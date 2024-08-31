@@ -3789,6 +3789,42 @@ Packing and unpacking
 Uncategorized
 +++++++++++++
 
+.. _function-_at_math_c__c_round_Cf:
+
+.. das:function:: round(x: float) : float
+
+// stub
+
+
+:Arguments: * **x** : float
+
+.. _function-_at_math_c__c_round_Cf2:
+
+.. das:function:: round(x: float2) : float2
+
+// stub
+
+
+:Arguments: * **x** : float2
+
+.. _function-_at_math_c__c_round_Cf3:
+
+.. das:function:: round(x: float3) : float3
+
+// stub
+
+
+:Arguments: * **x** : float3
+
+.. _function-_at_math_c__c_round_Cf4:
+
+.. das:function:: round(x: float4) : float4
+
+// stub
+
+
+:Arguments: * **x** : float4
+
 .. _function-_at_math_c__c__lb__rb__I_eq_H_ls_math_c__c_float4x4_gr__Ci_C_c_C_l:
 
 .. das:function:: float4x4 implicit ==const[](m: float4x4 implicit ==const; i: int) : float4&

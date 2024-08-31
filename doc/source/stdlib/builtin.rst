@@ -881,10 +881,11 @@ Containers
 
 .. das:function:: clear(array: array implicit)
 
-// stub
+Clears array. Elements are not deleted.
+
+:Arguments: * **array** : array implicit -  the array to clear
 
 
-:Arguments: * **array** : array implicit
 
 .. _function-_at__builtin__c__c_length_CIA:
 
@@ -899,10 +900,15 @@ Containers
 
 .. das:function:: capacity(array: array implicit) : int
 
-// stub
+Capacity will return current capacity of array.
+Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
+
+:Arguments: * **array** : array implicit -  the array
 
 
-:Arguments: * **array** : array implicit
+:Returns: the capacity of the array
+
+
 
 .. _function-_at__builtin__c__c_empty_CIG:
 
@@ -926,10 +932,15 @@ Containers
 
 .. das:function:: capacity(table: table implicit) : int
 
-// stub
+Capacity will return current capacity of table.
+Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
+
+:Arguments: * **table** : table implicit -  the table
 
 
-:Arguments: * **table** : table implicit
+:Returns: the capacity of the table
+
+
 
 .. _function-_at__builtin__c__c_empty_CIs:
 
@@ -1052,47 +1063,68 @@ Containers
 
 .. das:function:: emplace(Arr: array<auto(numT)>; value: numT&; at: int) : auto
 
-// stub
+Emplace will push to dynamic array `Arr` the content of `value`.
+`value` has to be of the same type (or const reference to same type) as array values.
+`value` will be pushed at index `at`.
+The `content` of value will be moved (<-) to it.
 
 
-:Arguments: * **Arr** : array<auto(numT)>
 
-            * **value** : numT&
+:Arguments: * **Arr** : array<auto(numT)> -  the array
 
-            * **at** : int
+            * **value** : numT& -  the value to push
+
+            * **at** : int -  the index to push to
+
+
 
 .. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr__dot__gr_A_&Y_ls_numT_gr_L:
 
 .. das:function:: emplace(Arr: array<auto(numT)>; value: numT&) : auto
 
-// stub
+Emplace will push to dynamic array `Arr` the content of `value`.
+`value` has to be of the same type (or const reference to same type) as array values.
+`value` will be pushed at the end of array.
+The `content` of value will be moved (<-) to it.
 
 
-:Arguments: * **Arr** : array<auto(numT)>
+:Arguments: * **Arr** : array<auto(numT)> -  the array
 
-            * **value** : numT&
+            * **value** : numT& -  the value to push
+
+
 
 .. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr__dot__gr_A__lb_-1_rb_Y_ls_numT_gr_L:
 
 .. das:function:: emplace(Arr: array<auto(numT)>; value: numT[]) : auto
 
-// stub
+Emplace will push to dynamic array `Arr` the content of `value`.
+`value` has to be of the same type (or const reference to same type) as array values.
+`value` will be pushed at the end of array.
+The `content` of value will be moved (<-) to it.
 
 
-:Arguments: * **Arr** : array<auto(numT)>
+:Arguments: * **Arr** : array<auto(numT)> -  the array
 
-            * **value** : numT[-1]
+            * **value** : numT[-1] -  array of values to push
+
+
 
 .. _function-_at__builtin__c__c_emplace_1_ls__lb_-1_rb_Y_ls_numT_gr__dot__gr_A__lb_-1_rb_Y_ls_numT_gr_L:
 
 .. das:function:: emplace(Arr: array<auto(numT)[]>; value: numT[]) : auto
 
-// stub
+Emplace will push to dynamic array `Arr` the content of `value`.
+`value` has to be of the same type (or const reference to same type) as array values.
+`value` will be pushed at the end of array.
+The `content` of value will be moved (<-) to it.
 
 
-:Arguments: * **Arr** : array<auto(numT)[-1]>
+:Arguments: * **Arr** : array<auto(numT)[-1]> -  the array
 
-            * **value** : numT[-1]
+            * **value** : numT[-1] -  array of values to push.
+
+
 
 .. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr__dot__gr_A_C0_ls_CY_ls_numT_gr_L;C_hh_Y_ls_numT_gr_L_gr_|_Ci:
 
@@ -1155,43 +1187,35 @@ Containers
 
 .. das:function:: back(a: array<auto(TT)> ==const) : TT&
 
-// stub
-
-
+Returns last element of the array.
 :Arguments: * **a** : array<auto(TT)>!
 
 .. _function-_at__builtin__c__c_back__hh__eq_1_ls_Y_ls_TT_gr__dot__gr_A:
 
 .. das:function:: back(a: array<auto(TT)># ==const) : TT&#
 
-// stub
-
-
+Returns last element of the array.
 :Arguments: * **a** : array<auto(TT)>#!
 
 .. _function-_at__builtin__c__c_back_C_eq_1_ls_Y_ls_TT_gr__dot__gr_A:
 
 .. das:function:: back(a: array<auto(TT)> const ==const) : TT const&
 
-// stub
-
-
+Returns last element of the array.
 :Arguments: * **a** : array<auto(TT)>!
 
 .. _function-_at__builtin__c__c_back_C_hh__eq_1_ls_Y_ls_TT_gr__dot__gr_A:
 
 .. das:function:: back(a: array<auto(TT)> const# ==const) : TT const&#
 
-// stub
-
-
+Returns last element of the array.
 :Arguments: * **a** : array<auto(TT)>#!
 
 .. _function-_at__builtin__c__c_back__eq_Y_ls_TT_gr__dot_:
 
 .. das:function:: back(arr: auto(TT) ==const) : auto&
 
-// stub
+Returns last element of the array.
 
 
 :Arguments: * **arr** : auto(TT)!
@@ -1200,9 +1224,7 @@ Containers
 
 .. das:function:: back(arr: auto(TT) const ==const) : auto const&
 
-// stub
-
-
+Returns last element of the array.
 :Arguments: * **arr** : auto(TT)!
 
 .. _function-_at__builtin__c__c_erase_1_ls_Y_ls_numT_gr__dot__gr_A_Ci:
@@ -1585,7 +1607,7 @@ Containers
 
 .. das:function:: copy_to_local(a: auto(TT)) : TT
 
-// stub
+Copies value and returns it as local value on stack. This is used to work around aliasing issues.
 
 
 :Arguments: * **a** : auto(TT)
@@ -1679,73 +1701,94 @@ Containers
 
 .. das:function:: each(rng: range) : iterator<int>
 
-// stub
+Returns int iterator, which iterates though each index at the range.
+
+:Arguments: * **rng** : range -  the range
 
 
-:Arguments: * **rng** : range
-
+:Returns: iterator
 .. _function-_at__builtin__c__c_each_Cs:
 
 .. das:function:: each(str: string) : iterator<int>
 
-// stub
+Returns int iterator, which iterates though each character in the string.
+
+:Arguments: * **str** : string -  the string
 
 
-:Arguments: * **str** : string
-
+:Returns: iterator
 .. _function-_at__builtin__c__c_each_C_lb_-1_rb_Y_ls_TT_gr__dot_:
 
 .. das:function:: each(a: auto(TT)[]) : iterator<TT&>
 
-// stub
+Returns iterator, which iterates though each index of the array.
+
+:Arguments: * **a** : auto(TT)[-1] -  the array
 
 
-:Arguments: * **a** : auto(TT)[-1]
+:Returns: iterator
 
 .. _function-_at__builtin__c__c_each_C1_ls_Y_ls_TT_gr__dot__gr_A:
 
 .. das:function:: each(a: array<auto(TT)>) : iterator<TT&>
 
-// stub
+Returns iterator, which iterates though each index of the array.
+
+:Arguments: * **a** : array<auto(TT)> -  the array
 
 
-:Arguments: * **a** : array<auto(TT)>
+:Returns: iterator
 
 .. _function-_at__builtin__c__c_each_C_hh_1_ls_Y_ls_TT_gr__dot__gr_A:
 
 .. das:function:: each(a: array<auto(TT)>#) : iterator<TT&#>
 
-// stub
+Returns iterator, which iterates though each index of the array.
+
+:Arguments: * **a** : array<auto(TT)># -  the array
 
 
-:Arguments: * **a** : array<auto(TT)>#
+:Returns: iterator
 
 .. _function-_at__builtin__c__c_each_CN_ls_arg_gr_0_ls_Y_ls_argT_gr__dot__gr_1_ls_b_gr__at_:
 
 .. das:function:: each(lam: lambda<(var arg:auto(argT)):bool>) : iterator<argT>
 
-// stub
+Iterates over values, which are supplied via lambda.
+When lambda returns false - no more values are iterated.
+
+:Arguments: * **lam** : lambda<(arg:auto(argT)):bool> -  lambda which takes reference to the value we iterate over, and returns bool
 
 
-:Arguments: * **lam** : lambda<(arg:auto(argT)):bool>
+:Returns: iterator
 
 .. _function-_at__builtin__c__c_each_ref_CN_ls_arg_gr_0_ls_1_ls_Y_ls_argT_gr__dot__gr__qm__gr_1_ls_b_gr__at_:
 
 .. das:function:: each_ref(lam: lambda<(var arg:auto(argT)?):bool>) : iterator<argT&>
 
-// stub
+Iterates over values, which are supplied via lambda.
+When lambda returns false - no more values are iterated.
+This is similar to 'each' function, but it takes pointer to the value instead of reference.
+That way by-value types can be iterated as well.
+
+:Arguments: * **lam** : lambda<(arg:auto(argT)?):bool> -  lambda which takes pointer to the value we iterate over, and returns bool
 
 
-:Arguments: * **lam** : lambda<(arg:auto(argT)?):bool>
+:Returns: iterator
+
+
 
 .. _function-_at__builtin__c__c_each_enum_CY_ls_TT_gr__dot_:
 
 .. das:function:: each_enum(tt: auto(TT)) : iterator<TT>
 
-// stub
+Iterates over each element in the enumeration.
+
+:Arguments: * **tt** : auto(TT) -  the enumeration
 
 
-:Arguments: * **tt** : auto(TT)
+:Returns: iterator of that enumeration
+
 
 .. _function-_at__builtin__c__c_nothing_1_ls_Y_ls_TT_gr__dot__gr_G:
 
@@ -2026,10 +2069,13 @@ Containers
 
 .. das:function:: clear(t: table<auto(KT);auto(VT)>) : auto
 
-// stub
+Clears table. Elements are not deleted.
+
+:Arguments: * **t** : table<auto(KT);auto(VT)> -  the table to clear
 
 
-:Arguments: * **t** : table<auto(KT);auto(VT)>
+
+
 
 ++++++++++++++++++++++++
 das::string manipulation
@@ -2335,10 +2381,13 @@ Smart ptr infrastructure
 
 .. das:function:: add_ptr_ref(src: smart_ptr<auto(TT)>) : smart_ptr<TT>
 
-// stub
+Increases reference count of the smart pointer.
+
+:Arguments: * **src** : smart_ptr<auto(TT)> -  the smart pointer
 
 
-:Arguments: * **src** : smart_ptr<auto(TT)>
+:Returns: the same smart pointer with increased reference count
+
 
 ++++++++++++++++++++
 Macro infrastructure
@@ -2415,14 +2464,18 @@ Profiler
 
 .. das:function:: dump_profile_info()
 
-// stub
+Dumps use counts of all lines collected by built-in profiler.
+DAS_ENABLE_PROFILER needs to be enabled during compilation to get sensible results.
 
 
 .. _function-_at__builtin__c__c_collect_profile_info_C_c_C_l:
 
 .. das:function:: collect_profile_info() : string
 
-// stub
+Returns description of the profiling results (namely use count per line of code).
+DAS_ENABLE_PROFILER needs to be enabled during compilation to get sensible results.
+
+
 
 
 .. _function-_at__builtin__c__c_profile_Ci_CIs_CI_builtin__C_c_C_l:
@@ -2525,7 +2578,8 @@ System infastructure
 
 .. das:function:: breakpoint()
 
-// stub
+Breakpoint will call os_debugbreakpoint, which is link-time unresolved dependency.
+It's supposed to call breakpoint in debugger tool, as sample implementation does.
 
 
 .. _function-_at__builtin__c__c_stackwalk_Cb_Cb_C_c_C_l:
@@ -2586,7 +2640,8 @@ System infastructure
 
 .. das:function:: aot_enabled() : bool
 
-// stub
+Returns true if AOT is enabled.
+
 
 
 +++++++++++++++++++
@@ -2882,7 +2937,7 @@ Binary serializer
 
 .. das:function:: binary_save(obj: auto; subexpr: block<(data:array<uint8> const):void>) : auto
 
-// stub
+Saves any data to array<uint8>. obsolete, use daslib/archive instead.
 
 
 :Arguments: * **obj** : auto
@@ -2893,7 +2948,7 @@ Binary serializer
 
 .. das:function:: binary_load(obj: auto; data: array<uint8>) : auto
 
-// stub
+Loads any data from array<uint8>. obsolete, use daslib/archive instead.
 
 
 :Arguments: * **obj** : auto
@@ -3032,41 +3087,56 @@ Lock checking internals
 
 .. das:function:: _move_with_lockcheck(a: auto(valA)&; b: auto(valB)&) : auto
 
-// stub
+Moves `b` into `a`, checks if `a` or `b` is locked, recursively for each lockable element of a and b
 
 
-:Arguments: * **a** : auto(valA)&
+:Arguments: * **a** : auto(valA)& -  the destination
 
-            * **b** : auto(valB)&
+            * **b** : auto(valB)& -  the source
+
+
+
+
 
 .. _function-_at__builtin__c__c__return_with_lockcheck_&_eq_Y_ls_valT_gr__dot_:
 
 .. das:function:: _return_with_lockcheck(a: auto(valT)& ==const) : auto&
 
-// stub
+Returns `a`. check if `a` is locked, recursively for each lockable element of a
+
+:Arguments: * **a** : auto(valT)&! -  the return value
 
 
-:Arguments: * **a** : auto(valT)&!
+:Returns: `a`
 
 .. _function-_at__builtin__c__c__return_with_lockcheck_C&_eq_Y_ls_valT_gr__dot_:
 
 .. das:function:: _return_with_lockcheck(a: auto(valT) const& ==const) : auto&
 
-// stub
+Returns `a`. check if `a` is locked, recursively for each lockable element of a
+
+:Arguments: * **a** : auto(valT)&! -  the return value
 
 
-:Arguments: * **a** : auto(valT)&!
+:Returns: `a`
+
 
 .. _function-_at__builtin__c__c__at_with_lockcheck_1_ls_Y_ls_keyT_gr__dot__gr_2_ls_Y_ls_valT_gr__dot__gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|:
 
 .. das:function:: _at_with_lockcheck(Tab: table<auto(keyT);auto(valT)>; at: keyT|keyT#) : valT&
 
-// stub
+Returns element of the table `Tab`, also checks if `Tab` is locked, recursively for each lockable element of `Tab`
 
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
+:Arguments: * **Tab** : table<auto(keyT);auto(valT)> -  the table
 
-            * **at** : option<keyT|keyT#>
+            * **at** : option<keyT|keyT#> -  the key in the table
+
+
+:Returns: the value at the key
+
+
+
 
 ++++++++++++++
 Bit operations
@@ -3084,37 +3154,47 @@ Bit operations
 
 .. das:function:: clz(bits: uint) : uint
 
-// stub
+Count leading zeros.
+
+:Arguments: * **bits** : uint -  the number to count the leading zeros of
 
 
-:Arguments: * **bits** : uint
+:Returns: the number of leading zeros (in binary form)
+
+
 
 .. _function-_at__builtin__c__c_clz_Cu64:
 
 .. das:function:: clz(bits: uint64) : uint64
 
-// stub
+Count leading zeros.
+
+:Arguments: * **bits** : uint64 -  the number to count the leading zeros of
 
 
-:Arguments: * **bits** : uint64
-
+:Returns: the number of leading zeros (in binary form)
 .. _function-_at__builtin__c__c_ctz_Cu:
 
 .. das:function:: ctz(bits: uint) : uint
 
-// stub
+Count trailing zeros.
+
+:Arguments: * **bits** : uint -  the number to count the leading zeros of
 
 
-:Arguments: * **bits** : uint
-
+:Returns: the number of trailing zeros (in binary form)
 .. _function-_at__builtin__c__c_ctz_Cu64:
 
 .. das:function:: ctz(bits: uint64) : uint64
 
-// stub
+Count trailing zeros.
+
+:Arguments: * **bits** : uint64 -  the number to count the leading zeros of
 
 
-:Arguments: * **bits** : uint64
+:Returns: the number of trailing zeros (in binary form)
+
+
 
 .. _function-_at__builtin__c__c_popcnt_Cu:
 
@@ -3208,7 +3288,7 @@ RTTI
 
 .. das:function:: class_rtti_size(ptr: void? implicit) : int
 
-// stub
+Returns size of specific TypeInfo for the instance of the class.
 
 
 :Arguments: * **ptr** : void? implicit
@@ -3259,23 +3339,31 @@ Algorithms
 
 .. das:function:: count(start: int = 0; step: int = 1) : iterator<int>
 
-// stub
+Returns int iterator which iterates from `start` value by incrementing it by `step` value.
+It is the intended way to have counter together with other values in the `for` loop.
 
 
-:Arguments: * **start** : int
+:Arguments: * **start** : int -  start value of the counter
 
-            * **step** : int
+            * **step** : int -  step value of the counter
 
+
+:Returns: iterator
 .. _function-_at__builtin__c__c_ucount_Cu_Cu_C_c_C_l:
 
 .. das:function:: ucount(start: uint = 0x0; step: uint = 0x1) : iterator<uint>
 
-// stub
+Returns uint iterator which iterates from `start` value by incrementing it by `step` value.
+It is the intended way to have counter together with other values in the `for` loop.
 
 
-:Arguments: * **start** : uint
+:Arguments: * **start** : uint -  start value of the counter
 
-            * **step** : uint
+            * **step** : uint -  step value of the counter
+
+
+:Returns: iterator
+
 
 .. _function-_at__builtin__c__c_iter_range_C_dot_:
 

@@ -28,6 +28,8 @@
 
 .. |handmade/function-math-fract| replace:: to be documented in |handmade/function-math-fract|.rst
 
+.. |handmade/function-math-round| replace:: to be documented in |handmade/function-math-round|.rst
+
 .. |handmade/function-math-sqrt| replace:: to be documented in |handmade/function-math-sqrt|.rst
 
 .. |handmade/function-math-rsqrt| replace:: to be documented in |handmade/function-math-rsqrt|.rst
