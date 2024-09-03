@@ -266,6 +266,14 @@ namespace das {
 #endif
     };
 
+    struct MatchingOptionError {
+        TypeDeclPtr optionType;
+        TypeDeclPtr option1;
+        TypeDeclPtr option2;
+    };
+
+    void findMatchingOptions ( const TypeDeclPtr & type, vector<MatchingOptionError> & matching );
+
     template <typename TT> struct ToBasicType {
         enum { type = Type::none };
         static_assert( int(type)!=int(Type::none),"This type is not supported or not bound. For the bound type missing or not included are "
@@ -692,7 +700,7 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isTempType(bool refMatters) const {
-        return (ref && refMatters) || isRefType() || isPointer() || isString() || baseType==Type::tIterator;
+        return (ref && refMatters) || isRefType() || isPointer() || isString() || baseType==Type::tIterator || baseType==Type::autoinfer || baseType==Type::alias;
     }
 
     __forceinline bool TypeDecl::isHandle() const {

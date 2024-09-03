@@ -1134,11 +1134,7 @@ global_function_declaration
         assignDefaultArguments($func);
         runFunctionAnnotations(scanner, yyextra, $func, $annL, tokAt(scanner,@annL));
         if ( $func->isGeneric() ) {
-            if ( !yyextra->g_Program->addGeneric($func) ) {
-                das_yyerror(scanner,"generic function is already defined " +
-                    $func->getMangledName(),$func->at,
-                        CompilationError::function_already_declared);
-            }
+            implAddGenericFunction(scanner,$func);
         } else {
             if ( !yyextra->g_Program->addFunction($func) ) {
                 das_yyerror(scanner,"function is already defined " +

@@ -1511,6 +1511,11 @@ namespace das
                 }
             }
         }
+        if ( baseType==Type::alias || baseType==Type::autoinfer ) {
+            if ( alias!=decl.alias ) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -3314,5 +3319,32 @@ namespace das
         }
         // all good
         return true;
+    }
+
+    void findMatchingOptions ( const TypeDeclPtr & type, vector<MatchingOptionError> & matching ) {
+        if ( type->baseType == Type::option ) {
+            // lets see if one of the argTypes is the same as the other
+            for ( size_t ai=0, as=type->argTypes.size(); ai<as; ++ai ) {
+                auto & argT = type->argTypes[ai];
+                for ( size_t bi=ai+1; bi<as; ++bi ) {
+                    auto & argB = type->argTypes[bi];
+                    if ( argT->isSameType(*argB, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::no, true, false) ) {
+                        matching.push_back({type,argT,argB});
+                        goto found;
+                    }
+                }
+            }
+            found:;
+        } else {
+            if ( type->firstType ) {
+                findMatchingOptions(type->firstType, matching);
+            }
+            if ( type->secondType ) {
+                findMatchingOptions(type->secondType, matching);
+            }
+            for ( auto & argT : type->argTypes ) {
+                findMatchingOptions(argT, matching);
+            }
+        }
     }
 }

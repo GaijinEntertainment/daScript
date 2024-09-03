@@ -577,6 +577,25 @@ namespace das {
         return list;
     }
 
+    void implAddGenericFunction ( yyscan_t scanner, Function * func ) {
+        for ( auto & arg : func->arguments ) {
+            vector<MatchingOptionError> optionErrors;
+            findMatchingOptions(arg->type, optionErrors);
+            if ( !optionErrors.empty() ) {
+                for ( auto & opt : optionErrors ) {
+                    // opt.type has matching options opt.option1 and opt.option2
+                    das_yyerror(scanner,"generic function argument " + arg->name + " of type " + opt.optionType->describe()
+                    + " has matching options " + opt.option1->describe() + " and " + opt.option2->describe(),
+                        opt.optionType->at, CompilationError::invalid_type);
+                }
+            }
+        }
+        if ( !yyextra->g_Program->addGeneric(func) ) {
+            das_yyerror(scanner,"generic function is already defined " + func->getMangledName(),
+                func->at, CompilationError::function_already_declared);
+        }
+    }
+
     vector<VariableDeclaration*> * ast_structVarDef ( yyscan_t scanner, vector<VariableDeclaration*> * list,
         AnnotationList * annL, bool isStatic, bool isPrivate, int ovr, bool cnst, Function * func, Expression * block,
             const LineInfo & fromBlock, const LineInfo & annLAt ) {
@@ -666,11 +685,7 @@ namespace das {
             }
             assignDefaultArguments(func);
             if ( isGeneric ) {
-                if ( !yyextra->g_Program->addGeneric(func) ) {
-                    das_yyerror(scanner,"generic function is already defined " + func->getMangledName(),
-                        func->at, CompilationError::function_already_declared);
-                }
-
+                implAddGenericFunction(scanner, func);
             } else {
                 runFunctionAnnotations(scanner, nullptr, func, annL, annLAt);
                 if ( !yyextra->g_Program->addFunction(func) ) {
