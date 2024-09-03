@@ -358,6 +358,7 @@ namespace das {
     }
 
     ProgramPtr parseDaScript ( const string & fileName,
+                               const string & moduleName,
                               const FileAccessPtr & access,
                               TextWriter & logs,
                               ModuleGroup & libGroup,
@@ -365,6 +366,7 @@ namespace das {
                               bool isDep,
                               CodeOfPolicies policies ) {
         ProgramPtr program = make_smart<Program>();
+        program->thisModule->name = moduleName;
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
 
@@ -381,7 +383,7 @@ namespace das {
         program->needMacroModule = false;
         program->policies = policies;
         program->thisModuleGroup = &libGroup;
-        program->thisModuleName.clear();
+        program->thisModuleName = program->thisModule->name;
         libGroup.foreach([&](Module * pm){
             program->library.addModule(pm);
             return true;
@@ -722,7 +724,7 @@ namespace das {
                 if ( libGroup.findModule(mod.moduleName) ) {
                     continue;
                 }
-                auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, true, policies);
+                auto program = parseDaScript(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies);
                 policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
                 if ( program->failed() ) {
                     return program;
@@ -746,7 +748,7 @@ namespace das {
             }
             auto & serializer_read = daScriptEnvironment::bound->serializer_read;
             if ( serializer_read && !policies.serialize_main_module ) serializer_read->seenNewModule = true;
-            auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
+            auto res = parseDaScript(fileName, "", access, logs, libGroup, exportAll, false, policies);
             // wirteback all parsed modules from serializer_write
             if ( daScriptEnvironment::bound->serializer_write != nullptr
                 && (!daScriptEnvironment::bound->serializer_read || daScriptEnvironment::bound->serializer_read->failed) ) {
