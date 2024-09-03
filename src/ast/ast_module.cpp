@@ -549,7 +549,7 @@ namespace das {
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
         access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
-        auto program = parseDaScript(modName, access, issues, dummyLibGroup, true);
+        auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, true);
         ownFileInfo = access->letGoOfFileInfo(modName);
         DAS_ASSERTF(ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
         if ( program ) {

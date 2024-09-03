@@ -836,7 +836,7 @@ namespace das {
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
         access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
-        auto program = parseDaScript(modName, access, issues, dummyLibGroup, exportAll, false, cop);
+        auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, exportAll, false, cop);
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
