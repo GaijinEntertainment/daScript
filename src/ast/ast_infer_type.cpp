@@ -1697,7 +1697,6 @@ namespace das {
                     }
                     return ta;
                 } else {
-                    ta = inferAlias(td);
                     error("can't be inferred: '" + describeType(td) + "'", reportInferAliasErrors(td), "",
                         td->at, CompilationError::invalid_type);
                 }

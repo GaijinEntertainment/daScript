@@ -2404,6 +2404,10 @@ single_alias
     } '=' type_declaration[tdecl] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $tdecl->isPrivateAlias = !$pubA;
+        if ( $tdecl->baseType == Type::alias ) {
+            das_yyerror(scanner,"alias cannot be defined in terms of another alias "+*$name,tokAt(scanner,@name),
+                CompilationError::invalid_type);
+        }
         $tdecl->alias = *$name;
         if ( !yyextra->g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
             das_yyerror(scanner,"type alias is already defined "+*$name,tokAt(scanner,@name),
