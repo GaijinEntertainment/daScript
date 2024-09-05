@@ -8354,6 +8354,10 @@ namespace das {
                 auto ctorName = st->module->name  + "::" + st->name;
                 auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,ctorName);
                 expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric).get();
+                 if ( !expr->constructor ) {
+                  tempCall->name = "__::" + st->name;
+                  expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric).get();
+                }
                 if ( !expr->constructor ) {
                     error("class constructor can't be inferred " + describeType(expr->makeType),
                         reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::function_not_found );
