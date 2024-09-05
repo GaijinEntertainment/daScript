@@ -106,6 +106,9 @@ namespace das {
             stackTop += (size + 0xf) & ~0xf;
             return result;
         }
+
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
     // structure
         virtual void preVisit ( Structure * var ) override {
             Visitor::preVisit(var);

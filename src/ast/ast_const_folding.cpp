@@ -838,6 +838,8 @@ namespace das {
                         runProgram->folding = true;
                         runProgram->markFoldingSymbolUse(needRun);
                         DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (remove unused)?" );
+                        runProgram->deriveAliases(dummy);
+                        DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (derive aliases)?" );
                         runProgram->allocateStack(dummy);
                         DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (allocate stack)?" );
                         runProgram->simulate(ctx, dummy);
