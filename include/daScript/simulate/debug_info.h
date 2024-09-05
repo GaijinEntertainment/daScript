@@ -156,6 +156,7 @@ namespace das
         virtual void serialize ( AstSerializer & ser );
         virtual bool isSameFileName ( const string & f1, const string & f2 ) const;
         virtual bool isOptionAllowed ( const string & /*opt*/, const string & /*from*/ ) const { return true; }
+        virtual bool isAnnotationAllowed ( const string & /*ann*/, const string & /*from*/ ) const { return true; }
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
@@ -181,6 +182,7 @@ namespace das
         virtual void serialize ( AstSerializer & ser ) override;
         virtual bool isSameFileName ( const string & f1, const string & f2 ) const override;
         virtual bool isOptionAllowed ( const string & opt, const string & from ) const override;
+        virtual bool isAnnotationAllowed ( const string & /*ann*/, const string & /*from*/ ) const override;
     protected:
         Context *           context = nullptr;
         SimFunction *       modGet = nullptr;
@@ -190,6 +192,7 @@ namespace das
         SimFunction *       canModuleBeRequired = nullptr;
         SimFunction *       sameFileName = nullptr;
         SimFunction *       optionAllowed = nullptr;
+        SimFunction *       annotationAllowed = nullptr;
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 
