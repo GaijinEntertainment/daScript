@@ -933,16 +933,26 @@ annotation_declaration_basic
     :   annotation_declaration_name[name] {
         $$ = new AnnotationDeclaration();
         $$->at = tokAt(scanner,@name);
-        if ( auto ann = findAnnotation(scanner,*$name,tokAt(scanner,@name)) ) {
-            $$->annotation = ann;
+        if ( yyextra->g_Access->isAnnotationAllowed(*$name, yyextra->g_Program->thisModuleName) ) {
+            if ( auto ann = findAnnotation(scanner,*$name,tokAt(scanner,@name)) ) {
+                $$->annotation = ann;
+            }
+        } else {
+            das_yyerror(scanner,"annotation " + *$name + " is not allowed here",
+                        tokAt(scanner,@name), CompilationError::invalid_annotation);
         }
         delete $name;
     }
     |   annotation_declaration_name[name] '(' annotation_argument_list[argL] ')' {
         $$ = new AnnotationDeclaration();
         $$->at = tokAt(scanner,@name);
-        if ( auto ann = findAnnotation(scanner,*$name,tokAt(scanner,@name)) ) {
-            $$->annotation = ann;
+        if ( yyextra->g_Access->isAnnotationAllowed(*$name, yyextra->g_Program->thisModuleName) ) {
+            if ( auto ann = findAnnotation(scanner,*$name,tokAt(scanner,@name)) ) {
+                $$->annotation = ann;
+            }
+        } else {
+            das_yyerror(scanner,"annotation " + *$name + " is not allowed here",
+                        tokAt(scanner,@name), CompilationError::invalid_annotation);
         }
         swap ( $$->arguments, *$argL );
         delete $argL;

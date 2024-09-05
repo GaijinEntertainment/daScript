@@ -45,6 +45,7 @@ namespace das {
                 canModuleBeRequired = context->findFunction("can_module_be_required");    // note, this one CAN be null
                 sameFileName = context->findFunction("is_same_file_name");    // note, this one CAN be null
                 optionAllowed = context->findFunction("option_allowed");    // note, this one CAN be null
+                annotationAllowed = context->findFunction("annotation_allowed");    // note, this one CAN be null
                 // get it ready
                 context->restart();
                 context->runInitScript();   // note: we assume sane init stack size here
@@ -167,6 +168,17 @@ namespace das {
         vec4f res = context->evalWithCatch(optionAllowed, args, nullptr);
         auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `option_allowed`: %s", exc);
+        return cast<bool>::to(res);
+    }
+
+    bool ModuleFileAccess::isAnnotationAllowed ( const string & ann, const string & from ) const {
+        if (failed() || !annotationAllowed) return FileAccess::isAnnotationAllowed(ann,from);
+        vec4f args[2];
+        args[0] = cast<const char *>::from(ann.c_str());
+        args[1] = cast<const char *>::from(from.c_str());
+        vec4f res = context->evalWithCatch(annotationAllowed, args, nullptr);
+        auto exc = context->getException(); exc;
+        DAS_ASSERTF(!exc, "exception failed in `annotation_allowed`: %s", exc);
         return cast<bool>::to(res);
     }
 }
