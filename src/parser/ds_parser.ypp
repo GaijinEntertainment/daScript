@@ -1377,6 +1377,7 @@ expr_new
         $$ = parseFunctionArguments(pNew,$arguments);
     }
     |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' make_struct_dim[dd] ')'   {
+        ((ExprMakeStruct *)$dd)->at = tokAt(scanner,@typeDecl);
         ((ExprMakeStruct *)$dd)->makeType = $typeDecl;
         ((ExprMakeStruct *)$dd)->useInitializer = true;
         ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
@@ -1846,6 +1847,7 @@ expr
             delete $name;
     }
     |   name_in_namespace[name] '(' make_struct_dim[dd] ')' {
+            ((ExprMakeStruct *)$dd)->at = tokAt(scanner,@name);
             ((ExprMakeStruct *)$dd)->makeType = new TypeDecl(Type::alias);
             ((ExprMakeStruct *)$dd)->makeType->alias = *$name;
             ((ExprMakeStruct *)$dd)->useInitializer = true;
