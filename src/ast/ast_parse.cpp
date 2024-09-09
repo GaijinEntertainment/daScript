@@ -470,10 +470,12 @@ namespace das {
                 }
                 if (!program->failed())
                     program->fixupAnnotations();
+                /*
                 if (!program->failed())
                     program->deriveAliases(logs);
                 if (!program->failed())
                     program->allocateStack(logs);
+                */
                 if (!program->failed())
                     program->finalizeAnnotations();
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
@@ -496,6 +498,8 @@ namespace das {
                     auto timeM = ref_time_ticks();
                     if (!program->failed())
                         program->markMacroSymbolUse();
+                    if (!program->failed())
+                        program->deriveAliases(logs);
                     if (!program->failed())
                         program->allocateStack(logs);
                     if (!program->failed())
@@ -770,6 +774,8 @@ namespace das {
                 if (!res->failed() && !exportAll)
                     res->removeUnusedSymbols();
                 if (!res->failed())
+                    res->deriveAliases(logs);
+                if (!res->failed())
                     res->allocateStack(logs);
             } else {
                 if (!res->failed())
@@ -778,6 +784,8 @@ namespace das {
                     addRttiRequireVariable(res, fileName);
                 if (!res->failed())
                     res->removeUnusedSymbols();
+                if (!res->failed())
+                    res->deriveAliases(logs);
                 if (!res->failed())
                     res->allocateStack(logs);
             }

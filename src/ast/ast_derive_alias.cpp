@@ -304,6 +304,9 @@ namespace das {
         bool logAliasing = false;
         TextWriter & logs;
     protected:
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
+    protected:
         virtual void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
             cmresDest[expr->right.get()] = expr->left.get();
@@ -585,12 +588,23 @@ namespace das {
     void Program::deriveAliases(TextWriter & logs) {
         bool logAliasing = options.getBoolOption("log_aliasing", false);
         if ( logAliasing ) logs << "ALIASING:\n";
+
+        library.foreach([&](Module * mod){
+            if ( logAliasing ) logs << "module " << mod->name << ":\n";
+            mod->functions.foreach([&](const FunctionPtr & func){
+                if ( func->builtIn || !func->used ) return;
+                deriveAliasing(func, logs, logAliasing);
+            });
+            return true;
+        },"*");
+        /*
         thisModule->functions.foreach([&](const FunctionPtr & func) {
             if ( func->builtIn || !func->used ) return;
             deriveAliasing(func, logs, logAliasing);
         });
+        */
         AliasMarker marker(this, logs);
-        visit(marker);
+        visitModules(marker);
         if ( logAliasing ) logs << "\n";
     }
 }

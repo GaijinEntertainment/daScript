@@ -101,6 +101,9 @@ namespace das {
         bool                    inStruct = false;
         bool                    noFastCall = false;
     protected:
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
+    protected:
         uint32_t allocateStack ( uint32_t size ) {
             auto result = stackTop;
             stackTop += (size + 0xf) & ~0xf;
@@ -648,10 +651,10 @@ namespace das {
         globalStringHeapSize = vstr.bytesTotal;
         // move some variables to CMRES
         VarCMRes vcm(this);
-        visit(vcm);
+        visitModules(vcm);
         // allocate stack for the rest of them
         AllocateStack context(this, logs);
-        visit(context);
+        visitModules(context);
         // adjust stack size for all the used variables
         for (auto & pm : library.modules) {
             for ( auto & var : pm->globals.each() ) {
