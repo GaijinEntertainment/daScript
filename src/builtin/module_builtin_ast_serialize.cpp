@@ -1688,6 +1688,7 @@ namespace das {
     // create the module macro state
         program->isCompiling = false;
         program->markMacroSymbolUse();
+        program->deriveAliases(ignore_logs);
         program->allocateStack(ignore_logs);
         program->makeMacroModule(ignore_logs);
     // unbind the module from the program

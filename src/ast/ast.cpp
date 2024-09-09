@@ -2989,6 +2989,15 @@ namespace das {
         return vis.visit(penum);
     }
 
+    void Program::visitModules(Visitor & vis, bool visitGenerics) {
+        vis.preVisitProgram(this);
+        library.foreach([&](Module * pm) -> bool {
+            visitModule(vis, pm, visitGenerics);
+            return true;
+        }, "*");
+        vis.visitProgram(this);
+    }
+
     void Program::visitModulesInOrder(Visitor & vis, bool visitGenerics) {
         vis.preVisitProgram(this);
         library.foreach_in_order([&](Module * pm) -> bool {
