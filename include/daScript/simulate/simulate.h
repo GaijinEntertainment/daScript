@@ -289,8 +289,15 @@ namespace das
         friend class Program;
         friend class Module;
     public:
+        struct CopyOptions
+        {
+            uint32_t category = 0;
+            uint32_t stackSize = 0;
+        };
+
         Context(uint32_t stackSize = 16*1024, bool ph = false);
         Context(const Context &, uint32_t category_);
+        Context(const Context & ctx, const CopyOptions & opts);
         Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
         virtual ~Context();
