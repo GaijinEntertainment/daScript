@@ -4,8 +4,7 @@ try exp = ::exp catch (e) exp = require("math").exp
 local function expLoop(n)
 {
     local sum = 0
-    local i;
-    for (i = 0; i < n; ++i)
+    for (local i = 0; i < n; ++i)
       sum += exp(1./(1.+i))
     return sum
 }

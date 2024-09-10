@@ -1,15 +1,12 @@
-local function fibI(n)
-{
-    local last = 0;
-    local cur = 1;
-    n = n - 1;
-    while(n)
-    {
-        --n;
+local function fibI(n) {
+    local last = 1
+    local cur = 0
+    do {
         local tmp = cur;
-        cur = last + cur;
+        cur += last;
         last = tmp;
-    }
+        --n;
+    } while(n);
     return cur;
 }
 local profile_it
