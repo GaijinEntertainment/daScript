@@ -1705,37 +1705,37 @@ namespace das {
             bool is_macro_module = this_mod->macroContext; // it's a macro module if it has macroContext
             ser << is_macro_module;
         } else {
-            TextWriter ignore_logs;
-            ReuseCacheGuard rcg;
-        // initialize program
-            program = make_smart<Program>();
-            program->promoteToBuiltin = this_mod->promoted;;
-            program->isDependency = true;
-            program->thisModuleGroup = ser.thisModuleGroup;
-            program->thisModuleName.clear();
-            program->library.reset();
-            program->policies.stack = 64 * 1024;
-            program->thisModule.release();
-            program->thisModule.reset(this_mod);
-            lib.foreach([&] ( Module * pm ) {
-                program->library.addModule(pm);
-                return true;
-            },"*");
-        // always finalize annotations
-            daScriptEnvironment::bound->g_Program = program;
-            if ( !already_exists ) {
-              program->finalizeAnnotations();
-            }
-
             bool is_macro_module = false;
             ser << is_macro_module;
-            if ( is_macro_module && !already_exists ) {
-                auto time0 = ref_time_ticks();
-                reinstantiateMacroModuleState(ser, program);
-                ser.totMacroTime += get_time_usec(time0);
+            if ( !already_exists ) {
+                TextWriter ignore_logs;
+                ReuseCacheGuard rcg;
+            // initialize program
+                program = make_smart<Program>();
+                program->promoteToBuiltin = this_mod->promoted;;
+                program->isDependency = true;
+                program->thisModuleGroup = ser.thisModuleGroup;
+                program->thisModuleName.clear();
+                program->library.reset();
+                program->policies.stack = 64 * 1024;
+                program->thisModule.release();
+                program->thisModule.reset(this_mod);
+                lib.foreach([&] ( Module * pm ) {
+                    program->library.addModule(pm);
+                    return true;
+                },"*");
+            // always finalize annotations
+                daScriptEnvironment::bound->g_Program = program;
+                program->finalizeAnnotations();
+
+                if ( is_macro_module ) {
+                    auto time0 = ref_time_ticks();
+                    reinstantiateMacroModuleState(ser, program);
+                    ser.totMacroTime += get_time_usec(time0);
+                }
+            // unbind the module from the program
+                program->thisModule.release();
             }
-        // unbind the module from the program
-            program->thisModule.release();
         }
     }
 
