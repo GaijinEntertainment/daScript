@@ -1056,7 +1056,12 @@ namespace das
     }
 
 
-    Context::Context(const Context & ctx, uint32_t category_): stack(ctx.stack.size()) {
+    Context::Context(const Context & ctx, uint32_t category_)
+        : Context(ctx, CopyOptions{category_, 0}) {
+    }
+
+    Context::Context(const Context & ctx, const CopyOptions & opts)
+        : stack(opts.stackSize ? opts.stackSize : ctx.stack.size()) {
         persistent = ctx.persistent;
         code = ctx.code;
         constStringHeap = ctx.constStringHeap;
@@ -1064,7 +1069,7 @@ namespace das
         thisProgram = ctx.thisProgram;
         thisHelper = ctx.thisHelper;
         name = "clone of " + ctx.name;
-        category.value = category_;
+        category.value = opts.category;
         ownStack = (ctx.stack.size() != 0);
         if ( persistent ) {
             heap = make_smart<PersistentHeapAllocator>();
