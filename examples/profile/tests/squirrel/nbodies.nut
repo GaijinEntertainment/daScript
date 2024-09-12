@@ -1,3 +1,4 @@
+//-file:plus-string
 /* The Computer Language Benchmarks Game
    https://salsa.debian.org/benchmarksgame-team/benchmarksgame/
    Squirrel implementation
@@ -9,12 +10,16 @@
 //local sqrt = ("require" in getconsttable()) ? require("math").sqrt : ("math" in getroottable()) ? math.sqrt : sqrt //for different squirrel implementations of common libraries
 
 local sqrt
-try sqrt = ::sqrt catch (e) sqrt = require("math").sqrt
+try {
+  sqrt = getroottable()["sqrt"]
+} catch (e) {
+  sqrt = require("math").sqrt
+}
 
 local PI = 3.141592653589793
 local SOLAR_MASS = 4 * PI * PI
 local DAYS_PER_YEAR = 365.24
-local bodies = [
+local BODIES = [
   [ // Sun
     0,// x
     0,// y
@@ -62,7 +67,7 @@ local bodies = [
   ]
 ]
 
-local function advance(bodies, nbody){
+function advance(bodies, nbody){
   for (local i=0;i<nbody;i++) {
     local bi  = bodies[i]
     local bix = bi[0]
@@ -100,7 +105,7 @@ local function advance(bodies, nbody){
   }
 }
 
-local function energy(bodies, nbody){
+local function _energy(bodies, nbody){
   local e = 0;
   for (local i=0;i<nbody;i++) {
     local bi = bodies[i]
@@ -121,7 +126,7 @@ local function energy(bodies, nbody){
   return e
 }
 
-local function offsetMomentum(b, nbody){
+function offsetMomentum(b, nbody){
   local px=0, py=0, pz = 0;
   for (local i=0;i<nbody;i++){
     local bi = b[i]
@@ -135,7 +140,7 @@ local function offsetMomentum(b, nbody){
   b[0][5] = pz / SOLAR_MASS
 }
 
-local function scale_bodies(bodies, nbody, scale) {
+function scale_bodies(bodies, nbody, scale) {
   for (local i=0;i<nbody;i++){
     local b = bodies[i]
     b[6] = b[6]*scale*scale
@@ -145,11 +150,22 @@ local function scale_bodies(bodies, nbody, scale) {
   }
 }
 
-local n = 500000//50000000 in https://benchmarksgame-team.pages.debian.net/benchmarksgame
-local nbody = bodies.len()
+local n = 50000//50000000 in https://benchmarksgame-team.pages.debian.net/benchmarksgame
+local nbody = BODIES.len()
 
 local profile_it
-try profile_it = ::loadfile("profile.nut")() catch (e) profile_it = require("profile.nut")
+try {
+  profile_it = getroottable()["loadfile"]("profile.nut")()
+  if (profile_it == null)
+    throw "no loadfile"
+} catch(e) profile_it = require("profile.nut")
 
-offsetMomentum(bodies, nbody)
-print("\"n-bodies\", " + profile_it(10, function () {scale_bodies(bodies, nbody, 0.01);for (local i=0; i<n; i++){ advance(bodies, nbody);} scale_bodies(bodies, nbody, 1/0.01); }) + ", 10\n")
+offsetMomentum(BODIES, nbody)
+function test_func(){
+  scale_bodies(BODIES, nbody, 0.01)
+  for (local i=0; i<n; i++){
+    advance(BODIES, nbody)
+  }
+  scale_bodies(BODIES, nbody, 1/0.01)
+}
+print("\"n-bodies\", " + profile_it(10,  test_func) + ", 10\n")

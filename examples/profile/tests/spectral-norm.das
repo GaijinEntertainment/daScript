@@ -67,6 +67,8 @@ def main
             luauFile = "spectral-norm.luau",
             luaJitFile = "spectral-norm.lua",
             monoFile = "spectral-norm.cs",
+            nutFile = "spectral-norm.nut",
+            nutModifiedFile = "spectral-norm.nut",
             dotNetFile = "spectral-norm.cs",
             jsFile = "spectral-norm.js",
         ]])

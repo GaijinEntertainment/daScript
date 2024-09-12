@@ -40,8 +40,8 @@ def main
             luauFile = "f2i.luau",
             luaFile = "f2i.lua",
             luaJitFile = "f2i.lua",
-            // nutFile = "f2i.nut",
-            // nutModifiedFile = "f2i.nut",
+            nutFile = "f2i.nut",
+            nutModifiedFile = "f2i.nut",
             // asFile = "f2i.as",
             jsFile = "f2i.js",
             monoFile = "f2i.cs", // this one - interpreter goes bonkers

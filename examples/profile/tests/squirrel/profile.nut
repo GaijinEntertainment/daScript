@@ -1,11 +1,15 @@
+//-file:plus-string
 local clock_func
-try clock_func = ::clock catch (e) clock_func = require("datetime").clock
+try {
+  clock_func = getroottable()["clock"]
+}
+catch (e) {
+  clock_func = require("datetime").clock
+}
 
-function profile_it(cnt, f)//for modified version
-{
+function profile_it(cnt, f) {//for quirrel version
   local res = 0
-  for (local i = 0; i < cnt; ++i)
-  {
+  for (local i = 0; i < cnt; ++i) {
     local start = clock_func()
     f()
     local measured = clock_func() - start

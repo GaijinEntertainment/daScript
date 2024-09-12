@@ -40,5 +40,7 @@ def main
             luaJitFile = "table-sort.lua",
             luauFile = "table-sort.luau",
             monoFile = "table-sort.cs",
-            dotNetFile = "table-sort.cs"
+            dotNetFile = "table-sort.cs",
+            nutFile = "table-sort.nut",
+            nutModifiedFile = "table-sort.nut"
         ]])
