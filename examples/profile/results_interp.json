@@ -1,0 +1,162 @@
+{
+  "dictionary": {
+    "Daslang (interperter)":  0.0167,
+    "Lua 5.4.6":  0.0660,
+    "LuaJIT2.1 -joff":  0.0166,
+    "Luau":  0.0297,
+    "Mono --interpreter":  1.3387,
+    "QuickJS":  0.1010,
+    "Quirrel 4.7.1":  0.0870,
+    "Squirrel 3.1":  0.1120
+  },
+  "exp loop": {
+    "Daslang (interperter)":  0.0114,
+    "Lua 5.4.6":  0.0510,
+    "LuaJIT2.1 -joff":  0.0377,
+    "Luau":  0.0203,
+    "Mono --interpreter":  0.3930,
+    "QuickJS":  0.0870,
+    "Quirrel 4.7.1":  0.0870,
+    "Squirrel 3.1":  0.0850
+  },
+  "fibonacci loop": {
+    "Daslang (interperter)":  0.0375,
+    "Lua 5.4.6":  0.0900,
+    "LuaJIT2.1 -joff":  0.0451,
+    "Luau":  0.0768,
+    "Mono --interpreter":  0.1312,
+    "QuickJS":  0.1240,
+    "Quirrel 4.7.1":  0.1570,
+    "Squirrel 3.1":  0.1120
+  },
+  "fibonacci recursive": {
+    "Daslang (interperter)":  0.0549,
+    "Lua 5.4.6":  0.1020,
+    "LuaJIT2.1 -joff":  0.0601,
+    "Luau":  0.0908,
+    "Mono --interpreter":  0.1113,
+    "QuickJS":  0.1680,
+    "Quirrel 4.7.1":  0.3010,
+    "Squirrel 3.1":  0.3020
+  },
+  "float2string": {
+    "Daslang (interperter)":  0.0778,
+    "Lua 5.4.6":  0.6010,
+    "LuaJIT2.1 -joff":  0.1717,
+    "Luau":  0.0751,
+    "Mono --interpreter":  5.5678,
+    "QuickJS":  3.6260,
+    "Quirrel 4.7.1": "N/A",
+    "Squirrel 3.1": "N/A"
+  },
+  "mandelbrot": {
+    "Daslang (interperter)":  0.0031,
+    "Lua 5.4.6":  0.1640,
+    "LuaJIT2.1 -joff":  0.0597,
+    "Luau":  0.0551,
+    "Mono --interpreter":  0.0260,
+    "QuickJS": "N/A",
+    "Quirrel 4.7.1": "N/A",
+    "Squirrel 3.1": "N/A"
+  },
+  "n-bodies": {
+    "Daslang (interperter)":  0.2139,
+    "Lua 5.4.6":  1.1670,
+    "LuaJIT2.1 -joff":  0.5630,
+    "Luau":  0.7025,
+    "Mono --interpreter":  1.1593,
+    "QuickJS":  2.4270,
+    "Quirrel 4.7.1":  2.8700,
+    "Squirrel 3.1":  2.8090
+  },
+  "native loop": {
+    "Daslang (interperter)":  0.0372,
+    "Lua 5.4.6": "N/A",
+    "LuaJIT2.1 -joff":  0.8821,
+    "Luau": "N/A",
+    "Mono --interpreter":  1.4586,
+    "QuickJS": "N/A",
+    "Quirrel 4.7.1":  0.6950,
+    "Squirrel 3.1": "N/A"
+  },
+  "particles kinematics": {
+    "Daslang (interperter)":  0.0118,
+    "Lua 5.4.6":  1.2090,
+    "LuaJIT2.1 -joff":  0.3041,
+    "Luau":  0.3859,
+    "Mono --interpreter":  0.6445,
+    "QuickJS":  1.4210,
+    "Quirrel 4.7.1":  0.6620,
+    "Squirrel 3.1":  1.4360
+  },
+  "primes loop": {
+    "Daslang (interperter)":  0.0408,
+    "Lua 5.4.6":  0.0960,
+    "LuaJIT2.1 -joff":  0.0683,
+    "Luau":  0.0936,
+    "Mono --interpreter":  0.1552,
+    "QuickJS":  0.1290,
+    "Quirrel 4.7.1":  0.3480,
+    "Squirrel 3.1":  0.3370
+  },
+  "queen": {
+    "Daslang (interperter)":  0.0013,
+    "Lua 5.4.6":  0.0020,
+    "LuaJIT2.1 -joff":  0.0012,
+    "Luau":  0.0017,
+    "Mono --interpreter": "N/A",
+    "QuickJS": "N/A",
+    "Quirrel 4.7.1": "N/A",
+    "Squirrel 3.1": "N/A"
+  },
+  "sha256": {
+    "Daslang (interperter)":  0.1233,
+    "Lua 5.4.6": "N/A",
+    "LuaJIT2.1 -joff":  0.2524,
+    "Luau":  0.7252,
+    "Mono --interpreter": "N/A",
+    "QuickJS": "N/A",
+    "Quirrel 4.7.1": "N/A",
+    "Squirrel 3.1": "N/A"
+  },
+  "sort": {
+    "Daslang (interperter)":  0.0320,
+    "Lua 5.4.6":  0.0910,
+    "LuaJIT2.1 -joff":  0.0700,
+    "Luau":  0.0520,
+    "Mono --interpreter":  0.2782,
+    "QuickJS": "N/A",
+    "Quirrel 4.7.1": "N/A",
+    "Squirrel 3.1": "N/A"
+  },
+  "spectral norm": {
+    "Daslang (interperter)":  0.2044,
+    "Lua 5.4.6":  0.5860,
+    "LuaJIT2.1 -joff":  0.2882,
+    "Luau":  0.2375,
+    "Mono --interpreter":  0.4391,
+    "QuickJS":  0.8820,
+    "Quirrel 4.7.1": "N/A",
+    "Squirrel 3.1": "N/A"
+  },
+  "string2float": {
+    "Daslang (interperter)":  0.0274,
+    "Lua 5.4.6":  0.2040,
+    "LuaJIT2.1 -joff":  0.1350,
+    "Luau":  0.1260,
+    "Mono --interpreter":  5.4922,
+    "QuickJS":  0.4560,
+    "Quirrel 4.7.1": "N/A",
+    "Squirrel 3.1": "N/A"
+  },
+  "tree": {
+    "Daslang (interperter)":  1.7525,
+    "Lua 5.4.6":  2.8580,
+    "LuaJIT2.1 -joff":  1.3200,
+    "Luau":  1.7606,
+    "Mono --interpreter":  1.9074,
+    "QuickJS":  16.8780,
+    "Quirrel 4.7.1": "N/A",
+    "Squirrel 3.1": "N/A"
+  }
+}

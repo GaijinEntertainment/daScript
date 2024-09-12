@@ -1,0 +1,50 @@
+{
+  "dictionary": {
+    ".NET": 0.0781, "C++": 0.0429, "DAS AOT": 0.0101, "DAS JIT": 0.0105,"LUAJIT": 0.0122, "LUAU --codegen": 0.0229, "MONO": 0.0772
+  },
+  "exp loop": {
+    ".NET": 0.0055, "C++": 0.0037, "DAS AOT": 0.0051, "DAS JIT": 0.0037,"LUAJIT": 0.0179, "LUAU --codegen": 0.0084, "MONO": 0.0105
+  },
+  "fibonacci loop": {
+    ".NET": 0.0020, "C++": 0.0016, "DAS AOT": 0.0016, "DAS JIT": 0.0019,"LUAJIT": 0.0048, "LUAU --codegen": 0.0350, "MONO": 0.0025
+  },
+  "fibonacci recursive": {
+    ".NET": 0.0065, "C++": 0.0039, "DAS AOT": 0.0045, "DAS JIT": 0.0046,"LUAJIT": 0.0127, "LUAU --codegen": 0.0598, "MONO": 0.0080
+  },
+  "float2string": {
+    ".NET": 0.3279, "C++": 0.2954, "DAS AOT": 0.0655, "DAS JIT": 0.0674,"LUAJIT": 0.1559, "LUAU --codegen": 0.0691, "MONO": 0.4555
+  },
+  "mandelbrot": {
+    ".NET": 0.0020, "C++": 0.0005, "DAS AOT": 0.0006, "DAS JIT": 0.0005,"LUAJIT": 0.0075, "LUAU --codegen": 0.0378, "MONO": 0.0040
+  },
+  "n-bodies": {
+    ".NET": 0.0386, "C++": 0.0270, "DAS AOT": 0.0270, "DAS JIT": 0.0207,"LUAJIT": 0.0816, "LUAU --codegen": 0.2299, "MONO": 0.0780
+  },
+  "native loop": {
+    ".NET": 0.1602, "C++": "N/A", "DAS AOT": 0.0122, "DAS JIT": 0.0122,"LUAJIT": 0.0122, "LUAU --codegen": "N/A", "MONO": 0.1336
+  },
+  "particles kinematics": {
+    ".NET": 0.0065, "C++": 0.0045, "DAS AOT": 0.0030, "DAS JIT": 0.0030,"LUAJIT": 0.2051, "LUAU --codegen": 0.1988, "MONO": 0.0911
+  },
+  "primes loop": {
+    ".NET": 0.0379, "C++": 0.0385, "DAS AOT": 0.0135, "DAS JIT": 0.0135,"LUAJIT": 0.0136, "LUAU --codegen": 0.0349, "MONO": 0.0378
+  },
+  "queen": {
+    ".NET": 0.0055, "C++": 0.0001, "DAS AOT": 0.0001, "DAS JIT": 0.0001,"LUAJIT": 0.0004, "LUAU --codegen": 0.0008, "MONO": "N/A"
+  },
+  "sha256": {
+    ".NET": 0.0075, "C++": "N/A", "DAS AOT": 0.0051, "DAS JIT": 0.0049,"LUAJIT": 0.0342, "LUAU --codegen": 0.5606, "MONO": "N/A"
+  },
+  "sort": {
+    ".NET": 0.0125, "C++": 0.0056, "DAS AOT": 0.0054, "DAS JIT": 0.0090,"LUAJIT": 0.0723, "LUAU --codegen": 0.0488, "MONO": 0.0105
+  },
+  "spectral norm": {
+    ".NET": 0.0120, "C++": 0.0123, "DAS AOT": 0.0124, "DAS JIT": 0.0124,"LUAJIT": 0.0146, "LUAU --codegen": 0.0568, "MONO": 0.0265
+  },
+  "string2float": {
+    ".NET": 0.1126, "C++": 0.1012, "DAS AOT": 0.0239, "DAS JIT": 0.0238,"LUAJIT": 0.1172, "LUAU --codegen": 0.1154, "MONO": 0.1817
+  },
+  "tree": {
+    ".NET": 0.2473, "C++": 0.1755, "DAS AOT": 0.1738, "DAS JIT": 0.1778,"LUAJIT": 1.0010, "LUAU --codegen": 1.3748, "MONO": 0.2566
+  }
+}
