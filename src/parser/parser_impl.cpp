@@ -59,7 +59,8 @@ namespace das {
 
     vector<ExpressionPtr> typesAndSequenceToList  ( vector<Expression *> * declL, Expression * arguments ) {
         vector<ExpressionPtr> args;
-        vector<ExpressionPtr> seq = sequenceToList(arguments);
+        vector<ExpressionPtr> seq;
+        if ( arguments ) seq = sequenceToList(arguments);
         args.reserve(declL->size() + seq.size());
         for ( auto & decl : *declL ) args.push_back(ExpressionPtr(decl));
         for ( auto & arg : seq ) args.push_back(move(arg));
