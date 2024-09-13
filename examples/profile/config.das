@@ -96,7 +96,7 @@ def run_files ( tf:TestFile )
     if TEST_SQUIRREL && !empty(tf.nutModifiedFile)
         // quirrel
         let nutRoot = "{get_das_root()}/examples/profile/tests/squirrel"
-        let numModifiedCompiler = "{nutRoot}/sq3-modified-64.exe"
+        let numModifiedCompiler = "{nutRoot}/sq-64.exe"
         let cwd = getcwd()
         chdir(nutRoot)
         run_and_gun("QUIRREL","{numModifiedCompiler} {nutRoot}/{tf.nutModifiedFile}")

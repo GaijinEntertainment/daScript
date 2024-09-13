@@ -1,15 +1,20 @@
-local function fibI(n) {
-    local last = 1
-    local cur = 0
-    do {
+//-file:plus-string
+
+function fibI(n) {
+    local last = 0;
+    local cur = 1;
+    while(--n) {
         local tmp = cur;
         cur += last;
         last = tmp;
-        --n;
-    } while(n);
+    }
     return cur;
 }
 local profile_it
-try profile_it = ::loadfile("profile.nut")() catch (e) profile_it = require("profile.nut")
+try {
+  profile_it = getroottable()["loadfile"]("profile.nut")()
+  if (profile_it == null)
+    throw "no loadfile"
+} catch(e) profile_it = require("profile.nut")
 
 print("\"fibonacci loop\", " + profile_it(20, function() {fibI(6511134)}) + ", 20\n");

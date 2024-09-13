@@ -43,6 +43,8 @@ def main
             luauFile = "queen.luau",
             luaFile = "queen.lua",
             luaJitFile = "queen.lua",
+            nutFile = "queen.nut",
+            nutModifiedFile = "queen.nut",
             // monoFile = "queen.cs",
             dotNetFile = "queen.cs",
         ]])
