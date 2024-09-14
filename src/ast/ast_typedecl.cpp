@@ -2676,8 +2676,8 @@ namespace das
         if ( type->baseType==Type::tPointer ) {
             return false;
         }
-        if ( type->firstType && isCircularType(type->firstType, all) ) return true;
-        if ( type->secondType && isCircularType(type->secondType, all) ) return true;
+        // if ( type->firstType && isCircularType(type->firstType, all) ) return true;
+        // if ( type->secondType && isCircularType(type->secondType, all) ) return true;
         auto pt = type.get();
         for (auto it : all) {
             if ( it == pt ) return true;
