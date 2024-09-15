@@ -1205,7 +1205,7 @@ expression_block
     ;
 
 expr_call_pipe
-    : expr_call[call] expr_full_block_assumed_piped[block] {
+    : expr[call] expr_full_block_assumed_piped[block] {
         if ( $call->rtti_isCallLikeExpr() ) {
             ((ExprLooksLikeCall *)$call)->arguments.push_back(ExpressionPtr($block));
             $$ = $call;
