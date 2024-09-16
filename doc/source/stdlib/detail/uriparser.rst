@@ -1,65 +1,66 @@
-.. |structure_annotation-uriparser-UriTextRangeA| replace:: Range of text in the URI.
+.. |handmade/function-uriparser-Uri| replace:: to be documented in |handmade/function-uriparser-Uri|.rst
 
-.. |structure_annotation-uriparser-UriIp4Struct| replace:: IPv4 address portion of the URI.
+.. |handmade/function-uriparser-using| replace:: to be documented in |handmade/function-uriparser-using|.rst
 
-.. |structure_annotation-uriparser-UriIp6Struct| replace:: IPv6 address porition of the URI.
+.. |handmade/function-uriparser-finalize| replace:: to be documented in |handmade/function-uriparser-finalize|.rst
 
-.. |structure_annotation-uriparser-UriHostDataA| replace:: Host data portion of the URI (IPv4 or IPv6, or some future data).
+.. |handmade/function-uriparser-clone| replace:: to be documented in |handmade/function-uriparser-clone|.rst
 
-.. |structure_annotation-uriparser-UriPathSegmentStructA| replace:: Part of the path portion of the URI.
+.. |handmade/function-uriparser-strip_uri| replace:: to be documented in |handmade/function-uriparser-strip_uri|.rst
 
-.. |structure_annotation-uriparser-UriUriA| replace:: URI base class, contains all URI data.
+.. |handmade/function-uriparser-add_base_uri| replace:: to be documented in |handmade/function-uriparser-add_base_uri|.rst
 
-.. |structure_annotation-uriparser-Uri| replace:: URI implementation.
+.. |handmade/function-uriparser-remove_base_uri| replace:: to be documented in |handmade/function-uriparser-remove_base_uri|.rst
 
-.. |function-uriparser-Uri| replace:: Creates new URI.
+.. |handmade/function-uriparser-normalize| replace:: to be documented in |handmade/function-uriparser-normalize|.rst
 
-.. |function-uriparser-using| replace:: Creates scoped URI variable.
+.. |handmade/function-uriparser-string| replace:: to be documented in |handmade/function-uriparser-string|.rst
 
-.. |function-uriparser-finalize| replace:: Finalizer for the URI.
+.. |handmade/function-uriparser-to_unix_file_name| replace:: to be documented in |handmade/function-uriparser-to_unix_file_name|.rst
 
-.. |function-uriparser-clone| replace:: Clones the URI.
+.. |handmade/function-uriparser-to_windows_file_name| replace:: to be documented in |handmade/function-uriparser-to_windows_file_name|.rst
 
-.. |function-uriparser-strip_uri| replace:: Removes query and fragment from the URI.
+.. |handmade/function-uriparser-to_file_name| replace:: to be documented in |handmade/function-uriparser-to_file_name|.rst
 
-.. |function-uriparser-add_base_uri| replace:: Adds `base` URI to the `relative` URI.
+.. |handmade/function-uriparser-uri_from_file_name| replace:: to be documented in |handmade/function-uriparser-uri_from_file_name|.rst
 
-.. |function-uriparser-remove_base_uri| replace:: Removes `base` URI from the `relative` URI.
+.. |handmade/function-uriparser-uri_from_windows_file_name| replace:: to be documented in |handmade/function-uriparser-uri_from_windows_file_name|.rst
 
-.. |function-uriparser-normalize| replace:: Normalizes URI, i.e. removes redundant `/` and `.` characters.
+.. |handmade/function-uriparser-uri_from_unix_file_name| replace:: to be documented in |handmade/function-uriparser-uri_from_unix_file_name|.rst
 
-.. |function-uriparser-string| replace:: Converts URI to string.
+.. |handmade/function-uriparser-uri_for_each_query_kv| replace:: to be documented in |handmade/function-uriparser-uri_for_each_query_kv|.rst
 
-.. |function-uriparser-to_unix_file_name| replace:: Converts URI to Unix file name.
+.. |handmade/function-uriparser-make_new_guid| replace:: to be documented in |handmade/function-uriparser-make_new_guid|.rst
 
-.. |function-uriparser-to_windows_file_name| replace:: Converts URI to Windows file name.
+.. |handmade/function-uriparser-uri_to_unix_file_name| replace:: to be documented in |handmade/function-uriparser-uri_to_unix_file_name|.rst
 
-.. |function-uriparser-to_file_name| replace:: Converts URI to the current platform file name.
+.. |handmade/function-uriparser-uri_to_windows_file_name| replace:: to be documented in |handmade/function-uriparser-uri_to_windows_file_name|.rst
 
-.. |function-uriparser-uri_from_file_name| replace:: Converts current platform file name to URI.
+.. |handmade/function-uriparser-unix_file_name_to_uri| replace:: to be documented in |handmade/function-uriparser-unix_file_name_to_uri|.rst
 
-.. |function-uriparser-uri_from_windows_file_name| replace:: Converts Windows file name to URI.
+.. |handmade/function-uriparser-windows_file_name_to_uri| replace:: to be documented in |handmade/function-uriparser-windows_file_name_to_uri|.rst
 
-.. |function-uriparser-uri_from_unix_file_name| replace:: Converts Unix file name to URI.
+.. |handmade/function-uriparser-uri_to_file_name| replace:: to be documented in |handmade/function-uriparser-uri_to_file_name|.rst
 
-.. |function-uriparser-uri_for_each_query_kv| replace:: Iterates over the URI query parameters.
+.. |handmade/function-uriparser-file_name_to_uri| replace:: to be documented in |handmade/function-uriparser-file_name_to_uri|.rst
 
-.. |function-uriparser-make_new_guid| replace:: Generates new GUID.
+.. |handmade/function-uriparser-escape_uri| replace:: to be documented in |handmade/function-uriparser-escape_uri|.rst
 
-.. |function-uriparser-escape_uri| replace:: Adds escape characters to the URI.
+.. |handmade/function-uriparser-unescape_uri| replace:: to be documented in |handmade/function-uriparser-unescape_uri|.rst
 
-.. |function-uriparser-file_name_to_uri| replace:: Converts current file name to URI.
+.. |handmade/function-uriparser-normalize_uri| replace:: to be documented in |handmade/function-uriparser-normalize_uri|.rst
 
-.. |function-uriparser-unescape_uri| replace:: Remove escape characters from the URI.
+.. |handmade/structure_annotation-uriparser-UriTextRangeA| replace:: to be documented in |handmade/structure_annotation-uriparser-UriTextRangeA|.rst
 
-.. |function-uriparser-unix_file_name_to_uri| replace:: Converts Unix file name to URI.
+.. |handmade/structure_annotation-uriparser-UriIp4Struct| replace:: to be documented in |handmade/structure_annotation-uriparser-UriIp4Struct|.rst
 
-.. |function-uriparser-uri_to_file_name| replace:: Converts URI to the current platform file name.
+.. |handmade/structure_annotation-uriparser-UriIp6Struct| replace:: to be documented in |handmade/structure_annotation-uriparser-UriIp6Struct|.rst
 
-.. |function-uriparser-uri_to_unix_file_name| replace:: Converts URI to Unix file name.
+.. |handmade/structure_annotation-uriparser-UriHostDataA| replace:: to be documented in |handmade/structure_annotation-uriparser-UriHostDataA|.rst
 
-.. |function-uriparser-uri_to_windows_file_name| replace:: Converts URI to Windows file name.
+.. |handmade/structure_annotation-uriparser-UriPathSegmentStructA| replace:: to be documented in |handmade/structure_annotation-uriparser-UriPathSegmentStructA|.rst
 
-.. |function-uriparser-windows_file_name_to_uri| replace:: Converts Windows file name to URI.
+.. |handmade/structure_annotation-uriparser-UriUriA| replace:: to be documented in |handmade/structure_annotation-uriparser-UriUriA|.rst
 
-.. |function-uriparser-normalize_uri| replace:: Normalizes URI. i.e. removes redundant `/` and `.` characters.
+.. |handmade/structure_annotation-uriparser-Uri| replace:: to be documented in |handmade/structure_annotation-uriparser-Uri|.rst
+

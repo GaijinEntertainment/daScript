@@ -7,9 +7,9 @@ options strict_smart_pointers = true
 module rst_comment private
 
 require daslib/ast_boost
+require daslib/rst
 require fio
 require strings
-require rst
 
 enum ParserState
     none
@@ -35,10 +35,18 @@ def private debug_rst ( s : string )
     if DEBUG_COMMENT_READER
         to_log(LOG_INFO,"{s}\n")
 
+def error_rst ( s : string )
+    if DEBUG_COMMENT_READER
+        error("{s} at {get_line_info(1) |> describe}\n")
+    else
+        error(s)
+
 def panic_rst ( s : string )
     if DEBUG_COMMENT_READER
-        to_log(LOG_ERROR,"{s} at {get_line_info(1) |> describe}\n")
-    panic(s)
+        error("{s} at {get_line_info(1) |> describe}\n")
+    else
+        error(s)
+    panic("panic")
 
 [macro_function]
 def private get_macro_name ( st:StructurePtr; mtype:string )
@@ -88,8 +96,6 @@ class RstComment : AstCommentReader
             function_comment += comment
         elif state==ParserState field
             field_comment += comment
-        elif state==ParserState enum_entry
-            enum_entry_comment += comment
         elif state==ParserState global
             global_comment += comment
         elif state==ParserState variant_alias
@@ -136,10 +142,10 @@ class RstComment : AstCommentReader
         if state != ParserState enum_decl
             panic_rst("expecting enum_decl, got {state}")
         state = ParserState enum_entry
-        enum_entry_comment = ""
+        // enum_entry_comment = ""
     def override afterEnumerationEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterEnumerationEntry {name} // {enum_entry_comment}")
-        enum_entry_comment =""
+        // enum_entry_comment =""
     def override afterEnumerationEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterEnumerationEntries")
         if state != ParserState enum_entry
@@ -148,11 +154,12 @@ class RstComment : AstCommentReader
     def override afterEnumeration ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterEnumeration {name} // {enum_comment}")
         if state != ParserState enum_decl
-            panic_rst("expecting enum_decl, got {state}")
-        if enum_comment != ""
-            write_to_detail("enumeration-{prog.thisModuleName}-{name}", enum_comment)
+            panic_rst("expecting enum_decl, got {state}. name {name}")
+        if enum_comment != "" || enum_entry_comment != ""
+            write_to_detail("enumeration-{prog.thisModuleName}-{name}", enum_comment + enum_entry_comment)
         state = ParserState none
         enum_comment = ""
+        enum_entry_comment =""
     def override beforeBitfield ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeBitfield")
         if state != ParserState none
@@ -163,12 +170,12 @@ class RstComment : AstCommentReader
         if state != ParserState bitfield_alias
             panic_rst("expecting bitfield_alias, got {state}")
         state = ParserState bitfield_entry
-        bitfield_entry_comment = ""
+        // bitfield_entry_comment = ""
     def override afterBitfieldEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterBitfieldEntry {name} // {bitfield_entry_comment}")
         if state != ParserState bitfield_entry
             panic_rst("expecting bitfield_entry, got {state}")
-        bitfield_entry_comment = ""
+        // bitfield_entry_comment = ""
     def override afterBitfieldEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterBitfieldEntries")
         state = ParserState bitfield_alias
@@ -176,8 +183,8 @@ class RstComment : AstCommentReader
         debug_rst("afterBitfield {name} // {bitfield_comment}")
         if state != ParserState bitfield_alias
             panic_rst("expecting bitfield_alias, got {state}")
-        if bitfield_comment != ""
-            write_to_detail("typedef-{prog.thisModuleName}-{name}", bitfield_comment)
+        if bitfield_comment != "" || bitfield_entry_comment != ""
+            write_to_detail("typedef-{prog.thisModuleName}-{name}", bitfield_comment + bitfield_entry_comment)
         state = ParserState none
         bitfield_comment = ""
     def override beforeTuple ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
@@ -219,12 +226,12 @@ class RstComment : AstCommentReader
         if state != ParserState variant_alias
             panic_rst("expecting variant_alias, got {state}")
         state = ParserState variant_entry
-        variant_entry_comment = ""
+        // variant_entry_comment = ""
     def override afterVariantEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterVariantEntry {name} // {variant_entry_comment}")
         if state != ParserState variant_entry
             panic_rst("expecting variant_entry, got {state}")
-        variant_entry_comment = ""
+        // variant_entry_comment = ""
     def override afterVariantEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterVariantEntries")
         if state != ParserState variant_entry
@@ -234,10 +241,11 @@ class RstComment : AstCommentReader
         debug_rst("afterVariant {name} // {variant_comment}")
         if state != ParserState variant_alias
             panic_rst("expecting variant_alias, got {state}")
-        if variant_comment != ""
-            write_to_detail("typedef-{prog.thisModuleName}-{name}", variant_comment)
+        if variant_comment != "" || variant_entry_comment != ""
+            write_to_detail("typedef-{prog.thisModuleName}-{name}", variant_comment + variant_entry_comment)
         state = ParserState none
         variant_comment = ""
+        variant_entry_comment = ""
     def override beforeGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeGlobalVariables")
         if state != ParserState none
@@ -300,13 +308,15 @@ class RstComment : AstCommentReader
                 else
                     to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
         // to_log(LOG_WARNING, "WARNING: unsupported structure-annotation = {ann.annotation.name} in {st.name}\n")
+        for fc in field_comments
+            if fc.kind=="function"
+                write_to_detail("function-{prog.thisModuleName}-{st.name}-{fc.name}", fc.comment)
+            else
+                structure_comment += fc.comment
+            debug_rst("    {fc.kind} {fc.name} // {fc.comment}")
         if !is_annotation && structure_comment != ""
             let topic_name = st.flags.isClass ? "class" : "structure"
             write_to_detail("{topic_name}-{prog.thisModuleName}-{st.name}", structure_comment)
-        for fc in field_comments
-            if fc.kind=="method"
-                write_to_detail("method-{prog.thisModuleName}-{st.name}.{fc.name}", fc.comment)
-            debug_rst("    {fc.kind} {fc.name} // {fc.comment}")
         structure_comment = ""
         delete field_comments
     def override beforeFunction ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
@@ -321,10 +331,10 @@ class RstComment : AstCommentReader
         if state==ParserState func
             state = ParserState none
             if function_comment != ""
-                write_to_detail("function-{prog.thisModuleName}-{function_file_name(fn)}", function_comment)
+                write_to_detail("function-{prog.thisModuleName}-{function_label_file(fn)}", function_comment)
         else
             if function_comment != ""
-                field_comments |> push([[auto "method",string(fn.name),function_comment]])
+                field_comments |> push([[auto "function",function_label_file(fn),function_comment]])
             state = ParserState structure
         function_comment = ""
     def override beforeStructureFields ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
@@ -347,17 +357,9 @@ class RstComment : AstCommentReader
         state = ParserState structure
         field_comment = ""
     def write_to_detail ( name, text : string ) : void
-        if is_in_aot() || is_in_completion()
-            return
         let fname = get_das_root() + "/doc/source/stdlib/detail/{name}.rst"
         fopen(fname,"wb") <| $ ( f )
             if f==null
-                to_log(LOG_ERROR, "can't open {fname}\n")
+                panic_rst("can't open {fname}")
             else
                 f |> fwrite(text)
-
-
-
-
-
-

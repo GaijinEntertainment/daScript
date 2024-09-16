@@ -1,152 +1,142 @@
-.. |function-strings-append| replace:: Appends single character `ch` to das::string `str`.
+.. |handmade/enumeration-strings-ConversionResult| replace:: to be documented in |handmade/enumeration-strings-ConversionResult|.rst
 
-.. |function-strings-as_string| replace:: Convert array of uint8_t `arr` to string.
+.. |handmade/function-strings-delete_string| replace:: to be documented in |handmade/function-strings-delete_string|.rst
 
-.. |function-strings-build_string| replace:: Create StringBuilderWriter and pass it to the block. Upon completion of a block, return whatever was written as string.
+.. |handmade/function-strings-build_string| replace:: to be documented in |handmade/function-strings-build_string|.rst
 
-.. |function-strings-builtin_strdup| replace:: Creates copy of a string via "C" strdup function. This way string will persist outside of the context lifetime.
+.. |handmade/function-strings-build_hash| replace:: to be documented in |handmade/function-strings-build_hash|.rst
 
-.. |function-strings-builtin_string_split| replace:: Split string by the delimiter string.
+.. |handmade/function-strings-peek_data| replace:: to be documented in |handmade/function-strings-peek_data|.rst
 
-.. |function-strings-builtin_string_split_by_char| replace:: Split string by any of the delimiter characters.
+.. |handmade/function-strings-modify_data| replace:: to be documented in |handmade/function-strings-modify_data|.rst
 
-.. |function-strings-character_at| replace:: Returns character of the string 'str' at index 'idx'.
+.. |handmade/function-strings-write| replace:: to be documented in |handmade/function-strings-write|.rst
 
-.. |function-strings-character_uat| replace:: Returns character of the string 'str' at index 'idx'. This function does not check bounds of index.
+.. |handmade/function-strings-write_char| replace:: to be documented in |handmade/function-strings-write_char|.rst
 
-.. |function-strings-chop| replace:: Return all part of the strings starting at start and ending at start + length.
+.. |handmade/function-strings-write_chars| replace:: to be documented in |handmade/function-strings-write_chars|.rst
 
-.. |function-strings-delete_string| replace:: Removes string from the string heap. This is unsafe because it will free the memory and all dangling strings will be broken.
+.. |handmade/function-strings-write_escape_string| replace:: to be documented in |handmade/function-strings-write_escape_string|.rst
 
-.. |function-strings-empty| replace:: Returns true if string is empty (null or "").
+.. |handmade/function-strings-fmt| replace:: to be documented in |handmade/function-strings-fmt|.rst
 
-.. |function-strings-ends_with| replace:: returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
+.. |handmade/function-strings-format| replace:: to be documented in |handmade/function-strings-format|.rst
 
-.. |function-strings-escape| replace:: Escape string so that escape sequences are printable, for example converting "\n" into "\\n".
+.. |handmade/function-strings-string| replace:: to be documented in |handmade/function-strings-string|.rst
 
-.. |function-strings-safe_unescape| replace:: Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
+.. |handmade/function-strings-builtin_strdup| replace:: to be documented in |handmade/function-strings-builtin_strdup|.rst
 
-.. |function-strings-find| replace:: Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
+.. |handmade/function-strings-character_at| replace:: to be documented in |handmade/function-strings-character_at|.rst
 
-.. |function-strings-float| replace:: Converts string to float. In case of error panic.
+.. |handmade/function-strings-character_uat| replace:: to be documented in |handmade/function-strings-character_uat|.rst
 
-.. |function-strings-double| replace:: Converts string to double. In case of error panic.
+.. |handmade/function-strings-repeat| replace:: to be documented in |handmade/function-strings-repeat|.rst
 
-.. |function-strings-int8| replace:: Converts string to int8. In case of error panic.
+.. |handmade/function-strings-to_char| replace:: to be documented in |handmade/function-strings-to_char|.rst
 
-.. |function-strings-uint8| replace:: Convert string to uint8. In case of error panic.
+.. |handmade/function-strings-ends_with| replace:: to be documented in |handmade/function-strings-ends_with|.rst
 
-.. |function-strings-int16| replace:: Converts string to int16. In case of error panic.
+.. |handmade/function-strings-starts_with| replace:: to be documented in |handmade/function-strings-starts_with|.rst
 
-.. |function-strings-uint16| replace:: Convert string to uint16. In case of error panic.
+.. |handmade/function-strings-strip| replace:: to be documented in |handmade/function-strings-strip|.rst
 
-.. |function-strings-int| replace:: Converts string to integer. In case of error panic.
+.. |handmade/function-strings-strip_right| replace:: to be documented in |handmade/function-strings-strip_right|.rst
 
-.. |function-strings-uint| replace:: Convert string to uint. In case of error panic.
+.. |handmade/function-strings-strip_left| replace:: to be documented in |handmade/function-strings-strip_left|.rst
 
-.. |function-strings-int64| replace:: Converts string to int64. In case of error panic.
+.. |handmade/function-strings-chop| replace:: to be documented in |handmade/function-strings-chop|.rst
 
-.. |function-strings-uint64| replace:: Convert string to uint64. In case of error panic.
+.. |handmade/function-strings-slice| replace:: to be documented in |handmade/function-strings-slice|.rst
 
-.. |function-strings-format| replace:: Converts value to string given specified format (that of C printf).
+.. |handmade/function-strings-find| replace:: to be documented in |handmade/function-strings-find|.rst
 
-.. |function-strings-is_alpha| replace:: Returns true if character is [A-Za-z].
+.. |handmade/function-strings-length| replace:: to be documented in |handmade/function-strings-length|.rst
 
-.. |function-strings-is_char_in_set| replace:: Returns true if character bit is set in the set (of 256 bits in uint32[8]).
+.. |handmade/function-strings-reverse| replace:: to be documented in |handmade/function-strings-reverse|.rst
 
-.. |function-strings-is_new_line| replace:: Returns true if character is '\n' or '\r'.
+.. |handmade/function-strings-append| replace:: to be documented in |handmade/function-strings-append|.rst
 
-.. |function-strings-is_number| replace:: Returns true if character is [0-9].
+.. |handmade/function-strings-resize| replace:: to be documented in |handmade/function-strings-resize|.rst
 
-.. |function-strings-is_white_space| replace:: Returns true if character is [ \t\n\r].
+.. |handmade/function-strings-to_upper| replace:: to be documented in |handmade/function-strings-to_upper|.rst
 
-.. |function-strings-length| replace:: Return length of string
+.. |handmade/function-strings-to_lower| replace:: to be documented in |handmade/function-strings-to_lower|.rst
 
-.. |function-strings-repeat| replace:: Repeat string specified number of times, and return the result.
+.. |handmade/function-strings-to_lower_in_place| replace:: to be documented in |handmade/function-strings-to_lower_in_place|.rst
 
-.. |function-strings-replace| replace:: Replace all occurances of the stubstring in the string with another substring.
+.. |handmade/function-strings-to_upper_in_place| replace:: to be documented in |handmade/function-strings-to_upper_in_place|.rst
 
-.. |function-strings-resize| replace:: Resize string, i.e make it specified length.
+.. |handmade/function-strings-builtin_string_split_by_char| replace:: to be documented in |handmade/function-strings-builtin_string_split_by_char|.rst
 
-.. |function-strings-reverse| replace:: Return reversed string
+.. |handmade/function-strings-builtin_string_split| replace:: to be documented in |handmade/function-strings-builtin_string_split|.rst
 
-.. |function-strings-slice| replace:: Return all part of the strings starting at start and ending by end. Start can be negative (-1 means "1 from the end").
+.. |handmade/function-strings-int8| replace:: to be documented in |handmade/function-strings-int8|.rst
 
-.. |function-strings-starts_with| replace:: returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
+.. |handmade/function-strings-uint8| replace:: to be documented in |handmade/function-strings-uint8|.rst
 
-.. |function-strings-string| replace:: Return string from the byte array.
+.. |handmade/function-strings-int16| replace:: to be documented in |handmade/function-strings-int16|.rst
 
-.. |function-strings-strip| replace:: Strips white-space-only characters that might appear at the beginning or end of the given string and returns the new stripped string.
+.. |handmade/function-strings-uint16| replace:: to be documented in |handmade/function-strings-uint16|.rst
 
-.. |function-strings-strip_left| replace:: Strips white-space-only characters that might appear at the beginning of the given string and returns the new stripped string.
+.. |handmade/function-strings-int| replace:: to be documented in |handmade/function-strings-int|.rst
 
-.. |function-strings-strip_right| replace:: Strips white-space-only characters that might appear at the end of the given string and returns the new stripped string.
+.. |handmade/function-strings-uint| replace:: to be documented in |handmade/function-strings-uint|.rst
 
-.. |function-strings-to_char| replace:: Convert character to string.
+.. |handmade/function-strings-int64| replace:: to be documented in |handmade/function-strings-int64|.rst
 
-.. |function-strings-to_float| replace:: Convert string to float. In case of error returns 0.0
+.. |handmade/function-strings-uint64| replace:: to be documented in |handmade/function-strings-uint64|.rst
 
-.. |function-strings-to_double| replace:: Convert string to double. In case of error returns 0.0lf
+.. |handmade/function-strings-float| replace:: to be documented in |handmade/function-strings-float|.rst
 
-.. |function-strings-to_int8| replace:: Convert string to int8. In case of error returns 0
+.. |handmade/function-strings-double| replace:: to be documented in |handmade/function-strings-double|.rst
 
-.. |function-strings-to_uint8| replace:: Convert string to uint8. In case of error returns 0u
+.. |handmade/function-strings-to_int8| replace:: to be documented in |handmade/function-strings-to_int8|.rst
 
-.. |function-strings-to_int16| replace:: Convert string to int16. In case of error returns 0
+.. |handmade/function-strings-to_uint8| replace:: to be documented in |handmade/function-strings-to_uint8|.rst
 
-.. |function-strings-to_uint16| replace:: Convert string to uint16. In case of error returns 0u
+.. |handmade/function-strings-to_int16| replace:: to be documented in |handmade/function-strings-to_int16|.rst
 
-.. |function-strings-to_int| replace:: Convert string to int. In case of error returns 0
+.. |handmade/function-strings-to_int| replace:: to be documented in |handmade/function-strings-to_int|.rst
 
-.. |function-strings-to_uint| replace:: Convert string to uint. In case of error returns 0u
+.. |handmade/function-strings-to_uint| replace:: to be documented in |handmade/function-strings-to_uint|.rst
 
-.. |function-strings-to_int64| replace:: Convert string to int64. In case of error returns 0l
+.. |handmade/function-strings-to_int64| replace:: to be documented in |handmade/function-strings-to_int64|.rst
 
-.. |function-strings-to_uint64| replace:: Convert string to uint64. In case of error returns 0ul
+.. |handmade/function-strings-to_uint64| replace:: to be documented in |handmade/function-strings-to_uint64|.rst
 
-.. |function-strings-to_lower| replace:: Return all lower case string
+.. |handmade/function-strings-to_float| replace:: to be documented in |handmade/function-strings-to_float|.rst
 
-.. |function-strings-to_lower_in_place| replace:: Modify string in place to be all lower case
+.. |handmade/function-strings-to_double| replace:: to be documented in |handmade/function-strings-to_double|.rst
 
-.. |function-strings-to_upper| replace:: Return all upper case string
+.. |handmade/function-strings-escape| replace:: to be documented in |handmade/function-strings-escape|.rst
 
-.. |function-strings-to_upper_in_place| replace:: Modify string in place to be all upper case string
+.. |handmade/function-strings-unescape| replace:: to be documented in |handmade/function-strings-unescape|.rst
 
-.. |function-strings-unescape| replace:: Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
+.. |handmade/function-strings-safe_unescape| replace:: to be documented in |handmade/function-strings-safe_unescape|.rst
 
-.. |function-strings-write| replace:: Returns textual representation of the value.
+.. |handmade/function-strings-replace| replace:: to be documented in |handmade/function-strings-replace|.rst
 
-.. |function-strings-write_char| replace:: Writes character into StringBuilderWriter.
+.. |handmade/function-strings-rtrim| replace:: to be documented in |handmade/function-strings-rtrim|.rst
 
-.. |function-strings-write_chars| replace:: Writes multiple characters into StringBuilderWriter.
+.. |handmade/function-strings-ltrim| replace:: to be documented in |handmade/function-strings-ltrim|.rst
 
-.. |function-strings-write_escape_string| replace:: Writes escaped string into StringBuilderWriter.
+.. |handmade/function-strings-trim| replace:: to be documented in |handmade/function-strings-trim|.rst
 
-.. |structure_annotation-strings-StringBuilderWriter| replace:: Object representing a string builder. Its significantly faster to write data to the string builder and than convert it to a string, as oppose to using sequences of string concatenations.
+.. |handmade/function-strings-is_alpha| replace:: to be documented in |handmade/function-strings-is_alpha|.rst
 
-.. |function-strings-rtrim| replace:: Removes trailing white space.
+.. |handmade/function-strings-is_new_line| replace:: to be documented in |handmade/function-strings-is_new_line|.rst
 
-.. |function-strings-peek_data| replace:: Passes temporary array which is mapped to the string data to a block as read-only.
+.. |handmade/function-strings-is_white_space| replace:: to be documented in |handmade/function-strings-is_white_space|.rst
 
-.. |function-strings-modify_data| replace:: Passes temporary array which is mapped to the string data to a block for both reading and writing.
+.. |handmade/function-strings-is_number| replace:: to be documented in |handmade/function-strings-is_number|.rst
 
-.. |function-strings-reserve_string_buffer| replace:: Allocate copy of the string data on the heap.
+.. |handmade/function-strings-is_char_in_set| replace:: to be documented in |handmade/function-strings-is_char_in_set|.rst
 
-.. |function-strings-set_total| replace:: Total number of elements in the character set.
+.. |handmade/function-strings-set_total| replace:: to be documented in |handmade/function-strings-set_total|.rst
 
-.. |function-strings-set_element| replace:: Gen character set element by element index (not character index).
+.. |handmade/function-strings-set_element| replace:: to be documented in |handmade/function-strings-set_element|.rst
 
-.. |function-strings-build_hash| replace:: Build hash of the string (as oppose to building entire string).
+.. |handmade/function-strings-reserve_string_buffer| replace:: to be documented in |handmade/function-strings-reserve_string_buffer|.rst
 
-.. |function-strings-ltrim| replace:: Removes leading white space.
-
-.. |function-strings-trim| replace:: Removes leading and trailing white space.
-
-.. |enumeration-strings-ConversionResult| replace:: Result of conversion from string to number.
-
-.. |function-strings-fmt| replace:: Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-
-
-
+.. |handmade/structure_annotation-strings-StringBuilderWriter| replace:: to be documented in |handmade/structure_annotation-strings-StringBuilderWriter|.rst
 

@@ -1,222 +1,216 @@
-.. |typedef-rtti-FileAccessPtr| replace:: smart_ptr<FileAccess>, i.e pointer to the `FileAccess` object.
+.. |handmade/typedef-rtti-ProgramFlags| replace:: to be documented in |handmade/typedef-rtti-ProgramFlags|.rst
 
-.. |typedef-rtti-ModuleFlags| replace:: Flags which represent the module's state.
+.. |handmade/typedef-rtti-context_category_flags| replace:: to be documented in |handmade/typedef-rtti-context_category_flags|.rst
 
-.. |typedef-rtti-ProgramFlags| replace:: Flags which represent state of the `Program` object, both during and after compilation.
+.. |handmade/typedef-rtti-TypeInfoFlags| replace:: to be documented in |handmade/typedef-rtti-TypeInfoFlags|.rst
 
-.. |typedef-rtti-RttiValue| replace:: Variant type which represents value of any annotation arguments and variable annotations.
+.. |handmade/typedef-rtti-StructInfoFlags| replace:: to be documented in |handmade/typedef-rtti-StructInfoFlags|.rst
 
-.. |enumeration-rtti-CompilationError| replace:: Enumeration which represents error type for each of the errors which compiler returns and various stages.
+.. |handmade/typedef-rtti-ModuleFlags| replace:: to be documented in |handmade/typedef-rtti-ModuleFlags|.rst
 
-.. |enumeration-rtti-ConstMatters| replace:: Yes or no flag which indicates if constant flag of the type matters (during comparison).
+.. |handmade/typedef-rtti-AnnotationDeclarationFlags| replace:: to be documented in |handmade/typedef-rtti-AnnotationDeclarationFlags|.rst
 
-.. |enumeration-rtti-RefMatters| replace:: Yes or no flag which indicates if reference flag of the type matters (during comparison).
+.. |handmade/typedef-rtti-RttiValue| replace:: to be documented in |handmade/typedef-rtti-RttiValue|.rst
 
-.. |enumeration-rtti-TemporaryMatters| replace:: Yes or no flag which indicates if temporary flag of the type matters (during comparison).
+.. |handmade/typedef-rtti-FileAccessPtr| replace:: to be documented in |handmade/typedef-rtti-FileAccessPtr|.rst
 
-.. |enumeration-rtti-Type| replace:: One of the fundamental (base) types of any type object.
+.. |handmade/enumeration-rtti-CompilationError| replace:: to be documented in |handmade/enumeration-rtti-CompilationError|.rst
 
-.. |function-rtti-RttiValue_nothing| replace:: Constructs new RttiValue of type 'nothing'.
+.. |handmade/enumeration-rtti-Type| replace:: to be documented in |handmade/enumeration-rtti-Type|.rst
 
-.. |function-rtti-arg_names| replace:: Iterates through argument names of the rtti type object.
+.. |handmade/enumeration-rtti-RefMatters| replace:: to be documented in |handmade/enumeration-rtti-RefMatters|.rst
 
-.. |function-rtti-arg_types| replace:: Iterates through argument types of the rtti type object.
+.. |handmade/enumeration-rtti-ConstMatters| replace:: to be documented in |handmade/enumeration-rtti-ConstMatters|.rst
 
-.. |function-rtti-basic_struct_for_each_field| replace:: Iterates through each field of the structure object.
+.. |handmade/enumeration-rtti-TemporaryMatters| replace:: to be documented in |handmade/enumeration-rtti-TemporaryMatters|.rst
 
-.. |function-rtti-builtin_is_same_type| replace:: Returns true if two `TypeInfo` objects are the same given comparison criteria.
+.. |handmade/function-rtti-LineInfo| replace:: to be documented in |handmade/function-rtti-LineInfo|.rst
 
-.. |function-rtti-compile| replace:: Compile Daslang program given as string.
+.. |handmade/function-rtti-using| replace:: to be documented in |handmade/function-rtti-using|.rst
 
-.. |function-rtti-compile_file| replace:: Compile Daslang program given as file in the `FileAccess` object.
+.. |handmade/function-rtti-CodeOfPolicies| replace:: to be documented in |handmade/function-rtti-CodeOfPolicies|.rst
 
-.. |function-rtti-context_for_each_function| replace:: Iterates through all functions in the `Context`.
+.. |handmade/function-rtti-get_dim| replace:: to be documented in |handmade/function-rtti-get_dim|.rst
 
-.. |function-rtti-context_for_each_variable| replace:: Iterates through all variables in the `Context`.
+.. |handmade/function-rtti-get_total_functions| replace:: to be documented in |handmade/function-rtti-get_total_functions|.rst
 
-.. |function-rtti-each_dim| replace:: Iterates through all dim values of the rtti type object, i.e. through all size properties of the array.
+.. |handmade/function-rtti-get_total_variables| replace:: to be documented in |handmade/function-rtti-get_total_variables|.rst
 
-.. |function-rtti-get_annotation_argument_value| replace:: Returns RttiValue which represents argument value for the specific annotation argument.
+.. |handmade/function-rtti-get_function_info| replace:: to be documented in |handmade/function-rtti-get_function_info|.rst
 
-.. |function-rtti-get_das_type_name| replace:: Returns name of the `Type` object.
+.. |handmade/function-rtti-get_variable_info| replace:: to be documented in |handmade/function-rtti-get_variable_info|.rst
 
-.. |function-rtti-get_dim| replace:: Get dim property of the type, i.e. size of the static array.
+.. |handmade/function-rtti-get_this_module| replace:: to be documented in |handmade/function-rtti-get_this_module|.rst
 
-.. |function-rtti-get_function_info| replace:: Get function declaration info by index.
+.. |handmade/function-rtti-get_module| replace:: to be documented in |handmade/function-rtti-get_module|.rst
 
-.. |function-rtti-get_module| replace:: Get `Module` object by name.
+.. |handmade/function-rtti-compile| replace:: to be documented in |handmade/function-rtti-compile|.rst
 
-.. |function-rtti-get_this_module| replace:: Get current `Program` object currently compiled module.
+.. |handmade/function-rtti-compile_file| replace:: to be documented in |handmade/function-rtti-compile_file|.rst
 
-.. |function-rtti-get_total_functions| replace:: Get total number of functions in the context.
+.. |handmade/function-rtti-for_each_expected_error| replace:: to be documented in |handmade/function-rtti-for_each_expected_error|.rst
 
-.. |function-rtti-get_total_variables| replace:: Get total number of global variables in the context.
+.. |handmade/function-rtti-for_each_require_declaration| replace:: to be documented in |handmade/function-rtti-for_each_require_declaration|.rst
 
-.. |function-rtti-get_variable_info| replace:: Get global variable type information by variable index.
+.. |handmade/function-rtti-simulate| replace:: to be documented in |handmade/function-rtti-simulate|.rst
 
-.. |function-rtti-get_variable_value| replace:: Return RttiValue which represents value of the global variable.
+.. |handmade/function-rtti-make_file_access| replace:: to be documented in |handmade/function-rtti-make_file_access|.rst
 
-.. |function-rtti-is_compatible_cast| replace:: Returns true if `from` type can be casted to `to` type.
+.. |handmade/function-rtti-set_file_source| replace:: to be documented in |handmade/function-rtti-set_file_source|.rst
 
-.. |function-rtti-is_same_type| replace:: Returns true if two `TypeInfo` objects are the same given comparison criteria.
+.. |handmade/function-rtti-add_file_access_root| replace:: to be documented in |handmade/function-rtti-add_file_access_root|.rst
 
-.. |function-rtti-make_file_access| replace:: Creates new `FileAccess` object.
+.. |handmade/function-rtti-program_for_each_module| replace:: to be documented in |handmade/function-rtti-program_for_each_module|.rst
 
-.. |function-rtti-module_for_each_annotation| replace:: Iterates though each handled type in the module.
+.. |handmade/function-rtti-module_for_each_dependency| replace:: to be documented in |handmade/function-rtti-module_for_each_dependency|.rst
 
-.. |function-rtti-module_for_each_enumeration| replace:: Iterates through each enumeration in the module.
+.. |handmade/function-rtti-program_for_each_registered_module| replace:: to be documented in |handmade/function-rtti-program_for_each_registered_module|.rst
 
-.. |function-rtti-module_for_each_function| replace:: Iterates through each function in the module.
+.. |handmade/function-rtti-module_for_each_structure| replace:: to be documented in |handmade/function-rtti-module_for_each_structure|.rst
 
-.. |function-rtti-module_for_each_generic| replace:: Iterates through each generic function in the module.
+.. |handmade/function-rtti-get_variable_value| replace:: to be documented in |handmade/function-rtti-get_variable_value|.rst
 
-.. |function-rtti-module_for_each_global| replace:: Iterates through each global variable in the module.
+.. |handmade/function-rtti-get_annotation_argument_value| replace:: to be documented in |handmade/function-rtti-get_annotation_argument_value|.rst
 
-.. |function-rtti-module_for_each_structure| replace:: Iterates through all structure declarations in the `Module` object.
+.. |handmade/function-rtti-module_for_each_enumeration| replace:: to be documented in |handmade/function-rtti-module_for_each_enumeration|.rst
 
-.. |function-rtti-program_for_each_module| replace:: Iterates through all modules of the `Program` object.
+.. |handmade/function-rtti-module_for_each_function| replace:: to be documented in |handmade/function-rtti-module_for_each_function|.rst
 
-.. |function-rtti-program_for_each_registered_module| replace:: Iterates through all registered modules of the Daslang runtime.
+.. |handmade/function-rtti-module_for_each_generic| replace:: to be documented in |handmade/function-rtti-module_for_each_generic|.rst
 
-.. |function-rtti-module_for_each_dependency| replace:: Iterates through each dependency of the module.
+.. |handmade/function-rtti-module_for_each_global| replace:: to be documented in |handmade/function-rtti-module_for_each_global|.rst
 
-.. |function-rtti-rtti_builtin_structure_for_each_annotation| replace:: Iterates through each annotation for the `Structure` object.
+.. |handmade/function-rtti-module_for_each_annotation| replace:: to be documented in |handmade/function-rtti-module_for_each_annotation|.rst
 
-.. |function-rtti-set_file_source| replace:: Sets source for the specified file in the `FileAccess` object.
+.. |handmade/function-rtti-rtti_builtin_structure_for_each_annotation| replace:: to be documented in |handmade/function-rtti-rtti_builtin_structure_for_each_annotation|.rst
 
-.. |function-rtti-add_file_access_root| replace:: Add extra root directory (search path) to the `FileAccess` object.
+.. |handmade/function-rtti-basic_struct_for_each_field| replace:: to be documented in |handmade/function-rtti-basic_struct_for_each_field|.rst
 
-.. |function-rtti-structure_for_each_annotation| replace:: Iterates through each annotation for the `Structure` object.
+.. |handmade/function-rtti-basic_struct_for_each_parent| replace:: to be documented in |handmade/function-rtti-basic_struct_for_each_parent|.rst
 
-.. |function-rtti-class_info| replace:: Returns `StructInfo?`` for the class.
+.. |handmade/function-rtti-builtin_is_same_type| replace:: to be documented in |handmade/function-rtti-builtin_is_same_type|.rst
 
-.. |structure_annotation-rtti-Annotation| replace:: Handled type or macro.
+.. |handmade/function-rtti-get_type_size| replace:: to be documented in |handmade/function-rtti-get_type_size|.rst
 
-.. |structure_annotation-rtti-AnnotationArgument| replace:: Single argument of the annotation, typically part of the `AnnotationArgumentList`.
+.. |handmade/function-rtti-get_type_align| replace:: to be documented in |handmade/function-rtti-get_type_align|.rst
 
-.. |any_annotation-rtti-AnnotationArgumentList| replace:: List of annotation arguments and properties.
+.. |handmade/function-rtti-get_tuple_field_offset| replace:: to be documented in |handmade/function-rtti-get_tuple_field_offset|.rst
 
-.. |any_annotation-rtti-AnnotationArguments| replace:: List of annotation arguments.
+.. |handmade/function-rtti-get_variant_field_offset| replace:: to be documented in |handmade/function-rtti-get_variant_field_offset|.rst
 
-.. |structure_annotation-rtti-AnnotationDeclaration| replace:: Annotation declaration, its location, and arguments.
+.. |handmade/function-rtti-is_compatible_cast| replace:: to be documented in |handmade/function-rtti-is_compatible_cast|.rst
 
-.. |any_annotation-rtti-AnnotationList| replace:: List of all annotations attached to the object (function or structure).
+.. |handmade/function-rtti-get_das_type_name| replace:: to be documented in |handmade/function-rtti-get_das_type_name|.rst
 
-.. |structure_annotation-rtti-BasicStructureAnnotation| replace:: Handled type which represents structure-like object.
+.. |handmade/function-rtti-add_annotation_argument| replace:: to be documented in |handmade/function-rtti-add_annotation_argument|.rst
 
-.. |structure_annotation-rtti-EnumInfo| replace:: Type object which represents enumeration.
+.. |handmade/function-rtti-sprint_data| replace:: to be documented in |handmade/function-rtti-sprint_data|.rst
 
-.. |structure_annotation-rtti-EnumValueInfo| replace:: Single element of enumeration, its name and value.
+.. |handmade/function-rtti-describe| replace:: to be documented in |handmade/function-rtti-describe|.rst
 
-.. |structure_annotation-rtti-Error| replace:: Object which holds information about compilation error or exception.
+.. |handmade/function-rtti-get_mangled_name| replace:: to be documented in |handmade/function-rtti-get_mangled_name|.rst
 
-.. |structure_annotation-rtti-FileAccess| replace:: Object which holds collection of files as well as means to access them (Project).
+.. |handmade/function-rtti-get_function_by_mnh| replace:: to be documented in |handmade/function-rtti-get_function_by_mnh|.rst
 
-.. |structure_annotation-rtti-FileInfo| replace:: Information about a single file stored in the `FileAccess` object.
+.. |handmade/function-rtti-get_line_info| replace:: to be documented in |handmade/function-rtti-get_line_info|.rst
 
-.. |structure_annotation-rtti-FuncInfo| replace:: Object which represents function declaration.
+.. |handmade/function-rtti-this_context| replace:: to be documented in |handmade/function-rtti-this_context|.rst
 
-.. |structure_annotation-rtti-SimFunction| replace:: Object which represents simulated function in the `Context`.
+.. |handmade/function-rtti-get_function_by_mangled_name_hash| replace:: to be documented in |handmade/function-rtti-get_function_by_mangled_name_hash|.rst
 
-.. |structure_annotation-rtti-LineInfo| replace:: Information about a section of the file stored in the `FileAccess` object.
+.. |handmade/function-rtti-get_function_mangled_name_hash| replace:: to be documented in |handmade/function-rtti-get_function_mangled_name_hash|.rst
 
-.. |structure_annotation-rtti-Module| replace:: Collection of types, aliases, functions, classes, macros etc under a single namespace.
+.. |handmade/function-rtti-lock_this_context| replace:: to be documented in |handmade/function-rtti-lock_this_context|.rst
 
-.. |structure_annotation-rtti-ModuleGroup| replace:: Collection of modules.
+.. |handmade/function-rtti-lock_context| replace:: to be documented in |handmade/function-rtti-lock_context|.rst
 
-.. |structure_annotation-rtti-Program| replace:: Object representing full information about Daslang program during and after compilation (but not the simulated result of the program).
+.. |handmade/function-rtti-lock_mutex| replace:: to be documented in |handmade/function-rtti-lock_mutex|.rst
 
-.. |structure_annotation-rtti-StructInfo| replace:: Type object which represents structure or class.
+.. |handmade/function-rtti-get_function_address| replace:: to be documented in |handmade/function-rtti-get_function_address|.rst
 
-.. |structure_annotation-rtti-TypeAnnotation| replace:: Handled type.
+.. |handmade/function-rtti-get_table_key_index| replace:: to be documented in |handmade/function-rtti-get_table_key_index|.rst
 
-.. |structure_annotation-rtti-TypeInfo| replace:: Object which represents any Daslang type.
+.. |handmade/function-rtti-each| replace:: to be documented in |handmade/function-rtti-each|.rst
 
-.. |structure_annotation-rtti-VarInfo| replace:: Object which represents variable declaration.
+.. |handmade/function-rtti-structure_for_each_annotation| replace:: to be documented in |handmade/function-rtti-structure_for_each_annotation|.rst
 
-.. |structure_annotation-rtti-LocalVariableInfo| replace:: Object which represents local variable declaration.
+.. |handmade/function-rtti-is_same_type| replace:: to be documented in |handmade/function-rtti-is_same_type|.rst
 
-.. |any_annotation-rtti-dasvector`Error| replace:: to be documented
+.. |handmade/function-rtti-context_for_each_function| replace:: to be documented in |handmade/function-rtti-context_for_each_function|.rst
 
-.. |variable-rtti-FUNCINFO_BUILTIN| replace:: Function flag which indicates that function is a built-in function.
+.. |handmade/function-rtti-context_for_each_variable| replace:: to be documented in |handmade/function-rtti-context_for_each_variable|.rst
 
-.. |variable-rtti-FUNCINFO_INIT| replace:: Function flag which indicates that function is called during the `Context` initialization.
+.. |handmade/function-rtti-each_dim| replace:: to be documented in |handmade/function-rtti-each_dim|.rst
 
-.. |variable-rtti-FUNCINFO_PRIVATE| replace:: Function flag which indicates that function is private.
+.. |handmade/function-rtti-arg_types| replace:: to be documented in |handmade/function-rtti-arg_types|.rst
 
-.. |variable-rtti-FUNCINFO_SHUTDOWN| replace:: Function flag which indicates that function is called during the `Context` shutdown.
+.. |handmade/function-rtti-arg_names| replace:: to be documented in |handmade/function-rtti-arg_names|.rst
 
-.. |variable-rtti-FUNCINFO_LATE_INIT| replace:: Function flag which indicates that function initialization is ordered via custom init order.
+.. |handmade/function-rtti-class_info| replace:: to be documented in |handmade/function-rtti-class_info|.rst
 
-.. |typedef-rtti-context_category_flags| replace:: Flags which specify type of the `Context`.
+.. |handmade/function-rtti-type_info| replace:: to be documented in |handmade/function-rtti-type_info|.rst
 
-.. |typedef-rtti-TypeInfoFlags| replace:: Flags which specify properties of the `TypeInfo` object (any rtti type).
+.. |handmade/function-rtti-RttiValue_nothing| replace:: to be documented in |handmade/function-rtti-RttiValue_nothing|.rst
 
-.. |typedef-rtti-StructInfoFlags| replace:: Flags which represent properties of the `StructInfo` object (rtti object which represents structure type).
+.. |handmade/structure_annotation-rtti-FileInfo| replace:: to be documented in |handmade/structure_annotation-rtti-FileInfo|.rst
 
-.. |structure_annotation-rtti-Context| replace:: Object which holds single Daslang Context. Context is the result of the simulation of the Daslang program.
+.. |handmade/structure_annotation-rtti-LineInfo| replace:: to be documented in |handmade/structure_annotation-rtti-LineInfo|.rst
 
-.. |structure_annotation-rtti-CodeOfPolicies| replace:: Object which holds compilation and simulation settings and restrictions.
+.. |handmade/any_annotation-rtti-recursive_mutex| replace:: to be documented in |handmade/any_annotation-rtti-recursive_mutex|.rst
 
-.. |function-rtti-LineInfo| replace:: LineInfo initializer.
+.. |handmade/structure_annotation-rtti-Context| replace:: to be documented in |handmade/structure_annotation-rtti-Context|.rst
 
-.. |function-rtti-CodeOfPolicies| replace:: CodeOfPolicies initializer.
+.. |handmade/structure_annotation-rtti-Error| replace:: to be documented in |handmade/structure_annotation-rtti-Error|.rst
 
-.. |function-rtti-using| replace:: Creates object which can be used inside of the block scope.
+.. |handmade/structure_annotation-rtti-FileAccess| replace:: to be documented in |handmade/structure_annotation-rtti-FileAccess|.rst
 
-.. |function-rtti-for_each_expected_error| replace:: Iterates through each compilation error of the `Program` object.
+.. |handmade/structure_annotation-rtti-Module| replace:: to be documented in |handmade/structure_annotation-rtti-Module|.rst
 
-.. |function-rtti-for_each_require_declaration| replace:: Iterates though each `require` declaration of the compiled program.
+.. |handmade/structure_annotation-rtti-ModuleGroup| replace:: to be documented in |handmade/structure_annotation-rtti-ModuleGroup|.rst
 
-.. |function-rtti-simulate| replace:: Simulates Daslang program and creates 'Context' object.
+.. |handmade/structure_annotation-rtti-AnnotationArgument| replace:: to be documented in |handmade/structure_annotation-rtti-AnnotationArgument|.rst
 
-.. |function-rtti-add_annotation_argument| replace:: Adds annotation argument to the `AnnotationArgumentList` object.
+.. |handmade/any_annotation-rtti-AnnotationArguments| replace:: to be documented in |handmade/any_annotation-rtti-AnnotationArguments|.rst
 
-.. |function-rtti-sprint_data| replace:: Prints data given `TypeInfo` and returns result as a string, similar to `print` function.
+.. |handmade/any_annotation-rtti-AnnotationArgumentList| replace:: to be documented in |handmade/any_annotation-rtti-AnnotationArgumentList|.rst
 
-.. |function-rtti-describe| replace:: Describe rtti object and return data as string.
+.. |handmade/structure_annotation-rtti-Program| replace:: to be documented in |handmade/structure_annotation-rtti-Program|.rst
 
-.. |function-rtti-get_mangled_name| replace:: Returns mangled name of the function.
+.. |handmade/structure_annotation-rtti-Annotation| replace:: to be documented in |handmade/structure_annotation-rtti-Annotation|.rst
 
-.. |function-rtti-get_function_by_mnh| replace:: Returns `SimFunction` by mangled name hash.
+.. |handmade/structure_annotation-rtti-AnnotationDeclaration| replace:: to be documented in |handmade/structure_annotation-rtti-AnnotationDeclaration|.rst
 
-.. |function-rtti-get_function_by_mangled_name_hash| replace:: Returns `function<>` given mangled name hash.
+.. |handmade/any_annotation-rtti-AnnotationList| replace:: to be documented in |handmade/any_annotation-rtti-AnnotationList|.rst
 
-.. |function-rtti-get_line_info| replace:: Returns `LineInfo` object for the current line (line where get_line_info is called from).
+.. |handmade/structure_annotation-rtti-TypeAnnotation| replace:: to be documented in |handmade/structure_annotation-rtti-TypeAnnotation|.rst
 
-.. |function-rtti-this_context| replace:: Returns current `Context` object.
+.. |handmade/structure_annotation-rtti-BasicStructureAnnotation| replace:: to be documented in |handmade/structure_annotation-rtti-BasicStructureAnnotation|.rst
 
-.. |function-rtti-get_function_mangled_name_hash| replace:: Returns mangled name hash of the `function<>` object.
+.. |handmade/structure_annotation-rtti-EnumValueInfo| replace:: to be documented in |handmade/structure_annotation-rtti-EnumValueInfo|.rst
 
-.. |function-rtti-type_info| replace:: Returns `TypeInfo` object for the local variable.
+.. |handmade/structure_annotation-rtti-EnumInfo| replace:: to be documented in |handmade/structure_annotation-rtti-EnumInfo|.rst
 
-.. |typeinfo_macro-rtti-rtti_typeinfo| replace:: Generates `TypeInfo` for the given expression or type.
+.. |handmade/structure_annotation-rtti-StructInfo| replace:: to be documented in |handmade/structure_annotation-rtti-StructInfo|.rst
 
-.. |any_annotation-rtti-recursive_mutex| replace:: Holds system-specific recursive mutex object (typically std::recursive_mutex).
+.. |handmade/structure_annotation-rtti-TypeInfo| replace:: to be documented in |handmade/structure_annotation-rtti-TypeInfo|.rst
 
-.. |function-rtti-lock_this_context| replace:: Makes recursive critical section of the current `Context` object.
+.. |handmade/structure_annotation-rtti-VarInfo| replace:: to be documented in |handmade/structure_annotation-rtti-VarInfo|.rst
 
-.. |function-rtti-lock_context| replace:: Makes recursive critical section of the given `Context` object.
+.. |handmade/structure_annotation-rtti-LocalVariableInfo| replace:: to be documented in |handmade/structure_annotation-rtti-LocalVariableInfo|.rst
 
-.. |function-rtti-lock_mutex| replace:: Makes recursive critical section of the given recursive_mutex object.
+.. |handmade/structure_annotation-rtti-FuncInfo| replace:: to be documented in |handmade/structure_annotation-rtti-FuncInfo|.rst
 
-.. |function-rtti-get_function_address| replace:: Return function pointer `SimFunction *` given mangled name hash.
+.. |handmade/structure_annotation-rtti-SimFunction| replace:: to be documented in |handmade/structure_annotation-rtti-SimFunction|.rst
 
-.. |function-rtti-basic_struct_for_each_parent| replace:: Iterates through each parent type of the `BasicStructureAnnotation` object.
+.. |handmade/structure_annotation-rtti-CodeOfPolicies| replace:: to be documented in |handmade/structure_annotation-rtti-CodeOfPolicies|.rst
 
-.. |typedef-rtti-AnnotationDeclarationFlags| replace:: Flags which represent properties of the `AnnotationDeclaration` object.
+.. |handmade/variable-rtti-FUNCINFO_INIT| replace:: to be documented in |handmade/variable-rtti-FUNCINFO_INIT|.rst
 
-.. |function-rtti-get_type_size| replace:: Returns size of the type in bytes.
+.. |handmade/variable-rtti-FUNCINFO_BUILTIN| replace:: to be documented in |handmade/variable-rtti-FUNCINFO_BUILTIN|.rst
 
-.. |function-rtti-get_type_align| replace:: Returns alignment of the type in bytes.
+.. |handmade/variable-rtti-FUNCINFO_PRIVATE| replace:: to be documented in |handmade/variable-rtti-FUNCINFO_PRIVATE|.rst
 
-.. |function-rtti-get_table_key_index| replace:: Returns index of the key in the table.
+.. |handmade/variable-rtti-FUNCINFO_SHUTDOWN| replace:: to be documented in |handmade/variable-rtti-FUNCINFO_SHUTDOWN|.rst
 
-.. |function-rtti-with_program_serialized| replace:: Serializes program and then deserializes it. This is to test serialization.
-
-.. |function-rtti-get_tuple_field_offset| replace:: Returns offset of the tuple field.
-
-.. |function-rtti-get_variant_field_offset| replace:: Returns offset of the variant field.
-
-.. |function-rtti-each| replace:: Iterates through each element of the object.
+.. |handmade/variable-rtti-FUNCINFO_LATE_INIT| replace:: to be documented in |handmade/variable-rtti-FUNCINFO_LATE_INIT|.rst
 

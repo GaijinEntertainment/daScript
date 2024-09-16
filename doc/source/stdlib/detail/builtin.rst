@@ -1,500 +1,404 @@
-.. |typedef-builtin-print_flags| replace:: this bitfield specifies how exactly values are to be printed
+.. |handmade/typedef-builtin-print_flags| replace:: to be documented in |handmade/typedef-builtin-print_flags|.rst
 
-.. |function-builtin-breakpoint| replace:: breakpoint will call os_debugbreakpoint, which is link-time unresolved dependency. It's supposed to call breakpoint in debugger tool, as sample implementation does.
+.. |handmade/function-builtin-interval| replace:: to be documented in |handmade/function-builtin-interval|.rst
 
-.. |function-builtin-builtin_get_command_line_arguments| replace:: to be documented
+.. |handmade/function-builtin-clear| replace:: to be documented in |handmade/function-builtin-clear|.rst
 
-.. |function-builtin-capacity| replace:: capacity will return current capacity of table or array `arg`. Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
+.. |handmade/function-builtin-length| replace:: to be documented in |handmade/function-builtin-length|.rst
 
-.. |function-builtin-clear| replace:: clear will clear whole table or array `arg`. The size of `arg` after clear is 0.
+.. |handmade/function-builtin-capacity| replace:: to be documented in |handmade/function-builtin-capacity|.rst
 
-.. |function-builtin-clone| replace:: to be documented
+.. |handmade/function-builtin-lock_count| replace:: to be documented in |handmade/function-builtin-lock_count|.rst
 
-.. |function-builtin-clone_string| replace:: clones string `arg` and returns pointer to new string. this ensures string is actually allocated in the current context heap.
+.. |handmade/function-builtin-get_das_root| replace:: to be documented in |handmade/function-builtin-get_das_root|.rst
 
-.. |function-builtin-collect_profile_info| replace:: enabling collecting of the use counts by built-in profiler
+.. |handmade/function-builtin-builtin_get_command_line_arguments| replace:: to be documented in |handmade/function-builtin-builtin_get_command_line_arguments|.rst
 
-.. |function-builtin-dump_profile_info| replace:: dumps use counts of all lines collected by built-in profiler
+.. |handmade/function-builtin-is_compiling| replace:: to be documented in |handmade/function-builtin-is_compiling|.rst
 
-.. |function-builtin-empty| replace:: returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+.. |handmade/function-builtin-is_compiling_macros| replace:: to be documented in |handmade/function-builtin-is_compiling_macros|.rst
 
-.. |function-builtin-gc0_reset| replace:: resets gc0 storage. stored pointers will no longer be accessible
+.. |handmade/function-builtin-is_compiling_macros_in_module| replace:: to be documented in |handmade/function-builtin-is_compiling_macros_in_module|.rst
 
-.. |function-builtin-gc0_restore_ptr| replace:: restores pointer from gc0 storage by `name`
+.. |handmade/function-builtin-is_reporting_compilation_errors| replace:: to be documented in |handmade/function-builtin-is_reporting_compilation_errors|.rst
 
-.. |function-builtin-gc0_restore_smart_ptr| replace:: restores smart_ptr from gc0 storage `name`
+.. |handmade/function-builtin-empty| replace:: to be documented in |handmade/function-builtin-empty|.rst
 
-.. |function-builtin-gc0_save_ptr| replace:: saves pointer to gc0 storage by specifying `name`
+.. |handmade/function-builtin-count| replace:: to be documented in |handmade/function-builtin-count|.rst
 
-.. |function-builtin-gc0_save_smart_ptr| replace:: saves smart_ptr to gc0 storage by specifying `name`
+.. |handmade/function-builtin-ucount| replace:: to be documented in |handmade/function-builtin-ucount|.rst
 
-.. |function-builtin-get_clock| replace:: return a current calendar time. The value returned generally represents the number of seconds since 00:00 hours, Jan 1, 1970 UTC (i.e., the current unix timestamp).
+.. |handmade/function-builtin-panic| replace:: to be documented in |handmade/function-builtin-panic|.rst
 
-.. |function-builtin-get_command_line_arguments| replace:: returns array of command line arguments.
+.. |handmade/function-builtin-print| replace:: to be documented in |handmade/function-builtin-print|.rst
 
-.. |function-builtin-get_das_root| replace:: returns path to where `daslib` and other libraries exist. this is typically root folder of the Daslang main repository
+.. |handmade/function-builtin-error| replace:: to be documented in |handmade/function-builtin-error|.rst
 
-.. |function-builtin-hash| replace:: returns hash value of the `data`. current implementation uses FNV64a hash.
+.. |handmade/function-builtin-sprint| replace:: to be documented in |handmade/function-builtin-sprint|.rst
 
-.. |function-builtin-heap_bytes_allocated| replace:: will return bytes allocated on heap (i.e. really used, not reserved)
+.. |handmade/function-builtin-sprint_json| replace:: to be documented in |handmade/function-builtin-sprint_json|.rst
 
-.. |function-builtin-heap_depth| replace:: returns number of generations in the regular heap
+.. |handmade/function-builtin-terminate| replace:: to be documented in |handmade/function-builtin-terminate|.rst
 
-.. |function-builtin-heap_report| replace:: reports heap usage and allocations
+.. |handmade/function-builtin-breakpoint| replace:: to be documented in |handmade/function-builtin-breakpoint|.rst
 
-.. |function-builtin-heap_collect| replace:: calls garbage collection on the regular heap
+.. |handmade/function-builtin-stackwalk| replace:: to be documented in |handmade/function-builtin-stackwalk|.rst
 
-.. |function-builtin-i_das_ptr_add| replace:: to be documented
+.. |handmade/function-builtin-reset_profiler| replace:: to be documented in |handmade/function-builtin-reset_profiler|.rst
 
-.. |function-builtin-i_das_ptr_dec| replace:: to be documented
+.. |handmade/function-builtin-dump_profile_info| replace:: to be documented in |handmade/function-builtin-dump_profile_info|.rst
 
-.. |function-builtin-i_das_ptr_diff| replace:: to be documented
+.. |handmade/function-builtin-collect_profile_info| replace:: to be documented in |handmade/function-builtin-collect_profile_info|.rst
 
-.. |function-builtin-i_das_ptr_inc| replace:: to be documented
+.. |handmade/function-builtin-variant_index| replace:: to be documented in |handmade/function-builtin-variant_index|.rst
 
-.. |function-builtin-i_das_ptr_set_add| replace:: to be documented
+.. |handmade/function-builtin-set_variant_index| replace:: to be documented in |handmade/function-builtin-set_variant_index|.rst
 
-.. |function-builtin-i_das_ptr_set_sub| replace:: to be documented
+.. |handmade/function-builtin-heap_allocation_stats| replace:: to be documented in |handmade/function-builtin-heap_allocation_stats|.rst
 
-.. |function-builtin-i_das_ptr_sub| replace:: to be documented
+.. |handmade/function-builtin-heap_allocation_count| replace:: to be documented in |handmade/function-builtin-heap_allocation_count|.rst
 
-.. |function-builtin-is_compiling| replace:: returns true if context is being compiled
+.. |handmade/function-builtin-string_heap_allocation_stats| replace:: to be documented in |handmade/function-builtin-string_heap_allocation_stats|.rst
 
-.. |function-builtin-is_folding| replace:: returns true if context is beeing folded, i.e during constant folding pass
+.. |handmade/function-builtin-string_heap_allocation_count| replace:: to be documented in |handmade/function-builtin-string_heap_allocation_count|.rst
 
-.. |function-builtin-is_compiling_macros| replace:: returns true if context is being compiled and the compiler is currently executing macro pass
+.. |handmade/function-builtin-heap_bytes_allocated| replace:: to be documented in |handmade/function-builtin-heap_bytes_allocated|.rst
 
-.. |function-builtin-is_compiling_macros_in_module| replace:: returns true if context is being compiled, its macro pass, and its in the specific module
+.. |handmade/function-builtin-heap_depth| replace:: to be documented in |handmade/function-builtin-heap_depth|.rst
 
-.. |function-builtin-is_reporting_compilation_errors| replace:: returns true if context failed to compile, and infer pass is reporting compilation errors
+.. |handmade/function-builtin-string_heap_bytes_allocated| replace:: to be documented in |handmade/function-builtin-string_heap_bytes_allocated|.rst
 
-.. |function-builtin-length| replace:: length will return current size of table or array `arg`.
+.. |handmade/function-builtin-string_heap_depth| replace:: to be documented in |handmade/function-builtin-string_heap_depth|.rst
 
-.. |function-builtin-memcmp| replace:: similar to C 'memcmp', compares `size` bytes of `left`` and `right` memory. returns -1 if left is less, 1 if left is greater, and 0 if left is same as right
+.. |handmade/function-builtin-heap_collect| replace:: to be documented in |handmade/function-builtin-heap_collect|.rst
 
-.. |function-builtin-panic| replace:: will cause panic. The program will be determinated if there is no recover. Panic is not a error handling mechanism and can not be used as such. It is indeed panic, fatal error. It is not supposed that program can completely correctly recover from panic, recover construction is provided so program can try to correcly shut-down or report fatal error. If there is no recover withing script, it will be called in calling eval (in C++ callee code).
+.. |handmade/function-builtin-string_heap_report| replace:: to be documented in |handmade/function-builtin-string_heap_report|.rst
 
-.. |function-builtin-peek| replace:: returns contents of the das::string as temporary string value. this is fastest way to access contents of das::string as string
+.. |handmade/function-builtin-heap_report| replace:: to be documented in |handmade/function-builtin-heap_report|.rst
 
-.. |function-builtin-print| replace:: outputs string into current context log output
+.. |handmade/function-builtin-memory_report| replace:: to be documented in |handmade/function-builtin-memory_report|.rst
 
-.. |function-builtin-profile| replace:: profiles specified block by evaluating it `count` times and returns minimal time spent in the block in seconds, as well as prints it.
+.. |handmade/function-builtin-is_intern_strings| replace:: to be documented in |handmade/function-builtin-is_intern_strings|.rst
 
-.. |function-builtin-reset_profiler| replace:: resets counters in the built-in profiler
+.. |handmade/function-builtin-hash| replace:: to be documented in |handmade/function-builtin-hash|.rst
 
-.. |function-builtin-set| replace:: to be documented
+.. |handmade/function-builtin-set_verify_array_locks| replace:: to be documented in |handmade/function-builtin-set_verify_array_locks|.rst
 
-.. |function-builtin-set_variant_index| replace:: sets internal index of the variant value
+.. |handmade/function-builtin-set_verify_table_locks| replace:: to be documented in |handmade/function-builtin-set_verify_table_locks|.rst
 
-.. |function-builtin-smart_ptr_clone| replace:: clones smart_ptr, internal use-count is incremented
+.. |handmade/function-builtin-set_verify_context_locks| replace:: to be documented in |handmade/function-builtin-set_verify_context_locks|.rst
 
-.. |function-builtin-smart_ptr_use_count| replace:: returns internal use-count for the smart_ptr
+.. |handmade/function-builtin-move_new| replace:: to be documented in |handmade/function-builtin-move_new|.rst
 
-.. |function-builtin-sprint| replace:: similar to 'print' but returns string instead of printing it
+.. |handmade/function-builtin-move| replace:: to be documented in |handmade/function-builtin-move|.rst
 
-.. |function-builtin-sprint_json| replace:: similar to 'write_json' but skips intermediate representation. this is faster but less flexible
+.. |handmade/function-builtin-smart_ptr_clone| replace:: to be documented in |handmade/function-builtin-smart_ptr_clone|.rst
 
-.. |function-builtin-stackwalk| replace:: stackwalk prints call stack and local variables values
+.. |handmade/function-builtin-smart_ptr_use_count| replace:: to be documented in |handmade/function-builtin-smart_ptr_use_count|.rst
 
-.. |function-builtin-string_heap_bytes_allocated| replace:: returns number of bytes allocated in the string heap
+.. |handmade/function-builtin-smart_ptr_is_valid| replace:: to be documented in |handmade/function-builtin-smart_ptr_is_valid|.rst
 
-.. |function-builtin-string_heap_collect| replace:: calls garbage collection on the string heap
+.. |handmade/function-builtin-gc0_save_ptr| replace:: to be documented in |handmade/function-builtin-gc0_save_ptr|.rst
 
-.. |function-builtin-string_heap_depth| replace:: returns number of generations in the string heap
+.. |handmade/function-builtin-gc0_save_smart_ptr| replace:: to be documented in |handmade/function-builtin-gc0_save_smart_ptr|.rst
 
-.. |function-builtin-string_heap_report| replace:: reports string heap usage and allocations
+.. |handmade/function-builtin-gc0_restore_ptr| replace:: to be documented in |handmade/function-builtin-gc0_restore_ptr|.rst
 
-.. |function-builtin-terminate| replace:: terminates current context execution
+.. |handmade/function-builtin-gc0_restore_smart_ptr| replace:: to be documented in |handmade/function-builtin-gc0_restore_smart_ptr|.rst
 
-.. |function-builtin-variant_index| replace:: returns internal index of the variant value
+.. |handmade/function-builtin-gc0_reset| replace:: to be documented in |handmade/function-builtin-gc0_reset|.rst
 
-.. |function-builtin-binary_load| replace:: loads any data from array<uint8>. obsolete, use daslib/archive instead
+.. |handmade/function-builtin-memcpy| replace:: to be documented in |handmade/function-builtin-memcpy|.rst
 
-.. |function-builtin-binary_save| replace:: saves any data to array<uint8>. obsolete, use daslib/archive instead
+.. |handmade/function-builtin-memcmp| replace:: to be documented in |handmade/function-builtin-memcmp|.rst
 
-.. |function-builtin-clone_dim| replace:: to be documented
+.. |handmade/function-builtin-memset8| replace:: to be documented in |handmade/function-builtin-memset8|.rst
 
-.. |function-builtin-clone_to_move| replace:: to be documented
+.. |handmade/function-builtin-memset16| replace:: to be documented in |handmade/function-builtin-memset16|.rst
 
-.. |function-builtin-each| replace:: returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+.. |handmade/function-builtin-memset32| replace:: to be documented in |handmade/function-builtin-memset32|.rst
 
-.. |function-builtin-each_enum| replace:: iterates over each element in the enumeration
+.. |handmade/function-builtin-memset64| replace:: to be documented in |handmade/function-builtin-memset64|.rst
 
-.. |function-builtin-each_ref| replace:: similar to each, but iterator returns references instead of values
+.. |handmade/function-builtin-memset128| replace:: to be documented in |handmade/function-builtin-memset128|.rst
 
-.. |function-builtin-emplace| replace:: emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+.. |handmade/function-builtin-malloc| replace:: to be documented in |handmade/function-builtin-malloc|.rst
 
-.. |function-builtin-erase| replace:: erase will erase `at` index element in `arg` array.
+.. |handmade/function-builtin-free| replace:: to be documented in |handmade/function-builtin-free|.rst
 
-.. |function-builtin-finalize| replace:: to be documented
+.. |handmade/function-builtin-malloc_usable_size| replace:: to be documented in |handmade/function-builtin-malloc_usable_size|.rst
 
-.. |function-builtin-finalize_dim| replace:: to be documented
+.. |handmade/function-builtin-i_das_ptr_inc| replace:: to be documented in |handmade/function-builtin-i_das_ptr_inc|.rst
 
-.. |function-builtin-get| replace:: will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+.. |handmade/function-builtin-i_das_ptr_dec| replace:: to be documented in |handmade/function-builtin-i_das_ptr_dec|.rst
 
-.. |function-builtin-find| replace:: will execute `block_arg` with argument pointer-to-value in `table_arg` pointing to value indexed by `key`, or null if `key` doesn't exist in `table_arg`.
+.. |handmade/function-builtin-i_das_ptr_add| replace:: to be documented in |handmade/function-builtin-i_das_ptr_add|.rst
 
-.. |function-builtin-find_for_edit| replace:: similar to find, but pointer to the value would be read-write
+.. |handmade/function-builtin-i_das_ptr_sub| replace:: to be documented in |handmade/function-builtin-i_das_ptr_sub|.rst
 
-.. |function-builtin-find_for_edit_if_exists| replace:: similar to find_if_exists, but pointer to the value would be read-write
+.. |handmade/function-builtin-i_das_ptr_set_add| replace:: to be documented in |handmade/function-builtin-i_das_ptr_set_add|.rst
 
-.. |function-builtin-find_if_exists| replace:: similar to find, but the block will only be called, if the key is found
+.. |handmade/function-builtin-i_das_ptr_set_sub| replace:: to be documented in |handmade/function-builtin-i_das_ptr_set_sub|.rst
 
-.. |function-builtin-find_index| replace:: returns index of they key in the array
+.. |handmade/function-builtin-i_das_ptr_diff| replace:: to be documented in |handmade/function-builtin-i_das_ptr_diff|.rst
 
-.. |function-builtin-find_index_if| replace:: returns index of the key in the array, where key is checked via compare block
+.. |handmade/function-builtin-class_rtti_size| replace:: to be documented in |handmade/function-builtin-class_rtti_size|.rst
 
-.. |function-builtin-get_ptr| replace:: returns regular pointer from the smart_ptr
+.. |handmade/function-builtin-profile| replace:: to be documented in |handmade/function-builtin-profile|.rst
 
-.. |function-builtin-has_value| replace:: returns true if iterable `a` (array, dim, etc) contains `key`
+.. |handmade/function-builtin-clone| replace:: to be documented in |handmade/function-builtin-clone|.rst
 
-.. |function-builtin-intptr| replace:: returns int64 representation of a pointer
+.. |handmade/function-builtin-peek| replace:: to be documented in |handmade/function-builtin-peek|.rst
 
-.. |function-builtin-key_exists| replace:: will return true if element `key` exists in table `table_arg`.
+.. |handmade/function-builtin-clone_string| replace:: to be documented in |handmade/function-builtin-clone_string|.rst
 
-.. |function-builtin-keys| replace:: returns iterator to all keys of the table
+.. |handmade/function-builtin-is_in_aot| replace:: to be documented in |handmade/function-builtin-is_in_aot|.rst
 
-.. |function-builtin-lock| replace:: locks array or table for the duration of the block invocation, so that it can't be resized. values can't be pushed or popped, etc.
+.. |handmade/function-builtin-is_in_completion| replace:: to be documented in |handmade/function-builtin-is_in_completion|.rst
 
-.. |function-builtin-lock_forever| replace:: locks array or table forever
+.. |handmade/function-builtin-is_folding| replace:: to be documented in |handmade/function-builtin-is_folding|.rst
 
-.. |function-builtin-next| replace:: returns next element in the iterator as the 'value'. result is true if there is element returned, or false if iterator is null or empty
+.. |handmade/function-builtin-to_log| replace:: to be documented in |handmade/function-builtin-to_log|.rst
 
-.. |function-builtin-nothing| replace:: returns empty iterator
+.. |handmade/function-builtin-to_compiler_log| replace:: to be documented in |handmade/function-builtin-to_compiler_log|.rst
 
-.. |function-builtin-pop| replace:: removes last element of the array
+.. |handmade/function-builtin-clz| replace:: to be documented in |handmade/function-builtin-clz|.rst
 
-.. |function-builtin-push| replace:: push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+.. |handmade/function-builtin-ctz| replace:: to be documented in |handmade/function-builtin-ctz|.rst
 
-.. |function-builtin-push_clone| replace:: similar to `push`, only values would be cloned instead of copied
+.. |handmade/function-builtin-popcnt| replace:: to be documented in |handmade/function-builtin-popcnt|.rst
 
-.. |function-builtin-reserve| replace:: makes sure array has sufficient amount of memory to hold specified number of elements. reserving arrays will speed up pushing to it
+.. |handmade/function-builtin-mul128| replace:: to be documented in |handmade/function-builtin-mul128|.rst
 
-.. |function-builtin-resize| replace:: Resize will resize `array_arg` array to a new size of `new_size`. If new_size is bigger than current, new elements will be zeroed.
+.. |handmade/function-builtin-using| replace:: to be documented in |handmade/function-builtin-using|.rst
 
-.. |function-builtin-resize_no_init| replace:: Resize will resize `array_arg` array to a new size of `new_size`. If new_size is bigger than current, new elements will be left uninitialized.
+.. |handmade/function-builtin-builtin_try_recover| replace:: to be documented in |handmade/function-builtin-builtin_try_recover|.rst
 
-.. |function-builtin-sort| replace:: sorts an array in ascending order.
+.. |handmade/function-builtin-eval_main_loop| replace:: to be documented in |handmade/function-builtin-eval_main_loop|.rst
 
-.. |function-builtin-to_array| replace:: will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be cloned
+.. |handmade/function-builtin-jit_enabled| replace:: to be documented in |handmade/function-builtin-jit_enabled|.rst
 
-.. |function-builtin-to_array_move| replace:: will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be copied or moved
+.. |handmade/function-builtin-aot_enabled| replace:: to be documented in |handmade/function-builtin-aot_enabled|.rst
 
-.. |function-builtin-to_table| replace:: will convert an array of key-value tuples into a table<key;value> type. arguments will be cloned
+.. |handmade/function-builtin-get_clock| replace:: to be documented in |handmade/function-builtin-get_clock|.rst
 
-.. |function-builtin-to_table_move| replace:: will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+.. |handmade/function-builtin-mktime| replace:: to be documented in |handmade/function-builtin-mktime|.rst
 
-.. |function-builtin-values| replace:: returns iterator to all values of the table
+.. |handmade/function-builtin-ref_time_ticks| replace:: to be documented in |handmade/function-builtin-ref_time_ticks|.rst
 
-.. |any_annotation-builtin-clock| replace:: das::Time which is a wrapper around `time_t`
+.. |handmade/function-builtin-get_time_usec| replace:: to be documented in |handmade/function-builtin-get_time_usec|.rst
 
-.. |any_annotation-builtin-das_string| replace:: das::string which is typically std::string or equivalent
+.. |handmade/function-builtin-get_time_nsec| replace:: to be documented in |handmade/function-builtin-get_time_nsec|.rst
 
-.. |variable-builtin-DBL_MAX| replace:: maximum possible value of 'double'
+.. |handmade/function-builtin-intptr| replace:: to be documented in |handmade/function-builtin-intptr|.rst
 
-.. |variable-builtin-DBL_MIN| replace:: smallest possible non-zero value of 'double'. if u want minimum possible value use `-DBL_MAX`
+.. |handmade/function-builtin-_move_with_lockcheck| replace:: to be documented in |handmade/function-builtin-_move_with_lockcheck|.rst
 
-.. |variable-builtin-FLT_MAX| replace:: maximum possible value of 'float'
+.. |handmade/function-builtin-_return_with_lockcheck| replace:: to be documented in |handmade/function-builtin-_return_with_lockcheck|.rst
 
-.. |variable-builtin-FLT_MIN| replace:: smallest possible non-zero value of 'float'. if u want minimum possible value use `-FLT_MAX`
+.. |handmade/function-builtin-resize| replace:: to be documented in |handmade/function-builtin-resize|.rst
 
-.. |variable-builtin-INT_MAX| replace:: maximum possible value of 'int'
+.. |handmade/function-builtin-resize_and_init| replace:: to be documented in |handmade/function-builtin-resize_and_init|.rst
 
-.. |variable-builtin-INT_MIN| replace:: minimum possible value of 'int'
+.. |handmade/function-builtin-resize_no_init| replace:: to be documented in |handmade/function-builtin-resize_no_init|.rst
 
-.. |variable-builtin-LONG_MAX| replace:: maximum possible value of 'int64'
+.. |handmade/function-builtin-reserve| replace:: to be documented in |handmade/function-builtin-reserve|.rst
 
-.. |variable-builtin-LONG_MIN| replace:: minimum possible value of 'int64'
+.. |handmade/function-builtin-pop| replace:: to be documented in |handmade/function-builtin-pop|.rst
 
-.. |variable-builtin-UINT_MAX| replace:: maximum possible value of 'uint'
+.. |handmade/function-builtin-push| replace:: to be documented in |handmade/function-builtin-push|.rst
 
-.. |variable-builtin-ULONG_MAX| replace:: minimum possible value of 'uint64'
+.. |handmade/function-builtin-emplace| replace:: to be documented in |handmade/function-builtin-emplace|.rst
 
-.. |variable-builtin-DAS_MAX_FUNCTION_ARGUMENTS| replace:: maximum number of arguments for the function. this is used to pre-allocate stack space for the function arguments
+.. |handmade/function-builtin-push_clone| replace:: to be documented in |handmade/function-builtin-push_clone|.rst
 
-.. |variable-builtin-LOG_CRITICAL| replace:: indicates maximum log level. critial errors, panic, shutdown
+.. |handmade/function-builtin-back| replace:: to be documented in |handmade/function-builtin-back|.rst
 
-.. |variable-builtin-LOG_ERROR| replace:: indicates log level recoverable errors
+.. |handmade/function-builtin-erase| replace:: to be documented in |handmade/function-builtin-erase|.rst
 
-.. |variable-builtin-LOG_WARNING| replace:: indicates log level for API misuse, non-fatal errors
+.. |handmade/function-builtin-erase_if| replace:: to be documented in |handmade/function-builtin-erase_if|.rst
 
-.. |variable-builtin-LOG_INFO| replace:: indicates log level for miscellaneous informative messages
+.. |handmade/function-builtin-remove_value| replace:: to be documented in |handmade/function-builtin-remove_value|.rst
 
-.. |variable-builtin-LOG_DEBUG| replace:: indicates log level for debug messages
+.. |handmade/function-builtin-find| replace:: to be documented in |handmade/function-builtin-find|.rst
 
-.. |variable-builtin-LOG_TRACE| replace:: indicates log level for the most noisy debug and tracing messages
+.. |handmade/function-builtin-get| replace:: to be documented in |handmade/function-builtin-get|.rst
 
-.. |variable-builtin-print_flags_debugger| replace:: printing flags similar to those used by the 'debug' function
+.. |handmade/function-builtin-find_if_exists| replace:: to be documented in |handmade/function-builtin-find_if_exists|.rst
 
-.. |function_annotation-builtin-deprecated| replace:: deprecated annotation is used to mark a function as deprecated. it will generate a warning during compilation, and will not be callable from the final compiled context
+.. |handmade/function-builtin-find_for_edit| replace:: to be documented in |handmade/function-builtin-find_for_edit|.rst
 
-.. |function_annotation-builtin-alias_cmres| replace:: indicates that function always aliases cmres (copy or move result), and cmres optimizations are disabled.
+.. |handmade/function-builtin-find_for_edit_if_exists| replace:: to be documented in |handmade/function-builtin-find_for_edit_if_exists|.rst
 
-.. |function_annotation-builtin-never_alias_cmres| replace:: indicates that function never aliases cmres (copy or move result), and cmres checks will not be performed
+.. |handmade/function-builtin-_at_with_lockcheck| replace:: to be documented in |handmade/function-builtin-_at_with_lockcheck|.rst
 
-.. |function_annotation-builtin-marker| replace:: marker annotation is used to attach arbitrary marker values to a function (in form of annotation arguments). its typically used for implementation of macros
+.. |handmade/function-builtin-insert| replace:: to be documented in |handmade/function-builtin-insert|.rst
 
-.. |function_annotation-builtin-generic| replace:: indicates that the function is generic, regardless of its argument types. generic functions will be instanced in the calling module
+.. |handmade/function-builtin-key_exists| replace:: to be documented in |handmade/function-builtin-key_exists|.rst
 
-.. |function_annotation-builtin-_macro| replace:: indicates that the function will be called during the macro pass, similar to `[init]`
+.. |handmade/function-builtin-binary_save| replace:: to be documented in |handmade/function-builtin-binary_save|.rst
 
-.. |function_annotation-builtin-macro_function| replace:: indicates that the function is part of the macro implementation, and will not be present in the final compiled context, unless explicitly called.
+.. |handmade/function-builtin-binary_load| replace:: to be documented in |handmade/function-builtin-binary_load|.rst
 
-.. |function_annotation-builtin-export| replace:: indicates that function is to be exported to the final compiled context
+.. |handmade/function-builtin-copy_to_local| replace:: to be documented in |handmade/function-builtin-copy_to_local|.rst
 
-.. |function_annotation-builtin-no_lint| replace:: indicates that the lint pass should be skipped for the specific function
+.. |handmade/function-builtin-move_to_local| replace:: to be documented in |handmade/function-builtin-move_to_local|.rst
 
-.. |function_annotation-builtin-sideeffects| replace:: indicates that the function should be treated as if it has side-effects. for example it will not be optimized out
+.. |handmade/function-builtin-clone_to_move| replace:: to be documented in |handmade/function-builtin-clone_to_move|.rst
 
-.. |function_annotation-builtin-pinvoke| replace:: indicates that the function is a pinvoke function, and will be called via pinvoke machinery
+.. |handmade/function-builtin-clone_dim| replace:: to be documented in |handmade/function-builtin-clone_dim|.rst
 
-.. |function_annotation-builtin-run| replace:: ensures that the function is always evaluated at compilation time
+.. |handmade/function-builtin-keys| replace:: to be documented in |handmade/function-builtin-keys|.rst
 
-.. |function_annotation-builtin-unsafe_operation| replace:: indicates that function is unsafe, and will require `unsafe` keyword to be called
+.. |handmade/function-builtin-values| replace:: to be documented in |handmade/function-builtin-values|.rst
 
-.. |function_annotation-builtin-no_aot| replace:: indicates that the AOT will not be generated for this specific function
+.. |handmade/function-builtin-finalize_dim| replace:: to be documented in |handmade/function-builtin-finalize_dim|.rst
 
-.. |function_annotation-builtin-init| replace:: indicates that the function would be called at the context initialization time
+.. |handmade/function-builtin-finalize| replace:: to be documented in |handmade/function-builtin-finalize|.rst
 
-.. |function_annotation-builtin-finalize| replace:: indicates that the function would be called at the context shutdown time
+.. |handmade/function-builtin-lock| replace:: to be documented in |handmade/function-builtin-lock|.rst
 
-.. |function_annotation-builtin-hybrid| replace:: indicates that the function is likely candidate for later patching, and the AOT will generate hybrid calls to it - instead of direct calls. that way modyfing the function will not affect AOT of other functions.
+.. |handmade/function-builtin-lock_forever| replace:: to be documented in |handmade/function-builtin-lock_forever|.rst
 
-.. |function_annotation-builtin-unsafe_deref| replace:: optimization, which indicates that pointer dereference, array and string indexing, and few other operations would not check for null or bounds
+.. |handmade/function-builtin-next| replace:: to be documented in |handmade/function-builtin-next|.rst
 
-.. |function_annotation-builtin-unused_argument| replace:: marks function arguments, which are unused. that way when code policies make unused arguments an error, a workaround can be provided
+.. |handmade/function-builtin-each| replace:: to be documented in |handmade/function-builtin-each|.rst
 
-.. |function_annotation-builtin-local_only| replace:: indicates that function can only accept local `make` expressions, like [[make tuple]] and [[make structure]]
+.. |handmade/function-builtin-iter_range| replace:: to be documented in |handmade/function-builtin-iter_range|.rst
 
-.. |function_annotation-builtin-expect_any_vector| replace:: indicates that function can only accept das::vector templates
+.. |handmade/function-builtin-each_ref| replace:: to be documented in |handmade/function-builtin-each_ref|.rst
 
-.. |function_annotation-builtin-builtin_array_sort| replace:: indicates sort function for builtin 'sort' machinery. used internally
+.. |handmade/function-builtin-each_enum| replace:: to be documented in |handmade/function-builtin-each_enum|.rst
 
-.. |function_annotation-builtin-concept_assert| replace:: similar to regular `assert` function, but always happens at compilation time. it would also display the error message from where the asserted function was called from, not the assert line itself.
+.. |handmade/function-builtin-nothing| replace:: to be documented in |handmade/function-builtin-nothing|.rst
 
-.. |function_annotation-builtin-__builtin_table_key_exists| replace:: part of internal implementation for `key_exists`
+.. |handmade/function-builtin-to_array| replace:: to be documented in |handmade/function-builtin-to_array|.rst
 
-.. |function_annotation-builtin-static_assert| replace:: similar to regular `assert` function, but always happens at compilation time
+.. |handmade/function-builtin-to_array_move| replace:: to be documented in |handmade/function-builtin-to_array_move|.rst
 
-.. |function_annotation-builtin-verify| replace:: assert for the expression with side effects. expression will not be optimized out if asserts are disabled
+.. |handmade/function-builtin-to_table| replace:: to be documented in |handmade/function-builtin-to_table|.rst
 
-.. |function_annotation-builtin-debug| replace:: prints value and returns that same value
+.. |handmade/function-builtin-to_table_move| replace:: to be documented in |handmade/function-builtin-to_table_move|.rst
 
-.. |function_annotation-builtin-assert| replace:: throws panic if first operand is false. can be disabled. second operand is error message
+.. |handmade/function-builtin-sort| replace:: to be documented in |handmade/function-builtin-sort|.rst
 
-.. |function_annotation-builtin-memzero| replace:: initializes section of memory with '0'
+.. |handmade/function-builtin-lock_data| replace:: to be documented in |handmade/function-builtin-lock_data|.rst
 
-.. |function_annotation-builtin-__builtin_table_find| replace:: part of internal implementation for `find`
+.. |handmade/function-builtin-find_index| replace:: to be documented in |handmade/function-builtin-find_index|.rst
 
-.. |function_annotation-builtin-invoke| replace:: invokes block, function, or lambda
+.. |handmade/function-builtin-find_index_if| replace:: to be documented in |handmade/function-builtin-find_index_if|.rst
 
-.. |function_annotation-builtin-__builtin_table_erase| replace:: part of internal implementation for `erase`
+.. |handmade/function-builtin-has_value| replace:: to be documented in |handmade/function-builtin-has_value|.rst
 
-.. |function-builtin-is_in_aot| replace:: returns true if compiler is currently generating AOT
+.. |handmade/function-builtin-get_ptr| replace:: to be documented in |handmade/function-builtin-get_ptr|.rst
 
-.. |function-builtin-memcpy| replace:: copies `size` bytes of memory from `right` to `left`
+.. |handmade/function-builtin-get_const_ptr| replace:: to be documented in |handmade/function-builtin-get_const_ptr|.rst
 
-.. |function-builtin-lock_data| replace:: locks array and invokes block with a pointer to array's data
+.. |handmade/function-builtin-add_ptr_ref| replace:: to be documented in |handmade/function-builtin-add_ptr_ref|.rst
 
-.. |function-builtin-map_to_array| replace:: builds temporary array from the specified memory
+.. |handmade/function-builtin-get_command_line_arguments| replace:: to be documented in |handmade/function-builtin-get_command_line_arguments|.rst
 
-.. |function-builtin-map_to_ro_array| replace:: same as `map_to_array` but array is read-only
+.. |handmade/function-builtin-map_to_array| replace:: to be documented in |handmade/function-builtin-map_to_array|.rst
 
-.. |function-builtin-ref_time_ticks| replace:: returns current time in ticks
+.. |handmade/function-builtin-map_to_ro_array| replace:: to be documented in |handmade/function-builtin-map_to_ro_array|.rst
 
-.. |function-builtin-get_time_usec| replace:: returns time interval in usec, since the specified `reft` (usually from `ref_time_ticks`)
+.. |handmade/function-builtin-swap| replace:: to be documented in |handmade/function-builtin-swap|.rst
 
-.. |function-builtin-get_time_nsec| replace:: returns time interval in nsec, since the specified `reft` (usually from `ref_time_ticks`)
+.. |handmade/function-builtin-subarray| replace:: to be documented in |handmade/function-builtin-subarray|.rst
 
-.. |function-builtin-iter_range| replace:: returns range(`foo`)
+.. |handmade/function-builtin-move_to_ref| replace:: to be documented in |handmade/function-builtin-move_to_ref|.rst
 
-.. |function-builtin-swap| replace:: swaps two values `a` and 'b'
+.. |handmade/function-builtin-float2| replace:: to be documented in |handmade/function-builtin-float2|.rst
 
-.. |function-builtin-interval| replace:: returns range('arg0','arg1')
+.. |handmade/function-builtin-float3| replace:: to be documented in |handmade/function-builtin-float3|.rst
 
-.. |function-builtin-lock_count| replace:: returns internal lock count for the array or table
+.. |handmade/function-builtin-float4| replace:: to be documented in |handmade/function-builtin-float4|.rst
 
-.. |function-builtin-error| replace:: similar to 'print' but outputs to context error output
+.. |handmade/function-builtin-int2| replace:: to be documented in |handmade/function-builtin-int2|.rst
 
-.. |function-builtin-memory_report| replace:: reports memory allocation, optionally GC errors only
+.. |handmade/function-builtin-int3| replace:: to be documented in |handmade/function-builtin-int3|.rst
 
-.. |function-builtin-class_rtti_size| replace:: returns size of specific TypeInfo for the class
+.. |handmade/function-builtin-int4| replace:: to be documented in |handmade/function-builtin-int4|.rst
 
-.. |function-builtin-to_log| replace:: similar to print but output goes to the logging infrastructure. `arg0` specifies log level, i.e. LOG_... constants
+.. |handmade/function-builtin-uint2| replace:: to be documented in |handmade/function-builtin-uint2|.rst
 
-.. |function-builtin-_move_with_lockcheck| replace:: moves `b` into `a`, checks if `a` or `b` is locked, recursively for each lockable element of a and b
+.. |handmade/function-builtin-uint3| replace:: to be documented in |handmade/function-builtin-uint3|.rst
 
-.. |function-builtin-_return_with_lockcheck| replace:: returns `a`. check if `a` is locked, recursively for each lockable element of a
+.. |handmade/function-builtin-uint4| replace:: to be documented in |handmade/function-builtin-uint4|.rst
 
-.. |function-builtin-back| replace:: returns last element of the array
+.. |handmade/structure_annotation-builtin-HashBuilder| replace:: to be documented in |handmade/structure_annotation-builtin-HashBuilder|.rst
 
-.. |function-builtin-_at_with_lockcheck| replace:: returns element of the table `Tab`, also checks if `Tab` is locked, recursively for each lockable element of `Tab`
+.. |handmade/any_annotation-builtin-das_string| replace:: to be documented in |handmade/any_annotation-builtin-das_string|.rst
 
-.. |function-builtin-get_const_ptr| replace:: return constant pointer from regular pointer
+.. |handmade/any_annotation-builtin-clock| replace:: to be documented in |handmade/any_annotation-builtin-clock|.rst
 
-.. |function-builtin-subarray| replace:: returns new array which is copy of a slice of range of the source array
+.. |handmade/any_annotation-builtin-dasvector`Error| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`Error|.rst
 
-.. |function-builtin-move_to_ref| replace:: moves `b` into `a`. if `b` is value, it will be copied to `a` instead
+.. |handmade/any_annotation-builtin-dasvector`smart_ptr`TypeDecl| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`smart_ptr`TypeDecl|.rst
 
-.. |function-builtin-copy_to_local| replace:: copies value and returns it as local value on stack. used to work around aliasing issues
+.. |handmade/any_annotation-builtin-dasvector`das_string| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`das_string|.rst
 
-.. |function-builtin-move_to_local| replace:: moves value and returns it as local value on stack. used to work around aliasing issues
+.. |handmade/any_annotation-builtin-dasvector`int| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`int|.rst
 
-.. |reader_macro-builtin-_esc| replace:: returns raw string input, without regards for escape sequences. For example %_esc\\n\\r%_esc will return 4 character string '\\','n','\\','r'
+.. |handmade/any_annotation-builtin-dasvector`smart_ptr`Expression| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`smart_ptr`Expression|.rst
 
-.. |typeinfo_macro-builtin-rtti_classinfo| replace:: Generates TypeInfo for the class initialization.
+.. |handmade/any_annotation-builtin-dasvector`FieldDeclaration| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`FieldDeclaration|.rst
 
-.. |variable-builtin-VEC_SEP| replace:: Read-only string constant which is used to separate elements of vectors. By default its ","
+.. |handmade/any_annotation-builtin-dasvector`EnumEntry| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`EnumEntry|.rst
 
-.. |function_annotation-builtin-__builtin_table_set_insert| replace:: part of internal implementation for `insert` of the sets (tables with keys only).
+.. |handmade/any_annotation-builtin-dasvector`smart_ptr`Variable| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`smart_ptr`Variable|.rst
 
-.. |function-builtin-is_in_completion| replace:: returns true if compiler is currently generating completion, i.e. lexical representation of the program for the text editor's text completion system.
+.. |handmade/any_annotation-builtin-dasvector`InferHistory| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`InferHistory|.rst
 
-.. |function-builtin-insert| replace:: inserts key into the set (table with no values) `Tab`
+.. |handmade/any_annotation-builtin-dasvector`pair`uint`uint| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`pair`uint`uint|.rst
 
-.. |function-builtin-add_ptr_ref| replace:: increases reference count of the smart pointer.
+.. |handmade/any_annotation-builtin-dasvector`LineInfo| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`LineInfo|.rst
 
-.. |function-builtin-clz| replace:: count leading zeros
+.. |handmade/any_annotation-builtin-dasvector`smart_ptr`MakeStruct| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`smart_ptr`MakeStruct|.rst
 
-.. |function-builtin-ctz| replace:: count trailing zeros
+.. |handmade/any_annotation-builtin-dasvector`smart_ptr`MakeFieldDecl| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`smart_ptr`MakeFieldDecl|.rst
 
-.. |function-builtin-popcnt| replace:: count number of set bits
+.. |handmade/any_annotation-builtin-dasvector`uint8| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`uint8|.rst
 
-.. |structure_macro-builtin-comment| replace:: [comment] macro, which does absolutely nothing but holds arguments.
+.. |handmade/any_annotation-builtin-dasvector`CaptureEntry| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`CaptureEntry|.rst
 
-.. |structure_macro-builtin-macro_interface| replace:: [macro_interface] specifies that class and its inherited children are used as a macro interfaces, and would not be exported by default.
+.. |handmade/any_annotation-builtin-dasvector`TestObjectFoo| replace:: to be documented in |handmade/any_annotation-builtin-dasvector`TestObjectFoo|.rst
 
-.. |structure_macro-builtin-cpp_layout| replace:: [cpp_layout] specifies that structure uses C++ memory layout rules, as oppose to native Daslang memory layout rules.
+.. |handmade/variable-builtin-DAS_MAX_FUNCTION_ARGUMENTS| replace:: to be documented in |handmade/variable-builtin-DAS_MAX_FUNCTION_ARGUMENTS|.rst
 
-.. |structure_macro-builtin-persistent| replace:: [persistent] annotation specifies that structure is allocated (via new) on the C++ heap, as oppose to Daslang context heap.
+.. |handmade/variable-builtin-INT_MIN| replace:: to be documented in |handmade/variable-builtin-INT_MIN|.rst
 
-.. |variable-builtin-SIZE_OF_PROLOGUE| replace:: size of the Prologue structure on the call stack.
+.. |handmade/variable-builtin-INT_MAX| replace:: to be documented in |handmade/variable-builtin-INT_MAX|.rst
 
-.. |variable-builtin-CONTEXT_OFFSET_OF_EVAL_TOP| replace:: offset of the eval stack top pointer in the `Context`.
+.. |handmade/variable-builtin-UINT_MAX| replace:: to be documented in |handmade/variable-builtin-UINT_MAX|.rst
 
-.. |variable-builtin-CONTEXT_OFFSET_OF_GLOBALS| replace:: offset of the global variables in the `Context`.
+.. |handmade/variable-builtin-LONG_MIN| replace:: to be documented in |handmade/variable-builtin-LONG_MIN|.rst
 
-.. |function_annotation-builtin-jit| replace:: Explicitly marks (forces) function to be compiled with JIT compiler.
+.. |handmade/variable-builtin-LONG_MAX| replace:: to be documented in |handmade/variable-builtin-LONG_MAX|.rst
 
-.. |function_annotation-builtin-unsafe_outside_of_for| replace:: Marks function as unsafe to be called outside of the sources `for` loop.
+.. |handmade/variable-builtin-ULONG_MAX| replace:: to be documented in |handmade/variable-builtin-ULONG_MAX|.rst
 
-.. |function_annotation-builtin-skip_lock_check| replace:: optimization, which indicates that lock checks are not needed in this function.
+.. |handmade/variable-builtin-FLT_MIN| replace:: to be documented in |handmade/variable-builtin-FLT_MIN|.rst
 
-.. |structure_macro-builtin-skip_field_lock_check| replace:: optimization, which indicates that the structure does not need lock checks.
+.. |handmade/variable-builtin-FLT_MAX| replace:: to be documented in |handmade/variable-builtin-FLT_MAX|.rst
 
-.. |function-builtin-set_verify_array_locks| replace:: runtime optimization, which indicates that the array does not need lock checks.
+.. |handmade/variable-builtin-DBL_MIN| replace:: to be documented in |handmade/variable-builtin-DBL_MIN|.rst
 
-.. |function-builtin-set_verify_table_locks| replace:: runtime optimization, which indicates that the table does not need lock checks.
+.. |handmade/variable-builtin-DBL_MAX| replace:: to be documented in |handmade/variable-builtin-DBL_MAX|.rst
 
-.. |function-builtin-invoke_code| replace:: Invokes function, declared as `vec4f(*)(Context *, vec4f *, void *)`.
+.. |handmade/variable-builtin-LOG_CRITICAL| replace:: to be documented in |handmade/variable-builtin-LOG_CRITICAL|.rst
 
-.. |function-builtin-instrument_jit| replace:: Replaces function simulation node with 'SimNode_Jit', which will call function pointer directly. Function pointer format is `vec4f(*)(Context *, vec4f *, void *)`
+.. |handmade/variable-builtin-LOG_ERROR| replace:: to be documented in |handmade/variable-builtin-LOG_ERROR|.rst
 
-.. |function-builtin-remove_jit| replace:: Restores original function simulation nodes.
+.. |handmade/variable-builtin-LOG_WARNING| replace:: to be documented in |handmade/variable-builtin-LOG_WARNING|.rst
 
-.. |function-builtin-is_jit_function| replace:: Returns true if function is instrumented with JIT.
+.. |handmade/variable-builtin-LOG_INFO| replace:: to be documented in |handmade/variable-builtin-LOG_INFO|.rst
 
-.. |function-builtin-get_jit_exception| replace:: Returns pointer to `void jit_exception ( const char * text, Context * context )`
+.. |handmade/variable-builtin-LOG_DEBUG| replace:: to be documented in |handmade/variable-builtin-LOG_DEBUG|.rst
 
-.. |function-builtin-get_jit_call_or_fastcall| replace:: Returns pointer to `vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context )`
+.. |handmade/variable-builtin-LOG_TRACE| replace:: to be documented in |handmade/variable-builtin-LOG_TRACE|.rst
 
-.. |function-builtin-get_jit_call_with_cmres| replace:: Returns pointer to `vec4f jit_call_with_cmres ( SimFunction * fn, vec4f * args, void * cmres, Context * context )`
+.. |handmade/variable-builtin-VEC_SEP| replace:: to be documented in |handmade/variable-builtin-VEC_SEP|.rst
 
-.. |function-builtin-get_jit_invoke_block| replace:: Returns pointer to `vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context )`
-
-.. |function-builtin-get_jit_invoke_block_with_cmres| replace:: Returns pointer to `vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context )`
-
-.. |function-builtin-get_jit_string_builder| replace:: Returns pointer to `char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args )`
-
-.. |function-builtin-get_jit_get_global_mnh| replace:: Returns pointer to `void * jit_get_global_mnh ( uint64_t mnh, Context & context )`
-
-.. |function-builtin-get_jit_alloc_heap| replace:: Returns pointer to `void * jit_alloc_heap ( uint32_t bytes, Context * context )`
-
-.. |function-builtin-get_jit_alloc_persistent| replace:: Returns pointer to `void * jit_alloc_persistent ( uint32_t bytes, Context * )`
-
-.. |function-builtin-get_jit_free_heap| replace:: Returns pointer to `void jit_free_heap ( void * bytes, uint32_t size, Context * context )`
-
-.. |function-builtin-get_jit_free_persistent| replace:: Returns pointer to `void jit_free_persistent ( void * bytes, Context * )`
-
-.. |function-builtin-get_jit_array_lock| replace:: Returns pointer to `void builtin_array_lock ( const Array & arr, Context * context )`
-
-.. |function-builtin-get_jit_array_unlock| replace:: Returns pointer to `void builtin_array_unlock ( const Array & arr, Context * context )`
-
-.. |function-builtin-get_jit_table_at| replace:: Returns pointer to `template <typename KeyType> int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )`
-
-.. |function-builtin-get_jit_str_cmp| replace:: Returns pointer to `int32_t jit_str_cmp ( char * a, char * b )`
-
-.. |function-builtin-get_jit_prologue| replace:: Returns pointer to `void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context )`
-
-.. |function-builtin-get_jit_epilogue| replace:: Returns pointer to `void jit_epilogue ( JitStackState * stackState, Context * context )`
-
-.. |function-builtin-get_jit_make_block| replace:: Returns pointer to `void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * funcInfo, Context * context )`
-
-.. |function-builtin-using| replace:: Creates temporary das_string.
-
-.. |function_annotation-builtin-hint| replace:: Hints the compiler to use specific optimization.
-
-.. |function-builtin-set_verify_context_locks| replace:: Enables or disables array or table lock runtime verification per context
-
-.. |function-builtin-count| replace:: returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
-
-.. |function-builtin-ucount| replace:: returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
-
-.. |function-builtin-move_new| replace:: Moves the new [[...]] value into smart_ptr.
-
-.. |function-builtin-move| replace:: Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b
-
-.. |function-builtin-to_compiler_log| replace:: Output text to compiler log, usually from the macro.
-
-.. |function-builtin-memset8| replace:: Effecitvely C memset.
-
-.. |function-builtin-memset16| replace:: Similar to memset, but fills values with 16 bit words.
-
-.. |function-builtin-memset32| replace:: Similar to memset, but fills values with 32 bit words.
-
-.. |function-builtin-memset64| replace:: Similar to memset, but fills values with 64 bit words.
-
-.. |function-builtin-memset128| replace:: Similar to memset, but fills values with 128 bit vector type values.
-
-.. |structure_annotation-builtin-HashBuilder| replace:: Helper structure to facilitate calculating hash values.
-
-.. |function-builtin-write| replace:: writes string to a hash-builder.
-
-.. |function-builtin-smart_ptr_is_valid| replace:: checks if smart pointer points to a valid data.
-
-.. |function-builtin-build_hash| replace:: returns hash value out of hash-builder.
-
-.. |function-builtin-malloc| replace:: C-style malloc
-
-.. |function-builtin-free| replace:: C-style free to be coupled with C-style malloc
-
-.. |function-builtin-is_intern_strings| replace:: returns true if string interning is enabled
-
-.. |function-builtin-malloc_usable_size| replace:: returns size of the allocated memory block
-
-.. |function-builtin-eval_main_loop| replace:: executes main loop for the application. has specific implementation in EMSCRIPTEN, otherwise invoke until false.
-
-.. |function-builtin-remove_value| replace:: removes first occurance of the key from the array.
-
-.. |function_annotation-builtin-no_jit| replace:: Disables JIT compilation for the function.
-
-.. |function_annotation-builtin-nodiscard| replace:: Marks function as nodiscard. Result of the function should be used.
-
-.. |function_annotation-builtin-expect_dim| replace:: A contract to mark function argument to be a static array.
-
-.. |function-builtin-mul128| replace:: Multiplies two 64 bit values and returns 128 bit result in form of two 64 bit values (low and high) as urange64.
-
-.. |function-builtin-aot_enabled| replace:: Returns true if AOT is enabled.
-
-.. |function-builtin-mktime| replace:: Converts calendar time to time since epoch.
-
-.. |structure_macro-builtin-safe_when_uninitialized| replace:: Marks structure as safe to be used when uninitialized.
-
-.. |function-builtin-heap_allocation_stats| replace:: Returns heap allocation statistics (bytes allocated and bytes deleted).
-
-.. |function-builtin-heap_allocation_count| replace:: Returns heap allocation count (total number of allocations).
-
-.. |function-builtin-string_heap_allocation_stats| replace:: Returns string heap allocation statistics (bytes allocated and bytes deleted).
-
-.. |function-builtin-string_heap_allocation_count| replace:: Returns string heap allocation count (total number of allocations).
+.. |handmade/variable-builtin-print_flags_debugger| replace:: to be documented in |handmade/variable-builtin-print_flags_debugger|.rst
 

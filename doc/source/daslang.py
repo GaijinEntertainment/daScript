@@ -41,6 +41,9 @@ class DASObject(ObjectDescription):
     #: added
     has_arguments = False
 
+    #: If set to ``True`` the arguments of the object are optional
+    skip_empty_arguments = False
+
     #: what is displayed right before the documentation entry
     display_prefix = None  # type: unicode
 
@@ -57,13 +60,19 @@ class DASObject(ObjectDescription):
         directives.
         """
         sig = sig.strip()
-        if '(' in sig and sig[-1:] == ')':
-            member, arglist = sig.split('(', 1)
+        sig = sig.split("/*")[0].strip()
+        open_paranteses = sig.find('(')
+        closed_paranteses = sig.rfind(')')
+        if open_paranteses > 0 and closed_paranteses > open_paranteses:
+            # take substring from open to closed paranteses
+            member, arglist = sig[:closed_paranteses + 1].split('(', 1)
             member = member.strip()
             arglist = arglist[:-1].strip()
+            retType = sig[closed_paranteses + 1:].strip()
         else:
             member = sig
             arglist = None
+            retType = None
         # If construct is nested, prefix the current prefix
         prefix = self.env.ref_context.get('das:object', None)
         mod_name = self.env.ref_context.get('das:module')
@@ -97,9 +106,12 @@ class DASObject(ObjectDescription):
         signode += addnodes.desc_name(name, name)
         if self.has_arguments:
             if not arglist:
-                signode += addnodes.desc_parameterlist()
+                if not self.skip_empty_arguments:
+                    signode += addnodes.desc_parameterlist()
             else:
                 _pseudo_parse_arglist(signode, arglist)
+        if retType:
+            signode += addnodes.desc_type(retType, retType)
         return fullname, prefix
 
     def add_target_and_index(self, name_obj, sig, signode):
@@ -199,6 +211,12 @@ class DASObject(ObjectDescription):
                                              else None)
 
 
+class DASAttribute(DASObject):
+    """Description of a Daslang attribute."""
+    has_arguments = True
+    skip_empty_arguments = True
+
+
 class DASCallable(DASObject):
     """Description of a Daslang function, method or constructor."""
     has_arguments = True
@@ -216,6 +234,10 @@ class DASCallable(DASObject):
               names=('rtype',)),
     ]
 
+class DASOperator(DASCallable):
+    """Description of a Daslang function, method or constructor."""
+    has_arguments = True
+    skip_empty_arguments = True
 
 class DASConstructor(DASCallable):
     """Like a callable but with a different prefix."""
@@ -304,6 +326,7 @@ class DaslangDomain(Domain):
         'data':      ObjType(_('data'),      'data'),
         'attribute': ObjType(_('attribute'), 'attr'),
         'module':    ObjType(_('module'),    'mod'),
+        'operator':  ObjType(_('operator'),    'op'),
     }
     directives = {
         'function':  DASCallable,
@@ -312,6 +335,7 @@ class DaslangDomain(Domain):
         'data':      DASObject,
         'attribute': DASObject,
         'module':    DASModule,
+        'operator':  DASOperator,
     }
     roles = {
         'func':  DASXRefRole(fix_parens=True),
@@ -320,6 +344,7 @@ class DaslangDomain(Domain):
         'data':  DASXRefRole(),
         'attr':  DASXRefRole(),
         'mod':   DASXRefRole(),
+        'op':    DASXRefRole(),
     }
     initial_data = {
         'objects': {},  # fullname -> docname, objtype
