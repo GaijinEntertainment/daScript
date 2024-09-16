@@ -188,6 +188,8 @@ VECTORCALL VECMATH_FINLINE vec4f v_ceil(vec4f a)
   // If truncated value is greater than input, subtract one.
   return v_sel(truncated, truncated1, v_cmp_gt(a, truncated));
 }
+VECTORCALL VECMATH_FINLINE vec4f v_trunc(vec4f a) { return vrndq_f32(a); }
+VECTORCALL VECMATH_FINLINE vec4i v_cvt_trunci(vec4f a) { return v_cvti_vec4i(a); }
 VECTORCALL VECMATH_FINLINE vec4i v_cvt_floori(vec4f a)
 {
   vec4i xi = v_cvt_vec4i(a);
@@ -200,6 +202,7 @@ VECTORCALL VECMATH_FINLINE vec4f sse4_ceil(vec4f a) { return v_ceil(a); }
 VECTORCALL VECMATH_FINLINE vec4f sse4_round(vec4f a) { return v_round(a); }
 VECTORCALL VECMATH_FINLINE vec4i sse4_cvt_floori(vec4f a) { return v_cvt_floori(a); }
 VECTORCALL VECMATH_FINLINE vec4i sse4_cvt_ceili(vec4f a)  { return v_cvt_ceili(a); }
+VECTORCALL VECMATH_FINLINE vec4i sse4_cvt_trunci(vec4f a)  { return v_cvt_trunci(a); }
 
 VECTORCALL VECMATH_FINLINE vec4i v_cvt_ceili(vec4f a)
 {

@@ -381,3 +381,63 @@ VECTORCALL VECMATH_FINLINE vec4f v_atan2_est_x(vec4f y, vec4f x)
 {
   return v_atan2_est(y, x);
 }
+
+VECTORCALL VECMATH_FINLINE vec4f v_safe_asin(vec4f ang)
+{
+  return v_asin(v_clamp(ang, v_neg(V_C_ONE), V_C_ONE));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_safe_acos(vec4f ang)
+{
+  return v_acos(v_clamp(ang, v_neg(V_C_ONE), V_C_ONE));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_safe_asin_x(vec4f ang)
+{
+  return v_asin_x(v_clamp(ang, v_neg(V_C_ONE), V_C_ONE));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_safe_acos_x(vec4f ang)
+{
+  return v_acos_x(v_clamp(ang, v_neg(V_C_ONE), V_C_ONE));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_angle_cos(vec3f a, vec3f b)
+{
+  return v_dot3(v_norm3_safe(a, v_zero()), v_norm3_safe(b, v_zero()));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_angle_cos_x(vec3f a, vec3f b)
+{
+  return v_dot3_x(v_norm3_safe(a, v_zero()), v_norm3_safe(b, v_zero()));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_angle_cos_unsafe(vec3f a, vec3f b)
+{
+  return v_dot3(v_norm3(a), v_norm3(b));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_angle_cos_unsafe_x(vec3f a, vec3f b)
+{
+  return v_dot3_x(v_norm3(a), v_norm3(b));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_angle(vec3f a, vec3f b)
+{
+  return v_safe_acos(v_angle_cos(a, b));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_angle_x(vec3f a, vec3f b)
+{
+  return v_safe_acos_x(v_angle_cos_x(a, b));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_angle_unsafe(vec3f a, vec3f b)
+{
+  return v_safe_acos(v_angle_cos_unsafe(a, b));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_angle_unsafe_x(vec3f a, vec3f b)
+{
+  return v_safe_acos_x(v_angle_cos_unsafe_x(a, b));
+}
