@@ -618,7 +618,7 @@ def public failed_T ( v:TypeDeclPtr; msg:string )
 
 def public base_type_to_llvm_type ( t:Type )
     return LLVMInt32Type()      if t == Type tInt || t == Type tUInt || t == Type tBitfield || t == Type tEnumeration
-    return LLVMInt64Type()      if t == Type tInt64 || t == Type tUInt64
+    return LLVMInt64Type()      if t == Type tInt64 || t == Type tUInt64 || t == Type tEnumeration64
     return LLVMInt16Type()      if t == Type tInt16 || t == Type tUInt16 || t == Type tEnumeration16
     return LLVMInt8Type()       if t == Type tInt8 || t == Type tUInt8 || t == Type tEnumeration8
     return LLVMFloatType()      if t == Type tFloat
