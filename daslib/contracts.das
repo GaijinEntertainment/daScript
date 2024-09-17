@@ -56,7 +56,7 @@ class IsAnyEnumMacro : IsAnyType
         for fna,typ in func.arguments,types // note: N^2
             for argv in decl.arguments
                 if fna.name==argv.name
-                    if length(typ.dim)!=0 || (typ.baseType!=Type tEnumeration && typ.baseType!=Type tEnumeration8 && typ.baseType!=Type tEnumeration16)
+                    if length(typ.dim)!=0 || (typ.baseType!=Type tEnumeration && typ.baseType!=Type tEnumeration8 && typ.baseType!=Type tEnumeration16 && typ.baseType!=Type tEnumeration64)
                         errors := "argument {argv.name} is not an enumeration"
                         return false
         return true

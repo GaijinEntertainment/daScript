@@ -583,6 +583,8 @@ def private walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:L
         eval = int(*data)
     elif info.baseType == Type tEnumeration16
         eval = int(*unsafe(reinterpret<int16?> data))
+    elif info.baseType == Type tEnumeration64
+        eval = int(*unsafe(reinterpret<int64?> data))
     else
         panic("unsupported enumeration")
     return <- new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval].name]]
@@ -609,7 +611,7 @@ def private walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
 		return <- walk_and_convert_tuple(data,info,at)
 	elif info.baseType == Type tTable
 		return <- walk_and_convert_table(data,info,at)
-    elif info.baseType == Type tEnumeration8 || info.baseType == Type tEnumeration16 || info.baseType == Type tEnumeration
+    elif info.baseType == Type tEnumeration8 || info.baseType == Type tEnumeration16 || info.baseType == Type tEnumeration64 || info.baseType == Type tEnumeration
         return <- walk_and_convert_enumeration(data,info,at)
     else
         return <- walk_and_convert_basic(data,info,at)
@@ -824,7 +826,7 @@ def public get_workhorse_types
     return [[auto
         Type tBool;             Type tInt8;             Type tUInt8;            Type tInt16;
         Type tUInt16;           Type tInt64;            Type tUInt64;           Type tEnumeration;
-        Type tEnumeration8;     Type tEnumeration16;    Type tInt;              Type tInt2;
+        Type tEnumeration8;     Type tEnumeration16;    Type tEnumeration64;    Type tInt;              Type tInt2;
         Type tInt3;             Type tInt4;             Type tUInt;             Type tBitfield;
         Type tUInt2;            Type tUInt3;            Type tUInt4;            Type tFloat;
         Type tFloat2;           Type tFloat3;           Type tFloat4;           Type tRange;

@@ -168,6 +168,7 @@ class DapiDataWalker
     def abstract WalkEnumeration ( var value:int &; ei:EnumInfo ) : void
     def abstract WalkEnumeration8  ( var value:int8 &; ei:EnumInfo ) : void
     def abstract WalkEnumeration16 ( var value:int16 &; ei:EnumInfo ) : void
+    def abstract WalkEnumeration64 ( var value:int64 &; ei:EnumInfo ) : void
     def abstract FakeContext ( var value:Context ) : void
     def abstract InvalidData : void
 

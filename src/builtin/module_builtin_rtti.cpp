@@ -1320,6 +1320,7 @@ namespace das {
             case Type::tEnumeration:    return tableFindValue<int32_t>     (tab,key,valueTypeSize,context);
             case Type::tEnumeration8:   return tableFindValue<int8_t>      (tab,key,valueTypeSize,context);
             case Type::tEnumeration16:  return tableFindValue<int16_t>     (tab,key,valueTypeSize,context);
+            case Type::tEnumeration64:  return tableFindValue<int64_t>     (tab,key,valueTypeSize,context);
             case Type::tBitfield:       return tableFindValue<Bitfield>    (tab,key,valueTypeSize,context);
             case Type::tInt:            return tableFindValue<int32_t>     (tab,key,valueTypeSize,context);
             case Type::tInt2:           return tableFindValue<int2>        (tab,key,valueTypeSize,context);

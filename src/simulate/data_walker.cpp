@@ -232,6 +232,7 @@ namespace das {
                 case Type::tEnumeration:    WalkEnumeration(*((int32_t *)pa), info->enumType); break;
                 case Type::tEnumeration8:   WalkEnumeration8(*((int8_t *)pa),  info->enumType); break;
                 case Type::tEnumeration16:  WalkEnumeration16(*((int16_t *)pa), info->enumType); break;
+                case Type::tEnumeration64:  WalkEnumeration64(*((int64_t *)pa), info->enumType); break;
                 case Type::fakeContext:     FakeContext(*(Context**)pa); break;
                 case Type::fakeLineInfo:    FakeLineInfo(*(LineInfo**)pa); break;
                 case Type::tPointer:

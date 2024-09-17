@@ -124,6 +124,9 @@ namespace das {
         case Type::tInt:
         case Type::tUInt:
             return Type::tEnumeration;
+        case Type::tInt64:
+        case Type::tUInt64:
+            return Type::tEnumeration64;
         default:
             DAS_ASSERTF(0, "we should not be here. unsupported enumeration base type.");
             return Type::none;
@@ -142,6 +145,9 @@ namespace das {
         case Type::tInt:
         case Type::tUInt:
             res = make_smart<TypeDecl>(Type::tEnumeration); break;
+        case Type::tInt64:
+        case Type::tUInt64:
+            res = make_smart<TypeDecl>(Type::tEnumeration64); break;
         default:
             DAS_ASSERTF(0, "we should not be here. unsupported enumeration base type.");
             return nullptr;

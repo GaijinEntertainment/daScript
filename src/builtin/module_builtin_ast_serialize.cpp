@@ -1028,6 +1028,7 @@ namespace das {
             case tEnumeration:
             case tEnumeration8:
             case tEnumeration16:
+            case tEnumeration64:
                 ser << alias << enumType << dim << dimExpr;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !!enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());

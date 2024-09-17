@@ -130,7 +130,7 @@ def describe_type(td:TypeDeclPtr)
                 write(writer,make_ref(handle_label_name(td.annotation),"{module_name(td.annotation._module)}::{td.annotation.name}"))
         elif baseType==Type tStructure
             write(writer,make_ref(struct_label_name(td.structType),"{module_name(td.structType._module)}::{td.structType.name}"))
-        elif baseType==Type tEnumeration || baseType==Type tEnumeration8 || baseType==Type tEnumeration16
+        elif baseType==Type tEnumeration || baseType==Type tEnumeration8 || baseType==Type tEnumeration16 || baseType==Type tEnumeration64
             write(writer,make_ref(enum_label_name(td.enumType),"{module_name(td.enumType._module)}::{td.enumType.name}"))
         elif baseType==Type tPointer
             if td.flags.smartPtr
