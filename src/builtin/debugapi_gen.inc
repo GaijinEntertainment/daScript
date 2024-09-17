@@ -80,11 +80,12 @@ protected:
     __fn_WalkEnumeration = 76,
     __fn_WalkEnumeration8 = 77,
     __fn_WalkEnumeration16 = 78,
-    __fn_FakeContext = 79,
-    __fn_InvalidData = 80,
+    __fn_WalkEnumeration64 = 79,
+    __fn_FakeContext = 80,
+    __fn_InvalidData = 81,
   };
 protected:
-  int _das_class_method_offset[81];
+  int _das_class_method_offset[82];
 public:
   DapiDataWalker_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_canVisitHandle] = info->fields[2]->offset;
@@ -166,8 +167,9 @@ public:
       _das_class_method_offset[__fn_WalkEnumeration] = info->fields[78]->offset;
       _das_class_method_offset[__fn_WalkEnumeration8] = info->fields[79]->offset;
       _das_class_method_offset[__fn_WalkEnumeration16] = info->fields[80]->offset;
-      _das_class_method_offset[__fn_FakeContext] = info->fields[81]->offset;
-      _das_class_method_offset[__fn_InvalidData] = info->fields[82]->offset;
+      _das_class_method_offset[__fn_WalkEnumeration64] = info->fields[81]->offset;
+      _das_class_method_offset[__fn_FakeContext] = info->fields[82]->offset;
+      _das_class_method_offset[__fn_InvalidData] = info->fields[83]->offset;
   }
   __forceinline Func get_canVisitHandle ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitHandle]);
@@ -874,9 +876,18 @@ public:
   __forceinline Func get_WalkEnumeration16 ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_WalkEnumeration16]);
   }
+  __forceinline Func get_WalkEnumeration64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_WalkEnumeration64]);
+  }
   __forceinline void invoke_WalkEnumeration16 ( Context * __context__, Func __funcCall__, void * self, int16_t & value, EnumInfo const  & ei ) const {
     das_invoke_function<void>::invoke
       <void *,int16_t &,EnumInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,value,ei);
+  }
+  __forceinline void invoke_WalkEnumeration64 ( Context * __context__, Func __funcCall__, void * self, int64_t & value, EnumInfo const  & ei ) const {
+    das_invoke_function<void>::invoke
+      <void *,int64_t &,EnumInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,value,ei);
   }

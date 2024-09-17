@@ -420,6 +420,8 @@ def public enum_class_type ( st )
         return Type tEnumeration8
     elif st.baseType==Type tInt16 || st.baseType==Type tUInt16
         return Type tEnumeration16
+    elif st.baseType==Type tInt64 || st.baseType==Type tUInt64
+        return Type tEnumeration64
     else
         return Type tEnumeration
 

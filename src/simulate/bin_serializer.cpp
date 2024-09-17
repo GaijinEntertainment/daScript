@@ -233,6 +233,10 @@ namespace das {
             verify_hash(ei->hash);
             serialize(data);
         }
+        virtual void WalkEnumeration64 ( int64_t & data, EnumInfo * ei ) override {
+            verify_hash(ei->hash);
+            serialize(data);
+        }
         virtual void Null ( TypeInfo * ) override {
             error("binary serialization of null pointers is not supported");
         }

@@ -129,7 +129,7 @@ class TypeMacroMacro : AstFunctionAnnotation
                         return <- [[TypeDeclPtr]]
                 append_expressions(body, expr)
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro(bitfield((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value))
-            elif argType.baseType==Type tEnumeration || argType.baseType==Type tEnumeration16 || argType.baseType==Type tEnumeration8
+            elif argType.baseType==Type tEnumeration || argType.baseType==Type tEnumeration16 || argType.baseType==Type tEnumeration64 || argType.baseType==Type tEnumeration8
                 let argTypeName = describe(argType)
                 var inscope expr <- qmacro_block() <|
                     if !(td.dimExpr[$v(macroArgIndex)] is ExprConstEnumeration)

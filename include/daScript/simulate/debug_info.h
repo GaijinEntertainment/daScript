@@ -48,6 +48,7 @@ namespace das
         tEnumeration,
         tEnumeration8,
         tEnumeration16,
+        tEnumeration64,
         tBitfield,
         tPointer,
         tFunction,

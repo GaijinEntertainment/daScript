@@ -639,6 +639,11 @@ namespace debugapi {
                 invoke_WalkEnumeration16(context,fn_WalkEnumeration16,classPtr,value,*ei);
             }
         }
+        virtual void WalkEnumeration64 ( int64_t & value, EnumInfo * ei ) override {
+           if ( auto fn_WalkEnumeration64 = get_WalkEnumeration64(classPtr) ) {
+                invoke_WalkEnumeration64(context,fn_WalkEnumeration64,classPtr,value,*ei);
+            }
+        }
         virtual void FakeContext ( Context * value ) override {
            if ( auto fn_FakeContext = get_FakeContext(classPtr) ) {
                 invoke_FakeContext(context,fn_FakeContext,classPtr,*value);

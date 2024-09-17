@@ -31,6 +31,7 @@ namespace das {
         {   Type::tEnumeration,   "tEnumeration" },
         {   Type::tEnumeration8,  "tEnumeration8" },
         {   Type::tEnumeration16, "tEnumeration16" },
+        {   Type::tEnumeration64, "tEnumeration64" },
         {   Type::tBitfield,    "tBitfield" },
         {   Type::tIterator,    "tIterator" },
         {   Type::tArray,       "tArray" },
@@ -143,6 +144,7 @@ namespace das {
             case Type::tEnumeration:
             case Type::tEnumeration8:
             case Type::tEnumeration16:
+            case Type::tEnumeration64:
             case Type::tBitfield:
                 return true;
             default:
@@ -450,7 +452,7 @@ namespace das {
                         mark ( fld.type.get() );
                     }
                 }
-            } else if ( decl->baseType==Type::tEnumeration || decl->baseType==Type::tEnumeration8 || decl->baseType==Type::tEnumeration16 ) {
+            } else if ( decl->baseType==Type::tEnumeration || decl->baseType==Type::tEnumeration8 || decl->baseType==Type::tEnumeration16 || decl->baseType==Type::tEnumeration64 ) {
                 DAS_ASSERT(decl->enumType);
                 useEnums.insert(decl->enumType);
             } else {
@@ -675,7 +677,7 @@ namespace das {
                 ss << "nullptr";
             }
             ss << ", ";
-            if ( info->type==Type::tEnumeration || info->type==Type::tEnumeration8 || info->type==Type::tEnumeration16 ) {
+            if ( info->type==Type::tEnumeration || info->type==Type::tEnumeration8 || info->type==Type::tEnumeration16 || info->type==Type::tEnumeration64 ) {
                 ss << "&" << enumInfoName(info->enumType);
             } else {
                 ss << "nullptr";

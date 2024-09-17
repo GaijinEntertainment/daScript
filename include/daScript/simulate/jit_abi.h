@@ -91,6 +91,7 @@ struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
         case Type::tEnumeration:    return (void *) &TAB_FUN<int32_t>; \
         case Type::tEnumeration8:   return (void *) &TAB_FUN<int8_t>; \
         case Type::tEnumeration16:  return (void *) &TAB_FUN<int16_t>; \
+        case Type::tEnumeration64:  return (void *) &TAB_FUN<int64_t>; \
         case Type::tInt:            return (void *) &TAB_FUN<int32_t>; \
         case Type::tInt2:           return (void *) &TAB_FUN<int2>; \
         case Type::tInt3:           return (void *) &TAB_FUN<int3>; \

@@ -39,6 +39,7 @@ namespace das
     template <> struct typeName<EnumStub>    { constexpr static const char * name() { return "enum"; } };
     template <> struct typeName<EnumStub8>   { constexpr static const char * name() { return "enum8"; } };
     template <> struct typeName<EnumStub16>  { constexpr static const char * name() { return "enum16"; } };
+    template <> struct typeName<EnumStub64>  { constexpr static const char * name() { return "enum64"; } };
 
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub);
@@ -48,6 +49,9 @@ namespace das
 
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub16);
     IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub16);
+
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,EnumStub64);
+    IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,EnumStub64);
 
     template <>
     struct SimPolicy<Func> {
@@ -152,6 +156,16 @@ namespace das
         addExtern<DAS_BIND_FUN(enum16_to_uint16)>(*this, lib, "uint16", SideEffects::none, "uint16_t")->arg("src");
         addExtern<DAS_BIND_FUN(enum16_to_int64)>(*this, lib, "int64", SideEffects::none, "int64_t")->arg("src");
         addExtern<DAS_BIND_FUN(enum16_to_uint64)>(*this, lib, "uint64", SideEffects::none, "uint64_t")->arg("src");
+        // enum64
+        addFunctionBasic<EnumStub64>(*this,lib);
+        addExtern<DAS_BIND_FUN(enum64_to_int)>(*this, lib, "int", SideEffects::none, "int32_t")->arg("src");
+        addExtern<DAS_BIND_FUN(enum64_to_uint)>(*this, lib, "uint", SideEffects::none, "uint32_t")->arg("src");
+        addExtern<DAS_BIND_FUN(enum64_to_int8)>(*this, lib, "int8", SideEffects::none, "int8_t")->arg("src");
+        addExtern<DAS_BIND_FUN(enum64_to_uint8)>(*this, lib, "uint8", SideEffects::none, "uint8_t")->arg("src");
+        addExtern<DAS_BIND_FUN(enum64_to_int16)>(*this, lib, "int16", SideEffects::none, "int16_t")->arg("src");
+        addExtern<DAS_BIND_FUN(enum64_to_uint16)>(*this, lib, "uint16", SideEffects::none, "uint16_t")->arg("src");
+        addExtern<DAS_BIND_FUN(enum64_to_int64)>(*this, lib, "int64", SideEffects::none, "int64_t")->arg("src");
+        addExtern<DAS_BIND_FUN(enum64_to_uint64)>(*this, lib, "uint64", SideEffects::none, "uint64_t")->arg("src");
         // function
         addFunctionBasic<Func>(*this,lib);
         addFunction( make_smart<BuiltInFn<Sim_EqFunPtr, bool,const Func,const void *>>("==",lib,"==",false) );
