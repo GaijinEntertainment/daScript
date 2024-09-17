@@ -293,9 +293,10 @@ namespace das {
 
     class AliasMarker : public Visitor {
     public:
-        AliasMarker ( const ProgramPtr & prog, TextWriter & ls ) : program(prog), logs(ls) {
+        AliasMarker ( const ProgramPtr & prog, bool permanent, TextWriter & ls ) : program(prog), logs(ls) {
             checkAliasing = program->options.getBoolOption("no_aliasing", program->policies.no_aliasing);
             logAliasing = program->options.getBoolOption("log_aliasing", false);
+            isPermanent = permanent;
         }
     protected:
         ProgramPtr  program;
@@ -303,9 +304,18 @@ namespace das {
         bool checkAliasing = false;
         bool logAliasing = false;
         TextWriter & logs;
+        bool isPermanent = false;
     protected:
-        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
-        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override {
+            if ( !var->used || var->aliasesResolved ) return false;
+            var->aliasesResolved = isPermanent;
+            return true;
+        }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            if ( !fun->used || fun->aliasesResolved ) return false;
+            fun->aliasesResolved = isPermanent;
+            return true;
+        }
     protected:
         virtual void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
@@ -585,7 +595,7 @@ namespace das {
         }
     };
 
-    void Program::deriveAliases(TextWriter & logs) {
+    void Program::deriveAliases(TextWriter & logs, bool permanent) {
         bool logAliasing = options.getBoolOption("log_aliasing", false);
         if ( logAliasing ) logs << "ALIASING:\n";
 
@@ -603,7 +613,7 @@ namespace das {
             deriveAliasing(func, logs, logAliasing);
         });
         */
-        AliasMarker marker(this, logs);
+        AliasMarker marker(this, permanent, logs);
         visitModules(marker);
         if ( logAliasing ) logs << "\n";
     }

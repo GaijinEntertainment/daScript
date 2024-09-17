@@ -79,7 +79,7 @@ namespace das {
 
     class AllocateStack : public Visitor {
     public:
-        AllocateStack( const ProgramPtr & prog, TextWriter & ls ) : logs(ls) {
+        AllocateStack( const ProgramPtr & prog, bool permanent, TextWriter & ls ) : logs(ls) {
             program = prog;
             log = prog->options.getBoolOption("log_stack");
             log_var_scope = prog->options.getBoolOption("log_var_scope");
@@ -88,6 +88,7 @@ namespace das {
             if( log ) {
                 logs << "\nSTACK INFORMATION in " << prog->thisModule->name << ":\n";
             }
+            isPermanent = permanent;
         }
     protected:
         ProgramPtr              program;
@@ -102,9 +103,18 @@ namespace das {
         TextWriter &            logs;
         bool                    inStruct = false;
         bool                    noFastCall = false;
+        bool                    isPermanent = false;
     protected:
-        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
-        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override {
+            if ( !var->used || var->stackResolved ) return false;
+            var->stackResolved = isPermanent;
+            return true;
+        }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            if ( !fun->used || fun->stackResolved ) return false;
+            fun->stackResolved = isPermanent;
+            return true;
+        }
     protected:
         uint32_t allocateStack ( uint32_t size ) {
             auto result = stackTop;
@@ -637,7 +647,7 @@ namespace das {
 
     // program
 
-    void Program::allocateStack(TextWriter & logs) {
+    void Program::allocateStack(TextWriter & logs, bool permanent) {
         // string heap
         AllocateConstString vstr;
         for (auto & pm : library.modules) {
@@ -657,7 +667,7 @@ namespace das {
         VarCMRes vcm(this);
         visitModules(vcm);
         // allocate stack for the rest of them
-        AllocateStack context(this, logs);
+        AllocateStack context(this, permanent, logs);
         visitModules(context);
         // adjust stack size for all the used variables
         for (auto & pm : library.modules) {

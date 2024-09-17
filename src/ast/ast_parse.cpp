@@ -470,12 +470,6 @@ namespace das {
                 }
                 if (!program->failed())
                     program->fixupAnnotations();
-                /*
-                if (!program->failed())
-                    program->deriveAliases(logs);
-                if (!program->failed())
-                    program->allocateStack(logs);
-                */
                 if (!program->failed())
                     program->finalizeAnnotations();
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
@@ -499,9 +493,9 @@ namespace das {
                     if (!program->failed())
                         program->markMacroSymbolUse();
                     if (!program->failed())
-                        program->deriveAliases(logs);
+                        program->deriveAliases(logs,true);
                     if (!program->failed())
-                        program->allocateStack(logs);
+                        program->allocateStack(logs,true);
                     if (!program->failed())
                         program->makeMacroModule(logs);
                     totM += get_time_usec(timeM);
@@ -774,9 +768,9 @@ namespace das {
                 if (!res->failed() && !exportAll)
                     res->removeUnusedSymbols();
                 if (!res->failed())
-                    res->deriveAliases(logs);
+                    res->deriveAliases(logs,true);
                 if (!res->failed())
-                    res->allocateStack(logs);
+                    res->allocateStack(logs,true);
             } else {
                 if (!res->failed())
                     res->markExecutableSymbolUse();
@@ -785,9 +779,9 @@ namespace das {
                 if (!res->failed())
                     res->removeUnusedSymbols();
                 if (!res->failed())
-                    res->deriveAliases(logs);
+                    res->deriveAliases(logs,true);
                 if (!res->failed())
-                    res->allocateStack(logs);
+                    res->allocateStack(logs,true);
             }
             if ( res->options.getBoolOption("log_require",false) ) {
                 TextWriter tw;

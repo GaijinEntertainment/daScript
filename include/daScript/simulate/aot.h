@@ -2784,7 +2784,7 @@ namespace das {
     __forceinline int32_t enum_to_int   ( EnumStub stub )   { return stub.value; }
     __forceinline int32_t enum8_to_int  ( EnumStub8 stub )  { return stub.value; }
     __forceinline int32_t enum16_to_int ( EnumStub16 stub ) { return stub.value; }
-    __forceinline int32_t enum64_to_int ( EnumStub64 stub ) { return stub.value; }
+    __forceinline int32_t enum64_to_int ( EnumStub64 stub ) { return int32_t(stub.value); }
 
     __forceinline uint32_t enum_to_uint   ( EnumStub stub )   { return uint32_t(stub.value); }
     __forceinline uint32_t enum8_to_uint  ( EnumStub8 stub )  { return uint32_t(stub.value); }
