@@ -363,6 +363,16 @@ namespace das
             };
             uint32_t access_flags = 0;
         };
+
+
+        union {
+            struct {
+                bool    aliasesResolved : 1;
+                bool    stackResolved : 1;
+            };
+            uint32_t     stackFlags = 0;
+        };
+
         AnnotationArgumentList  annotation;
 #if DAS_MACRO_SANITIZER
     public:
@@ -823,7 +833,7 @@ namespace das
         vector<VariablePtr> arguments;
         TypeDeclPtr         result;
         ExpressionPtr       body;
-        int                 index = -1;
+        int32_t             index = -1;
         uint32_t            totalStackSize = 0;
         int32_t             totalGenLabel = 0;
         LineInfo            at, atDecl;
@@ -924,6 +934,15 @@ namespace das
             };
             uint32_t    sideEffectFlags = 0;
         };
+
+        union {
+            struct {
+                bool    aliasesResolved : 1;
+                bool    stackResolved : 1;
+            };
+            uint32_t     stackFlags = 0;
+        };
+
         vector<InferHistory> inferStack;
         FunctionPtr fromGeneric = nullptr;
         uint64_t hash = 0;
@@ -1519,8 +1538,8 @@ namespace das
         void removeUnusedSymbols();
         void clearSymbolUse();
         void dumpSymbolUse(TextWriter & logs);
-        void allocateStack(TextWriter & logs);
-        void deriveAliases(TextWriter & logs);
+        void allocateStack(TextWriter & logs, bool permanent);
+        void deriveAliases(TextWriter & logs, bool permanent);
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );

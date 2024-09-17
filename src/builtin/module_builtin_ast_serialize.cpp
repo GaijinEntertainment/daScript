@@ -1689,8 +1689,8 @@ namespace das {
     // create the module macro state
         program->isCompiling = false;
         program->markMacroSymbolUse();
-        program->deriveAliases(ignore_logs);
-        program->allocateStack(ignore_logs);
+        // program->deriveAliases(ignore_logs); // this info should already be there
+        program->allocateStack(ignore_logs,true);
         program->makeMacroModule(ignore_logs);
     // unbind the module from the program
         return program->thisModule.release();
@@ -2318,7 +2318,7 @@ namespace das {
         markExecutableSymbolUse();
         removeUnusedSymbols();
         TextWriter logs;
-        allocateStack(logs);
+        allocateStack(logs,true);
     }
 
 }
