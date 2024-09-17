@@ -85,6 +85,12 @@ VECTORCALL VECMATH_FINLINE vec4f v_insert_y(vec4f a, float y);
 VECTORCALL VECMATH_FINLINE vec4f v_insert_z(vec4f a, float z);
 VECTORCALL VECMATH_FINLINE vec4f v_insert_w(vec4f a, float w);
 
+//! add float value to one of components of vector
+VECTORCALL VECMATH_FINLINE vec4f v_add_x(vec4f a, float x);
+VECTORCALL VECMATH_FINLINE vec4f v_add_y(vec4f a, float y);
+VECTORCALL VECMATH_FINLINE vec4f v_add_z(vec4f a, float z);
+VECTORCALL VECMATH_FINLINE vec4f v_add_w(vec4f a, float w);
+
 //! store vector to  16-byte aligned memory
 VECTORCALL VECMATH_FINLINE void v_st(void *m, vec4f v);
 //! store vector to unaligned memory
@@ -223,8 +229,15 @@ VECTORCALL VECMATH_FINLINE vec4i v_cvt_floori(vec4f a);
 //! round to nearest integer (result remains int)
 VECTORCALL VECMATH_FINLINE vec4i v_cvt_roundi(vec4f a);
 
+//! round to zero (result remains int)
+VECTORCALL VECMATH_FINLINE vec4i v_cvt_trunci(vec4f a);
+
 //! round to nearest integer (result remains fp)
 VECTORCALL VECMATH_FINLINE vec4f v_round(vec4f a);
+
+//! round to zero (result remains fp)
+VECTORCALL VECMATH_FINLINE vec4f v_trunc(vec4f a);
+
 //! (a + b)
 VECTORCALL VECMATH_FINLINE vec4f v_add(vec4f a, vec4f b);
 //! (a - b)
@@ -257,6 +270,8 @@ VECTORCALL VECMATH_FINLINE vec4f v_div_x(vec4f a, vec4f b);
 VECTORCALL VECMATH_FINLINE vec4f v_madd_x(vec4f a, vec4f b, vec4f c);
 //! .x = (a.x * b.x - c.x)
 VECTORCALL VECMATH_FINLINE vec4f v_msub_x(vec4f a, vec4f b, vec4f c);
+//! Get middle point between a and b
+VECTORCALL VECMATH_FINLINE vec4f v_midp(vec4f a, vec4f b);
 //! 1/a, very unprecise, fastest available on platform
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise_x(vec4f a);
@@ -286,6 +301,10 @@ VECTORCALL VECMATH_FINLINE vec4i v_negi(vec4i a);
 //! fabs(a)
 VECTORCALL VECMATH_FINLINE vec4f v_abs(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4i v_absi(vec4i a);
+
+//! clamp values in [min; max] range component-wise
+VECTORCALL VECMATH_FINLINE vec4f v_clamp(vec4f t, vec4f min_val, vec4f max_val);
+VECTORCALL VECMATH_FINLINE vec4i v_clampi(vec4i t, vec4i min_val, vec4i max_val);
 
 //! special floats compare for relative equality
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_relative_equal(vec4f a, vec4f b, vec4f max_diff = v_splats(1e-5f), vec4f max_rel_diff = v_splats(1.192092896e-07f));
@@ -539,6 +558,11 @@ VECTORCALL VECMATH_FINLINE vec3f v_length3_x(vec3f a);
 //! length: .x = sqrt(a.x*a.x + a.y*a.y), a.z, a.w could be anything (even NAN)
 VECTORCALL VECMATH_FINLINE vec4f v_length2_x(vec4f a);
 
+//! distance between two points
+VECTORCALL VECMATH_FINLINE vec4f v_distance_xyz_x(vec4f a, vec4f b);
+//! horizontal distance between two points
+VECTORCALL VECMATH_FINLINE vec4f v_distance_x0z_x(vec4f a, vec4f b);
+
 //! normalize: a/length(a). will return NaN for zero vector
 VECTORCALL VECMATH_FINLINE vec4f v_norm4(vec4f a);
 //! normalize: a/length(a), .w could be anything (even NAN). will return NaN for zero vector
@@ -547,9 +571,9 @@ VECTORCALL VECMATH_FINLINE vec3f v_norm3(vec3f a);
 VECTORCALL VECMATH_FINLINE vec4f v_norm2(vec4f a);
 
 //! safe normalize: a/length(a), return def value for zero vector
-VECTORCALL VECMATH_FINLINE vec4f v_norm4_safe(vec4f a, vec4f def = v_make_vec4f(0, 0, 0, 1));
-VECTORCALL VECMATH_FINLINE vec4f v_norm3_safe(vec3f a, vec3f def = v_make_vec4f(0, 1, 0, 0));
-VECTORCALL VECMATH_FINLINE vec4f v_norm2_safe(vec4f a, vec4f def = v_make_vec4f(0, 1, 0, 0));
+VECTORCALL VECMATH_FINLINE vec4f v_norm4_safe(vec4f a, vec4f def);
+VECTORCALL VECMATH_FINLINE vec4f v_norm3_safe(vec3f a, vec3f def);
+VECTORCALL VECMATH_FINLINE vec4f v_norm2_safe(vec4f a, vec4f def);
 
 VECTORCALL VECMATH_FINLINE vec4f v_remove_nan(vec4f a);
 //! check for NaN component-wise
@@ -1044,6 +1068,22 @@ VECTORCALL VECMATH_FINLINE quat4f v_quat_qsquad(float t,
 // Trigonometry
 //
 
+//! angle cos between two not-normalized vectors
+VECTORCALL VECMATH_FINLINE vec4f v_angle_cos(vec3f a, vec3f b);
+VECTORCALL VECMATH_FINLINE vec4f v_angle_cos_x(vec3f a, vec3f b);
+
+//! angle cos between two not-normalized not-zero vectors
+VECTORCALL VECMATH_FINLINE vec4f v_angle_cos_unsafe(vec3f a, vec3f b);
+VECTORCALL VECMATH_FINLINE vec4f v_angle_cos_unsafe_x(vec3f a, vec3f b);
+
+//! angle between two not-normalized vectors
+VECTORCALL VECMATH_FINLINE vec4f v_angle(vec3f a, vec3f b);
+VECTORCALL VECMATH_FINLINE vec4f v_angle_x(vec3f a, vec3f b);
+
+//! angle between two not-normalized not-zero vectors
+VECTORCALL VECMATH_FINLINE vec4f v_angle_unsafe(vec3f a, vec3f b);
+VECTORCALL VECMATH_FINLINE vec4f v_angle_unsafe_x(vec3f a, vec3f b);
+
 //! degrees <-> radians
 VECTORCALL VECMATH_FINLINE vec4f v_deg_to_rad(vec4f deg);
 VECTORCALL VECMATH_FINLINE vec4f v_rad_to_deg(vec4f rad);
@@ -1080,6 +1120,12 @@ VECTORCALL VECMATH_FINLINE vec4f v_asin_x(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_acos_x(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_atan_x(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_atan2_x(vec4f x, vec4f y);
+
+//! safe asin/acos by angle clamping to [-1;1]
+VECTORCALL VECMATH_FINLINE vec4f v_safe_asin(vec4f ang);
+VECTORCALL VECMATH_FINLINE vec4f v_safe_acos(vec4f ang);
+VECTORCALL VECMATH_FINLINE vec4f v_safe_asin_x(vec4f ang);
+VECTORCALL VECMATH_FINLINE vec4f v_safe_acos_x(vec4f ang);
 
 // compute approximate atan |error| is < 0.00045
 VECTORCALL VECMATH_FINLINE vec4f v_atan_est(vec4f x);  // any x

@@ -48,10 +48,18 @@ VECTORCALL VECMATH_FINLINE vec4f v_make_vec4f_mask(uint8_t bitmask)
   return v_cast_vec4f(v_cmp_eqi(isolated, lookup));
 }
 
-VECTORCALL VECMATH_FINLINE vec4f v_insert_x(vec4f a, float x) { return v_perm_ayzw(a, v_splats(x)); }
+VECTORCALL VECMATH_FINLINE vec4f v_distance_xyz_x(vec4f a, vec4f b) { return v_length3_x(v_sub(a, b)); }
+VECTORCALL VECMATH_FINLINE vec4f v_distance_x0z_x(vec4f a, vec4f b) { return v_length2_x(v_perm_xzxz(v_sub(a, b))); }
+
+VECTORCALL VECMATH_FINLINE vec4f v_insert_x(vec4f a, float x) { return v_perm_ayzw(a, v_set_x(x)); }
 VECTORCALL VECMATH_FINLINE vec4f v_insert_y(vec4f a, float y) { return v_perm_xbzw(a, v_splats(y)); }
 VECTORCALL VECMATH_FINLINE vec4f v_insert_z(vec4f a, float z) { return v_perm_xycw(a, v_splats(z)); }
 VECTORCALL VECMATH_FINLINE vec4f v_insert_w(vec4f a, float w) { return v_perm_xyzd(a, v_splats(w)); }
+
+VECTORCALL VECMATH_FINLINE vec4f v_add_x(vec4f a, float x) { return v_perm_ayzw(a, v_add_x(a, v_set_x(x))); }
+VECTORCALL VECMATH_FINLINE vec4f v_add_y(vec4f a, float y) { return v_perm_xbzw(a, v_add(a, v_splats(y))); }
+VECTORCALL VECMATH_FINLINE vec4f v_add_z(vec4f a, float z) { return v_perm_xycw(a, v_add(a, v_splats(z))); }
+VECTORCALL VECMATH_FINLINE vec4f v_add_w(vec4f a, float w) { return v_perm_xyzd(a, v_add(a, v_splats(w))); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_le(vec4f a, vec4f b) { return v_cmp_ge(b, a); }
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_lt(vec4f a, vec4f b) { return v_cmp_gt(b, a); }
@@ -183,6 +191,10 @@ VECTORCALL VECMATH_FINLINE vec4f v_sqr(vec4f a)
 VECTORCALL VECMATH_FINLINE vec4f v_sqr_x(vec4f a)
 {
   return v_mul_x(a, a);
+}
+VECTORCALL VECMATH_FINLINE vec4f v_midp(vec4f a, vec4f b)
+{
+  return v_mul(v_add(a, b), V_C_HALF);
 }
 
 VECTORCALL VECMATH_FINLINE vec4f v_perm_xxxx(vec4f a) { return v_splat_x(a); }
@@ -1435,7 +1447,7 @@ VECTORCALL VECMATH_FINLINE void v_quat_decompose_swing_twist(quat4f q, vec3f dir
 {
   // http://www.euclideanspace.com/maths/geometry/rotations/for/decomposition/
   vec3f p = v_mul(v_dot3(q, dir), dir);
-  twist = v_norm4_safe(v_perm_xyzW(p, q));
+  twist = v_norm4_safe(v_perm_xyzW(p, q), V_C_UNIT_0001);
   swing = v_quat_mul_quat(q, v_quat_conjugate(twist));
 }
 
@@ -1445,7 +1457,7 @@ VECTORCALL VECMATH_FINLINE void v_quat_decompose_swing_twist(quat4f q, vec3f dir
 VECTORCALL VECMATH_FINLINE void v_quat_decompose_twist_swing(quat4f q, vec3f dir, quat4f& twist, quat4f& swing)
 {
   vec3f p = v_mul(v_dot3(q, dir), dir);
-  twist = v_norm4_safe(v_perm_xyzW(p, q));
+  twist = v_norm4_safe(v_perm_xyzW(p, q), V_C_UNIT_0001);
   swing = v_quat_mul_quat(v_quat_conjugate(twist), q);
 }
 
