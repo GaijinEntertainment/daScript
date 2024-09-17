@@ -17,6 +17,8 @@ namespace das {
         VariablePtr             cmresVAR;
         bool                    failedToCMRES = false;
     protected:
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -615,6 +617,8 @@ namespace das {
         uint32_t bytesTotal = 0;
         das_hash_set<string>    uniStr;
     public:
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
         void allocateString ( const string & message ) {
             if ( !message.empty() ) {
                 if ( uniStr.find(message)==uniStr.end() ) {
