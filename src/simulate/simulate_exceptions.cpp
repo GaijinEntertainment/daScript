@@ -23,8 +23,14 @@
 #endif
 
 namespace das {
+    static void stackWalkToErr(Context & ctx, const LineInfo & at, bool showArguments, bool showLocalVariables) {
+        const das::string stack = ctx.getStackWalk(&at, showArguments, showLocalVariables);
+        ctx.to_err(&at, stack.c_str());
+    }
 
     void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
+        constexpr bool SHOW_ARGUMENTS = false;
+        constexpr bool SHOW_LOCAL_VARIABLES = false;
         exceptionMessage = message ? message : "";
         exceptionMessage += "\n";
         exception = exceptionMessage.c_str();
@@ -34,7 +40,7 @@ namespace das {
             to_err(&at, exception);
         }
         if ( alwaysStackWalkOnException ) {
-            stackWalk(&at, false, false);
+            stackWalkToErr(*this, at, SHOW_ARGUMENTS, SHOW_LOCAL_VARIABLES);
         }
         if ( breakOnException ) breakPoint(at, "exception", exception);
         throw dasException(exception, at);
@@ -44,7 +50,7 @@ namespace das {
                 to_err(&at, exception);
             }
             if ( alwaysStackWalkOnException ) {
-                stackWalk(&at, false, false);
+                stackWalkToErr(*this, at, SHOW_ARGUMENTS, SHOW_LOCAL_VARIABLES);
             }
             if ( breakOnException ) breakPoint(at, "exception", exception);
 #if defined(WIN64) || defined(_WIN64)
@@ -57,7 +63,7 @@ namespace das {
             to_err(&at, "\nunhandled exception\n");
             string msg = exceptionAt.describe() + ": " + exception;
             to_err(&at, msg.c_str());
-            stackWalk(&at, false, false);
+            stackWalkToErr(*this, at, SHOW_ARGUMENTS, SHOW_LOCAL_VARIABLES);
             breakPoint(at, "exception", exception);
         }
 #endif
