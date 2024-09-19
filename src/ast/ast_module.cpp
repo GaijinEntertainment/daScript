@@ -81,6 +81,10 @@ namespace das {
         requireModule[m] = pub;
     }
 
+    FileInfo * Module::getFileInfo() const {
+        return ownFileInfo.get();
+    }
+
     TypeAnnotation * Module::resolveAnnotation ( const TypeInfo * info ) {
         if ( info->type != Type::tHandle ) {
             return nullptr;

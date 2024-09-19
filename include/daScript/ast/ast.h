@@ -1114,6 +1114,7 @@ namespace das
         void addDependency ( Module * mod, bool pub );
         void addBuiltinDependency ( ModuleLibrary & lib, Module * mod, bool pub = false );
         void serialize( AstSerializer & ser, bool already_exists );
+        FileInfo * getFileInfo() const;
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {

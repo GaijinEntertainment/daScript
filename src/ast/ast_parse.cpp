@@ -37,7 +37,23 @@ namespace das {
         return (ch>='0' && ch<='9') || (ch>='a' && ch<='z') || (ch>='A' && ch<='Z');
     }
 
-    void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, vector<string> & req, das_set<FileInfo *> & collected  ) {
+    struct RequireRecord {
+        string              name;
+        vector<FileInfo *>  chain;
+    };
+
+    struct ChainGuard {
+        ChainGuard ( vector<FileInfo *> & c, FileInfo * fi ) : chain(c) {
+            chain.push_back(fi);
+        }
+        ~ChainGuard() {
+            chain.pop_back();
+        }
+        vector<FileInfo *> & chain;
+    };
+
+    void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected ) {
+        ChainGuard guard(chain,fi);
         const char * src = nullptr;
         uint32_t length = 0;
         fi->getSourceAndLength(src, length);
@@ -98,14 +114,14 @@ namespace das {
                                 mod += *src ++;
                             }
                             if ( isReq ) {
-                                req.push_back(mod);
+                                req.push_back({mod,chain});
                             } else if ( isInc ) {
                                 string incFileName = access->getIncludeFileName(fi->name,mod);
                                 auto info = access->getFileInfo(incFileName);
                                 if ( info ) {
                                     if ( collected.find(info)==collected.end() ) {
                                         collected.insert(info);
-                                        getAllRequireReq(info, access, req, collected);
+                                        getAllRequireReq(info, access, req, chain, collected);
                                     }
                                 }
                             }
@@ -128,10 +144,10 @@ namespace das {
         }
     }
 
-    vector<string> getAllRequire ( FileInfo * fi, const FileAccessPtr & access  ) {
+    vector<RequireRecord> getAllRequire ( FileInfo * fi, vector<FileInfo *> & chain, const FileAccessPtr & access  ) {
         das_set<FileInfo *> collected;
-        vector<string> req;
-        getAllRequireReq(fi, access, req, collected);
+        vector<RequireRecord> req;
+        getAllRequireReq(fi, access, req, chain, collected);
         return req;
     }
 
@@ -148,9 +164,10 @@ namespace das {
         return fname;
     }
 
-    bool addRequirements(const string & fileName, ModuleGroup & libGroup, Module * mod, const FileAccessPtr & access, vector<string> & notAllowed, TextWriter * log, int tab ) {
+    bool addRequirements(const string & fileName, ModuleGroup & libGroup, Module * mod, const FileAccessPtr & access,
+            vector<RequireRecord> & notAllowed, vector<FileInfo*> & chain, TextWriter * log, int tab ) {
         if ( !access->isModuleAllowed(mod->name, fileName) ) {
-            notAllowed.push_back(mod->name);
+            notAllowed.push_back({mod->name,chain});
             if ( log ) {
                 *log << string(tab,'\t') << "dependency " << mod->name << " - NOT ALLOWED\n";
             }
@@ -161,10 +178,13 @@ namespace das {
             }
             if ( libGroup.addModule(mod) ) {
                 tab ++;
-                for ( const auto & dep : mod->requireModule ) {
-                    if ( !addRequirements(fileName, libGroup, dep.first, access, notAllowed, log, tab) ) {
+                for ( auto & dep : mod->requireModule ) {
+                    chain.push_back(dep.first->getFileInfo());
+                    if ( !addRequirements(fileName, libGroup, dep.first, access, notAllowed, chain, log, tab) ) {
+                        chain.pop_back();
                         return false;
                     }
+                    chain.pop_back();
                 }
                 tab --;
             }
@@ -177,20 +197,23 @@ namespace das {
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           vector<ModuleInfo> & req,
-                          vector<string> & missing,
-                          vector<string> & circular,
-                          vector<string> & notAllowed,
+                          vector<RequireRecord> & missing,
+                          vector<RequireRecord> & circular,
+                          vector<RequireRecord> & notAllowed,
+                          vector<FileInfo *> & chain,
                           das_set<string> & dependencies,
                           ModuleGroup & libGroup,
                           TextWriter * log,
                           int tab,
                           bool allowPromoted ) {
         if ( auto fi = access->getFileInfo(fileName) ) {
+            ChainGuard guard(chain,fi);
             if ( log ) {
                 *log << string(tab,'\t') << "in " << fileName << "\n";
             }
-            vector<string> ownReq = getAllRequire(fi, access);
-            for ( auto & mod : ownReq ) {
+            vector<RequireRecord> ownReq = getAllRequire(fi, chain, access);
+            for ( auto & modRec : ownReq ) {
+                string & mod = modRec.name;
                 if ( log ) {
                     *log << string(tab,'\t') << "require " << mod << "\n";
                 }
@@ -221,7 +244,7 @@ namespace das {
                                 if ( log ) {
                                     *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
                                 }
-                                circular.push_back(mod);
+                                circular.push_back({mod, chain});
                                 return false;
                             }
                             dependencies.insert(mod);
@@ -231,10 +254,10 @@ namespace das {
                                 if ( log ) {
                                     *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
                                 }
-                                missing.push_back(mod);
+                                missing.push_back({mod,chain});
                                 return false;
                             }
-                            if ( !getPrerequisits(info.fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, log, tab + 1, allowPromoted) ) {
+                            if ( !getPrerequisits(info.fileName, access, req, missing, circular, notAllowed, chain, dependencies, libGroup, log, tab + 1, allowPromoted) ) {
                                 return false;
                             }
                             if ( log ) {
@@ -248,7 +271,7 @@ namespace das {
                                     *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - module name collision\n"
                                          << string(tab+1,'\t') << "requested from " << it_r->fileName << " and from " << info.fileName << "\n";
                                 }
-                                missing.push_back(mod);
+                                missing.push_back({mod, chain});
                                 return false;
                             } else {
                                 if ( log ) {
@@ -260,7 +283,7 @@ namespace das {
                         if ( log ) {
                             *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
                         }
-                        if ( !addRequirements(fileName, libGroup, module, access, notAllowed, log, tab) ) {
+                        if ( !addRequirements(fileName, libGroup, module, access, notAllowed, chain, log, tab) ) {
                             return false;
                         }
                     }
@@ -269,7 +292,7 @@ namespace das {
                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
                     }
                     if ( !access->isModuleAllowed(module->name, fileName) ) {
-                        notAllowed.push_back(module->name);
+                        notAllowed.push_back({mod,chain});
                         if ( log ) {
                             *log << string(tab,'\t') << "in " << fileName << " module " << module->name << " - NOT ALLOWED\n";
                         }
@@ -285,7 +308,7 @@ namespace das {
                 *log    << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n"
                         << string(tab+1,'\t') << "getDasRoot()='" << getDasRoot() << "'\n";
             }
-            missing.push_back(fileName);
+            missing.push_back({fileName,chain});
             return false;
         }
     }
@@ -518,9 +541,9 @@ namespace das {
     bool addExtraDependency(
         string modName,
         string modFile,
-        vector<string> & missing,
-        vector<string> & circular,
-        vector<string> & notAllowed,
+        vector<RequireRecord> & missing,
+        vector<RequireRecord> & circular,
+        vector<RequireRecord> & notAllowed,
         vector<ModuleInfo> & req,
         das_set<string> & dependencies,
         const FileAccessPtr & access,
@@ -535,7 +558,8 @@ namespace das {
             }
         }
         if ( !hasModule && !modFile.empty() ) {
-            if ( !getPrerequisits(modFile, access, req, missing, circular, notAllowed,
+            vector<FileInfo *> chain;
+            if ( !getPrerequisits(modFile, access, req, missing, circular, notAllowed, chain,
                 dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
                 if ( log ) {
                     *log << "failed to add extra dependency " << modName << " from " << modFile << "\n";
@@ -622,12 +646,21 @@ namespace das {
         res->thisModule->addVariable(rtti_require);
     }
 
+    void reportChain ( TextWriter & tw, const vector<FileInfo *> & chain ) {
+        bool first = true;
+        for ( auto fi = chain.rbegin(); fi != chain.rend(); ++fi ) {
+            if ( *fi ) {
+                tw << "\t" << (first ? "from " : "required from ") << (*fi)->name << "\n";
+            }
+            first = false;
+        }
+    }
 
     ProgramPtr reportPrerequisitesErrors (
             string fileName,
-            vector<string> & missing,
-            vector<string> & circular,
-            vector<string> & notAllowed,
+            vector<RequireRecord> & missing,
+            vector<RequireRecord> & circular,
+            vector<RequireRecord> & notAllowed,
             vector<ModuleInfo> & req,
             das_set<string> & dependencies,
             const FileAccessPtr & access,
@@ -638,21 +671,25 @@ namespace das {
         missing.clear();
         circular.clear();
         dependencies.clear();
-        getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, &tw, 1, false);
+        vector<FileInfo *> chain;
+        getPrerequisits(fileName, access, req, missing, circular, notAllowed, chain, dependencies, libGroup, &tw, 1, false);
         auto program = make_smart<Program>();
         program->policies = policies;
         program->thisModuleGroup = &libGroup;
         TextWriter err;
         for ( auto & mis : missing ) {
-            err << "missing prerequisit " << mis << "\n";
+            err << "missing prerequisit " << mis.name << "\n";
+            reportChain(err, mis.chain);
         }
         for ( auto & mis : circular ) {
-            err << "circular dependency " << mis << "\n";
+            err << "circular dependency " << mis.name << "\n";
+            reportChain(err, mis.chain);
         }
         for ( auto & mis : notAllowed ) {
-            err << "module not allowed " << mis << "\n";
+            err << "module not allowed " << mis.name << "\n";
+            reportChain(err, mis.chain);
         }
-        program->error(err.str(),"module dependency graph:\n" + tw.str(), "", LineInfo(),
+        program->error(err.str(), "", "", LineInfo(),
                         CompilationError::module_not_found);
         return program;
     }
@@ -697,10 +734,11 @@ namespace das {
         totM = 0;
         daScriptEnvironment::bound->macroTimeTicks = 0;
         vector<ModuleInfo> req;
-        vector<string> missing, circular, notAllowed;
+        vector<RequireRecord> missing, circular, notAllowed;
+        vector<FileInfo *> chain;
         das_set<string> dependencies;
         uint64_t preqT = 0;
-        if ( getPrerequisits(fileName, access, req, missing, circular, notAllowed,
+        if ( getPrerequisits(fileName, access, req, missing, circular, notAllowed, chain,
                 dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             preqT = get_time_usec(time0);
             disableSerializationOnDebugger(req);
@@ -790,7 +828,7 @@ namespace das {
                 circular.clear();
                 notAllowed.clear();
                 dependencies.clear();
-                getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, &tw, 1, false);
+                getPrerequisits(fileName, access, req, missing, circular, notAllowed, chain, dependencies, libGroup, &tw, 1, false);
                 logs << "module dependency graph:\n" << tw.str();
             }
             if ( !res->failed() ) {
