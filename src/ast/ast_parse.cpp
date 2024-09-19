@@ -37,11 +37,6 @@ namespace das {
         return (ch>='0' && ch<='9') || (ch>='a' && ch<='z') || (ch>='A' && ch<='Z');
     }
 
-    struct RequireRecord {
-        string              name;
-        vector<FileInfo *>  chain;
-    };
-
     struct ChainGuard {
         ChainGuard ( vector<FileInfo *> & c, FileInfo * fi ) : chain(c) {
             chain.push_back(fi);

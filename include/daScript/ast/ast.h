@@ -1648,13 +1648,19 @@ namespace das
     ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
 
+    struct RequireRecord {
+        string              name;
+        vector<FileInfo *>  chain;
+    };
+
     // collect script prerequisits
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           vector<ModuleInfo> & req,
-                          vector<string> & missing,
-                          vector<string> & circular,
-                          vector<string> & notAllowed,
+                          vector<RequireRecord> & missing,
+                          vector<RequireRecord> & circular,
+                          vector<RequireRecord> & notAllowed,
+                          vector<FileInfo *> & chain,
                           das_set<string> & dependencies,
                           ModuleGroup & libGroup,
                           TextWriter * log,
