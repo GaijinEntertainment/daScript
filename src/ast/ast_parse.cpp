@@ -214,6 +214,7 @@ namespace das {
                 }
                 if ( !access->canBeRequired(mod, fileName) )
                 {
+                    notAllowed.push_back({mod,chain});
                     if ( log ) {
                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CAN'T BE REQUIRED\n";
                     }
@@ -666,6 +667,7 @@ namespace das {
         missing.clear();
         circular.clear();
         dependencies.clear();
+        notAllowed.clear();
         vector<FileInfo *> chain;
         getPrerequisits(fileName, access, req, missing, circular, notAllowed, chain, dependencies, libGroup, &tw, 1, false);
         auto program = make_smart<Program>();
