@@ -226,9 +226,11 @@ namespace das {
         }
         virtual void preVisitAlias ( TypeDecl * td, const string & name ) override {
             Visitor::preVisitAlias(td,name);
-            if ( td->getSizeOf64()>0x7fffffff ) {
-                program->error("alias '" + name + "' is too big", "", "",
-                    td->at, CompilationError::invalid_type );
+            if ( !td->isAuto() ) {
+                if ( td->getSizeOf64()>0x7fffffff ) {
+                    program->error("alias '" + name + "' is too big", "", "",
+                        td->at, CompilationError::invalid_type );
+                }
             }
         }
         virtual void preVisit ( Enumeration * enu ) override {
