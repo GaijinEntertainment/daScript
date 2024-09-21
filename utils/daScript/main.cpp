@@ -423,8 +423,12 @@ void print_help() {
 #endif
 
 int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
-    bool isArgAot = strcmp(argv[1],"-aot")==0;
-    isAotLib = !isArgAot && strcmp(argv[1],"-aotlib")==0;
+    bool isArgAot = false;
+    if (argc > 1) {
+        isArgAot = strcmp(argv[1],"-aot")==0;
+        isAotLib = !isArgAot && strcmp(argv[1],"-aotlib")==0;
+    }
+
     if ( argc>2 && (isArgAot || isAotLib) ) {
         return das_aot_main(argc, argv);
     }
