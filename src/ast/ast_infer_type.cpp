@@ -5121,6 +5121,23 @@ namespace das {
             return nullptr;
         }
         virtual ExpressionPtr visit ( ExprField * expr ) override {
+            if ( expr->value->rtti_isVar() && !expr->value->type ) {    // if its a var expression, but it did not infer
+                auto var = static_cast<ExprVar *>(expr->value.get());
+                string moduleName, enumName;
+                splitTypeName(var->name, moduleName, enumName);
+                getSearchModule(moduleName);
+                vector<Enumeration *> possibleEnums;
+                program->library.foreach([&](Module * mod) -> bool {
+                    if ( auto possibleEnum = mod->findEnum(enumName) ) {
+                        possibleEnums.push_back(possibleEnum.get());
+                    }
+                    return true;
+                }, moduleName);
+                if ( possibleEnums.size()==1 ) {
+                    auto td = make_smart<TypeDecl>(possibleEnums.back());
+                    return make_smart<ExprConstEnumeration>(expr->at, expr->name, td);
+                }
+            }
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( expr->name.empty() ) {
                 error("syntax error, expecting field after '.'", "", "",
