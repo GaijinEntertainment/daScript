@@ -10,6 +10,7 @@ namespace das {
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at );
     char * ast_das_to_string ( Type bt, Context * context, LineInfoArg * at );
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context, LineInfoArg * at );
+    char * ast_find_enum_name ( Enumeration * enu, int64_t value, Context * context, LineInfoArg * at );
     int64_t ast_find_enum_value ( EnumerationPtr enu, const char * value );
     int64_t ast_find_enum_value_ex ( Enumeration * enu, const char * value );
 

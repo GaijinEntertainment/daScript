@@ -576,18 +576,20 @@ def private walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInf
             return [[ExpressionPtr]]
 
 def private walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
-    var eval = 0
+    var eval = 0l
     if info.baseType == Type tEnumeration
-        eval = * unsafe(reinterpret<int?> data)
+        eval = int64(*unsafe(reinterpret<int?> data))
     elif info.baseType == Type tEnumeration8
-        eval = int(*data)
+        eval = int64(*data)
     elif info.baseType == Type tEnumeration16
-        eval = int(*unsafe(reinterpret<int16?> data))
+        eval = int64(*unsafe(reinterpret<int16?> data))
     elif info.baseType == Type tEnumeration64
-        eval = int(*unsafe(reinterpret<int64?> data))
+        eval = *unsafe(reinterpret<int64?> data)
     else
         panic("unsupported enumeration")
-    return <- new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval].name]]
+    let name = info.enumType |> find_enum_name(eval)
+    panic("can't find name of enum value {eval} in {describe(info)}")  if name == ""
+    return <- new [[ExprConstEnumeration() enumType:=info.enumType, value:=name]]
 
 def private walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
 	// print("0x{intptr(data)} {describe(info)}\n")
