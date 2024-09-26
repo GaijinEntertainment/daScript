@@ -2001,7 +2001,7 @@ case YY_STATE_EOF(indent):
     if ( yyextra->g_FileAccessStack.size()==1 ) {
         if ( yyextra->das_indent_level ) {
             yyextra->das_indent_level--;
-            unput('\r');
+            unput('\n');
             #ifdef FLEX_DEBUG
             printf("emit }\n");
             #endif
