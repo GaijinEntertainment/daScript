@@ -283,6 +283,10 @@ namespace das {
         return ast_find_enum_value_ex(enu.get(), value);
     }
 
+    char * ast_find_enum_name ( Enumeration *enu, int64_t value, Context * context, LineInfoArg * at ) {
+        return context->allocateString(enu->find(value, string()), at);
+    }
+
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
         if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
         prog->error(message ? message : "macro error","","",at,CompilationError::macro_failed);
@@ -789,6 +793,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "find_bitfield_name",
             SideEffects::none, "find_bitfield_name")
                 ->args({"bit","value","context","lineinfo"});
+        addExtern<DAS_BIND_FUN(ast_find_enum_name)>(*this, lib,  "find_enum_name",
+            SideEffects::none, "ast_find_enum_name")
+                ->args({"enum","value","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_enum_value)>(*this, lib,  "find_enum_value",
             SideEffects::none, "ast_find_enum_value")
                 ->args({"enum","value"});
