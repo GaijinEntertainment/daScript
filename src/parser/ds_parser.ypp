@@ -3297,7 +3297,7 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->forceVariant = true;
         $$ = $msd;
     }
-    |   DAS_DEFAULT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; }  {
+    |   DAS_DEFAULT [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; }  {
         auto msd = new ExprMakeStruct();
         msd->at = tokAt(scanner,@loc);
         msd->makeType = TypeDeclPtr($mkt);

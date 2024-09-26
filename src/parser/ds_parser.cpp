@@ -10867,15 +10867,15 @@ yyreduce:
     break;
 
   case 789: /* $@94: %empty  */
-                              { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                              { yyextra->das_arrow_depth ++; }
     break;
 
   case 790: /* $@95: %empty  */
-                                                                                                                                          { yyextra->das_arrow_depth --; }
+                                                                                                    { yyextra->das_arrow_depth --; }
     break;
 
   case 791: /* make_struct_decl: "default" '<' $@94 type_declaration_no_options '>' $@95  */
-                                                                                                                                                                            {
+                                                                                                                                      {
         auto msd = new ExprMakeStruct();
         msd->at = tokAt(scanner,(yylsp[-5]));
         msd->makeType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
