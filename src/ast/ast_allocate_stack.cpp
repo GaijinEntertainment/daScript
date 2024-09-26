@@ -7,8 +7,10 @@ namespace das {
 
     class VarCMRes : public Visitor {
     public:
-        VarCMRes( const ProgramPtr & prog ) {
+        VarCMRes( const ProgramPtr & prog, bool everything ) {
             program = prog;
+            isEverything = everything
+;
         }
     protected:
         vector<ExprBlock *>     blocks;
@@ -16,9 +18,10 @@ namespace das {
         FunctionPtr             func;
         VariablePtr             cmresVAR;
         bool                    failedToCMRES = false;
+        bool                    isEverything = false;
     protected:
-        virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
-        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
+        virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
+        virtual bool canVisitFunction ( Function * fun ) override { return isEverything || fun->used; }
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -79,7 +82,7 @@ namespace das {
 
     class AllocateStack : public Visitor {
     public:
-        AllocateStack( const ProgramPtr & prog, bool permanent, TextWriter & ls ) : logs(ls) {
+        AllocateStack( const ProgramPtr & prog, bool permanent, bool everything, TextWriter & ls ) : logs(ls) {
             program = prog;
             log = prog->options.getBoolOption("log_stack");
             log_var_scope = prog->options.getBoolOption("log_var_scope");
@@ -89,6 +92,7 @@ namespace das {
                 logs << "\nSTACK INFORMATION in " << prog->thisModule->name << ":\n";
             }
             isPermanent = permanent;
+            isEverything = everything;
         }
     protected:
         ProgramPtr              program;
@@ -104,14 +108,17 @@ namespace das {
         bool                    inStruct = false;
         bool                    noFastCall = false;
         bool                    isPermanent = false;
+        bool                    isEverything = false;
     protected:
         virtual bool canVisitGlobalVariable ( Variable * var ) override {
-            if ( !var->used || var->stackResolved ) return false;
+            if ( var->stackResolved ) return false;
+            if ( !var->used && !isEverything ) return false;
             var->stackResolved = isPermanent;
             return true;
         }
         virtual bool canVisitFunction ( Function * fun ) override {
-            if ( !fun->used || fun->stackResolved ) return false;
+            if ( fun->stackResolved ) return false;
+            if ( !fun->used && !isEverything ) return false;
             fun->stackResolved = isPermanent;
             return true;
         }
@@ -647,7 +654,7 @@ namespace das {
 
     // program
 
-    void Program::allocateStack(TextWriter & logs, bool permanent) {
+    void Program::allocateStack(TextWriter & logs, bool permanent, bool everything) {
         // string heap
         AllocateConstString vstr;
         for (auto & pm : library.modules) {
@@ -664,11 +671,11 @@ namespace das {
         }
         globalStringHeapSize = vstr.bytesTotal;
         // move some variables to CMRES
-        VarCMRes vcm(this);
-        visitModules(vcm);
+        VarCMRes vcm(this, everything);
+        visit(vcm);
         // allocate stack for the rest of them
-        AllocateStack context(this, permanent, logs);
-        visitModules(context);
+        AllocateStack context(this, permanent, everything, logs);
+        visit(context);
         // adjust stack size for all the used variables
         for (auto & pm : library.modules) {
             for ( auto & var : pm->globals.each() ) {

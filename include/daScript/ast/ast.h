@@ -1539,8 +1539,8 @@ namespace das
         void removeUnusedSymbols();
         void clearSymbolUse();
         void dumpSymbolUse(TextWriter & logs);
-        void allocateStack(TextWriter & logs, bool permanent);
-        void deriveAliases(TextWriter & logs, bool permanent);
+        void allocateStack(TextWriter & logs, bool permanent, bool everything);
+        void deriveAliases(TextWriter & logs, bool permanent, bool everything);
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
