@@ -5645,7 +5645,57 @@ namespace das {
             return res;
         }
 
+        void preVisit ( ExprOp2 * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !strictProperties && isAssignmentOperator(expr->op) ) {
+                if ( expr->left->rtti_isField() ) {
+                    auto field = static_pointer_cast<ExprField>(expr->left);
+                    field->underClone = true;
+                } else if ( expr->left->rtti_isVar() ) {
+                    auto var = static_pointer_cast<ExprVar>(expr->left);
+                    var->underClone = true;
+                }
+            }
+        }
+        ExpressionPtr promoteOp2ToProperty ( ExprOp2 * expr ) {
+            // a.b += c  -> a`b`set(a`b`get() + c)
+            if ( expr->right->type && !expr->right->type->isAutoOrAlias() ) {
+                auto opName = expr->op; opName.pop_back();
+                if ( expr->left->rtti_isVar() ) {
+                    ExprVar * evar = (ExprVar*)(expr->left.get());
+                    if ( auto propGet = promoteToProperty(evar, nullptr) ) {    // we need both get and set
+                        auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
+                        opRight->type = make_smart<TypeDecl>(*expr->right->type);
+                        if ( auto cloneSet = promoteToProperty(evar, opRight) ) {
+                            return cloneSet;
+                        } else {
+                            expr->left = propGet;
+                            return expr;
+                        }
+                    }
+                } else if ( expr->left->rtti_isField() ) {
+                    ExprField * efield = (ExprField*)(expr->left.get());
+                    if ( auto propGet = promoteToProperty(efield, nullptr) ) {    // we need both get and set
+                        auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
+                        opRight->type = make_smart<TypeDecl>(*expr->right->type);
+                        if ( auto cloneSet = promoteToProperty(efield, opRight) ) {
+                            return cloneSet;
+                        } else {
+                            expr->left = propGet;
+                            return expr;
+                        }
+                    }
+                }
+            }
+            return nullptr;
+        }
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
+            if ( !strictProperties && expr->right->type && isAssignmentOperator(expr->op) ) {
+                if ( auto nExpr = promoteOp2ToProperty(expr) ) {
+                    reportAstChanged();
+                    return nExpr;
+                }
+            }
             if ( !expr->left->type  || expr->left->type->isAliasOrExpr()  ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->right->type || expr->right->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             // flippling commutative operations, if the constant is on the left
