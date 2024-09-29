@@ -188,11 +188,6 @@ namespace das
         char *          table_end = nullptr;
     };
 
-    struct TableKeysIterator : TableIterator {
-        TableKeysIterator ( const Table * tab, uint32_t st, LineInfo * at ) : TableIterator(tab,st,at) {}
-        virtual char * getData ( ) const override;
-    };
-
     struct TableValuesIterator : TableIterator {
         TableValuesIterator ( const Table * tab, uint32_t st, LineInfo * at ) : TableIterator(tab,st,at) {}
         virtual char * getData ( ) const override;

@@ -554,8 +554,8 @@ def clone(var a:table<string;auto(VT)>;b:table<string;VT>|#)
         a[kk] := v
 
 [unsafe_outside_of_for,nodiscard]
-def keys(a:table<auto(keyT);auto(valT)>|#) : iterator<keyT & const>
-    var it : iterator<keyT & const>
+def keys(a:table<auto(keyT);auto(valT)>|#) : iterator<keyT - const>
+    var it : iterator<keyT - const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
     return <- it
 
