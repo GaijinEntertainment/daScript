@@ -117,7 +117,7 @@ namespace das {
     //              push(temp, subexpr)
     //      return temp
     ExpressionPtr generateComprehension ( ExprArrayComprehension * expr, bool tableSyntax ) {
-        auto compName = "__acomp_" + to_string(expr->at.line);
+        auto compName = "__acomp_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
         auto pClosure = make_smart<ExprBlock>();
         pClosure->at = expr->subexpr->at;
         pClosure->returnType = make_smart<TypeDecl>(Type::autoinfer);
@@ -803,7 +803,7 @@ namespace das {
                     auto & varName = expr->iterators[i];
                     auto & var = expr->iteratorVariables[i];
                     if ( varName[0]!='_' || varName[1]!='_' ) {
-                        string newName = "__" + aotSuffixNameEx(varName,"_Var") + "_rename_at_" + to_string(var->at.line);
+                        string newName = "__" + aotSuffixNameEx(varName,"_Var") + "_rename_at_" + to_string(var->at.line) + "_" + to_string(var->at.column);
                         rename[var->name] = newName;
                         var->name = newName;
                         varName = newName;
@@ -816,7 +816,7 @@ namespace das {
             if ( scopes.size()==1 ) {   // only top level block
                 for ( auto & var : expr->variables ) {
                     if ( var->name[0]!='_' || var->name[1]!='_' ) {
-                        string newName = "__" + aotSuffixNameEx(var->name,"_Var") + "_rename_at_" + to_string(var->at.line);
+                        string newName = "__" + aotSuffixNameEx(var->name,"_Var") + "_rename_at_" + to_string(var->at.line) + "_" + to_string(var->at.column);
                         rename[var->name] = newName;
                         var->name = newName;
                     }
@@ -1171,11 +1171,11 @@ namespace das {
         btel->at = expr->at;
         btel->list.push_back(gtel);
         // names
-        string loopVar = "_loop_at_" + to_string(expr->at.line);
+        string loopVar = "_loop_at_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
         vector<string> srcNames, pVarNames;
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
-            srcNames.push_back("_source_" + to_string(si) + "_at_" + to_string(expr->at.line));
-            pVarNames.push_back("_pvar_" + to_string(si) + "_at_" + to_string(expr->at.line));
+            srcNames.push_back("_source_" + to_string(si) + "_at_" + to_string(expr->at.line) + "_" + to_string(expr->at.column));
+            pVarNames.push_back("_pvar_" + to_string(si) + "_at_" + to_string(expr->at.line) + "_" + to_string(expr->at.column));
         }
         auto leqt = make_smart<ExprLet>();
         leqt->at = expr->at;
