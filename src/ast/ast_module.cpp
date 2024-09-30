@@ -765,6 +765,13 @@ namespace das {
         if ( module ) {
             thisModule = thisModule ? thisModule : module;
             if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
+                if ( !module->requireModule.empty() ) {
+                    for ( auto dep : module->requireModule ) {
+                        if ( dep.first != module ) {
+                            addModule ( dep.first );
+                        }
+                    }
+                }
                 for ( auto dep : module->requireModule ) {
                     if ( dep.first != module ) {
                         addModule ( dep.first );
