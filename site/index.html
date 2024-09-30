@@ -255,45 +255,154 @@ def fibI(n) {
             The overhead of data-oriented processing in interpretation mode in Daslang is comparable to C++ in Debug mode, as demonstrated by the Particles sample.
         </p>
 
-        <small>Tested on AMD Ryzen Threadripper 3990X 64-Core Processor at Tue Jun 18 14:51:21 2024</small><br>
+        <small>Tested on AMD Ryzen Threadripper 3990X 64-Core Processor at Mon Sep 30 15:32:40 2024</small><br>
         <small>CLANG 17.0.6</small><br>
+
         <h2>Interpreted</h2>
-        <table border="1">
-        <tr><th>Test</th>
-        <th>DAS INTERPRETER</th><th>LUA</th><th>LUAJIT -joff</th><th>LUAU</th><th>MONO --interpreter</th><th>QUICKJS</th><th>QUIRREL</th><th>SQUIRREL3</th></tr>
-        <tr><td>dictionary</td>
-        <td><b>1.00 (0.0167)</b></td><td>3.97 (0.0660)</td><td><b>1.00 (0.0166)</b></td><td>1.78 (0.0297)</td><td>80.52 (1.3387)</td><td>6.07 (0.1010)</td><td>5.23 (0.0870)</td><td>6.74 (0.1120)</td></tr>
-        <tr><td>exp loop</td>
-        <td><b>1.00 (0.0114)</b></td><td>4.47 (0.0510)</td><td>3.31 (0.0377)</td><td>1.78 (0.0203)</td><td>34.47 (0.3930)</td><td>7.63 (0.0870)</td><td>7.63 (0.0870)</td><td>7.45 (0.0850)</td></tr>
-        <tr><td>fibonacci loop</td>
-        <td><b>1.00 (0.0375)</b></td><td>2.40 (0.0900)</td><td>1.20 (0.0451)</td><td>2.05 (0.0768)</td><td>3.50 (0.1312)</td><td>3.31 (0.1240)</td><td>4.19 (0.1570)</td><td>2.99 (0.1120)</td></tr>
-        <tr><td>fibonacci recursive</td>
-        <td><b>1.00 (0.0549)</b></td><td>1.86 (0.1020)</td><td>1.09 (0.0601)</td><td>1.65 (0.0908)</td><td>2.03 (0.1113)</td><td>3.06 (0.1680)</td><td>5.48 (0.3010)</td><td>5.50 (0.3020)</td></tr>
-        <tr><td>float2string</td>
-        <td>1.04 (0.0778)</td><td>8.00 (0.6010)</td><td>2.29 (0.1717)</td><td><b>1.00 (0.0751)</b></td><td>74.10 (5.5678)</td><td>48.26 (3.6260)</td><td>N/A</td><td>N/A</td></tr>
-        <tr><td>mandelbrot</td>
-        <td><b>1.00 (0.0031)</b></td><td>52.85 (0.1640)</td><td>19.23 (0.0597)</td><td>17.77 (0.0551)</td><td>8.39 (0.0260)</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
-        <tr><td>n-bodies</td>
-        <td><b>1.00 (0.2139)</b></td><td>5.45 (1.1670)</td><td>2.63 (0.5630)</td><td>3.28 (0.7025)</td><td>5.42 (1.1593)</td><td>11.34 (2.4270)</td><td>13.42 (2.8700)</td><td>13.13 (2.8090)</td></tr>
-        <tr><td>native loop</td>
-        <td><b>1.00 (0.0372)</b></td><td>N/A</td><td>23.72 (0.8821)</td><td>N/A</td><td>39.22 (1.4586)</td><td>N/A</td><td>18.69 (0.6950)</td><td>N/A</td></tr>
-        <tr><td>particles kinematics</td>
-        <td><b>1.00 (0.0118)</b></td><td>102.25 (1.2090)</td><td>25.72 (0.3041)</td><td>32.64 (0.3859)</td><td>54.50 (0.6445)</td><td>120.18 (1.4210)</td><td>55.99 (0.6620)</td><td>121.45 (1.4360)</td></tr>
-        <tr><td>primes loop</td>
-        <td><b>1.00 (0.0408)</b></td><td>2.35 (0.0960)</td><td>1.67 (0.0683)</td><td>2.29 (0.0936)</td><td>3.80 (0.1552)</td><td>3.16 (0.1290)</td><td>8.52 (0.3480)</td><td>8.25 (0.3370)</td></tr>
-        <tr><td>queen</td>
-        <td><b>1.00 (0.0013)</b></td><td>1.60 (0.0020)</td><td><b>1.00 (0.0012)</b></td><td>1.38 (0.0017)</td><td>N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
-        <tr><td>sha256</td>
-        <td><b>1.00 (0.1233)</b></td><td>N/A</td><td>2.05 (0.2524)</td><td>5.88 (0.7252)</td><td>N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
-        <tr><td>sort</td>
-        <td><b>1.00 (0.0320)</b></td><td>2.85 (0.0910)</td><td>2.19 (0.0700)</td><td>1.63 (0.0520)</td><td>8.70 (0.2782)</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
-        <tr><td>spectral norm</td>
-        <td><b>1.00 (0.2044)</b></td><td>2.87 (0.5860)</td><td>1.41 (0.2882)</td><td>1.16 (0.2375)</td><td>2.15 (0.4391)</td><td>4.31 (0.8820)</td><td>N/A</td><td>N/A</td></tr>
-        <tr><td>string2float</td>
-        <td><b>1.00 (0.0274)</b></td><td>7.44 (0.2040)</td><td>4.92 (0.1350)</td><td>4.59 (0.1260)</td><td>200.18 (5.4922)</td><td>16.62 (0.4560)</td><td>N/A</td><td>N/A</td></tr>
-        <tr><td>tree</td>
-        <td>1.33 (1.7525)</td><td>2.17 (2.8580)</td><td><b>1.00 (1.3200)</b></td><td>1.33 (1.7606)</td><td>1.45 (1.9074)</td><td>12.79 (16.8780)</td><td>N/A</td><td>N/A</td></tr>
+        <h3>dictionary</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar" style="width: 16.989189189189187%;">0.0189&nbsp (1.13)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 59.45945945945946%;">0.0660&nbsp (3.96)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar featured" style="width: 15.002342342342342%;">0.0167&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 27.664144144144142%;">0.0307&nbsp (1.84)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 91.89189189189189%;">0.1020&nbsp (6.13)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 79.2791891891892%;">0.0880&nbsp (5.28)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 100%;">0.1110&nbsp (6.67)</div></td></tr>
         </table>
+        <h3>exp loop</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 14.283908045977011%;">0.0124&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 59.77011494252874%;">0.0520&nbsp (4.18)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 43.93183908045978%;">0.0382&nbsp (3.08)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 23.408505747126437%;">0.0204&nbsp (1.64)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 100%;">0.0870&nbsp (7.00)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 98.85057471264368%;">0.0860&nbsp (6.92)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 97.70114942528737%;">0.0850&nbsp (6.84)</div></td></tr>
+        </table>
+        <h3>fibonacci loop</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 25.58345323741007%;">0.0356&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 64.74820143884892%;">0.0900&nbsp (2.53)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 32.66676258992805%;">0.0454&nbsp (1.28)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 55.77510791366905%;">0.0775&nbsp (2.18)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 90.64748201438849%;">0.1260&nbsp (3.54)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 100%;">0.1390&nbsp (3.91)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 79.85611510791367%;">0.1110&nbsp (3.12)</div></td></tr>
+        </table>
+        <h3>fibonacci recursive</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 19.463272727272727%;">0.0535&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 37.090909090909086%;">0.1020&nbsp (1.91)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 21.399745454545453%;">0.0588&nbsp (1.10)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 32.44021818181818%;">0.0892&nbsp (1.67)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 60.72727272727273%;">0.1670&nbsp (3.12)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 93.81818181818181%;">0.2580&nbsp (4.82)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 100%;">0.2750&nbsp (5.14)</div></td></tr>
+        </table>
+        <h3>float2string</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 2.115697674418605%;">0.0764&nbsp (1.01)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 17.19269102990033%;">0.6210&nbsp (8.19)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 4.76952934662237%;">0.1723&nbsp (2.27)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar featured" style="width: 2.099717607973422%;">0.0758&nbsp (1.00)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 100%;">3.6120&nbsp (47.63)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 2.9900332225913617%;">0.1080&nbsp (1.42)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 2.96234772978959%;">0.1070&nbsp (1.41)</div></td></tr>
+        </table>
+        <h3>mandelbrot</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 1.8542682926829268%;">0.0030&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 100%;">0.1640&nbsp (53.93)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 36.423780487804876%;">0.0597&nbsp (19.64)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 33.81981707317073%;">0.0555&nbsp (18.24)</div></td></tr>
+        </table>
+        <h3>n-bodies</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 8.584089979550104%;">0.2099&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 51.124744376278116%;">1.2500&nbsp (5.96)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 22.864478527607364%;">0.5590&nbsp (2.66)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 28.270098159509203%;">0.6912&nbsp (3.29)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 100%;">2.4450&nbsp (11.65)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 9.815950920245399%;">0.2400&nbsp (1.14)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 11.738241308793455%;">0.2870&nbsp (1.37)</div></td></tr>
+        </table>
+        <h3>native loop</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 4.222755392681555%;">0.0372&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 100%;">0.8819&nbsp (23.68)</div></td></tr>
+        </table>
+        <h3>particles kinematics</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 0.7949630624580255%;">0.0118&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 82.40429818670249%;">1.2270&nbsp (103.66)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 20.19722632639355%;">0.3007&nbsp (25.41)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 26.35768972464741%;">0.3925&nbsp (33.16)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 96.9778374748153%;">1.4440&nbsp (121.99)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 40.89993284083277%;">0.6090&nbsp (51.45)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 100%;">1.4890&nbsp (125.79)</div></td></tr>
+        </table>
+        <h3>primes loop</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 12.233333333333334%;">0.0411&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 28.57142857142857%;">0.0960&nbsp (2.34)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 20.55044642857143%;">0.0690&nbsp (1.68)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 28.047410714285714%;">0.0942&nbsp (2.29)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 38.98809523809524%;">0.1310&nbsp (3.19)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 99.40476190476191%;">0.3340&nbsp (8.13)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 100%;">0.3360&nbsp (8.17)</div></td></tr>
+        </table>
+        <h3>queen</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar" style="width: 31.799999999999994%;">0.0013&nbsp (1.01)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 50%;">0.0020&nbsp (1.60)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar featured" style="width: 31.3425%;">0.0013&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 44.01%;">0.0018&nbsp (1.40)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 99.99974999999999%;">0.0040&nbsp (3.19)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 100%;">0.0040&nbsp (3.19)</div></td></tr>
+        </table>
+        <h3>sha256</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 16.49282618159149%;">0.1213&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 34.55609852422014%;">0.2541&nbsp (2.10)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 100%;">0.7353&nbsp (6.06)</div></td></tr>
+        </table>
+        <h3>sort</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar" style="width: 34.744565217391305%;">0.0320&nbsp (1.33)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 100%;">0.0920&nbsp (3.83)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 76.18086956521739%;">0.0701&nbsp (2.92)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 57.68413043478261%;">0.0531&nbsp (2.21)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar featured" style="width: 26.08695652173913%;">0.0240&nbsp (1.00)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 30.434782608695656%;">0.0280&nbsp (1.17)</div></td></tr>
+        </table>
+        <h3>spectral norm</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 13.799054054054052%;">0.2042&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 40.067567567567565%;">0.5930&nbsp (2.90)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 19.556750000000005%;">0.2894&nbsp (1.42)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 16.155385135135138%;">0.2391&nbsp (1.17)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 60%;">0.8880&nbsp (4.35)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 97.22972972972973%;">1.4390&nbsp (7.05)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 100%;">1.4800&nbsp (7.25)</div></td></tr>
+        </table>
+        <h3>string2float</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar featured" style="width: 6.350762527233115%;">0.0291&nbsp (1.00)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 44.44444444444444%;">0.2040&nbsp (7.00)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar" style="width: 29.677647058823524%;">0.1362&nbsp (4.67)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 27.684858387799565%;">0.1271&nbsp (4.36)</div></td></tr>
+        <tr><th>QUICKJS</th><td><div class="chart-bar" style="width: 100%;">0.4590&nbsp (15.75)</div></td></tr>
+        <tr><th>QUIRREL</th><td><div class="chart-bar" style="width: 66.66666666666666%;">0.3060&nbsp (10.50)</div></td></tr>
+        <tr><th>SQUIRREL3</th><td><div class="chart-bar" style="width: 93.4640522875817%;">0.4290&nbsp (14.72)</div></td></tr>
+        </table>
+        <h3>tree</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>DAS INTERPRETER</th><td><div class="chart-bar" style="width: 60.326341127922966%;">1.7543&nbsp (1.17)</div></td></tr>
+        <tr><th>LUA</th><td><div class="chart-bar" style="width: 100%;">2.9080&nbsp (1.94)</div></td></tr>
+        <tr><th>LUAJIT -joff</th><td><div class="chart-bar featured" style="width: 51.56968707015132%;">1.4996&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAU</th><td><div class="chart-bar" style="width: 60.826722833562584%;">1.7688&nbsp (1.18)</div></td></tr>
+        </table>
+
 
         <p>
             As a compiled Ahead-of-Time language, Daslang is significantly faster than both LuaJIT and Chrome JS, both of which have extremely fast Just-in-Time compilers.
@@ -308,44 +417,163 @@ def fibI(n) {
             It is worth noting that unlike Just-in-Time compilation, Ahead-of-Time compilation can be used on any platform, including those with signed binary executables like iOS or consoles.
         </p>
 
-        <small>Tested on AMD Ryzen Threadripper 3990X 64-Core Processor at Fri Mar 15 23:33:28 2024</small><br>
-        <small>CLANG 17.0.6, AOT CLANG 17.0.6, JIT LLVM 16.0.6</small><br>
+        <small>Tested on AMD Ryzen Threadripper 3990X 64-Core Processor at Mon Sep 30 15:32:40 2024</small><br>
+        <small>CLANG 17.0.6</small><br>
+
         <h2>AOT or JIT</h2>
-        <table border="1">
-        <tr><th>Test</th>
-        <th>.NET</th><th>C++</th><th>DAS AOT</th><th>DAS JIT</th><th>LUAJIT</th><th>LUAU --codegen</th><th>MONO</th></tr>
-        <tr><td>dictionary</td>
-        <td>7.69 (0.0781)</td><td>4.23 (0.0429)</td><td><b>1.00 (0.0101)</b></td><td>1.03 (0.0105)</td><td>1.20 (0.0122)</td><td>2.25 (0.0229)</td><td>7.61 (0.0772)</td></tr>
-        <tr><td>exp loop</td>
-        <td>1.49 (0.0055)</td><td><b>1.00 (0.0037)</b></td><td>1.38 (0.0051)</td><td><b>1.01 (0.0037)</b></td><td>4.84 (0.0179)</td><td>2.27 (0.0084)</td><td>2.85 (0.0105)</td></tr>
-        <tr><td>fibonacci loop</td>
-        <td>1.26 (0.0020)</td><td><b>1.00 (0.0016)</b></td><td><b>1.00 (0.0016)</b></td><td>1.20 (0.0019)</td><td>3.01 (0.0048)</td><td>22.06 (0.0350)</td><td>1.58 (0.0025)</td></tr>
-        <tr><td>fibonacci recursive</td>
-        <td>1.67 (0.0065)</td><td><b>1.00 (0.0039)</b></td><td>1.15 (0.0045)</td><td>1.17 (0.0046)</td><td>3.26 (0.0127)</td><td>15.32 (0.0598)</td><td>2.05 (0.0080)</td></tr>
-        <tr><td>float2string</td>
-        <td>5.01 (0.3279)</td><td>4.51 (0.2954)</td><td><b>1.00 (0.0655)</b></td><td>1.03 (0.0674)</td><td>2.38 (0.1559)</td><td>1.06 (0.0691)</td><td>6.96 (0.4555)</td></tr>
-        <tr><td>mandelbrot</td>
-        <td>4.43 (0.0020)</td><td><b>1.00 (0.0005)</b></td><td>1.39 (0.0006)</td><td>1.02 (0.0005)</td><td>16.60 (0.0075)</td><td>83.70 (0.0378)</td><td>8.85 (0.0040)</td></tr>
-        <tr><td>n-bodies</td>
-        <td>1.87 (0.0386)</td><td>1.31 (0.0270)</td><td>1.31 (0.0270)</td><td><b>1.00 (0.0207)</b></td><td>3.95 (0.0816)</td><td>11.13 (0.2299)</td><td>3.77 (0.0780)</td></tr>
-        <tr><td>native loop</td>
-        <td>13.18 (0.1602)</td><td>N/A</td><td><b>1.01 (0.0122)</b></td><td><b>1.01 (0.0122)</b></td><td><b>1.00 (0.0122)</b></td><td>N/A</td><td>10.99 (0.1336)</td></tr>
-        <tr><td>particles kinematics</td>
-        <td>2.20 (0.0065)</td><td>1.51 (0.0045)</td><td><b>1.00 (0.0030)</b></td><td>1.03 (0.0030)</td><td>69.15 (0.2051)</td><td>67.02 (0.1988)</td><td>30.71 (0.0911)</td></tr>
-        <tr><td>primes loop</td>
-        <td>2.82 (0.0379)</td><td>2.86 (0.0385)</td><td><b>1.00 (0.0135)</b></td><td><b>1.00 (0.0135)</b></td><td>1.01 (0.0136)</td><td>2.59 (0.0349)</td><td>2.81 (0.0378)</td></tr>
-        <tr><td>queen</td>
-        <td>48.79 (0.0055)</td><td>1.02 (0.0001)</td><td>1.27 (0.0001)</td><td><b>1.00 (0.0001)</b></td><td>3.91 (0.0004)</td><td>7.43 (0.0008)</td><td>N/A</td></tr>
-        <tr><td>sha256</td>
-        <td>1.54 (0.0075)</td><td>N/A</td><td>1.05 (0.0051)</td><td><b>1.00 (0.0049)</b></td><td>7.01 (0.0342)</td><td>114.95 (0.5606)</td><td>N/A</td></tr>
-        <tr><td>sort</td>
-        <td>2.32 (0.0125)</td><td>1.04 (0.0056)</td><td><b>1.00 (0.0054)</b></td><td>1.67 (0.0090)</td><td>13.43 (0.0723)</td><td>9.06 (0.0488)</td><td>1.95 (0.0105)</td></tr>
-        <tr><td>spectral norm</td>
-        <td><b>1.00 (0.0120)</b></td><td>1.03 (0.0123)</td><td>1.03 (0.0124)</td><td>1.03 (0.0124)</td><td>1.21 (0.0146)</td><td>4.73 (0.0568)</td><td>2.21 (0.0265)</td></tr>
-        <tr><td>string2float</td>
-        <td>4.74 (0.1126)</td><td>4.25 (0.1012)</td><td><b>1.00 (0.0239)</b></td><td><b>1.00 (0.0238)</b></td><td>4.93 (0.1172)</td><td>4.85 (0.1154)</td><td>7.64 (0.1817)</td></tr>
-        <tr><td>tree</td>
-        <td>1.42 (0.2473)</td><td><b>1.01 (0.1755)</b></td><td><b>1.00 (0.1738)</b></td><td>1.02 (0.1778)</td><td>5.76 (1.0010)</td><td>7.91 (1.3748)</td><td>1.48 (0.2566)</td></tr>
+        <h3>dictionary</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 100%;">0.0795&nbsp (7.87)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 55.21356665430057%;">0.0439&nbsp (4.34)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 12.712764954067291%;">0.0101&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar" style="width: 13.144111118796253%;">0.0105&nbsp (1.03)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 15.239472575564179%;">0.0121&nbsp (1.20)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 29.311543854574722%;">0.0233&nbsp (2.31)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 96.32400007545414%;">0.0766&nbsp (7.58)</div></td></tr>
+        </table>
+        <h3>exp loop</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 33.53407591312711%;">0.0060&nbsp (1.63)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar featured" style="width: 20.611062649578386%;">0.0037&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar" style="width: 34.67422666577199%;">0.0062&nbsp (1.68)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 20.72848867118477%;">0.0037&nbsp (1.01)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 100%;">0.0179&nbsp (4.85)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 47.32156836431143%;">0.0085&nbsp (2.30)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 55.95909101075846%;">0.0100&nbsp (2.72)</div></td></tr>
+        </table>
+        <h3>fibonacci loop</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 9.115167983136192%;">0.0030&nbsp (1.89)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar featured" style="width: 4.846516813544659%;">0.0016&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 4.825193358048233%;">0.0016&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar" style="width: 5.815210934667979%;">0.0019&nbsp (1.21)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 14.560873896130403%;">0.0048&nbsp (3.02)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 100%;">0.0328&nbsp (20.72)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 9.12918053960527%;">0.0030&nbsp (1.89)</div></td></tr>
+        </table>
+        <h3>fibonacci recursive</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 10.50339824132082%;">0.0063&nbsp (1.56)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 7.201846064901344%;">0.0043&nbsp (1.07)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 6.744981550980265%;">0.0041&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar" style="width: 7.510852608862506%;">0.0045&nbsp (1.11)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 21.407508194488052%;">0.0129&nbsp (3.17)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 100%;">0.0602&nbsp (14.83)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 14.136883253672774%;">0.0085&nbsp (2.10)</div></td></tr>
+        </table>
+        <h3>float2string</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 62.09374644136687%;">0.2835&nbsp (4.22)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 66.16780104941354%;">0.3021&nbsp (4.49)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 14.748946644592193%;">0.0673&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 14.723762471640434%;">0.0672&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 34.24957734388003%;">0.1564&nbsp (2.33)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 15.20931332615037%;">0.0695&nbsp (1.03)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 100%;">0.4566&nbsp (6.79)</div></td></tr>
+        </table>
+        <h3>mandelbrot</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 5.270359336690307%;">0.0020&nbsp (4.45)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar featured" style="width: 1.1837283488439536%;">0.0004&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar" style="width: 1.6530015027286387%;">0.0006&nbsp (1.40)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar" style="width: 1.212728375207614%;">0.0005&nbsp (1.02)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 20.02689093353721%;">0.0076&nbsp (16.92)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 100%;">0.0379&nbsp (84.48)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 10.538873217157471%;">0.0040&nbsp (8.90)</div></td></tr>
+        </table>
+        <h3>n-bodies</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 16.943646013269984%;">0.0390&nbsp (1.89)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 11.74113799323641%;">0.0270&nbsp (1.31)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar" style="width: 11.914919869177004%;">0.0274&nbsp (1.33)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 8.981047348609918%;">0.0207&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 35.61976699326074%;">0.0820&nbsp (3.97)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 100%;">0.2302&nbsp (11.13)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 34.97794707994314%;">0.0805&nbsp (3.89)</div></td></tr>
+        </table>
+        <h3>native loop</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 100%;">0.1615&nbsp (13.20)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 7.584448969660347%;">0.0122&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 7.596831743488362%;">0.0123&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar featured" style="width: 7.573242559345991%;">0.0122&nbsp (1.00)</div></td></tr>
+        </table>
+        <h3>particles kinematics</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 3.226976830514347%;">0.0069&nbsp (2.32)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 1.624750679583217%;">0.0035&nbsp (1.17)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 1.3897121197353577%;">0.0030&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 1.393909236875498%;">0.0030&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 93.11635481309071%;">0.1997&nbsp (67.00)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 100%;">0.2144&nbsp (71.96)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 42.675727465328315%;">0.0915&nbsp (30.71)</div></td></tr>
+        </table>
+        <h3>primes loop</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 98.4665215588723%;">0.0380&nbsp (2.82)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 100%;">0.0386&nbsp (2.87)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 35.08758291873963%;">0.0135&nbsp (1.01)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 34.893242122719734%;">0.0135&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 35.37080223880597%;">0.0137&nbsp (1.01)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 90.71957918739635%;">0.0350&nbsp (2.60)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 98.46626243781095%;">0.0380&nbsp (2.82)</div></td></tr>
+        </table>
+        <h3>queen</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 100%;">0.0050&nbsp (43.86)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 2.3398128149748016%;">0.0001&nbsp (1.03)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar" style="width: 2.8597712183025354%;">0.0001&nbsp (1.25)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 2.279817614590833%;">0.0001&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 8.82529397648188%;">0.0004&nbsp (3.87)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 17.522598192144628%;">0.0009&nbsp (7.69)</div></td></tr>
+        </table>
+        <h3>sha256</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 1.4122202226037857%;">0.0080&nbsp (1.64)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar" style="width: 0.9134219356141695%;">0.0052&nbsp (1.06)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 0.8632843573933686%;">0.0049&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 5.992852923532778%;">0.0339&nbsp (6.94)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 100%;">0.5664&nbsp (115.84)</div></td></tr>
+        </table>
+        <h3>sort</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 17.810214177970618%;">0.0130&nbsp (2.37)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 7.827024538742607%;">0.0057&nbsp (1.04)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 7.529726389800344%;">0.0055&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar" style="width: 13.1208496424887%;">0.0096&nbsp (1.74)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 100%;">0.0730&nbsp (13.28)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 65.4432687999978%;">0.0478&nbsp (8.69)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 13.696265414635015%;">0.0100&nbsp (1.82)</div></td></tr>
+        </table>
+        <h3>spectral norm</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar featured" style="width: 20.92246746883756%;">0.0120&nbsp (1.00)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 21.484603166023568%;">0.0123&nbsp (1.03)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar" style="width: 21.456705612813344%;">0.0123&nbsp (1.03)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar" style="width: 21.57003942272988%;">0.0124&nbsp (1.03)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 25.58502040880377%;">0.0147&nbsp (1.22)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 100%;">0.0574&nbsp (4.78)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 45.34764710292628%;">0.0260&nbsp (2.17)</div></td></tr>
+        </table>
+        <h3>string2float</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 57.480708392260794%;">0.1065&nbsp (4.41)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar" style="width: 54.767068101897884%;">0.1015&nbsp (4.20)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar featured" style="width: 13.028344000082019%;">0.0241&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar featured" style="width: 13.083381941188183%;">0.0242&nbsp (1.00)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 63.303236932401%;">0.1173&nbsp (4.86)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 62.50480907500106%;">0.1158&nbsp (4.80)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 100%;">0.1853&nbsp (7.68)</div></td></tr>
+        </table>
+        <h3>tree</h3>
+        <table class="chart" style="width: 600px;">
+        <tr><th>.NET</th><td><div class="chart-bar" style="width: 17.655130001504503%;">0.2465&nbsp (1.41)</div></td></tr>
+        <tr><th>C++</th><td><div class="chart-bar featured" style="width: 12.511454756388652%;">0.1747&nbsp (1.00)</div></td></tr>
+        <tr><th>DAS AOT</th><td><div class="chart-bar" style="width: 12.726210179750788%;">0.1777&nbsp (1.02)</div></td></tr>
+        <tr><th>DAS JIT</th><td><div class="chart-bar" style="width: 12.719192496693275%;">0.1776&nbsp (1.02)</div></td></tr>
+        <tr><th>LUAJIT</th><td><div class="chart-bar" style="width: 69.07872787738073%;">0.9647&nbsp (5.52)</div></td></tr>
+        <tr><th>LUAU --codegen</th><td><div class="chart-bar" style="width: 100%;">1.3965&nbsp (7.99)</div></td></tr>
+        <tr><th>MONO</th><td><div class="chart-bar" style="width: 18.549984843952863%;">0.2590&nbsp (1.48)</div></td></tr>
         </table>
 
         <p>All samples for all languages in comparison are available in
