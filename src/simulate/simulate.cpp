@@ -1114,13 +1114,19 @@ namespace das
         announceCreation();
         // now, make it good to go
         restart();
-        if ( stack.size() > globalInitStackSize ) {
-            runInitScript();
-        } else {
-            auto ssz = max ( int(stack.size()), 16384 ) + globalInitStackSize;
-            StackAllocator init_stack(ssz);
-            SharedStackGuard init_guard(*this, init_stack);
-            runInitScript();
+        if ( !failed ) {
+            if ( stack.size() > globalInitStackSize ) {
+                failed |= runWithCatch([&]() {
+                    runInitScript();
+                });
+            } else {
+                auto ssz = max ( int(stack.size()), 16384 ) + globalInitStackSize;
+                StackAllocator init_stack(ssz);
+                SharedStackGuard init_guard(*this, init_stack);
+                failed |= runWithCatch([&]() {
+                    runInitScript();
+                });
+            }
         }
         restart();
     }
