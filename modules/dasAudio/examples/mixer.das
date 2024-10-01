@@ -6,6 +6,8 @@ require fio
 
 require daslib/jobque_boost
 
+require audio_resource
+
 def sleep_and_log_status ( var status:LockBox?; delay:uint )
     for t in range(delay/100u)
         if status != null
@@ -136,7 +138,7 @@ def main
         print("testing mp3 from pcm, decoded\n")
         var sound_data : array<float>
         var channels, rate : int
-        fopen("{get_das_root()}/modules/dasAudio/examples/test.mp3","rb") <| $ ( fr )
+        audio_fopen("test.mp3","rb") <| $ ( fr )
             if fr == null
                 panic("cannot open file")
             fmap(fr) <| $ ( data )
@@ -152,7 +154,7 @@ def main
     with_audio_system <|
         print("testing play,stop,pause on sound from file\n")
         print("play\n")
-        let sid = play_sound_from_file("{get_das_root()}/modules/dasAudio/examples/test.mp3", MA_SAMPLE_RATE, 2)
+        let sid = play_sound_from_file(audio_fname("test.mp3"), MA_SAMPLE_RATE, 2)
         sleep(2000u)
         print("set volume 0.5\n")
         sid |> set_volume(0.5)

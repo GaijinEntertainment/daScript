@@ -5,6 +5,7 @@ require math
 require fio
 
 require daslib/jobque_boost
+require audio_resource
 
 let USE_MP3 = true
 
@@ -15,7 +16,7 @@ def main
         var sound_data : array<float>
         var channels, rate : int
         static_if USE_MP3
-            fopen("{get_das_root()}/modules/dasAudio/examples/test.mp3","rb") <| $ ( fr )
+            audio_fopen("test.mp3","rb") <| $ ( fr )
                 if fr == null
                     panic("cannot open file")
                 fmap(fr) <| $ ( data )

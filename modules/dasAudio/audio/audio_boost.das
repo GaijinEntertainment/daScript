@@ -42,6 +42,7 @@ struct public AudioChannelStatus
     playback_position : uint64
     stream_que_length : int
 
+[safe_when_uninitialized]
 struct public Attenuation
     A, B, C, D : float
     E : float = 1.
