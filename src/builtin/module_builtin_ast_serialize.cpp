@@ -437,7 +437,7 @@ namespace das {
         }
         if ( func == nullptr ) {
             failed = true;
-            das_to_stderr("das: serialize: function '%s' not found", mangledName.c_str());
+            SERIALIZER_VERIFYF(false, "das: serialize: function '%s' not found", mangledName.c_str());
         }
     }
 
