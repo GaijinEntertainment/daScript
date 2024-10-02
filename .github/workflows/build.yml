@@ -136,7 +136,7 @@ jobs:
             ;;
         esac
 
-    - name: "Build: DaScript"
+    - name: "Build: Daslang"
       run: |
         set -eux
         mkdir build
@@ -146,18 +146,18 @@ jobs:
               linux64)
                 cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G "${{ matrix.cmake_generator }}"
                 cd build
-                ninja daScript
+                ninja daslang
                 ninja daScriptTest
                 ;;
               windows*)
                 cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
-                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScript
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest
                 ;;
               *)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
                 cd build
-                ninja daScript
+                ninja daslang
                 ninja daScriptTest
                 ;;
             esac
@@ -170,17 +170,17 @@ jobs:
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            linux64)
             cd bin
-            ./daScriptTest
-            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
+            ./daslangTest
+            ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
            windows*)
             cd bin/"${{ matrix.cmake_preset }}"
             ./daScriptTest.exe
-            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../../tests || ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../../tests
+            ./daslang _dasroot_/dastest/dastest.das -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../../tests
             ;;
            *)
             cd bin
             ./daScriptTest
-            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
+            ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
         esac
