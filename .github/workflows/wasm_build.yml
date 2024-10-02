@@ -104,7 +104,7 @@ jobs:
             source "/Users/runner/work/daScript/daScript/emsdk/emsdk_env.sh"
             ;;
         esac
-    - name: "Build: DaScript web"
+    - name: "Build: daslang web"
       run: |
         set -eux
         cd web
