@@ -170,7 +170,7 @@ jobs:
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            linux64)
             cd bin
-            ./daslangTest
+            ./daScriptTest
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
            windows*)
