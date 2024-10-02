@@ -217,7 +217,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
     if ( argc<=3 ) {
-        tout << "daScript -aot <in_script.das> <out_script.das.cpp> [-standalone-context <ctx_name>] [-q] [-j] [-dry-run]\n";
+        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-standalone-context <ctx_name>] [-q] [-j] [-dry-run]\n";
         return -1;
     }
     bool dryRun = false;
@@ -399,13 +399,23 @@ void replace( string& str, const string& from, const string& to ) {
 
 void print_help() {
     tout
-        << "daScript scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
+        << "daslang version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n"
+        << "daslang scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
+        << "    -jit        enable JIT\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
         << "    -dry-run    compile and simulate script without execution\n"
         << "    -dasroot    set path to dascript root folder (with daslib)\n"
-        << "daScript -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
+#if DAS_SMART_PTR_ID
+        << "    -track-smart-ptr <id> track smart pointer with id\n"
+#endif
+        << "    -das-wait-debugger wait for debugger to attach\n"
+        << "    -das-profiler enable profiler\n"
+        << "    -das-profiler-log-file <file> set profiler log file\n"
+        << "    -das-profiler-manual manual profiler control\n"
+        << "    -das-profiler-memory memory profiler\n"
+        << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -p          paranoid validation of CPP AOT\n"
         << "    -q          suppress all output\n"

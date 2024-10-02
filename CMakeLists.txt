@@ -13,19 +13,19 @@ option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
 option(DAS_QUIRREL_DISABLED "Disable dasQuirrel (quirrel bindings)" ON)
-option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" ON)
+option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" OFF)
 option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" OFF)
-option(DAS_IMGUI_DISABLED "Disable dasIMGUI (IMGUI, IMNODES, IMGUI-NODE-EDITOR gui libraries)" ON)
+option(DAS_IMGUI_DISABLED "Disable dasIMGUI (IMGUI, IMNODES, IMGUI-NODE-EDITOR gui libraries)" OFF)
 option(DAS_BGFX_DISABLED "Disable dasBGFX (BGFX graphics API)" ON)
 option(DAS_XBYAK_DISABLED "Disable dasXbyak (XBYAK and ZYDIS, x86 assembly, jit)" ON)
-option(DAS_MINFFT_DISABLED "Disable dasMinfft (Minimal FFT library)" ON)
-option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" ON)
+option(DAS_MINFFT_DISABLED "Disable dasMinfft (Minimal FFT library)" OFF)
+option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" OFF)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" OFF)
 option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" OFF)
 option(DAS_STBTRUETYPE_DISABLED "Disable dasStbTrueType (StbTrueType bindings, ttf rasterization)" OFF)
 option(DAS_SFML_DISABLED "Disable dasSFML (SFML multimedia library)" ON)
-option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
-option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
+option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" OFF)
+option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" OFF)
 option(DAS_TOOLS_DISABLED "Disable dasTools" OFF)
 option(DAS_AOT_EXAMPLES_DISABLED "Disable dasAOT examples" OFF)
 option(DAS_PROFILE_DISABLED "Disable dasProfile" OFF)
@@ -198,7 +198,7 @@ IF(CLANG_BIN_EXE)
     MACRO(DAS_CPP_BIND_AST tgt generate_das header_from prefix src_dir inc_dirs extras)
         MESSAGE(STATUS "Generating C++ bindings target ${tgt} from ${header_from}")
         ADD_CUSTOM_TARGET(${tgt})
-        ADD_DEPENDENCIES(${tgt} daScript)
+        ADD_DEPENDENCIES(${tgt} daslang)
         ADD_CUSTOM_COMMAND(
             TARGET ${tgt}
             WORKING_DIRECTORY ${src_dir}
@@ -210,7 +210,7 @@ IF(CLANG_BIN_EXE)
             TARGET ${tgt}
             WORKING_DIRECTORY ${src_dir}
             VERBATIM
-            COMMAND daScript ${generate_das} -args ${header_from}.json ${prefix} "${extras}"
+            COMMAND daslang ${generate_das} -args ${header_from}.json ${prefix} "${extras}"
             COMMENT "Generating C++ bindings from ${header_from}.json\n"
         )
     ENDMACRO()
@@ -218,7 +218,7 @@ IF(CLANG_BIN_EXE)
     MACRO(DAS_OUTPUT_AST tgt header_from src_dir inc_dirs)
         MESSAGE(STATUS "Generating C++ bindings target ${tgt} from ${header_from}")
         ADD_CUSTOM_TARGET(${tgt})
-        ADD_DEPENDENCIES(${tgt} daScript)
+        ADD_DEPENDENCIES(${tgt} daslang)
         ADD_CUSTOM_COMMAND(
             TARGET ${tgt}
             WORKING_DIRECTORY ${src_dir}
@@ -231,7 +231,7 @@ IF(CLANG_BIN_EXE)
     MACRO(DAS_OUTPUT_JSON tgt header_from src_dir inc_dirs)
         MESSAGE(STATUS "Generating C++ bindings target ${tgt} from ${header_from}")
         ADD_CUSTOM_TARGET(${tgt})
-        ADD_DEPENDENCIES(${tgt} daScript)
+        ADD_DEPENDENCIES(${tgt} daslang)
         ADD_CUSTOM_COMMAND(
             TARGET ${tgt}
             WORKING_DIRECTORY ${src_dir}
@@ -699,15 +699,15 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     add_custom_target(dasAotStub)
     SET(AOT_GENERATED_SRC)
-    DAS_AOT_LIB("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT_LIB("daslib/json.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT_LIB("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT_LIB("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT_LIB("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT_LIB("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT_LIB("daslib/random.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT_LIB("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT_LIB("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daslang)
+    DAS_AOT_LIB("daslib/json.das" AOT_GENERATED_SRC dasAotStub daslang)
+    DAS_AOT_LIB("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
+    DAS_AOT_LIB("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daslang)
+    DAS_AOT_LIB("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
+    DAS_AOT_LIB("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
+    DAS_AOT_LIB("daslib/random.das" AOT_GENERATED_SRC dasAotStub daslang)
+    DAS_AOT_LIB("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
+    DAS_AOT_LIB("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daslang)
     SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
@@ -715,7 +715,7 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
         utils/daScript/aot_stub.cpp
     )
     add_library(libDaScriptAot STATIC ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
-    ADD_DEPENDENCIES(libDaScriptAot dasAotStub daScript libDaScript)
+    ADD_DEPENDENCIES(libDaScriptAot dasAotStub daslang libDaScript)
     TARGET_LINK_LIBRARIES(libDaScriptAot libDaScript)
     SETUP_CPP11(libDaScriptAot)
 endif()
@@ -731,13 +731,13 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
-    add_executable(daScript ${DAS_DASCRIPT_MAIN_SRC})
-    TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-    # ADD_DEPENDENCIES(daScript libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
-    SETUP_CPP11(daScript)
-    SETUP_LTO(daScript)
+    add_executable(daslang ${DAS_DASCRIPT_MAIN_SRC})
+    TARGET_LINK_LIBRARIES(daslang libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+    # ADD_DEPENDENCIES(daslang libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
+    SETUP_CPP11(daslang)
+    SETUP_LTO(daslang)
 
-    INSTALL(TARGETS daScript
+    INSTALL(TARGETS daslang
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     )
 
@@ -749,15 +749,15 @@ if (NOT ${DAS_TOOLS_DISABLED})
     )
 
     #IF(APPLE)
-    #  add_executable(daScriptOsx MACOSX_BUNDLE ${DAS_DASCRIPT_MAIN_SRC})
-    #  TARGET_LINK_LIBRARIES(daScriptOsx libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-    #  ADD_DEPENDENCIES(daScriptOsx libDaScript libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
-    #  SETUP_CPP11(daScriptOsx)
-    #  SETUP_LTO(daScriptOsx)
-    #  set_target_properties(daScriptOsx PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "daScript")
-    #  set_target_properties(daScriptOsx PROPERTIES
-    #      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.4"
-    #      MACOSX_BUNDLE_LONG_VERSION_STRING  "daScript 0.4"
+    #  add_executable(daslangOsx MACOSX_BUNDLE ${DAS_DASCRIPT_MAIN_SRC})
+    #  TARGET_LINK_LIBRARIES(daslangOsx libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+    #  ADD_DEPENDENCIES(daslangOsx libDaScript libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
+    #  SETUP_CPP11(daslangOsx)
+    #  SETUP_LTO(daslangOsx)
+    #  set_target_properties(daslangOsx PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "daslang")
+    #  set_target_properties(daslangOsx PROPERTIES
+    #      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.5"
+    #      MACOSX_BUNDLE_LONG_VERSION_STRING  "daslang 0.5"
     #      MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daScript/MacOSXBundleInfo.plist.in)
     #ENDIF()
 

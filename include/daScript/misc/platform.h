@@ -1,5 +1,12 @@
 #pragma once
 
+#ifndef DAS_VERSION
+#define DAS_VERSION_MAJOR 0
+#define DAS_VERSION_MINOR 5
+#define DAS_VERSION_PATCH 0
+#define DAS_VERSION (DAS_VERSION_MAJOR*10000 + DAS_VERSION_MINOR*100 + DAS_VERSION_PATCH)
+#endif
+
 #ifdef __HAIKU__
 #define _GNU_SOURCE 1
 #endif
