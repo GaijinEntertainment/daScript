@@ -4,13 +4,15 @@ require audio/audio_boost
 require math
 require fio
 
+require audio_resource
+
 [export]
 def main
     with_audio_system <|
         print("testing mp3 from pcm, decoded\n")
         var sound_data : array<float>
         var channels, rate : int
-        fopen("{get_das_root()}/modules/dasAudio/examples/gong.wav","rb") <| $ ( fr )
+        audio_fopen("gong.wav","rb") <| $ ( fr )
             if fr == null
                 panic("cannot open file")
             fmap(fr) <| $ ( data )
