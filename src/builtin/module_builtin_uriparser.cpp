@@ -1,6 +1,8 @@
 #include "daScript/misc/platform.h"
 
 #include "module_builtin_uriparser.h"
+#include "daScript/simulate/aot.h"
+#include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
 
 #include "daScript/ast/ast.h"
@@ -22,49 +24,43 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(UriPathSegmentStructA,UriPathSegmentStructA)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(UriUriA,UriUriA)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Uri,das::Uri)
 
+
+// We shall honor ITU-T Recommendation X.667 and keep our generated uuids lowercase:
+// 6.5.4 Software generating the hexadecimal representation of a UUID shall not use upper case letters.
+// https://www.itu.int/rec/T-REC-X.667-201210-I/en
+
 #if defined(_MSC_VER) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
 
 #include <rpc.h>
 #pragma comment(lib,"Rpcrt4")
 
 char * das::makeNewGuid( das::Context * context, LineInfoArg * at ) {
-	UUID id;
-	if ( UuidCreate(&id)!=RPC_S_OK ) context->throw_error_at(at, "can't create UUID");
+    UUID id;
+    if ( UuidCreate(&id)!=RPC_S_OK ) context->throw_error_at(at, "can't create UUID");
     CHAR* uuidstr = NULL;
     if ( UuidToStringA(&id, (RPC_CSTR *)&uuidstr)!=RPC_S_OK ) context->throw_error_at(at, "can't convert UUID to string");
+    // UuidToStringA is not guaranteed to yield a lowercase string, even though currently it does
+    das::builtin_string_tolower_in_place(uuidstr);
     char * res = context->allocateString(uuidstr, at);
     RpcStringFreeA((RPC_CSTR *)&uuidstr);
     return res;
 }
 
-#elif defined(__linux__) && defined(LINUX_UUID) || defined __HAIKU__
+#elif defined(__linux__) && defined(LINUX_UUID) || defined __HAIKU__ || defined(__APPLE__)
 
 #include <uuid/uuid.h>
 
-char * das::makeNewGuid( das::Context * context, LineInfoArg * at ) {
-    union {
-        unsigned char   data[16];
-        uint32_t        data32[4];
-    } data;
-    uuid_generate(data.data);
-    TextWriter tw;
-    tw << HEX << data.data32[0] << "-" << data.data32[1] << "-" << data.data32[2] << "-" << data.data32[3] << DEC;
-    return context->allocateString(tw.str(),at);
-}
-
-#elif defined(__APPLE__)
-
-#include <uuid/uuid.h>
+// older versions of libuuid do not define that
+#ifndef UUID_STR_LEN
+#define UUID_STR_LEN 37
+#endif
 
 char * das::makeNewGuid( das::Context * context, LineInfoArg * at ) {
-    union {
-        unsigned char   data[16];
-        uint32_t        data32[4];
-    } data;
-    uuid_generate(data.data);
-    TextWriter tw;
-    tw << HEX << data.data32[0] << "-" << data.data32[1] << "-" << data.data32[2] << "-" << data.data32[3] << DEC;
-    return context->allocateString(tw.str(),at);
+    uuid_t uuid;
+    char uuidStr[UUID_STR_LEN];
+    uuid_generate(uuid);
+    uuid_unparse_lower(uuid, uuidStr);
+    return context->allocateString(uuidStr, at);
 }
 
 #else
