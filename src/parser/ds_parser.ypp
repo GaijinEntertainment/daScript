@@ -419,6 +419,7 @@
 %type <pExpression>     expr_field
 %type <pExpression>     expr_assign
 %type <pExpression>     expr_assign_pipe
+%type <pExpression>     expr_assign_pipe_right
 %type <pExpression>     expr_list
 %type <pExpression>     optional_expr_list
 %type <pExpression>     optional_expr_list_in_braces
@@ -1715,15 +1716,33 @@ expr_assign
     |   expr[left] ROTREQU[loc] expr[right]  { $$ = new ExprOp2(tokAt(scanner,@loc),">>>=", ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
+expr_assign_pipe_right
+    :   LAPIPE expr_block[right]   { $$ = $right; }
+    |   LFPIPE expr_block[right]   { $$ = $right; }
+    |   LLPIPE expr_block[right]   { $$ = $right; }
+    |   expr_call_pipe[right]      { $$ = $right; }
+    ;
+
+
 expr_assign_pipe
-    :   expr[left] '='[loc]    LAPIPE expr_block[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   expr[left] '='[loc]    LFPIPE expr_block[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   expr[left] '='[loc]    LLPIPE expr_block[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   expr[left] LARROW[loc] LAPIPE expr_block[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] LARROW[loc] LFPIPE expr_block[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] LARROW[loc] LLPIPE expr_block[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] '='[loc]    expr_call_pipe[right]      { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   expr[left] LARROW[loc] expr_call_pipe[right]      { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    :   expr[left] '='[loc]       expr_assign_pipe_right[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc]    expr_assign_pipe_right[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] ANDEQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"&=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] OREQU[loc]     expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"|=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] XOREQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"^=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ANDANDEQU[loc] expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"&&=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] OROREQU[loc]   expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"||=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] XORXOREQU[loc] expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"^^=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ADDEQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"+=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SUBEQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"-=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] MULEQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"*=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] DIVEQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"/=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] MODEQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"%=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SHLEQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"<<=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] SHREQU[loc]    expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),">>=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ROTLEQU[loc]   expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),"<<<=", ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] ROTREQU[loc]   expr_assign_pipe_right[right]   { $$ = new ExprOp2(tokAt(scanner,@loc),">>>=", ExpressionPtr($left), ExpressionPtr($right)); }
+
     ;
 
 expr_named_call
