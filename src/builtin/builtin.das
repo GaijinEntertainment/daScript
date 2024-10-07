@@ -328,7 +328,7 @@ def find(Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(p:valT?#):void>
     __builtin_table_unlock(Tab)
 
 [deprecated(message="use tab?[key] or 'get' instead")]
-def find(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
+def find(Tab:table<auto(keyT)>;at:keyT|#;blk:block<(p:void?):void>)
     concept_assert(false,"find(table<keyT; void>, ...) is not supported")
 
 // one table lookup with block to rule them all 'get'
@@ -377,7 +377,7 @@ def get(var Tab:table<auto(keyT);auto(valT)> ==const;at:keyT-#;blk:block<(var p:
     else
         return false
 
-def get(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
+def get(Tab:table<auto(keyT)>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"get(table<keyT>, ...) is not supported; use 'key_exists' instead")
     return false
 
@@ -406,7 +406,7 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:block<(p:valT
         return false
 
 [deprecated(message="use tab?[key] or 'get' instead")]
-def find_if_exists(Tab:table<auto(keyT);void>;at:keyT-#;blk:block<(p:void?):void>)
+def find_if_exists(Tab:table<auto(keyT)>;at:keyT-#;blk:block<(p:void?):void>)
     concept_assert(false,"find_if_exists(table<keyT; void>, ...) is not supported")
     return false
 
@@ -421,7 +421,7 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var 
     __builtin_table_unlock(Tab)
 
 [deprecated(message="use tab?[key] or 'get' instead")]
-def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
+def find_for_edit(var Tab:table<auto(keyT)>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit(table<keyT; void>, ...) is not supported")
 
 [unsafe_operation, deprecated(message="use tab?[key] instead")]
@@ -429,7 +429,7 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#):valT?
     return __builtin_table_find(Tab,at)
 
 [unsafe_operation, deprecated(message="use tab?[key] instead")]
-def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#):void?
+def find_for_edit(var Tab:table<auto(keyT)>;at:keyT|#):void?
     concept_assert(false,"find_for_edit(table<keyT; void>, ...) is not supported")
 
 // find for edit if exists
@@ -459,7 +459,7 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:b
         return false
 
 [deprecated(message="use tab?[key] or 'get' instead")]
-def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
+def find_for_edit_if_exists(var Tab:table<auto(keyT)>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit_if_exists(table<keyT; void>, ...) is not supported")
     return false
 
@@ -480,7 +480,7 @@ def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):bool
         _builtin_verify_locks(Tab)
     return __builtin_table_erase(Tab,at)
 
-def insert(var Tab:table<auto(keyT);void>;at:keyT|#)
+def insert(var Tab:table<auto(keyT)>;at:keyT|#)
     __builtin_table_set_insert(Tab,at)
 
 def key_exists(Tab:table<auto(keyT);auto(valT)>|#;at:string#):bool
@@ -542,12 +542,12 @@ def clone(var a:array<auto(TT)>;b:array<TT>|#)
         for aV,bV in a,b
             aV := bV
 
-def clone(var a:table<auto(KT);void>;b:table<KT;void>|#)
+def clone(var a:table<auto(KT)>;b:table<KT>|#)
     clear(a)
     for k in keys(b)
         __builtin_table_set_insert(a,k)
 
-def clone(var a:table<string;void>;b:table<string;void>|#)
+def clone(var a:table<string>;b:table<string>|#)
     clear(a)
     for k in keys(b)
         let kk := k
@@ -570,10 +570,10 @@ def keys(a:table<auto(keyT);auto(valT)>|#) : iterator<keyT - const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
     return <- it
 
-def values(a:table<auto(keyT);void> ==const|#)
+def values(a:table<auto(keyT)> ==const|#)
     concept_assert(false,"can't iterate over values of a table<...; void>")
 
-def values(var a:table<auto(keyT);void> ==const|#)
+def values(var a:table<auto(keyT)> ==const|#)
     concept_assert(false,"can't iterate over values of a table<...; void>")
 
 [unsafe_outside_of_for,nodiscard]
@@ -757,17 +757,34 @@ def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
     return <- tab
 
 [skip_lock_check]
-def to_table(a:auto(keyT)[]) : table<keyT -const;void>
-    var tab : table<keyT -const;void>
+def to_table(a:auto(keyT)[]) : table<keyT -const>
+    var tab : table<keyT -const>
     for at in a
         __builtin_table_set_insert(tab,at)
     return <- tab
 
 [skip_lock_check]
-def to_table_move(var a:auto(keyT)[]) : table<keyT -const;void>
-    var tab : table<keyT -const;void>
+def to_table_move(var a:auto(keyT)[]) : table<keyT -const>
+    var tab : table<keyT -const>
     for at in a
         __builtin_table_set_insert(tab,at)
+    return <- tab
+
+[skip_lock_check]
+def to_table_move(var a:auto(keyT)) : table<keyT -const>
+    var tab : table<keyT -const>
+    __builtin_table_set_insert(tab,a)
+    return <- tab
+
+[skip_lock_check]
+def to_table_move(var a:tuple<auto(keyT);auto(valT)>) : table<keyT -const;valT>
+    var tab : table<keyT -const;valT>
+    static_if typeinfo(can_copy type<valT>)
+        tab[a._0] = a._1
+    static_elif typeinfo(can_move type<valT>)
+        tab[a._0] <- a._1
+    else
+        concept_assert(false,"this array can't be copied or moved")
     return <- tab
 
 [skip_lock_check]
