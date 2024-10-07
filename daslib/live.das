@@ -43,7 +43,10 @@ def saveLiveContext
 def restoreLiveContext
     to_log(LOG_TRACE, "LIVE: restoreLiveContext\n");
     if length(decsLiveData) > 0
-        decsLiveData |> mem_archive_load(decsState)
+        try
+            decsLiveData |> mem_archive_load(decsState)
+        recover
+            to_log(LOG_ERROR, "exception during restoreLiveContext\n")
 
 [finalize]
 def private go_offline
