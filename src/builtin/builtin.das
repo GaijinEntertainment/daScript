@@ -521,15 +521,26 @@ def clone_to_move(clone_src:auto(TT)|#) : TT -const -#
 
 def clone_dim(var a;b:auto|#)
     static_if typeinfo(is_dim a) && typeinfo(is_dim b) && typeinfo(dim a)==typeinfo(dim b)
-        for aV,bV in a,b
-            aV := bV
+        if typeinfo(is_pod a)
+            unsafe
+                memcpy(addr(a[0]),addr(b[0]),typeinfo(sizeof a[0])*length(a))
+        else
+            for aV,bV in a,b
+                aV := bV
     else
         concept_assert(false,"can't clone this array")
 
 def clone(var a:array<auto(TT)>;b:array<TT>|#)
-    unsafe(resize(a,length(b))) // note: is this safe? do we actaully need to init first???
-    for aV,bV in a,b
-        aV := bV
+    let ln = length(b)
+    unsafe(resize(a,ln)) // note: is this safe? do we actaully need to init first???
+    if ln == 0
+        return
+    static_if typeinfo(is_pod type<TT>)
+        unsafe
+            memcpy(addr(a[0]),addr(b[0]),typeinfo(sizeof a[0])*ln)
+    else
+        for aV,bV in a,b
+            aV := bV
 
 def clone(var a:table<auto(KT);void>;b:table<KT;void>|#)
     clear(a)
