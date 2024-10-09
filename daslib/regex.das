@@ -250,6 +250,7 @@ def private re_set_items(expr:string; offset:int) : MaybeReNode
     var iofs = offset
     var prev_char = -1
     var next_range = false
+    var next_meta = false
     while !eos(expr,iofs)
         let ch = at(expr,iofs)
         var next_char = -1
@@ -290,6 +291,7 @@ def private re_set_items(expr:string; offset:int) : MaybeReNode
                     return nada()
                 if is_set_character(che)
                     next_char = -1
+                    next_meta = true
                     set_meta(cset,che)
                     note("set - meta {to_char(che)}",iofs)
                 else
@@ -317,6 +319,8 @@ def private re_set_items(expr:string; offset:int) : MaybeReNode
                 note("set - char {uint(next_char)}",iofs)
                 set_or_char(cset,next_char)
                 prev_char = next_char
+        elif next_meta
+            next_meta = false
         elif !next_range
             note("syntax error???",iofs)
             return nada()
