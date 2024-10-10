@@ -121,6 +121,6 @@ function_file_name returns auto
 +--------+-------------+
 
 
-Return file name to match function name. Things like ? are replaced via appropriate suffixes.
+Get the file name for the function.
 
 

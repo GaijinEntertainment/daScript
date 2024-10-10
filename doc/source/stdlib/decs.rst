@@ -60,29 +60,29 @@ One of the callbacks which form individual pass.
 
 CTypeInfo fields are
 
-+-----------+-----------------------------------------------------------------------------------------+
-+basicType  + :ref:`rtti::Type <enum-rtti-Type>`                                                      +
-+-----------+-----------------------------------------------------------------------------------------+
-+mangledName+string                                                                                   +
-+-----------+-----------------------------------------------------------------------------------------+
-+fullName   +string                                                                                   +
-+-----------+-----------------------------------------------------------------------------------------+
-+hash       + :ref:`TypeHash <alias-TypeHash>`                                                        +
-+-----------+-----------------------------------------------------------------------------------------+
-+size       +uint                                                                                     +
-+-----------+-----------------------------------------------------------------------------------------+
-+eraser     +function<(arr:array<uint8>):void>                                                        +
-+-----------+-----------------------------------------------------------------------------------------+
-+clonner    +function<(dst:array<uint8>;src:array<uint8> const):void>                                 +
-+-----------+-----------------------------------------------------------------------------------------+
-+serializer +function<(arch: :ref:`archive::Archive <struct-archive-Archive>` ;arr:array<uint8>):void>+
-+-----------+-----------------------------------------------------------------------------------------+
-+dumper     +function<(elem:void? const):string>                                                      +
-+-----------+-----------------------------------------------------------------------------------------+
-+mkTypeInfo +function<>                                                                               +
-+-----------+-----------------------------------------------------------------------------------------+
-+gc         +function<(src:array<uint8>):lambda<>>                                                    +
-+-----------+-----------------------------------------------------------------------------------------+
++-----------+-----------------------------------------------------------------------------------------------------------+
++basicType  + :ref:`rtti::Type <enum-rtti-Type>`                                                                        +
++-----------+-----------------------------------------------------------------------------------------------------------+
++mangledName+string                                                                                                     +
++-----------+-----------------------------------------------------------------------------------------------------------+
++fullName   +string                                                                                                     +
++-----------+-----------------------------------------------------------------------------------------------------------+
++hash       + :ref:`TypeHash <alias-TypeHash>`                                                                          +
++-----------+-----------------------------------------------------------------------------------------------------------+
++size       +uint                                                                                                       +
++-----------+-----------------------------------------------------------------------------------------------------------+
++eraser     +function<(arr:array<uint8>):void>                                                                          +
++-----------+-----------------------------------------------------------------------------------------------------------+
++clonner    +function<(dst:array<uint8>;src:array<uint8> const):void>                                                   +
++-----------+-----------------------------------------------------------------------------------------------------------+
++serializer +function<(arch: :ref:`archive::Archive <struct-archive-Archive>` ;arr:array<uint8>;name:string const):void>+
++-----------+-----------------------------------------------------------------------------------------------------------+
++dumper     +function<(elem:void? const):string>                                                                        +
++-----------+-----------------------------------------------------------------------------------------------------------+
++mkTypeInfo +function<>                                                                                                 +
++-----------+-----------------------------------------------------------------------------------------------------------+
++gc         +function<(src:array<uint8>):lambda<>>                                                                      +
++-----------+-----------------------------------------------------------------------------------------------------------+
 
 
 Type information for the individual component subtype.
@@ -877,6 +877,8 @@ set returns auto
 
 Set component value specified by name and type.
 If value already exists, it is overwritten. If already existing value type is not the same - panic.
+overwrite
+insert new one
 
 .. _function-_at_decs_c__c_get_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr_.:
 
@@ -937,6 +939,8 @@ set returns auto
 
 Set component value specified by name and type.
 If value already exists, it is overwritten. If already existing value type is not the same - panic.
+overwrite
+insert new one
 
 +++++++++++++++++++++++
 Deubg and serialization
@@ -995,6 +999,7 @@ Deletes component.
 .. das:function:: debug_dump()
 
 Prints out state of the ECS system.
+debug(arch)
 
 ++++++
 Stages
@@ -1018,6 +1023,7 @@ Stages
 
 
 Registration of a single pass callback. This is a low-level function, used by decs_boost macros.
+insert new one
 
 .. _function-_at_decs_c__c_decs_stage_Cs:
 
@@ -1208,6 +1214,7 @@ for_each_archetype_find returns bool const
 Invokes block for each entity of each archetype that can be processed by the request.
 Request is returned by a specified function.
 If block returns true, iteration is stopped.
+[template(atype)]
 
 .. _function-_at_decs_c__c_decs_array_CY_ls_TT_gr_._C1_ls_u8_gr_A_Ci:
 
@@ -1344,6 +1351,8 @@ verify_request returns tuple<ok:bool;error:string>
 
 
 Verifies ESC request. Returns pair of boolean (true for OK) and error message.
+this queries just about everything
+assuming require_not is typically shorter
 
 .. _function-_at_decs_c__c_compile_request_S_ls_decs_c__c_EcsRequest_gr_:
 

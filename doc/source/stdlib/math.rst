@@ -2572,15 +2572,19 @@ float* only
   *  :ref:`rcp_est (x:float3 const) : float3 <function-_at_math_c__c_rcp_est_Cf3>` 
   *  :ref:`rcp_est (x:float4 const) : float4 <function-_at_math_c__c_rcp_est_Cf4>` 
   *  :ref:`fract (x:float const) : float <function-_at_math_c__c_fract_Cf>` 
+  *  :ref:`round (x:float const) : float <function-_at_math_c__c_round_Cf>` 
   *  :ref:`rsqrt (x:float const) : float <function-_at_math_c__c_rsqrt_Cf>` 
   *  :ref:`rsqrt_est (x:float const) : float <function-_at_math_c__c_rsqrt_est_Cf>` 
   *  :ref:`fract (x:float2 const) : float2 <function-_at_math_c__c_fract_Cf2>` 
+  *  :ref:`round (x:float2 const) : float2 <function-_at_math_c__c_round_Cf2>` 
   *  :ref:`rsqrt (x:float2 const) : float2 <function-_at_math_c__c_rsqrt_Cf2>` 
   *  :ref:`rsqrt_est (x:float2 const) : float2 <function-_at_math_c__c_rsqrt_est_Cf2>` 
   *  :ref:`fract (x:float3 const) : float3 <function-_at_math_c__c_fract_Cf3>` 
+  *  :ref:`round (x:float3 const) : float3 <function-_at_math_c__c_round_Cf3>` 
   *  :ref:`rsqrt (x:float3 const) : float3 <function-_at_math_c__c_rsqrt_Cf3>` 
   *  :ref:`rsqrt_est (x:float3 const) : float3 <function-_at_math_c__c_rsqrt_est_Cf3>` 
   *  :ref:`fract (x:float4 const) : float4 <function-_at_math_c__c_fract_Cf4>` 
+  *  :ref:`round (x:float4 const) : float4 <function-_at_math_c__c_round_Cf4>` 
   *  :ref:`rsqrt (x:float4 const) : float4 <function-_at_math_c__c_rsqrt_Cf4>` 
   *  :ref:`rsqrt_est (x:float4 const) : float4 <function-_at_math_c__c_rsqrt_est_Cf4>` 
   *  :ref:`atan_est (x:float const) : float <function-_at_math_c__c_atan_est_Cf>` 
@@ -2690,6 +2694,21 @@ fract returns float
 
 |function-math-fract|
 
+.. _function-_at_math_c__c_round_Cf:
+
+.. das:function:: round(x: float const)
+
+round returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-round|
+
 .. _function-_at_math_c__c_rsqrt_Cf:
 
 .. das:function:: rsqrt(x: float const)
@@ -2734,6 +2753,21 @@ fract returns float2
 
 
 |function-math-fract|
+
+.. _function-_at_math_c__c_round_Cf2:
+
+.. das:function:: round(x: float2 const)
+
+round returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-round|
 
 .. _function-_at_math_c__c_rsqrt_Cf2:
 
@@ -2780,6 +2814,21 @@ fract returns float3
 
 |function-math-fract|
 
+.. _function-_at_math_c__c_round_Cf3:
+
+.. das:function:: round(x: float3 const)
+
+round returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-round|
+
 .. _function-_at_math_c__c_rsqrt_Cf3:
 
 .. das:function:: rsqrt(x: float3 const)
@@ -2824,6 +2873,21 @@ fract returns float4
 
 
 |function-math-fract|
+
+.. _function-_at_math_c__c_round_Cf4:
+
+.. das:function:: round(x: float4 const)
+
+round returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-round|
 
 .. _function-_at_math_c__c_rsqrt_Cf4:
 

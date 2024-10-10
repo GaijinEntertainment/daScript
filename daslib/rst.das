@@ -55,6 +55,7 @@ def call_macro_label_name(mod,value)
     return "call-macro-{module_name(mod)}-{value}"
 
 def public function_file_name(value:FunctionPtr|Function?)
+    //! Get the file name for the function.
     var mn = string(value.name)
     mn = mn |> replace_multiple([{auto
         "?" => "_qm_";

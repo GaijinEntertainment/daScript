@@ -597,6 +597,8 @@ Type aliases
 +----------------------+---+-----+
 +forceTuple            +8  +256  +
 +----------------------+---+-----+
++alwaysUseInitializer  +9  +512  +
++----------------------+---+-----+
 
 
 |typedef-ast-ExprMakeStructFlags|
@@ -5343,7 +5345,7 @@ captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 it defines as follows
 
 
-.. das:function:: AstTypeMacro.visit(self: AstTypeMacro; prog: ProgramPtr; mod: Module? const; td: TypeDeclPtr)
+.. das:function:: AstTypeMacro.visit(self: AstTypeMacro; prog: ProgramPtr; mod: Module? const; td: TypeDeclPtr; passT: TypeDeclPtr)
 
 visit returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
@@ -5357,6 +5359,8 @@ visit returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 +mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const   +
 +--------+----------------------------------------------------+
 +td      + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`             +
++--------+----------------------------------------------------+
++passT   + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`             +
 +--------+----------------------------------------------------+
 
 
@@ -12563,6 +12567,7 @@ Searching
   *  :ref:`find_variable (module:rtti::Module? const implicit;variable:string const implicit) : smart_ptr\<ast::Variable\> <function-_at_ast_c__c_find_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs>` 
   *  :ref:`find_matching_variable (program:rtti::Program? const implicit;function:ast::Function? const implicit;name:string const implicit;seePrivate:bool const;block:block\<(var arg0:array\<smart_ptr\<ast::Variable\>\>#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_find_matching_variable_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm__CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm__CIs_Cb_CI0_ls__hh_1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`find_bitfield_name (bit:smart_ptr\<ast::TypeDecl\> const implicit;value:bitfield const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Ct_C_c_C_l>` 
+  *  :ref:`find_enum_name (enum:ast::Enumeration? const implicit;value:int64 const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_find_enum_name_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm__Ci64_C_c_C_l>` 
   *  :ref:`find_enum_value (enum:smart_ptr\<ast::Enumeration\> const implicit;value:string const implicit) : int64 <function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_W_CIs>` 
   *  :ref:`find_enum_value (enum:ast::Enumeration? const implicit;value:string const implicit) : int64 <function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm__CIs>` 
   *  :ref:`find_structure_field (structPtr:ast::Structure? const implicit;field:string const implicit;context:__context const;lineinfo:__lineInfo const) : ast::FieldDeclaration? <function-_at_ast_c__c_find_structure_field_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm__CIs_C_c_C_l>` 
@@ -12659,6 +12664,23 @@ find_bitfield_name returns string
 
 
 |function-ast-find_bitfield_name|
+
+.. _function-_at_ast_c__c_find_enum_name_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm__Ci64_C_c_C_l:
+
+.. das:function:: find_enum_name(enum: Enumeration? const implicit; value: int64 const)
+
+find_enum_name returns string
+
++--------+------------------------------------------------------------------+
++argument+argument type                                                     +
++========+==================================================================+
++enum    + :ref:`ast::Enumeration <handle-ast-Enumeration>` ? const implicit+
++--------+------------------------------------------------------------------+
++value   +int64 const                                                       +
++--------+------------------------------------------------------------------+
+
+
+|function-ast-find_enum_name|
 
 .. _function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_W_CIs:
 
@@ -13820,5 +13842,50 @@ get_function_aot_hash returns uint64
 
 
 |function-ast-get_function_aot_hash|
+
++++++
+Infer
++++++
+
+  *  :ref:`infer_generic_type (type:smart_ptr\<ast::TypeDecl\> const implicit;passType:smart_ptr\<ast::TypeDecl\> const implicit;topLevel:bool const;isPassType:bool const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_infer_generic_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb>` 
+  *  :ref:`update_alias_map (program:smart_ptr\<rtti::Program\> const implicit;argType:smart_ptr\<ast::TypeDecl\> const implicit;passType:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_update_alias_map_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_C_c_C_l>` 
+
+.. _function-_at_ast_c__c_infer_generic_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb:
+
+.. das:function:: infer_generic_type(type: smart_ptr<TypeDecl> const implicit; passType: smart_ptr<TypeDecl> const implicit; topLevel: bool const; isPassType: bool const)
+
+infer_generic_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
+
++----------+----------------------------------------------------------------------+
++argument  +argument type                                                         +
++==========+======================================================================+
++type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++----------+----------------------------------------------------------------------+
++passType  +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++----------+----------------------------------------------------------------------+
++topLevel  +bool const                                                            +
++----------+----------------------------------------------------------------------+
++isPassType+bool const                                                            +
++----------+----------------------------------------------------------------------+
+
+
+|function-ast-infer_generic_type|
+
+.. _function-_at_ast_c__c_update_alias_map_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_C_c_C_l:
+
+.. das:function:: update_alias_map(program: smart_ptr<Program> const implicit; argType: smart_ptr<TypeDecl> const implicit; passType: smart_ptr<TypeDecl> const implicit)
+
++--------+----------------------------------------------------------------------+
++argument+argument type                                                         +
++========+======================================================================+
++program +smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` > const implicit+
++--------+----------------------------------------------------------------------+
++argType +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
++passType+smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++--------+----------------------------------------------------------------------+
+
+
+|function-ast-update_alias_map|
 
 

@@ -38,6 +38,12 @@ Type aliases
 +-----------------+---+-----+
 +needMacroModule  +5  +32   +
 +-----------------+---+-----+
++promoteToBuiltin +6  +64   +
++-----------------+---+-----+
++isDependency     +7  +128  +
++-----------------+---+-----+
++macroException   +8  +256  +
++-----------------+---+-----+
 
 
 |typedef-rtti-ProgramFlags|
@@ -552,25 +558,27 @@ Enumerations
 +--------------+--+
 +tEnumeration16+39+
 +--------------+--+
-+tBitfield     +40+
++tEnumeration64+40+
 +--------------+--+
-+tPointer      +41+
++tBitfield     +41+
 +--------------+--+
-+tFunction     +42+
++tPointer      +42+
 +--------------+--+
-+tLambda       +43+
++tFunction     +43+
 +--------------+--+
-+tIterator     +44+
++tLambda       +44+
 +--------------+--+
-+tArray        +45+
++tIterator     +45+
 +--------------+--+
-+tTable        +46+
++tArray        +46+
 +--------------+--+
-+tBlock        +47+
++tTable        +47+
 +--------------+--+
-+tTuple        +48+
++tBlock        +48+
 +--------------+--+
-+tVariant      +49+
++tTuple        +49+
++--------------+--+
++tVariant      +50+
 +--------------+--+
 
 

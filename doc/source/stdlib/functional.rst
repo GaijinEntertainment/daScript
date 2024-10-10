@@ -51,6 +51,7 @@ filter returns auto
 
 
 iterates over `src` and yields only those elements for which `blk` returns true
+filter with function
 
 .. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_:
 
@@ -68,6 +69,7 @@ filter returns auto
 
 
 iterates over `src` and yields only those elements for which `blk` returns true
+filter with function
 
 .. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_:
 
@@ -84,7 +86,7 @@ map returns auto
 +--------+--------------------------------------+
 
 
-iterates over `src` and yields the result of `blk` for each element
+reduce value, any invokable
 
 .. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_:
 
@@ -101,7 +103,7 @@ map returns auto
 +--------+----------------------------------------+
 
 
-iterates over `src` and yields the result of `blk` for each element
+reduce value, any invokable
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_:
 
@@ -118,8 +120,7 @@ reduce returns auto
 +--------+-----------------------------------------------------+
 
 
-iterates over `it` and yields the reduced (combined) result of `blk` for each element
-and previous reduction result
+summ of all elements
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_:
 
@@ -136,8 +137,7 @@ reduce returns auto
 +--------+-------------------------------------------------------+
 
 
-iterates over `it` and yields the reduced (combined) result of `blk` for each element
-and previous reduction result
+summ of all elements
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_:
 
@@ -154,8 +154,7 @@ reduce returns auto
 +--------+----------------------------------------------------+
 
 
-iterates over `it` and yields the reduced (combined) result of `blk` for each element
-and previous reduction result
+summ of all elements
 
 .. _function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G:
 
@@ -172,6 +171,7 @@ sum returns auto
 
 iterates over `it` and yields the sum of all elements
 same as reduce(it, @(a,b) => a + b)
+any
 
 .. _function-_at_functional_c__c_any_C.:
 
@@ -187,6 +187,7 @@ any returns auto
 
 
 iterates over `it` and yields true if any element is true
+all
 
 .. _function-_at_functional_c__c_all_C.:
 
@@ -236,6 +237,7 @@ islice returns auto
 
 
 iterates over `src` and yields only the elements in the range [start,stop)
+[[ value; value; value; .... count times ]]
 
 .. _function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i:
 
@@ -253,6 +255,7 @@ repeat_ref returns auto
 
 
 yields `value` by reference `count` times
+[[ value; value; value; .... count times ]]
 
 .. _function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i:
 
