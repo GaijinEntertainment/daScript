@@ -29,7 +29,8 @@ I.e. if the object can `expire` while in scope, with delete, garbage collection,
 
 .. das:attribute:: SharedAddrMacro
 
-|function_annotation-safe_addr-SharedAddrMacro|
+This macro reports an error if shared_addr is attempted on anything other that shared global variables.
+I.e. only global variables are safe to use with shared_addr.
 
 ++++++++++++++++++++++
 Safe temporary address

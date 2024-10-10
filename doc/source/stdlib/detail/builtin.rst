@@ -498,3 +498,29 @@
 
 .. |function-builtin-string_heap_allocation_count| replace:: Returns string heap allocation count (total number of allocations).
 
+.. |function_annotation-builtin-type_function| replace:: Marks function as a type function.
+
+.. |function_annotation-builtin-make_function_unsafe| replace:: Marks function from which this is called from as unsafe.
+
+.. |function-builtin-resize_and_init| replace:: Resizes array and initializes new elements.
+
+.. |function-builtin-erase_if| replace:: Erases element from the array if it satisfies the condition.
+
+.. |function-builtin-float2|  replace:: Generic c-tor for float2.
+
+.. |function-builtin-float3|  replace:: Generic c-tor for float3.
+
+.. |function-builtin-float4|  replace:: Generic c-tor for float4.
+
+.. |function-builtin-int2|  replace:: Generic c-tor for int2.
+
+.. |function-builtin-int3|  replace:: Generic c-tor for int3.
+
+.. |function-builtin-int4|  replace:: Generic c-tor for int4.
+
+.. |function-builtin-uint2|  replace:: Generic c-tor for uint2.
+
+.. |function-builtin-uint3|  replace:: Generic c-tor for uint3.
+
+.. |function-builtin-uint4|  replace:: Generic c-tor for uint4.
+

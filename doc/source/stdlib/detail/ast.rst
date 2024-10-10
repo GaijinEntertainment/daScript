@@ -94,6 +94,8 @@
 
 .. |typedef-ast-SimulateMacroPtr| replace:: Smart pointer to `SimulateMacro` object.
 
+.. |typedef-ast-TypeMacroPtr| replace:: Smart pointer to `TypeMacro` object.
+
 .. |enumeration-ast-SideEffects| replace:: Enumeration with all possible side effects of expression or function.
 
 .. |enumeration-ast-CaptureMode| replace:: Enumeration with lambda variables capture modes.
@@ -1194,6 +1196,8 @@
 
 .. |structure_annotation-ast-TypeInfoMacro| replace:: Compilation time only structure which holds live information about typeinfo expression for the specific macro.
 
+.. |structure_annotation-ast-TypeMacro|  replace:: Compilation time only structure which holds live information about type macro.
+
 .. |structure_annotation-ast-ExprTypeInfo| replace:: typeinfo() expression (`typeinfo(dim a)`, `typeinfo(is_ref_type type<int&>)`)
 
 .. |structure_annotation-ast-ExprTypeDecl| replace:: typedecl() expression (`typedecl(1+2)`)
@@ -1438,4 +1442,22 @@
 .. |function-ast-get_function_aot_hash| replace:: Returns hash of the function for the AOT matching.
 
 .. |function-ast-can_access_global_variable| replace:: Returns true if global variable is accessible from the specified module.
+
+.. |class-ast-AstTypeMacro| replace:: Macro which is part of the type declaration, for example $type_macro_name<type_macro_type_args...>(type_macro_args).
+
+.. |method-ast-AstTypeMacro.visit| replace:: This callback occurs after the type macro is visited.
+
+.. |function-ast-make_type_macro| replace:: Creates adapter for the 'AstTypeMacro' interface.
+
+.. |function-ast-add_type_macro| replace:: Adds 'AstTypeMacro' to the specific module.
+
+.. |function-ast-add_new_type_macro| replace:: Makes adapter to the 'AstTypeMacro' and adds it to the current module.
+
+.. |function-ast-add_type_function| replace:: Adds type function keyword, i.e allow function call to have several type arguments first via the following syntax some_call<type_args>(regular_args).
+
+.. |function-ast-find_enum_name| replace:: Finds name of the corresponding enumeration value in the specified type.
+
+.. |function-ast-infer_generic_type| replace:: Infers generic type for the specified type and pass type.
+
+.. |function-ast-update_alias_map| replace:: Updates alias map for the specified infer.
 

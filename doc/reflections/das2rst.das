@@ -60,7 +60,7 @@ def document_module_math(root:string)
         group_by_regex("all numerics (uint*, int*, float*, double)", mod, %regex~(min|max)$%%);
         group_by_regex("float* and double", mod, %regex~(sign|abs|acos|asin|atan|atan2|cos|sin|tan|exp|log|exp2|
 log2|pow|sqrt|rcp|ceil|floor|abs|saturate|sincos|is_finite|is_nan)$%%);
-        group_by_regex("float* only", mod, %regex~(atan_est|atan2_est|rcp_est|ceili|floori|roundi|trunci|rsqrt|rsqrt_est|fract|\-)$%%);
+        group_by_regex("float* only", mod, %regex~(atan_est|atan2_est|rcp_est|ceili|floori|roundi|trunci|round|rsqrt|rsqrt_est|fract|\-)$%%);
         group_by_regex("float3 only", mod, %regex~(cross|reflect|refract|distance|distance_sq|
 inv_distance|inv_distance_sq)$%%);
         group_by_regex("float2, float3, float4", mod, %regex~(length|length_sq|inv_length|inv_length_sq|
@@ -196,6 +196,7 @@ def document_module_ast(root:string)
         group_by_regex("Log", mod, %regex~(to_compilation_log)%%);
         group_by_regex("Removal", mod, %regex~(remove.*)%%);
         group_by_regex("Properties", mod, %regex~(is|has|get|can)_.*%%);
+        group_by_regex("Infer", mod, %regex~(infer_generic_type|update_alias_map)$%%);
         hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))
     }]
     document("AST manipulation library",mod,"{root}/ast.rst","{root}/detail/ast.rst",groups)

@@ -260,7 +260,7 @@ apply_template returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +--------+--------------------------------------------------------------------+
 
 
-Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
+TODO: figure out why this is needed
 
 .. _function-_at_templates_boost_c__c_apply_template_CH_ls_rtti_c__c_LineInfo_gr__&1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CN_ls_rules_gr_0_ls_S_ls_templates_boost_c__c_Template_gr__gr_1_ls_v_gr__builtin_:
 
@@ -279,7 +279,7 @@ apply_template returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +--------+----------------------------------------------------------------------------------------------+
 
 
-Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
+TODO: figure out why this is needed
 
 .. _function-_at_templates_boost_c__c_apply_template_&1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CN_ls_rules_gr_0_ls_S_ls_templates_boost_c__c_Template_gr__gr_1_ls_v_gr__builtin_:
 
@@ -296,7 +296,7 @@ apply_template returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 +--------+----------------------------------------------------------------------------------------------+
 
 
-Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
+TODO: figure out why this is needed
 
 ++++++++++++++++++
 Expression helpers
@@ -1139,7 +1139,7 @@ enum_class_type returns auto
 +--------+-------------+
 
 
-|function-templates_boost-enum_class_type|
+return underlying type for the enumeration
 
 .. _function-_at_templates_boost_c__c_add_type_ptr_ref_CY_ls_TT_gr_._CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias;autoToAlias_gr_t:
 

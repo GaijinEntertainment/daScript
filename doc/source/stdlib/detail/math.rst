@@ -203,3 +203,4 @@
 
 .. |function-math-quat_slerp| replace:: Spherical linear interpolation between `a` and `b` by `t`.
 
+.. |function-math-round| replace:: Returns the nearest integer to `x`.

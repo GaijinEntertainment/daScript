@@ -130,8 +130,7 @@ binary_search returns auto
 +--------+---------------------+
 
 
-Returns true if an val appears within the range [f, last).
-Array a must be sorted.
+now for all the other types
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L:
 
@@ -152,8 +151,7 @@ binary_search returns auto
 +--------+---------------------+
 
 
-Returns true if an val appears within the range [f, last).
-Array a must be sorted.
+now for all the other types
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -172,8 +170,7 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-Returns true if an val appears within the range [f, last).
-Array a must be sorted.
+now for all the other types
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -196,8 +193,7 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-Returns true if an val appears within the range [f, last).
-Array a must be sorted.
+now for all the other types
 
 .. _function-_at_algorithm_c__c_lower_bound_C._Ci_Ci_C._%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
@@ -294,8 +290,7 @@ binary_search returns auto
 +--------+-------------+
 
 
-Returns true if an val appears within the range [f, last).
-Array a must be sorted.
+now for all the other types
 
 .. _function-_at_algorithm_c__c_binary_search_C._Ci_Ci_C._%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
@@ -316,8 +311,7 @@ binary_search returns auto
 +--------+-------------+
 
 
-Returns true if an val appears within the range [f, last).
-Array a must be sorted.
+now for all the other types
 
 .. _function-_at_algorithm_c__c_binary_search_C._CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin__%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
@@ -336,8 +330,7 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-Returns true if an val appears within the range [f, last).
-Array a must be sorted.
+now for all the other types
 
 .. _function-_at_algorithm_c__c_binary_search_C._Ci_Ci_CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin__%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
@@ -360,8 +353,7 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-Returns true if an val appears within the range [f, last).
-Array a must be sorted.
+now for all the other types
 
 ++++++++++++++++++
 Array manipulation

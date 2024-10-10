@@ -1,7 +1,7 @@
 .. _reference:
 
 #################################
-  Daslang 0.4 Reference Manual
+  Daslang 0.5 Reference Manual
 #################################
 
 Copyright (c) 2018-2024 Gaijin Entertainment

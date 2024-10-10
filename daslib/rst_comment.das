@@ -28,7 +28,7 @@ enum ParserState
     enum_entry
     type_alias
 
-let private DEBUG_COMMENT_READER = false
+let private DEBUG_COMMENT_READER = true
 
 [macro_function]
 def private debug_rst ( s : string )
@@ -268,7 +268,9 @@ class RstComment : AstCommentReader
             for ann in st.annotations
                 if (ann.annotation.name=="function_macro" || ann.annotation.name=="call_macro" || ann.annotation.name=="contract"
                     || ann.annotation.name=="block_macro" || ann.annotation.name=="tag_function_macro")
-                    let ann_name = get_macro_name(st,string(ann.annotation.name))
+                    var ann_name = get_macro_name(st,string(ann.annotation.name))
+                    if ann_name |> empty
+                        ann_name = string(st.name)
                     write_to_detail("function_annotation-{prog.thisModuleName}-{ann_name}", structure_comment)
                     is_annotation = true
                     break
@@ -349,6 +351,8 @@ class RstComment : AstCommentReader
     def write_to_detail ( name, text : string ) : void
         if is_in_aot() || is_in_completion()
             return
+        if DEBUG_COMMENT_READER
+            to_log(LOG_INFO,"write_to_detail {name}\n")
         let fname = get_das_root() + "/doc/source/stdlib/detail/{name}.rst"
         fopen(fname,"wb") <| $ ( f )
             if f==null
