@@ -686,7 +686,7 @@ def private re_match2_concat ( var regex:Regex; var node:ReNode?; str:uint8? ) :
 def private re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match eos {str}\n")
-    if *str == 0u8
+    if *str != 0u8
         return null
     node.tail = str
     var node2 = node.next
@@ -699,8 +699,6 @@ def private re_match2_eos ( var regex:Regex; var node:ReNode?; str:uint8? ) : ui
 def private re_match2_question ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match question {str}\n")
-    if *str == 0u8
-        return null
     var nsub = node.subexpr
     var tail = invoke(nsub.fun2,regex,nsub,str)
     if tail == null
@@ -775,8 +773,6 @@ def private re_match2_plus_set ( var regex:Regex; var node:ReNode?; str:uint8? )
 def private re_match2_star ( var regex:Regex; var node:ReNode?; str:uint8? ) : uint8?
     if log_match_enabled
         print("match2 plus {str}\n")
-    if *str == 0u8
-        return null
     var ofs = str
     var node2 = node.next
     var nsub = node.subexpr
