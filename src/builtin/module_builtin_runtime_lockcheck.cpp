@@ -58,7 +58,8 @@ namespace das
     struct LockErrorReporter : DataWalker {
 
         enum class PathType {
-            field
+            none
+        ,   field
         ,   tuple
         ,   array_element
         ,   table_element
@@ -66,8 +67,8 @@ namespace das
         };
 
         struct PathChunk {
-            PathType type;
-            const char * name;
+            PathType type = PathType::none;
+            const char * name = nullptr;
             TypeInfo * ti = nullptr;
             TypeInfo * vi = nullptr;
             int32_t index = 0;
@@ -98,6 +99,7 @@ namespace das
         vector<PathChunk> path;
         string pathStr;
         bool locked = false;
+        uint32_t totalLockCount = 0;
         virtual bool canVisitArray ( Array * ar, TypeInfo * ) override {
             return !ar->forego_lock_check;
         }
@@ -181,13 +183,14 @@ namespace das
             if ( pa->lock ) {
                 locked = true;
                 _cancel = true;
-
+                totalLockCount = pa->lock;
             }
         }
         virtual void beforeTable ( Table * pa, TypeInfo * ) override {
             if ( pa->lock ) {
                 locked = true;
                 _cancel = true;
+                totalLockCount = pa->lock;
             }
         }
         virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
@@ -238,14 +241,16 @@ namespace das
         if ( failed ) {
             LineInfo atProblem = rtti_get_line_info(1,&context,(LineInfoArg *) &node->debugInfo);
             string errorPath;
+            uint32_t totalLockCount = 0;
             {
                 LockErrorReporter reporter;
                 reporter.walk(value,typeInfo);
                 reporter.collectPath();
+                totalLockCount = reporter.totalLockCount;
                 errorPath = reporter.pathStr;
             }
-            context.throw_error_at(&atProblem, "object type<%s>%s contains locked elements and can't be modified (resized, pushed to, erased from, cleared, deleted, moved, or returned via move)",
-                debug_type(typeInfo).c_str(), errorPath.c_str());
+            context.throw_error_at(&atProblem, "object type<%s>%s contains locked elements (count=%u) and can't be modified (resized, pushed to, erased from, cleared, deleted, moved, or returned via move)",
+                debug_type(typeInfo).c_str(), errorPath.c_str(), totalLockCount);
         }
         return v_zero();
     }
