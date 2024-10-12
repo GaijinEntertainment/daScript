@@ -58,7 +58,8 @@ namespace das
     struct LockErrorReporter : DataWalker {
 
         enum class PathType {
-            field
+            none
+        ,   field
         ,   tuple
         ,   array_element
         ,   table_element
@@ -66,8 +67,8 @@ namespace das
         };
 
         struct PathChunk {
-            PathType type;
-            const char * name;
+            PathType type = PathType::none;
+            const char * name = nullptr;
             TypeInfo * ti = nullptr;
             TypeInfo * vi = nullptr;
             int32_t index = 0;
