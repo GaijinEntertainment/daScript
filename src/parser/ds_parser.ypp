@@ -833,6 +833,12 @@ expression_if_then_else
         eite->isStatic = $loc;
         $$ = eite;
     }
+    |   if_or_static_if[loc] expr[cond] { yyextra->das_suppress_errors=true; } error { yyextra->das_suppress_errors=false; } ';' {
+        $$ = nullptr;
+        delete $cond;
+        das_yyerror(scanner,"expecting an idented block after if",tokAt(scanner,@loc), CompilationError::syntax_error);
+        yyerrok;
+    }
     |   expression_if_one_liner[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] expression_else_one_liner[if_false] ';' {
         $$ = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),ExpressionPtr(ast_wrapInBlock($if_true)),$if_false ? ExpressionPtr(ast_wrapInBlock($if_false)) : nullptr);
     }
@@ -859,6 +865,12 @@ expression_while_loop
         pWhile->body = ExpressionPtr($block);
         ((ExprBlock *)$block)->inTheLoop = true;
         $$ = pWhile;
+    }
+    |   DAS_WHILE[loc] expr[cond] { yyextra->das_suppress_errors=true; } error { yyextra->das_suppress_errors=false; } ';' {
+        $$ = nullptr;
+        delete $cond;
+        das_yyerror(scanner,"expecting an idented block after while",tokAt(scanner,@loc), CompilationError::syntax_error);
+        yyerrok;
     }
     ;
 

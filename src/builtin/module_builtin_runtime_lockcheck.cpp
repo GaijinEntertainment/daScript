@@ -176,6 +176,9 @@ namespace das
                         }
                         break;
                     }
+                    default:
+                        pathStr += "???";
+                        break;
                 }
             }
         }
