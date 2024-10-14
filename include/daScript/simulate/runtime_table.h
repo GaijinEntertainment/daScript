@@ -87,7 +87,7 @@ namespace das
             while ( true ) {
                 auto kh = pHashes[index];
                 if (kh == HASH_EMPTY64 ) {
-                    if ( tab.isLocked() ) context->throw_error("can't insert into locked table");
+                    if ( tab.isLocked() ) context->throw_error_at(at, "can't insert into locked table");
                     if ( insertI != -1u ) {
                         index = insertI;
                         tab.tombstones--;
