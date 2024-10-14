@@ -378,6 +378,71 @@ namespace das
         return TT;
     }
 
+    // semantic hash
+
+    uint64_t TypeDecl::getSemanticHash() const {
+        HashBuilder hb;
+        das_set<Structure *> dep;
+        das_set<Annotation *> adep;
+        return getSemanticHash(hb, dep, adep);
+    }
+
+    uint64_t TypeDecl::getSemanticHash(HashBuilder & hb,das_set<Structure *> & dep, das_set<Annotation *> & adep) const {
+        TextWriter wr;
+        hb.update(baseType);
+        if ( structType ) {
+            if ( dep.find(structType) == dep.end() ) {
+                dep.insert(structType);
+                hb.updateString(structType->getMangledName());
+                hb.update(structType->fields.size());
+                for ( auto & fld : structType->fields ) {
+                    hb.updateString(fld.name);
+                    hb.update(fld.type->getSemanticHash(hb, dep, adep));
+                }
+            }
+        } else if ( enumType ) {
+            hb.updateString(enumType->getMangledName());
+            hb.update(enumType->baseType);
+            for ( auto & e : enumType->list ) {
+                hb.updateString(e.name);
+            }
+        } else if ( annotation ) {
+            if ( adep.find(annotation) == adep.end() ) {
+                adep.insert(annotation);
+                annotation->getSemanticHash(hb, dep, adep);
+            }
+        }
+        hb.update(firstType != nullptr);
+        if ( firstType ) {
+            firstType->getSemanticHash(hb, dep, adep);
+        }
+        hb.update(secondType != nullptr);
+        if ( secondType ) {
+            secondType->getSemanticHash(hb, dep, adep);
+        }
+        hb.update(argTypes.size());
+        for ( auto & argT : argTypes ) {
+            argT->getSemanticHash(hb, dep, adep);
+        }
+        hb.update(argNames.size());
+        for ( auto & argN : argNames ) {
+            hb.updateString(argN);
+        }
+        hb.update(dim.size());
+        for ( auto & d : dim ) {
+            hb.update(d);
+        }
+        hb.update(dimExpr.size());
+        for ( auto & de : dimExpr ) {
+            hb.update(de != nullptr);
+            if ( de ) {
+                wr << *(de);
+            }
+        }
+        hb.update(flags);
+        hb.updateString(wr.str());
+        return hb.getHash();
+    }
 
     // TypeDecl
 

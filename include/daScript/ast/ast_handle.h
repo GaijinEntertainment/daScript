@@ -84,6 +84,7 @@ namespace das
             : TypeAnnotation(n,cpn), mlib(l) {
             mlib->getThisModule()->registerAnnotation(this);
         }
+        virtual uint64_t getSemanticHash ( HashBuilder & hb, das_set<Structure *> &, das_set<Annotation *> & ) const override;
         virtual string getSmartAnnotationCloneFunction() const override { return "smart_ptr_clone"; }
         virtual void seal(Module * m) override;
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
@@ -494,6 +495,11 @@ namespace das
             walker.walk_dim((char *)pVec->data(), &atit);
         }
         virtual bool isYetAnotherVectorTemplate() const override { return true; }
+        virtual uint64_t getSemanticHash ( HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep ) const override {
+            hb.updateString(getMangledName());
+            vecType->getSemanticHash(hb, dep, adep);
+            return hb.getHash();
+        }
         TypeDeclPtr                vecType;
         DebugInfoHelper            helpA;
         TypeInfo *                 ati = nullptr;
@@ -725,6 +731,11 @@ namespace das
         }
         das::SimNode *simulateClone(das::Context &context, const das::LineInfo &at, das::SimNode *l, das::SimNode *r) const override {
             return context.code->makeNode<SimNode_Set<OT>>(at, l, r);
+        }
+        virtual uint64_t getSemanticHash ( HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep ) const override {
+            hb.updateString(getMangledName());
+            valueType->getSemanticHash(hb, dep, adep);
+            return hb.getHash();
         }
         TypeDeclPtr valueType;
     };

@@ -68,8 +68,11 @@ namespace das {
             if (!str) str = "";
             seed = wyhash((const uint8_t *)str, len, seed);
         }
+        __forceinline void updateString ( const string & str ) {
+            seed = wyhash((const uint8_t *)str.c_str(), str.size(), seed);
+        }
         template <typename TT>
-        __forceinline void update ( TT & data ) {
+        __forceinline void update ( const TT & data ) {
             seed = wyhash((const uint8_t *)&data, sizeof(data), seed);
         }
     };

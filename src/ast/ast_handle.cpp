@@ -17,6 +17,24 @@ namespace das {
         }
     }
 
+    uint64_t BasicStructureAnnotation::getSemanticHash ( HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep ) const {
+        hb.updateString(getMangledName());
+        for ( auto & it : fields ) {
+            auto & sfield = it.second;
+            hb.updateString(sfield.name);
+            hb.update(sfield.offset);
+            if ( sfield.constDecl ) {
+                hb.updateString("const");
+                hb.update(sfield.constDecl->getSemanticHash(hb,dep,adep));
+            }
+            if ( sfield.decl ) {
+                hb.updateString("decl");
+                hb.update(sfield.decl->getSemanticHash(hb,dep,adep));
+            }
+        }
+        return hb.getHash();
+    }
+
     bool BasicStructureAnnotation::hasStringData(das_set<void *> & dep) const {
         for ( auto & it : fields ) {
             auto & sfield = it.second;

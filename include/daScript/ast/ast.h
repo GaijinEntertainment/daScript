@@ -467,6 +467,10 @@ namespace das
             p->cppName = cppName;
             return p;
         }
+        virtual uint64_t getSemanticHash ( HashBuilder & hb, das_set<Structure *> &, das_set<Annotation *> & ) const {
+            hb.updateString(getMangledName());
+            return hb.getHash();
+        }
         virtual int32_t getGcFlags(das_set<Structure *> &, das_set<Annotation *> &) const { return 0; }
         virtual bool canAot(das_set<Structure *> &) const { return true; }
         virtual bool canMove() const {
