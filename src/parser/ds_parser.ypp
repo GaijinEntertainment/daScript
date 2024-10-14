@@ -326,6 +326,9 @@
 %token      END_STRING_EXPR         "}"
 %token      END_OF_READ             "end of failed eader macro"
 
+%token      '{'                     "begin of code block"
+%token      '}'                     "end of code block"
+%token      ';'                     "end of expression"
 
 %token      SEMICOLON_CUR_CUR       ";}}"
 %token      SEMICOLON_CUR_SQR       ";}]"
