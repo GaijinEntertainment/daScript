@@ -394,6 +394,7 @@
 %type <i>               optional_override
 %type <b>               optional_constant
 %type <b>               kwd_let
+%type <b>               kwd_let_var_or_nothing
 %type <b>               is_public_module
 %type <b>               optional_shared
 %type <b>               optional_sealed
@@ -1492,6 +1493,12 @@ expression_try_catch
     }
     ;
 
+kwd_let_var_or_nothing
+    :   DAS_LET  { $$ = true; }
+    |   DAS_VAR  { $$ = false; }
+    |   /* empty */ { $$ = true; }
+    ;
+
 kwd_let
     :   DAS_LET  { $$ = true; }
     |   DAS_VAR  { $$ = false; }
@@ -2167,15 +2174,13 @@ struct_variable_declaration_list
     ;
 
 function_argument_declaration
-    :   optional_field_annotation[ann] variable_declaration[decl]          {
+    :   optional_field_annotation[ann] kwd_let_var_or_nothing[is_let] variable_declaration[decl]  {
             $$ = $decl;
-            $$ = $decl;
-            $decl->pTypeDecl->constant = true;
-            $decl->annotation = $ann;
-        }
-    |   optional_field_annotation[ann] DAS_VAR variable_declaration[decl]  {
-            $$ = $decl;
-            $decl->pTypeDecl->removeConstant = true;
+            if ( $is_let ) {
+                $decl->pTypeDecl->constant = true;
+            } else {
+                $decl->pTypeDecl->removeConstant = true;
+            }
             $decl->annotation = $ann;
         }
     |   MTAG_A '(' expr[subexpr] ')' {
