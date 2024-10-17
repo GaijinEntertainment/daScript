@@ -696,6 +696,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
         // reporting
             addField<DAS_BIND_MANAGED_FIELD(always_report_candidates_threshold)>("always_report_candidates_threshold");
+        // infer passes
+            addField<DAS_BIND_MANAGED_FIELD(max_infer_passes)>("max_infer_passes");
         // memory
             addField<DAS_BIND_MANAGED_FIELD(stack)>("stack");
             addField<DAS_BIND_MANAGED_FIELD(intern_strings)>("intern_strings");

@@ -1386,6 +1386,8 @@ namespace das
         bool        serialize_main_module = true;       // if false, then we recompile main module each time
     // error reporting
         int32_t     always_report_candidates_threshold = 6; // always report candidates if there are less than this number
+    // infer passes
+        int32_t     max_infer_passes = 50;              // maximum number of infer passes
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
