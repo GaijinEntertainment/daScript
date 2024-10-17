@@ -325,6 +325,9 @@ namespace das {
                     ss << "\n";
                 }
             }
+            if ( fn->fromGeneric ) {
+                ss << "// from generic " << fn->fromGeneric->describe() << "\n";
+            }
             ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;
             if ( fn->arguments.size() ) ss << "(";
         }
