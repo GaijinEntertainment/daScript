@@ -1426,7 +1426,7 @@ namespace das {
 
         bool hasDefaultUserConstructor ( const string & sna ) const {
             vector<TypeDeclPtr> argDummy;
-            auto fnlist = findMatchingFunctions(sna, argDummy);
+            auto fnlist = findMatchingFunctions("__::" + sna, argDummy);
             for ( auto & fn : fnlist ) {
                 if ( fn->arguments.size()==0 ) {
                     return true;
@@ -9096,10 +9096,8 @@ namespace das {
 
     void Program::inferTypesDirty(TextWriter & logs, bool verbose) {
         const bool log = options.getBoolOption("log_infer_passes",false);
-        int pass = 0, maxPasses = 50;
-        if (auto maxP = options.find("max_infer_passes", Type::tInt)) {
-            maxPasses = maxP->iValue;
-        }
+        int pass = 0;
+        int  maxPasses = options.getIntOption("max_infer_passes", policies.max_infer_passes);
         if ( log ) {
             logs << "INITIAL CODE:\n" << *this;
         }
