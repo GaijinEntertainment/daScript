@@ -636,7 +636,9 @@ namespace das {
             }
             ss << ")";
         }
-        ss << ": " << result->describe();
+        if ( result ) {
+            ss << ": " << result->describe();
+        }
         return ss.str();
     }
 

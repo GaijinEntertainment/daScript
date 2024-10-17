@@ -56,6 +56,7 @@ namespace das {
             reportPrivateFunctions = prog->options.getBoolOption("report_private_functions", prog->policies.report_private_functions);
             noUnsafeUninitializedStructs = prog->options.getBoolOption("no_unsafe_uninitialized_structures", prog->policies.no_unsafe_uninitialized_structures);
             strictProperties = prog->options.getBoolOption("strict_properties", prog->policies.strict_properties);
+            alwaysExportInitializer = prog->options.getBoolOption("always_export_initializer", false);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -94,6 +95,7 @@ namespace das {
         bool                    reportPrivateFunctions = false;
         bool                    noUnsafeUninitializedStructs = false;
         bool                    strictProperties = false;
+        bool                    alwaysExportInitializer = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1901,10 +1903,26 @@ namespace das {
             }
             verifyType(decl.type);
         }
-        bool tryMakeStructureCtor ( Structure * var, bool isPrivate ) {
+        FunctionPtr getOrCreateDummy ( Module * mod ) {
+            auto dummy = make_smart<Function>();
+            dummy->name = "```dummy```";
+            dummy->module = mod;
+            auto dummyName = dummy->getMangledName();
+            if ( auto gen = mod->findGeneric(dummyName) ) {
+                return gen;
+            }
+            auto result = dummy;
+            mod->addGeneric(dummy);
+            reportAstChanged();
+            return result;
+        }
+        bool tryMakeStructureCtor ( Structure * var, bool isPrivate, bool fromGeneric ) {
             if ( !hasDefaultUserConstructor(var->name) ) {
                 auto ctor = makeConstructor(var, isPrivate);
-                ctor->exports = program->options.getBoolOption("always_export_initializer", false);
+                if ( fromGeneric ) {
+                    ctor->fromGeneric = getOrCreateDummy(var->module);
+                }
+                ctor->exports = alwaysExportInitializer;
                 extraFunctions.push_back(ctor);
                 reportAstChanged();
                 return true;
@@ -1913,9 +1931,13 @@ namespace das {
             }
         }
         virtual StructurePtr visit ( Structure * var ) override {
-            if ( !var->genCtor && var->hasAnyInitializers() ) {
-                if ( tryMakeStructureCtor(var, var->privateStructure) ) {
-                    var->genCtor = true;
+            if ( !var->genCtor  ) {
+                if ( var->hasAnyInitializers() ) {
+                    if ( tryMakeStructureCtor(var, var->privateStructure, false) ) {
+                        var->genCtor = true;
+                    }
+                } else {
+                    getOrCreateDummy(program->thisModule.get());
                 }
             }
             auto tt = make_smart<TypeDecl>(Type::tStructure);
@@ -8000,7 +8022,7 @@ namespace das {
                             if ( expr->arguments.size()==0 ) {
                                 expr->name = aliasT->structType->name;
                                 bool isPrivate = aliasT->structType->privateStructure || aliasT->structType->module != program->thisModule.get();
-                                tryMakeStructureCtor (aliasT->structType, isPrivate);
+                                tryMakeStructureCtor (aliasT->structType, isPrivate, true);
                             } else {
 
                                 error("can only generate default structure constructor without arguments",
