@@ -8647,6 +8647,11 @@ namespace das {
                     expr->initAllFields = true;
                 }
             }
+            // drop the ref
+            if ( expr->makeType->ref ) {
+                expr->makeType->ref = false;
+                reportAstChanged();
+            }
             // result type
             auto resT = make_smart<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->structs.size());
