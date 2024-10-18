@@ -1907,6 +1907,7 @@ namespace das {
             auto dummy = make_smart<Function>();
             dummy->name = "```dummy```";
             dummy->module = mod;
+            dummy->generated = true;
             auto dummyName = dummy->getMangledName();
             if ( auto gen = mod->findGeneric(dummyName) ) {
                 return gen;
@@ -5679,6 +5680,18 @@ namespace das {
                 }
             }
         }
+        void removeR2v(ExpressionPtr &expr) {
+            if ( expr->rtti_isCallLikeExpr() ) {
+                auto call = static_pointer_cast<ExprLooksLikeCall>(expr);
+                if ( call->arguments.size() == 2 ) {
+                    if ( call->arguments[1]->rtti_isR2V() ) {
+                        auto arg = static_pointer_cast<ExprRef2Value>(call->arguments[1]);
+                        call->arguments[1] = arg->subexpr;
+                        reportAstChanged();
+                    }
+                }
+            }
+        }
         ExpressionPtr promoteOp2ToProperty ( ExprOp2 * expr ) {
             // a.b += c  -> a`b`set(a`b`get() + c)
             if ( expr->right->type && !expr->right->type->isAutoOrAlias() ) {
@@ -5689,6 +5702,7 @@ namespace das {
                         auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
                         opRight->type = make_smart<TypeDecl>(*expr->right->type);
                         if ( auto cloneSet = promoteToProperty(evar, opRight) ) {
+                            removeR2v(cloneSet);
                             return cloneSet;
                         } else {
                             expr->left = propGet;
@@ -5701,6 +5715,7 @@ namespace das {
                         auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
                         opRight->type = make_smart<TypeDecl>(*expr->right->type);
                         if ( auto cloneSet = promoteToProperty(efield, opRight) ) {
+                            removeR2v(cloneSet);
                             return cloneSet;
                         } else {
                             expr->left = propGet;
@@ -8443,7 +8458,7 @@ namespace das {
                 auto ctorName = st->module->name  + "::" + st->name;
                 auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,ctorName);
                 expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric).get();
-                 if ( !expr->constructor ) {
+                if ( !expr->constructor ) {
                   tempCall->name = "__::" + st->name;
                   expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric).get();
                 }
