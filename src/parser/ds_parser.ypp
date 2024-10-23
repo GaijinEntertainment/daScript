@@ -1846,18 +1846,17 @@ expr_field
         $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), *$name, true);
         delete $name;
     }
-    |   expr[subexpr] '.'[loc] NAME[name] '(' ')' {
-        $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), *$name);
-        delete $name;
-        das_yyerror(scanner,"foo.bar() method call syntax is not supported, use foo->bar() instead",
-            tokAt(scanner,@loc),CompilationError::syntax_error);
+    |   expr[left] '.'[loc] NAME[method_name] '(' ')' {
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        delete $method_name;
+        $$ = pInvoke;
     }
-    |   expr[subexpr] '.'[loc] NAME[name] '(' expr_list[arguments] ')' {
-        $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), *$name);
-        delete $name;
-        das_yyerror(scanner,"foo.bar(...) method call syntax is not supported, use foo->bar(...) instead",
-            tokAt(scanner,@loc),CompilationError::syntax_error);
-        delete $arguments;
+    |   expr[left] '.'[loc] NAME[method_name] '(' expr_list[arguments] ')' {
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        auto callArgs = sequenceToList($arguments);
+        pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
+        delete $method_name;
+        $$ = pInvoke;
     }
     |   expr[subexpr] '.'[loc] { yyextra->das_suppress_errors=true; } error { yyextra->das_suppress_errors=false; } {
         $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@loc), ExpressionPtr($subexpr), "");
