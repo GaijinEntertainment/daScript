@@ -152,6 +152,22 @@ namespace das
         }
     };
 
+    // note: those two are here because int64_t and uint64_t types are long long on windows and long on e.g. linux
+    // so any long long return type is not handled correctly on platforms where int64 is long
+    template <typename ...Args>
+    struct ImplCallStaticFunctionImpl<int64_t, false, false, long long, Args...> {
+        static __forceinline int64_t call ( long long (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return (int64_t) CallStaticFunction<long long, Args...>(fn,ctx,args);;
+        }
+    };
+
+    template <typename ...Args>
+    struct ImplCallStaticFunctionImpl<uint64_t, false, false, unsigned long long, Args...> {
+        static __forceinline uint64_t call ( unsigned long long (*fn)(Args...), Context & ctx, SimNode ** args ) {
+            return (uint64_t) CallStaticFunction<unsigned long long, Args...>(fn,ctx,args);;
+        }
+    };
+
     template <bool Pointer, bool IsEnum, typename ...Args> // void
     struct ImplCallStaticFunctionImpl<void,Pointer,IsEnum,void,Args...> {
         static __forceinline void call ( void (*fn)(Args...), Context & ctx, SimNode ** args ) {
