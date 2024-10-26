@@ -2712,6 +2712,8 @@ enum_basic_type_declaration
     |   DAS_TUINT       { $$ = Type::tUInt; }
     |   DAS_TUINT8      { $$ = Type::tUInt8; }
     |   DAS_TUINT16     { $$ = Type::tUInt16; }
+    |   DAS_TINT64      { $$ = Type::tInt64; }
+    |   DAS_TUINT64     { $$ = Type::tUInt64; }
     ;
 
 structure_type_declaration
