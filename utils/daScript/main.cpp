@@ -18,6 +18,7 @@ static bool quiet = false;
 static bool paranoid_validation = false;
 static bool jitEnabled = false;
 static bool isAotLib = false;
+static bool version2syntax = false;
 
 das::Context * get_context ( int stackSize=0 );
 
@@ -42,6 +43,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     policies.aot = false;
     policies.aot_module = true;
     policies.fail_on_lack_of_aot_export = true;
+    policies.version_2_syntax = version2syntax;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
@@ -193,6 +195,7 @@ bool compileStandalone ( const string & fn, const string & cppFn, bool /*dryRun*
     policies.aot = false;
     policies.aot_module = true;
     policies.fail_on_lack_of_aot_export = true;
+    policies.version_2_syntax = version2syntax;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
@@ -333,6 +336,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     }
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
+    policies.version_2_syntax = version2syntax;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
@@ -401,6 +405,7 @@ void print_help() {
     tout
         << "daslang version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n"
         << "daslang scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
+        << "    -v2syntax   enable version 2 syntax (experimental)\n"
         << "    -jit        enable JIT\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -log        output program code\n"
@@ -476,6 +481,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 }
                 setDasRoot(argv[i+1]);
                 i += 1;
+            } else if ( cmd=="v2syntax" ) {
+                version2syntax = true;
             } else if ( cmd=="jit") {
                 jitEnabled = true;
             } else if ( cmd=="log" ) {

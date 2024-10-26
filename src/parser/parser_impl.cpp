@@ -14,6 +14,10 @@ namespace das {
 
     static __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
 
+    void das2_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr ) {
+        yyextra->g_Program->error(error,"","",at,cerr);
+    }
+
     void das_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr ) {
         yyextra->g_Program->error(error,"","",at,cerr);
     }
@@ -1035,4 +1039,18 @@ namespace das {
         block->list.push_back(ExpressionPtr(expr));
         return block;
     }
+
+    int skip_underscode ( char * tok, char * buf, char * bufend ) {
+        char * out = buf;
+        for ( ;; ) {
+            char ch = *tok ++;
+            if ( ch==0 ) break;
+            if ( ch=='_' ) continue;
+            *out++ = ch;
+            if ( out==bufend ) { out--; break; }
+        }
+        *out = 0;
+        return int(out - buf);
+    }
+
  }

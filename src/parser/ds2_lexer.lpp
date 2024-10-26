@@ -4,7 +4,7 @@
     #include <fast_float/fast_float.h>
     #include "daScript/ast/ast.h"
     #include "parser_state.h"
-    #include "ds_parser.hpp"
+    #include "ds2_parser.hpp"
 
     #ifndef SCNi64
       #define SCNi64       "lli"
@@ -18,13 +18,13 @@
 
     using namespace das;
 
-    union DAS_YYSTYPE;
-    typedef DAS_YYSTYPE YYSTYPE;
+    union DAS2_YYSTYPE;
+    typedef DAS2_YYSTYPE YYSTYPE;
 
     #define YY_NO_INPUT
 
-    void das_yyfatalerror ( DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error );
-    LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
+    void das2_yyfatalerror ( DAS2_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error );
+    LineInfo tokAt ( yyscan_t scanner, const struct DAS2_YYLTYPE & li );
 
     #define YY_USER_ACTION \
         yylloc_param->first_line = yylloc_param->last_line = \
@@ -41,27 +41,23 @@
     #define YYCOLUMN(expr,comment)  ((expr))
 #endif
 
-void YYTAB() {
-    // YYCOLUMN(yyextra->das_yycolumn = (yyextra->das_yycolumn - 1 + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1), "TAB");
-}
+void YY2NEWLINE(yyscan_t yyscanner);
+void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, DAS2_YYLTYPE & li, const char * text );
 
-void YYNEWLINE(yyscan_t yyscanner);
-void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, DAS_YYLTYPE & li, const char * text );
-
-#define YY_DECL int yylex(DAS_YYSTYPE *yylval_param, DAS_YYLTYPE *yylloc_param, yyscan_t yyscanner)
+#define YY_DECL int yylex(DAS2_YYSTYPE *yylval_param, DAS2_YYLTYPE *yylloc_param, yyscan_t yyscanner)
 
 #define YY_EXTRA_TYPE das::DasParserState *
 
 %}
 
-%option prefix="das_yy"
+%option prefix="das2_yy"
 %option noyywrap
 %option never-interactive
 %option nounistd
 %option yylineno
 %option reentrant
 %option bison-bridge
-%option header-file="lex.yy.h"
+%option header-file="lex2.yy.h"
 
 /* %option debug */
 
@@ -85,7 +81,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,lFile);
         auto info = yyextra->g_Access->getFileInfo(incFileName);
         if ( !info ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
+            das2_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
         } else {
             yyextra->g_FileAccessStack.pop_back();
             yyextra->g_FileAccessStack.push_back(info);
@@ -93,11 +89,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             YYCOLUMN ( yyextra->das_yycolumn = lCol, "LINE DIRECTIVE");
         }
     } else {
-        das_yyfatalerror(yylloc_param,yyscanner,"can't process line directive " + string(yytext),
+        das2_yyfatalerror(yylloc_param,yyscanner,"can't process line directive " + string(yytext),
             CompilationError::invalid_line_directive); return LEXER_ERROR;
     }
 }
-<indent>"*/"                        das_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<indent>"*/"                        das2_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <indent>"/*" {
     BEGIN(c_comment);
     yyextra->das_c_style_depth = 1;
@@ -107,7 +103,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         for ( auto & crd : yyextra->g_CommentReaders ) crd->open(false, tak);
     }
 }
-<normal>"*/"                        das_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+<normal>"*/"                        das2_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <normal>"/*" {
     BEGIN(c_comment);
     yyextra->das_c_style_depth = 1;
@@ -176,16 +172,16 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
 }
 <c_comment><<EOF>>             {
-    das_yyfatalerror(yylloc_param,yyscanner,"end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
+    das2_yyfatalerror(yylloc_param,yyscanner,"end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
     BEGIN(normal);
 }
 <reader><<EOF>>         {
-    das_yyfatalerror(yylloc_param,yyscanner,"reader constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das2_yyfatalerror(yylloc_param,yyscanner,"reader constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
     return END_OF_READ;
 }
 <reader>\n        {
-    YYNEWLINE(yyscanner);
+    YY2NEWLINE(yyscanner);
     yylval_param->ch = yytext[0];
     return STRING_CHARACTER;
 }
@@ -205,7 +201,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return BEGIN_STRING_EXPR;
 }
 <strb><<EOF>>             {
-    das_yyfatalerror(yylloc_param,yyscanner,"string constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das2_yyfatalerror(yylloc_param,yyscanner,"string constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
     return END_STRING;
 }
@@ -219,11 +215,10 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <strb>\r              /* do exactly nothing */
 <strb>\n                {
     yylval_param->ch = *yytext;
-    YYNEWLINE(yyscanner);
+    YY2NEWLINE(yyscanner);
     return STRING_CHARACTER;
 }
 <strb>\t                {
-    YYTAB();
     yylval_param->ch = *yytext;
     return STRING_CHARACTER;
 }
@@ -233,7 +228,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 }
 <indent>[ \t\r]*\n      /* skip empty line */ {
     yyextra->das_current_line_indent = 0;
-    YYNEWLINE(yyscanner);
+    YY2NEWLINE(yyscanner);
 }
 <indent>" "             {
     yyextra->das_current_line_indent++;
@@ -246,12 +241,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     #ifdef FLEX_DEBUG
         printf("\\t, cli=%i\n", yyextra->das_current_line_indent);
     #endif
-    YYTAB();
 }
 <indent>(\/\/.*)*\n     {
     yyextra->das_current_line_indent = 0;
     yyextra->das_need_oxford_comma = true;
-    YYNEWLINE(yyscanner);
+    YY2NEWLINE(yyscanner);
     #ifdef FLEX_DEBUG
         printf("new line\n");
     #endif
@@ -265,14 +259,14 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             #ifdef FLEX_DEBUG
             printf("INVALID INDENT at %i, emit BEGIN_STRING\n", yyextra->das_current_line_indent);
             #endif
-            das_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
+            das2_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
             return BEGIN_STRING;
         }
         if ( yyextra->das_current_line_indent % yyextra->das_tab_size ) {
             #ifdef FLEX_DEBUG
             printf("INVALID INDENT at %i, emit {\n", yyextra->das_current_line_indent);
             #endif
-            das_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
+            das2_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
             yyextra->das_current_line_indent = (yyextra->das_current_line_indent + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1);
         }
         yyextra->das_indent_level++;
@@ -312,14 +306,13 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 <include>[ ]*                     /* eat the whitespace */
 <include>\t {
-    YYTAB();
 }
 <include>[^ \t\r\n]+                { /* got the include file name */
     auto cfi = yyextra->g_FileAccessStack.back();
     string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,yytext);
     auto info = yyextra->g_Access->getFileInfo(incFileName);
     if ( !info ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
+        das2_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
     } else {
         if ( yyextra->das_already_include.find(incFileName) == yyextra->das_already_include.end() ) {
             yyextra->das_already_include.insert(incFileName);
@@ -501,7 +494,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->ui64);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
             return LEXER_ERROR;
         }
@@ -512,7 +505,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i64);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-1 ) {
             return LEXER_ERROR;
         }
@@ -524,7 +517,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         uint8_t u8_const;
         auto res = fast_float::from_chars(temptext, temptext+templength, u8_const);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
             return LEXER_ERROR;
         }
@@ -536,7 +529,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->ui);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-1 ) {
             return LEXER_ERROR;
         }
@@ -547,7 +540,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
             return LEXER_ERROR;
         }
@@ -562,7 +555,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength ) {
             return LEXER_ERROR;
         }
@@ -573,7 +566,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui64, 16);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-2 ) {
             return LEXER_ERROR;
         }
@@ -584,7 +577,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui64, 16);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-1 ) {
             return LEXER_ERROR;
         }
@@ -597,7 +590,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             uint8_t u8_const;
             auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext)-2, u8_const, 16);
             if ( res.ec == std::errc::result_out_of_range ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
+                das2_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
             } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-2 ) {
                 return LEXER_ERROR;
             }
@@ -606,7 +599,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         } else {
             auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui, 16);
             if ( res.ec == std::errc::result_out_of_range ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+                das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
             } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-1 ) {
                 return LEXER_ERROR;
             }
@@ -618,7 +611,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui, 16);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
         } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext) ) {
             return LEXER_ERROR;
         }
@@ -627,7 +620,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(f|F)?      {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -636,7 +629,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -646,7 +639,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>[0-9]+(f|F) {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -655,7 +648,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>[0-9]+[eE][+\-]?[0-9]+(f|F)? {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -664,7 +657,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(lf|d) {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -673,7 +666,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(lf|d)?   {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -682,7 +675,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>[0-9]+(lf|d) {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -691,7 +684,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>[0-9]+[eE][+\-]?[0-9]+(lf|d) {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -699,7 +692,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 }
 <normal>\)                                  {
     if ( !yyextra->das_nested_parentheses ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching parentheses", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching parentheses", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     yyextra->das_nested_parentheses --;
@@ -711,7 +704,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 }
 <normal>\]                                  {
     if ( !yyextra->das_nested_square_braces ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     yyextra->das_nested_square_braces --;
@@ -732,7 +725,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         }
     } else {
         if ( !yyextra->das_nested_curly_braces ) {
-            das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
+            das2_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
             return '}';
         }
         yyextra->das_nested_curly_braces --;
@@ -909,12 +902,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
 <normal>[ \r]                             /* skip white space */
 <normal>\t {
-    YYTAB();
 }
 
 <normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}}" {
     if ( yyextra->das_nested_curly_braces < 2 ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     yyextra->das_nested_curly_braces -= 2;
@@ -923,11 +915,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 <normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}]" {
     if ( !yyextra->das_nested_curly_braces ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     if ( !yyextra->das_nested_square_braces ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     yyextra->das_nested_curly_braces --;
@@ -937,11 +929,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 <normal>","([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}]" {
     if ( !yyextra->das_nested_curly_braces ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     if ( !yyextra->das_nested_square_braces ) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     yyextra->das_nested_curly_braces --;
@@ -951,7 +943,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 <normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"]]" {
     if ( yyextra->das_nested_square_braces < 2) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     yyextra->das_nested_square_braces -= 2;
@@ -960,7 +952,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 <normal>","([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"]]" {
     if ( yyextra->das_nested_square_braces < 2) {
-        das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
     yyextra->das_nested_square_braces -= 2;
@@ -1017,7 +1009,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 %%
 
-void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info ) {
+void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     auto infoPtr = info ? info : yyextra->g_FileAccessStack.back();
     yyextra->g_FileAccessStack.push_back(infoPtr);
@@ -1028,21 +1020,21 @@ void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, 
     BEGIN(normal);
 }
 
-void das_yybegin_reader ( yyscan_t yyscanner ) {
+void das2_yybegin_reader ( yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     BEGIN(reader);
 }
 
-void das_yyend_reader ( yyscan_t yyscanner ) {
+void das2_yyend_reader ( yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     BEGIN(normal);
 }
 
-#if DAS_YYDEBUG
-extern int das_yydebug;
+#if DAS2_YYDEBUG
+extern int das2_yydebug;
 #endif
 
-void das_collect_keywords ( Module * mod, yyscan_t yyscanner ) {
+void das2_collect_keywords ( Module * mod, yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     for ( auto & kwd : mod->keywords ) {
         auto it = yyextra->das_keywords.find(kwd.first);
@@ -1065,14 +1057,15 @@ void das_collect_keywords ( Module * mod, yyscan_t yyscanner ) {
     }
 }
 
-void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
+void das2_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
+    printf("DAS VERSION 2 SYNTAX\n");
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     yyextra->g_thisStructure = nullptr;
     yyextra->das_module_alias.clear();
     yyextra->das_already_include.clear();
     yyextra->das_keywords.clear();
-#if DAS_YYDEBUG
-    das_yydebug = 0;
+#if DAS2_YYDEBUG
+    das2_yydebug = 0;
 #endif
     yyextra->das_tab_size = yyextra->das_def_tab_size;
     yyextra->das_line_no.clear();
@@ -1095,12 +1088,12 @@ void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
     yylineno = 1;
 }
 
-void YYNEWLINE ( yyscan_t yyscanner ) {
+void YY2NEWLINE ( yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     YYCOLUMN(yyextra->das_yycolumn = 0,"NEW LINE");
 }
 
-void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, DAS_YYLTYPE & li, const char * text ) {
+void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, DAS2_YYLTYPE & li, const char * text ) {
     if ( crdi.empty() ) return;
     while ( !(text[0]=='/' && text[1]=='/') && *text ) text ++;
     if ( *text==0 ) return;
@@ -1113,3 +1106,4 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
     for ( auto & crd : crdi ) crd->close(tak);
 }
+

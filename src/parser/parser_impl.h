@@ -57,6 +57,7 @@ namespace das {
     };
 
     void das_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr );
+    void das2_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr );
     void das_checkName ( yyscan_t scanner, const string & name, const LineInfo &at );
 
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
@@ -100,5 +101,5 @@ namespace das {
     Expression * ast_rpipe ( yyscan_t scanner, Expression * arg, Expression * fncall, const LineInfo & locAt );
     Expression * ast_makeGenerator ( yyscan_t scanner, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt );
     ExprBlock * ast_wrapInBlock ( Expression * expr );
-
+    int skip_underscode ( char * tok, char * buf, char * bufend );
 }
