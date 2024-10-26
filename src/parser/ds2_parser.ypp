@@ -41,6 +41,16 @@
         TypeDecl * firstType;
         TypeDecl * secondType;
     };
+
+    struct EnumPair {
+        string name;
+        ExpressionPtr expr;
+        LineInfo at;
+        EnumPair ( string * n, Expression * e, const LineInfo & l )
+            : name(*n), expr(e), at(l) {};
+        EnumPair ( string * n, const LineInfo & l )
+            : name(*n), expr(nullptr), at(l) {};
+    };
 }
 
 %{
@@ -114,6 +124,7 @@
     AnnotationList *                faList;
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
+    EnumPair *                      pEnumPair;
     Structure *                     pStructure;
     Function *                      pFuncDecl;
     CaptureEntry *                  pCapt;
@@ -135,6 +146,7 @@
 %destructor { delete $$; } <faList>
 %destructor { delete $$; } <pMakeStruct>
 %destructor { if ( $$->use_count()==1 ) delete $$; } <pEnum>
+%destructor { delete $$; } <pEnumPair>
 %destructor { delete $$; } <pCapt>
 %destructor { delete $$; } <pCaptList>
 %destructor { delete $$.firstType; delete $$.secondType; } <aTypePair>
@@ -341,6 +353,7 @@
 %type <pNameWithPosList>let_variable_name_with_pos_list
 %type <type>            basic_type_declaration
 %type <type>            enum_basic_type_declaration
+%type <type>            optional_enum_basic_type_declaration
 %type <pTypeDecl>       type_declaration
 %type <pTypeDecl>       type_declaration_no_options
 %type <pTypeDecl>       new_type_declaration
@@ -413,6 +426,7 @@
 %type <i>               copy_or_move_or_clone
 
 %type <pEnum>           enum_list
+%type <pEnumPair>       enum_expression
 
 %type <pExpression>     expr
 %type <pExpression>     expr_mtag
@@ -2394,41 +2408,45 @@ global_let
     }
     ;
 
+enum_expression
+    :   NAME[name] {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $$ = new EnumPair($name,tokAt(scanner,@name));
+    }
+    |   NAME[name] '=' expr[value] {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $$ = new EnumPair($name,$value,tokAt(scanner,@name));
+    }
+    ;
+
 enum_list
     :   {
         $$ = new Enumeration();
     }
-    |   enum_list[pE] ';' {
-        $$ = $pE;
-    }
-    |   enum_list[pE] NAME[name] ';' {
-        das_checkName(scanner,*$name,tokAt(scanner,@name));
-        if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
-            das2_yyerror(scanner,"enumeration already declared " + *$name, tokAt(scanner,@name),
+    |   enum_expression[eE] {
+        $$ = new Enumeration();
+        if ( !$$->add($eE->name,$eE->expr,$eE->at) ) {
+            das2_yyerror(scanner,"enumeration already declared " + $eE->name, $eE->at,
                 CompilationError::enumeration_value_already_declared);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
-            auto tokName = tokAt(scanner,@name);
             for ( auto & crd : yyextra->g_CommentReaders ) {
-                crd->afterEnumerationEntry($name->c_str(), tokName);
+                crd->afterEnumerationEntry($eE->name.c_str(), $eE->at);
             }
         }
-        delete $name;
-        $$ = $pE;
+        delete $eE;
     }
-    |   enum_list[pE] NAME[name] '=' expr[value] ';' {
-        das_checkName(scanner,*$name,tokAt(scanner,@name));
-        if ( !$pE->add(*$name,ExpressionPtr($value),tokAt(scanner,@name)) ) {
-            das2_yyerror(scanner,"enumeration value already declared " + *$name, tokAt(scanner,@name),
+    |   enum_list[pE] ',' enum_expression[eE] {
+        if ( !$pE->add($eE->name,$eE->expr,$eE->at) ) {
+            das2_yyerror(scanner,"enumeration already declared " + $eE->name, $eE->at,
                 CompilationError::enumeration_value_already_declared);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
-            auto tokName = tokAt(scanner,@name);
             for ( auto & crd : yyextra->g_CommentReaders ) {
-                crd->afterEnumerationEntry($name->c_str(), tokName);
+                crd->afterEnumerationEntry($eE->name.c_str(), $eE->at);
             }
         }
-        delete $name;
+        delete $eE;
         $$ = $pE;
     }
     ;
@@ -2493,30 +2511,22 @@ enum_name
     }
     ;
 
-enum_declaration
-    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] '{' {
-        if ( !yyextra->g_CommentReaders.empty() ) {
-            auto tak = tokAt(scanner,@edecl);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
-        }
-    } enum_list[pE] {
-        if ( !yyextra->g_CommentReaders.empty() ) {
-            auto tak = tokAt(scanner,@pE);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
-        }
-    } '}' {
-        if ( !yyextra->g_CommentReaders.empty() ) {
-            auto pubename = tokAt(scanner,@pE);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumeration($edecl->name.c_str(),pubename);
-        }
-        ast_enumDeclaration(scanner,$annL,tokAt(scanner,@annL),$pubE,$edecl,$pE,Type::tInt);
+optional_enum_basic_type_declaration
+    :   {
+        $$ = Type::tInt;
     }
-    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] ':' enum_basic_type_declaration[ebt] '{' {
+    |   ':' enum_basic_type_declaration[decl] {
+        $$ = $decl;
+    }
+    ;
+
+enum_declaration
+    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] optional_enum_basic_type_declaration[ebt] '{' {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@edecl);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
         }
-    } enum_list[pE] {
+    } enum_list[pE] optional_comma {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
@@ -2660,6 +2670,8 @@ enum_basic_type_declaration
     |   DAS_TUINT       { $$ = Type::tUInt; }
     |   DAS_TUINT8      { $$ = Type::tUInt8; }
     |   DAS_TUINT16     { $$ = Type::tUInt16; }
+    |   DAS_TINT64      { $$ = Type::tInt64; }
+    |   DAS_TUINT64     { $$ = Type::tUInt64; }
     ;
 
 structure_type_declaration

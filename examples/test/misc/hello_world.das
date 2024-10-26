@@ -1,7 +1,5 @@
-/*
-	NOTE - this is WIP example of every single feature new syntax has to offer
-	new syntax no longer supports significant whitespace, oxoford commas, etc
-*/
+//	NOTE - this is WIP example of every single feature new syntax has to offer
+//	new syntax no longer supports significant whitespace, oxoford commas, etc
 
 /////////////////////
 // module declaration
@@ -50,7 +48,7 @@ class Cls {			// class with methods
 
 }
 
-class DerivedClass : Cls {	// class with inheritance
+class private DerivedClass : Cls {	// class with inheritance
 	def override base_method {
 		debug("bar");
 	}
@@ -59,6 +57,37 @@ class DerivedClass : Cls {	// class with inheritance
 	}
 }
 
+///////////////////
+// enum declaration
+
+enum EmptyEnum {
+}
+
+enum MyEnum {
+	ONE,
+	TWO,
+	THREE
+}
+
+enum EnumWithTrailingComma {
+	ONE,
+	TWO,
+}
+
+enum Enum8u : uint8 {
+	ONE,
+	TWO,
+	THREE = 16u8	// TODO: 16i8 causes 2x smart_ptr_leak, note - it causes 1x smart_ptr_leak with old parser
+}
+
+enum private Enum64 : uint64 {	// 64 bit enum, private
+	ONE,
+	TWO,
+	THREE = 16ul
+}
+
+// TODO: add example of enum with annotation. for now we don't have a builtin enum one
+
 [export]
 def main {
 	var f <- {1=>"a", 2=>"b", 3=>"c", 4=>"d"};
@@ -66,5 +95,4 @@ def main {
 }
 
 options log;
-
 

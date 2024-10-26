@@ -85,6 +85,16 @@ extern int das2_yydebug;
         TypeDecl * secondType;
     };
 
+    struct EnumPair {
+        string name;
+        ExpressionPtr expr;
+        LineInfo at;
+        EnumPair ( string * n, Expression * e, const LineInfo & l )
+            : name(*n), expr(e), at(l) {};
+        EnumPair ( string * n, const LineInfo & l )
+            : name(*n), expr(nullptr), at(l) {};
+    };
+
 
 /* Token kinds.  */
 #ifndef DAS2_YYTOKENTYPE
@@ -310,6 +320,7 @@ union DAS2_YYSTYPE
     AnnotationList *                faList;
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
+    EnumPair *                      pEnumPair;
     Structure *                     pStructure;
     Function *                      pFuncDecl;
     CaptureEntry *                  pCapt;
