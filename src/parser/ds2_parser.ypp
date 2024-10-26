@@ -301,10 +301,6 @@
 %token  MTAG_F              "$f"
 %token  MTAG_DOTDOTDOT      "..."
 
-%token  BRABRAB             "[["    /* [[ */
-%token  BRACBRB             "[{"    /* [{ */
-%token  CBRCBRB             "{{"    /* {{ */
-
 %token<i>       INTEGER                 "integer constant"
 %token<i64>     LONG_INTEGER            "long integer constant"
 %token<ui>      UNSIGNED_INTEGER        "unsigned integer constant"
@@ -469,14 +465,10 @@
 %type <pExpression>     make_decl
 %type <pMakeStruct>     make_struct_fields
 %type <pExpression>     make_struct_decl
-%type <pExpression>     make_struct_dim
 %type <pExpression>     make_struct_single
-%type <pExpression>     make_tuple
 %type <pExpression>     make_map_tuple
-%type <pExpression>     make_dim
 %type <pExpression>     make_dim_decl
 %type <pExpression>     make_tuple_call
-%type <pExpression>     make_table
 %type <pExpression>     make_table_decl
 %type <pExpression>     array_comprehension_where
 %type <pExpression>     array_comprehension
@@ -486,8 +478,6 @@
 %type <pExpression>     func_addr_name
 %type <pExpression>     expr_call
 %type <pExpression>     expr_call_pipe
-
-%type <pExpression>     optional_block
 
 %type <pFuncDecl>       function_declaration
 %type <pFuncDecl>       function_declaration_header
@@ -522,7 +512,7 @@
 %left       LPIPE RPIPE LBPIPE LAPIPE LFPIPE LLPIPE
 %left       POST_INC POST_DEC RARROW DEREF
 %left       '.'
-%nonassoc  '[' ']' '(' ')' QDOT QBRA BRABRAB BRACBRB CBRCBRB
+%nonassoc  '[' ']' '(' ')' QDOT QBRA
 %nonassoc   '$' '@'
 %nonassoc   COLCOL
 
@@ -1524,23 +1514,8 @@ tuple_expansion
     ;
 
 tuple_expansion_variable_declaration
-    :   BRABRAB tuple_expansion[list] ']' ']' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    :   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
         $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
-        $$->init_via_move  = ($com & CorM_MOVE) !=0;
-        $$->init_via_clone = ($com & CorM_CLONE) !=0;
-        $$->isTupleExpansion = true;
-    }
-    |   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
-        $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
-        $$->init_via_move  = ($com & CorM_MOVE) !=0;
-        $$->init_via_clone = ($com & CorM_CLONE) !=0;
-        $$->isTupleExpansion = true;
-    }
-    |   BRABRAB tuple_expansion[list] ']' ']' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
-        auto typeDecl = new TypeDecl(Type::autoinfer);
-        typeDecl->at = tokAt(scanner,@list);
-        typeDecl->ref = $ref;
-        $$ = new VariableDeclaration($list,tokAt(scanner,@list),typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
@@ -1679,7 +1654,7 @@ capture_list
 
 optional_capture_list
     :   { $$ = nullptr; }
-    |   BRABRAB capture_list[cl] ']' ']' { $$ = $cl; }
+    |   '[' '[' capture_list[cl] ']' ']' { $$ = $cl; }
     ;
 
 expr_block
@@ -2080,7 +2055,7 @@ expr_mtag
 
 optional_field_annotation
     :                                                   { $$ = nullptr; }
-    |   BRABRAB annotation_argument_list[alist] ']' ']' { $$ = $alist; }
+    |   '[' '[' annotation_argument_list[alist] ']' ']' { $$ = $alist; }
     ;
 
 optional_override
@@ -3233,99 +3208,8 @@ make_struct_single
     }
     ;
 
-make_struct_dim
-    :   make_struct_fields[msf] {
-        auto msd = new ExprMakeStruct();
-        msd->structs.push_back(MakeStructPtr($msf));
-        $$ = msd;
-    }
-    |   make_struct_dim[msd] ';' make_struct_fields[msf] {
-        ((ExprMakeStruct *) $msd)->structs.push_back(MakeStructPtr($msf));
-        $$ = $msd;
-    }
-    ;
-
-optional_block
-    :   { $$ = nullptr; }
-    |   DAS_WHERE expr_block[blk] { $$ = $blk; }
-    ;
-
-
-optional_trailing_semicolon_cur_cur
-    : '}' '}'
-    | SEMICOLON_CUR_CUR
-    ;
-
-optional_trailing_semicolon_cur_sqr
-    : '}' ']'
-    | SEMICOLON_CUR_SQR
-    ;
-
-optional_trailing_semicolon_sqr_sqr
-    : ']' ']'
-    | SEMICOLON_SQR_SQR
-    ;
-
-optional_trailing_delim_sqr_sqr
-    : ']' ']'
-    | SEMICOLON_SQR_SQR
-    | COMMA_SQR_SQR
-    ;
-
-optional_trailing_delim_cur_sqr
-    : '}' ']'
-    | SEMICOLON_CUR_SQR
-    | COMMA_CUR_SQR
-    ;
-
-
 make_struct_decl
-    :   BRABRAB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr {
-        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
-        ((ExprMakeStruct *)$msd)->block = $blk;
-        $msd->at = tokAt(scanner,@loc);
-        $$ = $msd;
-    }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] optional_block[blk] optional_trailing_delim_sqr_sqr {
-        auto msd = new ExprMakeStruct();
-        msd->makeType = TypeDeclPtr($mkt);
-        msd->block = $blk;
-        msd->at = tokAt(scanner,@loc);
-        $$ = msd;
-    }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' optional_block[blk] optional_trailing_delim_sqr_sqr {
-        auto msd = new ExprMakeStruct();
-        msd->makeType = TypeDeclPtr($mkt);
-        msd->useInitializer = true;
-        msd->block = $blk;
-        msd->at = tokAt(scanner,@loc);
-        $$ = msd;
-    }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr {
-        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
-        ((ExprMakeStruct *)$msd)->useInitializer = true;
-        ((ExprMakeStruct *)$msd)->block = $blk;
-        $msd->at = tokAt(scanner,@loc);
-        $$ = $msd;
-    }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr {
-        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
-        ((ExprMakeStruct *)$msd)->block = $blk;
-        $msd->at = tokAt(scanner,@loc);
-        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
-        tam->arguments.push_back(ExpressionPtr($msd));
-        $$ = tam;
-    }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr {
-        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
-        ((ExprMakeStruct *)$msd)->useInitializer = true;
-        ((ExprMakeStruct *)$msd)->block = $blk;
-        $msd->at = tokAt(scanner,@loc);
-        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
-        tam->arguments.push_back(ExpressionPtr($msd));
-        $$ = tam;
-    }
-    |   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    :   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
@@ -3357,29 +3241,6 @@ make_struct_decl
     }
     ;
 
-make_tuple
-    :   expr[val] {
-        $$ = $val;
-    }
-    |   expr[kval] MAPTO[mkt] expr[vval] {
-        ExprMakeTuple * mt = new ExprMakeTuple(tokAt(scanner,@mkt));
-        mt->values.push_back(ExpressionPtr($kval));
-        mt->values.push_back(ExpressionPtr($vval));
-        $$ = mt;
-    }
-    |   make_tuple[mkt] ',' expr[val] {
-        ExprMakeTuple * mt;
-        if ( $mkt->rtti_isMakeTuple() ) {
-            mt = static_cast<ExprMakeTuple *>($mkt);
-        } else {
-            mt = new ExprMakeTuple(tokAt(scanner,@mkt));
-            mt->values.push_back(ExpressionPtr($mkt));
-        }
-        mt->values.push_back(ExpressionPtr($val));
-        $$ = mt;
-    }
-    ;
-
 make_map_tuple
     :   expr[kval] MAPTO[mkt] expr[vval] {
         ExprMakeTuple * mt = new ExprMakeTuple(tokAt(scanner,@mkt));
@@ -3408,18 +3269,6 @@ make_tuple_call
     }
     ;
 
-make_dim
-    :   make_tuple[val] {
-        auto mka = new ExprMakeArray();
-        mka->values.push_back(ExpressionPtr($val));
-        $$ = mka;
-    }
-    |   make_dim[mka] ';' make_tuple[val] {
-        ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
-        $$ = $mka;
-    }
-    ;
-
 make_dim_decl
     :   '[' [loc] expr_list[arguments] optional_comma ']' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
@@ -3427,18 +3276,6 @@ make_dim_decl
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
         tam->arguments.push_back(mka);
-        $$ = tam;
-    }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr {
-        ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
-        $mka->at = tokAt(scanner,@loc);
-        $$ = $mka;
-    }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_cur_sqr {
-        ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
-        $mka->at = tokAt(scanner,@loc);
-        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
-        tam->arguments.push_back(ExpressionPtr($mka));
         $$ = tam;
     }
     |   DAS_ARRAY[loc] '(' expr_list[arguments] optional_comma ')' {
@@ -3473,18 +3310,6 @@ make_dim_decl
     }
     ;
 
-make_table
-    :   make_map_tuple[val] {
-        auto mka = new ExprMakeArray();
-        mka->values.push_back(ExpressionPtr($val));
-        $$ = mka;
-    }
-    |   make_table[mka] ';' make_map_tuple[val] {
-        ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
-        $$ = $mka;
-    }
-    ;
-
 expr_map_tuple_list
     :   make_map_tuple[subexpr] {
         $$ = $subexpr;
@@ -3501,15 +3326,6 @@ make_table_decl
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
         auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
         ttm->arguments.push_back(mka);
-        $$ = ttm;
-    }
-    |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
-        auto mkt = make_smart<TypeDecl>(Type::autoinfer);
-        mkt->dim.push_back(TypeDecl::dimAuto);
-        ((ExprMakeArray *)$mka)->makeType = mkt;
-        $mka->at = tokAt(scanner,@loc);
-        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
-        ttm->arguments.push_back(ExpressionPtr($mka));
         $$ = ttm;
     }
     |   DAS_TABLE[loc] '(' expr_map_tuple_list[arguments] optional_comma ')' {
@@ -3555,17 +3371,8 @@ array_comprehension
     :   '[' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
-    |   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
-        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
-    }
-    |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' [forend] {
-        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
-    }
     |   '{' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
-    }
-    | CBRCBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' '}' [forend] {
-        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
     ;
 
