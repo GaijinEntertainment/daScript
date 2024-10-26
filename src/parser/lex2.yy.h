@@ -718,7 +718,7 @@ extern int yylex \
 #undef yyTABLES_NAME
 #endif
 
-#line 785 "ds2_lexer.lpp"
+#line 780 "ds2_lexer.lpp"
 
 
 #line 724 "lex2.yy.h"

@@ -1982,12 +1982,6 @@ expr
         auto fncall = yyextra->g_Program->makeCall(tokAt(scanner,@type),tokAt(scanner,@type),das_to_string($type));
         $$ = ast_rpipe(scanner,$arg,fncall,tokAt(scanner,@loc));
     }
-    | name_in_namespace[ena] NAME[eni]          { $$ = ast_NameName(scanner,$ena,$eni,tokAt(scanner,@ena),tokAt(scanner,@eni)); }
-    |   DAS_UNSAFE '(' expr[subexpr] ')' {
-        $subexpr->alwaysSafe = true;
-        $subexpr->userSaidItsSafe = true;
-        $$ = $subexpr;
-    }
     |   expression_keyword[kwd] { $$ = $kwd; }
     ;
 
@@ -2041,8 +2035,8 @@ expr_mtag
     ;
 
 optional_field_annotation
-    :                                                   { $$ = nullptr; }
-    |   '[' '[' annotation_argument_list[alist] ']' ']' { $$ = $alist; }
+    :                                           { $$ = nullptr; }
+    |   '<' annotation_argument_list[alist] '>' { $$ = $alist; }
     ;
 
 optional_override
@@ -2126,12 +2120,6 @@ struct_variable_declaration_list
                 }
                 $$ = ast_structVarDef(scanner,$list,$annL,$isStatic,$isPrivate,$ovr,$cnst,$func,$block,tokRangeAt(scanner,@from,@block),tokAt(scanner,@annL));
             }
-    |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
-        das2_yyerror(scanner,"structure field or class method annotation expected to remain on the same line with the field or the class",
-            tokAt(scanner,@annL), CompilationError::syntax_error);
-        delete $annL;
-        $$ = $list;
-    }
     ;
 
 function_argument_declaration
