@@ -13,9 +13,13 @@ union YYSTYPE;
 
 #define YY_NO_UNISTD_H
 #include "../parser/lex.yy.h"
+#include "../parser/lex2.yy.h"
 
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
 int das_yyparse(yyscan_t yyscanner);
+
+void das2_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
+int das2_yyparse(yyscan_t yyscanner);
 
 namespace das {
 
@@ -413,7 +417,11 @@ namespace das {
         parserState.das_def_tab_size = daScriptEnvironment::bound->das_def_tab_size;
         parserState.das_gen2_make_syntax = policies.gen2_make_syntax;
         yyscan_t scanner = nullptr;
-        das_yylex_init_extra(&parserState, &scanner);
+        if ( policies.version_2_syntax ) {
+            das2_yylex_init_extra(&parserState, &scanner);
+        } else {
+            das_yylex_init_extra(&parserState, &scanner);
+        }
         int64_t file_mtime = access->getFileMtime(fileName.c_str());
         if ( auto fi = access->getFileInfo(fileName) ) {
             parserState.g_FileAccessStack.push_back(fi);
@@ -421,9 +429,17 @@ namespace das {
             uint32_t len = 0;
             fi->getSourceAndLength(src,len);
             if (isUtf8Text(src, len)) {
-                das_yybegin(src + 3, len-3, scanner);
+                if ( policies.version_2_syntax ) {
+                    das2_yybegin(src + 3, len-3, scanner);
+                } else {
+                    das_yybegin(src + 3, len-3, scanner);
+                }
             } else {
-                das_yybegin(src, len, scanner);
+                if ( policies.version_2_syntax ) {
+                    das2_yybegin(src, len, scanner);
+                } else {
+                    das_yybegin(src, len, scanner);
+                }
             }
             libGroup.foreach([&](Module * mod){
                 if ( mod->commentReader ) {
@@ -438,8 +454,13 @@ namespace das {
             daScriptEnvironment::bound->g_compilerLog = nullptr;
             return program;
         }
-        err = das_yyparse(scanner);
-        das_yylex_destroy(scanner);
+        if ( policies.version_2_syntax ) {
+            err = das2_yyparse(scanner);
+            das2_yylex_destroy(scanner);
+        } else {
+            err = das_yyparse(scanner);
+            das_yylex_destroy(scanner);
+        }
         parserState = DasParserState();
         totParse += get_time_usec(time0);
         if ( err || program->failed() ) {

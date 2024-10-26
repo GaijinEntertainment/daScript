@@ -298,20 +298,31 @@ FLEX(../src/parser/ds_lexer.lpp)
 BISON(../src/parser/ds_parser.ypp)
 
 SET(PARSER_GENERATED_SRC
+# parser 1
 ../src/parser/ds_parser.hpp
 ../src/parser/ds_parser.cpp
 ../src/parser/ds_parser.output
 ../src/parser/ds_lexer.cpp
 ../src/parser/lex.yy.h
+# parser 2
+../src/parser/ds2_parser.hpp
+../src/parser/ds2_parser.cpp
+../src/parser/ds2_parser.output
+../src/parser/ds2_lexer.cpp
+../src/parser/lex2.yy.h
 )
 
 SET(PARSER_SRC
 ../src/parser/ds_parser.ypp
 ../src/parser/ds_lexer.lpp
+../src/parser/ds2_parser.ypp
+../src/parser/ds2_lexer.lpp
 ../src/parser/parser_state.h
 ../src/parser/parser_impl.cpp
 ../src/parser/parser_impl.h
 )
+
+
 list(SORT PARSER_SRC)
 SOURCE_GROUP_FILES("parser" PARSER_SRC)
 SOURCE_GROUP_FILES("parser/generated" PARSER_GENERATED_SRC)

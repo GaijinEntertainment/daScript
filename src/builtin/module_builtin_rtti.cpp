@@ -691,9 +691,11 @@ namespace das {
         CodeOfPoliciesAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CodeOfPolicies", ml) {
         // aot
             addField<DAS_BIND_MANAGED_FIELD(aot)>("aot");
+            addField<DAS_BIND_MANAGED_FIELD(standalone_context)>("standalone_context");
             addField<DAS_BIND_MANAGED_FIELD(aot_module)>("aot_module");
             addField<DAS_BIND_MANAGED_FIELD(completion)>("completion");
             addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
+            addField<DAS_BIND_MANAGED_FIELD(serialize_main_module)>("serialize_main_module");
         // reporting
             addField<DAS_BIND_MANAGED_FIELD(always_report_candidates_threshold)>("always_report_candidates_threshold");
         // infer passes
@@ -714,6 +716,8 @@ namespace das {
         // rtti
             addField<DAS_BIND_MANAGED_FIELD(rtti)>("rtti");
         // language
+            addField<DAS_BIND_MANAGED_FIELD(version_2_syntax)>("version_2_syntax");
+            addField<DAS_BIND_MANAGED_FIELD(gen2_make_syntax)>("gen2_make_syntax");
             addField<DAS_BIND_MANAGED_FIELD(no_unsafe)>("no_unsafe");
             addField<DAS_BIND_MANAGED_FIELD(local_ref_is_unsafe)>("local_ref_is_unsafe");
             addField<DAS_BIND_MANAGED_FIELD(no_global_variables)>("no_global_variables");
@@ -743,6 +747,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_optimizations)>("no_optimizations");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_no_aot)>("fail_on_no_aot");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_lack_of_aot_export)>("fail_on_lack_of_aot_export");
+            addField<DAS_BIND_MANAGED_FIELD(log_compile_time)>("log_compile_time");
+            addField<DAS_BIND_MANAGED_FIELD(log_total_compile_time)>("log_total_compile_time");
             addField<DAS_BIND_MANAGED_FIELD(no_fast_call)>("no_fast_call");
         // debugger
             addField<DAS_BIND_MANAGED_FIELD(debugger)>("debugger");
