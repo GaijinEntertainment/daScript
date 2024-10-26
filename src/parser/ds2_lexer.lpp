@@ -304,9 +304,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
 }
 
-<include>[ ]*                     /* eat the whitespace */
-<include>\t {
-}
+<include>[ \t]*                     /* eat the whitespace */
 <include>[^ \t\r\n]+                { /* got the include file name */
     auto cfi = yyextra->g_FileAccessStack.back();
     string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,yytext);
@@ -867,42 +865,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\>\>\>\="                          return ROTREQU;
 <normal>"\<\<\<\="                          return ROTLEQU;
 <normal>"\=\>"                              return MAPTO;
-<normal>"\[\["                              {
-        if ( yyextra->das_gen2_make_syntax ) {
-            yyextra->das_nested_square_braces ++;
-            unput('[');
-            return '[';
-        } else {
-            yyextra->das_nested_square_braces ++;
-            yyextra->das_nested_square_braces ++;
-            return BRABRAB;
-        }
-    }
-<normal>"\[\{"                              {
-        if ( yyextra->das_gen2_make_syntax ) {
-            yyextra->das_nested_square_braces ++;
-            unput('{');
-            return '[';
-        } else {
-            yyextra->das_nested_curly_braces ++;
-            yyextra->das_nested_square_braces ++;
-            return BRACBRB;
-        }
-    }
-<normal>"\{\{"                              {
-        if ( yyextra->das_gen2_make_syntax ) {
-            yyextra->das_nested_curly_braces ++;
-            unput('{');
-            return '{';
-        } else {
-            yyextra->das_nested_curly_braces ++;
-            yyextra->das_nested_curly_braces ++;
-            return CBRCBRB;
-        }
-    }
-<normal>[ \r]                             /* skip white space */
-<normal>\t {
-}
+<normal>[ \r\t]                             /* skip white space */
 
 <normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}}" {
     if ( yyextra->das_nested_curly_braces < 2 ) {
