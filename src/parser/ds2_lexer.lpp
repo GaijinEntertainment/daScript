@@ -61,17 +61,16 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 /* %option debug */
 
-%x indent
+%x normal
 %x strb
 %x c_comment
 %x cpp_comment
 %x include
-%s normal
 %x reader
 
 %%
 
-<indent,normal>\#[0-9]+,[0-9]+,\"[^\"]+\"\# {
+<normal>\#[0-9]+,[0-9]+,\"[^\"]+\"\# {
     string txt = yytext;
     int lRow, lCol;
     char lFile[256];
@@ -93,31 +92,13 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             CompilationError::invalid_line_directive); return LEXER_ERROR;
     }
 }
-<indent>"*/"                        das2_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
-<indent>"/*" {
-    BEGIN(c_comment);
-    yyextra->das_c_style_depth = 1;
-    yyextra->das_in_normal = false;
-    if ( !yyextra->g_CommentReaders.empty() ) {
-        auto tak = tokAt(yyscanner,*yylloc_param);
-        for ( auto & crd : yyextra->g_CommentReaders ) crd->open(false, tak);
-    }
-}
 <normal>"*/"                        das2_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 <normal>"/*" {
     BEGIN(c_comment);
     yyextra->das_c_style_depth = 1;
-    yyextra->das_in_normal = true;
     if ( !yyextra->g_CommentReaders.empty() ) {
         auto tak = tokAt(yyscanner,*yylloc_param);
         for ( auto & crd : yyextra->g_CommentReaders ) crd->open(false, tak);
-    }
-}
-<indent>"\/\/" {
-    BEGIN(cpp_comment);
-    if ( !yyextra->g_CommentReaders.empty() ) {
-        auto tak = tokAt(yyscanner,*yylloc_param);
-        for ( auto & crd : yyextra->g_CommentReaders ) crd->open(true, tak);
     }
 }
 <normal>"\/\/" {
@@ -152,11 +133,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             auto tak = tokAt(yyscanner,*yylloc_param);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->close(tak);
         }
-        if ( yyextra->das_in_normal ) {
-            BEGIN(normal);
-        } else {
-            BEGIN(indent);
-        }
+        BEGIN(normal);
     }
 }
 <c_comment>. {                      /* skipping comment body */
@@ -226,84 +203,6 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     yylval_param->ch = *yytext;
     return STRING_CHARACTER;
 }
-<indent>[ \t\r]*\n      /* skip empty line */ {
-    yyextra->das_current_line_indent = 0;
-    YY2NEWLINE(yyscanner);
-}
-<indent>" "             {
-    yyextra->das_current_line_indent++;
-    #ifdef FLEX_DEBUG
-        printf("[ ], indent=%i\n", yyextra->das_current_line_indent);
-    #endif
-}
-<indent>\t            {
-    yyextra->das_current_line_indent = (yyextra->das_current_line_indent + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1);
-    #ifdef FLEX_DEBUG
-        printf("\\t, cli=%i\n", yyextra->das_current_line_indent);
-    #endif
-}
-<indent>(\/\/.*)*\n     {
-    yyextra->das_current_line_indent = 0;
-    yyextra->das_need_oxford_comma = true;
-    YY2NEWLINE(yyscanner);
-    #ifdef FLEX_DEBUG
-        printf("new line\n");
-    #endif
-    das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
-}
-<indent>.               {
-    unput(*yytext);
-    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT");
-    if (yyextra->das_current_line_indent > yyextra->das_indent_level*yyextra->das_tab_size ) {
-        if ( yyextra->das_current_line_indent > (1 + yyextra->das_indent_level) * yyextra->das_tab_size ) {
-            #ifdef FLEX_DEBUG
-            printf("INVALID INDENT at %i, emit BEGIN_STRING\n", yyextra->das_current_line_indent);
-            #endif
-            das2_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
-            return BEGIN_STRING;
-        }
-        if ( yyextra->das_current_line_indent % yyextra->das_tab_size ) {
-            #ifdef FLEX_DEBUG
-            printf("INVALID INDENT at %i, emit {\n", yyextra->das_current_line_indent);
-            #endif
-            das2_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
-            yyextra->das_current_line_indent = (yyextra->das_current_line_indent + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1);
-        }
-        yyextra->das_indent_level++;
-        #ifdef FLEX_DEBUG
-        printf("emit {, cli=%i, indent =%i\n", yyextra->das_current_line_indent, yyextra->das_indent_level);
-        #endif
-        return '{';
-    } else if (yyextra->das_current_line_indent < yyextra->das_indent_level*yyextra->das_tab_size ) {
-        yyextra->das_indent_level--;
-        #ifdef FLEX_DEBUG
-        printf("emit }, cli=%i, indent =%i\n", yyextra->das_current_line_indent, yyextra->das_indent_level);
-        #endif
-        return '}';
-    } else {
-        BEGIN(normal);
-    }
-}
-<indent><<EOF>>         {
-    if ( yyextra->g_FileAccessStack.size()==1 ) {
-        if ( yyextra->das_indent_level ) {
-            yyextra->das_indent_level--;
-            unput('\n');
-            #ifdef FLEX_DEBUG
-            printf("emit }\n");
-            #endif
-            return '}';
-        } else {
-            return 0;
-        }
-    } else {
-        yypop_buffer_state(yyscanner);
-        yyextra->g_FileAccessStack.pop_back();
-        yylineno = yyextra->das_line_no.back();
-        yyextra->das_line_no.pop_back();
-    }
-}
-
 <include>[ \t]*                     /* eat the whitespace */
 <include>[^ \t\r\n]+                { /* got the include file name */
     auto cfi = yyextra->g_FileAccessStack.back();
@@ -329,38 +228,36 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 }
 
 <normal>"include"                                       BEGIN(include);
-<normal>"for"                                           /* yyextra->das_need_oxford_comma = false; */ return DAS_FOR;
-<normal>"while"                                         yyextra->das_need_oxford_comma = false; return DAS_WHILE;
-<normal>"if"                                            yyextra->das_need_oxford_comma = false; return DAS_IF;
-<normal>"static_if"                                     yyextra->das_need_oxford_comma = false; return DAS_STATIC_IF;
-<normal>"elif"                                          yyextra->das_need_oxford_comma = false; return DAS_ELIF;
-<normal>"static_elif"                                   yyextra->das_need_oxford_comma = false; return DAS_STATIC_ELIF;
-<normal>"else"                                          yyextra->das_need_oxford_comma = false; return DAS_ELSE;
-<normal>"finally"                                       yyextra->das_need_oxford_comma = false; return DAS_FINALLY;
-<normal>"def"                                           yyextra->das_need_oxford_comma = false; return DAS_DEF;
-<normal>"with"                                          yyextra->das_need_oxford_comma = false; return DAS_WITH;
+<normal>"for"                                           return DAS_FOR;
+<normal>"while"                                         return DAS_WHILE;
+<normal>"if"                                            return DAS_IF;
+<normal>"static_if"                                     return DAS_STATIC_IF;
+<normal>"elif"                                          return DAS_ELIF;
+<normal>"static_elif"                                   return DAS_STATIC_ELIF;
+<normal>"else"                                          return DAS_ELSE;
+<normal>"finally"                                       return DAS_FINALLY;
+<normal>"def"                                           return DAS_DEF;
+<normal>"with"                                          return DAS_WITH;
 <normal>"aka"                                           return DAS_AKA;
 <normal>"assume"                                        return DAS_ASSUME;
-<normal>"let"[ \t\r]*\/\/.*\n {
-    yyextra->das_need_oxford_comma = false;
+<normal>"let"[ \t\r]*\/\/.*\n { // TODO: comment reader after let where?
     unput('\n');
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     return DAS_LET;
 }
 <normal>"let"                                           return DAS_LET;
-<normal>"var"[ \t\r]*\/\/.*\n {
-    yyextra->das_need_oxford_comma = false;
+<normal>"var"[ \t\r]*\/\/.*\n { // TODO: comment reader after var where?
     unput('\n');
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     return DAS_VAR;
 }
 <normal>"var"                                           return DAS_VAR;
-<normal>"struct"                                        yyextra->das_need_oxford_comma = false; return DAS_STRUCT;
-<normal>"class"                                         yyextra->das_need_oxford_comma = false; return DAS_CLASS;
-<normal>"enum"                                          yyextra->das_need_oxford_comma = false; return DAS_ENUM;
-<normal>"try"                                           yyextra->das_need_oxford_comma = false; return DAS_TRY;
-<normal>"recover"                                       yyextra->das_need_oxford_comma = false; return DAS_CATCH;
-<normal>"typedef"                                       yyextra->das_need_oxford_comma = false; return DAS_TYPEDEF;
+<normal>"struct"                                        return DAS_STRUCT;
+<normal>"class"                                         return DAS_CLASS;
+<normal>"enum"                                          return DAS_ENUM;
+<normal>"try"                                           return DAS_TRY;
+<normal>"recover"                                       return DAS_CATCH;
+<normal>"typedef"                                       return DAS_TYPEDEF;
 <normal>"typedecl"                                      return DAS_TYPEDECL;
 <normal>"label"                                         return DAS_LABEL;
 <normal>"goto"                                          return DAS_GOTO;
@@ -397,12 +294,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"shared"                                        return DAS_SHARED;
 <normal>"private"                                       return DAS_PRIVATE;
 <normal>"smart_ptr"                                     return DAS_SMART_PTR;
-<normal>unsafe[ \t\r]*\(    {
-    unput('(');
-    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT (");
-    return DAS_UNSAFE;
-}
-<normal>"unsafe"                                        yyextra->das_need_oxford_comma = false; return DAS_UNSAFE;
+<normal>"unsafe"                                        return DAS_UNSAFE;
 <normal>"inscope"                                       return DAS_INSCOPE;
 <normal>"static"                                        return DAS_STATIC;
 <normal>"as"                                            return DAS_AS;
@@ -450,9 +342,6 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>[_[:alpha:]][_[:alnum:]\`]* {
     auto it = yyextra->das_keywords.find(yytext);
     if ( it != yyextra->das_keywords.end() ) {
-        if ( !it->second.is_type_function && !it->second.needs_oxford_comma ) {
-            yyextra->das_need_oxford_comma = false;
-        }
         yylval_param->s = new string(it->second.keyword);
         return it->second.is_type_function ? TYPE_FUNCTION : KEYWORD;
     }
@@ -742,63 +631,10 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\.\.\."                            return MTAG_DOTDOTDOT;
 <normal>"\.\."                              return DOTDOT;
 <normal>"\|\>"                              return RPIPE;
-<normal>\<\|[ \t\r]*\/\/.*\n {
-    yyextra->das_need_oxford_comma = false;
+<normal>\<\|[ \t\r]*\/\/.*\n {  // TODO: this CPP comment is where?
     unput('\n');
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     return LBPIPE;
-}
-<normal>\<\|[ \t\r]*\n                      yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;
-<normal>\<\|[ \t]\$                         {
-    unput('$');
-    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $");
-    if ( yyextra->das_nested_parentheses ) {
-        return LPIPE;
-    } else {
-        yyextra->das_need_oxford_comma = false;
-        return LBPIPE;
-    }
-}
-<normal>\<\|[ \t]\@                         {
-    unput('@');
-    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT @");
-    if ( yyextra->das_nested_parentheses ) {
-        return LPIPE;
-    } else {
-        yyextra->das_need_oxford_comma = false;
-        return LBPIPE;
-    }
-}
-<normal>\@\@[ \t]*\<\|               {
-    unput('@');
-    unput('@');
-    YYCOLUMN(yyextra->das_yycolumn-=2, "UNPUT @@");
-    if ( yyextra->das_nested_parentheses ) {
-        return LFPIPE;
-    } else {
-        yyextra->das_need_oxford_comma = false;
-        return LFPIPE;
-    }
-}
-<normal>\@[ \t]*\<\|               {
-    unput('@');
-    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT @");
-    if ( yyextra->das_nested_parentheses ) {
-        return LAPIPE;
-    } else {
-        yyextra->das_need_oxford_comma = false;
-        return LAPIPE;
-    }
-}
-<normal>\$[ \t]*\<\|               {
-    unput('$');
-    YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $");
-    if ( yyextra->das_nested_parentheses ) {
-        return LLPIPE;
-    } else {
-        yyextra->das_need_oxford_comma = false;
-        return LLPIPE;
-    }
 }
 <normal>"\<\|"                              return LPIPE;
 <normal>"\$\$"                              return MTAG_E;
@@ -927,40 +763,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>(\/\/.*)*\n {
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
-    if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_curly_braces && !yyextra->das_nested_square_braces ) {
-        bool ns = ((yyextra->das_current_line_indent!=0) && yyextra->das_need_oxford_comma) || yyextra->das_force_oxford_comma;
-        #ifdef FLEX_DEBUG
-        if ( yyextra->das_force_oxford_comma ) printf ( "forcing oxford comma\n");
-        #endif
-        yyextra->das_force_oxford_comma = false;
-        yyextra->das_current_line_indent = 0;
-        yyextra->das_need_oxford_comma = true;
-        BEGIN(indent);
-        if ( ns ) {
-            #ifdef FLEX_DEBUG
-            printf("emit ; at EOL\n");
-            #endif
-            return ';';
-        }
-    }
 }
 <normal><<EOF>>         {
     if ( yyextra->g_FileAccessStack.size()==1 ) {
         YYCOLUMN(yyextra->das_yycolumn = 0,"EOF");
-        if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_curly_braces && !yyextra->das_nested_square_braces ) {
-            bool ns = (yyextra->das_current_line_indent!=0) && yyextra->das_need_oxford_comma;
-            yyextra->das_current_line_indent = 0;
-            yyextra->das_need_oxford_comma = true;
-            BEGIN(indent);
-            if ( ns ) {
-                #ifdef FLEX_DEBUG
-                printf("emit ; at EOF\n");
-                #endif
-                return ';';
-            }
-        } else {
-            return 0;
-        }
+        return 0;
     } else {
         yypop_buffer_state(yyscanner);
         yyextra->g_FileAccessStack.pop_back();
@@ -1030,17 +837,12 @@ void das2_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
 #if DAS2_YYDEBUG
     das2_yydebug = 0;
 #endif
-    yyextra->das_tab_size = yyextra->das_def_tab_size;
     yyextra->das_line_no.clear();
     YYCOLUMN(yyextra->das_yycolumn = 0,"YYBEGIN");
-    yyextra->das_current_line_indent = 0;
-    yyextra->das_indent_level = 0;
     yyextra->das_nested_parentheses = 0;
     yyextra->das_nested_curly_braces = 0;
     yyextra->das_nested_square_braces = 0;
     yyextra->das_nested_sb = 0;
-    yyextra->das_need_oxford_comma = true;
-    yyextra->das_force_oxford_comma = false;
     yyextra->das_c_style_depth = 0;
     yyextra->das_arrow_depth = 0;
     yyextra->g_CommentReaders.clear();

@@ -445,13 +445,12 @@ void yyfree ( void * , yyscan_t yyscanner );
 
 #ifdef YY_HEADER_EXPORT_START_CONDITIONS
 #define INITIAL 0
-#define indent 1
+#define normal 1
 #define strb 2
 #define c_comment 3
 #define cpp_comment 4
 #define include 5
-#define normal 6
-#define reader 7
+#define reader 6
 
 #endif
 
@@ -719,9 +718,9 @@ extern int yylex \
 #undef yyTABLES_NAME
 #endif
 
-#line 973 "ds2_lexer.lpp"
+#line 785 "ds2_lexer.lpp"
 
 
-#line 725 "lex2.yy.h"
+#line 724 "lex2.yy.h"
 #undef das2_yyIN_HEADER
 #endif /* das2_yyHEADER_H */

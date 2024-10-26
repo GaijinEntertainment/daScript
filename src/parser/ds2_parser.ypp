@@ -678,18 +678,6 @@ expr_reader
 
 options_declaration
     :   DAS_OPTIONS annotation_argument_list[list] {
-        for ( auto & opt : *$list ) {
-            if ( opt.name=="indenting" && opt.type==Type::tInt ) {
-                if (opt.iValue != 0 && opt.iValue != 2 && opt.iValue != 4 && opt.iValue != 8) { //this is error
-                    yyextra->das_tab_size = yyextra->das_def_tab_size;
-                } else {
-                    yyextra->das_tab_size = opt.iValue ? opt.iValue : yyextra->das_def_tab_size;//0 is default
-                }
-                yyextra->g_FileAccessStack.back()->tabSize = yyextra->das_tab_size;
-            } else if ( opt.name=="gen2_make_syntax" && opt.type==Type::tBool ) {
-                yyextra->das_gen2_make_syntax = opt.bValue;
-            }
-        }
         if ( yyextra->g_Program->options.size() ) {
             for ( auto & opt : *$list ) {
                 if ( yyextra->g_Access->isOptionAllowed(opt.name, yyextra->g_Program->thisModuleName) ) {
@@ -808,7 +796,7 @@ if_or_static_if
 
 expression_else_one_liner
     :   { $$ = nullptr; }
-    |   DAS_ELSE[loc] { yyextra->das_need_oxford_comma = true; } expression_if_one_liner[result] {
+    |   DAS_ELSE[loc] expression_if_one_liner[result] {
             $$ = $result;
     }
     ;
@@ -828,13 +816,13 @@ expression_if_then_else
         eite->isStatic = $loc;
         $$ = eite;
     }
-    |   expression_if_one_liner[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] expression_else_one_liner[if_false] ';' {
+    |   expression_if_one_liner[if_true] DAS_IF[loc] expr[cond] expression_else_one_liner[if_false] ';' {
         $$ = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),ExpressionPtr(ast_wrapInBlock($if_true)),$if_false ? ExpressionPtr(ast_wrapInBlock($if_false)) : nullptr);
     }
     ;
 
 expression_for_loop
-    :   DAS_FOR[loc] { yyextra->das_need_oxford_comma=false; } variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] expression_block[block] {
+    :   DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] expression_block[block] {
         $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
     }
     ;
@@ -867,7 +855,7 @@ expression_with
     ;
 
 expression_with_alias
-    :   DAS_ASSUME[loc] NAME[aname] '=' { yyextra->das_need_oxford_comma=true; } expr[subexpr] {
+    :   DAS_ASSUME[loc] NAME[aname] '=' expr[subexpr] {
         $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, $subexpr );
         delete $aname;
     }
@@ -1677,8 +1665,7 @@ expr_full_block
     ;
 
 expr_full_block_assumed_piped
-    :   block_or_lambda[bal] {  yyextra->das_need_oxford_comma = false; }
-            optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
+    :   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
                                 optional_function_type[result] expression_block[block] {
         $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
     }
@@ -2115,7 +2102,6 @@ struct_variable_declaration_list
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
             DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT optional_constant[cnst] {
-                yyextra->das_force_oxford_comma=true;
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@isPrivate);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
@@ -2404,7 +2390,6 @@ global_let
         ast_globalLetList(scanner,$kwd_let,$glob_shar,$pub_var,$list);
     }
     |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
-        yyextra->das_force_oxford_comma=true;
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@pub_var);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
@@ -2501,7 +2486,7 @@ alias_list
 
 alias_declaration
     :   DAS_TYPEDEF '{' alias_list '}'
-    |   DAS_TYPEDEF { yyextra->das_force_oxford_comma=true;} single_alias ';'
+    |   DAS_TYPEDEF single_alias ';'
     ;
 
 optional_public_or_private_enum
@@ -3026,7 +3011,7 @@ type_declaration
     ;
 
 tuple_alias_declaration
-    :   DAS_TTUPLE optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] {
+    :   DAS_TTUPLE optional_public_or_private_alias[pubA] NAME[vname] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTuple(atvname);
@@ -3061,7 +3046,7 @@ tuple_alias_declaration
     ;
 
 variant_alias_declaration
-    :   DAS_TVARIANT optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] {
+    :   DAS_TVARIANT optional_public_or_private_alias[pubA] NAME[vname] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariant(atvname);
@@ -3097,7 +3082,7 @@ variant_alias_declaration
     ;
 
 bitfield_alias_declaration
-    :   DAS_TBITFIELD optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] {
+    :   DAS_TBITFIELD optional_public_or_private_alias[pubA] NAME[vname] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
@@ -3209,7 +3194,7 @@ make_struct_single
     ;
 
 make_struct_decl
-    :   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    :   DAS_STRUCT [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
@@ -3217,14 +3202,14 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->alwaysUseInitializer = true;
         $$ = $msd;
     }
-    |   DAS_CLASS [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    |   DAS_CLASS [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->forceClass = true;
         $$ = $msd;
     }
-    |   DAS_TVARIANT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    |   DAS_TVARIANT [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
@@ -3260,7 +3245,7 @@ make_tuple_call
         mkt->makeType = make_smart<TypeDecl>(Type::autoinfer);
         $$ = mkt;
     }
-    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    |   DAS_TTUPLE [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
