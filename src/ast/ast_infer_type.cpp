@@ -5150,15 +5150,40 @@ namespace das {
                 splitTypeName(var->name, moduleName, enumName);
                 getSearchModule(moduleName);
                 vector<Enumeration *> possibleEnums;
+                vector<TypeDecl *> possibleBitfields;
                 program->library.foreach([&](Module * mod) -> bool {
                     if ( auto possibleEnum = mod->findEnum(enumName) ) {
                         possibleEnums.push_back(possibleEnum.get());
                     }
+                    if ( auto possibleBitfield = mod->findAlias(enumName) ) {
+                        if ( possibleBitfield->isBitfield() ) {
+                            possibleBitfields.push_back(possibleBitfield.get());
+                        }
+                    }
                     return true;
                 }, moduleName);
+                if ( possibleBitfields.size() && possibleEnums.size() ) {
+                    error("ambiguous field lookup, '" + var->name + "' is both an enum and a bitfield", "", "",
+                        expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
                 if ( possibleEnums.size()==1 ) {
                     auto td = make_smart<TypeDecl>(possibleEnums.back());
                     return make_smart<ExprConstEnumeration>(expr->at, expr->name, td);
+                } else if ( possibleBitfields.size()==1 ) {
+                    auto alias = possibleBitfields.back();
+                    int bit = alias->findArgumentIndex(expr->name);
+                    if ( bit!=-1 ) {
+                        auto td = make_smart<TypeDecl>(*alias);
+                        td->ref = false;
+                        auto bitConst = new ExprConstBitfield(expr->at, 1u << bit);
+                        bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
+                        return bitConst;
+                    } else {
+                        error("bitfield '" + expr->name + "' not found in " + describeType(alias), "", "",
+                            expr->at, CompilationError::cant_get_field);
+                        return Visitor::visit(expr);
+                    }
                 }
             }
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
