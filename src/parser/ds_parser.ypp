@@ -3327,7 +3327,7 @@ make_struct_decl
         tam->arguments.push_back(ExpressionPtr($msd));
         $$ = tam;
     }
-    |   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    |   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
@@ -3335,14 +3335,14 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->alwaysUseInitializer = true;
         $$ = $msd;
     }
-    |   DAS_CLASS [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    |   DAS_CLASS [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->forceClass = true;
         $$ = $msd;
     }
-    |   DAS_TVARIANT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    |   DAS_TVARIANT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
@@ -3401,7 +3401,7 @@ make_tuple_call
         mkt->makeType = make_smart<TypeDecl>(Type::autoinfer);
         $$ = mkt;
     }
-    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_single[msd] ')'  {
+    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;

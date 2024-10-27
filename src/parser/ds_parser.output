@@ -1108,19 +1108,19 @@ Grammar
 
   800 $@89: %empty
 
-  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 '(' make_struct_single ')'
+  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 '(' make_struct_dim ')'
 
   802 $@90: %empty
 
   803 $@91: %empty
 
-  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 '(' make_struct_single ')'
+  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 '(' make_struct_dim ')'
 
   805 $@92: %empty
 
   806 $@93: %empty
 
-  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 '(' make_struct_single ')'
+  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 '(' make_struct_dim ')'
 
   808 $@94: %empty
 
@@ -1141,7 +1141,7 @@ Grammar
 
   818 $@97: %empty
 
-  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 '(' make_struct_single ')'
+  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 '(' make_struct_dim ')'
 
   820 make_dim: make_tuple
   821         | make_dim "end of expression" make_tuple
@@ -2149,10 +2149,10 @@ Nonterminals, with rules where they appear
         on right: 388 389 770 771 774 775 776 777 778
     make_struct_single <pExpression> (462)
         on left: 776
-        on right: 274 409 801 804 807 819
+        on right: 274 409
     make_struct_dim <pExpression> (463)
         on left: 777 778
-        on right: 778 793 796 797 798
+        on right: 778 793 796 797 798 801 804 807 819
     optional_block <pExpression> (464)
         on left: 779 780
         on right: 793 794 795 796 797 798
@@ -7058,14 +7058,14 @@ State 425
 
 State 426
 
-  801 make_struct_decl: "struct" . '<' $@88 type_declaration_no_options '>' $@89 '(' make_struct_single ')'
+  801 make_struct_decl: "struct" . '<' $@88 type_declaration_no_options '>' $@89 '(' make_struct_dim ')'
 
     '<'  shift, and go to state 618
 
 
 State 427
 
-  804 make_struct_decl: "class" . '<' $@90 type_declaration_no_options '>' $@91 '(' make_struct_single ')'
+  804 make_struct_decl: "class" . '<' $@90 type_declaration_no_options '>' $@91 '(' make_struct_dim ')'
 
     '<'  shift, and go to state 619
 
@@ -7894,7 +7894,7 @@ State 458
 State 459
 
   816 make_tuple_call: "tuple" . '(' expr_list optional_comma ')'
-  819                | "tuple" . '<' $@96 type_declaration_no_options '>' $@97 '(' make_struct_single ')'
+  819                | "tuple" . '<' $@96 type_declaration_no_options '>' $@97 '(' make_struct_dim ')'
 
     '<'  shift, and go to state 656
     '('  shift, and go to state 657
@@ -7902,7 +7902,7 @@ State 459
 
 State 460
 
-  807 make_struct_decl: "variant" . '<' $@92 type_declaration_no_options '>' $@93 '(' make_struct_single ')'
+  807 make_struct_decl: "variant" . '<' $@92 type_declaration_no_options '>' $@93 '(' make_struct_dim ')'
 
     '<'  shift, and go to state 658
 
@@ -12261,7 +12261,7 @@ State 617
 
 State 618
 
-  801 make_struct_decl: "struct" '<' . $@88 type_declaration_no_options '>' $@89 '(' make_struct_single ')'
+  801 make_struct_decl: "struct" '<' . $@88 type_declaration_no_options '>' $@89 '(' make_struct_dim ')'
 
     $default  reduce using rule 799 ($@88)
 
@@ -12270,7 +12270,7 @@ State 618
 
 State 619
 
-  804 make_struct_decl: "class" '<' . $@90 type_declaration_no_options '>' $@91 '(' make_struct_single ')'
+  804 make_struct_decl: "class" '<' . $@90 type_declaration_no_options '>' $@91 '(' make_struct_dim ')'
 
     $default  reduce using rule 802 ($@90)
 
@@ -14006,7 +14006,7 @@ State 655
 
 State 656
 
-  819 make_tuple_call: "tuple" '<' . $@96 type_declaration_no_options '>' $@97 '(' make_struct_single ')'
+  819 make_tuple_call: "tuple" '<' . $@96 type_declaration_no_options '>' $@97 '(' make_struct_dim ')'
 
     $default  reduce using rule 817 ($@96)
 
@@ -14131,7 +14131,7 @@ State 657
 
 State 658
 
-  807 make_struct_decl: "variant" '<' . $@92 type_declaration_no_options '>' $@93 '(' make_struct_single ')'
+  807 make_struct_decl: "variant" '<' . $@92 type_declaration_no_options '>' $@93 '(' make_struct_dim ')'
 
     $default  reduce using rule 805 ($@92)
 
@@ -23901,7 +23901,7 @@ State 833
 
 State 834
 
-  801 make_struct_decl: "struct" '<' $@88 . type_declaration_no_options '>' $@89 '(' make_struct_single ')'
+  801 make_struct_decl: "struct" '<' $@88 . type_declaration_no_options '>' $@89 '(' make_struct_dim ')'
 
     "type"       shift, and go to state 306
     "array"      shift, and go to state 307
@@ -23957,7 +23957,7 @@ State 834
 
 State 835
 
-  804 make_struct_decl: "class" '<' $@90 . type_declaration_no_options '>' $@91 '(' make_struct_single ')'
+  804 make_struct_decl: "class" '<' $@90 . type_declaration_no_options '>' $@91 '(' make_struct_dim ')'
 
     "type"       shift, and go to state 306
     "array"      shift, and go to state 307
@@ -27319,7 +27319,7 @@ State 880
 
 State 881
 
-  819 make_tuple_call: "tuple" '<' $@96 . type_declaration_no_options '>' $@97 '(' make_struct_single ')'
+  819 make_tuple_call: "tuple" '<' $@96 . type_declaration_no_options '>' $@97 '(' make_struct_dim ')'
 
     "type"       shift, and go to state 306
     "array"      shift, and go to state 307
@@ -27387,7 +27387,7 @@ State 882
 
 State 883
 
-  807 make_struct_decl: "variant" '<' $@92 . type_declaration_no_options '>' $@93 '(' make_struct_single ')'
+  807 make_struct_decl: "variant" '<' $@92 . type_declaration_no_options '>' $@93 '(' make_struct_dim ')'
 
     "type"       shift, and go to state 306
     "array"      shift, and go to state 307
@@ -36066,7 +36066,7 @@ State 1081
   703                            | type_declaration_no_options . "==" '&'
   704                            | type_declaration_no_options . '?'
   708                            | type_declaration_no_options . "??"
-  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options . '>' $@89 '(' make_struct_single ')'
+  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options . '>' $@89 '(' make_struct_dim ')'
 
     "const"     shift, and go to state 401
     "implicit"  shift, and go to state 402
@@ -36100,7 +36100,7 @@ State 1082
   703                            | type_declaration_no_options . "==" '&'
   704                            | type_declaration_no_options . '?'
   708                            | type_declaration_no_options . "??"
-  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options . '>' $@91 '(' make_struct_single ')'
+  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options . '>' $@91 '(' make_struct_dim ')'
 
     "const"     shift, and go to state 401
     "implicit"  shift, and go to state 402
@@ -38650,7 +38650,7 @@ State 1125
   703                            | type_declaration_no_options . "==" '&'
   704                            | type_declaration_no_options . '?'
   708                            | type_declaration_no_options . "??"
-  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options . '>' $@97 '(' make_struct_single ')'
+  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options . '>' $@97 '(' make_struct_dim ')'
 
     "const"     shift, and go to state 401
     "implicit"  shift, and go to state 402
@@ -38691,7 +38691,7 @@ State 1127
   703                            | type_declaration_no_options . "==" '&'
   704                            | type_declaration_no_options . '?'
   708                            | type_declaration_no_options . "??"
-  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options . '>' $@93 '(' make_struct_single ')'
+  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options . '>' $@93 '(' make_struct_dim ')'
 
     "const"     shift, and go to state 401
     "implicit"  shift, and go to state 402
@@ -43176,7 +43176,7 @@ State 1260
 
 State 1261
 
-  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' . $@89 '(' make_struct_single ')'
+  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' . $@89 '(' make_struct_dim ')'
 
     $default  reduce using rule 800 ($@89)
 
@@ -43185,7 +43185,7 @@ State 1261
 
 State 1262
 
-  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' . $@91 '(' make_struct_single ')'
+  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' . $@91 '(' make_struct_dim ')'
 
     $default  reduce using rule 803 ($@91)
 
@@ -43580,7 +43580,7 @@ State 1281
 
 State 1282
 
-  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' . $@97 '(' make_struct_single ')'
+  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' . $@97 '(' make_struct_dim ')'
 
     $default  reduce using rule 818 ($@97)
 
@@ -43596,7 +43596,7 @@ State 1283
 
 State 1284
 
-  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' . $@93 '(' make_struct_single ')'
+  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' . $@93 '(' make_struct_dim ')'
 
     $default  reduce using rule 806 ($@93)
 
@@ -46402,14 +46402,14 @@ State 1369
 
 State 1370
 
-  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 . '(' make_struct_single ')'
+  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 . '(' make_struct_dim ')'
 
     '('  shift, and go to state 1442
 
 
 State 1371
 
-  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 . '(' make_struct_single ')'
+  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 . '(' make_struct_dim ')'
 
     '('  shift, and go to state 1443
 
@@ -46944,14 +46944,14 @@ State 1384
 
 State 1385
 
-  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 . '(' make_struct_single ')'
+  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 . '(' make_struct_dim ')'
 
     '('  shift, and go to state 1453
 
 
 State 1386
 
-  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 . '(' make_struct_single ')'
+  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 . '(' make_struct_dim ')'
 
     '('  shift, and go to state 1454
 
@@ -49125,24 +49125,24 @@ State 1441
 
 State 1442
 
-  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 '(' . make_struct_single ')'
+  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 '(' . make_struct_dim ')'
 
     "$f"    shift, and go to state 897
     "name"  shift, and go to state 1292
 
-    make_struct_fields  go to state 943
-    make_struct_single  go to state 1503
+    make_struct_fields  go to state 903
+    make_struct_dim     go to state 1503
 
 
 State 1443
 
-  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 '(' . make_struct_single ')'
+  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 '(' . make_struct_dim ')'
 
     "$f"    shift, and go to state 897
     "name"  shift, and go to state 1292
 
-    make_struct_fields  go to state 943
-    make_struct_single  go to state 1504
+    make_struct_fields  go to state 903
+    make_struct_dim     go to state 1504
 
 
 State 1444
@@ -49871,24 +49871,24 @@ State 1452
 
 State 1453
 
-  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 '(' . make_struct_single ')'
+  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 '(' . make_struct_dim ')'
 
     "$f"    shift, and go to state 897
     "name"  shift, and go to state 1292
 
-    make_struct_fields  go to state 943
-    make_struct_single  go to state 1511
+    make_struct_fields  go to state 903
+    make_struct_dim     go to state 1511
 
 
 State 1454
 
-  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 '(' . make_struct_single ')'
+  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 '(' . make_struct_dim ')'
 
     "$f"    shift, and go to state 897
     "name"  shift, and go to state 1292
 
-    make_struct_fields  go to state 943
-    make_struct_single  go to state 1512
+    make_struct_fields  go to state 903
+    make_struct_dim     go to state 1512
 
 
 State 1455
@@ -52072,16 +52072,20 @@ State 1502
 
 State 1503
 
-  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 '(' make_struct_single . ')'
+  778 make_struct_dim: make_struct_dim . "end of expression" make_struct_fields
+  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 '(' make_struct_dim . ')'
 
-    ')'  shift, and go to state 1541
+    "end of expression"  shift, and go to state 1146
+    ')'                  shift, and go to state 1541
 
 
 State 1504
 
-  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 '(' make_struct_single . ')'
+  778 make_struct_dim: make_struct_dim . "end of expression" make_struct_fields
+  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 '(' make_struct_dim . ')'
 
-    ')'  shift, and go to state 1542
+    "end of expression"  shift, and go to state 1146
+    ')'                  shift, and go to state 1542
 
 
 State 1505
@@ -52251,16 +52255,20 @@ State 1510
 
 State 1511
 
-  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 '(' make_struct_single . ')'
+  778 make_struct_dim: make_struct_dim . "end of expression" make_struct_fields
+  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 '(' make_struct_dim . ')'
 
-    ')'  shift, and go to state 1547
+    "end of expression"  shift, and go to state 1146
+    ')'                  shift, and go to state 1547
 
 
 State 1512
 
-  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 '(' make_struct_single . ')'
+  778 make_struct_dim: make_struct_dim . "end of expression" make_struct_fields
+  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 '(' make_struct_dim . ')'
 
-    ')'  shift, and go to state 1548
+    "end of expression"  shift, and go to state 1146
+    ')'                  shift, and go to state 1548
 
 
 State 1513
@@ -53435,14 +53443,14 @@ State 1540
 
 State 1541
 
-  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 '(' make_struct_single ')' .
+  801 make_struct_decl: "struct" '<' $@88 type_declaration_no_options '>' $@89 '(' make_struct_dim ')' .
 
     $default  reduce using rule 801 (make_struct_decl)
 
 
 State 1542
 
-  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 '(' make_struct_single ')' .
+  804 make_struct_decl: "class" '<' $@90 type_declaration_no_options '>' $@91 '(' make_struct_dim ')' .
 
     $default  reduce using rule 804 (make_struct_decl)
 
@@ -53570,14 +53578,14 @@ State 1546
 
 State 1547
 
-  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 '(' make_struct_single ')' .
+  819 make_tuple_call: "tuple" '<' $@96 type_declaration_no_options '>' $@97 '(' make_struct_dim ')' .
 
     $default  reduce using rule 819 (make_tuple_call)
 
 
 State 1548
 
-  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 '(' make_struct_single ')' .
+  807 make_struct_decl: "variant" '<' $@92 type_declaration_no_options '>' $@93 '(' make_struct_dim ')' .
 
     $default  reduce using rule 807 (make_struct_decl)
 

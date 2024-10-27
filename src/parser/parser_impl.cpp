@@ -83,7 +83,9 @@ namespace das {
     }
 
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments ) {
-        pCall->arguments = sequenceToList(arguments);
+        if ( arguments ) {
+            pCall->arguments = sequenceToList(arguments);
+        }
         return pCall;
     }
 
