@@ -251,6 +251,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     return DAS_VAR;
 }
+<normal>"uninitialized"                                 return DAS_UNINITIALIZED;
 <normal>"var"                                           return DAS_VAR;
 <normal>"struct"                                        return DAS_STRUCT;
 <normal>"class"                                         return DAS_CLASS;

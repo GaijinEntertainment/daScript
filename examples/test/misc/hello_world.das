@@ -121,6 +121,62 @@ def bitfield_use_example {
 	debug(bf);
 }
 
+////////////////////
+// making structures
+
+struct Mks {
+	a : int = 1;
+	b : float = 2.0;
+	def Mks ( t : int ) {
+		a = t;
+		b = float(t);
+	}
+}
+
+[export]
+def test_make_struct {
+	let a = Mks();	// with default values
+	debug(a);
+	let A = default<Mks>;	// with default values, same as Mks()
+	debug(A);
+	let b = Mks(a=2,b=3.0);	// with values overwritten
+	debug(b);
+	let c = Mks(a=4);		// with some values overwritten
+	debug(c);
+	let C = Mks(5);			// with constructor
+	debug(C);
+	let d = struct<Mks>(a=2,b=3.0);	// with values overwritten
+	debug(d);
+	let e = struct<Mks>(a=1,b=1.0;a=2,b=2.0;a=3,b=3.0);	// this is array of structures // TODO: do we need better syntax_error
+	debug(e);
+	unsafe {
+		let h = default<Mks> uninitialized;	// uninitialized, a=0, b=0.0
+		debug(h);
+		let i = struct<Mks>(uninitialized a=1);	// uninitialized, a=1, b=0.0
+		debug(i);
+	}
+}
+
+[export]
+def test_new_struct {
+	let a = new Mks();	    		// Mks*, on heap - default values
+	debug(a);
+	let A = new default<Mks>;		// Mks*, on heap - default values
+	debug(A);
+	let b = new Mks(5);	    		// Mks*, on heap - with constructor
+	debug(b);
+	let c = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
+	debug(c);
+	let d = new<Mks[10]>();			// dim of 10 elements
+	debug(d);
+	unsafe {
+		let j = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
+		debug(j);
+		let h = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0\
+		debug(h);
+	};
+}
+
 ///////
 // main
 
