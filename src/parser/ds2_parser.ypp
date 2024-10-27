@@ -389,6 +389,7 @@
 %type <aa>              annotation_argument
 %type <aa>              annotation_argument_value
 %type <aaList>          annotation_argument_list
+%type <aaList>          metadata_argument_list
 %type <aaList>          annotation_argument_value_list
 %type <aaList>          optional_field_annotation
 %type <fa>              annotation_declaration_basic
@@ -925,6 +926,14 @@ annotation_argument_list
     }
     ;
 
+metadata_argument_list
+    :   '@' annotation_argument[arg]  {
+        $$ = ast_annotationArgumentListEntry(scanner,new AnnotationArgumentList(),$arg);
+    }
+    |   metadata_argument_list[argL] '@' annotation_argument[arg] {
+        $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
+    }
+    ;
 annotation_declaration_name
     :   name_in_namespace[name]     { $$ = $name; }
     |   DAS_REQUIRE                 { $$ = new string("require"); }
@@ -2049,8 +2058,8 @@ expr_mtag
     ;
 
 optional_field_annotation
-    :                                           { $$ = nullptr; }
-    |   '<' annotation_argument_list[alist] '>' { $$ = $alist; }
+    :                                 { $$ = nullptr; }
+    |   metadata_argument_list[alist] { $$ = $alist; }
     ;
 
 optional_override

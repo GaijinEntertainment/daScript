@@ -30,7 +30,10 @@ struct Baz : Bar {			// structure with methods
 }
 
 class Cls {			// class with methods
-	<comment> foobar : int;						// note field annotation TOOD: IS THIS WHAT WE ARE DOING HERE?
+	@big			// with metadata
+	@min=13
+	@max=42
+	foobar : int;
 	static foobars : float;
 	def foo {
 		debug("foo");
