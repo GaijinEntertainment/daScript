@@ -2739,10 +2739,17 @@ bitfield_alias_bits
         $$ = pSL;
 
     }
-    |   bitfield_alias_bits[list] ';' {
-        $$ = $list;
+    |   NAME[name] {
+        $$ = new vector<string>();
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $$->push_back(*$name);
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@name);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfieldEntry($name->c_str(),atvname);
+        }
+        delete $name;
     }
-    |   bitfield_alias_bits[list] NAME[name] ';' {
+    |   bitfield_alias_bits[list] ',' NAME[name] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $list->push_back(*$name);
         $$ = $list;
@@ -3101,7 +3108,7 @@ bitfield_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfieldEntries(atvname);
         }
-    } bitfield_alias_bits[list] {
+    } bitfield_alias_bits[list] optional_comma {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfieldEntries(atvname);

@@ -33,9 +33,9 @@ class Cls {			// class with methods
 	@big			// with metadata
 	@min=13
 	@max=42
-	foobar : int;
+	private foobar : int;
 	static foobars : float;
-	def foo {
+	def public foo {
 		debug("foo");
 	}
 	def private private_method ( m : int ) {	// todo: make it `private def static_method`
@@ -90,6 +90,39 @@ enum private Enum64 : uint64 {	// 64 bit enum, private
 }
 
 // TODO: add example of enum with annotation. for now we don't have a builtin enum one
+
+[export]
+def enum_use_example {
+	let bf = MyEnum.ONE;
+	debug(bf);
+}
+
+///////////
+// bitfield
+
+
+bitfield EmptyBitfield {
+}
+
+bitfield MyBitfield {
+	ONE,
+	TWO,
+	THREE,
+}
+
+bitfield BitfieldWithTrailingComma {
+	ONE,
+	TWO,
+}
+
+[export]
+def bitfield_use_example {
+	let bf = MyBitfield.ONE;
+	debug(bf);
+}
+
+///////
+// main
 
 [export]
 def main {
