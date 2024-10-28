@@ -188,6 +188,46 @@ def test_new_struct {
 }
 
 /////////
+// tuples
+
+tuple Tup {
+	a : int;
+	b : float;
+	c : string;
+}
+
+[export]
+def test_tuples {
+	let a : tuple<int;float;string> = (1,2.,"3");
+	debug(a);
+	let b : tuple<int;float;string> = tuple(1,2.,"3");
+	debug(b);
+	let c : tuple<int;float;string> = tuple<Tup>(a=1,b=2.,c="3");
+	debug(c);
+	let e : tuple<int;float;string> = tuple<Tup>(uninitialized a=1);	// a=1,b=0.0,c=""
+	debug(e);
+	let f : tuple<int;float;string>* = new tuple(1,2.,"3");	// on heap
+}
+
+///////////
+// variants
+
+variant Varr {
+	a : int;
+	b : float;
+	c : string;
+}
+
+[export]
+def test_variants {
+	// NOTE - variant can't be uninitialized (it just makes no sense)
+	let a : variant<a:int;b:float;c:string> = Varr(a=1);
+	debug(a);
+	let b : variant<a:int;b:float;c:string> = variant<Varr>(a=1);
+	debug(b);
+}
+
+/////////
 // arrays
 
 [export]
@@ -208,6 +248,14 @@ def test_arrays {
 	debug(f);
 	let G : array<Mks> <- array struct<Mks>(a=1,b=2.0; a=3,b=4.0);	// array of structures
 	debug(G);
+	let h : Tup[2] <- tuple<Tup>(a=1,b=2.,c="3"; a=4,b=5.,c="6");
+	debug(h);
+	let H : array<Tup> <- array tuple<Tup>(a=1,b=2.,c="3"; a=4,b=5.,c="6");	// array of tuples
+	debug(H);
+	let v : Varr[6] <- variant<Varr>(a=1; b=2.; c="3"; a=4; b=5.; c="6");
+	debug(v);
+	let V : array<Varr> <- array variant<Varr>(a=1; b=2.; c="3"; a=4; b=5.; c="6");	// array of variants
+	debug(V);
 }
 
 /////////////////
