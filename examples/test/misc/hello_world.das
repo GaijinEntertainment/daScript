@@ -131,6 +131,10 @@ struct Mks {
 		a = t;
 		b = float(t);
 	}
+	def Mks ( one,two,three:int ) {
+		a = one + two;
+		b = float(two + three);
+	}
 }
 
 [export]
@@ -145,6 +149,8 @@ def test_make_struct {
 	debug(c);
 	let C = Mks(5);			// with constructor
 	debug(C);
+	let CC = Mks(1,2,3);	// with complex constructor
+	debug(CC);
 	let d = struct<Mks>(a=2,b=3.0);	// with values overwritten
 	debug(d);
 	let e = struct<Mks>(a=1,b=1.0;a=2,b=2.0;a=3,b=3.0);	// this is array of structures // TODO: do we need better syntax_error
@@ -177,13 +183,32 @@ def test_new_struct {
 	};
 }
 
+/////////////////
+// comprehensions
+
+[export]
+def test_comprehensions {
+	// array<int>
+	let arr_comp <- [for x in range(1,100); x*x; where x%2==0];	// array comprehension
+	debug(arr_comp);
+	// iterator<int>
+	let iter_comp <- [iterator for x in range(1,100); x*x; where x%2==0];	// iterator comprehension
+	debug(iter_comp);
+	// table<int>
+	let set_comp <- {for x in range(1,100); x*x; where x%2==0};	// set comprehension
+	debug(set_comp);
+	// table<int;string>
+	let table_comp <- {for x in range(1,10); x=>"{x*x}"; where x%2==0};	// table comprehension
+	debug(table_comp);
+}
+
 ///////
 // main
 
 [export]
 def main {
-	var f <- {1=>"a", 2=>"b", 3=>"c", 4=>"d"};
-	debug(f);
+	// var f <- {1=>"a", 2=>"b", 3=>"c", 4=>"d"};
+	// debug(f);
 }
 
 options log;

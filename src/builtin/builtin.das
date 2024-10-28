@@ -764,14 +764,21 @@ def to_table(a:auto(keyT)[]) : table<keyT -const>
     return <- tab
 
 [skip_lock_check]
-def to_table_move(var a:auto(keyT)[]) : table<keyT -const>
+def to_table_move(a:auto(keyT)[]) : table<keyT -const>
     var tab : table<keyT -const>
     for at in a
         __builtin_table_set_insert(tab,at)
     return <- tab
 
 [skip_lock_check]
-def to_table_move(var a:auto(keyT)) : table<keyT -const>
+def to_table_move(a:array<auto(keyT)>) : table<keyT -const>
+    var tab : table<keyT -const>
+    for at in a
+        __builtin_table_set_insert(tab,at)
+    return <- tab
+
+[skip_lock_check]
+def to_table_move(a:auto(keyT)) : table<keyT -const>
     var tab : table<keyT -const>
     __builtin_table_set_insert(tab,a)
     return <- tab
@@ -789,6 +796,19 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>) : table<keyT -const;valT>
 
 [skip_lock_check]
 def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
+    var tab : table<keyT -const;valT>
+    static_if typeinfo(can_copy type<valT>)
+        for x in a
+            tab[x._0] = x._1
+    static_elif typeinfo(can_move type<valT>)
+        for x in a
+            tab[x._0] <- x._1
+    else
+        concept_assert(false,"this array can't be copied or moved")
+    return <- tab
+
+[skip_lock_check]
+def to_table_move(var a:array<tuple<auto(keyT);auto(valT)>>) : table<keyT -const;valT>
     var tab : table<keyT -const;valT>
     static_if typeinfo(can_copy type<valT>)
         for x in a
