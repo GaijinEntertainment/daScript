@@ -218,7 +218,7 @@
 %token  DAS_UNSAFE          "unsafe"
 %token  DAS_INSCOPE         "inscope"
 %token  DAS_STATIC          "static"
-%token  DAS_FIXED_ARRAY     "fixed_array"
+%token  DAS_DIM             "dim"
 %token  DAS_DEFAULT         "default"
 %token  DAS_UNINITIALIZED   "uninitialized"
 
@@ -2896,7 +2896,7 @@ type_declaration_no_options
         $typeDecl->explicitRef = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] '?' {
+    |   type_declaration_no_options[typeDecl] '*' {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = TypeDeclPtr($typeDecl);
@@ -3298,6 +3298,16 @@ make_dim_decl
         tam->arguments.push_back(mka);
         $$ = tam;
     }
+    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = $init;
+        ((ExprMakeStruct *)$msd)->forceStruct = true;
+        ((ExprMakeStruct *)$msd)->alwaysUseInitializer = true;
+        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
+        tam->arguments.push_back($msd);
+        $$ = tam;
+    }
     |   DAS_ARRAY[loc] '(' expr_list[arguments] optional_comma ')' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
@@ -3314,14 +3324,14 @@ make_dim_decl
         tam->arguments.push_back(mka);
         $$ = tam;
     }
-    |   DAS_FIXED_ARRAY[loc] '(' expr_list[arguments] optional_comma ')' {
+    |   DAS_DIM[loc] '(' expr_list[arguments] optional_comma ')' {
         auto mka = new ExprMakeArray(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
         mka->makeType->dim.push_back(TypeDecl::dimAuto);
         $$ = mka;
     }
-    |   DAS_FIXED_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] optional_comma ')' {
+    |   DAS_DIM[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] optional_comma ')' {
         auto mka = new ExprMakeArray(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = TypeDeclPtr($mkt);

@@ -169,7 +169,7 @@ extern int das2_yydebug;
     DAS_UNSAFE = 319,              /* "unsafe"  */
     DAS_INSCOPE = 320,             /* "inscope"  */
     DAS_STATIC = 321,              /* "static"  */
-    DAS_FIXED_ARRAY = 322,         /* "fixed_array"  */
+    DAS_DIM = 322,                 /* "dim"  */
     DAS_DEFAULT = 323,             /* "default"  */
     DAS_UNINITIALIZED = 324,       /* "uninitialized"  */
     DAS_TBOOL = 325,               /* "bool"  */
