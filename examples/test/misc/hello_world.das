@@ -1,6 +1,10 @@
 //	NOTE - this is WIP example of every single feature new syntax has to offer
 //	new syntax no longer supports significant whitespace, oxoford commas, etc
 
+//  NOTE - in every case where type is specified for let or var, it is optional, and can be inferred
+//	its there for the documentation purposes
+
+
 /////////////////////
 // module declaration
 
@@ -139,48 +143,71 @@ struct Mks {
 
 [export]
 def test_make_struct {
-	let a = Mks();	// with default values
+	let a : Mks = Mks();	// with default values
 	debug(a);
-	let A = default<Mks>;	// with default values, same as Mks()
+	let A : Mks = default<Mks>;	// with default values, same as Mks()
 	debug(A);
-	let b = Mks(a=2,b=3.0);	// with values overwritten
+	let b : Mks = Mks(a=2,b=3.0);	// with values overwritten
 	debug(b);
-	let c = Mks(a=4);		// with some values overwritten
+	let c : Mks = Mks(a=4);		// with some values overwritten
 	debug(c);
-	let C = Mks(5);			// with constructor
+	let C : Mks = Mks(5);			// with constructor
 	debug(C);
-	let CC = Mks(1,2,3);	// with complex constructor
+	let CC : Mks = Mks(1,2,3);	// with complex constructor
 	debug(CC);
-	let d = struct<Mks>(a=2,b=3.0);	// with values overwritten
+	let d : Mks = struct<Mks>(a=2,b=3.0);	// with values overwritten
 	debug(d);
-	let e = struct<Mks>(a=1,b=1.0;a=2,b=2.0;a=3,b=3.0);	// this is array of structures // TODO: do we need better syntax_error
+	let e : Mks[3] = struct<Mks>(a=1,b=1.0;a=2,b=2.0;a=3,b=3.0);	// this is array of structures // TODO: do we need better syntax_error
 	debug(e);
 	unsafe {
-		let h = default<Mks> uninitialized;	// uninitialized, a=0, b=0.0
+		let h : Mks = default<Mks> uninitialized;	// uninitialized, a=0, b=0.0
 		debug(h);
-		let i = struct<Mks>(uninitialized a=1);	// uninitialized, a=1, b=0.0
+		let i : Mks = struct<Mks>(uninitialized a=1);	// uninitialized, a=1, b=0.0
 		debug(i);
 	}
 }
 
 [export]
 def test_new_struct {
-	let a = new Mks();	    		// Mks*, on heap - default values
+	let a : Mks* = new Mks();	    		// Mks*, on heap - default values
 	debug(a);
-	let A = new default<Mks>;		// Mks*, on heap - default values
+	let A : Mks* = new default<Mks>;		// Mks*, on heap - default values
 	debug(A);
-	let b = new Mks(5);	    		// Mks*, on heap - with constructor
+	let b : Mks* = new Mks(5);	    		// Mks*, on heap - with constructor
 	debug(b);
-	let c = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
+	let c : Mks* = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
 	debug(c);
-	let d = new<Mks[10]>();			// dim of 10 elements
+	let d : Mks*[10] = new<Mks[10]>();			// dim of 10 elements
 	debug(d);
 	unsafe {
-		let j = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
+		let j : Mks* = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
 		debug(j);
-		let h = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0\
+		let h : Mks* = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0
 		debug(h);
 	};
+}
+
+/////////
+// arrays
+
+[export]
+def test_arrays {
+	let a : array<int> <- [1,2,3,4,5];	// array of integers
+	debug(a);
+	let c : array<int> <- array(1,2,3,4,5);	// array of integers
+	debug(c);
+	let d : array<int> <- array<int>(1,2,3,4,5);	// array of integers
+	debug(d);
+	let b : int[5] = dim(1,2,3,4,5);	// fixed size array of integers
+	debug(b);
+	let e : int[5] = dim<int>(1,2,3,4,5);	// fixed size array of integers
+	debug(e);
+	let g : array<Mks> <- [ Mks(1), Mks(2,3,4) ];	// array of structures
+	debug(g);
+	let f : Mks[2] <- struct<Mks>(a=1,b=2.0; a=3,b=4.0);
+	debug(f);
+	let G : array<Mks> <- array struct<Mks>(a=1,b=2.0; a=3,b=4.0);	// array of structures
+	debug(G);
 }
 
 /////////////////
@@ -188,17 +215,13 @@ def test_new_struct {
 
 [export]
 def test_comprehensions {
-	// array<int>
-	let arr_comp <- [for x in range(1,100); x*x; where x%2==0];	// array comprehension
+	let arr_comp : array<int> <- [for x in range(1,100); x*x; where x%2==0];	// array comprehension
 	debug(arr_comp);
-	// iterator<int>
-	let iter_comp <- [iterator for x in range(1,100); x*x; where x%2==0];	// iterator comprehension
+	let iter_comp : iterator<int> <- [iterator for x in range(1,100); x*x; where x%2==0];	// iterator comprehension
 	debug(iter_comp);
-	// table<int>
-	let set_comp <- {for x in range(1,100); x*x; where x%2==0};	// set comprehension
+	let set_comp : table<int> <- {for x in range(1,100); x*x; where x%2==0};	// set comprehension
 	debug(set_comp);
-	// table<int;string>
-	let table_comp <- {for x in range(1,10); x=>"{x*x}"; where x%2==0};	// table comprehension
+	let table_comp : table<int;string> <- {for x in range(1,10); x=>"{x*x}"; where x%2==0};	// table comprehension
 	debug(table_comp);
 }
 
