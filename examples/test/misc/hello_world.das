@@ -161,7 +161,7 @@ def test_new_struct {
 	let A : Mks* = new default<Mks>;		// Mks*, on heap - default values
 	let b : Mks* = new Mks(5);	    		// Mks*, on heap - with constructor
 	let c : Mks* = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
-	let d : Mks*[10] = new<Mks[10]>();			// dim of 10 elements
+	let d : Mks*[10] = new<Mks[10]>();			// fixed_array of 10 elements
 	unsafe {
 		let j : Mks* = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
 		let h : Mks* = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0
@@ -210,8 +210,8 @@ def test_arrays {
 	let a : array<int> <- [1,2,3,4,5];	// array of integers
 	let c : array<int> <- array(1,2,3,4,5);	// array of integers
 	let d : array<int> <- array<int>(1,2,3,4,5);	// array of integers
-	let b : int[5] = dim(1,2,3,4,5);	// fixed size array of integers
-	let e : int[5] = dim<int>(1,2,3,4,5);	// fixed size array of integers
+	let b : int[5] = fixed_array(1,2,3,4,5);	// fixed size array of integers
+	let e : int[5] = fixed_array<int>(1,2,3,4,5);	// fixed size array of integers
 	let g : array<Mks> <- [ Mks(1), Mks(2,3,4) ];	// array of structures
 	let f : Mks[2] <- struct<Mks>(a=1,b=2.0; a=3,b=4.0);
 	let G : array<Mks> <- array struct<Mks>(a=1,b=2.0; a=3,b=4.0);	// array of structures

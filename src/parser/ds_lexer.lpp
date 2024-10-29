@@ -364,6 +364,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return DAS_VAR;
 }
 <normal>"var"                                           return DAS_VAR;
+<normal>"uninitialized"                                 return DAS_UNINITIALIZED;
 <normal>"struct"                                        yyextra->das_need_oxford_comma = false; return DAS_STRUCT;
 <normal>"class"                                         yyextra->das_need_oxford_comma = false; return DAS_CLASS;
 <normal>"enum"                                          yyextra->das_need_oxford_comma = false; return DAS_ENUM;
