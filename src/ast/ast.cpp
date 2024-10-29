@@ -217,6 +217,20 @@ namespace das {
 
     // structure
 
+    uint64_t Structure::getSemanticHash(HashBuilder & hb,das_set<Structure *> & dep, das_set<Annotation *> & adep) const {
+        if ( ownSemanticHash ) {
+            hb.update(ownSemanticHash);
+        } else {
+            hb.updateString(getMangledName());
+            hb.update(fields.size());
+            for ( auto & fld : fields ) {
+                hb.updateString(fld.name);
+                hb.update(fld.type->getSemanticHash(hb, dep, adep));
+            }
+        }
+        return hb.getHash();
+    }
+
     StructurePtr Structure::clone() const {
         auto cs = make_smart<Structure>(name);
         cs->fields.reserve(fields.size());

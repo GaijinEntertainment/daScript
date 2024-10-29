@@ -3539,6 +3539,8 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
         bool logIt = options.getBoolOption("log_aot",false);
+        // first we cache semantic hashes
+        cacheAotHash();
         // make list of functions
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         das_hash_map<int,Function *> indexToFunction;
