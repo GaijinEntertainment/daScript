@@ -97,8 +97,7 @@ enum private Enum64 : uint64 {	// 64 bit enum, private
 
 [export]
 def enum_use_example {
-	let bf = MyEnum.ONE;
-	debug(bf);
+	let bf : MyEnum = MyEnum.ONE;
 }
 
 ///////////
@@ -121,8 +120,7 @@ bitfield BitfieldWithTrailingComma {
 
 [export]
 def bitfield_use_example {
-	let bf = MyBitfield.ONE;
-	debug(bf);
+	let bf : MyBitfield = MyBitfield.ONE;
 }
 
 ////////////////////
@@ -144,46 +142,29 @@ struct Mks {
 [export]
 def test_make_struct {
 	let a : Mks = Mks();	// with default values
-	debug(a);
 	let A : Mks = default<Mks>;	// with default values, same as Mks()
-	debug(A);
 	let b : Mks = Mks(a=2,b=3.0);	// with values overwritten
-	debug(b);
 	let c : Mks = Mks(a=4);		// with some values overwritten
-	debug(c);
 	let C : Mks = Mks(5);			// with constructor
-	debug(C);
 	let CC : Mks = Mks(1,2,3);	// with complex constructor
-	debug(CC);
 	let d : Mks = struct<Mks>(a=2,b=3.0);	// with values overwritten
-	debug(d);
 	let e : Mks[3] = struct<Mks>(a=1,b=1.0;a=2,b=2.0;a=3,b=3.0);	// this is array of structures // TODO: do we need better syntax_error
-	debug(e);
 	unsafe {
 		let h : Mks = default<Mks> uninitialized;	// uninitialized, a=0, b=0.0
-		debug(h);
 		let i : Mks = struct<Mks>(uninitialized a=1);	// uninitialized, a=1, b=0.0
-		debug(i);
 	}
 }
 
 [export]
 def test_new_struct {
 	let a : Mks* = new Mks();	    		// Mks*, on heap - default values
-	debug(a);
 	let A : Mks* = new default<Mks>;		// Mks*, on heap - default values
-	debug(A);
 	let b : Mks* = new Mks(5);	    		// Mks*, on heap - with constructor
-	debug(b);
 	let c : Mks* = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
-	debug(c);
 	let d : Mks*[10] = new<Mks[10]>();			// dim of 10 elements
-	debug(d);
 	unsafe {
 		let j : Mks* = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
-		debug(j);
 		let h : Mks* = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0
-		debug(h);
 	};
 }
 
@@ -199,13 +180,9 @@ tuple Tup {
 [export]
 def test_tuples {
 	let a : tuple<int;float;string> = (1,2.,"3");
-	debug(a);
 	let b : tuple<int;float;string> = tuple(1,2.,"3");
-	debug(b);
 	let c : tuple<int;float;string> = tuple<Tup>(a=1,b=2.,c="3");
-	debug(c);
 	let e : tuple<int;float;string> = tuple<Tup>(uninitialized a=1);	// a=1,b=0.0,c=""
-	debug(e);
 	let f : tuple<int;float;string>* = new tuple(1,2.,"3");	// on heap
 }
 
@@ -222,9 +199,7 @@ variant Varr {
 def test_variants {
 	// NOTE - variant can't be uninitialized (it just makes no sense)
 	let a : variant<a:int;b:float;c:string> = Varr(a=1);
-	debug(a);
 	let b : variant<a:int;b:float;c:string> = variant<Varr>(a=1);
-	debug(b);
 }
 
 /////////
@@ -233,29 +208,29 @@ def test_variants {
 [export]
 def test_arrays {
 	let a : array<int> <- [1,2,3,4,5];	// array of integers
-	debug(a);
 	let c : array<int> <- array(1,2,3,4,5);	// array of integers
-	debug(c);
 	let d : array<int> <- array<int>(1,2,3,4,5);	// array of integers
-	debug(d);
 	let b : int[5] = dim(1,2,3,4,5);	// fixed size array of integers
-	debug(b);
 	let e : int[5] = dim<int>(1,2,3,4,5);	// fixed size array of integers
-	debug(e);
 	let g : array<Mks> <- [ Mks(1), Mks(2,3,4) ];	// array of structures
-	debug(g);
 	let f : Mks[2] <- struct<Mks>(a=1,b=2.0; a=3,b=4.0);
-	debug(f);
 	let G : array<Mks> <- array struct<Mks>(a=1,b=2.0; a=3,b=4.0);	// array of structures
-	debug(G);
 	let h : Tup[2] <- tuple<Tup>(a=1,b=2.,c="3"; a=4,b=5.,c="6");
-	debug(h);
 	let H : array<Tup> <- array tuple<Tup>(a=1,b=2.,c="3"; a=4,b=5.,c="6");	// array of tuples
-	debug(H);
 	let v : Varr[6] <- variant<Varr>(a=1; b=2.; c="3"; a=4; b=5.; c="6");
-	debug(v);
 	let V : array<Varr> <- array variant<Varr>(a=1; b=2.; c="3"; a=4; b=5.; c="6");	// array of variants
-	debug(V);
+}
+
+////////
+// table
+
+def test_tables() {
+	let a : table<int> <- { 1, 2, 3, 4, 5 };	// table of integers, keys only
+	let b : table<int> <- table<int>(1,2,3,4,5);	// table of integers, keys only
+	let B : table<int> <- table(1,2,3,4,5);	// table of integers, keys only
+	let c : table<int;int> <- { 1=>1, 2=>2, 3=>3, 4=>4, 5=>5 };	// table of integers, key-value pairs
+	let d : table<int;int> <- table<int;int>(1=>1,2=>2,3=>3,4=>4,5=>5);	// table of integers, key-value pairs
+	let D : table<int;int> <- table(1=>1,2=>2,3=>3,4=>4,5=>5);	// table of integers, key-value pairs
 }
 
 /////////////////
@@ -264,13 +239,9 @@ def test_arrays {
 [export]
 def test_comprehensions {
 	let arr_comp : array<int> <- [for x in range(1,100); x*x; where x%2==0];	// array comprehension
-	debug(arr_comp);
 	let iter_comp : iterator<int> <- [iterator for x in range(1,100); x*x; where x%2==0];	// iterator comprehension
-	debug(iter_comp);
 	let set_comp : table<int> <- {for x in range(1,100); x*x; where x%2==0};	// set comprehension
-	debug(set_comp);
 	let table_comp : table<int;string> <- {for x in range(1,10); x=>"{x*x}"; where x%2==0};	// table comprehension
-	debug(table_comp);
 }
 
 ///////

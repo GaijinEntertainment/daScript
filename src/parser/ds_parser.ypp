@@ -380,6 +380,7 @@
 %type <aa>              annotation_argument
 %type <aa>              annotation_argument_value
 %type <aaList>          annotation_argument_list
+%type <aaList>          metadata_argument_list
 %type <aaList>          annotation_argument_value_list
 %type <aaList>          optional_field_annotation
 %type <fa>              annotation_declaration_basic
@@ -929,6 +930,15 @@ annotation_argument_list
         $$ = ast_annotationArgumentListEntry(scanner,new AnnotationArgumentList(),$arg);
     }
     |   annotation_argument_list[argL] ',' annotation_argument[arg] {
+        $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
+    }
+    ;
+
+metadata_argument_list
+    :   '@' annotation_argument[arg]  {
+        $$ = ast_annotationArgumentListEntry(scanner,new AnnotationArgumentList(),$arg);
+    }
+    |   metadata_argument_list[argL] '@' annotation_argument[arg] {
         $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
     }
     ;
@@ -2080,7 +2090,8 @@ expr_mtag
 
 optional_field_annotation
     :                                                   { $$ = nullptr; }
-    |   BRABRAB annotation_argument_list[alist] ']' ']' { $$ = $alist; }
+    |   BRABRAB annotation_argument_list[alist] ']' ']' { $$ = $alist; /*this one is gone when BRABRA is disabled*/ }
+    |   metadata_argument_list[alist]                   { $$ = $alist; }
     ;
 
 optional_override
