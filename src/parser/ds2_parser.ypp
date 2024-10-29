@@ -938,6 +938,7 @@ metadata_argument_list
         $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
     }
     ;
+
 annotation_declaration_name
     :   name_in_namespace[name]     { $$ = $name; }
     |   DAS_REQUIRE                 { $$ = new string("require"); }
