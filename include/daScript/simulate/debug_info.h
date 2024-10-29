@@ -7,6 +7,10 @@ namespace das
 #define DAS_ENABLE_PROFILER 0
 #endif
 
+#ifndef DAS_ENABLE_KEEPALIVE
+#define DAS_ENABLE_KEEPALIVE 0
+#endif
+
     enum Type : int32_t {
         none,
         autoinfer,

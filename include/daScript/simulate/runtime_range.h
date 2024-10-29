@@ -166,6 +166,7 @@ namespace das
             *pi = i;
             for (SimNode ** __restrict body = this->list; body!=tail; ++body) {
                 (*body)->eval(context);
+                DAS_KEEPALIVE_LOOP(&context);
             }
         } }
     loopend:;
@@ -208,6 +209,7 @@ namespace das
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
             pbody->eval(context);
+            DAS_KEEPALIVE_LOOP(&context);
         } }
     loopend:;
         this->evalFinal(context);
@@ -262,6 +264,7 @@ namespace das
             for (SimNode ** __restrict body = this->list; body!=tail; ++body) {
                 DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                 (*body)->eval(context);
+                DAS_KEEPALIVE_LOOP(&context);
             }
         } }
     loopend:;
@@ -308,6 +311,7 @@ namespace das
             SimNode * pbody = this->list[0];   // note: instruments
             DAS_SINGLE_STEP(context,pbody->debugInfo,true);
             pbody->eval(context);
+            DAS_KEEPALIVE_LOOP(&context);
         } }
     loopend:;
         this->evalFinal(context);

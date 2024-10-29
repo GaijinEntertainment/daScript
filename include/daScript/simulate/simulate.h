@@ -37,6 +37,14 @@ namespace das
         #define DAS_PROFILE_NODE
     #endif
 
+    #if DAS_ENABLE_KEEPALIVE
+        #define DAS_KEEPALIVE_CALL(context) os_keepalive_call((context))
+        #define DAS_KEEPALIVE_LOOP(context) os_keepalive_loop((context))
+    #else
+        #define DAS_KEEPALIVE_CALL(context)
+        #define DAS_KEEPALIVE_LOOP(context)
+    #endif
+
     class Context;
     struct SimNode;
     struct Block;
@@ -160,7 +168,8 @@ namespace das
     };
 
 #define DAS_PROCESS_LOOP_FLAGS(howtocontinue) \
-    { if (context.stopFlags) { \
+    {   DAS_KEEPALIVE_LOOP(&context); \
+        if (context.stopFlags) { \
         if (context.stopFlags & EvalFlags::stopForContinue) { \
             context.stopFlags &= ~EvalFlags::stopForContinue; \
             howtocontinue; \
@@ -174,7 +183,8 @@ namespace das
     } }
 
 #define DAS_PROCESS_LOOP1_FLAGS(howtocontinue) \
-    { if (context.stopFlags) { \
+    { DAS_KEEPALIVE_LOOP(&context); \
+        if (context.stopFlags) { \
         if (context.stopFlags & EvalFlags::stopForContinue) { \
             context.stopFlags &= ~EvalFlags::stopForContinue; \
             howtocontinue; \
@@ -276,6 +286,9 @@ namespace das
     void dapiUserCommand ( const char * command );
     void dapiOnBeforeGC ( Context & ctx );
     void dapiOnAfterGC ( Context & ctx );
+
+    void os_keepalive_call ( Context * );
+    void os_keepalive_loop ( Context * );
 
     typedef shared_ptr<Context> ContextPtr;
 
@@ -1000,6 +1013,7 @@ __forceinline void profileNode ( SimNode * node ) {
                 auto RE = context.abiResult();
                 context.stopFlags = 0;
                 for ( uint32_t i=0, is=totalFinal; i!=is; ++i ) {
+                    DAS_KEEPALIVE_LOOP(&context);
                     finalList[i]->eval(context);
                 }
                 context.stopFlags = SF;
@@ -1013,6 +1027,7 @@ __forceinline void profileNode ( SimNode * node ) {
                 auto RE = context.abiResult();
                 context.stopFlags = 0;
                 for ( uint32_t i=0, is=totalFinal; i!=is; ++i ) {
+                    DAS_KEEPALIVE_LOOP(&context);
                     DAS_SINGLE_STEP(context,finalList[i]->debugInfo,false);
                     finalList[i]->eval(context);
                 }
