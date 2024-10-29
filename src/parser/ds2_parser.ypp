@@ -1274,6 +1274,7 @@ name_in_namespace
             delete $name;
             $$ = $namespace;
         }
+    |   COLCOL NAME[name]                      { *$name = "::" + *$name; $$ = $name; }
     ;
 
 expression_delete

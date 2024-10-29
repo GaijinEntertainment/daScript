@@ -8103,6 +8103,157 @@ State 457
     '('       [reduce using rule 359 (expr)]
     $default  reduce using rule 359 (expr)
 
+    shift/reduce conflict on token '(':
+      359 expr: name_in_namespace .
+      333 expr_named_call: name_in_namespace . '(' '[' make_struct_fields ']' ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' '[' make_struct_fields ']' ')' expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                  $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                       "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                                               expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 434: expr_named_call
+                                                                                                                                                                                                                                                     `-> 333: name_in_namespace . '(' '[' make_struct_fields ']' ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' expr_list optional_comma ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                     "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                            expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                                    `-> 215: expr_assign                                        "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                             `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                           `-> 398: '(' expr_list optional_comma ')'
+                                                                                                                                                                                                                                                     `-> 359: name_in_namespace .
+
+    shift/reduce conflict on token '(':
+      359 expr: name_in_namespace .
+      334 expr_named_call: name_in_namespace . '(' expr_list ',' '[' make_struct_fields ']' ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' expr_list ',' '[' make_struct_fields ']' ')' expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                     "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                                                             expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 434: expr_named_call
+                                                                                                                                                                                                                                                     `-> 334: name_in_namespace . '(' expr_list ',' '[' make_struct_fields ']' ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' expr_list optional_comma ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                     "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                            expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                                    `-> 215: expr_assign                                        "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                             `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                           `-> 398: '(' expr_list optional_comma ')'
+                                                                                                                                                                                                                                                     `-> 359: name_in_namespace .
+
+    shift/reduce conflict on token '(':
+      359 expr: name_in_namespace .
+      353 expr_call: name_in_namespace . '(' ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' ')' expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                       $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                            "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                    expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 406: expr_call
+                                                                                                                                                                                                                                                     `-> 353: name_in_namespace . '(' ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' expr_list optional_comma ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                     "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                            expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                                    `-> 215: expr_assign                                        "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                             `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                           `-> 398: '(' expr_list optional_comma ')'
+                                                                                                                                                                                                                                                     `-> 359: name_in_namespace .
+
+    shift/reduce conflict on token '(':
+      359 expr: name_in_namespace .
+      354 expr_call: name_in_namespace . '(' make_struct_single ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' make_struct_single ')' expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                          $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                               "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                                       expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 406: expr_call
+                                                                                                                                                                                                                                                     `-> 354: name_in_namespace . '(' make_struct_single ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' expr_list optional_comma ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                     "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                            expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                                    `-> 215: expr_assign                                        "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                             `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                           `-> 398: '(' expr_list optional_comma ')'
+                                                                                                                                                                                                                                                     `-> 359: name_in_namespace .
+
+    shift/reduce conflict on token '(':
+      359 expr: name_in_namespace .
+      355 expr_call: name_in_namespace . '(' expr_list ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' expr_list ')' expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                 $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                      "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                              expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 406: expr_call
+                                                                                                                                                                                                                                                     `-> 355: name_in_namespace . '(' expr_list ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' name_in_namespace . '(' expr_list optional_comma ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                     "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                            expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                                    `-> 215: expr_assign                                        "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                             `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                           `-> 398: '(' expr_list optional_comma ')'
+                                                                                                                                                                                                                                                     `-> 359: name_in_namespace .
+
+
 
 State 458
 
@@ -8142,6 +8293,32 @@ State 462
     $default  reduce using rule 112 (optional_annotation_list)
 
     optional_annotation_list  go to state 636
+
+    shift/reduce conflict on token '[':
+      112 optional_annotation_list: %empty .
+      113 optional_annotation_list: . '[' annotation_list ']'
+      First example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' block_or_lambda . '[' annotation_list ']' optional_capture_list optional_function_argument_list optional_function_type block_or_simple_block ')' ':' type_declaration_no_options "end of expression" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                              $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                                      ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr_full_block                                                                                                                                                ')'
+                                                                                                                                                             `-> 304: block_or_lambda optional_annotation_list           optional_capture_list optional_function_argument_list optional_function_type block_or_simple_block
+                                                                                                                                                                                      `-> 113: . '[' annotation_list ']'
+      Second example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' block_or_lambda . '[' '[' capture_list ']' ']' optional_function_argument_list optional_function_type block_or_simple_block ')' ':' type_declaration_no_options "end of expression" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                             $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                                                     ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                                                          ')'
+                                                                                                                                                             `-> 435: expr_full_block
+                                                                                                                                                                      `-> 304: block_or_lambda optional_annotation_list optional_capture_list                 optional_function_argument_list optional_function_type block_or_simple_block
+                                                                                                                                                                                               `-> 112: %empty .        `-> 303: '[' '[' capture_list ']' ']'
+
 
 
 State 463
@@ -8202,6 +8379,133 @@ State 469
 
     block_or_lambda                go to state 639
     expr_full_block_assumed_piped  go to state 640
+
+    shift/reduce conflict on token '$':
+      406 expr: expr_call .
+      293 block_or_lambda: . '$'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr_call . '$' optional_annotation_list optional_capture_list optional_function_argument_list optional_function_type expression_block expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                                                                     $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                                                                                          "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                                                                                                                                                  expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 439: expr_call_pipe
+                                                                                                                                                                                                                                                     `-> 213: expr_call expr_full_block_assumed_piped
+                                                                                                                                                                                                                                                                        `-> 305: block_or_lambda optional_annotation_list optional_capture_list optional_function_argument_list optional_function_type expression_block
+                                                                                                                                                                                                                                                                                 `-> 293: . '$'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr_call . '$' optional_annotation_list optional_capture_list optional_function_argument_list optional_function_type block_or_simple_block "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                                                                                                            $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                                                                                                                                 "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                    expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                            `-> 215: expr_assign                                                                                                                                                            "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                     `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                   `-> 435: expr_full_block
+                                                                                                                                                                                                                                                     `-> 406: expr_call .                            `-> 304: block_or_lambda optional_annotation_list optional_capture_list optional_function_argument_list optional_function_type block_or_simple_block
+                                                                                                                                                                                                                                                                                                              `-> 293: '$'
+
+    shift/reduce conflict on token '@':
+      406 expr: expr_call .
+      294 block_or_lambda: . '@'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr_call . '@' optional_annotation_list optional_capture_list optional_function_argument_list optional_function_type expression_block expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                                                                     $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                                                                                          "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                                                                                                                                                  expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 439: expr_call_pipe
+                                                                                                                                                                                                                                                     `-> 213: expr_call expr_full_block_assumed_piped
+                                                                                                                                                                                                                                                                        `-> 305: block_or_lambda optional_annotation_list optional_capture_list optional_function_argument_list optional_function_type expression_block
+                                                                                                                                                                                                                                                                                 `-> 294: . '@'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr_call . '@' '@' "$c" '(' expr ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                          $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                               "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                    expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                            `-> 215: expr_assign                                          "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                     `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                   `-> 367: expr_mtag
+                                                                                                                                                                                                                                                     `-> 406: expr_call .                            `-> 455: '@' '@' "$c" '(' expr ')'
+
+    shift/reduce conflict on token '@':
+      406 expr: expr_call .
+      295 block_or_lambda: . '@' '@'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr_call . '@' '@' optional_annotation_list optional_capture_list optional_function_argument_list optional_function_type expression_block expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                                                                        $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                                                                                             "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                                                                                                                                                     expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 439: expr_call_pipe
+                                                                                                                                                                                                                                                     `-> 213: expr_call expr_full_block_assumed_piped
+                                                                                                                                                                                                                                                                        `-> 305: block_or_lambda    optional_annotation_list optional_capture_list optional_function_argument_list optional_function_type expression_block
+                                                                                                                                                                                                                                                                                 `-> 295: . '@' '@'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr_call . '@' '@' "$c" '(' expr ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                          $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                               "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                    expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                            `-> 215: expr_assign                                          "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                     `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                   `-> 367: expr_mtag
+                                                                                                                                                                                                                                                     `-> 406: expr_call .                            `-> 455: '@' '@' "$c" '(' expr ')'
+
+    shift/reduce conflict on token "begin of code block":
+      406 expr: expr_call .
+      306 expr_full_block_assumed_piped: . "begin of code block" expressions "end of code block"
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "while" expr_call . "begin of code block" expressions "end of code block" expression_block "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                   $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                        "end of code block"
+                                                                                                                                                                                  `-> 233: expressions expression_while_loop
+                                                                                                                                                                                                       `-> 72: "while" expr                                                                                         expression_block
+                                                                                                                                                                                                                       `-> 439: expr_call_pipe
+                                                                                                                                                                                                                                `-> 213: expr_call expr_full_block_assumed_piped
+                                                                                                                                                                                                                                                   `-> 306: . "begin of code block" expressions "end of code block"
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "while" expr_call . "begin of code block" expressions "end of code block" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                  $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                       "end of code block"
+                                                                                                                                                                                  `-> 233: expressions expression_any
+                                                                                                                                                                                                       `-> 218: expression_while_loop
+                                                                                                                                                                                                                `-> 72: "while" expr                 expression_block
+                                                                                                                                                                                                                                `-> 406: expr_call . `-> 211: "begin of code block" expressions "end of code block"
+
 
 
 State 470
@@ -10992,6 +11296,38 @@ State 588
     '('       [reduce using rule 246 (expr_new)]
     $default  reduce using rule 246 (expr_new)
 
+    shift/reduce conflict on token '(':
+      246 expr_new: "new" structure_type_declaration .
+      247 expr_new: "new" structure_type_declaration . '(' optional_expr_list ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' "new" structure_type_declaration . '(' optional_expr_list ')' expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                         $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                              "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                                                      expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 432: expr_new
+                                                                                                                                                                                                                                                     `-> 247: "new" structure_type_declaration . '(' optional_expr_list ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' "new" structure_type_declaration . '(' expr_list optional_comma ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                        $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                                             "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                                    expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                                                            `-> 215: expr_assign                                        "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                                                     `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                                                   `-> 398: '(' expr_list optional_comma ')'
+                                                                                                                                                                                                                                                     `-> 432: expr_new
+                                                                                                                                                                                                                                                              `-> 246: "new" structure_type_declaration .
+
+
 
 State 589
 
@@ -13525,6 +13861,35 @@ State 639
     $default  reduce using rule 112 (optional_annotation_list)
 
     optional_annotation_list  go to state 837
+
+    shift/reduce conflict on token '[':
+      112 optional_annotation_list: %empty .
+      113 optional_annotation_list: . '[' annotation_list ']'
+      First example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' block_or_lambda . '[' annotation_list ']' optional_capture_list optional_function_argument_list optional_function_type expression_block expr_full_block_assumed_piped ')' ':' type_declaration_no_options "end of expression" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                                         $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                                                                                 ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                                                                                      ')'
+                                                                                                                                                             `-> 439: expr_call_pipe
+                                                                                                                                                                      `-> 213: expr_full_block_assumed_piped                                                                                                                             expr_full_block_assumed_piped
+                                                                                                                                                                               `-> 305: block_or_lambda optional_annotation_list           optional_capture_list optional_function_argument_list optional_function_type expression_block
+                                                                                                                                                                                                        `-> 113: . '[' annotation_list ']'
+      Second example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' expr_call block_or_lambda . '[' '[' capture_list ']' ']' optional_function_argument_list optional_function_type expression_block ')' ':' type_declaration_no_options "end of expression" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                           $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                                                                   ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                                                                        ')'
+                                                                                                                                                             `-> 439: expr_call_pipe
+                                                                                                                                                                      `-> 213: expr_call expr_full_block_assumed_piped
+                                                                                                                                                                                         `-> 305: block_or_lambda optional_annotation_list optional_capture_list                 optional_function_argument_list optional_function_type expression_block
+                                                                                                                                                                                                                  `-> 112: %empty .        `-> 303: '[' '[' capture_list ']' ']'
+
 
 
 State 640
@@ -22997,6 +23362,63 @@ State 811
     STRING_CHARACTER_ESC  [reduce using rule 29 (string_builder_body)]
     $default              reduce using rule 29 (string_builder_body)
 
+    shift/reduce conflict on token STRING_CHARACTER:
+       29 string_builder_body: string_builder_body character_sequence .
+       25 character_sequence: character_sequence . STRING_CHARACTER
+      First example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' "start of the string" string_builder_body character_sequence . STRING_CHARACTER "end of the string" ')' ':' type_declaration_no_options "end of expression" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                    $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                            ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                 ')'
+                                                                                                                                                             `-> 362: string_builder
+                                                                                                                                                                      `-> 31: "start of the string" string_builder_body                                                       "end of the string"
+                                                                                                                                                                                                    `-> 29: string_builder_body character_sequence
+                                                                                                                                                                                                                                `-> 25: character_sequence . STRING_CHARACTER
+      Second example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' "start of the string" string_builder_body character_sequence . STRING_CHARACTER "end of the string" ')' ':' type_declaration_no_options "end of expression" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                            $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                    ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                         ')'
+                                                                                                                                                             `-> 362: string_builder
+                                                                                                                                                                      `-> 31: "start of the string" string_builder_body                                                               "end of the string"
+                                                                                                                                                                                                    `-> 29: string_builder_body                              character_sequence
+                                                                                                                                                                                                            `-> 29: string_builder_body character_sequence . `-> 23: STRING_CHARACTER
+
+    shift/reduce conflict on token STRING_CHARACTER_ESC:
+       29 string_builder_body: string_builder_body character_sequence .
+       26 character_sequence: character_sequence . STRING_CHARACTER_ESC
+      First example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' "start of the string" string_builder_body character_sequence . STRING_CHARACTER_ESC "end of the string" ')' ':' type_declaration_no_options "end of expression" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                        $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                     ')'
+                                                                                                                                                             `-> 362: string_builder
+                                                                                                                                                                      `-> 31: "start of the string" string_builder_body                                                           "end of the string"
+                                                                                                                                                                                                    `-> 29: string_builder_body character_sequence
+                                                                                                                                                                                                                                `-> 26: character_sequence . STRING_CHARACTER_ESC
+      Second example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' "start of the string" string_builder_body character_sequence . STRING_CHARACTER_ESC "end of the string" ')' ':' type_declaration_no_options "end of expression" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                        ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                             ')'
+                                                                                                                                                             `-> 362: string_builder
+                                                                                                                                                                      `-> 31: "start of the string" string_builder_body                                                                   "end of the string"
+                                                                                                                                                                                                    `-> 29: string_builder_body                              character_sequence
+                                                                                                                                                                                                            `-> 29: string_builder_body character_sequence . `-> 24: STRING_CHARACTER_ESC
+
+
 
 State 812
 
@@ -26405,6 +26827,69 @@ State 881
 
     '('       [reduce using rule 346 (expr_field)]
     $default  reduce using rule 346 (expr_field)
+
+    shift/reduce conflict on token '(':
+      346 expr_field: expr '.' "name" .
+      348 expr_field: expr '.' "name" . '(' ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr '.' "name" . '(' ')' expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                     $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                          "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                  expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 366: expr_field
+                                                                                                                                                                                                                                                     `-> 348: expr '.' "name" . '(' ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr '.' "name" . '(' expr_list optional_comma ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                       $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                            "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                   expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                                           `-> 215: expr_assign                                        "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                                    `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                                  `-> 398: '(' expr_list optional_comma ')'
+                                                                                                                                                                                                                                                     `-> 366: expr_field
+                                                                                                                                                                                                                                                              `-> 346: expr '.' "name" .
+
+    shift/reduce conflict on token '(':
+      346 expr_field: expr '.' "name" .
+      349 expr_field: expr '.' "name" . '(' expr_list ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr '.' "name" . '(' expr_list ')' expression_any "end of code block" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                               $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                    "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                            expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_with_alias
+                                                                                                                                                                                                                `-> 74: "assume" "name" '=' expr
+                                                                                                                                                                                                                                            `-> 366: expr_field
+                                                                                                                                                                                                                                                     `-> 349: expr '.' "name" . '(' expr_list ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@2 function_declaration_header "begin of code block" expressions "assume" "name" '=' expr '.' "name" . '(' expr_list optional_comma ')' "end of expression" "end of code block" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                       $end
+               `-> 6: program global_function_declaration
+                              `-> 204: optional_annotation_list "def" function_declaration
+                                                                      `-> 210: optional_public_or_private_function $@2 function_declaration_header expression_block
+                                                                                                                                                   `-> 211: "begin of code block" expressions                                                                                                                                                                            "end of code block"
+                                                                                                                                                                                  `-> 233: expressions                                                                                   expression_any
+                                                                                                                                                                                           `-> 233: expressions expression_any                                                           `-> 215: expr_assign                                        "end of expression"
+                                                                                                                                                                                                                `-> 221: expression_with_alias                                                    `-> 314: expr
+                                                                                                                                                                                                                         `-> 74: "assume" "name" '=' expr                                                  `-> 398: '(' expr_list optional_comma ')'
+                                                                                                                                                                                                                                                     `-> 366: expr_field
+                                                                                                                                                                                                                                                              `-> 346: expr '.' "name" .
+
 
 
 State 882
