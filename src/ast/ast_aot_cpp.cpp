@@ -3970,6 +3970,19 @@ namespace das {
         gen.run();
     }
 
+    void Program::cacheAotHash() {
+        for (auto & pm : library.modules) {
+            pm->structures.foreach([&](auto ps){
+                if ( !ps->ownSemanticHash ) {
+                    HashBuilder hb;
+                    das_set<Structure *> dep;
+                    das_set<Annotation *> adep;
+                    ps->ownSemanticHash = ps->getSemanticHash(hb,dep,adep);
+                }
+            });
+        }
+    }
+
     void Program::aotCpp ( Context & context, TextWriter & logs ) {
         // run no-aot marker
         NoAotMarker marker;
@@ -3978,6 +3991,7 @@ namespace das {
         PrologueMarker pmarker;
         visit(pmarker);
         // compute semantic hash for each used function
+        cacheAotHash(); // first we cache hashes for all structures
         int fni = 0;
         for (auto & pm : library.modules) {
             pm->functions.foreach([&](auto pfun){

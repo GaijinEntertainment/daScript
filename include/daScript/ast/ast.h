@@ -272,6 +272,7 @@ namespace das
         string getMangledName() const;
         bool hasAnyInitializers() const;
         void serialize( AstSerializer & ser );
+        uint64_t getSemanticHash(HashBuilder & hb,das_set<Structure *> & dep, das_set<Annotation *> & adep) const;
     public:
         string                          name;
         vector<FieldDeclaration>        fields;
@@ -280,6 +281,7 @@ namespace das
         Module *                        module = nullptr;
         Structure *                     parent = nullptr;
         AnnotationList                  annotations;
+        uint64_t                        ownSemanticHash = 0;
         union {
             struct {
                 bool    isClass : 1;
@@ -1563,6 +1565,7 @@ namespace das
         void visitModules(Visitor & vis, bool visitGenerics = false);
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
+        void cacheAotHash();
         void aotCpp ( Context & context, TextWriter & logs );
         void writeStandaloneContext ( TextWriter & logs );
         void writeStandaloneContextMethods ( TextWriter & logs );

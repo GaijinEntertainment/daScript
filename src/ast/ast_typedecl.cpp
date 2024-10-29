@@ -393,12 +393,7 @@ namespace das
         if ( structType ) {
             if ( dep.find(structType) == dep.end() ) {
                 dep.insert(structType);
-                hb.updateString(structType->getMangledName());
-                hb.update(structType->fields.size());
-                for ( auto & fld : structType->fields ) {
-                    hb.updateString(fld.name);
-                    hb.update(fld.type->getSemanticHash(hb, dep, adep));
-                }
+                structType->getSemanticHash(hb, dep, adep);
             }
         } else if ( enumType ) {
             hb.updateString(enumType->getMangledName());
@@ -412,27 +407,21 @@ namespace das
                 annotation->getSemanticHash(hb, dep, adep);
             }
         }
-        hb.update(firstType != nullptr);
         if ( firstType ) {
             firstType->getSemanticHash(hb, dep, adep);
         }
-        hb.update(secondType != nullptr);
         if ( secondType ) {
             secondType->getSemanticHash(hb, dep, adep);
         }
-        hb.update(argTypes.size());
         for ( auto & argT : argTypes ) {
             argT->getSemanticHash(hb, dep, adep);
         }
-        hb.update(argNames.size());
         for ( auto & argN : argNames ) {
             hb.updateString(argN);
         }
-        hb.update(dim.size());
         for ( auto & d : dim ) {
             hb.update(d);
         }
-        hb.update(dimExpr.size());
         for ( auto & de : dimExpr ) {
             hb.update(de != nullptr);
             if ( de ) {
