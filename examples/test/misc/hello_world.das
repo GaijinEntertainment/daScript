@@ -296,6 +296,20 @@ def test_if_then_else ( cond1,cond2:bool ) {
 	}
 }
 
+///////////
+// for loop
+
+[export]
+def test_for ( i : int ) {
+	for ( x in range(1,i) ) {
+		debug(x);
+	}
+	for ( x,y in range(1,i),count() ) {
+		debug(x);
+		debug(y);
+	}
+}
+
 /////////
 // piping
 
