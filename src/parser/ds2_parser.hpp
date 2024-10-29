@@ -232,63 +232,58 @@ extern int das2_yydebug;
     QDOT = 382,                    /* "?."  */
     QBRA = 383,                    /* "?["  */
     LPIPE = 384,                   /* "<|"  */
-    LBPIPE = 385,                  /* " <|"  */
-    LLPIPE = 386,                  /* "$ <|"  */
-    LAPIPE = 387,                  /* "@ <|"  */
-    LFPIPE = 388,                  /* "@@ <|"  */
-    RPIPE = 389,                   /* "|>"  */
-    CLONEEQU = 390,                /* ":="  */
-    ROTL = 391,                    /* "<<<"  */
-    ROTR = 392,                    /* ">>>"  */
-    ROTLEQU = 393,                 /* "<<<="  */
-    ROTREQU = 394,                 /* ">>>="  */
-    MAPTO = 395,                   /* "=>"  */
-    COLCOL = 396,                  /* "::"  */
-    ANDAND = 397,                  /* "&&"  */
-    OROR = 398,                    /* "||"  */
-    XORXOR = 399,                  /* "^^"  */
-    ANDANDEQU = 400,               /* "&&="  */
-    OROREQU = 401,                 /* "||="  */
-    XORXOREQU = 402,               /* "^^="  */
-    DOTDOT = 403,                  /* ".."  */
-    MTAG_E = 404,                  /* "$$"  */
-    MTAG_I = 405,                  /* "$i"  */
-    MTAG_V = 406,                  /* "$v"  */
-    MTAG_B = 407,                  /* "$b"  */
-    MTAG_A = 408,                  /* "$a"  */
-    MTAG_T = 409,                  /* "$t"  */
-    MTAG_C = 410,                  /* "$c"  */
-    MTAG_F = 411,                  /* "$f"  */
-    MTAG_DOTDOTDOT = 412,          /* "..."  */
-    INTEGER = 413,                 /* "integer constant"  */
-    LONG_INTEGER = 414,            /* "long integer constant"  */
-    UNSIGNED_INTEGER = 415,        /* "unsigned integer constant"  */
-    UNSIGNED_LONG_INTEGER = 416,   /* "unsigned long integer constant"  */
-    UNSIGNED_INT8 = 417,           /* "unsigned int8 constant"  */
-    FLOAT = 418,                   /* "floating point constant"  */
-    DOUBLE = 419,                  /* "double constant"  */
-    NAME = 420,                    /* "name"  */
-    KEYWORD = 421,                 /* "keyword"  */
-    TYPE_FUNCTION = 422,           /* "type function"  */
-    BEGIN_STRING = 423,            /* "start of the string"  */
-    STRING_CHARACTER = 424,        /* STRING_CHARACTER  */
-    STRING_CHARACTER_ESC = 425,    /* STRING_CHARACTER_ESC  */
-    END_STRING = 426,              /* "end of the string"  */
-    BEGIN_STRING_EXPR = 427,       /* "{"  */
-    END_STRING_EXPR = 428,         /* "}"  */
-    END_OF_READ = 429,             /* "end of failed eader macro"  */
-    SEMICOLON_CUR_CUR = 430,       /* ";}}"  */
-    SEMICOLON_CUR_SQR = 431,       /* ";}]"  */
-    SEMICOLON_SQR_SQR = 432,       /* ";]]"  */
-    COMMA_SQR_SQR = 433,           /* ",]]"  */
-    COMMA_CUR_SQR = 434,           /* ",}]"  */
-    UNARY_MINUS = 435,             /* UNARY_MINUS  */
-    UNARY_PLUS = 436,              /* UNARY_PLUS  */
-    PRE_INC = 437,                 /* PRE_INC  */
-    PRE_DEC = 438,                 /* PRE_DEC  */
-    POST_INC = 439,                /* POST_INC  */
-    POST_DEC = 440,                /* POST_DEC  */
-    DEREF = 441                    /* DEREF  */
+    RPIPE = 385,                   /* "|>"  */
+    CLONEEQU = 386,                /* ":="  */
+    ROTL = 387,                    /* "<<<"  */
+    ROTR = 388,                    /* ">>>"  */
+    ROTLEQU = 389,                 /* "<<<="  */
+    ROTREQU = 390,                 /* ">>>="  */
+    MAPTO = 391,                   /* "=>"  */
+    COLCOL = 392,                  /* "::"  */
+    ANDAND = 393,                  /* "&&"  */
+    OROR = 394,                    /* "||"  */
+    XORXOR = 395,                  /* "^^"  */
+    ANDANDEQU = 396,               /* "&&="  */
+    OROREQU = 397,                 /* "||="  */
+    XORXOREQU = 398,               /* "^^="  */
+    DOTDOT = 399,                  /* ".."  */
+    MTAG_E = 400,                  /* "$$"  */
+    MTAG_I = 401,                  /* "$i"  */
+    MTAG_V = 402,                  /* "$v"  */
+    MTAG_B = 403,                  /* "$b"  */
+    MTAG_A = 404,                  /* "$a"  */
+    MTAG_T = 405,                  /* "$t"  */
+    MTAG_C = 406,                  /* "$c"  */
+    MTAG_F = 407,                  /* "$f"  */
+    MTAG_DOTDOTDOT = 408,          /* "..."  */
+    INTEGER = 409,                 /* "integer constant"  */
+    LONG_INTEGER = 410,            /* "long integer constant"  */
+    UNSIGNED_INTEGER = 411,        /* "unsigned integer constant"  */
+    UNSIGNED_LONG_INTEGER = 412,   /* "unsigned long integer constant"  */
+    UNSIGNED_INT8 = 413,           /* "unsigned int8 constant"  */
+    FLOAT = 414,                   /* "floating point constant"  */
+    DOUBLE = 415,                  /* "double constant"  */
+    NAME = 416,                    /* "name"  */
+    BEGIN_STRING = 417,            /* "start of the string"  */
+    STRING_CHARACTER = 418,        /* STRING_CHARACTER  */
+    STRING_CHARACTER_ESC = 419,    /* STRING_CHARACTER_ESC  */
+    END_STRING = 420,              /* "end of the string"  */
+    BEGIN_STRING_EXPR = 421,       /* "{"  */
+    END_STRING_EXPR = 422,         /* "}"  */
+    END_OF_READ = 423,             /* "end of failed eader macro"  */
+    SEMICOLON_CUR_CUR = 424,       /* ";}}"  */
+    SEMICOLON_CUR_SQR = 425,       /* ";}]"  */
+    SEMICOLON_SQR_SQR = 426,       /* ";]]"  */
+    COMMA_SQR_SQR = 427,           /* ",]]"  */
+    COMMA_CUR_SQR = 428,           /* ",}]"  */
+    UNARY_MINUS = 429,             /* UNARY_MINUS  */
+    UNARY_PLUS = 430,              /* UNARY_PLUS  */
+    PRE_INC = 431,                 /* PRE_INC  */
+    PRE_DEC = 432,                 /* PRE_DEC  */
+    LLPIPE = 433,                  /* LLPIPE  */
+    POST_INC = 434,                /* POST_INC  */
+    POST_DEC = 435,                /* POST_DEC  */
+    DEREF = 436                    /* DEREF  */
   };
   typedef enum das2_yytokentype das2_yytoken_kind_t;
 #endif
