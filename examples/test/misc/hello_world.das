@@ -11,6 +11,11 @@
 // note - this works, but commented out for now, becasue of WARNING: program is setup as both module, and endpoint
 // module hello_world;	// module name
 
+////////////////////
+// alias declaration
+
+typedef IntArray = array<int>;	// alias for array of integers
+
 /////////////////////
 // struct declaration
 
