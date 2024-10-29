@@ -286,7 +286,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"expect"                                        return DAS_EXPECT;
 <normal>"table"                                         return DAS_TABLE;
 <normal>"array"                                         return DAS_ARRAY;
-<normal>"dim"                                           return DAS_DIM;
+<normal>"fixed_array"                                   return DAS_FIXED_ARRAY;
 <normal>"default"                                       return DAS_DEFAULT;
 <normal>"iterator"                                      return DAS_ITERATOR;
 <normal>"in"                                            return DAS_IN;

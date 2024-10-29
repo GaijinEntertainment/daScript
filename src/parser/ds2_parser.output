@@ -1122,13 +1122,13 @@ Grammar
   798 $@94: %empty
 
   799 make_dim_decl: "array" '<' $@93 type_declaration_no_options '>' $@94 '(' expr_list optional_comma ')'
-  800              | "dim" '(' expr_list optional_comma ')'
+  800              | "fixed_array" '(' expr_list optional_comma ')'
 
   801 $@95: %empty
 
   802 $@96: %empty
 
-  803 make_dim_decl: "dim" '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')'
+  803 make_dim_decl: "fixed_array" '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')'
 
   804 expr_map_tuple_list: make_map_tuple
   805                    | expr_map_tuple_list ',' make_map_tuple
@@ -1244,7 +1244,7 @@ Terminals, with rules where they appear
     "unsafe" (319) 74
     "inscope" (320) 292
     "static" (321) 516
-    "dim" (322) 800 803
+    "fixed_array" (322) 800 803
     "default" (323) 779
     "uninitialized" (324) 767
     "bool" (325) 182 619
@@ -5501,7 +5501,7 @@ State 358
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -5706,7 +5706,7 @@ State 368
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -5891,7 +5891,7 @@ State 378
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -6359,7 +6359,7 @@ State 400
     "label"                           shift, and go to state 551
     "goto"                            shift, and go to state 552
     "unsafe"                          shift, and go to state 553
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -6565,7 +6565,7 @@ State 408
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -6961,7 +6961,7 @@ State 421
     "class"                shift, and go to state 418
     "array"                shift, and go to state 424
     "table"                shift, and go to state 426
-    "dim"                  shift, and go to state 432
+    "fixed_array"          shift, and go to state 432
     "default"              shift, and go to state 433
     "tuple"                shift, and go to state 435
     "variant"              shift, and go to state 436
@@ -7067,8 +7067,8 @@ State 431
 
 State 432
 
-  800 make_dim_decl: "dim" . '(' expr_list optional_comma ')'
-  803              | "dim" . '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')'
+  800 make_dim_decl: "fixed_array" . '(' expr_list optional_comma ')'
+  803              | "fixed_array" . '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')'
 
     '<'  shift, and go to state 627
     '('  shift, and go to state 628
@@ -7131,7 +7131,7 @@ State 438
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -7242,7 +7242,7 @@ State 439
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -7477,7 +7477,7 @@ State 457
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -7590,7 +7590,7 @@ State 458
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -7701,7 +7701,7 @@ State 459
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -7812,7 +7812,7 @@ State 460
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -7923,7 +7923,7 @@ State 461
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -8034,7 +8034,7 @@ State 462
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -8149,7 +8149,7 @@ State 463
     "iterator"                        shift, and go to state 655
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -8261,7 +8261,7 @@ State 464
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -9188,7 +9188,7 @@ State 506
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -9452,7 +9452,7 @@ State 515
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -9710,7 +9710,7 @@ State 531
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -9885,7 +9885,7 @@ State 539
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -10024,7 +10024,7 @@ State 543
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -10163,7 +10163,7 @@ State 546
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
     "explicit"                        shift, and go to state 743
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -10274,7 +10274,7 @@ State 547
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -10415,7 +10415,7 @@ State 552
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
     "label"                           shift, and go to state 749
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -10538,7 +10538,7 @@ State 554
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -10696,7 +10696,7 @@ State 558
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -10839,7 +10839,7 @@ State 563
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -11547,7 +11547,7 @@ State 602
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -11808,7 +11808,7 @@ State 619
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -11977,7 +11977,7 @@ State 621
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -12090,7 +12090,7 @@ State 622
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -12219,7 +12219,7 @@ State 625
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -12322,7 +12322,7 @@ State 626
 
 State 627
 
-  803 make_dim_decl: "dim" '<' . $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')'
+  803 make_dim_decl: "fixed_array" '<' . $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')'
 
     $default  reduce using rule 801 ($@95)
 
@@ -12331,7 +12331,7 @@ State 627
 
 State 628
 
-  800 make_dim_decl: "dim" '(' . expr_list optional_comma ')'
+  800 make_dim_decl: "fixed_array" '(' . expr_list optional_comma ')'
 
     "struct"                          shift, and go to state 417
     "class"                           shift, and go to state 418
@@ -12348,7 +12348,7 @@ State 628
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -12478,7 +12478,7 @@ State 631
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -12810,7 +12810,7 @@ State 636
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -12921,7 +12921,7 @@ State 637
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -13032,7 +13032,7 @@ State 638
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -13143,7 +13143,7 @@ State 639
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -13254,7 +13254,7 @@ State 640
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -13366,7 +13366,7 @@ State 641
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -14185,7 +14185,7 @@ State 660
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -14394,7 +14394,7 @@ State 664
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -14505,7 +14505,7 @@ State 665
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -14630,7 +14630,7 @@ State 668
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -14741,7 +14741,7 @@ State 669
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -14852,7 +14852,7 @@ State 670
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -14963,7 +14963,7 @@ State 671
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15082,7 +15082,7 @@ State 673
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15202,7 +15202,7 @@ State 675
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15313,7 +15313,7 @@ State 676
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15425,7 +15425,7 @@ State 677
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15536,7 +15536,7 @@ State 678
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15647,7 +15647,7 @@ State 679
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15758,7 +15758,7 @@ State 680
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15869,7 +15869,7 @@ State 681
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -15980,7 +15980,7 @@ State 682
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16091,7 +16091,7 @@ State 683
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16207,7 +16207,7 @@ State 684
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16318,7 +16318,7 @@ State 685
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16429,7 +16429,7 @@ State 686
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16540,7 +16540,7 @@ State 687
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16651,7 +16651,7 @@ State 688
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16762,7 +16762,7 @@ State 689
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16873,7 +16873,7 @@ State 690
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -16984,7 +16984,7 @@ State 691
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -17095,7 +17095,7 @@ State 692
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -17206,7 +17206,7 @@ State 693
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -17317,7 +17317,7 @@ State 694
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -17454,7 +17454,7 @@ State 696
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -17573,7 +17573,7 @@ State 698
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -18442,7 +18442,7 @@ State 737
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -18736,7 +18736,7 @@ State 743
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -19187,7 +19187,7 @@ State 752
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -19731,7 +19731,7 @@ State 766
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -19938,7 +19938,7 @@ State 778
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20055,7 +20055,7 @@ State 779
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20172,7 +20172,7 @@ State 780
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20289,7 +20289,7 @@ State 781
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20406,7 +20406,7 @@ State 782
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20523,7 +20523,7 @@ State 783
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20640,7 +20640,7 @@ State 784
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20757,7 +20757,7 @@ State 785
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20874,7 +20874,7 @@ State 786
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -20991,7 +20991,7 @@ State 787
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -21108,7 +21108,7 @@ State 788
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -21224,7 +21224,7 @@ State 789
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -21336,7 +21336,7 @@ State 790
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -21453,7 +21453,7 @@ State 791
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -21570,7 +21570,7 @@ State 792
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -21687,7 +21687,7 @@ State 793
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -21804,7 +21804,7 @@ State 794
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -21921,7 +21921,7 @@ State 795
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -22044,7 +22044,7 @@ State 797
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -22226,7 +22226,7 @@ State 806
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -22760,7 +22760,7 @@ State 817
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -22877,7 +22877,7 @@ State 818
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -23540,7 +23540,7 @@ State 831
 
 State 832
 
-  803 make_dim_decl: "dim" '<' $@95 . type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')'
+  803 make_dim_decl: "fixed_array" '<' $@95 . type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')'
 
     "type"       shift, and go to state 226
     "array"      shift, and go to state 227
@@ -23597,7 +23597,7 @@ State 832
 State 833
 
   316 expr_list: expr_list . ',' expr
-  800 make_dim_decl: "dim" '(' expr_list . optional_comma ')'
+  800 make_dim_decl: "fixed_array" '(' expr_list . optional_comma ')'
 
     ','  shift, and go to state 856
 
@@ -24564,7 +24564,7 @@ State 848
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -24699,7 +24699,7 @@ State 851
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -24811,7 +24811,7 @@ State 852
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -24953,7 +24953,7 @@ State 856
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -25152,7 +25152,7 @@ State 866
     "iterator"                        shift, and go to state 655
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -27813,7 +27813,7 @@ State 914
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -27952,7 +27952,7 @@ State 918
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -28380,7 +28380,7 @@ State 940
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -28534,7 +28534,7 @@ State 946
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -28740,7 +28740,7 @@ State 953
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -28864,7 +28864,7 @@ State 955
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -28993,7 +28993,7 @@ State 958
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29104,7 +29104,7 @@ State 959
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29215,7 +29215,7 @@ State 960
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29326,7 +29326,7 @@ State 961
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29437,7 +29437,7 @@ State 962
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29548,7 +29548,7 @@ State 963
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29659,7 +29659,7 @@ State 964
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29770,7 +29770,7 @@ State 965
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29881,7 +29881,7 @@ State 966
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -29992,7 +29992,7 @@ State 967
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -30103,7 +30103,7 @@ State 968
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -30214,7 +30214,7 @@ State 969
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -30325,7 +30325,7 @@ State 970
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -30436,7 +30436,7 @@ State 971
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -30547,7 +30547,7 @@ State 972
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -30658,7 +30658,7 @@ State 973
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -30769,7 +30769,7 @@ State 974
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -30997,7 +30997,7 @@ State 978
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -34513,7 +34513,7 @@ State 1069
   693                            | type_declaration_no_options . "==" '&'
   694                            | type_declaration_no_options . '*'
   698                            | type_declaration_no_options . "??"
-  803 make_dim_decl: "dim" '<' $@95 type_declaration_no_options . '>' $@96 '(' expr_list optional_comma ')'
+  803 make_dim_decl: "fixed_array" '<' $@95 type_declaration_no_options . '>' $@96 '(' expr_list optional_comma ')'
 
     "const"     shift, and go to state 370
     "implicit"  shift, and go to state 371
@@ -34532,7 +34532,7 @@ State 1069
 
 State 1070
 
-  800 make_dim_decl: "dim" '(' expr_list optional_comma . ')'
+  800 make_dim_decl: "fixed_array" '(' expr_list optional_comma . ')'
 
     ')'  shift, and go to state 1218
 
@@ -34838,7 +34838,7 @@ State 1085
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -35065,7 +35065,7 @@ State 1089
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -35302,7 +35302,7 @@ State 1094
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -35413,7 +35413,7 @@ State 1095
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -35592,7 +35592,7 @@ State 1098
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -35703,7 +35703,7 @@ State 1099
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -35814,7 +35814,7 @@ State 1100
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -35938,7 +35938,7 @@ State 1102
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -36107,7 +36107,7 @@ State 1109
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -36227,7 +36227,7 @@ State 1111
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -36339,7 +36339,7 @@ State 1112
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -36452,7 +36452,7 @@ State 1113
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -36598,7 +36598,7 @@ State 1119
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -36823,7 +36823,7 @@ State 1123
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -36935,7 +36935,7 @@ State 1124
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -39505,7 +39505,7 @@ State 1174
     "label"                           shift, and go to state 551
     "goto"                            shift, and go to state 552
     "unsafe"                          shift, and go to state 553
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -39671,7 +39671,7 @@ State 1178
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -39792,7 +39792,7 @@ State 1180
     "addr"                            shift, and go to state 430
     "continue"                        shift, and go to state 549
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -40269,7 +40269,7 @@ State 1212
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -40399,7 +40399,7 @@ State 1216
 
 State 1217
 
-  803 make_dim_decl: "dim" '<' $@95 type_declaration_no_options '>' . $@96 '(' expr_list optional_comma ')'
+  803 make_dim_decl: "fixed_array" '<' $@95 type_declaration_no_options '>' . $@96 '(' expr_list optional_comma ')'
 
     $default  reduce using rule 802 ($@96)
 
@@ -40408,7 +40408,7 @@ State 1217
 
 State 1218
 
-  800 make_dim_decl: "dim" '(' expr_list optional_comma ')' .
+  800 make_dim_decl: "fixed_array" '(' expr_list optional_comma ')' .
 
     $default  reduce using rule 800 (make_dim_decl)
 
@@ -40475,7 +40475,7 @@ State 1224
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -40631,7 +40631,7 @@ State 1230
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -41303,7 +41303,7 @@ State 1239
     "iterator"                        shift, and go to state 655
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -41930,7 +41930,7 @@ State 1257
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -42141,7 +42141,7 @@ State 1259
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -42375,7 +42375,7 @@ State 1264
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -42532,7 +42532,7 @@ State 1271
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -42661,7 +42661,7 @@ State 1274
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -42908,7 +42908,7 @@ State 1280
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -43024,7 +43024,7 @@ State 1281
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -43394,7 +43394,7 @@ State 1302
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -43565,7 +43565,7 @@ State 1310
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -43676,7 +43676,7 @@ State 1311
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -43787,7 +43787,7 @@ State 1312
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -43881,7 +43881,7 @@ State 1312
 
 State 1313
 
-  803 make_dim_decl: "dim" '<' $@95 type_declaration_no_options '>' $@96 . '(' expr_list optional_comma ')'
+  803 make_dim_decl: "fixed_array" '<' $@95 type_declaration_no_options '>' $@96 . '(' expr_list optional_comma ')'
 
     '('  shift, and go to state 1385
 
@@ -43931,7 +43931,7 @@ State 1317
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -44059,7 +44059,7 @@ State 1320
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -44182,7 +44182,7 @@ State 1322
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -44294,7 +44294,7 @@ State 1323
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -44476,7 +44476,7 @@ State 1332
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -44587,7 +44587,7 @@ State 1333
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -44698,7 +44698,7 @@ State 1334
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -44857,7 +44857,7 @@ State 1341
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -45566,7 +45566,7 @@ State 1361
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -45678,7 +45678,7 @@ State 1362
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -46161,7 +46161,7 @@ State 1379
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -46273,7 +46273,7 @@ State 1380
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -46637,7 +46637,7 @@ State 1384
 
 State 1385
 
-  803 make_dim_decl: "dim" '<' $@95 type_declaration_no_options '>' $@96 '(' . expr_list optional_comma ')'
+  803 make_dim_decl: "fixed_array" '<' $@95 type_declaration_no_options '>' $@96 '(' . expr_list optional_comma ')'
 
     "struct"                          shift, and go to state 417
     "class"                           shift, and go to state 418
@@ -46654,7 +46654,7 @@ State 1385
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -46996,7 +46996,7 @@ State 1393
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -47233,7 +47233,7 @@ State 1397
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -47365,7 +47365,7 @@ State 1400
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -47476,7 +47476,7 @@ State 1401
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -47911,7 +47911,7 @@ State 1408
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -48339,7 +48339,7 @@ State 1422
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -48526,7 +48526,7 @@ State 1428
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -48692,7 +48692,7 @@ State 1435
 State 1436
 
   316 expr_list: expr_list . ',' expr
-  803 make_dim_decl: "dim" '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list . optional_comma ')'
+  803 make_dim_decl: "fixed_array" '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list . optional_comma ')'
 
     ','  shift, and go to state 856
 
@@ -49255,7 +49255,7 @@ State 1456
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -49657,7 +49657,7 @@ State 1467
 
 State 1468
 
-  803 make_dim_decl: "dim" '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma . ')'
+  803 make_dim_decl: "fixed_array" '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma . ')'
 
     ')'  shift, and go to state 1493
 
@@ -49714,7 +49714,7 @@ State 1473
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -49853,7 +49853,7 @@ State 1478
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -49964,7 +49964,7 @@ State 1479
     "upcast"                          shift, and go to state 429
     "addr"                            shift, and go to state 430
     "reinterpret"                     shift, and go to state 431
-    "dim"                             shift, and go to state 432
+    "fixed_array"                     shift, and go to state 432
     "default"                         shift, and go to state 433
     "bool"                            shift, and go to state 232
     "void"                            shift, and go to state 233
@@ -50248,7 +50248,7 @@ State 1492
 
 State 1493
 
-  803 make_dim_decl: "dim" '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')' .
+  803 make_dim_decl: "fixed_array" '<' $@95 type_declaration_no_options '>' $@96 '(' expr_list optional_comma ')' .
 
     $default  reduce using rule 803 (make_dim_decl)
 
