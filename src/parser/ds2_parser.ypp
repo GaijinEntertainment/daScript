@@ -2495,14 +2495,8 @@ single_alias
     }
     ;
 
-alias_list
-    :   single_alias ';'
-    |   alias_list single_alias ';'
-    ;
-
 alias_declaration
-    :   DAS_TYPEDEF '{' alias_list '}'
-    |   DAS_TYPEDEF single_alias ';'
+    :   DAS_TYPEDEF single_alias ';'
     ;
 
 optional_public_or_private_enum
