@@ -249,6 +249,91 @@ def test_comprehensions {
 	let table_comp : table<int;string> <- {for x in range(1,10); x=>"{x*x}"; where x%2==0};	// table comprehension
 }
 
+////////////////////
+// return expression
+
+[export]
+def test_regular_return ( a,b : int ) : int {
+	return a + b;
+}
+
+[export]
+def test_return_with_move_syntax ( var a : array<int> ) {
+	return <- a;
+}
+
+[export]
+def test_return_lambda ( a : int ) : lambda<(arg:int):void> {
+	return <- @ ( b : int ) {
+		debug(a+b);
+	};
+}
+
+[export]
+def test_cond_return ( cond : bool ) {
+	return 13 if (cond);
+	return 42;
+}
+
+///////////////
+// if-then-else
+
+[export]
+def test_if_then_else ( cond1,cond2:bool ) {
+	// TODO: eventually support if ( cond ) expr; and such
+	if ( cond1 ) {
+		debug(cond1);
+	}
+	if ( cond1 ) {
+		debug(cond1);
+	} else {
+		debug(cond2);
+	}
+	if ( cond1 ) {
+		debug(cond1);
+	} elif ( cond2 ) {
+		debug(cond2);
+	}
+}
+
+/////////
+// piping
+
+def take_anything ( a ) {
+	debug(a);
+}
+
+def take_any_two ( a,b ) {
+	debug(a);
+	debug(b);
+}
+
+[export]
+def test_pipes() {
+	take_anything() <| 13;		// lpipe
+	13.1 |> take_anything();	// rpipe
+	take_anything() $ {
+		print("this is block;");	// piping block
+	};
+	take_anything() $ ( a : int ) {
+		print("this is block which takes argument {a};");	// piping block
+	};
+	take_anything() {				// naked block
+		print("this is block;");
+	};
+	take_any_two(13) {				// argument and naked block
+		print("this is block;");
+	};
+	13 |> take_any_two() {			// lpipe and naked block
+		print("this is block;");
+	};
+	take_anything() @ ( a,b : int ) {
+		print("this is lambda which takes 2 arguments");
+		return 13; // and returns value
+	};
+}
+
+
 ///////
 // main
 

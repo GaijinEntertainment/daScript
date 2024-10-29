@@ -341,11 +341,6 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"float3"                                        return DAS_TFLOAT3;
 <normal>"float4"                                        return DAS_TFLOAT4;
 <normal>[_[:alpha:]][_[:alnum:]\`]* {
-    auto it = yyextra->das_keywords.find(yytext);
-    if ( it != yyextra->das_keywords.end() ) {
-        yylval_param->s = new string(it->second.keyword);
-        return it->second.is_type_function ? TYPE_FUNCTION : KEYWORD;
-    }
     yylval_param->s = new string(yytext);
     return NAME;
 }
@@ -632,11 +627,6 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\.\.\."                            return MTAG_DOTDOTDOT;
 <normal>"\.\."                              return DOTDOT;
 <normal>"\|\>"                              return RPIPE;
-<normal>\<\|[ \t\r]*\/\/.*\n {  // TODO: this CPP comment is where?
-    unput('\n');
-    das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
-    return LBPIPE;
-}
 <normal>"\<\|"                              return LPIPE;
 <normal>"\$\$"                              return MTAG_E;
 <normal>\$e([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_E;
