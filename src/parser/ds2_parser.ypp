@@ -351,6 +351,7 @@
 %type <type>            optional_enum_basic_type_declaration
 %type <pTypeDecl>       type_declaration
 %type <pTypeDecl>       type_declaration_no_options
+%type <pTypeDecl>       type_declaration_no_options_no_dim
 %type <pTypeDecl>       new_type_declaration
 %type <pTypeDecl>       auto_type_declaration
 %type <pTypeDecl>       bitfield_type_declaration
@@ -445,7 +446,6 @@
 %type <pExpression>     expression_delete
 %type <pExpression>     expression_return
 %type <pExpression>     expression_yield
-%type <pExpression>     expression_yield_no_pipe
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
 %type <pExpression>     expression_if_one_liner
@@ -800,7 +800,7 @@ expression_else_one_liner
 expression_if_one_liner
     :   expr[result]                        { $$ = $result; }
     |   expression_return[result]           { $$ = $result; }
-    |   expression_yield_no_pipe[result]    { $$ = $result; }
+    |   expression_yield[result]            { $$ = $result; }
     |   expression_break[result]            { $$ = $result; }
     |   expression_continue[result]         { $$ = $result; }
     ;
@@ -1214,12 +1214,12 @@ expression_any
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_unsafe[subexpr]          { $$ = $subexpr; }
     |   expression_with[subexpr]            { $$ = $subexpr; }
-    |   expression_with_alias[subexpr]      { $$ = $subexpr; }
+    |   expression_with_alias[subexpr] ';'  { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr] ';'       { $$ = $subexpr; }
     |   expression_continue[subexpr] ';'    { $$ = $subexpr; }
     |   expression_return[subexpr] ';'      { $$ = $subexpr; }
-    |   expression_yield[subexpr]           { $$ = $subexpr; }
+    |   expression_yield[subexpr] ';'       { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
     |   expression_label[subexpr] ';'       { $$ = $subexpr; }
@@ -1339,7 +1339,7 @@ expression_return
     }
     ;
 
-expression_yield_no_pipe
+expression_yield
     :   DAS_YIELD[loc] expr[subexpr] {
         $$ = new ExprYield(tokAt(scanner,@loc),ExpressionPtr($subexpr));
     }
@@ -1347,12 +1347,6 @@ expression_yield_no_pipe
         auto pRet = new ExprYield(tokAt(scanner,@loc),ExpressionPtr($subexpr));
         pRet->moveSemantics = true;
         $$ = pRet;
-    }
-    ;
-
-expression_yield
-    :   expression_yield_no_pipe[result] ';' {
-        $$ = $result;
     }
     ;
 
@@ -2593,18 +2587,25 @@ dim_list
         $$ = new TypeDecl(Type::autoinfer);
         appendDimExpr($$, $dimExpr);
     }
+    |   '[' ']' {
+        $$ = new TypeDecl(Type::autoinfer);
+        appendDimExpr($$, nullptr);
+    }
     |  dim_list[list] '[' expr[dimExpr] ']' {
         $$ = $list;
         appendDimExpr($$, $dimExpr);
     }
+    |  dim_list[list] '[' ']' {
+        $$ = $list;
+        appendDimExpr($$, nullptr);
+    }
     ;
 
 type_declaration_no_options
-    :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(scanner,@basicType); }
-    |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
-    |   bitfield_type_declaration[typeDecl]                 { $$ = $typeDecl; }
-    |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
-    |   type_declaration_no_options[typeDecl] dim_list[dimlist] {
+    :   type_declaration_no_options_no_dim[typeDecl] {
+        $$ = $typeDecl;
+    }
+    |   type_declaration_no_options_no_dim[typeDecl] dim_list[dimlist] {
         if ( $typeDecl->baseType==Type::typeDecl ) {
             das2_yyerror(scanner,"type declaration can`t be used as array base type",tokAt(scanner,@typeDecl),
                 CompilationError::invalid_type);
@@ -2619,12 +2620,13 @@ type_declaration_no_options
         $dimlist->dimExpr.clear();
         delete $dimlist;
     }
-    |   type_declaration_no_options[typeDecl] '[' ']' {
-        $typeDecl->dim.push_back(TypeDecl::dimAuto);
-        $typeDecl->dimExpr.push_back(nullptr);
-        $typeDecl->removeDim = false;
-        $$ = $typeDecl;
-    }
+    ;
+
+type_declaration_no_options_no_dim
+    :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(scanner,@basicType); }
+    |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
+    |   bitfield_type_declaration[typeDecl]                 { $$ = $typeDecl; }
+    |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
         $typeDecl->autoToAlias = true;
         $$ = $typeDecl;
@@ -2648,56 +2650,56 @@ type_declaration_no_options
         $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
-    |   type_declaration_no_options[typeDecl] '-' '[' ']' {
+    |   type_declaration_no_options_no_dim[typeDecl] '-' '[' ']' {
         $typeDecl->removeDim = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] DAS_EXPLICIT {
+    |   type_declaration_no_options_no_dim[typeDecl] DAS_EXPLICIT {
         $typeDecl->isExplicit = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] DAS_CONST {
+    |   type_declaration_no_options_no_dim[typeDecl] DAS_CONST {
         $typeDecl->constant = true;
         $typeDecl->removeConstant = false;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] '-' DAS_CONST {
+    |   type_declaration_no_options_no_dim[typeDecl] '-' DAS_CONST {
         $typeDecl->constant = false;
         $typeDecl->removeConstant = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] '&' {
+    |   type_declaration_no_options_no_dim[typeDecl] '&' {
         $typeDecl->ref = true;
         $typeDecl->removeRef = false;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] '-' '&' {
+    |   type_declaration_no_options_no_dim[typeDecl] '-' '&' {
         $typeDecl->ref = false;
         $typeDecl->removeRef = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] '#' {
+    |   type_declaration_no_options_no_dim[typeDecl] '#' {
         $$ = $typeDecl;
         $$->temporary = true;
     }
-    |   type_declaration_no_options[typeDecl] DAS_IMPLICIT {
+    |   type_declaration_no_options_no_dim[typeDecl] DAS_IMPLICIT {
         $$ = $typeDecl;
         $$->implicit = true;
     }
-    |   type_declaration_no_options[typeDecl] '-' '#' {
+    |   type_declaration_no_options_no_dim[typeDecl] '-' '#' {
         $typeDecl->temporary = false;
         $typeDecl->removeTemporary = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] EQUEQU DAS_CONST {
+    |   type_declaration_no_options_no_dim[typeDecl] EQUEQU DAS_CONST {
         $typeDecl->explicitConst = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] EQUEQU '&' {
+    |   type_declaration_no_options_no_dim[typeDecl] EQUEQU '&' {
         $typeDecl->explicitRef = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options[typeDecl] '*' {
+    |   type_declaration_no_options_no_dim[typeDecl] '*' {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = TypeDeclPtr($typeDecl);
@@ -2708,7 +2710,7 @@ type_declaration_no_options
         $$->smartPtr = true;
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   type_declaration_no_options[typeDecl] QQ {
+    |   type_declaration_no_options_no_dim[typeDecl] QQ {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = make_smart<TypeDecl>(Type::tPointer);
