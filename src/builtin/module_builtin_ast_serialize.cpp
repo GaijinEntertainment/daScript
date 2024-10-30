@@ -1141,8 +1141,7 @@ namespace das {
         ser << fields << fieldLookup;
         ser << parent // parent could be in the current module or in some other
                       // module
-            << flags
-            << ownSemanticHash;
+            << flags;
         serializeAnnotationList(ser, annotations);
         ptr_ref_count::serialize(ser);
     }
@@ -2194,7 +2193,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 37;
+        static constexpr uint32_t currentVersion = 36;
         return currentVersion;
     }
 
