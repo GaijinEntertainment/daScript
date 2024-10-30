@@ -516,6 +516,8 @@ namespace das {
                     program->allocateStack(logs,true,true);
                 if (!program->failed())
                     program->finalizeAnnotations();
+                if (!program->failed())
+                    program->updateSemanticHash();
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             }
             if (!program->failed()) {

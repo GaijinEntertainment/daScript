@@ -3091,6 +3091,15 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
+    void Program::updateSemanticHash() {
+        thisModule->structures.foreach([&](StructurePtr & ps){
+            HashBuilder hb;
+            das_set<Structure *> dep;
+            das_set<Annotation *> adep;
+            ps->ownSemanticHash = ps->getOwnSemanticHash(hb,dep,adep);
+        });
+   }
+
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         auto time0 = ref_time_ticks();
         isSimulating = true;

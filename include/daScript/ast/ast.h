@@ -272,6 +272,7 @@ namespace das
         string getMangledName() const;
         bool hasAnyInitializers() const;
         void serialize( AstSerializer & ser );
+        uint64_t getOwnSemanticHash(HashBuilder & hb,das_set<Structure *> & dep, das_set<Annotation *> & adep) const;
     public:
         string                          name;
         vector<FieldDeclaration>        fields;
@@ -280,6 +281,7 @@ namespace das
         Module *                        module = nullptr;
         Structure *                     parent = nullptr;
         AnnotationList                  annotations;
+        uint64_t                        ownSemanticHash = 0;
         union {
             struct {
                 bool    isClass : 1;
@@ -467,7 +469,14 @@ namespace das
             p->cppName = cppName;
             return p;
         }
-        virtual uint64_t getSemanticHash ( HashBuilder & hb, das_set<Structure *> &, das_set<Annotation *> & ) const {
+        virtual void seal( Module * m ) override {
+            Annotation::seal(m);
+            HashBuilder hb;
+            das_set<Structure *> dep;
+            das_set<Annotation *> adep;
+            ownSemanticHash = getOwnSemanticHash(hb,dep,adep);
+        }
+        virtual uint64_t getOwnSemanticHash ( HashBuilder & hb, das_set<Structure *> &, das_set<Annotation *> & ) const {
             hb.updateString(getMangledName());
             return hb.getHash();
         }
@@ -543,6 +552,7 @@ namespace das
         // new and delete, jit versions
         virtual void * jitGetNew () const { return nullptr; }
         virtual void * jitGetDelete () const { return nullptr; }
+        uint64_t ownSemanticHash = 0;
     };
 
     struct StructureAnnotation : Annotation {
@@ -1548,6 +1558,7 @@ namespace das
         void dumpSymbolUse(TextWriter & logs);
         void allocateStack(TextWriter & logs, bool permanent, bool everything);
         void deriveAliases(TextWriter & logs, bool permanent, bool everything);
+        void updateSemanticHash();
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
