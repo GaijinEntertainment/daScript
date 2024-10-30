@@ -446,7 +446,6 @@
 %type <pExpression>     expression_delete
 %type <pExpression>     expression_return
 %type <pExpression>     expression_yield
-%type <pExpression>     expression_yield_no_pipe
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
 %type <pExpression>     expression_if_one_liner
@@ -801,7 +800,7 @@ expression_else_one_liner
 expression_if_one_liner
     :   expr[result]                        { $$ = $result; }
     |   expression_return[result]           { $$ = $result; }
-    |   expression_yield_no_pipe[result]    { $$ = $result; }
+    |   expression_yield[result]            { $$ = $result; }
     |   expression_break[result]            { $$ = $result; }
     |   expression_continue[result]         { $$ = $result; }
     ;
@@ -1215,12 +1214,12 @@ expression_any
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_unsafe[subexpr]          { $$ = $subexpr; }
     |   expression_with[subexpr]            { $$ = $subexpr; }
-    |   expression_with_alias[subexpr]      { $$ = $subexpr; }
+    |   expression_with_alias[subexpr] ';'  { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
     |   expression_break[subexpr] ';'       { $$ = $subexpr; }
     |   expression_continue[subexpr] ';'    { $$ = $subexpr; }
     |   expression_return[subexpr] ';'      { $$ = $subexpr; }
-    |   expression_yield[subexpr]           { $$ = $subexpr; }
+    |   expression_yield[subexpr] ';'       { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
     |   expression_label[subexpr] ';'       { $$ = $subexpr; }
@@ -1340,7 +1339,7 @@ expression_return
     }
     ;
 
-expression_yield_no_pipe
+expression_yield
     :   DAS_YIELD[loc] expr[subexpr] {
         $$ = new ExprYield(tokAt(scanner,@loc),ExpressionPtr($subexpr));
     }
@@ -1348,12 +1347,6 @@ expression_yield_no_pipe
         auto pRet = new ExprYield(tokAt(scanner,@loc),ExpressionPtr($subexpr));
         pRet->moveSemantics = true;
         $$ = pRet;
-    }
-    ;
-
-expression_yield
-    :   expression_yield_no_pipe[result] ';' {
-        $$ = $result;
     }
     ;
 
