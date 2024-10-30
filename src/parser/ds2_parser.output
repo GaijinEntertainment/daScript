@@ -2608,6 +2608,21 @@ State 56
     "::"      [reduce using rule 239 (name_in_namespace)]
     $default  reduce using rule 239 (name_in_namespace)
 
+    shift/reduce conflict on token "::":
+      239 name_in_namespace: "name" .
+      240 name_in_namespace: "name" . "::" "name"
+      First example: "typeinfo" "name" . "::" "name" expr ')'
+      Shift derivation
+        expr_type_info
+        `-> 285: "typeinfo" name_in_namespace             expr ')'
+                            `-> 240: "name" . "::" "name"
+      Second example: "name" . "::" "name" ')'
+      Reduce derivation
+        expr_type_info
+        `-> 285: name_in_namespace "::" "name" expr            ')'
+                 `-> 239: "name" .             `-> 359: %empty
+
+
 
 State 57
 
@@ -8185,6 +8200,32 @@ State 464
 
     optional_annotation_list  go to state 637
 
+    shift/reduce conflict on token '[':
+      112 optional_annotation_list: %empty .
+      113 optional_annotation_list: . '[' annotation_list ']'
+      First example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' block_or_lambda . '[' annotation_list ']' optional_capture_list optional_function_argument_list optional_function_type block_or_simple_block ')' ':' type_declaration_no_options "end of expression" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                              $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                                      ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr_full_block                                                                                                                                                ')'
+                                                                                                                                                             `-> 304: block_or_lambda optional_annotation_list           optional_capture_list optional_function_argument_list optional_function_type block_or_simple_block
+                                                                                                                                                                                      `-> 113: . '[' annotation_list ']'
+      Second example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' block_or_lambda . '[' '[' capture_list ']' ']' optional_function_argument_list optional_function_type block_or_simple_block ')' ':' type_declaration_no_options "end of expression" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                             $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                                                     ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                                                          ')'
+                                                                                                                                                             `-> 435: expr_full_block
+                                                                                                                                                                      `-> 304: block_or_lambda optional_annotation_list optional_capture_list                 optional_function_argument_list optional_function_type block_or_simple_block
+                                                                                                                                                                                               `-> 112: %empty .        `-> 303: '[' '[' capture_list ']' ']'
+
+
 
 State 465
 
@@ -8242,6 +8283,24 @@ State 471
 
     block_or_lambda                go to state 640
     expr_full_block_assumed_piped  go to state 641
+
+    shift/reduce conflict on token "begin of code block":
+      406 expr: expr_call .
+      306 expr_full_block_assumed_piped: . "begin of code block" expressions "end of code block"
+      First example: expr_call . "begin of code block" "end of code block" expression_block
+      Shift derivation
+        expression_while_loop
+        `-> 72: expr                                                                                             expression_block
+                `-> 439: expr_call_pipe
+                         `-> 213: expr_call expr_full_block_assumed_piped
+                                            `-> 306: . "begin of code block" expressions     "end of code block"
+                                                                             `-> 306: %empty
+      Second example: "begin of code block" "end of code block" "end of code block"
+      Reduce derivation
+        expression_while_loop
+        `-> 72: "begin of code block" expressions     expression_block
+                                      `-> 211: %empty `-> 211: "end of code block" "end of code block"
+
 
 
 State 472
@@ -13590,6 +13649,35 @@ State 640
     $default  reduce using rule 112 (optional_annotation_list)
 
     optional_annotation_list  go to state 839
+
+    shift/reduce conflict on token '[':
+      112 optional_annotation_list: %empty .
+      113 optional_annotation_list: . '[' annotation_list ']'
+      First example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' block_or_lambda . '[' annotation_list ']' optional_capture_list optional_function_argument_list optional_function_type expression_block expr_full_block_assumed_piped ')' ':' type_declaration_no_options "end of expression" $end
+      Shift derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                                         $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                                                                                 ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                                                                                      ')'
+                                                                                                                                                             `-> 439: expr_call_pipe
+                                                                                                                                                                      `-> 213: expr_full_block_assumed_piped                                                                                                                             expr_full_block_assumed_piped
+                                                                                                                                                                               `-> 305: block_or_lambda optional_annotation_list           optional_capture_list optional_function_argument_list optional_function_type expression_block
+                                                                                                                                                                                                        `-> 113: . '[' annotation_list ']'
+      Second example: program kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation "$i" '(' expr_call block_or_lambda . '[' '[' capture_list ']' ']' optional_function_argument_list optional_function_type expression_block ')' ':' type_declaration_no_options "end of expression" $end
+      Reduce derivation
+        $accept
+        `-> 0: program                                                                                                                                                                                                                                                                                                                                                                                           $end
+               `-> 5: program global_let
+                              `-> 523: kwd_let optional_shared optional_public_or_private_variable $@29 optional_field_annotation let_variable_declaration
+                                                                                                                                  `-> 510: let_variable_name_with_pos_list                                                                                                                                                                                   ':' type_declaration_no_options "end of expression"
+                                                                                                                                           `-> 506: "$i" '(' expr                                                                                                                                                                                        ')'
+                                                                                                                                                             `-> 439: expr_call_pipe
+                                                                                                                                                                      `-> 213: expr_call expr_full_block_assumed_piped
+                                                                                                                                                                                         `-> 305: block_or_lambda optional_annotation_list optional_capture_list                 optional_function_argument_list optional_function_type expression_block
+                                                                                                                                                                                                                  `-> 112: %empty .        `-> 303: '[' '[' capture_list ']' ']'
+
 
 
 State 641
@@ -23140,6 +23228,33 @@ State 813
     STRING_CHARACTER      [reduce using rule 29 (string_builder_body)]
     STRING_CHARACTER_ESC  [reduce using rule 29 (string_builder_body)]
     $default              reduce using rule 29 (string_builder_body)
+
+    shift/reduce conflict on token STRING_CHARACTER:
+       29 string_builder_body: string_builder_body character_sequence .
+       25 character_sequence: character_sequence . STRING_CHARACTER
+      Example: string_builder_body character_sequence . STRING_CHARACTER
+      Shift derivation
+        string_builder_body
+        `-> 29: string_builder_body character_sequence
+                                    `-> 25: character_sequence . STRING_CHARACTER
+      Reduce derivation
+        string_builder_body
+        `-> 29: string_builder_body                              character_sequence
+                `-> 29: string_builder_body character_sequence . `-> 23: STRING_CHARACTER
+
+    shift/reduce conflict on token STRING_CHARACTER_ESC:
+       29 string_builder_body: string_builder_body character_sequence .
+       26 character_sequence: character_sequence . STRING_CHARACTER_ESC
+      Example: string_builder_body character_sequence . STRING_CHARACTER_ESC
+      Shift derivation
+        string_builder_body
+        `-> 29: string_builder_body character_sequence
+                                    `-> 26: character_sequence . STRING_CHARACTER_ESC
+      Reduce derivation
+        string_builder_body
+        `-> 29: string_builder_body                              character_sequence
+                `-> 29: string_builder_body character_sequence . `-> 24: STRING_CHARACTER_ESC
+
 
 
 State 814
