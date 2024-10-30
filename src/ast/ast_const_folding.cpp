@@ -842,6 +842,7 @@ namespace das {
                         DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (derive aliases)?" );
                         runProgram->allocateStack(dummy,false,false);
                         DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (allocate stack)?" );
+                        runProgram->updateSemanticHash();
                         runProgram->simulate(ctx, dummy);
                         DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (simulate)?" );
                         runProgram->folding = false;
