@@ -157,8 +157,8 @@ def test_make_struct {
 	let c : Mks = Mks(a=4);		// with some values overwritten
 	let C : Mks = Mks(5);			// with constructor
 	let CC : Mks = Mks(1,2,3);	// with complex constructor
-	let d : Mks = struct<Mks>(a=2,b=3.0);	// with values overwritten
-	let e : Mks[3] = struct<Mks>(a=1,b=1.0;a=2,b=2.0;a=3,b=3.0);	// this is array of structures // TODO: do we need better syntax_error
+	let d : Mks = struct<Mks>( a=2,b=3.0 );	// with values overwritten
+	let e : Mks[3] = struct<Mks>( (a=1,b=1.0), (a=2,b=2.0), (a=3,b=3.0) );	// this is array of structures // TODO: do we need better syntax_error
 	unsafe {
 		let h : Mks = default<Mks> uninitialized;	// uninitialized, a=0, b=0.0
 		let i : Mks = struct<Mks>(uninitialized a=1);	// uninitialized, a=1, b=0.0
@@ -223,12 +223,12 @@ def test_arrays {
 	let b : int[5] = fixed_array(1,2,3,4,5);	// fixed size array of integers
 	let e : int[5] = fixed_array<int>(1,2,3,4,5);	// fixed size array of integers
 	let g : array<Mks> <- [ Mks(1), Mks(2,3,4) ];	// array of structures
-	let f : Mks[2] <- struct<Mks>(a=1,b=2.0; a=3,b=4.0);
-	let G : array<Mks> <- array struct<Mks>(a=1,b=2.0; a=3,b=4.0);	// array of structures
-	let h : Tup[2] <- tuple<Tup>(a=1,b=2.,c="3"; a=4,b=5.,c="6");
-	let H : array<Tup> <- array tuple<Tup>(a=1,b=2.,c="3"; a=4,b=5.,c="6");	// array of tuples
-	let v : Varr[6] <- variant<Varr>(a=1; b=2.; c="3"; a=4; b=5.; c="6");
-	let V : array<Varr> <- array variant<Varr>(a=1; b=2.; c="3"; a=4; b=5.; c="6");	// array of variants
+	let f : Mks[2] <- struct<Mks>( (a=1,b=2.0), (a=3,b=4.0) );
+	let G : array<Mks> <- array struct<Mks>( (a=1,b=2.0), (a=3,b=4.0) );	// array of structures
+	let h : Tup[2] <- tuple<Tup>( (a=1,b=2.,c="3"), (a=4,b=5.,c="6") );
+	let H : array<Tup> <- array tuple<Tup>( (a=1,b=2.,c="3"), (a=4,b=5.,c="6") );	// array of tuples
+	let v : Varr[6] <- variant<Varr>(a=1, b=2., c="3", a=4, b=5., c="6");
+	let V : array<Varr> <- array variant<Varr>(a=1, b=2., c="3", a=4, b=5., c="6");	// array of variants
 }
 
 ////////

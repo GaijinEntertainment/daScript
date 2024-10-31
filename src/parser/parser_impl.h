@@ -102,4 +102,5 @@ namespace das {
     Expression * ast_makeGenerator ( yyscan_t scanner, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt );
     ExprBlock * ast_wrapInBlock ( Expression * expr );
     int skip_underscode ( char * tok, char * buf, char * bufend );
+    Expression * ast_makeStructToMakeVariant ( MakeStruct * decl, const LineInfo & locAt );
 }
