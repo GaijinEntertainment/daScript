@@ -228,6 +228,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 }
 
 <normal>"include"                                       BEGIN(include);
+<normal>"capture"                                       return DAS_CAPTURE;
 <normal>"for"                                           return DAS_FOR;
 <normal>"while"                                         return DAS_WHILE;
 <normal>"if"                                            return DAS_IF;

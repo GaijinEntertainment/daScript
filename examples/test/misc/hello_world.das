@@ -16,6 +16,11 @@
 
 typedef IntArray = array<int>;	// alias for array of integers
 
+//////////////////////////////
+// global variable declaration
+
+let G_A = 5;
+
 /////////////////////
 // struct declaration
 
@@ -388,6 +393,19 @@ def test_string_builder ( arg,arg2:int ) {
 	debug(c);
 	let d = "{arg} + {arg2} = {arg+arg2}";
 	debug(d);
+}
+
+/////////////////////////
+// lambda capture example
+
+[export]
+def test_lambda_capture ( a : int ) {
+	var b = 13;
+	return @ capture(=a,:=b) ( c : int ) {
+		debug(a);
+		debug(b);
+		debug(c);
+	};
 }
 
 ///////

@@ -155,6 +155,7 @@
 %token  LEXER_ERROR         "lexer error"
 
 /* keywords */
+%token  DAS_CAPTURE         "capture"
 %token  DAS_STRUCT          "struct"
 %token  DAS_CLASS           "class"
 %token  DAS_LET             "let"
@@ -346,6 +347,7 @@
 %type <pNameList>       tuple_expansion
 %type <pNameWithPosList>variable_name_with_pos_list
 %type <pNameWithPosList>let_variable_name_with_pos_list
+%type <pNameWithPosList>global_let_variable_name_with_pos_list
 %type <type>            basic_type_declaration
 %type <type>            enum_basic_type_declaration
 %type <type>            optional_enum_basic_type_declaration
@@ -361,13 +363,13 @@
 %type <pTypeDeclList>   type_declaration_no_options_list
 %type <pVarDeclList>    struct_variable_declaration_list
 %type <pVarDeclList>    optional_struct_variable_declaration_list
-%type <pVarDeclList>    global_variable_declaration_list
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
 %type <pVarDecl>        function_argument_declaration
 %type <pVarDecl>        structure_variable_declaration
 %type <pVarDecl>        let_variable_declaration
+%type <pVarDecl>        global_let_variable_declaration
 %type <pVarDecl>        tuple_expansion_variable_declaration
 %type <pVarDecl>        tuple_type
 %type <pVarDeclList>    tuple_type_list
@@ -1529,7 +1531,7 @@ capture_list
 
 optional_capture_list
     :   { $$ = nullptr; }
-    |   '[' '[' capture_list[cl] ']' ']' { $$ = $cl; }
+    |   DAS_CAPTURE '(' capture_list[cl] ')' { $$ = $cl; }
     ;
 
 expr_full_block
@@ -2149,6 +2151,23 @@ let_variable_name_with_pos_list
     }
     ;
 
+global_let_variable_name_with_pos_list
+    :   NAME[name]  {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        auto pSL = new vector<VariableNameAndPosition>();
+        pSL->push_back(VariableNameAndPosition{*$name,"",tokAt(scanner,@name)});
+        $$ = pSL;
+        delete $name;
+    }
+    |   global_let_variable_name_with_pos_list[list] ',' NAME[name] {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $list->push_back(VariableNameAndPosition{*$name,"",tokAt(scanner,@name)});
+        $$ = $list;
+        delete $name;
+    }
+    ;
+
+
 let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
     :   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] ';' {
         $$ = new VariableDeclaration($list,$typeDecl,nullptr);
@@ -2168,28 +2187,25 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
     }
     ;
 
-global_variable_declaration_list
-    :   {
-        $$ = new vector<VariableDeclaration*>();
+global_let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
+    :   global_let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] ';' {
+        $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
-    |   global_variable_declaration_list[list] {
-        if ( !yyextra->g_CommentReaders.empty() ) {
-            auto tak = tokAt(scanner,@list);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
-        }
-    }   optional_field_annotation[ann] let_variable_declaration[decl] {
-        if ( !yyextra->g_CommentReaders.empty() ) {
-            auto tak = tokAt(scanner,@decl);
-            for ( auto & crd : yyextra->g_CommentReaders )
-                for ( auto & nl : *($decl->pNameList) )
-                    crd->afterGlobalVariable(nl.name.c_str(),tak);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterGlobalVariables(tak);
-        }
-        $$ = $list;
-        $decl->annotation = $ann;
-        $list->push_back($decl);
+    |   global_let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+        $$ = new VariableDeclaration($list,$typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+    }
+    |   global_let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(scanner,@list);
+        typeDecl->ref = $ref;
+        $$ = new VariableDeclaration($list,typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
     ;
+
 
 optional_shared
     :                { $$ = false; }
@@ -2203,15 +2219,12 @@ optional_public_or_private_variable
     ;
 
 global_let
-    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] '{' global_variable_declaration_list[list] '}' {
-        ast_globalLetList(scanner,$kwd_let,$glob_shar,$pub_var,$list);
-    }
-    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
+    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@pub_var);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
         }
-    } optional_field_annotation[ann] let_variable_declaration[decl] {
+    } optional_field_annotation[ann] global_let_variable_declaration[decl] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@decl);
             for ( auto & crd : yyextra->g_CommentReaders )
