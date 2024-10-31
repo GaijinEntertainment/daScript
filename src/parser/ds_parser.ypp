@@ -1430,10 +1430,17 @@ expr_new
         auto pNew = new ExprNew(tokAt(scanner,@loc),TypeDeclPtr($typeDecl),true);
         $$ = parseFunctionArguments(pNew,$arguments);
     }
-    |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' use_initializer[init] make_struct_single[dd] ')'   {
+    |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' make_struct_single[dd] ')'   {
         ((ExprMakeStruct *)$dd)->at = tokAt(scanner,@typeDecl);
         ((ExprMakeStruct *)$dd)->makeType = $typeDecl;
-        ((ExprMakeStruct *)$dd)->useInitializer = $init;
+        ((ExprMakeStruct *)$dd)->useInitializer = true; // $init;
+        ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
+        $$ = new ExprAscend(tokAt(scanner,@loc),ExpressionPtr($dd));
+    }
+    |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' DAS_UNINITIALIZED make_struct_single[dd] ')'   {
+        ((ExprMakeStruct *)$dd)->at = tokAt(scanner,@typeDecl);
+        ((ExprMakeStruct *)$dd)->makeType = $typeDecl;
+        ((ExprMakeStruct *)$dd)->useInitializer = false; // $init;
         ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
         $$ = new ExprAscend(tokAt(scanner,@loc),ExpressionPtr($dd));
     }
