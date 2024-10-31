@@ -469,7 +469,7 @@
 %type <pMakeStruct>     make_struct_fields
 %type <pExpression>     make_struct_decl
 %type <pExpression>     make_struct_single
-%type <pExpression>     make_struct_dim
+%type <pExpression>     make_struct_dim_decl
 %type <pExpression>     make_struct_dim_list
 %type <pExpression>     make_variant_dim
 %type <pExpression>     make_map_tuple
@@ -3049,13 +3049,13 @@ make_struct_dim_list
     }
     ;
 
-make_struct_dim
+make_struct_dim_decl
     :   make_struct_fields[msf] {
         auto msd = new ExprMakeStruct();
         msd->structs.push_back(MakeStructPtr($msf));
         $$ = msd;
     }
-    |   make_struct_dim_list[msd] {
+    |   make_struct_dim_list[msd] optional_comma {
         $$ = $msd;
     }
     ;
@@ -3066,7 +3066,7 @@ use_initializer
     ;
 
 make_struct_decl
-    :   DAS_STRUCT [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim[msd] ')'  {
+    :   DAS_STRUCT [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
@@ -3074,7 +3074,7 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->alwaysUseInitializer = true;
         $$ = $msd;
     }
-    |   DAS_CLASS [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim[msd] ')'  {
+    |   DAS_CLASS [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
@@ -3117,7 +3117,7 @@ make_tuple_call
         mkt->makeType = make_smart<TypeDecl>(Type::autoinfer);
         $$ = mkt;
     }
-    |   DAS_TTUPLE [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim[msd] ')'  {
+    |   DAS_TTUPLE [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
@@ -3135,7 +3135,7 @@ make_dim_decl
         tam->arguments.push_back(mka);
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
@@ -3145,7 +3145,7 @@ make_dim_decl
         tam->arguments.push_back($msd);
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_TTUPLE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_TTUPLE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
