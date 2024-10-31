@@ -81,6 +81,7 @@ def resize_and_init(var Arr:array<auto(numT)>;newSize:int; initValue:numT)
             Arr[i] := initValue
 
 
+[unused_argument(Arr, newSize)]
 def resize_no_init(var Arr:array<auto(numT)>;newSize:int)
     static_if typeinfo(is_raw type<numT>)
         static_if typeinfo(need_lock_check type<numT>)
@@ -97,6 +98,7 @@ def reserve(var Arr:array<auto(numT)>;newSize:int)
 def pop(var Arr:array<auto(numT)>)
     unsafe(resize(Arr, length(Arr)-1))  // resize will throw if negative
 
+[unused_argument(Arr, value)]
 def push(var Arr:array<auto(numT)>;value:numT-# const;at:int)
     static_if typeinfo(can_copy value)
         static_if typeinfo(need_lock_check type<numT>)
@@ -105,6 +107,7 @@ def push(var Arr:array<auto(numT)>;value:numT-# const;at:int)
     else
         concept_assert(false,"can't push value, which can't be copied")
 
+[unused_argument(Arr, value)]
 def push(var Arr:array<auto(numT)>;value:numT-# const)
     static_if typeinfo(can_copy value)
         static_if typeinfo(need_lock_check type<numT>)
@@ -113,6 +116,7 @@ def push(var Arr:array<auto(numT)>;value:numT-# const)
     else
         concept_assert(false,"can't push value, which can't be copied")
 
+[unused_argument(Arr, value)]
 def push(var Arr:array<auto(numT)>; varr:array<numT>-#)
     static_if typeinfo(can_copy type<numT>)
         static_if typeinfo(need_lock_check type<numT>)
@@ -122,6 +126,7 @@ def push(var Arr:array<auto(numT)>; varr:array<numT>-#)
     else
         concept_assert(false,"can't push value, which can't be copied")
 
+[unused_argument(Arr, value)]
 def push(var Arr:array<auto(numT)>; varr:numT[]-#)
     static_if typeinfo(can_copy type<numT>)
         static_if typeinfo(need_lock_check type<numT>)
@@ -131,6 +136,7 @@ def push(var Arr:array<auto(numT)>; varr:numT[]-#)
     else
         concept_assert(false,"can't push value, which can't be copied")
 
+[unused_argument(Arr, value)]
 def push(var Arr:array<auto(numT)[]>; varr:numT[]-#)
     static_if typeinfo(can_copy type<numT>)
         static_if typeinfo(sizeof Arr[0])==typeinfo(sizeof varr)
