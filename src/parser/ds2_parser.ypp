@@ -835,7 +835,7 @@ expression_unsafe
     ;
 
 expression_while_loop
-    :   DAS_WHILE[loc] expr[condition] expression_block[block] {
+    :   DAS_WHILE[loc] '(' expr[condition] ')' expression_block[block] {
         auto pWhile = new ExprWhile(tokAt(scanner,@loc));
         pWhile->cond = ExpressionPtr($condition);
         pWhile->body = ExpressionPtr($block);
@@ -845,7 +845,7 @@ expression_while_loop
     ;
 
 expression_with
-    :   DAS_WITH[loc] expr[with] expression_block[block] {
+    :   DAS_WITH[loc] '(' expr[with] ')' expression_block[block] {
         auto pWith = new ExprWith(tokAt(scanner,@loc));
         pWith->with = ExpressionPtr($with);
         pWith->body = ExpressionPtr($block);

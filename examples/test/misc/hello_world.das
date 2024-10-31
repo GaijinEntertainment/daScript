@@ -310,6 +310,16 @@ def test_for ( i : int ) {
 	}
 }
 
+/////////////
+// while loop
+
+[export]
+def test_while ( cond : bool ) {
+	while ( cond ) {
+		debug(cond);
+	}
+}
+
 /////////
 // piping
 
