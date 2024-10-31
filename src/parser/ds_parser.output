@@ -11,7 +11,6 @@ State 520 conflicts: 2 shift/reduce
 State 522 conflicts: 2 shift/reduce
 State 628 conflicts: 1 shift/reduce
 State 849 conflicts: 1 shift/reduce
-State 938 conflicts: 2 shift/reduce
 State 1050 conflicts: 1 shift/reduce
 State 1163 conflicts: 1 shift/reduce
 State 1439 conflicts: 1 shift/reduce
@@ -29807,9 +29806,7 @@ State 938
     STRING_CHARACTER      shift, and go to state 222
     STRING_CHARACTER_ESC  shift, and go to state 223
 
-    STRING_CHARACTER      [reduce using rule 29 (string_builder_body)]
-    STRING_CHARACTER_ESC  [reduce using rule 29 (string_builder_body)]
-    $default              reduce using rule 29 (string_builder_body)
+    $default  reduce using rule 29 (string_builder_body)
 
 
 State 939

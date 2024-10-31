@@ -365,6 +365,21 @@ def test_typeinfo( arg : int ) {
 	debug(c);
 }
 
+/////////////////
+// string builder
+
+[export]
+def test_string_builder ( arg,arg2:int ) {
+	let a = "";
+	debug(a);
+	let b = "hello, world!";
+	debug(b);
+	let c = "arg={arg}\n";
+	debug(c);
+	let d = "{arg} + {arg2} = {arg+arg2}";
+	debug(d);
+}
+
 ///////
 // main
 

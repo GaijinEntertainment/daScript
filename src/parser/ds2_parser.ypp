@@ -518,6 +518,9 @@
 %nonassoc   '$' '@'
 %nonassoc   COLCOL
 
+%right STRING_CHARACTER STRING_CHARACTER_ESC
+%right BEGIN_STRING_EXPR END_STRING_EXPR
+
 %%
 
 program
@@ -578,10 +581,10 @@ module_declaration
     ;
 
 character_sequence
-    :   STRING_CHARACTER[char]                              { $$ = new string(); *$$ += $char; }
-    |   STRING_CHARACTER_ESC                                { $$ = new string(); *$$ += "\\\\"; }
-    |   character_sequence[elem]  STRING_CHARACTER[char]    { $$ = $elem; *$elem += $char; }
-    |   character_sequence[elem]  STRING_CHARACTER_ESC      { $$ = $elem; *$elem += "\\\\"; }
+    :   STRING_CHARACTER[char]                                                    { $$ = new string(); *$$ += $char; }
+    |   STRING_CHARACTER_ESC                                                      { $$ = new string(); *$$ += "\\\\"; }
+    |   character_sequence[elem]  STRING_CHARACTER[char]  %prec STRING_CHARACTER  { $$ = $elem; *$elem += $char; }
+    |   character_sequence[elem]  STRING_CHARACTER_ESC    %prec STRING_CHARACTER  { $$ = $elem; *$elem += "\\\\"; }
     ;
 
 string_constant
@@ -594,7 +597,7 @@ string_builder_body
         $$->at = LineInfo(yyextra->g_FileAccessStack.back(),
             yylloc.first_column,yylloc.first_line,yylloc.last_column,yylloc.last_line);
     }
-    |   string_builder_body[sb] character_sequence[sconst] {
+    |   string_builder_body[sb] character_sequence[sconst] %prec STRING_CHARACTER {
         bool err;
         auto esconst = unescapeString(*$sconst,&err);
         if ( err ) das2_yyerror(scanner,"invalid escape sequence",tokAt(scanner,@sb), CompilationError::invalid_escape_sequence);
@@ -603,7 +606,7 @@ string_builder_body
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
         $$ = $sb;
     }
-    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] END_STRING_EXPR {
+    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] END_STRING_EXPR %prec BEGIN_STRING_EXPR {
         auto se = ExpressionPtr($subexpr);
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(se);
         $$ = $sb;

@@ -13,7 +13,6 @@ Terminals unused in grammar
 State 464 conflicts: 1 shift/reduce
 State 471 conflicts: 1 shift/reduce
 State 640 conflicts: 1 shift/reduce
-State 814 conflicts: 2 shift/reduce
 
 
 Grammar
@@ -23141,9 +23140,7 @@ State 814
     STRING_CHARACTER      shift, and go to state 211
     STRING_CHARACTER_ESC  shift, and go to state 212
 
-    STRING_CHARACTER      [reduce using rule 29 (string_builder_body)]
-    STRING_CHARACTER_ESC  [reduce using rule 29 (string_builder_body)]
-    $default              reduce using rule 29 (string_builder_body)
+    $default  reduce using rule 29 (string_builder_body)
 
 
 State 815
