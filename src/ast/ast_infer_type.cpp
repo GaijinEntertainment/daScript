@@ -3072,7 +3072,31 @@ namespace das {
             if ( expr->argumentsFailedToInfer ) {
                 auto blockT = expr->arguments[0]->type;
                 if ( !blockT ) {
-                    // no go, no block
+                    if ( expr->isInvokeMethod && expr->arguments[0]->rtti_isField() ) {
+                        auto eField = static_pointer_cast<ExprField>(expr->arguments[0]);
+                        if ( eField->value->type ) {        // it inferred, but field not found
+                            bool allOtherInferred = true;   // we check, if all other arguments inferred
+                            for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
+                                if ( !expr->arguments[i]->type ) {
+                                    allOtherInferred = false;
+                                    break;
+                                }
+                            }
+                            if ( allOtherInferred ) {
+                                // we build _::{field.name} ( field, arg1, arg2, ... )
+                                auto newCall = make_smart<ExprCall>(expr->at, "__::" + eField->name);
+                                newCall->arguments.push_back(eField->value->clone());
+                                for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
+                                    newCall->arguments.push_back(expr->arguments[i]->clone());
+                                }
+                                auto fcall = inferFunctionCall(newCall.get(), InferCallError::tryOperator);  // we infer it
+                                if ( fcall != nullptr ) {
+                                    reportAstChanged();
+                                    return newCall;
+                                }
+                            }
+                        }
+                    }
                 } else if ( !blockT->isGoodBlockType() && !blockT->isGoodFunctionType() && !blockT->isGoodLambdaType() ) {
                     // no go, not a good block
                 } else if ( expr->arguments.size()-1 != blockT->argTypes.size() ) {

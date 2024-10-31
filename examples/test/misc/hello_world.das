@@ -328,6 +328,15 @@ def test_while ( cond : bool ) {
 /////////
 // piping
 
+def take_mks ( a : Mks ) {
+	debug(a);
+}
+
+def take_mks_and_int ( a : Mks; b : int ) {
+	debug(a);
+	debug(b);
+}
+
 def take_anything ( a ) {
 	debug(a);
 }
@@ -360,6 +369,9 @@ def test_pipes() {
 		print("this is lambda which takes 2 arguments");
 		return 13; // and returns value
 	};
+	var mks = Mks();
+	mks.take_mks();				// method-like call syntax
+	mks.take_mks_and_int(13);	// method-like call syntax
 }
 
 ///////////
