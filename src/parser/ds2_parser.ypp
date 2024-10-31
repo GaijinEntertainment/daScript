@@ -1435,7 +1435,7 @@ expr_type_decl
     ;
 
 expr_type_info
-    :   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] expr[subexpr] ')' {
+    :   DAS_TYPEINFO[loc] name_in_namespace[trait] '('  expr[subexpr] ')' {
             if ( $subexpr->rtti_isTypeDecl() ) {
                 auto ptd = (ExprTypeDecl *)$subexpr;
                 $$ = new ExprTypeInfo(tokAt(scanner,@loc),*$trait,ptd->typeexpr);
@@ -1445,7 +1445,7 @@ expr_type_info
             }
             delete $trait;
     }
-    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] '<' NAME[subtrait] '>' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] name_in_namespace[trait] '<' NAME[subtrait] '>' '(' expr[subexpr] ')' {
             if ( $subexpr->rtti_isTypeDecl() ) {
                 auto ptd = (ExprTypeDecl *)$subexpr;
                 $$ = new ExprTypeInfo(tokAt(scanner,@loc),*$trait,ptd->typeexpr,*$subtrait);
@@ -1456,7 +1456,7 @@ expr_type_info
             delete $trait;
             delete $subtrait;
     }
-    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] name_in_namespace[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' '(' expr[subexpr] ')' {
             if ( $subexpr->rtti_isTypeDecl() ) {
                 auto ptd = (ExprTypeDecl *)$subexpr;
                 $$ = new ExprTypeInfo(tokAt(scanner,@loc),*$trait,ptd->typeexpr,*$subtrait,*$extratrait);

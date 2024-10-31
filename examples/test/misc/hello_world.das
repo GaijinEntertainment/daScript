@@ -347,6 +347,23 @@ def test_pipes() {
 	};
 }
 
+///////////
+// typeinfo
+
+[comment (i=1,f=2.0,s="three",b=false)]
+struct Event {
+    i : int;
+}
+
+[export]
+def test_typeinfo( arg : int ) {
+	let a = typeinfo sizeof(arg);
+	debug(a);
+	let b = typeinfo has_field<add>(type<Baz>);
+	debug(b);
+	let c = typeinfo struct_get_annotation_argument<comment;s>(type<Event>);
+	debug(c);
+}
 
 ///////
 // main
