@@ -8154,7 +8154,20 @@ namespace das {
                 ecast->reinterpret = true;
                 ecast->alwaysSafe = true;
                 expr->aliasSubstitution.reset();
+                reportAstChanged();
                 return ecast;
+            }
+            if ( !expr->func ) {
+                auto aliasT = findAlias(expr->name);
+                if ( aliasT && aliasT->isTuple() ) {
+                    auto mkt = make_smart<ExprMakeTuple>(expr->at);
+                    mkt->type = make_smart<TypeDecl>(*aliasT);
+                    for ( auto & arg : expr->arguments ) {
+                        mkt->values.push_back(arg->clone());
+                    }
+                    reportAstChanged();
+                    return mkt;
+                }
             }
             if ( func && !expr->func && func->isClassMethod && func->arguments.size()>=1 ) {
                 auto bt = func->arguments[0]->type;
