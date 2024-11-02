@@ -420,6 +420,52 @@ def test_lambda_capture ( a : int ) {
 	};
 }
 
+////////////
+// generator
+
+[export]
+def test_generator ( a : int ) {
+	// passing block as argument
+	var g1 <- generator<int> (${
+		for ( x in range(1,a) ) {
+			yield x;
+		}
+		return false;
+	});
+	var G1 <- generator<int> capture(=a) (${
+		for ( x in range(1,a) ) {
+			yield x;
+		}
+		return false;
+	});
+	// simplified syntax
+	var g2 <- generator<int> {
+		for ( x in range(1,a) ) {
+			yield x;
+		}
+		return false;
+	};
+	var G2 <- generator<int> capture(=a) {
+		for ( x in range(1,a) ) {
+			yield x;
+		}
+		return false;
+	};
+	// via pipe
+	var g3 <- generator<int>() <| ${
+		for ( x in range(1,a) ) {
+			yield x;
+		}
+		return false;
+	};
+	var G3 <- generator<int> capture(=a) () <| ${
+		for ( x in range(1,a) ) {
+			yield x;
+		}
+		return false;
+	};
+}
+
 ///////
 // main
 
