@@ -189,11 +189,13 @@ tuple Tup {
 
 [export]
 def test_tuples {
-	let a : tuple<int;float;string> = (1,2.,"3");
-	let b : tuple<int;float;string> = tuple(1,2.,"3");
-	let c : tuple<int;float;string> = tuple<Tup>(a=1,b=2.,c="3");
-	let e : tuple<int;float;string> = tuple<Tup>(uninitialized a=1);	// a=1,b=0.0,c=""
-	let f : tuple<int;float;string>* = new tuple(1,2.,"3");	// on heap
+	let a : tuple<int;float;string> = (1,2.,"3");	debug(a);
+	let b : tuple<int;float;string> = tuple(1,2.,"3");	debug(b);
+	let c : tuple<int;float;string> = Tup(1,2.,"3");	debug(c);
+	let d : tuple<int;float;string> = Tup(a=1,b=2.,c="3");	debug(d);
+	let e : tuple<int;float;string> = tuple<Tup>(a=1,b=2.,c="3");	debug(e);
+	let f : tuple<int;float;string> = tuple<Tup>(uninitialized a=1);	debug(f);	// a=1,b=0.0,c=""
+	let g : tuple<int;float;string>* = new tuple(1,2.,"3");	debug(g); // on heap
 }
 
 ///////////
