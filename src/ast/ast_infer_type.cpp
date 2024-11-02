@@ -2774,10 +2774,10 @@ namespace das {
                 return Visitor::visit(expr);
             }
             if ( expr->arguments.size()!=1 ) {
-                error("generator can only have one argument",  "", "",
+                error("expecting generator(closure)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
             } else if ( !expr->arguments[0]->rtti_isMakeBlock() ) {
-                error("expecting generator(closure), got " + string(expr->arguments[0]->__rtti) + " instead",  "", "",
+                error("expecting generator(closure)",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
             } else {
                 auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);

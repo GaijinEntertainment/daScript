@@ -1246,9 +1246,6 @@ expr_call_pipe
             delete $block;
         }
     }
-    |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] expr_full_block_assumed_piped[subexpr] {
-        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc));
-    }
     ;
 
 expression_any
