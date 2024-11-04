@@ -1350,7 +1350,7 @@ namespace das
             pInvoke->arguments = nullptr;
             pInvoke->nArguments = 0;
         }
-        return pInvoke;
+        return keepAlive(context,pInvoke);
     }
 
     SimNode * ExprErase::simulate (Context & context) const {
@@ -2632,18 +2632,22 @@ namespace das
     }
 
     SimNode * ExprWhile::simulate (Context & context) const {
+        SimNode_Block * whileNode = nullptr;
 #if DAS_DEBUGGER
         if ( context.thisProgram->getDebugger() ) {
-            auto node = context.code->makeNode<SimNodeDebug_While>(at, cond->simulate(context));
-            simulateFinal(context, body, node);
-            return node;
+            whileNode = context.code->makeNode<SimNodeDebug_While>(at, cond->simulate(context));
+        } else
+#endif
+#if DAS_ENABLE_KEEPALIVE
+        if ( context.thisProgram->policies.keep_alive ) {
+            whileNode = context.code->makeNode<SimNode_While>(at, cond->simulate(context));
         } else
 #endif
         {
-            auto node = context.code->makeNode<SimNode_While>(at, cond->simulate(context));
-            simulateFinal(context, body, node);
-            return node;
+            whileNode = context.code->makeNode<SimNode_While>(at, cond->simulate(context));
         }
+        simulateFinal(context, body, whileNode);
+        return whileNode;
     }
 
     SimNode * ExprUnsafe::simulate (Context & context) const {
@@ -2687,6 +2691,15 @@ namespace das
                     result = (SimNode_ForWithIteratorBase *) context.code->makeNode<SimNodeDebug_ForWithIteratorBase>(at);
                 } else {
                     result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForWithIterator>(total, at);
+                }
+            } else
+#endif
+#if DAS_ENABLE_KEEPALIVE
+            if ( context.thisProgram->policies.keep_alive ) {
+                if ( total>MAX_FOR_UNROLL ) {
+                    result = (SimNode_ForWithIteratorBase *) context.code->makeNode<SimNodeKeepAlive_ForWithIteratorBase>(at);
+                } else {
+                    result = (SimNode_ForWithIteratorBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeKeepAlive_ForWithIterator>(total, at);
                 }
             } else
 #endif
@@ -2776,6 +2789,42 @@ namespace das
                             result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeDebug_ForRange1>(sources[0]->type->baseType,at);
                         } else {
                             result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeDebug_ForRange>(sources[0]->type->baseType,at);
+                        }
+                    }
+                } else {
+                    DAS_ASSERTF(0, "we should not be here yet. logic above assumes optimized for path of some kind.");
+                    context.thisProgram->error("internal compilation error, generating for", "", "", at);
+                    return nullptr;
+                }
+            } else
+#endif
+#if DAS_ENABLE_KEEPALIVE
+            if ( context.thisProgram->policies.keep_alive ) {
+                if ( dynamicArrays ) {
+                    if (loop1) {
+                        result = (SimNode_ForBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeKeepAlive_ForGoodArray1>(total, at);
+                    } else {
+                        result = (SimNode_ForBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeKeepAlive_ForGoodArray>(total, at);
+                    }
+                } else if ( fixedArrays ) {
+                    if (loop1) {
+                        result = (SimNode_ForBase *)context.code->makeNodeUnrollNZ_FOR<SimNodeKeepAlive_ForFixedArray1>(total, at);
+                    } else {
+                        result = (SimNode_ForBase *)context.code->makeNodeUnrollNZ_FOR<SimNodeKeepAlive_ForFixedArray>(total, at);
+                    }
+                } else if ( rangeBase ) {
+                    DAS_ASSERT(total==1 && "simple range on 1 loop only");
+                    if ( NF ) {
+                        if (loop1) {
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeKeepAlive_ForRangeNF1>(sources[0]->type->baseType,at);
+                        } else {
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeKeepAlive_ForRangeNF>(sources[0]->type->baseType,at);
+                        }
+                    } else {
+                        if (loop1) {
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeKeepAlive_ForRange1>(sources[0]->type->baseType,at);
+                        } else {
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeKeepAlive_ForRange>(sources[0]->type->baseType,at);
                         }
                     }
                 } else {
@@ -2941,6 +2990,17 @@ namespace das
         return let;
     }
 
+    SimNode * ExprLooksLikeCall::keepAlive ( Context & context, SimNode * result ) const {
+#if DAS_ENABLE_KEEPALIVE
+        if ( context.thisProgram->policies.keep_alive ) {
+            return context.code->makeNode<SimNode_KeepAlive>(at,result);
+        } else
+#endif
+        {
+            return result;
+        }
+    }
+
     SimNode_CallBase * ExprCall::simulateCall (const FunctionPtr & func,
                                                const ExprLooksLikeCall * expr,
                                                Context & context,
@@ -2991,7 +3051,13 @@ namespace das
         if ( !doesNotNeedSp && stackTop ) {
             pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
         }
-        return pCall;
+        if ( func->builtIn ) {
+            // TODO: we need to determine, if we need keep-alive for the func
+            // basic function which is not recursive in any shape or form may not need one
+            return pCall;   // we don't need keep-alive for the built-in functions
+        } else {
+            return keepAlive(context,pCall);
+        }
     }
 
     SimNode * ExprNamedCall::simulate (Context &) const {
@@ -2999,7 +3065,7 @@ namespace das
         return nullptr;
     }
 
-void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
+    void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
         context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
         context.tabGMnLookup->clear();
         for ( int i=0, is=context.totalVariables; i!=is; ++i ) {
@@ -3102,6 +3168,12 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
 
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         auto time0 = ref_time_ticks();
+    #if !(DAS_ENABLE_KEEPALIVE)
+        if ( policies.keep_alive ) {
+            error("keep_alive is not enabled in this build. Modify DAS_ENABLE_KEEPALIVE first", "", "", LineInfo());
+            return false;
+        }
+    #endif
         isSimulating = true;
         context.failed = true;
         astTypeInfo.clear();    // this is to be filled via typeinfo(ast_typedecl and such)
