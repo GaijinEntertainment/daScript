@@ -168,8 +168,7 @@ namespace das
     };
 
 #define DAS_PROCESS_LOOP_FLAGS(howtocontinue) \
-    {   DAS_KEEPALIVE_LOOP(&context); \
-        if (context.stopFlags) { \
+    {   if (context.stopFlags) { \
         if (context.stopFlags & EvalFlags::stopForContinue) { \
             context.stopFlags &= ~EvalFlags::stopForContinue; \
             howtocontinue; \
@@ -183,6 +182,15 @@ namespace das
     } }
 
 #define DAS_PROCESS_LOOP1_FLAGS(howtocontinue) \
+    {   if (context.stopFlags) { \
+        if (context.stopFlags & EvalFlags::stopForContinue) { \
+            context.stopFlags &= ~EvalFlags::stopForContinue; \
+            howtocontinue; \
+        } \
+        goto loopend; \
+    } }
+
+#define DAS_PROCESS_KEEPALIVE_LOOP1_FLAGS(howtocontinue) \
     { DAS_KEEPALIVE_LOOP(&context); \
         if (context.stopFlags) { \
         if (context.stopFlags & EvalFlags::stopForContinue) { \
@@ -973,6 +981,29 @@ __forceinline void profileNode ( SimNode * node ) {
     template <>
     struct EvalTT<char *> { static __forceinline char * eval ( Context & context, SimNode * node ) {
         return node->evalPtr(context); }};
+
+    // any kind of keep-alive
+
+#if DAS_ENABLE_KEEPALIVE
+
+    struct SimNode_KeepAlive : SimNode {
+        SimNode_KeepAlive ( const LineInfo & at, SimNode * res ) : SimNode(at), value(res) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            DAS_KEEPALIVE_CALL(&context);                           \
+            return value->eval##TYPE(context); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+        DAS_EVAL_ABI virtual vec4f eval ( das::Context & context ) override {
+            DAS_KEEPALIVE_CALL(&context);
+            return value->eval(context);
+        }
+        SimNode * value = nullptr;
+    };
+
+#endif
 
     // FUNCTION CALL
     struct SimNode_CallBase : SimNode {
