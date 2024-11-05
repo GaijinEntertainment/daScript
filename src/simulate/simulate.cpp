@@ -724,12 +724,10 @@ namespace das
         while ( cond->evalBool(context) && !context.stopFlags ) {
             SimNode ** __restrict body = list;
         loopbegin:;
-            if (body!=tail) {
-                for (; body!=tail; ++body) {
-                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
-                    (*body)->eval(context);
-                    DAS_PROCESS_LOOP_FLAGS(break);
-                }
+            for (; body!=tail; ++body) {
+                DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                (*body)->eval(context);
+                DAS_PROCESS_LOOP_FLAGS(break);
             }
         }
     loopend:;
