@@ -429,6 +429,7 @@
 %type <pExpression>     expr_list
 %type <pExpression>     optional_expr_list
 %type <pExpression>     optional_expr_list_in_braces
+%type <pExpression>     optional_expr_map_tuple_list
 %type <pExpression>     expr_map_tuple_list
 %type <pExpression>     expression_label
 %type <pExpression>     expression_goto
@@ -1311,6 +1312,11 @@ optional_expr_list
 optional_expr_list_in_braces
     :   { $$ = nullptr; }
     |   '(' optional_expr_list[arguments] optional_comma ')' { $$ = $arguments; }
+    ;
+
+optional_expr_map_tuple_list
+    :   { $$ = nullptr; }
+    |   expr_map_tuple_list[arguments] optional_comma { $$ = $arguments; }
     ;
 
 type_declaration_no_options_list
@@ -3650,7 +3656,7 @@ make_table_decl
         ttm->arguments.push_back(ExpressionPtr($mka));
         $$ = ttm;
     }
-    |   DAS_TABLE[loc] '(' expr_map_tuple_list[arguments] optional_comma ')' {
+    |   DAS_TABLE[loc] '(' optional_expr_map_tuple_list[arguments] ')' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
@@ -3658,23 +3664,47 @@ make_table_decl
         ttm->arguments.push_back(mka);
         $$ = ttm;
     }
-    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] '>' '(' expr_map_tuple_list[arguments] optional_comma ')' {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
-        mka->values = sequenceToList($arguments);
-        mka->makeType = TypeDeclPtr($decl);
-        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
-        ttm->arguments.push_back(mka);
-        $$ = ttm;
+    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] '>' '(' optional_expr_map_tuple_list[arguments] ')' {
+        if ( $arguments ) {
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+            mka->values = sequenceToList($arguments);
+            mka->makeType = TypeDeclPtr($decl);
+            auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+            ttm->arguments.push_back(mka);
+            $$ = ttm;
+        } else {
+            auto msd = new ExprMakeStruct();
+            msd->at = tokAt(scanner,@loc);
+            msd->makeType = make_smart<TypeDecl>(Type::tTable);
+            msd->makeType->firstType = TypeDeclPtr($decl);
+            msd->makeType->secondType = make_smart<TypeDecl>(Type::tVoid);
+            msd->at = tokAt(scanner,@loc);
+            msd->useInitializer = true;
+            msd->alwaysUseInitializer = true;
+            $$ = msd;
+        }
     }
-    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] ';' type_declaration_no_options[to_decl] '>' '(' expr_map_tuple_list[arguments] optional_comma ')' {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
-        mka->values = sequenceToList($arguments);
-        mka->makeType = make_smart<TypeDecl>(Type::tTuple);
-        mka->makeType->argTypes.push_back($decl);
-        mka->makeType->argTypes.push_back($to_decl);
-        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
-        ttm->arguments.push_back(mka);
-        $$ = ttm;
+    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] ';' type_declaration_no_options[to_decl] '>' '(' optional_expr_map_tuple_list[arguments] ')' {
+        if ( $arguments ) {
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+            mka->values = sequenceToList($arguments);
+            mka->makeType = make_smart<TypeDecl>(Type::tTuple);
+            mka->makeType->argTypes.push_back($decl);
+            mka->makeType->argTypes.push_back($to_decl);
+            auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+            ttm->arguments.push_back(mka);
+            $$ = ttm;
+        } else {
+            auto msd = new ExprMakeStruct();
+            msd->at = tokAt(scanner,@loc);
+            msd->makeType = make_smart<TypeDecl>(Type::tTable);
+            msd->makeType->firstType = TypeDeclPtr($decl);
+            msd->makeType->secondType = TypeDeclPtr($to_decl);
+            msd->at = tokAt(scanner,@loc);
+            msd->useInitializer = true;
+            msd->alwaysUseInitializer = true;
+            $$ = msd;
+        }
     }
     ;
 

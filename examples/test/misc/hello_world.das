@@ -246,6 +246,8 @@ def test_tables() {
 	let c : table<int;int> <- { 1=>1, 2=>2, 3=>3, 4=>4, 5=>5 };	// table of integers, key-value pairs
 	let d : table<int;int> <- table<int;int>(1=>1,2=>2,3=>3,4=>4,5=>5);	// table of integers, key-value pairs
 	let D : table<int;int> <- table(1=>1,2=>2,3=>3,4=>4,5=>5);	// table of integers, key-value pairs
+	let e : table<int> <- table<int>();	// empty table of integers
+	let f : table<int;int> <- table<int;int>();	// empty table of integers, key-value pairs
 }
 
 /////////////////
