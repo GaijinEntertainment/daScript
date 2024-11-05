@@ -8,7 +8,7 @@ namespace das
 #endif
 
 #ifndef DAS_ENABLE_KEEPALIVE
-#define DAS_ENABLE_KEEPALIVE 0
+#define DAS_ENABLE_KEEPALIVE 1
 #endif
 
     enum Type : int32_t {

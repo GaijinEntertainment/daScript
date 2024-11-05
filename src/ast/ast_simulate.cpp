@@ -114,14 +114,24 @@ namespace das
 
     // common for move and copy
 
+    SimNode_CallBase * getCallBase ( SimNode * node ) {
+        if ( node->rtti_node_isKeepAlive() ) {
+            SimNode_KeepAlive * ka = static_cast<SimNode_KeepAlive *>(node);
+            node = ka->value;
+        }
+        DAS_ASSERTF(node->rtti_node_isCallBase(),"we are calling getCallBase on a node, which is not a call base node."
+                    "we should not be here, script compiler should have caught this during compilation.");
+        return static_cast<SimNode_CallBase *>(node);
+    }
+
     SimNode * makeLocalCMResMove (const LineInfo & at, Context & context, uint32_t offset, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
                 return right;
             }
         }
@@ -129,8 +139,8 @@ namespace das
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                auto * right = rE->simulate(context);
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
                 return right;
             }
         }
@@ -155,18 +165,16 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * rightC = (SimNode_CallBase *) right;
-                rightC->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
-                return rightC;
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                return right;
             }
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * rightC = (SimNode_CallBase *) right;
-                rightC->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
-                return rightC;
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
+                return right;
             }
         }
         // wo standard path
@@ -192,8 +200,8 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
                 return right;
             }
         }
@@ -201,8 +209,8 @@ namespace das
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
                 return right;
             }
         }
@@ -227,18 +235,16 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * rightC = (SimNode_CallBase *) right;
-                rightC->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
-                return rightC;
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                return right;
             }
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * rightC = (SimNode_CallBase *) right;
-                rightC->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
-                return rightC;
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
+                return right;
             }
         }
         // wo standard path
@@ -264,8 +270,8 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
                 return right;
             }
         }
@@ -273,8 +279,8 @@ namespace das
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
                 return right;
             }
         }
@@ -298,8 +304,8 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
                 return right;
             }
         }
@@ -307,8 +313,8 @@ namespace das
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
                 return right;
             }
         }
@@ -340,8 +346,8 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = lE->simulate(context);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = lE->simulate(context);
                 return right;
             }
         }
@@ -349,8 +355,8 @@ namespace das
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = lE->simulate(context);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = lE->simulate(context);
                 return right;
             }
         }
@@ -378,8 +384,8 @@ namespace das
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = lE->simulate(context);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = lE->simulate(context);
                 return right;
             }
         }
@@ -387,8 +393,8 @@ namespace das
         if ( rE->rtti_isInvoke() ) {
             auto cll = static_pointer_cast<ExprInvoke>(rE);
             if ( cll->allowCmresSkip() ) {
-                SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
-                right->cmresEval = lE->simulate(context);
+                auto right = rE->simulate(context);
+                getCallBase(right)->cmresEval = lE->simulate(context);
                 return right;
             }
         }
@@ -413,14 +419,12 @@ namespace das
     }
 
     SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
-        {
-            if ( copyOnReturn || moveOnReturn ) {
-                return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
-            } else if ( fastCall ) {
-                return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(arguments.size()), at);
-            } else {
-                return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
-            }
+        if ( copyOnReturn || moveOnReturn ) {
+            return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
+        } else if ( fastCall ) {
+            return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(arguments.size()), at);
+        } else {
+            return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
         }
     }
 
@@ -2465,8 +2469,7 @@ namespace das
         } else if ( returnInBlock ) {
             if ( returnCallCMRES ) {
                 DAS_VERIFYF(simSubE, "internal error. can't be zero");
-                SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
-                simRet->cmresEval = context.code->makeNode<SimNode_GetBlockCMResOfs>(at,0,stackTop);
+                getCallBase(simSubE)->cmresEval = context.code->makeNode<SimNode_GetBlockCMResOfs>(at,0,stackTop);
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
                 DAS_VERIFYF(simSubE, "internal error. can't be zero");
@@ -2484,8 +2487,7 @@ namespace das
         } else if ( subexpr ) {
             if ( returnCallCMRES ) {
                 DAS_VERIFYF(simSubE, "internal error. can't be zero");
-                SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
-                simRet->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at,0);
+                getCallBase(simSubE)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at,0);
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( returnCMRES ) {
                 // ReturnLocalCMRes
@@ -2962,13 +2964,13 @@ namespace das
             varExpr->variable = var;
             varExpr->local = local;
             varExpr->type = make_smart<TypeDecl>(*var->type);
-            SimNode_CallBase * retN = nullptr; // it has to be CALL with CMRES
+            SimNode * retN = nullptr; // it has to be CALL with CMRES
             const auto & rE = var->init;
             if ( rE->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(rE);
                 if ( cll->allowCmresSkip() ) {
-                    retN = (SimNode_CallBase *) rE->simulate(context);
-                    retN->cmresEval = varExpr->simulate(context);
+                    retN = rE->simulate(context);
+                    getCallBase(retN)->cmresEval = varExpr->simulate(context);
                 }
             }
             if ( !retN ) {
