@@ -2103,6 +2103,7 @@ namespace das {
               << value.profiler
               << value.profile_module
               << value.jit
+              << value.keep_alive
               << value.threadlock_context;
         return *this;
     }
