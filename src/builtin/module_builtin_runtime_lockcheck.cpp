@@ -157,10 +157,6 @@ namespace das
                         break;
                     }
                     case PathType::array_element:
-                        pathStr += "[";
-                        pathStr += to_string(pc.index);
-                        pathStr += "]";
-                        break;
                     case PathType::table_element:
                         pathStr += "[";
                         pathStr += to_string(pc.index);
@@ -176,6 +172,8 @@ namespace das
                         }
                         break;
                     }
+                    default:
+                        break;
                 }
             }
         }
