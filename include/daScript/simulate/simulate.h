@@ -122,6 +122,8 @@ namespace das
         virtual bool rtti_node_isInstrument() const { return false; }
         virtual bool rtti_node_isInstrumentFunction() const { return false; }
         virtual bool rtti_node_isJit() const { return false; }
+        virtual bool rtti_node_isKeepAlive() const { return false; }
+        virtual bool rtti_node_isCallBase() const { return false; }
     protected:
         virtual ~SimNode() {}
     };
@@ -988,6 +990,7 @@ __forceinline void profileNode ( SimNode * node ) {
 
     struct SimNode_KeepAlive : SimNode {
         SimNode_KeepAlive ( const LineInfo & at, SimNode * res ) : SimNode(at), value(res) {}
+        virtual bool rtti_node_isKeepAlive() const override { return true; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
@@ -1008,6 +1011,7 @@ __forceinline void profileNode ( SimNode * node ) {
     // FUNCTION CALL
     struct SimNode_CallBase : SimNode {
         SimNode_CallBase ( const LineInfo & at ) : SimNode(at) {}
+        virtual bool rtti_node_isCallBase() const override { return true; }
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitCall ( SimVisitor & vis );
         __forceinline void evalArgs ( Context & context, vec4f * argValues ) {

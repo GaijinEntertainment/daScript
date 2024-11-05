@@ -429,13 +429,13 @@ namespace das
     };
 
     template <>
-    struct SimNodeKeepAlive_ForGoodArray1<0> : public SimNode_ForBase {
-        SimNodeKeepAlive_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForBase(at) {}
+    struct SimNodeKeepAlive_ForGoodArray1<0> : public SimNode_ForGoodArray1<0> {
+        SimNodeKeepAlive_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForGoodArray1<0>(at) {}
     };
 
     template <>
-    struct SimNodeKeepAlive_ForGoodArray1<1> : public SimNode_ForBase {
-        SimNodeKeepAlive_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForBase(at) {}
+    struct SimNodeKeepAlive_ForGoodArray1<1> : public SimNode_ForGoodArray1<1> {
+        SimNodeKeepAlive_ForGoodArray1 ( const LineInfo & at ) : SimNode_ForGoodArray1<1>(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             Array * __restrict pha;
