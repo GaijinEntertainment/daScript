@@ -3598,15 +3598,15 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * pi[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
-                pi[t] = context.stack.sp() + stackTop[t];
+                pi[t] = context.stack.sp() + this->stackTop[t];
             }
             Iterator * sources[totalCount] = {};
             for ( int t=0; t!=totalCount; ++t ) {
-                vec4f ll = source_iterators[t]->eval(context);
+                vec4f ll = this->source_iterators[t]->eval(context);
                 sources[t] = cast<Iterator *>::to(ll);
             }
             bool needLoop = true;
-            SimNode ** __restrict tail = list + total;
+            SimNode ** __restrict tail = this->list + this->total;
             for ( int t=0; t!=totalCount; ++t ) {
                 sources[t]->isOpen = true;
                 needLoop = sources[t]->first(context, pi[t]) && needLoop;
@@ -3614,7 +3614,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
             if ( !needLoop ) goto loopend;
             while ( !context.stopFlags ) {
-                SimNode ** __restrict body = list;
+                SimNode ** __restrict body = this->list;
             loopbegin:;
                 DAS_KEEPALIVE_LOOP(&context);
                 for (; body!=tail; ++body) {
@@ -3627,7 +3627,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
             }
         loopend:
-            evalFinal(context);
+            this->evalFinal(context);
             for ( int t=0; t!=totalCount; ++t ) {
                 sources[t]->close(context, pi[t]);
             }
