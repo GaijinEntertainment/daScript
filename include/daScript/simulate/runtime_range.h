@@ -91,7 +91,7 @@ namespace das
     // FOR RANGE KEEPALIVE
     //////////////////
 
-#if DAS_DEBUGGER
+#if DAS_ENABLE_KEEPALIVE
 
     template <typename TRange>
     struct SimNodeKeepAlive_ForRange : SimNode_ForRange<TRange>  {
