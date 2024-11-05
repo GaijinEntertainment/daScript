@@ -233,6 +233,7 @@ def test_arrays {
 	let H : array<Tup> <- array tuple<Tup>( (a=1,b=2.,c="3"), (a=4,b=5.,c="6") );	// array of tuples
 	let v : Varr[6] <- variant<Varr>(a=1, b=2., c="3", a=4, b=5., c="6");
 	let V : array<Varr> <- array variant<Varr>(a=1, b=2., c="3", a=4, b=5., c="6");	// array of variants
+	let I : array<int> <- array<int>(); // empty array of integers
 }
 
 ////////
