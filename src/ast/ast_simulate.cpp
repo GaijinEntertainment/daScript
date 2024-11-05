@@ -115,10 +115,12 @@ namespace das
     // common for move and copy
 
     SimNode_CallBase * getCallBase ( SimNode * node ) {
+#if DAS_ENABLE_KEEPALIVE
         if ( node->rtti_node_isKeepAlive() ) {
             SimNode_KeepAlive * ka = static_cast<SimNode_KeepAlive *>(node);
             node = ka->value;
         }
+#endif
         DAS_ASSERTF(node->rtti_node_isCallBase(),"we are calling getCallBase on a node, which is not a call base node."
                     "we should not be here, script compiler should have caught this during compilation.");
         return static_cast<SimNode_CallBase *>(node);
