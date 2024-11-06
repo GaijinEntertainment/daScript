@@ -1846,6 +1846,11 @@ expr
         $$ = ast_rpipe(scanner,$arg,fncall,tokAt(scanner,@loc));
     }
     |   expr_call_pipe[pipe] { $$ = $pipe; }
+    |   DAS_UNSAFE '(' expr[subexpr] ')' {
+            $subexpr->alwaysSafe = true;
+            $subexpr->userSaidItsSafe = true;
+            $$ = $subexpr;
+        }
     ;
 
 expr_mtag

@@ -473,6 +473,21 @@ def test_generator ( a : int ) {
 	};
 }
 
+//////////////////////
+// unsafe declarations
+
+[export]
+def test_unsafe_declarations {
+	unsafe {
+		let a = 13;
+		let b = addr(a);
+		debug(b);
+	}
+	let A = 13;
+	let B = unsafe(addr(A));
+	debug(B);
+}
+
 ///////
 // main
 
