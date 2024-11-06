@@ -949,6 +949,9 @@ metadata_argument_list
     |   metadata_argument_list[argL] '@' annotation_argument[arg] {
         $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
     }
+    |   metadata_argument_list[argL] ';' {
+        $$ = $argL;
+    }
     ;
 
 annotation_declaration_name

@@ -838,7 +838,9 @@ namespace das {
         "skip_lock_checks",             Type::tBool,
         "skip_module_lock_checks",      Type::tBool,
     // pinvoke
-        "threadlock_context",           Type::tBool
+        "threadlock_context",           Type::tBool,
+    // version_2_syntax
+        "gen2",                         Type::tBool,
     };
 
     void verifyOptions() {

@@ -3055,7 +3055,7 @@ namespace das
         if ( !doesNotNeedSp && stackTop ) {
             pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
         }
-        if ( func->builtIn ) {
+        if ( func->builtIn || !func->recursive ) {
             // TODO: we need to determine, if we need keep-alive for the func
             // basic function which is not recursive in any shape or form may not need one
             return pCall;   // we don't need keep-alive for the built-in functions
@@ -3161,6 +3161,31 @@ namespace das
     extern "C" int64_t ref_time_ticks ();
     extern "C" int get_time_usec (int64_t reft);
 
+    bool isRecursive ( Function * fun, das_hash_set<Function *> & visited ) {
+        if ( visited.find(fun) != visited.end() ) {
+            return true;
+        }
+        visited.insert(fun);
+        for ( auto call : fun->useFunctions ) {
+            if ( isRecursive(call, visited) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void Program::updateKeepAliveFlags() {
+        if ( !policies.keep_alive ) return;
+        for ( auto mod : library.modules ) {
+            mod->functions.foreach([&](FunctionPtr & fn){
+                if ( fn->builtIn ) return;
+                if ( !fn->used ) return;
+                das_hash_set<Function *> visited;
+                fn->recursive = isRecursive(fn.get(), visited);
+            });
+        }
+    }
+
     void Program::updateSemanticHash() {
         thisModule->structures.foreach([&](StructurePtr & ps){
             HashBuilder hb;
@@ -3168,7 +3193,7 @@ namespace das
             das_set<Annotation *> adep;
             ps->ownSemanticHash = ps->getOwnSemanticHash(hb,dep,adep);
         });
-   }
+    }
 
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         auto time0 = ref_time_ticks();
@@ -3178,6 +3203,9 @@ namespace das
             return false;
         }
     #endif
+        if ( policies.keep_alive ) {
+            updateKeepAliveFlags();
+        }
         isSimulating = true;
         context.failed = true;
         astTypeInfo.clear();    // this is to be filled via typeinfo(ast_typedecl and such)

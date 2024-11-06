@@ -933,6 +933,7 @@ namespace das
                 bool    captureString : 1;
                 bool    callCaptureString : 1;
                 bool    hasStringBuilder : 1;
+                bool    recursive : 1;              // this one is detected by the updateKeepAlive during the simulate, if enabled
             };
             uint32_t moreFlags = 0;
         };
@@ -1560,6 +1561,7 @@ namespace das
         void allocateStack(TextWriter & logs, bool permanent, bool everything);
         void deriveAliases(TextWriter & logs, bool permanent, bool everything);
         void updateSemanticHash();
+        void updateKeepAliveFlags();
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
