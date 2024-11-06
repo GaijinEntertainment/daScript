@@ -3306,11 +3306,6 @@ namespace das
                     }
                     auto mangledName = pfun->getMangledName();
                     auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());
-                    if ( MNH==0 ) {
-                        error("Internalc compiler errors. Mangled name hash is zero. Function " + pfun->name,
-                            "\tMangled name " + mangledName + " hash is " + to_string(MNH), "",
-                                pfun->at);
-                    }
                     fnByMnh[MNH] = pfun.get();
                     auto & gfun = context.functions[pfun->index];
                     gfun.name = context.code->allocateName(pfun->name);
