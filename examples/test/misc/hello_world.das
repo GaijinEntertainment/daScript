@@ -1,4 +1,4 @@
-#gen2#
+options gen2;
 
 //	NOTE - this is WIP example of every single feature new syntax has to offer
 //	new syntax no longer supports significant whitespace, oxoford commas, etc
