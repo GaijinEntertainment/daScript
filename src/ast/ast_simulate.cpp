@@ -1087,11 +1087,18 @@ namespace das
     // goto
 
     SimNode * ExprGoto::simulate (Context & context) const {
+        SimNode * result = nullptr;
         if ( subexpr ) {
-            return context.code->makeNode<SimNode_Goto>(at, subexpr->simulate(context));
+            result = context.code->makeNode<SimNode_Goto>(at, subexpr->simulate(context));
         } else {
-            return context.code->makeNode<SimNode_GotoLabel>(at,label);
+            result = context.code->makeNode<SimNode_GotoLabel>(at,label);
         }
+#if DAS_ENABLE_KEEPALIVE
+        if ( context.thisProgram->policies.keep_alive ) {
+            result = context.code->makeNode<SimNode_KeepAlive>(at,result);
+        }
+#endif
+        return result;
     }
 
     // r2v
