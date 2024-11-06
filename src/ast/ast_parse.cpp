@@ -410,8 +410,15 @@ namespace das {
                     continue;
                 }
             }
-            if (text[i] == '#' && i + 5 < length && text[i + 1] == 'g' && text[i + 2] == 'e' && text[i + 3] == 'n' && text[i + 4] == '2' && text[i + 5] == '#') {
-                return true;
+            // check for options\s*gen2
+            if (text[i] == 'o' && i + 7 < length && text[i + 1] == 'p' && text[i + 2] == 't' && text[i + 3] == 'i' && text[i + 4] == 'o' && text[i + 5] == 'n' && text[i + 6] == 's' && isspace(text[i + 7]) ) {
+                i += 7;
+                while (i < length && isspace(text[i])) {
+                    ++i;
+                }
+                if (i + 4 < length && text[i] == 'g' && text[i + 1] == 'e' && text[i + 2] == 'n' && text[i + 3] == '2') {
+                    return true;
+                }
             }
         }
         return false;
