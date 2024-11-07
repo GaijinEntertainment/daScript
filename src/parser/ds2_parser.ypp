@@ -1268,7 +1268,7 @@ type_declaration_no_options_list
         $$ = new vector<Expression *>();
         $$->push_back(new ExprTypeDecl(tokAt(scanner,@decl),$decl));
     }
-    |   type_declaration_no_options_list[declL] ';' type_declaration[decl] {
+    |   type_declaration_no_options_list[declL] c_or_s type_declaration[decl] {
         $$ = $declL;
         $$->push_back(new ExprTypeDecl(tokAt(scanner,@decl),$decl));
     }
@@ -1470,7 +1470,7 @@ expr_type_info
             delete $trait;
             delete $subtrait;
     }
-    |   DAS_TYPEINFO[loc] name_in_namespace[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' '(' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] name_in_namespace[trait] '<' NAME[subtrait] c_or_s NAME[extratrait] '>' '(' expr[subexpr] ')' {
             if ( $subexpr->rtti_isTypeDecl() ) {
                 auto ptd = (ExprTypeDecl *)$subexpr;
                 $$ = new ExprTypeInfo(tokAt(scanner,@loc),*$trait,ptd->typeexpr,*$subtrait,*$extratrait);
@@ -2029,17 +2029,17 @@ tuple_type
 
 tuple_type_list
     :   tuple_type[decl]                               { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
-    |   tuple_type_list[list] ';' tuple_type[decl]     { $$ = $list; $list->push_back($decl); }
+    |   tuple_type_list[list] c_or_s tuple_type[decl]  { $$ = $list; $list->push_back($decl); }
     ;
 
 tuple_alias_type_list
-    :   {
+    : {
         $$ = new vector<VariableDeclaration*>();
     }
-    | tuple_alias_type_list[list] ';' {
+    | tuple_alias_type_list[list] c_or_s {
         $$ = $list;
     }
-    |   tuple_alias_type_list[list] tuple_type[decl] ';' {
+    | tuple_alias_type_list[list] tuple_type[decl] c_or_s {
         $$ = $list; $list->push_back($decl);
         /*
         if ( !yyextra->g_CommentReaders.empty() ) {
@@ -2065,17 +2065,17 @@ variant_type
 
 variant_type_list
     :   variant_type[decl]                               { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
-    |   variant_type_list[list] ';' variant_type[decl]   { $$ = $list; $list->push_back($decl); }
+    |   variant_type_list[list] c_or_s variant_type[decl]   { $$ = $list; $list->push_back($decl); }
     ;
 
 variant_alias_type_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    | variant_alias_type_list[list] ';' {
+    | variant_alias_type_list[list] c_or_s {
         $$ = $list;
     }
-    |   variant_alias_type_list[list] variant_type[decl] ';' {
+    |   variant_alias_type_list[list] variant_type[decl] c_or_s {
         $$ = $list; $list->push_back($decl);
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tokName = tokAt(scanner,@decl);
@@ -2606,12 +2606,17 @@ bitfield_type_declaration
     }
     ;
 
+c_or_s
+    :   ','
+    |   ';'
+    ;
+
 table_type_pair
     :   type_declaration[keyTypeDecl] {
         $$.firstType = $keyTypeDecl;
         $$.secondType = new TypeDecl(Type::tVoid);
     }
-    |   type_declaration[keyTypeDecl] ';' type_declaration[valueTypeDecl] {
+    |   type_declaration[keyTypeDecl] c_or_s type_declaration[valueTypeDecl] {
         $$.firstType = $keyTypeDecl;
         $$.secondType = $valueTypeDecl;
     }
@@ -2734,7 +2739,7 @@ type_declaration_no_options_no_dim
         $typeDecl->explicitRef = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] '*' {
+    |   type_declaration_no_options_no_dim[typeDecl] '?' {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = TypeDeclPtr($typeDecl);
@@ -3276,7 +3281,7 @@ make_table_decl
             $$ = msd;
         }
     }
-    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] ';' type_declaration_no_options[to_decl] '>' '(' optional_expr_map_tuple_list[arguments] ')' {
+    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] c_or_s type_declaration_no_options[to_decl] '>' '(' optional_expr_map_tuple_list[arguments] ')' {
         if ( $arguments ) {
             auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
             mka->values = sequenceToList($arguments);
