@@ -468,6 +468,7 @@ namespace das {
             uint32_t len = 0;
             fi->getSourceAndLength(src,len);
             bool gen2 = policies.version_2_syntax || detectGen2Syntax(src, len);
+            program->policies.version_2_syntax = gen2;
             if ( gen2 ) {
                 das2_yylex_init_extra(&parserState, &scanner);
             } else {
