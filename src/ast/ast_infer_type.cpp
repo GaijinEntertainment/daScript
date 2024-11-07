@@ -3084,7 +3084,7 @@ namespace das {
                             }
                             if ( allOtherInferred ) {
                                 // we build _::{field.name} ( field, arg1, arg2, ... )
-                                auto newCall = make_smart<ExprCall>(expr->at, "__::" + eField->name);
+                                auto newCall = make_smart<ExprCall>(expr->at, "_::" + eField->name);
                                 newCall->arguments.push_back(eField->value->clone());
                                 for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
                                     newCall->arguments.push_back(expr->arguments[i]->clone());
