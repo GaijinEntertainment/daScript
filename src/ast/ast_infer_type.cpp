@@ -9097,7 +9097,7 @@ namespace das {
                     error("unknown value type", "", "",
                         expr->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
-                } else if ( !expr->recordType->isSameType(*(eval->type),RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no) ) {
+                } else if ( !expr->recordType->isSameType(*(eval->type),RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes) ) {
                     error("incompatible value type. expecting " + describeType(expr->recordType) + " vs " + describeType(eval->type), "", "",
                         eval->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
