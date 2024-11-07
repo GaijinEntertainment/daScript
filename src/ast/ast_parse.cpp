@@ -487,6 +487,12 @@ namespace das {
                     das_yybegin(src, len, scanner);
                 }
             }
+            libGroup.foreach([&](Module * mod){
+                if ( mod->commentReader ) {
+                    parserState.g_CommentReaders.push_back(mod->commentReader.get());
+                }
+                return true;
+            },"*");
             if ( gen2 ) {
                 err = das2_yyparse(scanner);
                 das2_yylex_destroy(scanner);
@@ -494,12 +500,6 @@ namespace das {
                 err = das_yyparse(scanner);
                 das_yylex_destroy(scanner);
             }
-            libGroup.foreach([&](Module * mod){
-                if ( mod->commentReader ) {
-                    parserState.g_CommentReaders.push_back(mod->commentReader.get());
-                }
-                return true;
-            },"*");
         } else {
             program->error(fileName + " not found", "","",LineInfo());
             program->isCompiling = false;
