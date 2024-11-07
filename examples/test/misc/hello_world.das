@@ -169,14 +169,14 @@ def test_make_struct {
 
 [export]
 def test_new_struct {
-	let a : Mks* = new Mks();	    		// Mks*, on heap - default values
-	let A : Mks* = new default<Mks>;		// Mks*, on heap - default values
-	let b : Mks* = new Mks(5);	    		// Mks*, on heap - with constructor
-	let c : Mks* = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
-	let d : Mks*[10] = new<Mks[10]>();			// fixed_array of 10 elements
+	let a : Mks?  = new Mks();	    		// Mks*, on heap - default values
+	let A : Mks?  = new default<Mks>;		// Mks*, on heap - default values
+	let b : Mks?  = new Mks(5);	    		// Mks*, on heap - with constructor
+	let c : Mks?  = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
+	let d : Mks? [10] = new<Mks[10]>();			// fixed_array of 10 elements
 	unsafe {
-		let j : Mks* = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
-		let h : Mks* = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0
+		let j : Mks? = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
+		let h : Mks? = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0
 	};
 }
 
@@ -191,13 +191,13 @@ tuple Tup {
 
 [export]
 def test_tuples {
-	let a : tuple<int;float;string> = (1,2.,"3");	debug(a);
-	let b : tuple<int;float;string> = tuple(1,2.,"3");	debug(b);
-	let c : tuple<int;float;string> = Tup(1,2.,"3");	debug(c);
-	let d : tuple<int;float;string> = Tup(a=1,b=2.,c="3");	debug(d);
-	let e : tuple<int;float;string> = tuple<Tup>(a=1,b=2.,c="3");	debug(e);
-	let f : tuple<int;float;string> = tuple<Tup>(uninitialized a=1);	debug(f);	// a=1,b=0.0,c=""
-	let g : tuple<int;float;string>* = new tuple(1,2.,"3");	debug(g); // on heap
+	let a : tuple<int,float,string> = (1,2.,"3");	debug(a);
+	let b : tuple<int,float,string> = tuple(1,2.,"3");	debug(b);
+	let c : tuple<int,float,string> = Tup(1,2.,"3");	debug(c);
+	let d : tuple<int,float,string> = Tup(a=1,b=2.,c="3");	debug(d);
+	let e : tuple<int,float,string> = tuple<Tup>(a=1,b=2.,c="3");	debug(e);
+	let f : tuple<int,float,string> = tuple<Tup>(uninitialized a=1);	debug(f);	// a=1,b=0.0,c=""
+	let g : tuple<int,float,string>? = new tuple(1,2.,"3");	debug(g); // on heap
 }
 
 ///////////
@@ -212,8 +212,8 @@ variant Varr {
 [export]
 def test_variants {
 	// NOTE - variant can't be uninitialized (it just makes no sense)
-	let a : variant<a:int;b:float;c:string> = Varr(a=1);
-	let b : variant<a:int;b:float;c:string> = variant<Varr>(a=1);
+	let a : variant<a:int,b:float,c:string> = Varr(a=1);
+	let b : variant<a:int,b:float,c:string> = variant<Varr>(a=1);
 }
 
 /////////
@@ -243,11 +243,11 @@ def test_tables() {
 	let a : table<int> <- { 1, 2, 3, 4, 5 };	// table of integers, keys only
 	let b : table<int> <- table<int>(1,2,3,4,5);	// table of integers, keys only
 	let B : table<int> <- table(1,2,3,4,5);	// table of integers, keys only
-	let c : table<int;int> <- { 1=>1, 2=>2, 3=>3, 4=>4, 5=>5 };	// table of integers, key-value pairs
-	let d : table<int;int> <- table<int;int>(1=>1,2=>2,3=>3,4=>4,5=>5);	// table of integers, key-value pairs
-	let D : table<int;int> <- table(1=>1,2=>2,3=>3,4=>4,5=>5);	// table of integers, key-value pairs
+	let c : table<int,int> <- { 1=>1, 2=>2, 3=>3, 4=>4, 5=>5 };	// table of integers, key-value pairs
+	let d : table<int,int> <- table<int,int>(1=>1,2=>2,3=>3,4=>4,5=>5);	// table of integers, key-value pairs
+	let D : table<int,int> <- table(1=>1,2=>2,3=>3,4=>4,5=>5);	// table of integers, key-value pairs
 	let e : table<int> <- table<int>();	// empty table of integers
-	let f : table<int;int> <- table<int;int>();	// empty table of integers, key-value pairs
+	let f : table<int,int> <- table<int,int>();	// empty table of integers, key-value pairs
 }
 
 /////////////////
