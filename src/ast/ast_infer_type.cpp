@@ -8160,13 +8160,19 @@ namespace das {
             if ( !expr->func ) {
                 auto aliasT = findAlias(expr->name);
                 if ( aliasT && aliasT->isTuple() ) {
-                    auto mkt = make_smart<ExprMakeTuple>(expr->at);
-                    mkt->type = make_smart<TypeDecl>(*aliasT);
-                    for ( auto & arg : expr->arguments ) {
-                        mkt->values.push_back(arg->clone());
-                    }
                     reportAstChanged();
-                    return mkt;
+                    if ( expr->arguments.size() ) {
+                        auto mkt = make_smart<ExprMakeTuple>(expr->at);
+                        mkt->recordType = make_smart<TypeDecl>(*aliasT);
+                        for ( auto & arg : expr->arguments ) {
+                            mkt->values.push_back(arg->clone());
+                        }
+                        return mkt;
+                    } else {
+                        auto mks = make_smart<ExprMakeStruct>(expr->at);
+                        mks->makeType = make_smart<TypeDecl>(*aliasT);
+                        return mks;
+                    }
                 }
             }
             if ( func && !expr->func && func->isClassMethod && func->arguments.size()>=1 ) {
