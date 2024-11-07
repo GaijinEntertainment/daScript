@@ -987,95 +987,98 @@ Grammar
   719 make_struct_dim_decl: make_struct_fields
   720                     | make_struct_dim_list optional_comma
 
-  721 use_initializer: %empty
-  722                | "uninitialized"
+  721 optional_make_struct_dim_decl: make_struct_dim_decl
+  722                              | %empty
 
-  723 $@72: %empty
+  723 use_initializer: %empty
+  724                | "uninitialized"
 
-  724 $@73: %empty
+  725 $@72: %empty
 
-  725 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer make_struct_dim_decl ')'
+  726 $@73: %empty
 
-  726 $@74: %empty
+  727 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer optional_make_struct_dim_decl ')'
 
-  727 $@75: %empty
+  728 $@74: %empty
 
-  728 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer make_struct_dim_decl ')'
+  729 $@75: %empty
 
-  729 $@76: %empty
+  730 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer optional_make_struct_dim_decl ')'
 
-  730 $@77: %empty
+  731 $@76: %empty
 
-  731 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim ')'
+  732 $@77: %empty
 
-  732 $@78: %empty
+  733 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim ')'
 
-  733 $@79: %empty
+  734 $@78: %empty
 
-  734 make_struct_decl: "default" '<' $@78 type_declaration_no_options '>' $@79 use_initializer
+  735 $@79: %empty
 
-  735 make_map_tuple: expr "=>" expr
-  736               | expr
+  736 make_struct_decl: "default" '<' $@78 type_declaration_no_options '>' $@79 use_initializer
 
-  737 make_tuple_call: "tuple" '(' expr_list optional_comma ')'
+  737 make_map_tuple: expr "=>" expr
+  738               | expr
 
-  738 $@80: %empty
+  739 make_tuple_call: "tuple" '(' expr_list optional_comma ')'
 
-  739 $@81: %empty
+  740 $@80: %empty
 
-  740 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer make_struct_dim_decl ')'
+  741 $@81: %empty
 
-  741 make_dim_decl: '[' expr_list optional_comma ']'
+  742 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer optional_make_struct_dim_decl ')'
 
-  742 $@82: %empty
+  743 make_dim_decl: '[' expr_list optional_comma ']'
 
-  743 $@83: %empty
+  744 $@82: %empty
 
-  744 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer make_struct_dim_decl ')'
+  745 $@83: %empty
 
-  745 $@84: %empty
+  746 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer optional_make_struct_dim_decl ')'
 
-  746 $@85: %empty
+  747 $@84: %empty
 
-  747 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer make_struct_dim_decl ')'
+  748 $@85: %empty
 
-  748 $@86: %empty
+  749 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer optional_make_struct_dim_decl ')'
 
-  749 $@87: %empty
+  750 $@86: %empty
 
-  750 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
-  751              | "array" '(' expr_list optional_comma ')'
+  751 $@87: %empty
 
-  752 $@88: %empty
+  752 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
+  753              | "array" '(' expr_list optional_comma ')'
 
-  753 $@89: %empty
+  754 $@88: %empty
 
-  754 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list ')'
-  755              | "fixed_array" '(' expr_list optional_comma ')'
+  755 $@89: %empty
 
-  756 $@90: %empty
+  756 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list ')'
+  757              | "fixed_array" '(' expr_list optional_comma ')'
 
-  757 $@91: %empty
+  758 $@90: %empty
 
-  758 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')'
+  759 $@91: %empty
 
-  759 expr_map_tuple_list: make_map_tuple
-  760                    | expr_map_tuple_list ',' make_map_tuple
+  760 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')'
 
-  761 make_table_decl: "begin of code block" expr_map_tuple_list optional_comma "end of code block"
-  762                | "table" '(' expr_map_tuple_list optional_comma ')'
-  763                | "table" '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
-  764                | "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
+  761 expr_map_tuple_list: make_map_tuple
+  762                    | expr_map_tuple_list ',' make_map_tuple
 
-  765 array_comprehension_where: %empty
-  766                          | "end of expression" "where" expr
+  763 make_table_decl: "begin of code block" expr_map_tuple_list optional_comma "end of code block"
+  764                | "table" '(' expr_map_tuple_list optional_comma ')'
+  765                | "table" '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
+  766                | "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
 
-  767 optional_comma: %empty
-  768               | ','
+  767 array_comprehension_where: %empty
+  768                          | "end of expression" "where" expr
 
-  769 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
-  770                    | '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
-  771                    | "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
+  769 optional_comma: %empty
+  770               | ','
+
+  771 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  772                    | '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  773                    | "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
 
 
 Terminals, with rules where they appear
@@ -1086,58 +1089,58 @@ Terminals, with rules where they appear
     '$' (36) 20 295 632 634
     '%' (37) 35 39 140 382
     '&' (38) 148 298 389 500 508 639 640 645
-    '(' (40) 58 68 69 70 72 73 93 102 108 115 116 250 251 252 271 272 287 288 289 305 335 336 337 338 340 350 351 355 356 357 358 359 400 410 411 412 413 443 444 445 446 447 448 450 451 452 453 454 455 456 457 458 459 481 510 565 606 607 631 632 634 711 712 713 714 717 718 725 728 731 737 740 744 747 750 751 754 755 758 762 763 764
-    ')' (41) 58 68 69 70 72 73 93 102 108 115 116 250 251 252 271 272 287 288 289 305 335 336 337 338 340 350 351 355 356 357 358 359 400 410 411 412 413 443 444 445 446 447 448 450 451 452 453 454 455 456 457 458 459 481 510 565 606 607 631 632 634 711 712 713 714 717 718 725 728 731 737 740 744 747 750 751 754 755 758 762 763 764
+    '(' (40) 58 68 69 70 72 73 93 102 108 115 116 250 251 252 271 272 287 288 289 305 335 336 337 338 340 350 351 355 356 357 358 359 400 410 411 412 413 443 444 445 446 447 448 450 451 452 453 454 455 456 457 458 459 481 510 565 606 607 631 632 634 711 712 713 714 717 718 727 730 733 739 742 746 749 752 753 756 757 760 764 765 766
+    ')' (41) 58 68 69 70 72 73 93 102 108 115 116 250 251 252 271 272 287 288 289 305 335 336 337 338 340 350 351 355 356 357 358 359 400 410 411 412 413 443 444 445 446 447 448 450 451 452 453 454 455 456 457 458 459 481 510 565 606 607 631 632 634 711 712 713 714 717 718 727 730 733 739 742 746 749 752 753 756 757 760 764 765 766
     '*' (42) 138 380 409 646
     '+' (43) 136 372 378
-    ',' (44) 48 82 95 111 270 291 303 336 512 513 515 533 567 568 612 709 710 713 714 718 760 768
+    ',' (44) 48 82 95 111 270 291 303 336 512 513 515 533 567 568 612 709 710 713 714 718 762 770
     '-' (45) 137 373 379 635 638 640 643
     '.' (46) 40 165 167 168 348 349 350 351 354 402 404 406 452 454 455
     '/' (47) 41 139 381
     ':' (58) 50 51 118 271 416 485 491 501 502 516 517 519 520 545 550
-    "end of expression" (59) 9 15 16 69 214 215 216 221 223 224 225 226 229 230 231 240 271 272 289 475 477 483 487 489 490 493 495 496 516 517 518 519 520 521 539 609 617 764 766 769 770 771
-    '<' (60) 141 248 277 280 283 286 288 289 344 347 383 412 413 414 419 425 430 615 630 634 649 653 656 659 663 666 670 673 677 680 683 686 725 728 731 734 740 744 747 750 754 758 763 764
+    "end of expression" (59) 9 15 16 69 214 215 216 221 223 224 225 226 229 230 231 240 271 272 289 475 477 483 487 489 490 493 495 496 516 517 518 519 520 521 539 609 617 766 768 771 772 773
+    '<' (60) 141 248 277 280 283 286 288 289 344 347 383 412 413 414 419 425 430 615 630 634 649 653 656 659 663 666 670 673 677 680 683 686 727 730 733 736 742 746 749 752 756 760 765 766
     '=' (61) 74 86 87 88 89 90 91 93 299 317 497 504 530 538
-    '>' (62) 142 248 277 280 283 286 288 289 344 347 384 412 413 414 419 425 430 615 630 634 649 653 656 659 663 666 670 673 677 680 683 686 725 728 731 734 740 744 747 750 754 758 763 764
+    '>' (62) 142 248 277 280 283 286 288 289 344 347 384 412 413 414 419 425 430 615 630 634 649 653 656 659 663 666 670 673 677 680 683 686 727 730 733 736 742 746 749 752 756 760 765 766
     '?' (63) 177 178 416 427 430 431 457
     '@' (64) 96 97 296 297 341 344 347 459
-    '[' (91) 113 163 335 336 401 402 618 619 620 621 635 741 769 770
-    ']' (93) 113 163 164 335 336 401 402 403 404 618 619 620 621 635 741 769 770
+    '[' (91) 113 163 335 336 401 402 618 619 620 621 635 743 771 772
+    ']' (93) 113 163 164 335 336 401 402 403 404 618 619 620 621 635 743 771 772
     '^' (94) 150 391
-    "begin of code block" (123) 211 212 308 548 560 693 697 701 761 771
+    "begin of code block" (123) 211 212 308 548 560 693 697 701 763 773
     '|' (124) 149 390 688 689
-    "end of code block" (125) 211 212 308 548 560 693 697 701 761 771
+    "end of code block" (125) 211 212 308 548 560 693 697 701 763 773
     '~' (126) 121 371
     error (256) 234 354
     "lexer error" (258)
     "capture" (259) 305
-    "struct" (260) 555 725 744
-    "class" (261) 554 728
+    "struct" (260) 555 727 746
+    "class" (261) 554 730
     "let" (262) 262 265
     "def" (263) 204 477 479
     "while" (264) 72
     "if" (265) 59 69
     "static_if" (266) 60
     "else" (267) 57 62
-    "for" (268) 70 769 770 771
+    "for" (268) 70 771 772 773
     "recover" (269) 261
     "true" (270) 79 90 366
     "false" (271) 80 91 367
     "new" (272) 249 250 251 252 253
     "typeinfo" (273) 287 288 289
     "type" (274) 84 286 419 425 430 630
-    "in" (275) 70 85 769 770 771
+    "in" (275) 70 85 771 772 773
     "is" (276) 173 175 419 420 421 458
     "as" (277) 43 174 176 177 178 422 425 426 427 430 431 456 457
     "elif" (278) 54
     "static_elif" (279) 55
-    "array" (280) 653 744 747 750 751 754
+    "array" (280) 653 746 749 752 753 756
     "return" (281) 256 257 258
     "null" (282) 360
     "break" (283) 254
     "try" (284) 261
     "options" (285) 36
-    "table" (286) 656 762 763 764
+    "table" (286) 656 764 765 766
     "expect" (287) 46
     "const" (288) 466 637 638 644
     "require" (289) 37 99
@@ -1155,11 +1158,11 @@ Terminals, with rules where they appear
     "override" (301) 463
     "abstract" (302) 477
     "upcast" (303) 280
-    "iterator" (304) 659 770
+    "iterator" (304) 659 772
     "var" (305) 263 266
     "addr" (306) 411
     "continue" (307) 255
-    "where" (308) 766
+    "where" (308) 768
     "pass" (309) 231
     "reinterpret" (310) 283
     "module" (311) 22
@@ -1174,9 +1177,9 @@ Terminals, with rules where they appear
     "unsafe" (320) 71 443
     "inscope" (321) 267
     "static" (322) 471
-    "fixed_array" (323) 755 758
-    "default" (324) 734
-    "uninitialized" (325) 722
+    "fixed_array" (323) 757 760
+    "default" (324) 736
+    "uninitialized" (325) 724
     "bool" (326) 179 569
     "void" (327) 589
     "string" (328) 180 570
@@ -1208,8 +1211,8 @@ Terminals, with rules where they appear
     "uint8" (354) 201 579 600
     "int16" (355) 202 573 598
     "uint16" (356) 203 580 601
-    "tuple" (357) 683 693 737 740 747
-    "variant" (358) 686 697 731 750
+    "tuple" (357) 683 693 739 742 749
+    "variant" (358) 686 697 733 752
     "generator" (359) 412 413 414
     "yield" (360) 259 260
     "sealed" (361) 464 552
@@ -1243,7 +1246,7 @@ Terminals, with rules where they appear
     ">>>" (389) 160 377
     "<<<=" (390) 161 333
     ">>>=" (391) 162 334
-    "=>" (392) 293 294 735
+    "=>" (392) 293 294 737
     "::" (393) 242 243
     "&&" (394) 105 133 392
     "||" (395) 106 134 393
@@ -1465,10 +1468,10 @@ Nonterminals, with rules where they appear
         on right: 211 212 233 234 308
     optional_expr_list <pExpression> (267)
         on left: 235 236
-        on right: 250 632 634 754
+        on right: 250 632 634 756
     optional_expr_map_tuple_list <pExpression> (268)
         on left: 237 238
-        on right: 763 764
+        on right: 765 766
     type_declaration_no_options_list <pTypeDeclList> (269)
         on left: 239 240
         on right: 240 634
@@ -1558,7 +1561,7 @@ Nonterminals, with rules where they appear
         on right: 432
     expr_list <pExpression> (298)
         on left: 290 291
-        on right: 70 236 291 336 338 351 357 359 400 451 737 741 751 755 758 769 770 771
+        on right: 70 236 291 336 338 351 357 359 400 451 739 743 753 757 760 771 772 773
     block_or_simple_block <pExpression> (299)
         on left: 292 293 294
         on right: 306
@@ -1624,7 +1627,7 @@ Nonterminals, with rules where they appear
         on right: 213 408
     expr <pExpression> (320)
         on left: 360 361 362 363 364 365 366 367 368 369 370 371 372 373 374 375 376 377 378 379 380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 397 398 399 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 419 420 421 422 425 426 427 430 431 432 433 434 435 436 437 438 439 440 441 442 443
-        on right: 30 53 58 63 68 69 72 73 74 244 245 257 258 259 260 271 272 277 280 283 287 288 289 290 291 293 294 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 331 332 333 334 337 338 340 348 349 350 351 354 370 371 372 373 374 375 376 377 378 379 380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 397 398 399 401 402 403 404 405 406 409 410 411 413 415 416 419 420 421 422 425 426 427 430 431 439 440 441 443 444 445 446 447 448 450 451 452 453 454 455 456 457 458 459 481 502 503 510 517 518 520 521 530 565 607 618 620 631 707 708 709 710 711 712 713 714 735 736 766 769 770
+        on right: 30 53 58 63 68 69 72 73 74 244 245 257 258 259 260 271 272 277 280 283 287 288 289 290 291 293 294 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 331 332 333 334 337 338 340 348 349 350 351 354 370 371 372 373 374 375 376 377 378 379 380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 397 398 399 401 402 403 404 405 406 409 410 411 413 415 416 419 420 421 422 425 426 427 430 431 439 440 441 443 444 445 446 447 448 450 451 452 453 454 455 456 457 458 459 481 502 503 510 517 518 520 521 530 565 607 618 620 631 707 708 709 710 711 712 713 714 737 738 768 771 772
     $@19 (321)
         on left: 417
         on right: 419
@@ -1801,7 +1804,7 @@ Nonterminals, with rules where they appear
         on right: 563
     variable_name_with_pos_list <pNameWithPosList> (379)
         on left: 564 565 566 567 568
-        on right: 70 499 500 501 502 503 567 568 769 770 771
+        on right: 70 499 500 501 502 503 567 568 771 772 773
     basic_type_declaration <type> (380)
         on left: 569 570 571 572 573 574 575 576 577 578 579 580 581 582 583 584 585 586 587 588 589 590 591 592 593 594 595
         on right: 358 359 420 426 431 441 624
@@ -1837,7 +1840,7 @@ Nonterminals, with rules where they appear
         on right: 620 621 623
     type_declaration_no_options <pTypeDecl> (391)
         on left: 622 623
-        on right: 271 277 280 283 344 412 413 414 419 516 517 519 520 687 688 725 728 731 734 740 744 747 750 754 758 763 764
+        on right: 271 277 280 283 344 412 413 414 419 516 517 519 520 687 688 727 730 733 736 742 746 749 752 756 760 765 766
     type_declaration_no_options_no_dim <pTypeDecl> (392)
         on left: 624 625 626 627 630 631 632 634 635 636 637 638 639 640 641 642 643 644 645 646 649 650 653 656 659 660 663 666 667 670 673 674 677 680 683 686
         on right: 622 623 635 636 637 638 639 640 641 642 643 644 645 646 650
@@ -1969,7 +1972,7 @@ Nonterminals, with rules where they appear
         on right: 335 336 709 710 713 714 715 716 717 718 719
     make_variant_dim <pExpression> (435)
         on left: 715
-        on right: 731 750
+        on right: 733 752
     make_struct_single <pExpression> (436)
         on left: 716
         on right: 252 356
@@ -1978,96 +1981,99 @@ Nonterminals, with rules where they appear
         on right: 718 720
     make_struct_dim_decl <pExpression> (438)
         on left: 719 720
-        on right: 725 728 740 744 747
-    use_initializer <b> (439)
+        on right: 721
+    optional_make_struct_dim_decl <pExpression> (439)
         on left: 721 722
-        on right: 251 252 725 728 734 740 744 747
-    make_struct_decl <pExpression> (440)
-        on left: 725 728 731 734
+        on right: 727 730 742 746 749
+    use_initializer <b> (440)
+        on left: 723 724
+        on right: 251 252 727 730 736 742 746 749
+    make_struct_decl <pExpression> (441)
+        on left: 727 730 733 736
         on right: 702
-    $@72 (441)
-        on left: 723
-        on right: 725
-    $@73 (442)
-        on left: 724
-        on right: 725
-    $@74 (443)
+    $@72 (442)
+        on left: 725
+        on right: 727
+    $@73 (443)
         on left: 726
-        on right: 728
-    $@75 (444)
-        on left: 727
-        on right: 728
-    $@76 (445)
+        on right: 727
+    $@74 (444)
+        on left: 728
+        on right: 730
+    $@75 (445)
         on left: 729
-        on right: 731
-    $@77 (446)
-        on left: 730
-        on right: 731
-    $@78 (447)
+        on right: 730
+    $@76 (446)
+        on left: 731
+        on right: 733
+    $@77 (447)
         on left: 732
-        on right: 734
-    $@79 (448)
-        on left: 733
-        on right: 734
-    make_map_tuple <pExpression> (449)
-        on left: 735 736
-        on right: 759 760 771
-    make_tuple_call <pExpression> (450)
-        on left: 737 740
+        on right: 733
+    $@78 (448)
+        on left: 734
+        on right: 736
+    $@79 (449)
+        on left: 735
+        on right: 736
+    make_map_tuple <pExpression> (450)
+        on left: 737 738
+        on right: 761 762 773
+    make_tuple_call <pExpression> (451)
+        on left: 739 742
         on right: 706
-    $@80 (451)
-        on left: 738
-        on right: 740
-    $@81 (452)
-        on left: 739
-        on right: 740
-    make_dim_decl <pExpression> (453)
-        on left: 741 744 747 750 751 754 755 758
+    $@80 (452)
+        on left: 740
+        on right: 742
+    $@81 (453)
+        on left: 741
+        on right: 742
+    make_dim_decl <pExpression> (454)
+        on left: 743 746 749 752 753 756 757 760
         on right: 703
-    $@82 (454)
-        on left: 742
-        on right: 744
-    $@83 (455)
-        on left: 743
-        on right: 744
-    $@84 (456)
+    $@82 (455)
+        on left: 744
+        on right: 746
+    $@83 (456)
         on left: 745
-        on right: 747
-    $@85 (457)
-        on left: 746
-        on right: 747
-    $@86 (458)
+        on right: 746
+    $@84 (457)
+        on left: 747
+        on right: 749
+    $@85 (458)
         on left: 748
-        on right: 750
-    $@87 (459)
-        on left: 749
-        on right: 750
-    $@88 (460)
-        on left: 752
-        on right: 754
-    $@89 (461)
-        on left: 753
-        on right: 754
-    $@90 (462)
-        on left: 756
-        on right: 758
-    $@91 (463)
-        on left: 757
-        on right: 758
-    expr_map_tuple_list <pExpression> (464)
-        on left: 759 760
-        on right: 238 760 761 762
-    make_table_decl <pExpression> (465)
-        on left: 761 762 763 764
+        on right: 749
+    $@86 (459)
+        on left: 750
+        on right: 752
+    $@87 (460)
+        on left: 751
+        on right: 752
+    $@88 (461)
+        on left: 754
+        on right: 756
+    $@89 (462)
+        on left: 755
+        on right: 756
+    $@90 (463)
+        on left: 758
+        on right: 760
+    $@91 (464)
+        on left: 759
+        on right: 760
+    expr_map_tuple_list <pExpression> (465)
+        on left: 761 762
+        on right: 238 762 763 764
+    make_table_decl <pExpression> (466)
+        on left: 763 764 765 766
         on right: 704
-    array_comprehension_where <pExpression> (466)
-        on left: 765 766
-        on right: 769 770 771
-    optional_comma <b> (467)
+    array_comprehension_where <pExpression> (467)
         on left: 767 768
-        on right: 236 238 400 548 701 720 737 741 751 755 758 761 762
-    array_comprehension <pExpression> (468)
-        on left: 769 770 771
+        on right: 771 772 773
+    optional_comma <b> (468)
+        on left: 769 770
+        on right: 236 238 400 548 701 720 739 743 753 757 760 763 764
+    array_comprehension <pExpression> (469)
+        on left: 771 772 773
         on right: 705
 
 
@@ -5817,7 +5823,7 @@ State 370
 
     ','  shift, and go to state 501
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 502
 
@@ -6529,14 +6535,14 @@ State 400
 
 State 401
 
-  725 make_struct_decl: "struct" . '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer make_struct_dim_decl ')'
+  727 make_struct_decl: "struct" . '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '<'  shift, and go to state 576
 
 
 State 402
 
-  728 make_struct_decl: "class" . '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer make_struct_dim_decl ')'
+  730 make_struct_decl: "class" . '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '<'  shift, and go to state 577
 
@@ -6609,11 +6615,11 @@ State 407
 
 State 408
 
-  744 make_dim_decl: "array" . "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer make_struct_dim_decl ')'
-  747              | "array" . "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer make_struct_dim_decl ')'
-  750              | "array" . "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
-  751              | "array" . '(' expr_list optional_comma ')'
-  754              | "array" . '<' $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list ')'
+  746 make_dim_decl: "array" . "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer optional_make_struct_dim_decl ')'
+  749              | "array" . "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer optional_make_struct_dim_decl ')'
+  752              | "array" . "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
+  753              | "array" . '(' expr_list optional_comma ')'
+  756              | "array" . '<' $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list ')'
 
     "struct"   shift, and go to state 584
     "tuple"    shift, and go to state 585
@@ -6631,9 +6637,9 @@ State 409
 
 State 410
 
-  762 make_table_decl: "table" . '(' expr_map_tuple_list optional_comma ')'
-  763                | "table" . '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
-  764                | "table" . '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
+  764 make_table_decl: "table" . '(' expr_map_tuple_list optional_comma ')'
+  765                | "table" . '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
+  766                | "table" . '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
 
     '<'  shift, and go to state 589
     '('  shift, and go to state 590
@@ -6683,8 +6689,8 @@ State 416
 
 State 417
 
-  755 make_dim_decl: "fixed_array" . '(' expr_list optional_comma ')'
-  758              | "fixed_array" . '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')'
+  757 make_dim_decl: "fixed_array" . '(' expr_list optional_comma ')'
+  760              | "fixed_array" . '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')'
 
     '<'  shift, and go to state 597
     '('  shift, and go to state 598
@@ -6692,7 +6698,7 @@ State 417
 
 State 418
 
-  734 make_struct_decl: "default" . '<' $@78 type_declaration_no_options '>' $@79 use_initializer
+  736 make_struct_decl: "default" . '<' $@78 type_declaration_no_options '>' $@79 use_initializer
 
     '<'  shift, and go to state 599
 
@@ -6706,8 +6712,8 @@ State 419
 
 State 420
 
-  737 make_tuple_call: "tuple" . '(' expr_list optional_comma ')'
-  740                | "tuple" . '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer make_struct_dim_decl ')'
+  739 make_tuple_call: "tuple" . '(' expr_list optional_comma ')'
+  742                | "tuple" . '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '<'  shift, and go to state 600
     '('  shift, and go to state 601
@@ -6715,7 +6721,7 @@ State 420
 
 State 421
 
-  731 make_struct_decl: "variant" . '<' $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim ')'
+  733 make_struct_decl: "variant" . '<' $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim ')'
 
     '<'  shift, and go to state 602
 
@@ -7059,8 +7065,8 @@ State 439
 
 State 440
 
-  761 make_table_decl: "begin of code block" . expr_map_tuple_list optional_comma "end of code block"
-  771 array_comprehension: "begin of code block" . "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
+  763 make_table_decl: "begin of code block" . expr_map_tuple_list optional_comma "end of code block"
+  773 array_comprehension: "begin of code block" . "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -7723,9 +7729,9 @@ State 445
 
 State 446
 
-  741 make_dim_decl: '[' . expr_list optional_comma ']'
-  769 array_comprehension: '[' . "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
-  770                    | '[' . "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  743 make_dim_decl: '[' . expr_list optional_comma ']'
+  771 array_comprehension: '[' . "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  772                    | '[' . "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -9166,11 +9172,11 @@ State 500
 State 501
 
   612 bitfield_alias_bits: bitfield_alias_bits ',' . "name"
-  768 optional_comma: ',' .
+  770 optional_comma: ',' .
 
     "name"  shift, and go to state 694
 
-    $default  reduce using rule 768 (optional_comma)
+    $default  reduce using rule 770 (optional_comma)
 
 
 State 502
@@ -10320,7 +10326,7 @@ State 563
 
     ','  shift, and go to state 757
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 758
 
@@ -10542,18 +10548,18 @@ State 575
 
 State 576
 
-  725 make_struct_decl: "struct" '<' . $@72 type_declaration_no_options '>' $@73 '(' use_initializer make_struct_dim_decl ')'
+  727 make_struct_decl: "struct" '<' . $@72 type_declaration_no_options '>' $@73 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 723 ($@72)
+    $default  reduce using rule 725 ($@72)
 
     $@72  go to state 769
 
 
 State 577
 
-  728 make_struct_decl: "class" '<' . $@74 type_declaration_no_options '>' $@75 '(' use_initializer make_struct_dim_decl ')'
+  730 make_struct_decl: "class" '<' . $@74 type_declaration_no_options '>' $@75 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 726 ($@74)
+    $default  reduce using rule 728 ($@74)
 
     $@74  go to state 770
 
@@ -10613,37 +10619,37 @@ State 583
 
 State 584
 
-  744 make_dim_decl: "array" "struct" . '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer make_struct_dim_decl ')'
+  746 make_dim_decl: "array" "struct" . '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '<'  shift, and go to state 777
 
 
 State 585
 
-  747 make_dim_decl: "array" "tuple" . '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer make_struct_dim_decl ')'
+  749 make_dim_decl: "array" "tuple" . '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '<'  shift, and go to state 778
 
 
 State 586
 
-  750 make_dim_decl: "array" "variant" . '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
+  752 make_dim_decl: "array" "variant" . '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
 
     '<'  shift, and go to state 779
 
 
 State 587
 
-  754 make_dim_decl: "array" '<' . $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list ')'
+  756 make_dim_decl: "array" '<' . $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list ')'
 
-    $default  reduce using rule 752 ($@88)
+    $default  reduce using rule 754 ($@88)
 
     $@88  go to state 780
 
 
 State 588
 
-  751 make_dim_decl: "array" '(' . expr_list optional_comma ')'
+  753 make_dim_decl: "array" '(' . expr_list optional_comma ')'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -10754,8 +10760,8 @@ State 588
 
 State 589
 
-  763 make_table_decl: "table" '<' . type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
-  764                | "table" '<' . type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
+  765 make_table_decl: "table" '<' . type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
+  766                | "table" '<' . type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -10812,7 +10818,7 @@ State 589
 
 State 590
 
-  762 make_table_decl: "table" '(' . expr_map_tuple_list optional_comma ')'
+  764 make_table_decl: "table" '(' . expr_map_tuple_list optional_comma ')'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -11281,16 +11287,16 @@ State 596
 
 State 597
 
-  758 make_dim_decl: "fixed_array" '<' . $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')'
+  760 make_dim_decl: "fixed_array" '<' . $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')'
 
-    $default  reduce using rule 756 ($@90)
+    $default  reduce using rule 758 ($@90)
 
     $@90  go to state 790
 
 
 State 598
 
-  755 make_dim_decl: "fixed_array" '(' . expr_list optional_comma ')'
+  757 make_dim_decl: "fixed_array" '(' . expr_list optional_comma ')'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -11401,25 +11407,25 @@ State 598
 
 State 599
 
-  734 make_struct_decl: "default" '<' . $@78 type_declaration_no_options '>' $@79 use_initializer
+  736 make_struct_decl: "default" '<' . $@78 type_declaration_no_options '>' $@79 use_initializer
 
-    $default  reduce using rule 732 ($@78)
+    $default  reduce using rule 734 ($@78)
 
     $@78  go to state 792
 
 
 State 600
 
-  740 make_tuple_call: "tuple" '<' . $@80 type_declaration_no_options '>' $@81 '(' use_initializer make_struct_dim_decl ')'
+  742 make_tuple_call: "tuple" '<' . $@80 type_declaration_no_options '>' $@81 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 738 ($@80)
+    $default  reduce using rule 740 ($@80)
 
     $@80  go to state 793
 
 
 State 601
 
-  737 make_tuple_call: "tuple" '(' . expr_list optional_comma ')'
+  739 make_tuple_call: "tuple" '(' . expr_list optional_comma ')'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -11530,9 +11536,9 @@ State 601
 
 State 602
 
-  731 make_struct_decl: "variant" '<' . $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim ')'
+  733 make_struct_decl: "variant" '<' . $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim ')'
 
-    $default  reduce using rule 729 ($@76)
+    $default  reduce using rule 731 ($@76)
 
     $@76  go to state 795
 
@@ -12427,7 +12433,7 @@ State 612
 
 State 613
 
-  771 array_comprehension: "begin of code block" "for" . variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
+  773 array_comprehension: "begin of code block" "for" . variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
 
     "$i"    shift, and go to state 703
     "name"  shift, and go to state 704
@@ -12495,8 +12501,8 @@ State 614
   456          | expr . "as" "$f" '(' expr ')'
   457          | expr . '?' "as" "$f" '(' expr ')'
   458          | expr . "is" "$f" '(' expr ')'
-  735 make_map_tuple: expr . "=>" expr
-  736               | expr .
+  737 make_map_tuple: expr . "=>" expr
+  738               | expr .
 
     "is"   shift, and go to state 634
     "as"   shift, and go to state 635
@@ -12535,24 +12541,24 @@ State 614
     '.'    shift, and go to state 667
     '['    shift, and go to state 668
 
-    $default  reduce using rule 736 (make_map_tuple)
+    $default  reduce using rule 738 (make_map_tuple)
 
 
 State 615
 
-  759 expr_map_tuple_list: make_map_tuple .
+  761 expr_map_tuple_list: make_map_tuple .
 
-    $default  reduce using rule 759 (expr_map_tuple_list)
+    $default  reduce using rule 761 (expr_map_tuple_list)
 
 
 State 616
 
-  760 expr_map_tuple_list: expr_map_tuple_list . ',' make_map_tuple
-  761 make_table_decl: "begin of code block" expr_map_tuple_list . optional_comma "end of code block"
+  762 expr_map_tuple_list: expr_map_tuple_list . ',' make_map_tuple
+  763 make_table_decl: "begin of code block" expr_map_tuple_list . optional_comma "end of code block"
 
     ','  shift, and go to state 808
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 809
 
@@ -12937,7 +12943,7 @@ State 621
 
 State 622
 
-  769 array_comprehension: '[' "for" . variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  771 array_comprehension: '[' "for" . variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
 
     "$i"    shift, and go to state 703
     "name"  shift, and go to state 704
@@ -12947,7 +12953,7 @@ State 622
 
 State 623
 
-  770 array_comprehension: '[' "iterator" . "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  772 array_comprehension: '[' "iterator" . "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
 
     "for"  shift, and go to state 811
 
@@ -12955,11 +12961,11 @@ State 623
 State 624
 
   291 expr_list: expr_list . ',' expr
-  741 make_dim_decl: '[' expr_list . optional_comma ']'
+  743 make_dim_decl: '[' expr_list . optional_comma ']'
 
     ','  shift, and go to state 812
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 813
 
@@ -13072,7 +13078,7 @@ State 626
 
     ','  shift, and go to state 812
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 814
 
@@ -16827,7 +16833,7 @@ State 689
 
     ','  shift, and go to state 812
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 899
 
@@ -20570,11 +20576,11 @@ State 756
 State 757
 
   533 enum_list: enum_list ',' . enum_expression
-  768 optional_comma: ',' .
+  770 optional_comma: ',' .
 
     "name"  shift, and go to state 561
 
-    $default  reduce using rule 768 (optional_comma)
+    $default  reduce using rule 770 (optional_comma)
 
     enum_expression  go to state 951
 
@@ -20920,7 +20926,7 @@ State 768
 
 State 769
 
-  725 make_struct_decl: "struct" '<' $@72 . type_declaration_no_options '>' $@73 '(' use_initializer make_struct_dim_decl ')'
+  727 make_struct_decl: "struct" '<' $@72 . type_declaration_no_options '>' $@73 '(' use_initializer optional_make_struct_dim_decl ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -20977,7 +20983,7 @@ State 769
 
 State 770
 
-  728 make_struct_decl: "class" '<' $@74 . type_declaration_no_options '>' $@75 '(' use_initializer make_struct_dim_decl ')'
+  730 make_struct_decl: "class" '<' $@74 . type_declaration_no_options '>' $@75 '(' use_initializer optional_make_struct_dim_decl ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -21097,7 +21103,7 @@ State 772
 
     "uninitialized"  shift, and go to state 965
 
-    $default  reduce using rule 721 (use_initializer)
+    $default  reduce using rule 723 (use_initializer)
 
     use_initializer  go to state 966
 
@@ -21394,34 +21400,34 @@ State 776
 
 State 777
 
-  744 make_dim_decl: "array" "struct" '<' . $@82 type_declaration_no_options '>' $@83 '(' use_initializer make_struct_dim_decl ')'
+  746 make_dim_decl: "array" "struct" '<' . $@82 type_declaration_no_options '>' $@83 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 742 ($@82)
+    $default  reduce using rule 744 ($@82)
 
     $@82  go to state 971
 
 
 State 778
 
-  747 make_dim_decl: "array" "tuple" '<' . $@84 type_declaration_no_options '>' $@85 '(' use_initializer make_struct_dim_decl ')'
+  749 make_dim_decl: "array" "tuple" '<' . $@84 type_declaration_no_options '>' $@85 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 745 ($@84)
+    $default  reduce using rule 747 ($@84)
 
     $@84  go to state 972
 
 
 State 779
 
-  750 make_dim_decl: "array" "variant" '<' . $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
+  752 make_dim_decl: "array" "variant" '<' . $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
 
-    $default  reduce using rule 748 ($@86)
+    $default  reduce using rule 750 ($@86)
 
     $@86  go to state 973
 
 
 State 780
 
-  754 make_dim_decl: "array" '<' $@88 . type_declaration_no_options '>' $@89 '(' optional_expr_list ')'
+  756 make_dim_decl: "array" '<' $@88 . type_declaration_no_options '>' $@89 '(' optional_expr_list ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -21479,19 +21485,19 @@ State 780
 State 781
 
   291 expr_list: expr_list . ',' expr
-  751 make_dim_decl: "array" '(' expr_list . optional_comma ')'
+  753 make_dim_decl: "array" '(' expr_list . optional_comma ')'
 
     ','  shift, and go to state 812
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 975
 
 
 State 782
 
-  763 make_table_decl: "table" '<' type_declaration_no_options . '>' '(' optional_expr_map_tuple_list ')'
-  764                | "table" '<' type_declaration_no_options . "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
+  765 make_table_decl: "table" '<' type_declaration_no_options . '>' '(' optional_expr_map_tuple_list ')'
+  766                | "table" '<' type_declaration_no_options . "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
 
     "end of expression"  shift, and go to state 976
     '>'                  shift, and go to state 977
@@ -21499,12 +21505,12 @@ State 782
 
 State 783
 
-  760 expr_map_tuple_list: expr_map_tuple_list . ',' make_map_tuple
-  762 make_table_decl: "table" '(' expr_map_tuple_list . optional_comma ')'
+  762 expr_map_tuple_list: expr_map_tuple_list . ',' make_map_tuple
+  764 make_table_decl: "table" '(' expr_map_tuple_list . optional_comma ')'
 
     ','  shift, and go to state 808
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 978
 
@@ -21982,7 +21988,7 @@ State 789
 
 State 790
 
-  758 make_dim_decl: "fixed_array" '<' $@90 . type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')'
+  760 make_dim_decl: "fixed_array" '<' $@90 . type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -22040,18 +22046,18 @@ State 790
 State 791
 
   291 expr_list: expr_list . ',' expr
-  755 make_dim_decl: "fixed_array" '(' expr_list . optional_comma ')'
+  757 make_dim_decl: "fixed_array" '(' expr_list . optional_comma ')'
 
     ','  shift, and go to state 812
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 986
 
 
 State 792
 
-  734 make_struct_decl: "default" '<' $@78 . type_declaration_no_options '>' $@79 use_initializer
+  736 make_struct_decl: "default" '<' $@78 . type_declaration_no_options '>' $@79 use_initializer
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -22108,7 +22114,7 @@ State 792
 
 State 793
 
-  740 make_tuple_call: "tuple" '<' $@80 . type_declaration_no_options '>' $@81 '(' use_initializer make_struct_dim_decl ')'
+  742 make_tuple_call: "tuple" '<' $@80 . type_declaration_no_options '>' $@81 '(' use_initializer optional_make_struct_dim_decl ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -22166,18 +22172,18 @@ State 793
 State 794
 
   291 expr_list: expr_list . ',' expr
-  737 make_tuple_call: "tuple" '(' expr_list . optional_comma ')'
+  739 make_tuple_call: "tuple" '(' expr_list . optional_comma ')'
 
     ','  shift, and go to state 812
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 989
 
 
 State 795
 
-  731 make_struct_decl: "variant" '<' $@76 . type_declaration_no_options '>' $@77 '(' make_variant_dim ')'
+  733 make_struct_decl: "variant" '<' $@76 . type_declaration_no_options '>' $@77 '(' make_variant_dim ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -22975,7 +22981,7 @@ State 806
 
   567 variable_name_with_pos_list: variable_name_with_pos_list . ',' "name"
   568                            | variable_name_with_pos_list . ',' "name" "aka" "name"
-  771 array_comprehension: "begin of code block" "for" variable_name_with_pos_list . "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
+  773 array_comprehension: "begin of code block" "for" variable_name_with_pos_list . "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
 
     "in"  shift, and go to state 999
     ','   shift, and go to state 908
@@ -22983,7 +22989,7 @@ State 806
 
 State 807
 
-  735 make_map_tuple: expr "=>" . expr
+  737 make_map_tuple: expr "=>" . expr
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -23093,8 +23099,8 @@ State 807
 
 State 808
 
-  760 expr_map_tuple_list: expr_map_tuple_list ',' . make_map_tuple
-  768 optional_comma: ',' .
+  762 expr_map_tuple_list: expr_map_tuple_list ',' . make_map_tuple
+  770 optional_comma: ',' .
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -23175,7 +23181,7 @@ State 808
     '$'                               shift, and go to state 448
     '@'                               shift, and go to state 449
 
-    $default  reduce using rule 768 (optional_comma)
+    $default  reduce using rule 770 (optional_comma)
 
     string_builder          go to state 450
     expr_reader             go to state 451
@@ -23207,7 +23213,7 @@ State 808
 
 State 809
 
-  761 make_table_decl: "begin of code block" expr_map_tuple_list optional_comma . "end of code block"
+  763 make_table_decl: "begin of code block" expr_map_tuple_list optional_comma . "end of code block"
 
     "end of code block"  shift, and go to state 1002
 
@@ -23216,7 +23222,7 @@ State 810
 
   567 variable_name_with_pos_list: variable_name_with_pos_list . ',' "name"
   568                            | variable_name_with_pos_list . ',' "name" "aka" "name"
-  769 array_comprehension: '[' "for" variable_name_with_pos_list . "in" expr_list "end of expression" expr array_comprehension_where ']'
+  771 array_comprehension: '[' "for" variable_name_with_pos_list . "in" expr_list "end of expression" expr array_comprehension_where ']'
 
     "in"  shift, and go to state 1003
     ','   shift, and go to state 908
@@ -23224,7 +23230,7 @@ State 810
 
 State 811
 
-  770 array_comprehension: '[' "iterator" "for" . variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  772 array_comprehension: '[' "iterator" "for" . variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
 
     "$i"    shift, and go to state 703
     "name"  shift, and go to state 704
@@ -23235,7 +23241,7 @@ State 811
 State 812
 
   291 expr_list: expr_list ',' . expr
-  768 optional_comma: ',' .
+  770 optional_comma: ',' .
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -23316,7 +23322,7 @@ State 812
     '$'                               shift, and go to state 448
     '@'                               shift, and go to state 449
 
-    $default  reduce using rule 768 (optional_comma)
+    $default  reduce using rule 770 (optional_comma)
 
     string_builder          go to state 450
     expr_reader             go to state 451
@@ -23347,7 +23353,7 @@ State 812
 
 State 813
 
-  741 make_dim_decl: '[' expr_list optional_comma . ']'
+  743 make_dim_decl: '[' expr_list optional_comma . ']'
 
     ']'  shift, and go to state 1006
 
@@ -23429,9 +23435,9 @@ State 821
 State 822
 
   335 expr_named_call: name_in_namespace '(' '[' . make_struct_fields ']' ')'
-  741 make_dim_decl: '[' . expr_list optional_comma ']'
-  769 array_comprehension: '[' . "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
-  770                    | '[' . "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  743 make_dim_decl: '[' . expr_list optional_comma ']'
+  771 array_comprehension: '[' . "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  772                    | '[' . "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -30219,14 +30225,14 @@ State 961
 
 State 962
 
-  725 make_struct_decl: "struct" '<' $@72 type_declaration_no_options . '>' $@73 '(' use_initializer make_struct_dim_decl ')'
+  727 make_struct_decl: "struct" '<' $@72 type_declaration_no_options . '>' $@73 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '>'  shift, and go to state 1092
 
 
 State 963
 
-  728 make_struct_decl: "class" '<' $@74 type_declaration_no_options . '>' $@75 '(' use_initializer make_struct_dim_decl ')'
+  730 make_struct_decl: "class" '<' $@74 type_declaration_no_options . '>' $@75 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '>'  shift, and go to state 1093
 
@@ -30243,9 +30249,9 @@ State 964
 
 State 965
 
-  722 use_initializer: "uninitialized" .
+  724 use_initializer: "uninitialized" .
 
-    $default  reduce using rule 722 (use_initializer)
+    $default  reduce using rule 724 (use_initializer)
 
 
 State 966
@@ -30389,7 +30395,7 @@ State 970
 
 State 971
 
-  744 make_dim_decl: "array" "struct" '<' $@82 . type_declaration_no_options '>' $@83 '(' use_initializer make_struct_dim_decl ')'
+  746 make_dim_decl: "array" "struct" '<' $@82 . type_declaration_no_options '>' $@83 '(' use_initializer optional_make_struct_dim_decl ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -30446,7 +30452,7 @@ State 971
 
 State 972
 
-  747 make_dim_decl: "array" "tuple" '<' $@84 . type_declaration_no_options '>' $@85 '(' use_initializer make_struct_dim_decl ')'
+  749 make_dim_decl: "array" "tuple" '<' $@84 . type_declaration_no_options '>' $@85 '(' use_initializer optional_make_struct_dim_decl ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -30503,7 +30509,7 @@ State 972
 
 State 973
 
-  750 make_dim_decl: "array" "variant" '<' $@86 . type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
+  752 make_dim_decl: "array" "variant" '<' $@86 . type_declaration_no_options '>' $@87 '(' make_variant_dim ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -30560,21 +30566,21 @@ State 973
 
 State 974
 
-  754 make_dim_decl: "array" '<' $@88 type_declaration_no_options . '>' $@89 '(' optional_expr_list ')'
+  756 make_dim_decl: "array" '<' $@88 type_declaration_no_options . '>' $@89 '(' optional_expr_list ')'
 
     '>'  shift, and go to state 1106
 
 
 State 975
 
-  751 make_dim_decl: "array" '(' expr_list optional_comma . ')'
+  753 make_dim_decl: "array" '(' expr_list optional_comma . ')'
 
     ')'  shift, and go to state 1107
 
 
 State 976
 
-  764 make_table_decl: "table" '<' type_declaration_no_options "end of expression" . type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
+  766 make_table_decl: "table" '<' type_declaration_no_options "end of expression" . type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
 
     "type"       shift, and go to state 215
     "array"      shift, and go to state 216
@@ -30631,14 +30637,14 @@ State 976
 
 State 977
 
-  763 make_table_decl: "table" '<' type_declaration_no_options '>' . '(' optional_expr_map_tuple_list ')'
+  765 make_table_decl: "table" '<' type_declaration_no_options '>' . '(' optional_expr_map_tuple_list ')'
 
     '('  shift, and go to state 1109
 
 
 State 978
 
-  762 make_table_decl: "table" '(' expr_map_tuple_list optional_comma . ')'
+  764 make_table_decl: "table" '(' expr_map_tuple_list optional_comma . ')'
 
     ')'  shift, and go to state 1110
 
@@ -30687,42 +30693,42 @@ State 984
 
 State 985
 
-  758 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options . '>' $@91 '(' expr_list optional_comma ')'
+  760 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options . '>' $@91 '(' expr_list optional_comma ')'
 
     '>'  shift, and go to state 1114
 
 
 State 986
 
-  755 make_dim_decl: "fixed_array" '(' expr_list optional_comma . ')'
+  757 make_dim_decl: "fixed_array" '(' expr_list optional_comma . ')'
 
     ')'  shift, and go to state 1115
 
 
 State 987
 
-  734 make_struct_decl: "default" '<' $@78 type_declaration_no_options . '>' $@79 use_initializer
+  736 make_struct_decl: "default" '<' $@78 type_declaration_no_options . '>' $@79 use_initializer
 
     '>'  shift, and go to state 1116
 
 
 State 988
 
-  740 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options . '>' $@81 '(' use_initializer make_struct_dim_decl ')'
+  742 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options . '>' $@81 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '>'  shift, and go to state 1117
 
 
 State 989
 
-  737 make_tuple_call: "tuple" '(' expr_list optional_comma . ')'
+  739 make_tuple_call: "tuple" '(' expr_list optional_comma . ')'
 
     ')'  shift, and go to state 1118
 
 
 State 990
 
-  731 make_struct_decl: "variant" '<' $@76 type_declaration_no_options . '>' $@77 '(' make_variant_dim ')'
+  733 make_struct_decl: "variant" '<' $@76 type_declaration_no_options . '>' $@77 '(' make_variant_dim ')'
 
     '>'  shift, and go to state 1119
 
@@ -30885,7 +30891,7 @@ State 998
 
 State 999
 
-  771 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" . expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
+  773 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" . expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block"
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -31054,7 +31060,7 @@ State 1000
   456          | expr . "as" "$f" '(' expr ')'
   457          | expr . '?' "as" "$f" '(' expr ')'
   458          | expr . "is" "$f" '(' expr ')'
-  735 make_map_tuple: expr "=>" expr .
+  737 make_map_tuple: expr "=>" expr .
 
     "is"   shift, and go to state 634
     "as"   shift, and go to state 635
@@ -31092,26 +31098,26 @@ State 1000
     '.'    shift, and go to state 667
     '['    shift, and go to state 668
 
-    $default  reduce using rule 735 (make_map_tuple)
+    $default  reduce using rule 737 (make_map_tuple)
 
 
 State 1001
 
-  760 expr_map_tuple_list: expr_map_tuple_list ',' make_map_tuple .
+  762 expr_map_tuple_list: expr_map_tuple_list ',' make_map_tuple .
 
-    $default  reduce using rule 760 (expr_map_tuple_list)
+    $default  reduce using rule 762 (expr_map_tuple_list)
 
 
 State 1002
 
-  761 make_table_decl: "begin of code block" expr_map_tuple_list optional_comma "end of code block" .
+  763 make_table_decl: "begin of code block" expr_map_tuple_list optional_comma "end of code block" .
 
-    $default  reduce using rule 761 (make_table_decl)
+    $default  reduce using rule 763 (make_table_decl)
 
 
 State 1003
 
-  769 array_comprehension: '[' "for" variable_name_with_pos_list "in" . expr_list "end of expression" expr array_comprehension_where ']'
+  771 array_comprehension: '[' "for" variable_name_with_pos_list "in" . expr_list "end of expression" expr array_comprehension_where ']'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -31224,7 +31230,7 @@ State 1004
 
   567 variable_name_with_pos_list: variable_name_with_pos_list . ',' "name"
   568                            | variable_name_with_pos_list . ',' "name" "aka" "name"
-  770 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list . "in" expr_list "end of expression" expr array_comprehension_where ']'
+  772 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list . "in" expr_list "end of expression" expr array_comprehension_where ']'
 
     "in"  shift, and go to state 1125
     ','   shift, and go to state 908
@@ -31333,9 +31339,9 @@ State 1005
 
 State 1006
 
-  741 make_dim_decl: '[' expr_list optional_comma ']' .
+  743 make_dim_decl: '[' expr_list optional_comma ']' .
 
-    $default  reduce using rule 741 (make_dim_decl)
+    $default  reduce using rule 743 (make_dim_decl)
 
 
 State 1007
@@ -34525,18 +34531,18 @@ State 1091
 
 State 1092
 
-  725 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' . $@73 '(' use_initializer make_struct_dim_decl ')'
+  727 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' . $@73 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 724 ($@73)
+    $default  reduce using rule 726 ($@73)
 
     $@73  go to state 1189
 
 
 State 1093
 
-  728 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' . $@75 '(' use_initializer make_struct_dim_decl ')'
+  730 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' . $@75 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 727 ($@75)
+    $default  reduce using rule 729 ($@75)
 
     $@75  go to state 1190
 
@@ -34615,51 +34621,51 @@ State 1102
 
 State 1103
 
-  744 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options . '>' $@83 '(' use_initializer make_struct_dim_decl ')'
+  746 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options . '>' $@83 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '>'  shift, and go to state 1196
 
 
 State 1104
 
-  747 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options . '>' $@85 '(' use_initializer make_struct_dim_decl ')'
+  749 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options . '>' $@85 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '>'  shift, and go to state 1197
 
 
 State 1105
 
-  750 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options . '>' $@87 '(' make_variant_dim ')'
+  752 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options . '>' $@87 '(' make_variant_dim ')'
 
     '>'  shift, and go to state 1198
 
 
 State 1106
 
-  754 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' . $@89 '(' optional_expr_list ')'
+  756 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' . $@89 '(' optional_expr_list ')'
 
-    $default  reduce using rule 753 ($@89)
+    $default  reduce using rule 755 ($@89)
 
     $@89  go to state 1199
 
 
 State 1107
 
-  751 make_dim_decl: "array" '(' expr_list optional_comma ')' .
+  753 make_dim_decl: "array" '(' expr_list optional_comma ')' .
 
-    $default  reduce using rule 751 (make_dim_decl)
+    $default  reduce using rule 753 (make_dim_decl)
 
 
 State 1108
 
-  764 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options . '>' '(' optional_expr_map_tuple_list ')'
+  766 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options . '>' '(' optional_expr_map_tuple_list ')'
 
     '>'  shift, and go to state 1200
 
 
 State 1109
 
-  763 make_table_decl: "table" '<' type_declaration_no_options '>' '(' . optional_expr_map_tuple_list ')'
+  765 make_table_decl: "table" '<' type_declaration_no_options '>' '(' . optional_expr_map_tuple_list ')'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -34774,9 +34780,9 @@ State 1109
 
 State 1110
 
-  762 make_table_decl: "table" '(' expr_map_tuple_list optional_comma ')' .
+  764 make_table_decl: "table" '(' expr_map_tuple_list optional_comma ')' .
 
-    $default  reduce using rule 762 (make_table_decl)
+    $default  reduce using rule 764 (make_table_decl)
 
 
 State 1111
@@ -34808,50 +34814,50 @@ State 1113
 
 State 1114
 
-  758 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' . $@91 '(' expr_list optional_comma ')'
+  760 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' . $@91 '(' expr_list optional_comma ')'
 
-    $default  reduce using rule 757 ($@91)
+    $default  reduce using rule 759 ($@91)
 
     $@91  go to state 1206
 
 
 State 1115
 
-  755 make_dim_decl: "fixed_array" '(' expr_list optional_comma ')' .
+  757 make_dim_decl: "fixed_array" '(' expr_list optional_comma ')' .
 
-    $default  reduce using rule 755 (make_dim_decl)
+    $default  reduce using rule 757 (make_dim_decl)
 
 
 State 1116
 
-  734 make_struct_decl: "default" '<' $@78 type_declaration_no_options '>' . $@79 use_initializer
+  736 make_struct_decl: "default" '<' $@78 type_declaration_no_options '>' . $@79 use_initializer
 
-    $default  reduce using rule 733 ($@79)
+    $default  reduce using rule 735 ($@79)
 
     $@79  go to state 1207
 
 
 State 1117
 
-  740 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' . $@81 '(' use_initializer make_struct_dim_decl ')'
+  742 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' . $@81 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 739 ($@81)
+    $default  reduce using rule 741 ($@81)
 
     $@81  go to state 1208
 
 
 State 1118
 
-  737 make_tuple_call: "tuple" '(' expr_list optional_comma ')' .
+  739 make_tuple_call: "tuple" '(' expr_list optional_comma ')' .
 
-    $default  reduce using rule 737 (make_tuple_call)
+    $default  reduce using rule 739 (make_tuple_call)
 
 
 State 1119
 
-  731 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' . $@77 '(' make_variant_dim ')'
+  733 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' . $@77 '(' make_variant_dim ')'
 
-    $default  reduce using rule 730 ($@77)
+    $default  reduce using rule 732 ($@77)
 
     $@77  go to state 1209
 
@@ -34991,7 +34997,7 @@ State 1122
 State 1123
 
   291 expr_list: expr_list . ',' expr
-  771 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list . "end of expression" make_map_tuple array_comprehension_where "end of code block"
+  773 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list . "end of expression" make_map_tuple array_comprehension_where "end of code block"
 
     "end of expression"  shift, and go to state 1214
     ','                  shift, and go to state 1046
@@ -35000,7 +35006,7 @@ State 1123
 State 1124
 
   291 expr_list: expr_list . ',' expr
-  769 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list . "end of expression" expr array_comprehension_where ']'
+  771 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list . "end of expression" expr array_comprehension_where ']'
 
     "end of expression"  shift, and go to state 1215
     ','                  shift, and go to state 1046
@@ -35008,7 +35014,7 @@ State 1124
 
 State 1125
 
-  770 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" . expr_list "end of expression" expr array_comprehension_where ']'
+  772 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" . expr_list "end of expression" expr array_comprehension_where ']'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -35648,9 +35654,9 @@ State 1133
 State 1134
 
   336 expr_named_call: name_in_namespace '(' expr_list ',' '[' . make_struct_fields ']' ')'
-  741 make_dim_decl: '[' . expr_list optional_comma ']'
-  769 array_comprehension: '[' . "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
-  770                    | '[' . "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  743 make_dim_decl: '[' . expr_list optional_comma ']'
+  771 array_comprehension: '[' . "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
+  772                    | '[' . "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -37492,14 +37498,14 @@ State 1188
 
 State 1189
 
-  725 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 . '(' use_initializer make_struct_dim_decl ')'
+  727 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 . '(' use_initializer optional_make_struct_dim_decl ')'
 
     '('  shift, and go to state 1272
 
 
 State 1190
 
-  728 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 . '(' use_initializer make_struct_dim_decl ')'
+  730 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 . '(' use_initializer optional_make_struct_dim_decl ')'
 
     '('  shift, and go to state 1273
 
@@ -37644,48 +37650,48 @@ State 1195
 
 State 1196
 
-  744 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' . $@83 '(' use_initializer make_struct_dim_decl ')'
+  746 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' . $@83 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 743 ($@83)
+    $default  reduce using rule 745 ($@83)
 
     $@83  go to state 1276
 
 
 State 1197
 
-  747 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' . $@85 '(' use_initializer make_struct_dim_decl ')'
+  749 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' . $@85 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    $default  reduce using rule 746 ($@85)
+    $default  reduce using rule 748 ($@85)
 
     $@85  go to state 1277
 
 
 State 1198
 
-  750 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' . $@87 '(' make_variant_dim ')'
+  752 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' . $@87 '(' make_variant_dim ')'
 
-    $default  reduce using rule 749 ($@87)
+    $default  reduce using rule 751 ($@87)
 
     $@87  go to state 1278
 
 
 State 1199
 
-  754 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 . '(' optional_expr_list ')'
+  756 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 . '(' optional_expr_list ')'
 
     '('  shift, and go to state 1279
 
 
 State 1200
 
-  764 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' . '(' optional_expr_map_tuple_list ')'
+  766 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' . '(' optional_expr_map_tuple_list ')'
 
     '('  shift, and go to state 1280
 
 
 State 1201
 
-  763 make_table_decl: "table" '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list . ')'
+  765 make_table_decl: "table" '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list . ')'
 
     ')'  shift, and go to state 1281
 
@@ -37693,11 +37699,11 @@ State 1201
 State 1202
 
   238 optional_expr_map_tuple_list: expr_map_tuple_list . optional_comma
-  760 expr_map_tuple_list: expr_map_tuple_list . ',' make_map_tuple
+  762 expr_map_tuple_list: expr_map_tuple_list . ',' make_map_tuple
 
     ','  shift, and go to state 808
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
     optional_comma  go to state 1282
 
@@ -38034,32 +38040,32 @@ State 1205
 
 State 1206
 
-  758 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 . '(' expr_list optional_comma ')'
+  760 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 . '(' expr_list optional_comma ')'
 
     '('  shift, and go to state 1286
 
 
 State 1207
 
-  734 make_struct_decl: "default" '<' $@78 type_declaration_no_options '>' $@79 . use_initializer
+  736 make_struct_decl: "default" '<' $@78 type_declaration_no_options '>' $@79 . use_initializer
 
     "uninitialized"  shift, and go to state 965
 
-    $default  reduce using rule 721 (use_initializer)
+    $default  reduce using rule 723 (use_initializer)
 
     use_initializer  go to state 1287
 
 
 State 1208
 
-  740 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 . '(' use_initializer make_struct_dim_decl ')'
+  742 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 . '(' use_initializer optional_make_struct_dim_decl ')'
 
     '('  shift, and go to state 1288
 
 
 State 1209
 
-  731 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 . '(' make_variant_dim ')'
+  733 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 . '(' make_variant_dim ')'
 
     '('  shift, and go to state 1289
 
@@ -38201,7 +38207,7 @@ State 1213
 
 State 1214
 
-  771 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" . make_map_tuple array_comprehension_where "end of code block"
+  773 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" . make_map_tuple array_comprehension_where "end of code block"
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -38312,7 +38318,7 @@ State 1214
 
 State 1215
 
-  769 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" . expr array_comprehension_where ']'
+  771 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" . expr array_comprehension_where ']'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -38423,7 +38429,7 @@ State 1215
 State 1216
 
   291 expr_list: expr_list . ',' expr
-  770 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list . "end of expression" expr array_comprehension_where ']'
+  772 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list . "end of expression" expr array_comprehension_where ']'
 
     "end of expression"  shift, and go to state 1295
     ','                  shift, and go to state 1046
@@ -40053,22 +40059,22 @@ State 1271
 
 State 1272
 
-  725 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' . use_initializer make_struct_dim_decl ')'
+  727 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' . use_initializer optional_make_struct_dim_decl ')'
 
     "uninitialized"  shift, and go to state 965
 
-    $default  reduce using rule 721 (use_initializer)
+    $default  reduce using rule 723 (use_initializer)
 
     use_initializer  go to state 1333
 
 
 State 1273
 
-  728 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' . use_initializer make_struct_dim_decl ')'
+  730 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' . use_initializer optional_make_struct_dim_decl ')'
 
     "uninitialized"  shift, and go to state 965
 
-    $default  reduce using rule 721 (use_initializer)
+    $default  reduce using rule 723 (use_initializer)
 
     use_initializer  go to state 1334
 
@@ -40182,28 +40188,28 @@ State 1275
 
 State 1276
 
-  744 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 . '(' use_initializer make_struct_dim_decl ')'
+  746 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 . '(' use_initializer optional_make_struct_dim_decl ')'
 
     '('  shift, and go to state 1337
 
 
 State 1277
 
-  747 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 . '(' use_initializer make_struct_dim_decl ')'
+  749 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 . '(' use_initializer optional_make_struct_dim_decl ')'
 
     '('  shift, and go to state 1338
 
 
 State 1278
 
-  750 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 . '(' make_variant_dim ')'
+  752 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 . '(' make_variant_dim ')'
 
     '('  shift, and go to state 1339
 
 
 State 1279
 
-  754 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 '(' . optional_expr_list ')'
+  756 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 '(' . optional_expr_list ')'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -40317,7 +40323,7 @@ State 1279
 
 State 1280
 
-  764 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' . optional_expr_map_tuple_list ')'
+  766 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' . optional_expr_map_tuple_list ')'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -40432,9 +40438,9 @@ State 1280
 
 State 1281
 
-  763 make_table_decl: "table" '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')' .
+  765 make_table_decl: "table" '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')' .
 
-    $default  reduce using rule 763 (make_table_decl)
+    $default  reduce using rule 765 (make_table_decl)
 
 
 State 1282
@@ -40707,7 +40713,7 @@ State 1285
 
 State 1286
 
-  758 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' . expr_list optional_comma ')'
+  760 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' . expr_list optional_comma ')'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -40818,25 +40824,25 @@ State 1286
 
 State 1287
 
-  734 make_struct_decl: "default" '<' $@78 type_declaration_no_options '>' $@79 use_initializer .
+  736 make_struct_decl: "default" '<' $@78 type_declaration_no_options '>' $@79 use_initializer .
 
-    $default  reduce using rule 734 (make_struct_decl)
+    $default  reduce using rule 736 (make_struct_decl)
 
 
 State 1288
 
-  740 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' . use_initializer make_struct_dim_decl ')'
+  742 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' . use_initializer optional_make_struct_dim_decl ')'
 
     "uninitialized"  shift, and go to state 965
 
-    $default  reduce using rule 721 (use_initializer)
+    $default  reduce using rule 723 (use_initializer)
 
     use_initializer  go to state 1343
 
 
 State 1289
 
-  731 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 '(' . make_variant_dim ')'
+  733 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 '(' . make_variant_dim ')'
 
     "$f"    shift, and go to state 820
     "name"  shift, and go to state 1095
@@ -40961,11 +40967,11 @@ State 1292
 
 State 1293
 
-  771 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple . array_comprehension_where "end of code block"
+  773 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple . array_comprehension_where "end of code block"
 
     "end of expression"  shift, and go to state 1347
 
-    $default  reduce using rule 765 (array_comprehension_where)
+    $default  reduce using rule 767 (array_comprehension_where)
 
     array_comprehension_where  go to state 1348
 
@@ -41030,7 +41036,7 @@ State 1294
   456          | expr . "as" "$f" '(' expr ')'
   457          | expr . '?' "as" "$f" '(' expr ')'
   458          | expr . "is" "$f" '(' expr ')'
-  769 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" expr . array_comprehension_where ']'
+  771 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" expr . array_comprehension_where ']'
 
     "is"                 shift, and go to state 634
     "as"                 shift, and go to state 635
@@ -41069,14 +41075,14 @@ State 1294
     '.'                  shift, and go to state 667
     '['                  shift, and go to state 668
 
-    $default  reduce using rule 765 (array_comprehension_where)
+    $default  reduce using rule 767 (array_comprehension_where)
 
     array_comprehension_where  go to state 1349
 
 
 State 1295
 
-  770 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" . expr array_comprehension_where ']'
+  772 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" . expr array_comprehension_where ']'
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -42575,28 +42581,34 @@ State 1332
 
 State 1333
 
-  725 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer . make_struct_dim_decl ')'
+  727 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer . optional_make_struct_dim_decl ')'
 
     "$f"    shift, and go to state 820
     "name"  shift, and go to state 1095
     '('     shift, and go to state 1367
 
-    make_struct_fields    go to state 1368
-    make_struct_dim_list  go to state 1369
-    make_struct_dim_decl  go to state 1370
+    $default  reduce using rule 722 (optional_make_struct_dim_decl)
+
+    make_struct_fields             go to state 1368
+    make_struct_dim_list           go to state 1369
+    make_struct_dim_decl           go to state 1370
+    optional_make_struct_dim_decl  go to state 1371
 
 
 State 1334
 
-  728 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer . make_struct_dim_decl ')'
+  730 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer . optional_make_struct_dim_decl ')'
 
     "$f"    shift, and go to state 820
     "name"  shift, and go to state 1095
     '('     shift, and go to state 1367
 
-    make_struct_fields    go to state 1368
-    make_struct_dim_list  go to state 1369
-    make_struct_dim_decl  go to state 1371
+    $default  reduce using rule 722 (optional_make_struct_dim_decl)
+
+    make_struct_fields             go to state 1368
+    make_struct_dim_list           go to state 1369
+    make_struct_dim_decl           go to state 1370
+    optional_make_struct_dim_decl  go to state 1372
 
 
 State 1335
@@ -42698,7 +42710,7 @@ State 1335
     func_addr_expr          go to state 463
     expr_field              go to state 464
     expr_call               go to state 465
-    expr                    go to state 1372
+    expr                    go to state 1373
     expr_mtag               go to state 467
     basic_type_declaration  go to state 468
     make_decl               go to state 469
@@ -42718,74 +42730,77 @@ State 1336
 
 State 1337
 
-  744 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' . use_initializer make_struct_dim_decl ')'
+  746 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' . use_initializer optional_make_struct_dim_decl ')'
 
     "uninitialized"  shift, and go to state 965
 
-    $default  reduce using rule 721 (use_initializer)
-
-    use_initializer  go to state 1373
-
-
-State 1338
-
-  747 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' . use_initializer make_struct_dim_decl ')'
-
-    "uninitialized"  shift, and go to state 965
-
-    $default  reduce using rule 721 (use_initializer)
+    $default  reduce using rule 723 (use_initializer)
 
     use_initializer  go to state 1374
 
 
+State 1338
+
+  749 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' . use_initializer optional_make_struct_dim_decl ')'
+
+    "uninitialized"  shift, and go to state 965
+
+    $default  reduce using rule 723 (use_initializer)
+
+    use_initializer  go to state 1375
+
+
 State 1339
 
-  750 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' . make_variant_dim ')'
+  752 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' . make_variant_dim ')'
 
     "$f"    shift, and go to state 820
     "name"  shift, and go to state 1095
 
     make_struct_fields  go to state 1344
-    make_variant_dim    go to state 1375
+    make_variant_dim    go to state 1376
 
 
 State 1340
 
-  754 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list . ')'
+  756 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list . ')'
 
-    ')'  shift, and go to state 1376
+    ')'  shift, and go to state 1377
 
 
 State 1341
 
-  764 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list . ')'
+  766 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list . ')'
 
-    ')'  shift, and go to state 1377
+    ')'  shift, and go to state 1378
 
 
 State 1342
 
   291 expr_list: expr_list . ',' expr
-  758 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list . optional_comma ')'
+  760 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list . optional_comma ')'
 
     ','  shift, and go to state 812
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
-    optional_comma  go to state 1378
+    optional_comma  go to state 1379
 
 
 State 1343
 
-  740 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer . make_struct_dim_decl ')'
+  742 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer . optional_make_struct_dim_decl ')'
 
     "$f"    shift, and go to state 820
     "name"  shift, and go to state 1095
     '('     shift, and go to state 1367
 
-    make_struct_fields    go to state 1368
-    make_struct_dim_list  go to state 1369
-    make_struct_dim_decl  go to state 1379
+    $default  reduce using rule 722 (optional_make_struct_dim_decl)
+
+    make_struct_fields             go to state 1368
+    make_struct_dim_list           go to state 1369
+    make_struct_dim_decl           go to state 1370
+    optional_make_struct_dim_decl  go to state 1380
 
 
 State 1344
@@ -42803,9 +42818,9 @@ State 1344
 
 State 1345
 
-  731 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim . ')'
+  733 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim . ')'
 
-    ')'  shift, and go to state 1380
+    ')'  shift, and go to state 1381
 
 
 State 1346
@@ -42817,23 +42832,23 @@ State 1346
 
 State 1347
 
-  766 array_comprehension_where: "end of expression" . "where" expr
+  768 array_comprehension_where: "end of expression" . "where" expr
 
-    "where"  shift, and go to state 1381
+    "where"  shift, and go to state 1382
 
 
 State 1348
 
-  771 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where . "end of code block"
+  773 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where . "end of code block"
 
-    "end of code block"  shift, and go to state 1382
+    "end of code block"  shift, and go to state 1383
 
 
 State 1349
 
-  769 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where . ']'
+  771 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where . ']'
 
-    ']'  shift, and go to state 1383
+    ']'  shift, and go to state 1384
 
 
 State 1350
@@ -42896,7 +42911,7 @@ State 1350
   456          | expr . "as" "$f" '(' expr ')'
   457          | expr . '?' "as" "$f" '(' expr ')'
   458          | expr . "is" "$f" '(' expr ')'
-  770 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr . array_comprehension_where ']'
+  772 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr . array_comprehension_where ']'
 
     "is"                 shift, and go to state 634
     "as"                 shift, and go to state 635
@@ -42935,9 +42950,9 @@ State 1350
     '.'                  shift, and go to state 667
     '['                  shift, and go to state 668
 
-    $default  reduce using rule 765 (array_comprehension_where)
+    $default  reduce using rule 767 (array_comprehension_where)
 
-    array_comprehension_where  go to state 1384
+    array_comprehension_where  go to state 1385
 
 
 State 1351
@@ -42956,7 +42971,7 @@ State 1352
     "name"  shift, and go to state 56
 
     name_in_namespace  go to state 818
-    func_addr_name     go to state 1385
+    func_addr_name     go to state 1386
 
 
 State 1353
@@ -43174,10 +43189,10 @@ State 1356
   714                   | make_struct_fields ',' "$f" '(' expr ')' . ":=" expr
 
     "<-"  shift, and go to state 907
-    ":="  shift, and go to state 1386
+    ":="  shift, and go to state 1387
     '='   shift, and go to state 909
 
-    copy_or_move  go to state 1387
+    copy_or_move  go to state 1388
 
 
 State 1357
@@ -43300,7 +43315,7 @@ State 1360
 
     $default  reduce using rule 429 ($@24)
 
-    $@24  go to state 1388
+    $@24  go to state 1389
 
 
 State 1361
@@ -43400,7 +43415,7 @@ State 1361
     '%'    shift, and go to state 666
     '.'    shift, and go to state 667
     '['    shift, and go to state 668
-    ')'    shift, and go to state 1389
+    ')'    shift, and go to state 1390
 
 
 State 1362
@@ -43502,7 +43517,7 @@ State 1362
     func_addr_expr          go to state 463
     expr_field              go to state 464
     expr_call               go to state 465
-    expr                    go to state 1390
+    expr                    go to state 1391
     expr_mtag               go to state 467
     basic_type_declaration  go to state 468
     make_decl               go to state 469
@@ -43597,7 +43612,7 @@ State 1363
     "||"                 shift, and go to state 653
     "^^"                 shift, and go to state 654
     ".."                 shift, and go to state 655
-    "end of expression"  shift, and go to state 1391
+    "end of expression"  shift, and go to state 1392
     '?'                  shift, and go to state 656
     '|'                  shift, and go to state 657
     '^'                  shift, and go to state 658
@@ -43624,7 +43639,7 @@ State 1365
 
   477 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable "abstract" optional_constant $@26 function_declaration_header . "end of expression"
 
-    "end of expression"  shift, and go to state 1392
+    "end of expression"  shift, and go to state 1393
 
 
 State 1366
@@ -43662,7 +43677,7 @@ State 1366
     "name"      shift, and go to state 199
 
     function_name                go to state 200
-    function_declaration_header  go to state 1393
+    function_declaration_header  go to state 1394
 
 
 State 1367
@@ -43672,7 +43687,7 @@ State 1367
     "$f"    shift, and go to state 820
     "name"  shift, and go to state 1095
 
-    make_struct_fields  go to state 1394
+    make_struct_fields  go to state 1395
 
 
 State 1368
@@ -43693,28 +43708,35 @@ State 1369
   718 make_struct_dim_list: make_struct_dim_list . ',' '(' make_struct_fields ')'
   720 make_struct_dim_decl: make_struct_dim_list . optional_comma
 
-    ','  shift, and go to state 1395
+    ','  shift, and go to state 1396
 
-    $default  reduce using rule 767 (optional_comma)
+    $default  reduce using rule 769 (optional_comma)
 
-    optional_comma  go to state 1396
+    optional_comma  go to state 1397
 
 
 State 1370
 
-  725 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer make_struct_dim_decl . ')'
+  721 optional_make_struct_dim_decl: make_struct_dim_decl .
 
-    ')'  shift, and go to state 1397
+    $default  reduce using rule 721 (optional_make_struct_dim_decl)
 
 
 State 1371
 
-  728 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer make_struct_dim_decl . ')'
+  727 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer optional_make_struct_dim_decl . ')'
 
     ')'  shift, and go to state 1398
 
 
 State 1372
+
+  730 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer optional_make_struct_dim_decl . ')'
+
+    ')'  shift, and go to state 1399
+
+
+State 1373
 
   289 expr_type_info: "typeinfo" name_in_namespace '<' "name" "end of expression" "name" '>' '(' expr . ')'
   337 expr_method_call: expr . "->" "name" '(' ')'
@@ -43811,80 +43833,86 @@ State 1372
     '%'    shift, and go to state 666
     '.'    shift, and go to state 667
     '['    shift, and go to state 668
-    ')'    shift, and go to state 1399
-
-
-State 1373
-
-  744 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer . make_struct_dim_decl ')'
-
-    "$f"    shift, and go to state 820
-    "name"  shift, and go to state 1095
-    '('     shift, and go to state 1367
-
-    make_struct_fields    go to state 1368
-    make_struct_dim_list  go to state 1369
-    make_struct_dim_decl  go to state 1400
+    ')'    shift, and go to state 1400
 
 
 State 1374
 
-  747 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer . make_struct_dim_decl ')'
+  746 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer . optional_make_struct_dim_decl ')'
 
     "$f"    shift, and go to state 820
     "name"  shift, and go to state 1095
     '('     shift, and go to state 1367
 
-    make_struct_fields    go to state 1368
-    make_struct_dim_list  go to state 1369
-    make_struct_dim_decl  go to state 1401
+    $default  reduce using rule 722 (optional_make_struct_dim_decl)
+
+    make_struct_fields             go to state 1368
+    make_struct_dim_list           go to state 1369
+    make_struct_dim_decl           go to state 1370
+    optional_make_struct_dim_decl  go to state 1401
 
 
 State 1375
 
-  750 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim . ')'
+  749 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer . optional_make_struct_dim_decl ')'
 
-    ')'  shift, and go to state 1402
+    "$f"    shift, and go to state 820
+    "name"  shift, and go to state 1095
+    '('     shift, and go to state 1367
+
+    $default  reduce using rule 722 (optional_make_struct_dim_decl)
+
+    make_struct_fields             go to state 1368
+    make_struct_dim_list           go to state 1369
+    make_struct_dim_decl           go to state 1370
+    optional_make_struct_dim_decl  go to state 1402
 
 
 State 1376
 
-  754 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list ')' .
-
-    $default  reduce using rule 754 (make_dim_decl)
-
-
-State 1377
-
-  764 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')' .
-
-    $default  reduce using rule 764 (make_table_decl)
-
-
-State 1378
-
-  758 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma . ')'
+  752 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim . ')'
 
     ')'  shift, and go to state 1403
 
 
+State 1377
+
+  756 make_dim_decl: "array" '<' $@88 type_declaration_no_options '>' $@89 '(' optional_expr_list ')' .
+
+    $default  reduce using rule 756 (make_dim_decl)
+
+
+State 1378
+
+  766 make_table_decl: "table" '<' type_declaration_no_options "end of expression" type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')' .
+
+    $default  reduce using rule 766 (make_table_decl)
+
+
 State 1379
 
-  740 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer make_struct_dim_decl . ')'
+  760 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma . ')'
 
     ')'  shift, and go to state 1404
 
 
 State 1380
 
-  731 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim ')' .
+  742 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer optional_make_struct_dim_decl . ')'
 
-    $default  reduce using rule 731 (make_struct_decl)
+    ')'  shift, and go to state 1405
 
 
 State 1381
 
-  766 array_comprehension_where: "end of expression" "where" . expr
+  733 make_struct_decl: "variant" '<' $@76 type_declaration_no_options '>' $@77 '(' make_variant_dim ')' .
+
+    $default  reduce using rule 733 (make_struct_decl)
+
+
+State 1382
+
+  768 array_comprehension_where: "end of expression" "where" . expr
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -43981,7 +44009,7 @@ State 1381
     func_addr_expr          go to state 463
     expr_field              go to state 464
     expr_call               go to state 465
-    expr                    go to state 1405
+    expr                    go to state 1406
     expr_mtag               go to state 467
     basic_type_declaration  go to state 468
     make_decl               go to state 469
@@ -43992,147 +44020,37 @@ State 1381
     array_comprehension     go to state 474
 
 
-State 1382
-
-  771 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block" .
-
-    $default  reduce using rule 771 (array_comprehension)
-
-
 State 1383
 
-  769 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']' .
+  773 array_comprehension: "begin of code block" "for" variable_name_with_pos_list "in" expr_list "end of expression" make_map_tuple array_comprehension_where "end of code block" .
 
-    $default  reduce using rule 769 (array_comprehension)
+    $default  reduce using rule 773 (array_comprehension)
 
 
 State 1384
 
-  770 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where . ']'
+  771 array_comprehension: '[' "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']' .
 
-    ']'  shift, and go to state 1406
+    $default  reduce using rule 771 (array_comprehension)
 
 
 State 1385
+
+  772 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where . ']'
+
+    ']'  shift, and go to state 1407
+
+
+State 1386
 
   347 func_addr_expr: '@' '@' '<' $@15 optional_function_argument_list optional_function_type '>' $@16 func_addr_name .
 
     $default  reduce using rule 347 (func_addr_expr)
 
 
-State 1386
-
-  714 make_struct_fields: make_struct_fields ',' "$f" '(' expr ')' ":=" . expr
-
-    "struct"                          shift, and go to state 401
-    "class"                           shift, and go to state 402
-    "true"                            shift, and go to state 403
-    "false"                           shift, and go to state 404
-    "new"                             shift, and go to state 405
-    "typeinfo"                        shift, and go to state 406
-    "type"                            shift, and go to state 407
-    "array"                           shift, and go to state 408
-    "null"                            shift, and go to state 409
-    "table"                           shift, and go to state 410
-    "deref"                           shift, and go to state 411
-    "cast"                            shift, and go to state 412
-    "upcast"                          shift, and go to state 413
-    "addr"                            shift, and go to state 414
-    "reinterpret"                     shift, and go to state 415
-    "unsafe"                          shift, and go to state 416
-    "fixed_array"                     shift, and go to state 417
-    "default"                         shift, and go to state 418
-    "bool"                            shift, and go to state 221
-    "void"                            shift, and go to state 222
-    "string"                          shift, and go to state 223
-    "int"                             shift, and go to state 225
-    "int2"                            shift, and go to state 226
-    "int3"                            shift, and go to state 227
-    "int4"                            shift, and go to state 228
-    "uint"                            shift, and go to state 229
-    "bitfield"                        shift, and go to state 419
-    "uint2"                           shift, and go to state 231
-    "uint3"                           shift, and go to state 232
-    "uint4"                           shift, and go to state 233
-    "float"                           shift, and go to state 234
-    "float2"                          shift, and go to state 235
-    "float3"                          shift, and go to state 236
-    "float4"                          shift, and go to state 237
-    "range"                           shift, and go to state 238
-    "urange"                          shift, and go to state 239
-    "range64"                         shift, and go to state 240
-    "urange64"                        shift, and go to state 241
-    "int64"                           shift, and go to state 243
-    "uint64"                          shift, and go to state 244
-    "double"                          shift, and go to state 245
-    "int8"                            shift, and go to state 248
-    "uint8"                           shift, and go to state 249
-    "int16"                           shift, and go to state 250
-    "uint16"                          shift, and go to state 251
-    "tuple"                           shift, and go to state 420
-    "variant"                         shift, and go to state 421
-    "generator"                       shift, and go to state 422
-    "++"                              shift, and go to state 423
-    "--"                              shift, and go to state 424
-    "::"                              shift, and go to state 55
-    "$$"                              shift, and go to state 425
-    "$i"                              shift, and go to state 426
-    "$v"                              shift, and go to state 427
-    "$b"                              shift, and go to state 428
-    "$a"                              shift, and go to state 429
-    "$c"                              shift, and go to state 430
-    "..."                             shift, and go to state 431
-    "integer constant"                shift, and go to state 432
-    "long integer constant"           shift, and go to state 433
-    "unsigned integer constant"       shift, and go to state 434
-    "unsigned long integer constant"  shift, and go to state 435
-    "unsigned int8 constant"          shift, and go to state 436
-    "floating point constant"         shift, and go to state 437
-    "double constant"                 shift, and go to state 438
-    "name"                            shift, and go to state 56
-    "start of the string"             shift, and go to state 439
-    "begin of code block"             shift, and go to state 440
-    '-'                               shift, and go to state 441
-    '+'                               shift, and go to state 442
-    '*'                               shift, and go to state 443
-    '%'                               shift, and go to state 14
-    '~'                               shift, and go to state 444
-    '!'                               shift, and go to state 445
-    '['                               shift, and go to state 446
-    '('                               shift, and go to state 447
-    '$'                               shift, and go to state 448
-    '@'                               shift, and go to state 449
-
-    string_builder          go to state 450
-    expr_reader             go to state 451
-    expr_call_pipe          go to state 452
-    name_in_namespace       go to state 453
-    expr_new                go to state 454
-    expr_cast               go to state 455
-    expr_type_decl          go to state 456
-    expr_type_info          go to state 457
-    block_or_lambda         go to state 458
-    expr_full_block         go to state 459
-    expr_numeric_const      go to state 460
-    expr_named_call         go to state 461
-    expr_method_call        go to state 462
-    func_addr_expr          go to state 463
-    expr_field              go to state 464
-    expr_call               go to state 465
-    expr                    go to state 1407
-    expr_mtag               go to state 467
-    basic_type_declaration  go to state 468
-    make_decl               go to state 469
-    make_struct_decl        go to state 470
-    make_tuple_call         go to state 471
-    make_dim_decl           go to state 472
-    make_table_decl         go to state 473
-    array_comprehension     go to state 474
-
-
 State 1387
 
-  713 make_struct_fields: make_struct_fields ',' "$f" '(' expr ')' copy_or_move . expr
+  714 make_struct_fields: make_struct_fields ',' "$f" '(' expr ')' ":=" . expr
 
     "struct"                          shift, and go to state 401
     "class"                           shift, and go to state 402
@@ -44242,21 +44160,131 @@ State 1387
 
 State 1388
 
+  713 make_struct_fields: make_struct_fields ',' "$f" '(' expr ')' copy_or_move . expr
+
+    "struct"                          shift, and go to state 401
+    "class"                           shift, and go to state 402
+    "true"                            shift, and go to state 403
+    "false"                           shift, and go to state 404
+    "new"                             shift, and go to state 405
+    "typeinfo"                        shift, and go to state 406
+    "type"                            shift, and go to state 407
+    "array"                           shift, and go to state 408
+    "null"                            shift, and go to state 409
+    "table"                           shift, and go to state 410
+    "deref"                           shift, and go to state 411
+    "cast"                            shift, and go to state 412
+    "upcast"                          shift, and go to state 413
+    "addr"                            shift, and go to state 414
+    "reinterpret"                     shift, and go to state 415
+    "unsafe"                          shift, and go to state 416
+    "fixed_array"                     shift, and go to state 417
+    "default"                         shift, and go to state 418
+    "bool"                            shift, and go to state 221
+    "void"                            shift, and go to state 222
+    "string"                          shift, and go to state 223
+    "int"                             shift, and go to state 225
+    "int2"                            shift, and go to state 226
+    "int3"                            shift, and go to state 227
+    "int4"                            shift, and go to state 228
+    "uint"                            shift, and go to state 229
+    "bitfield"                        shift, and go to state 419
+    "uint2"                           shift, and go to state 231
+    "uint3"                           shift, and go to state 232
+    "uint4"                           shift, and go to state 233
+    "float"                           shift, and go to state 234
+    "float2"                          shift, and go to state 235
+    "float3"                          shift, and go to state 236
+    "float4"                          shift, and go to state 237
+    "range"                           shift, and go to state 238
+    "urange"                          shift, and go to state 239
+    "range64"                         shift, and go to state 240
+    "urange64"                        shift, and go to state 241
+    "int64"                           shift, and go to state 243
+    "uint64"                          shift, and go to state 244
+    "double"                          shift, and go to state 245
+    "int8"                            shift, and go to state 248
+    "uint8"                           shift, and go to state 249
+    "int16"                           shift, and go to state 250
+    "uint16"                          shift, and go to state 251
+    "tuple"                           shift, and go to state 420
+    "variant"                         shift, and go to state 421
+    "generator"                       shift, and go to state 422
+    "++"                              shift, and go to state 423
+    "--"                              shift, and go to state 424
+    "::"                              shift, and go to state 55
+    "$$"                              shift, and go to state 425
+    "$i"                              shift, and go to state 426
+    "$v"                              shift, and go to state 427
+    "$b"                              shift, and go to state 428
+    "$a"                              shift, and go to state 429
+    "$c"                              shift, and go to state 430
+    "..."                             shift, and go to state 431
+    "integer constant"                shift, and go to state 432
+    "long integer constant"           shift, and go to state 433
+    "unsigned integer constant"       shift, and go to state 434
+    "unsigned long integer constant"  shift, and go to state 435
+    "unsigned int8 constant"          shift, and go to state 436
+    "floating point constant"         shift, and go to state 437
+    "double constant"                 shift, and go to state 438
+    "name"                            shift, and go to state 56
+    "start of the string"             shift, and go to state 439
+    "begin of code block"             shift, and go to state 440
+    '-'                               shift, and go to state 441
+    '+'                               shift, and go to state 442
+    '*'                               shift, and go to state 443
+    '%'                               shift, and go to state 14
+    '~'                               shift, and go to state 444
+    '!'                               shift, and go to state 445
+    '['                               shift, and go to state 446
+    '('                               shift, and go to state 447
+    '$'                               shift, and go to state 448
+    '@'                               shift, and go to state 449
+
+    string_builder          go to state 450
+    expr_reader             go to state 451
+    expr_call_pipe          go to state 452
+    name_in_namespace       go to state 453
+    expr_new                go to state 454
+    expr_cast               go to state 455
+    expr_type_decl          go to state 456
+    expr_type_info          go to state 457
+    block_or_lambda         go to state 458
+    expr_full_block         go to state 459
+    expr_numeric_const      go to state 460
+    expr_named_call         go to state 461
+    expr_method_call        go to state 462
+    func_addr_expr          go to state 463
+    expr_field              go to state 464
+    expr_call               go to state 465
+    expr                    go to state 1409
+    expr_mtag               go to state 467
+    basic_type_declaration  go to state 468
+    make_decl               go to state 469
+    make_struct_decl        go to state 470
+    make_tuple_call         go to state 471
+    make_dim_decl           go to state 472
+    make_table_decl         go to state 473
+    array_comprehension     go to state 474
+
+
+State 1389
+
   430 expr: expr '?' "as" "type" '<' $@23 type_declaration '>' $@24 .
 
     $default  reduce using rule 430 (expr)
 
 
-State 1389
+State 1390
 
    58 expression_else: elif_or_static_elif '(' expr ')' . expression_block expression_else
 
     "begin of code block"  shift, and go to state 322
 
-    expression_block  go to state 1409
+    expression_block  go to state 1410
 
 
-State 1390
+State 1391
 
   271 tuple_expansion_variable_declaration: '(' tuple_expansion ')' ':' type_declaration_no_options copy_or_move_or_clone expr . "end of expression"
   337 expr_method_call: expr . "->" "name" '(' ')'
@@ -44340,7 +44368,7 @@ State 1390
     "||"                 shift, and go to state 653
     "^^"                 shift, and go to state 654
     ".."                 shift, and go to state 655
-    "end of expression"  shift, and go to state 1410
+    "end of expression"  shift, and go to state 1411
     '?'                  shift, and go to state 656
     '|'                  shift, and go to state 657
     '^'                  shift, and go to state 658
@@ -44356,30 +44384,30 @@ State 1390
     '['                  shift, and go to state 668
 
 
-State 1391
+State 1392
 
   272 tuple_expansion_variable_declaration: '(' tuple_expansion ')' optional_ref copy_or_move_or_clone expr "end of expression" .
 
     $default  reduce using rule 272 (tuple_expansion_variable_declaration)
 
 
-State 1392
+State 1393
 
   477 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable "abstract" optional_constant $@26 function_declaration_header "end of expression" .
 
     $default  reduce using rule 477 (struct_variable_declaration_list)
 
 
-State 1393
+State 1394
 
   479 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@27 function_declaration_header . expression_block
 
     "begin of code block"  shift, and go to state 322
 
-    expression_block  go to state 1411
+    expression_block  go to state 1412
 
 
-State 1394
+State 1395
 
   709 make_struct_fields: make_struct_fields . ',' "name" copy_or_move expr
   710                   | make_struct_fields . ',' "name" ":=" expr
@@ -44388,83 +44416,83 @@ State 1394
   717 make_struct_dim_list: '(' make_struct_fields . ')'
 
     ','  shift, and go to state 1018
-    ')'  shift, and go to state 1412
-
-
-State 1395
-
-  718 make_struct_dim_list: make_struct_dim_list ',' . '(' make_struct_fields ')'
-  768 optional_comma: ',' .
-
-    '('  shift, and go to state 1413
-
-    $default  reduce using rule 768 (optional_comma)
+    ')'  shift, and go to state 1413
 
 
 State 1396
+
+  718 make_struct_dim_list: make_struct_dim_list ',' . '(' make_struct_fields ')'
+  770 optional_comma: ',' .
+
+    '('  shift, and go to state 1414
+
+    $default  reduce using rule 770 (optional_comma)
+
+
+State 1397
 
   720 make_struct_dim_decl: make_struct_dim_list optional_comma .
 
     $default  reduce using rule 720 (make_struct_dim_decl)
 
 
-State 1397
-
-  725 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer make_struct_dim_decl ')' .
-
-    $default  reduce using rule 725 (make_struct_decl)
-
-
 State 1398
 
-  728 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer make_struct_dim_decl ')' .
+  727 make_struct_decl: "struct" '<' $@72 type_declaration_no_options '>' $@73 '(' use_initializer optional_make_struct_dim_decl ')' .
 
-    $default  reduce using rule 728 (make_struct_decl)
+    $default  reduce using rule 727 (make_struct_decl)
 
 
 State 1399
+
+  730 make_struct_decl: "class" '<' $@74 type_declaration_no_options '>' $@75 '(' use_initializer optional_make_struct_dim_decl ')' .
+
+    $default  reduce using rule 730 (make_struct_decl)
+
+
+State 1400
 
   289 expr_type_info: "typeinfo" name_in_namespace '<' "name" "end of expression" "name" '>' '(' expr ')' .
 
     $default  reduce using rule 289 (expr_type_info)
 
 
-State 1400
-
-  744 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer make_struct_dim_decl . ')'
-
-    ')'  shift, and go to state 1414
-
-
 State 1401
 
-  747 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer make_struct_dim_decl . ')'
+  746 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer optional_make_struct_dim_decl . ')'
 
     ')'  shift, and go to state 1415
 
 
 State 1402
 
-  750 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')' .
+  749 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer optional_make_struct_dim_decl . ')'
 
-    $default  reduce using rule 750 (make_dim_decl)
+    ')'  shift, and go to state 1416
 
 
 State 1403
 
-  758 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')' .
+  752 make_dim_decl: "array" "variant" '<' $@86 type_declaration_no_options '>' $@87 '(' make_variant_dim ')' .
 
-    $default  reduce using rule 758 (make_dim_decl)
+    $default  reduce using rule 752 (make_dim_decl)
 
 
 State 1404
 
-  740 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer make_struct_dim_decl ')' .
+  760 make_dim_decl: "fixed_array" '<' $@90 type_declaration_no_options '>' $@91 '(' expr_list optional_comma ')' .
 
-    $default  reduce using rule 740 (make_tuple_call)
+    $default  reduce using rule 760 (make_dim_decl)
 
 
 State 1405
+
+  742 make_tuple_call: "tuple" '<' $@80 type_declaration_no_options '>' $@81 '(' use_initializer optional_make_struct_dim_decl ')' .
+
+    $default  reduce using rule 742 (make_tuple_call)
+
+
+State 1406
 
   337 expr_method_call: expr . "->" "name" '(' ')'
   338                 | expr . "->" "name" '(' expr_list ')'
@@ -44524,7 +44552,7 @@ State 1405
   456          | expr . "as" "$f" '(' expr ')'
   457          | expr . '?' "as" "$f" '(' expr ')'
   458          | expr . "is" "$f" '(' expr ')'
-  766 array_comprehension_where: "end of expression" "where" expr .
+  768 array_comprehension_where: "end of expression" "where" expr .
 
     "is"   shift, and go to state 634
     "as"   shift, and go to state 635
@@ -44562,17 +44590,17 @@ State 1405
     '.'    shift, and go to state 667
     '['    shift, and go to state 668
 
-    $default  reduce using rule 766 (array_comprehension_where)
-
-
-State 1406
-
-  770 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']' .
-
-    $default  reduce using rule 770 (array_comprehension)
+    $default  reduce using rule 768 (array_comprehension_where)
 
 
 State 1407
+
+  772 array_comprehension: '[' "iterator" "for" variable_name_with_pos_list "in" expr_list "end of expression" expr array_comprehension_where ']' .
+
+    $default  reduce using rule 772 (array_comprehension)
+
+
+State 1408
 
   337 expr_method_call: expr . "->" "name" '(' ')'
   338                 | expr . "->" "name" '(' expr_list ')'
@@ -44673,7 +44701,7 @@ State 1407
     $default  reduce using rule 714 (make_struct_fields)
 
 
-State 1408
+State 1409
 
   337 expr_method_call: expr . "->" "name" '(' ')'
   338                 | expr . "->" "name" '(' expr_list ')'
@@ -44774,7 +44802,7 @@ State 1408
     $default  reduce using rule 713 (make_struct_fields)
 
 
-State 1409
+State 1410
 
    58 expression_else: elif_or_static_elif '(' expr ')' expression_block . expression_else
 
@@ -44785,62 +44813,62 @@ State 1409
     $default  reduce using rule 56 (expression_else)
 
     elif_or_static_elif  go to state 1256
-    expression_else      go to state 1416
+    expression_else      go to state 1417
 
 
-State 1410
+State 1411
 
   271 tuple_expansion_variable_declaration: '(' tuple_expansion ')' ':' type_declaration_no_options copy_or_move_or_clone expr "end of expression" .
 
     $default  reduce using rule 271 (tuple_expansion_variable_declaration)
 
 
-State 1411
+State 1412
 
   479 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@27 function_declaration_header expression_block .
 
     $default  reduce using rule 479 (struct_variable_declaration_list)
 
 
-State 1412
+State 1413
 
   717 make_struct_dim_list: '(' make_struct_fields ')' .
 
     $default  reduce using rule 717 (make_struct_dim_list)
 
 
-State 1413
+State 1414
 
   718 make_struct_dim_list: make_struct_dim_list ',' '(' . make_struct_fields ')'
 
     "$f"    shift, and go to state 820
     "name"  shift, and go to state 1095
 
-    make_struct_fields  go to state 1417
-
-
-State 1414
-
-  744 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer make_struct_dim_decl ')' .
-
-    $default  reduce using rule 744 (make_dim_decl)
+    make_struct_fields  go to state 1418
 
 
 State 1415
 
-  747 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer make_struct_dim_decl ')' .
+  746 make_dim_decl: "array" "struct" '<' $@82 type_declaration_no_options '>' $@83 '(' use_initializer optional_make_struct_dim_decl ')' .
 
-    $default  reduce using rule 747 (make_dim_decl)
+    $default  reduce using rule 746 (make_dim_decl)
 
 
 State 1416
+
+  749 make_dim_decl: "array" "tuple" '<' $@84 type_declaration_no_options '>' $@85 '(' use_initializer optional_make_struct_dim_decl ')' .
+
+    $default  reduce using rule 749 (make_dim_decl)
+
+
+State 1417
 
    58 expression_else: elif_or_static_elif '(' expr ')' expression_block expression_else .
 
     $default  reduce using rule 58 (expression_else)
 
 
-State 1417
+State 1418
 
   709 make_struct_fields: make_struct_fields . ',' "name" copy_or_move expr
   710                   | make_struct_fields . ',' "name" ":=" expr
@@ -44849,10 +44877,10 @@ State 1417
   718 make_struct_dim_list: make_struct_dim_list ',' '(' make_struct_fields . ')'
 
     ','  shift, and go to state 1018
-    ')'  shift, and go to state 1418
+    ')'  shift, and go to state 1419
 
 
-State 1418
+State 1419
 
   718 make_struct_dim_list: make_struct_dim_list ',' '(' make_struct_fields ')' .
 

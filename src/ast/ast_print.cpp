@@ -1147,18 +1147,30 @@ namespace das {
                     ss << "default<";
                     if ( expr->type ) {
                         ss << expr->type->describe();
-                     } else {
+                    } else {
                         ss << "/* undefined */";
-                     }
-                     ss << ">";
+                    }
+                    ss << ">";
+                    if ( !expr->useInitializer && !expr->constructor ) {
+                        ss << " uninitialized";
+                    }
                 } else {
-                    ss << "struct<" << expr->type->describe() << ">(";
+                    ss << "struct<";
+                    if ( expr->type ) {
+                        ss << expr->type->describe();
+                    } else {
+                        ss << "/* undefined */";
+                    }
+                    ss << ">(";
+                    if ( !expr->useInitializer && !expr->constructor ) {
+                        ss << "uninitialized ";
+                    }
                 }
             } else {
                 ss << "[[";
                 if ( expr->type ) {
                     ss << expr->type->describe();
-                    if ( expr->useInitializer ) {
+                    if ( expr->useInitializer || expr->constructor ) {
                         ss << "()";
                     }
                     ss << " ";
