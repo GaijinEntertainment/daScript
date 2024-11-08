@@ -742,7 +742,7 @@ def to_array_move(var a:auto(TT)[]) : array<TT -const>
         return <- arr
 
 [skip_lock_check]
-def to_array_move(var a:auto(TT)) : array<TT -const>
+def to_array_move(a:auto(TT)) : array<TT -const>
     unsafe
         var arr : array<TT -const>
         static_if typeinfo(is_smart_ptr a)
