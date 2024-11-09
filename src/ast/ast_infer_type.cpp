@@ -2636,8 +2636,9 @@ namespace das {
                       + describeType(dvT),  "", "",
                     expr->at, CompilationError::cant_dereference);
             } else {
-                expr->type = make_smart<TypeDecl>(*dvT);
-                expr->type->constant |= expr->subexpr->type->constant;
+                expr->type = make_smart<TypeDecl>(*seT->firstType);
+                expr->type->constant |= expr->subexpr->type->constant | dvT->constant;
+                expr->type->ref = dvT->ref; // only ref if default value is ref
                 propagateTempType(expr->subexpr->type, expr->type); // t?# ?? def = #t
                 propagateAlwaysSafe(expr->subexpr);
             }
