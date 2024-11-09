@@ -9111,6 +9111,11 @@ namespace das {
                         mkt->recordType = make_smart<TypeDecl>(*expr->recordType);
                         mkt->makeType.reset();
                     }
+                    if ( !expr->recordType->isSameType(*(eval->type),RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no) ) { // disable substitue
+                        // we need a cast
+                        auto cast = make_smart<ExprCast>(expr->at, resExpr, make_smart<TypeDecl>(*expr->recordType));
+                        resExpr = cast;
+                    }
                     return resExpr;
                 }
             }
