@@ -3085,13 +3085,14 @@ namespace das {
                             }
                             if ( allOtherInferred ) {
                                 // we build _::{field.name} ( field, arg1, arg2, ... )
-                                auto newCall = make_smart<ExprCall>(expr->at, "_::" + eField->name);
+                                auto callName = "_::" + eField->name;
+                                auto newCall = make_smart<ExprCall>(expr->at, callName);
                                 newCall->arguments.push_back(eField->value->clone());
                                 for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
                                     newCall->arguments.push_back(expr->arguments[i]->clone());
                                 }
                                 auto fcall = inferFunctionCall(newCall.get(), InferCallError::tryOperator);  // we infer it
-                                if ( fcall != nullptr ) {
+                                if ( fcall != nullptr || newCall->name != callName ) {
                                     reportAstChanged();
                                     return newCall;
                                 }
