@@ -1867,6 +1867,10 @@ namespace das {
                     } else if ( !decl.type->canCopy() && !decl.moveSemantics ) {
                         error("field " + decl.name + " can't be copied, use <- instead; " + describeType(decl.type), "", "",
                               decl.init->at, CompilationError::invalid_initialization_type );
+                        if ( canRelaxAssign(decl.init.get()) ) {
+                            reportAstChanged();
+                            decl.moveSemantics = true;
+                        }
                     } else if ( !decl.init->type->canCopy() && !decl.init->type->canMove() ) {
                         error("field " + decl.name + "can't be initialized at all; " + describeType(decl.init->type),  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
@@ -8339,6 +8343,10 @@ namespace das {
                 if (!fieldType->canCopy() && !decl->moveSemantics) {
                     error("field " + decl->name + " can't be copied; " + describeType(fieldType),"","use <- instead",
                         decl->at, CompilationError::invalid_type);
+                    if ( canRelaxAssign(decl->value.get()) ) {
+                        reportAstChanged();
+                        decl->moveSemantics = true;
+                    }
                 } else if (decl->moveSemantics && decl->value->type->isConst()) {
                     error("can't move from a constant value " + describeType(decl->value->type), "", "",
                         decl->value->at, CompilationError::cant_move);
@@ -8449,6 +8457,10 @@ namespace das {
                     if( !field->type->canCopy() && !decl->moveSemantics ) {
                         error("field " + decl->name + " can't be copied; " + describeType(field->type),"","use <- instead",
                               decl->at, CompilationError::invalid_type );
+                        if ( canRelaxAssign(decl->value.get()) ) {
+                            reportAstChanged();
+                            decl->moveSemantics = true;
+                        }
                     } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + describeType(decl->value->type), "", "",
                             decl->value->at, CompilationError::cant_move);
@@ -8494,6 +8506,10 @@ namespace das {
                     if( !fldt->canCopy() && !decl->moveSemantics ) {
                         error("field " + decl->name + " can't be copied; " + describeType(fldt),"","use <- instead",
                               decl->at, CompilationError::invalid_type );
+                        if ( canRelaxAssign(decl->value.get()) ) {
+                            reportAstChanged();
+                            decl->moveSemantics = true;
+                        }
                     } else if (decl->moveSemantics && decl->value->type->isConst()) {
                         error("can't move from a constant value " + describeType(decl->value->type), "", "",
                             decl->value->at, CompilationError::cant_move);
