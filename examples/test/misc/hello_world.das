@@ -162,8 +162,10 @@ def test_make_struct {
 	let d : Mks = struct<Mks>( a=2,b=3.0 );	// with values overwritten
 	let e : Mks[3] = struct<Mks>( (a=1,b=1.0), (a=2,b=2.0), (a=3,b=3.0) );	// this is array of structures // TODO: do we need better syntax_error
 	unsafe {
-		let h : Mks = default<Mks> uninitialized;	// uninitialized, a=0, b=0.0
+		let h : Mks = default<Mks> uninitialized;		// uninitialized, a=0, b=0.0
+		let H : Mks = Mks(uninitialized);				// uninitialized, a=0, b=0.0
 		let i : Mks = struct<Mks>(uninitialized a=1);	// uninitialized, a=1, b=0.0
+		let I : Mks = Mks(uninitialized a=1);			// uninitialized, a=1, b=0.0
 	}
 }
 
