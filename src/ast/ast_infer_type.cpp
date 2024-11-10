@@ -57,6 +57,7 @@ namespace das {
             noUnsafeUninitializedStructs = prog->options.getBoolOption("no_unsafe_uninitialized_structures", prog->policies.no_unsafe_uninitialized_structures);
             strictProperties = prog->options.getBoolOption("strict_properties", prog->policies.strict_properties);
             alwaysExportInitializer = prog->options.getBoolOption("always_export_initializer", false);
+            relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -96,6 +97,7 @@ namespace das {
         bool                    noUnsafeUninitializedStructs = false;
         bool                    strictProperties = false;
         bool                    alwaysExportInitializer = false;
+        bool                    relaxedAssign = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -2007,6 +2009,10 @@ namespace das {
             } else if ( !(var->init_via_move || var->init_via_clone) && !var->init->type->canCopy() ) {
                 error("global variable '" + var->name + "' can't be copied",  "", "",
                     var->at, CompilationError::cant_copy);
+                if ( canRelaxAssign(var->init.get()) ) {
+                    reportAstChanged();
+                    var->init_via_move = true;
+                }
             } else if ( var->init_via_move && !var->init->type->canMove() ) {
                 error("global variable '" + var->name + "' can't be moved",  "", "",
                     var->at, CompilationError::cant_move);
@@ -6043,6 +6049,10 @@ namespace das {
             if ( !expr->left->type->canCopy() ) {
                 error("this type can't be copied"+copyErrorInfo(expr),
                     "", "use move (<-) or clone (:=) instead", expr->at, CompilationError::cant_copy);
+                if ( canRelaxAssign(expr->right.get()) ) {
+                    reportAstChanged();
+                    return make_smart<ExprMove>(expr->at, expr->left->clone(), expr->right->clone());
+                }
             }
             expr->type = make_smart<TypeDecl>();  // we return nothing
             return Visitor::visit(expr);
@@ -6329,6 +6339,10 @@ namespace das {
                 if ( block->moveOnReturn && !expr->moveSemantics ) {
                     error("this type can't be copied; " + describeType(block->type),"","use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
+                    if ( canRelaxAssign(expr->subexpr.get()) ) {
+                        reportAstChanged();
+                        expr->moveSemantics = true;
+                    }
                 }
                 if ( block->returnType && block->returnType->ref && !safeExpression(expr) ) {
                     error("returning reference requires unsafe", "", "",
@@ -6360,6 +6374,10 @@ namespace das {
                 if ( func->moveOnReturn && !expr->moveSemantics ) {
                     error("this type can't be copied; " + describeType(func->result),"","use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
+                    if ( canRelaxAssign(expr->subexpr.get()) ) {
+                        reportAstChanged();
+                        expr->moveSemantics = true;
+                    }
                 }
                 if ( func->result->ref && !safeExpression(expr) ) {
                     error("returning reference requires unsafe", "", "",
@@ -7009,6 +7027,18 @@ namespace das {
             c2m->arguments.push_back(var->init);
             return c2m;
         }
+        bool canRelaxAssign ( Expression * init ) const {
+            if ( !relaxedAssign ) return false;
+            if ( !init->type || !init->type->canMove() ) return false;  // only if it can be moved
+            if ( init->rtti_isMakeLocal() ) return true;    // a = [[...]] is always ok to transform to a <- [[...]]
+            if ( init->rtti_isCallFunc() ) {
+                auto call = static_cast<ExprCallFunc *>(init);
+                if ( call->func && call->func->result && !call->func->result->ref ) {
+                    return true;    // a = f() is ok to transform to a <- f(), if its not a function which returns reference
+                }
+            }
+            return false;
+        }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
             local.push_back(var);
             if ( !var->init->type ) {
@@ -7044,7 +7074,6 @@ namespace das {
                 error("local variable " + var->name + " initialization type mismatch. const matters, "
                       + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                     var->at, CompilationError::invalid_initialization_type);
-
             } else if ( !var->type->ref && var->type->isGoodBlockType() ) {
                 if ( !var->init->rtti_isMakeBlock() ) {
                     error("local variable " + var->name + " can only be initialized with make block expression", "", "",
@@ -7066,6 +7095,10 @@ namespace das {
                        && var->init->type->canMove() && !(var->init_via_move || var->init_via_clone) ) {
                 error("local variable " + var->name + " can only be move-initialized","","use <- for that",
                     var->at, CompilationError::invalid_initialization_type);
+                if ( canRelaxAssign(var->init.get()) ) {
+                    reportAstChanged();
+                    var->init_via_move = true;
+                }
             } else if ( var->init_via_move && var->init->type->isConst() ) {
                 error("local variable " + var->name + " can't init (move) from a constant value. " + describeType(var->init->type), "", "",
                     var->at, CompilationError::cant_move);
