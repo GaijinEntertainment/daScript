@@ -165,7 +165,7 @@ namespace das {
         ft->alias = "FieldDeclarationFlags";
         ft->argNames = { "moveSemantics", "parentType", "capturedConstant",
             "generated", "capturedRef", "doNotDelete", "privateField", "_sealed",
-            "implemented" };
+            "implemented", "classMethod" };
         return ft;
     }
 

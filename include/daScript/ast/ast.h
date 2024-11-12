@@ -219,6 +219,7 @@ namespace das
                     bool            privateField : 1;
                     bool            sealed : 1;
                     bool            implemented : 1;
+                    bool            classMethod : 1;
                 };
                 uint32_t            flags = 0;
             };

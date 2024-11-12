@@ -151,7 +151,7 @@ namespace das {
             return verbose ? fun->describe() : "";
         }
     protected:
-        void verifyType ( const TypeDeclPtr & decl, bool allowExplicit = false ) const {
+        void verifyType ( const TypeDeclPtr & decl, bool allowExplicit = false, bool classMethod = false ) const {
             // TODO: enable and cleanup
             if ( decl->isExplicit && !allowExplicit ) {
                 /*
@@ -285,7 +285,7 @@ namespace das {
                     verifyType(resultType);
                 }
                 for ( auto & argType : decl->argTypes ) {
-                    if ( argType->ref && argType->isRefType() ) {
+                    if ( !classMethod && (argType->ref && argType->isRefType()) ) {
                         error("can't pass a boxed type by a reference: '" + describeType(argType) + "'", "", "",
                               argType->at,CompilationError::invalid_argument_type);
                     }
@@ -1907,7 +1907,7 @@ namespace das {
                 decl.offset = int(fieldOffset);
                 fieldOffset += decl.type->getSizeOf64();
             }
-            verifyType(decl.type);
+            verifyType(decl.type, false, decl.classMethod);
         }
         FunctionPtr getOrCreateDummy ( Module * mod ) {
             auto dummy = make_smart<Function>();
