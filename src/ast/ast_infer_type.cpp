@@ -7035,10 +7035,15 @@ namespace das {
             if ( !relaxedAssign ) return false;
             if ( !init->type || !init->type->canMove() ) return false;  // only if it can be moved
             if ( init->rtti_isMakeLocal() ) return true;    // a = [[...]] is always ok to transform to a <- [[...]]
-            if ( init->rtti_isCallFunc() ) {
+            else if ( init->rtti_isCallFunc() ) {
                 auto call = static_cast<ExprCallFunc *>(init);
                 if ( call->func && call->func->result && !call->func->result->ref ) {
                     return true;    // a = f() is ok to transform to a <- f(), if its not a function which returns reference
+                }
+            } else if ( init->rtti_isInvoke() ) {
+                auto inv = static_cast<ExprInvoke *>(init);
+                if ( inv->isCopyOrMove() ) {
+                    return true;    // a = invoke(f,...) is ok to transform to a <- invoke(f,...), if it does not return reference
                 }
             }
             return false;
