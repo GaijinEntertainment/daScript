@@ -1519,10 +1519,11 @@ block_or_lambda
     ;
 
 capture_entry
-    :   '&' NAME[name]         { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_reference); delete $name; }
-    |   '=' NAME[name]         { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_copy); delete $name; }
-    |   LARROW NAME[name]      { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_move); delete $name; }
-    |   CLONEEQU NAME[name]    { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_clone); delete $name; }
+    :   '&' NAME[name]              { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_reference); delete $name; }
+    |   '=' NAME[name]              { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_copy); delete $name; }
+    |   LARROW NAME[name]           { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_move); delete $name; }
+    |   CLONEEQU NAME[name]         { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_clone); delete $name; }
+    |   NAME[op] '(' NAME[name] ')' { $$ = ast_makeCaptureEntry(scanner,tokAt(scanner,@op),*$op,*$name); delete $op; delete $name; }
     ;
 
 capture_list

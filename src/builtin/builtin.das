@@ -519,6 +519,13 @@ def move_to_local ( var a : auto(TT)& ) : TT -const -&
         concept_assert(false,"can't move this type")
 
 [skip_lock_check]
+def clone(clone_src:auto(TT)|#) : TT -const -#
+    unsafe
+        var clone_dest : TT - #
+        clone_dest := clone_src
+        return <- clone_dest
+
+[skip_lock_check]
 def clone_to_move(clone_src:auto(TT)|#) : TT -const -#
     unsafe
         var clone_dest : TT - #
