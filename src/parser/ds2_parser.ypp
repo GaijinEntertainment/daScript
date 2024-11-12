@@ -1680,6 +1680,18 @@ expr_field
         delete $method_name;
         $$ = pInvoke;
     }
+    |   expr[left] '.'[loc] basic_type_declaration[method_type] '(' ')' {
+        auto method_name = das_to_string($method_type);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, method_name);
+        $$ = pInvoke;
+    }
+    |   expr[left] '.'[loc] basic_type_declaration[method_type] '(' expr_list[arguments] ')' {
+        auto method_name = das_to_string($method_type);
+        auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, method_name);
+        auto callArgs = sequenceToList($arguments);
+        pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
+        $$ = pInvoke;
+    }
     |   expr[subexpr] '.'[loc] { yyextra->das_suppress_errors=true; } error { yyextra->das_suppress_errors=false; } {
         $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@loc), ExpressionPtr($subexpr), "");
         yyerrok;
