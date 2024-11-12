@@ -3923,7 +3923,7 @@ class LlvmJitVisitor : AstVisitor
         thisBlock = null
         thisFunc = null
 
-    def make_block_funcion(expr:smart_ptr<ExprMakeBlock>; capture:array<CapturedVariable>; first_field_index:int; captureType:LLVMOpaqueType? ) : tuple<func:LLVMOpaqueValue?;impl:LLVMOpaqueValue?>
+    def make_block_funcion(expr:smart_ptr<ExprMakeBlock>; captured:array<CapturedVariable>; first_field_index:int; captureType:LLVMOpaqueType? ) : tuple<func:LLVMOpaqueValue?;impl:LLVMOpaqueValue?>
         var astVisitor = new LlvmJitVisitor(expr.at, jit_context, false, g_di_builder, di_cu)
         var fmna : string
         unsafe
@@ -3932,7 +3932,7 @@ class LlvmJitVisitor : AstVisitor
             var cblk = (*astVisitor)->before_function_entry()
             var carg = (*astVisitor)->get_capture_param()
             carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
-            for c,ai in capture,count()
+            for c,ai in captured,count()
                 var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai+first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
                 if c.eref
                     var arg_t = LLVMPointerType(type_to_llvm_type(c.variable._type), 0u)
@@ -3955,23 +3955,23 @@ class LlvmJitVisitor : AstVisitor
         return false
 
     def override preVisitExprMakeBlock(expr:smart_ptr<ExprMakeBlock>) : void
-        var capture <- capture_block(expr._block)
+        var captured <- capture_block(expr._block)
         // build block type
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 8u))
         var first_field_index = length(blk_fields)
-        for c in capture
+        for c in captured
             if c.variable._type.isGoodBlockType
                 blk_fields |> push(type_to_llvm_type(c.variable._type))
             else
                 blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
         var this_block_type = LLVMStructType(blk_fields)
-        // allocate block, set capture fields
+        // allocate block, set captured fields
         var blk : LLVMOpaqueValue?
         at_function_entry <|
             blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}_")
         var blkv = LLVMGetUndef(this_block_type)
-        for c,idx in capture,count()
+        for c,idx in captured,count()
             var v_ptr = getV_ptr(c.variable, false)
             if v_ptr == null
                 v_ptr = getE_ptr(c.expression, false)
@@ -4006,7 +4006,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildStore(g_builder, blkv, blk)
 
         // make block function
-        var blk_make = make_block_funcion(expr, capture,first_field_index, this_block_type)
+        var blk_make = make_block_funcion(expr, captured,first_field_index, this_block_type)
 
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
