@@ -7034,7 +7034,9 @@ namespace das {
         bool canRelaxAssign ( Expression * init ) const {
             if ( !relaxedAssign ) return false;
             if ( !init->type || !init->type->canMove() ) return false;  // only if it can be moved
-            if ( init->rtti_isMakeLocal() ) return true;    // a = [[...]] is always ok to transform to a <- [[...]]
+            if ( init->rtti_isMakeLocal() ) return true;        // a = [[...]] is always ok to transform to a <- [[...]]
+            else if ( init->rtti_isMakeBlock() ) return true;   // a = @... is always ok to transform to a <- @
+            else if ( init->rtti_isAscend() ) return true;      // a = new [[Foo()]] is always ok to transform to a <- new [[Foo()]]
             else if ( init->rtti_isCallFunc() ) {
                 auto call = static_cast<ExprCallFunc *>(init);
                 if ( call->func && call->func->result && !call->func->result->ref ) {
@@ -8185,6 +8187,50 @@ namespace das {
             fieldName->type = conststring;
             return inferGenericOperator(opN, expr_at, arg0, fieldName, err);
         }
+
+
+        Variable * findMatchingBlockOrLambdaVariable ( const string & name ) {
+            // local (that on the stack)
+            for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {
+                auto var = (*it).get();
+                if ( var->name==name || var->aka==name ) {
+                    return var;
+                }
+            }
+            // block arguments
+            for ( auto it = blocks.rbegin(); it!=blocks.rend(); ++it ) {
+                ExprBlock * block = *it;
+                for ( auto & arg : block->arguments ) {
+                    if ( arg->name==name || arg->aka==name ) {
+                        return arg.get();
+                    }
+                }
+            }
+            // function argument
+            if ( func ) {
+                for ( auto & arg : func->arguments ) {
+                    if ( arg->name==name || arg->aka==name ) {
+                        return arg.get();
+                    }
+                }
+            }
+            // static class method accessing static variables
+            if ( func && func->isStaticClassMethod && func->classParent->hasStaticMembers ) {
+                auto staticVarName = func->classParent->name + "`" + name;
+                if ( auto var = func->classParent->module->findVariable(staticVarName) ) {
+                    return var.get();
+                }
+            }
+            // global
+            auto vars = findMatchingVar(name, false);
+            if ( vars.size()==1 ) {
+                auto var = vars.back();
+                return var.get();
+            }
+            // and nada
+            return nullptr;
+        }
+
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
             expr->func = inferFunctionCall(expr).get();
@@ -8216,6 +8262,22 @@ namespace das {
                         auto mks = make_smart<ExprMakeStruct>(expr->at);
                         mks->makeType = make_smart<TypeDecl>(*aliasT);
                         return mks;
+                    }
+                }
+            }
+            if ( !expr->func ) {
+                auto var = findMatchingBlockOrLambdaVariable(expr->name);   // if this is lambda_var(args...) or such
+                if ( var && var->type && var->type->dim.size()==0 ) {              // we promote to vname(args...) to invoke(vname,args...)
+                    auto bt = var->type->baseType;
+                    if ( bt==Type::tBlock || bt==Type::tLambda || bt==Type::tFunction ) {
+                        reportAstChanged();
+                        auto varExpr = make_smart<ExprVar>(expr->at, var->name);
+                        auto invokeExpr = make_smart<ExprInvoke>(expr->at, expr->name);
+                        invokeExpr->arguments.push_back(varExpr);
+                        for ( auto & arg : expr->arguments ) {
+                            invokeExpr->arguments.push_back(arg->clone());
+                        }
+                        return invokeExpr;
                     }
                 }
             }
