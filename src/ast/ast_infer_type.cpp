@@ -8286,15 +8286,28 @@ namespace das {
                 if ( bt && bt->isClass() ) {
                     if ( expr->name.find("::") == string::npos ) {  // we only promote to self->call() if its not blah::call, _::call, or __::call
                         auto memFn = bt->structType->findField(expr->name);
-                        if ( memFn && memFn->type && memFn->type->isFunction() ) {
-                            auto self = new ExprVar(expr->at, "self");
-                            auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
-                            for ( auto & arg : expr->arguments ) {
-                                pInvoke->arguments.push_back(arg->clone());
+                        if ( memFn && memFn->type ) {
+                            if (  memFn->type->dim.size()==0 && (memFn->type->baseType==Type::tBlock || memFn->type->baseType==Type::tLambda || memFn->type->baseType==Type::tFunction) ) {
+                                reportAstChanged();
+                                if ( memFn->classMethod ) {
+                                    auto self = new ExprVar(expr->at, "self");
+                                    auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
+                                    for ( auto & arg : expr->arguments ) {
+                                        pInvoke->arguments.push_back(arg->clone());
+                                    }
+                                    pInvoke->alwaysSafe = expr->alwaysSafe;
+                                    return pInvoke;
+                                } else {
+                                    auto invokeExpr = make_smart<ExprInvoke>(expr->at, expr->name);
+                                    auto self = make_smart<ExprVar>(expr->at, "self");
+                                    auto that = make_smart<ExprField>(expr->at, self, expr->name);
+                                    invokeExpr->arguments.push_back(that);
+                                    for ( auto & arg : expr->arguments ) {
+                                        invokeExpr->arguments.push_back(arg->clone());
+                                    }
+                                    return invokeExpr;
+                                }
                             }
-                            pInvoke->alwaysSafe = expr->alwaysSafe;
-                            reportAstChanged();
-                            return pInvoke;
                         }
                     }
                 }
