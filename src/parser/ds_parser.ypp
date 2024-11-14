@@ -605,6 +605,7 @@ character_sequence
 
 string_constant
     :   BEGIN_STRING character_sequence[seq] END_STRING    { $$ = $seq; }
+    |   BEGIN_STRING END_STRING                            { $$ = new string(); }
     ;
 
 string_builder_body
