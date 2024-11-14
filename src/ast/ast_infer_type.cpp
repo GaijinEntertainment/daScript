@@ -3168,6 +3168,15 @@ namespace das {
                                                     expr->at, CompilationError::invalid_argument_count);
                                             }
                                         } else {
+                                            auto stf = sttf->type;
+                                            if ( stf && stf->dim.size()==0 && (stf->baseType==Type::tBlock || stf->baseType==Type::tFunction || stf->baseType==Type::tLambda) ) {
+                                                reportAstChanged();
+                                                expr->isInvokeMethod = false;      // we replace invoke(foo.GetValue,cast<auto> foo,...) with invoke(foo.GetValue,...)
+                                                expr->arguments.erase(expr->arguments.begin()+1);
+                                            } else {
+                                                error("'" + stt->name + "->" + eField->name + "' expecting function", "", "",
+                                                    expr->at, CompilationError::invalid_argument_count);
+                                            }
                                             error("'" + stt->name + "->" + eField->name + "' expecting function", "", "",
                                                 expr->at, CompilationError::invalid_argument_count);
                                         }
@@ -4508,7 +4517,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 if ( seT->isConst() ) {
-                    error("cannot access the constant table by index, use 'find' instead", "", "",
+                    error("cannot access the constant table by index, use 'get' instead", "", "",
                         expr->index->at, CompilationError::invalid_table_type);
                     return Visitor::visit(expr);
                 }
