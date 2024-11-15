@@ -3,6 +3,10 @@ options log
 require tutorial_07
 
 [export]
+def take_2 ( a : int; b : float )
+    print("take_2 a = {a} b = {b}\n")
+
+[export]
 def test
     print("this tutorial implements C interfaces\n")
     das_c_func(13)

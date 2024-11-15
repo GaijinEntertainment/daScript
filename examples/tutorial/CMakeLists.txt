@@ -128,6 +128,11 @@ ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial07.das
 )
 DAS_TUTORIAL(tutorial07 "${TUTORIAL_07_SRC}")
 
+SET(TUTORIAL_07_UNALIGNED_SRC
+${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial07unaligned.c
+)
+DAS_TUTORIAL(tutorial07unaligned "${TUTORIAL_07_UNALIGNED_SRC}")
+
 # "C" interface, loading from source file text
 SET(TUTORIAL_07A_SRC
 ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial07a.c
