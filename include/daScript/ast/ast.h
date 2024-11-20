@@ -249,6 +249,7 @@ namespace das
         int getAlignOf() const;
         __forceinline bool canCopy() const { return canCopy(false); }
         bool canCopy(bool tempMatters) const;
+        bool canCloneFromConst() const;
         bool canClone() const;
         bool canMove() const;
         bool canAot() const;
@@ -1418,6 +1419,7 @@ namespace das
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language
+        bool relaxed_pointer_const = true;              // allow const correctness to be relaxed on pointers
         bool version_2_syntax = false;                  // use syntax version 2
         bool gen2_make_syntax = false;                  // only new make syntax is allowed (no [[...]] or [{...}])
         bool relaxed_assign = true;                     // allow = to <- substitution, in certain expressions

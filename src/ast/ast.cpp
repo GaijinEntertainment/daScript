@@ -278,6 +278,14 @@ namespace das {
         return true;
     }
 
+    bool Structure::canCloneFromConst() const {
+        for ( const auto & fd : fields ) {
+            if ( !fd.type->canCloneFromConst() )
+                return false;
+        }
+        return true;
+    }
+
     bool Structure::canClone() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->canClone() )

@@ -1,4 +1,5 @@
 options indenting = 4
+options relaxed_pointer_const
 
 module suite shared
 
