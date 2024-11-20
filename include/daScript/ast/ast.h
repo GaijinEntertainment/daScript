@@ -1737,6 +1737,23 @@ namespace das
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();
     };
+
+    struct daScriptEnvironmentGuard {
+        das::daScriptEnvironment *initialBound;
+        das::daScriptEnvironment *initialOwned;
+
+        daScriptEnvironmentGuard(das::daScriptEnvironment *bound = nullptr, das::daScriptEnvironment *owned = nullptr) {
+            initialBound = das::daScriptEnvironment::bound;
+            initialOwned = das::daScriptEnvironment::owned;
+            das::daScriptEnvironment::bound = bound;
+            das::daScriptEnvironment::owned = owned;
+        }
+
+        ~daScriptEnvironmentGuard() {
+            das::daScriptEnvironment::bound = initialBound;
+            das::daScriptEnvironment::owned = initialOwned;
+        }
+    };
 }
 
 
