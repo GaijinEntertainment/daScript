@@ -112,7 +112,7 @@ def push(var Arr:array<auto(numT)>;value:numT-# const)
     static_if typeinfo(can_copy value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] = value
+        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] = unsafe(reinterpret<numT-#-const>(value))
     else
         concept_assert(false,"can't push value, which can't be copied")
 
@@ -339,7 +339,7 @@ def find(Tab:table<auto(keyT)>;at:keyT|#;blk:block<(p:void?):void>)
 
 // one table lookup with block to rule them all 'get'
 
-def get(Tab:table<auto(keyT);auto(valT)> ==const #;at:keyT|#;blk:block<(p:valT#&):void>)
+def get(Tab:table<auto(keyT);auto(valT)> ==const #;at:keyT-#;blk:block<(p:valT#&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
@@ -350,7 +350,7 @@ def get(Tab:table<auto(keyT);auto(valT)> ==const #;at:keyT|#;blk:block<(p:valT#&
     else
         return false
 
-def get(Tab:table<auto(keyT);auto(valT)> ==const;at:keyT|#;blk:block<(p:valT&):void>)
+def get(Tab:table<auto(keyT);auto(valT)> ==const;at:keyT-#;blk:block<(p:valT&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
@@ -361,7 +361,7 @@ def get(Tab:table<auto(keyT);auto(valT)> ==const;at:keyT|#;blk:block<(p:valT&):v
     else
         return false
 
-def get(var Tab:table<auto(keyT);auto(valT)> ==const #;at:keyT|#;blk:block<(var p:valT#&):void>)
+def get(var Tab:table<auto(keyT);auto(valT)> ==const #;at:keyT-#;blk:block<(var p:valT#&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
@@ -372,7 +372,7 @@ def get(var Tab:table<auto(keyT);auto(valT)> ==const #;at:keyT|#;blk:block<(var 
     else
         return false
 
-def get(var Tab:table<auto(keyT);auto(valT)> ==const;at:keyT|#;blk:block<(var p:valT&):void>)
+def get(var Tab:table<auto(keyT);auto(valT)> ==const;at:keyT-#;blk:block<(var p:valT&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
@@ -1024,7 +1024,7 @@ def get_const_ptr ( src : smart_ptr<auto(TT)> ) : TT ? const
 
 def add_ptr_ref ( src : smart_ptr<auto(TT)> ) : smart_ptr<TT>
     unsafe
-        var dst := src
+        var dst := reinterpret<smart_ptr<TT>> src
         return <- dst
 
 [generic]

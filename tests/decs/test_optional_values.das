@@ -1,5 +1,6 @@
 options persistent_heap = true
 options gc
+options relaxed_pointer_const
 
 require daslib/decs_boost
 require dastest/testing_boost public

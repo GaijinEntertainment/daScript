@@ -5,7 +5,7 @@ require daslib/decs_boost
 require dastest/testing_boost public
 
 [test]
-def test_serialize( t: T? )
+def test_serialize( var t: T? )
     restart()
     let entitiesNum = 3
     for i in range (entitiesNum)

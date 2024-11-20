@@ -58,6 +58,7 @@ namespace das {
             strictProperties = prog->options.getBoolOption("strict_properties", prog->policies.strict_properties);
             alwaysExportInitializer = prog->options.getBoolOption("always_export_initializer", false);
             relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
+            relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -98,6 +99,7 @@ namespace das {
         bool                    strictProperties = false;
         bool                    alwaysExportInitializer = false;
         bool                    relaxedAssign = false;
+        bool                    relaxedPointerConst = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1419,6 +1421,22 @@ namespace das {
                     if ( subT != type && !subT->canClone() ) {
                         if ( !(subT->baseType==Type::tStructure || subT->baseType==Type::tVariant || subT->baseType==Type::tTuple) ) {
                             ss << "\tcan't clone '" << trait << ": " << describeType(subT) << "'\n";
+                        }
+                    }
+                });
+                error(message, ss.str(), "", at, CompilationError::cant_copy);
+            } else {
+                error(message, "", "", at, CompilationError::cant_copy);
+            }
+        }
+
+        void reportCantCloneFromConst ( const string & message, const TypeDeclPtr & type, const LineInfo & at ) {
+            if ( verbose ) {
+                TextWriter ss;
+                reportTrait(type, type->describe(TypeDecl::DescribeExtra::no,TypeDecl::DescribeContracts::no), [&](const TypeDeclPtr & subT, const string & trait) {
+                    if ( subT != type && !subT->canCloneFromConst() ) {
+                        if ( !(subT->baseType==Type::tStructure || subT->baseType==Type::tVariant || subT->baseType==Type::tTuple) ) {
+                            ss << "\tcan't assign '" << trait << ": " << describeType(subT) << " = " << describeType(subT) << " const'\n";
                         }
                     }
                 });
@@ -3772,6 +3790,9 @@ namespace das {
                 } else if ( expr->trait=="can_clone" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canClone());
+                } else if ( expr->trait=="can_clone_from_const" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canCloneFromConst());
                 } else if ( expr->trait=="can_new" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canNew());
@@ -5949,9 +5970,19 @@ namespace das {
         bool canCopyOrMoveType ( const TypeDeclPtr & leftType, const TypeDeclPtr & rightType, TemporaryMatters tmatter, Expression * leftExpr ) const {
             if ( leftType->baseType==Type::tPointer ) {
                 if ( !leftType->isVoidPointer() && rightType->isVoidPointer() ) return leftExpr->rtti_isNullPtr();  // anyptr = null ok, otherwise no void copy
+                if ( !relaxedPointerConst ) {
+                    if ( !leftType->constant && rightType->constant && !(leftType->firstType && leftType->firstType->constant) ) return false;  // Foo const? = Foo? const ok.
+                }
                 return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::yes, true, true);
             } else {
-                return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::no, true, true);
+                if ( leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::no, true, true) ) {
+                    if ( !relaxedPointerConst ) {
+                        if ( !leftType->constant && rightType->constant && !rightType->canCloneFromConst() ) return false;
+                    }
+                    return true;
+                } else {
+                    return false;
+                }
             }
         }
         string moveErrorInfo(ExprMove * expr) const {
@@ -6141,6 +6172,9 @@ namespace das {
             } else if ( !expr->left->type->canClone() ) {
                 reportCantClone("type " + describeType(expr->left->type) + " can't be cloned from " + describeType(expr->right->type),
                     expr->left->type, expr->at);
+            } else if ( !relaxedPointerConst && expr->right->type->constant && !expr->right->type->canCloneFromConst() ) {
+                reportCantCloneFromConst("type " + describeType(expr->left->type) + " can't be cloned from const type " + describeType(expr->right->type),
+                    expr->right->type, expr->at);
             } else {
                 auto cloneType = expr->left->type;
                 if ( cloneType->isHandle() ) {
@@ -8969,6 +9003,13 @@ namespace das {
         virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
             if (!init->type) {
                 return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+            }
+            if ( expr->recordType && expr->recordType->baseType==Type::tTuple ) {
+                if ( !canCopyOrMoveType(expr->recordType->argTypes[index],init->type,TemporaryMatters::no,init) ) {
+                    error("can't initialize tuple element " + to_string(index) + "; expecting "
+                        + describeType(expr->recordType->argTypes[index]) + ", passing " + describeType(init->type),"", "",
+                        init->at, CompilationError::invalid_type);
+                }
             }
             if (!init->type->canCopy() && init->type->canMove() && init->type->isConst()) {
                 error("can't move from a constant value " + describeType(init->type), "", "",
