@@ -1,6 +1,5 @@
 options persistent_heap = true
 options gc
-options relaxed_pointer_const = false
 
 require dastest/testing_boost public
 
@@ -16,4 +15,4 @@ def test_lambda_capture_const( var t: T? )
     invoke(l)
     delete l
 
-options log_infer_passes
+
