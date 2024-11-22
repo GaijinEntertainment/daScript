@@ -1,4 +1,4 @@
-#gen2#
+options gen2;
 
 //	NOTE - this is WIP example of every single feature new syntax has to offer
 //	new syntax no longer supports significant whitespace, oxoford commas, etc
@@ -169,14 +169,14 @@ def test_make_struct {
 
 [export]
 def test_new_struct {
-	let a : Mks* = new Mks();	    		// Mks*, on heap - default values
-	let A : Mks* = new default<Mks>;		// Mks*, on heap - default values
-	let b : Mks* = new Mks(5);	    		// Mks*, on heap - with constructor
-	let c : Mks* = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
-	let d : Mks*[10] = new<Mks[10]>();			// fixed_array of 10 elements
+	let a : Mks?  = new Mks();	    		// Mks*, on heap - default values
+	let A : Mks?  = new default<Mks>;		// Mks*, on heap - default values
+	let b : Mks?  = new Mks(5);	    		// Mks*, on heap - with constructor
+	let c : Mks?  = new<Mks>(a=1,b=2.0);	// Mks*, on heap - with values overwritten
+	let d : Mks? [10] = new<Mks[10]>();			// fixed_array of 10 elements
 	unsafe {
-		let j : Mks* = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
-		let h : Mks* = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0
+		let j : Mks? = new<Mks>(uninitialized b=2.0);	// Mks* - on heap, uninitialized, a=0, b=2.0
+		let h : Mks? = new default<Mks> uninitialized;	// Mks* - on heap, uninitialized, a=0, b=0.0
 	};
 }
 
@@ -197,7 +197,7 @@ def test_tuples {
 	let d : tuple<int;float;string> = Tup(a=1,b=2.,c="3");	debug(d);
 	let e : tuple<int;float;string> = tuple<Tup>(a=1,b=2.,c="3");	debug(e);
 	let f : tuple<int;float;string> = tuple<Tup>(uninitialized a=1);	debug(f);	// a=1,b=0.0,c=""
-	let g : tuple<int;float;string>* = new tuple(1,2.,"3");	debug(g); // on heap
+	let g : tuple<int;float;string>? = new tuple(1,2.,"3");	debug(g); // on heap
 }
 
 ///////////

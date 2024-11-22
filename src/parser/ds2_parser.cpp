@@ -1088,9 +1088,9 @@ static const yytype_int16 yyrline[] =
     3118,  3123,  3129,  3130,  3134,  3135,  3139,  3139,  3139,  3147,
     3147,  3147,  3154,  3154,  3154,  3161,  3161,  3161,  3172,  3178,
     3184,  3190,  3190,  3190,  3200,  3208,  3208,  3208,  3218,  3218,
-    3218,  3228,  3228,  3228,  3238,  3246,  3246,  3246,  3265,  3272,
-    3272,  3272,  3282,  3285,  3291,  3299,  3307,  3327,  3352,  3353,
-    3357,  3358,  3363,  3366,  3369
+    3218,  3228,  3228,  3228,  3238,  3247,  3247,  3247,  3267,  3274,
+    3274,  3274,  3284,  3287,  3293,  3301,  3309,  3329,  3354,  3355,
+    3359,  3360,  3365,  3368,  3371
 };
 #endif
 
@@ -10030,6 +10030,7 @@ yyreduce:
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-4])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        mka->gen2 = true;
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-4])),"to_array_move");
         tam->arguments.push_back(mka);
         (yyval.pExpression) = tam;
@@ -10050,6 +10051,7 @@ yyreduce:
             auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-8])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
             mka->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
+            mka->gen2 = true;
             auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-8])),"to_array_move");
             tam->arguments.push_back(mka);
             (yyval.pExpression) = tam;
@@ -10071,7 +10073,7 @@ yyreduce:
         auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-4])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
-        mka->makeType->dim.push_back(TypeDecl::dimAuto);
+        mka->gen2 = true;
         (yyval.pExpression) = mka;
     }
     break;
@@ -10089,7 +10091,7 @@ yyreduce:
         auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-9])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = TypeDeclPtr((yyvsp[-6].pTypeDecl));
-        if ( !mka->makeType->dim.size() ) mka->makeType->dim.push_back(TypeDecl::dimAuto);
+        mka->gen2 = true;
         (yyval.pExpression) = mka;
     }
     break;

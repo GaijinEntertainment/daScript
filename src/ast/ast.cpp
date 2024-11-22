@@ -2612,6 +2612,7 @@ namespace das {
             cexpr->values.push_back(val->clone());
         }
         cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        cexpr->gen2 = gen2;
         return cexpr;
     }
 

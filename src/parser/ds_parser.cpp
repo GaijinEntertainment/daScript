@@ -1140,10 +1140,10 @@ static const yytype_int16 yyrline[] =
     3480,  3480,  3488,  3488,  3488,  3495,  3495,  3495,  3502,  3502,
     3502,  3513,  3516,  3522,  3536,  3542,  3548,  3554,  3554,  3554,
     3564,  3569,  3576,  3584,  3589,  3596,  3596,  3596,  3606,  3606,
-    3606,  3616,  3616,  3616,  3626,  3634,  3634,  3634,  3653,  3660,
-    3660,  3660,  3670,  3675,  3682,  3685,  3691,  3699,  3708,  3716,
-    3736,  3761,  3762,  3766,  3767,  3772,  3775,  3778,  3781,  3784,
-    3787
+    3606,  3616,  3616,  3616,  3626,  3635,  3635,  3635,  3655,  3662,
+    3662,  3662,  3672,  3677,  3684,  3687,  3693,  3701,  3710,  3718,
+    3738,  3763,  3764,  3768,  3769,  3774,  3777,  3780,  3783,  3786,
+    3789
 };
 #endif
 
@@ -11606,6 +11606,7 @@ yyreduce:
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-4])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        mka->gen2 = true;
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-4])),"to_array_move");
         tam->arguments.push_back(mka);
         (yyval.pExpression) = tam;
@@ -11626,6 +11627,7 @@ yyreduce:
             auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-8])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
             mka->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
+            mka->gen2 = true;
             auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-8])),"to_array_move");
             tam->arguments.push_back(mka);
             (yyval.pExpression) = tam;
@@ -11647,7 +11649,7 @@ yyreduce:
         auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-4])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
-        mka->makeType->dim.push_back(TypeDecl::dimAuto);
+        mka->gen2 = true;
         (yyval.pExpression) = mka;
     }
     break;
@@ -11665,7 +11667,7 @@ yyreduce:
         auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-9])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = TypeDeclPtr((yyvsp[-6].pTypeDecl));
-        if ( !mka->makeType->dim.size() ) mka->makeType->dim.push_back(TypeDecl::dimAuto);
+        mka->gen2 = true;
         (yyval.pExpression) = mka;
     }
     break;
