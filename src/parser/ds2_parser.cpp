@@ -1087,10 +1087,10 @@ static const yytype_int16 yyrline[] =
     3051,  3057,  3063,  3070,  3077,  3083,  3092,  3098,  3106,  3111,
     3118,  3123,  3129,  3130,  3134,  3135,  3139,  3139,  3139,  3147,
     3147,  3147,  3154,  3154,  3154,  3161,  3161,  3161,  3172,  3178,
-    3184,  3190,  3190,  3190,  3200,  3208,  3208,  3208,  3218,  3218,
-    3218,  3228,  3228,  3228,  3238,  3247,  3247,  3247,  3267,  3274,
-    3274,  3274,  3284,  3287,  3293,  3301,  3309,  3329,  3354,  3355,
-    3359,  3360,  3365,  3368,  3371
+    3184,  3190,  3190,  3190,  3200,  3209,  3209,  3209,  3219,  3219,
+    3219,  3229,  3229,  3229,  3239,  3248,  3248,  3248,  3268,  3275,
+    3275,  3275,  3285,  3288,  3294,  3302,  3310,  3330,  3355,  3356,
+    3360,  3361,  3366,  3369,  3372
 };
 #endif
 
@@ -9956,6 +9956,7 @@ yyreduce:
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-3])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        mka->gen2 = true;
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-3])),"to_array_move");
         tam->arguments.push_back(mka);
         (yyval.pExpression) = tam;
