@@ -1241,20 +1241,33 @@ namespace das {
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
-            ss << "[[";
-            if ( expr->type ) {
-                ss << expr->type->describe();
+            if ( gen2 ) {
+                // if ( expr->type ) { ss << "/*" << expr->type->describe() << "*/ "; }
+                ss << "fixed_array";
+                if ( expr->makeType ) {
+                    ss << "<" << expr->makeType->describe() << ">";
+                } else {
+                    ss << "</* undefined */>";
+                }
+                ss << "(";
             } else {
-                ss << "/* undefined */";
+                ss << "[[";
+                if ( expr->type ) {
+                    ss << expr->type->describe();
+                } else {
+                    ss << "/* undefined */";
+                }
+                ss << " ";
             }
-            ss << " ";
         }
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
-            if ( !lastField ) ss << "; ";
+            if ( !lastField ) {
+                ss << (gen2 ? ", " : "; ");
+            }
             return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
-            ss << "]]";
+            ss << (gen2 ? ")" : "]]");
             return Visitor::visit(expr);
         }
     // array comprehension

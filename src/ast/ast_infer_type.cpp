@@ -9100,19 +9100,27 @@ namespace das {
                 return;
             }
             verifyType(expr->makeType);
-            if ( expr->makeType->dim.size()>1 ) {
-                error("[[" + describeType(expr->makeType) + "]] array can only initialize single dimension arrays", "", "",
-                      expr->at, CompilationError::invalid_type);
-            } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->values.size()) ) {
-                error("[[" + describeType(expr->makeType) + "]] array dimension mismatch, provided " +
-                      to_string(expr->values.size()) + " elements, expecting " + to_string(expr->makeType->dim[0]), "", "",
-                    expr->at, CompilationError::invalid_type);
-            } else if ( expr->makeType->ref ) {
-                error("[[" + describeType(expr->makeType) + "]] array can't be reference", "", "",
-                    expr->at, CompilationError::invalid_type);
+            if ( expr->gen2 ) {
+                if ( expr->makeType->ref ) {
+                    error("fixed_array<" + describeType(expr->makeType) + "> array type can't be reference", "", "",
+                        expr->at, CompilationError::invalid_type);
+                }
+                expr->recordType = make_smart<TypeDecl>(*expr->makeType);
+            } else {
+                if ( expr->makeType->dim.size()>1 ) {
+                    error("[[" + describeType(expr->makeType) + "]] array can only initialize single dimension arrays", "", "",
+                        expr->at, CompilationError::invalid_type);
+                } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->values.size()) ) {
+                    error("[[" + describeType(expr->makeType) + "]] array dimension mismatch, provided " +
+                        to_string(expr->values.size()) + " elements, expecting " + to_string(expr->makeType->dim[0]), "", "",
+                        expr->at, CompilationError::invalid_type);
+                } else if ( expr->makeType->ref ) {
+                    error("[[" + describeType(expr->makeType) + "]] array can't be reference", "", "",
+                        expr->at, CompilationError::invalid_type);
+                }
+                expr->recordType = make_smart<TypeDecl>(*expr->makeType);
+                expr->recordType->dim.clear();
             }
-            expr->recordType = make_smart<TypeDecl>(*expr->makeType);
-            expr->recordType->dim.clear();
             expr->initAllFields = true;
         }
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool last ) override {
@@ -9124,7 +9132,7 @@ namespace das {
                     if ( init->type && !init->type->isAutoOrAlias() ) {
                         // blah[] vs blah
                         TypeDeclPtr mkt;
-                        if ( expr->makeType->dim.size() && !init->type->dim.size() ) {
+                        if ( !expr->gen2 && expr->makeType->dim.size() && !init->type->dim.size() ) {
                             if (expr->makeType->dim.size() == 1 && expr->makeType->dim[0] == TypeDecl::dimAuto) {
                                 auto infT = make_smart<TypeDecl>(*expr->makeType);
                                 infT->dim.clear();
@@ -9203,7 +9211,8 @@ namespace das {
                     }
                 } else {
                     error("can't initialize array element " + to_string(index) + "; expecting "
-                        + describeType(expr->recordType)+", passing " + describeType(init->type), "", "",
+                        + describeType(expr->recordType)+", passing " + describeType(init->type),
+                            "make type is " + describeType(expr->makeType), "",
                             init->at, CompilationError::invalid_type );
                 }
             } else if ( !expr->recordType->canCopy() && expr->recordType->canMove() && init->type->isConst() ) {
@@ -9268,7 +9277,9 @@ namespace das {
             }
             auto resT = make_smart<TypeDecl>(*expr->makeType);
             uint32_t resDim = uint32_t(expr->values.size());
-            if ( resDim!=1 || expr->makeType->dim.size() ) {
+            if ( expr->gen2 ) {
+                resT->dim.push_back(resDim);
+            } else if ( resDim!=1 || expr->makeType->dim.size() ) {
                 resT->dim.resize(1);
                 resT->dim[0] = resDim;
             } else {
