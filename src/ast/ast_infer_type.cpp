@@ -3101,9 +3101,26 @@ namespace das {
             if ( expr->argumentsFailedToInfer ) {
                 auto blockT = expr->arguments[0]->type;
                 if ( !blockT ) {
-                    if ( expr->isInvokeMethod && expr->arguments[0]->rtti_isField() ) {
-                        auto eField = static_pointer_cast<ExprField>(expr->arguments[0]);
-                        if ( eField->value->type ) {        // it inferred, but field not found
+                    if ( expr->isInvokeMethod ) {
+                        ExpressionPtr value;
+                        TypeDeclPtr valueType;
+                        string methodName;
+                        if ( expr->arguments[0]->rtti_isField() ) {
+                            auto eField = static_pointer_cast<ExprField>(expr->arguments[0]);
+                            if ( eField->value->type ) {        // it inferred, but field not found
+                                value = eField->value;
+                                valueType = eField->value->type;
+                                methodName = eField->name;
+                            }
+                        } else if ( expr->arguments[0]->rtti_isSwizzle() ) {
+                            auto eSwizzle = static_pointer_cast<ExprSwizzle>(expr->arguments[0]);
+                            if ( eSwizzle->value->type ) {        // it inferred, but field not found
+                                value = eSwizzle->value;
+                                valueType = eSwizzle->value->type;
+                                methodName = eSwizzle->mask;
+                            }
+                        }
+                        if ( valueType ) {
                             bool allOtherInferred = true;   // we check, if all other arguments inferred
                             for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
                                 if ( !expr->arguments[i]->type ) {
@@ -3113,9 +3130,9 @@ namespace das {
                             }
                             if ( allOtherInferred ) {
                                 // we build _::{field.name} ( field, arg1, arg2, ... )
-                                auto callName = "_::" + eField->name;
+                                auto callName = "_::" + methodName;
                                 auto newCall = make_smart<ExprCall>(expr->at, callName);
-                                newCall->arguments.push_back(eField->value);
+                                newCall->arguments.push_back(value);
                                 for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
                                     newCall->arguments.push_back(expr->arguments[i]);
                                 }
@@ -4992,7 +5009,7 @@ namespace das {
             }
             int dim = valT->getVectorDim();
             if ( !TypeDecl::buildSwizzleMask(expr->mask, dim, expr->fields) ) {
-                error("invalid swizzle mask",   "", "",
+                error("invalid swizzle mask " + expr->mask,   "", "",
                     expr->at, CompilationError::invalid_swizzle_mask);
             } else {
                 auto bt = valT->getVectorBaseType();
