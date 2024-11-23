@@ -867,13 +867,25 @@ namespace das {
             if ( printRef && expr->r2v ) ss << "@";
             if ( printRef && expr->r2cr ) ss << "$";
             if ( printRef && expr->write ) ss << "#";
-            for ( auto f : expr->fields ) {
-                switch ( f ) {
-                    case 0:     ss << "x"; break;
-                    case 1:     ss << "y"; break;
-                    case 2:     ss << "z"; break;
-                    case 3:     ss << "w"; break;
-                    default:    ss << "?"; break;
+            if ( expr->fields.size() ) {
+                for ( auto f : expr->fields ) {
+                    switch ( f ) {
+                        case 0:     ss << "x"; break;
+                        case 1:     ss << "y"; break;
+                        case 2:     ss << "z"; break;
+                        case 3:     ss << "w"; break;
+                        default:    ss << "?"; break;
+                    }
+                }
+            } else {
+                ss << expr->mask;
+                if ( expr->value->type && expr->value->type->isVectorType() ) {
+                    auto dim = expr->value->type->getVectorDim();
+                    vector<uint8_t> dummy;
+                    if ( !TypeDecl::buildSwizzleMask(expr->mask, dim, dummy) ) {
+                        ss << "/*invalid swizzle*/";
+                        return Visitor::visit(expr);
+                    }
                 }
             }
             return Visitor::visit(expr);
