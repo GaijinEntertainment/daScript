@@ -2009,7 +2009,13 @@ namespace das {
                 } else {
                     varT->ref = false;
                     TypeDecl::applyAutoContracts(varT, var->type);
+                    if ( !relaxedPointerConst ) { // var a = Foo? const -> var a : Foo const? = Foo? const
+                        if ( varT->isPointer() && !varT->constant && var->init->type->constant ) {
+                            varT->firstType->constant = true;
+                        }
+                    }
                     var->type = varT;
+                    var->type->sanitize();
                     reportAstChanged();
                 }
             } else if ( !canCopyOrMoveType(var->type,var->init->type,TemporaryMatters::no,var->init.get(),
@@ -5980,6 +5986,9 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMove
+        bool isVoidOrNothing ( const TypeDeclPtr & ptr ) const {
+            return !ptr || ptr->isVoid();
+        }
         bool canCopyOrMoveType ( const TypeDeclPtr & leftType, const TypeDeclPtr & rightType, TemporaryMatters tmatter, Expression * leftExpr,
                 const string & errorText, CompilationError errorCode, const LineInfo & at ) const {
             if ( leftType->baseType==Type::tPointer ) {
@@ -5993,7 +6002,7 @@ namespace das {
                     }
                 }
                 if ( !relaxedPointerConst ) {
-                    if ( !leftType->constant && rightType->constant && !(leftType->firstType && leftType->firstType->constant) ) { // Foo const? = Foo? const ok.
+                    if ( !leftType->constant && rightType->constant && !(leftType->firstType && leftType->firstType->constant) && !isVoidOrNothing(leftType->firstType) ) {
                         error(errorText + "; "+ describeType(leftType) + " = " + describeType(rightType),
                             "can't copy constant to non-constant pointer. needs to be " + describeType(leftType->firstType) + " const?", "", at, errorCode);
                         return false;
@@ -7145,6 +7154,11 @@ namespace das {
                 } else {
                     varT->ref = false;
                     TypeDecl::applyAutoContracts(varT, var->type);
+                    if ( !relaxedPointerConst ) { // var a = Foo? const -> var a : Foo const? = Foo? const
+                        if ( varT->isPointer() && !varT->constant && var->init->type->constant ) {
+                            varT->firstType->constant = true;
+                        }
+                    }
                     var->type = varT;
                     var->type->sanitize();
                     reportAstChanged();
