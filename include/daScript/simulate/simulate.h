@@ -213,7 +213,7 @@ namespace das
         }
     public:
         LineInfo exceptionAt;
-        std::string exceptionWhat;
+        das::string exceptionWhat;
     };
 #endif
 
