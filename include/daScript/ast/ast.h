@@ -1440,7 +1440,7 @@ namespace das
         bool default_module_public = true;              // by default module is 'public', not 'private'
         bool no_deprecated = false;
         bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
-        bool strict_smart_pointers = false;             // collection of tests for smart pointers, like van inscope for any local, etc
+        bool strict_smart_pointers = true;              // collection of tests for smart pointers, like van inscope for any local, etc
         bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
         bool strict_unsafe_delete = false;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
         bool no_members_functions_in_struct = false;    // structures can't have member functions
