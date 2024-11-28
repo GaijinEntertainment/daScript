@@ -1274,6 +1274,96 @@ namespace das {
             return result;
         }
 
+        void reportDualFunctionNotFound( const string & name, const string & extra,
+                                    const LineInfo & at, const MatchingFunctions & candidateFunctions,
+            const vector<TypeDeclPtr> & types, const vector<TypeDeclPtr> & types2, bool inferAuto, bool inferBlocks, bool reportDetails,
+                                    CompilationError cerror, int nExtra, const string & moreError ) {
+            if ( verbose ) {
+                TextWriter ss;
+                ss << name << "(";
+                bool first = true;
+                for ( auto &it : types ) {
+                    if ( !first ) {
+                        ss << ", ";
+                    }
+                    first = false;
+                    ss << it->describe();
+                }
+                ss << ") or (";
+                first = true;
+                for ( auto &it : types2 ) {
+                    if ( !first ) {
+                        ss << ", ";
+                    }
+                    first = false;
+                    ss << it->describe();
+                }
+                ss << ")\n";
+                if ( func ) {
+                    ss << "while compiling: " << func->describe() << "\n";
+                }
+                if ( !moreError.empty() ) {
+                    ss << moreError;
+                }
+                if ( candidateFunctions.size()==0 ) {
+                    ss << "there are no good matching candidates out of " << nExtra << " total functions with the same name\n";
+                } else if ( candidateFunctions.size() > 1 ) {
+                    ss << "candidates:\n";
+                } else if ( candidateFunctions.size()==1 ) {
+                    ss << (nExtra ? "\nmost likely candidate:\n" : "\ncandidate function:\n");
+                }
+                string moduleName, funcName;
+                splitTypeName(name, moduleName, funcName);
+                auto inWhichModule = getSearchModule(moduleName);
+                for ( auto & missFn : candidateFunctions ) {
+                    auto visM = getFunctionVisModule(missFn);
+                    bool isVisible = isVisibleFunc(inWhichModule,visM);
+                    if ( !reportInvisibleFunctions  && !isVisible ) continue;
+                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
+                    if ( !reportPrivateFunctions && isPrivate ) continue;
+                    ss << "\t";
+                    if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
+                        ss << missFn->module->name << "::";
+                    ss << describeFunction(missFn);
+                    if ( missFn->builtIn ) {
+                        ss << " // builtin";
+                    } else {
+                        ss << " at " << missFn->at.describe();
+                    }
+                    ss << "\n";
+                    if ( reportDetails ) {
+                        if ( missFn->arguments.size() == types2.size() ) {
+                            ss << describeMismatchingFunction(missFn, types2, inferAuto, inferBlocks);
+                        } else {
+                            ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
+                        }
+                    }
+                    if ( !isVisible ) {
+                        ss << "\t\tmodule " << visM->name << " is not visible directly from ";
+                        if ( inWhichModule->name.empty()) {
+                            ss << "the current module\n";
+                        } else {
+                            ss << inWhichModule->name << "\n";
+                        }
+                    }
+                    if ( isPrivate ) {
+                        ss << "\t\tfunction is private";
+                        if ( missFn->module && !missFn->module->name.empty() ) {
+                            ss << " to module " << missFn->module->name;
+                        }
+                        ss << "\n";
+                    }
+                }
+                if ( nExtra>0 && candidateFunctions.size()!=0 ) {
+                    ss << "also " << nExtra << " more candidates\n";
+                }
+                error(extra, ss.str(), "", at, cerror);
+            } else {
+                error(extra, "", "", at, cerror);
+            }
+        }
+
+
         void reportFunctionNotFound( const string & name, const string & extra,
                                     const LineInfo & at, const MatchingFunctions & candidateFunctions,
             const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks, bool reportDetails,
@@ -5409,8 +5499,22 @@ namespace das {
                     expr->type->constant |= tupleT->constant;
                 }
             } else if ( !expr->type ) {
-                error("field '" + expr->name + "' not found in " + describeType(expr->value->type), "", "",
-                      expr->at, CompilationError::cant_get_field);
+                if ( verbose && valT ) {
+                    MatchingFunctions mf;
+                    collectMissingOperators(".`"+expr->name,expr->value,nullptr,mf);
+                    collectMissingOperators(".",expr->value,make_smart<ExprConstString>(expr->at,expr->name),mf);
+                    if ( !mf.empty() ) {
+                        reportDualFunctionNotFound(".`"+expr->name, "field '" + expr->name + "' not found in " + describeType(valT),
+                                expr->at, mf, {valT}, {valT, make_smart<TypeDecl>(Type::tString)}, true, false, true,
+                            CompilationError::cant_get_field, 0, "");
+                    } else {
+                        error("field '" + expr->name + "' not found in " + describeType(valT), "", "",
+                            expr->at, CompilationError::cant_get_field);
+                    }
+                } else {
+                    error("field '" + expr->name + "' not found in " + describeType(valT), "", "",
+                        expr->at, CompilationError::cant_get_field);
+                }
                 return Visitor::visit(expr);
             } else {
                 expr->type->constant |= valT->constant;
@@ -5418,7 +5522,17 @@ namespace das {
             propagateTempType(expr->value->type, expr->type);   // a#.foo = foo#
             return Visitor::visit(expr);
         }
-    // ExprSafeField
+        void collectMissingOperators ( const string & opN, const ExpressionPtr & arg0, const ExpressionPtr & arg1, MatchingFunctions & mf ) {
+            auto opName = "_::" + opN;
+            vector<TypeDeclPtr> args;
+            args.push_back(arg0->type);
+            if ( arg1 ) args.push_back(arg1->type);
+            auto can1 = findCandidates(opName, args);
+            auto can2 = findGenericCandidates(opName, args);
+            mf.reserve(mf.size()+can1.size()+can2.size());
+            mf.insert(mf.end(), can1.begin(), can1.end());
+            mf.insert(mf.end(), can2.begin(), can2.end());
+        }
         virtual ExpressionPtr visit ( ExprSafeField * expr ) override {
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
@@ -5427,8 +5541,22 @@ namespace das {
             }
             auto valT = expr->value->type;
             if ( !valT->isPointer() || !valT->firstType ) {
-                error("can only safe dereference a pointer to a tupe, a structure or a handle " + describeType(valT), "", "",
-                      expr->at, CompilationError::cant_get_field);
+                if ( verbose && !expr->no_promotion ) {
+                    MatchingFunctions mf;
+                    collectMissingOperators("?.`"+expr->name,expr->value,nullptr,mf);
+                    collectMissingOperators("?.",expr->value,make_smart<ExprConstString>(expr->at,expr->name),mf);
+                    if ( !mf.empty() ) {
+                        reportDualFunctionNotFound("?.`"+expr->name, "can only safe dereference a pointer to a tuple, a structure or a handle " + describeType(valT),
+                                expr->at, mf, {expr->value->type}, {expr->value->type, make_smart<TypeDecl>(Type::tString)}, true, false, true,
+                            CompilationError::cant_get_field, 0, "");
+                    } else {
+                        error("can only safe dereference a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
+                            expr->at, CompilationError::cant_get_field);
+                    }
+                } else {
+                    error("can only safe dereference a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
+                        expr->at, CompilationError::cant_get_field);
+                }
                 return Visitor::visit(expr);
             }
             expr->value = Expression::autoDereference(expr->value);
@@ -8639,22 +8767,37 @@ namespace das {
                     }
                 } else {
                     TextWriter extra;
-                    if ( verbose ) {
-                        vector<TypeDeclPtr> args;
-                        args.push_back(expr->makeType);
-                        args.push_back(decl->value->type);
-                        auto opName = "_::.`" + decl->name + "`clone";
-                        auto funs = findMatchingFunctions(opName, args);
-                        auto gens = findMatchingGenerics(opName, args);
-                        if ( funs.size()==1 || gens.size()==1 ) {
-                            if ( strictProperties ) {
+                    vector<TypeDeclPtr> args;
+                    args.push_back(expr->makeType);
+                    args.push_back(decl->value->type);
+                    auto opName = "_::.`" + decl->name + "`clone";
+                    auto funs = findMatchingFunctions(opName, args);
+                    auto gens = findMatchingGenerics(opName, args);
+                    bool brokenStrictProperty = false;
+                    if ( funs.size()==1 || gens.size()==1 ) {
+                        if ( strictProperties ) {
+                            brokenStrictProperty = true;
+                            if ( verbose ) {
                                 extra
                                     << "since there is operator ."  << decl->name << " := ("
                                         << expr->makeType->structType->name << "," << decl->value->type->describe() << ") , try "
                                         <<  decl->name << " := " << *(decl->value);
-                            } else {
-                                convertCloneSemanticsToExpression(expr,index,decl);
-                                return nullptr;
+                            }
+                        } else {
+                            convertCloneSemanticsToExpression(expr,index,decl);
+                            return nullptr;
+                        }
+                    }
+                    if ( !brokenStrictProperty && verbose ) {
+                        auto can1 = findCandidates(opName, args);
+                        auto can2 = findGenericCandidates(opName, args);
+                        can1.reserve(can1.size()+can2.size());
+                        can1.insert(can1.end(), can2.begin(), can2.end());
+                        for ( auto & fn : can1 ) {
+                            if ( fn->isClassMethod && fn->arguments.size()==2
+                                    && fn->arguments[0]->type->isSameType(*args[0],RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes) ) {
+                                extra << "property " << decl->name << " : " << describeType(fn->arguments[1]->type) << " can't be initialized with " << decl->value->type->describe() << "\n";
+                                break;
                             }
                         }
                     }
