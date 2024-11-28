@@ -764,82 +764,80 @@ namespace das {
             return findMatchingFunctions(name, arguments, false, false);
         }
 
-        MatchingFunctions findCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
+        // MISSING CANDIDATES
+
+        bool isOperator (const string & s) const {
+            for ( auto ch : s ) {
+                if ( ch>='0' && ch<='9' ) return false;
+                else if ( ch>='a' && ch<='z' ) return false;
+                else if ( ch>='A' && ch<='Z' ) return false;
+                else if ( ch=='_' ) return false;
+            }
+            return true;
+        }
+
+        bool isCloseEnoughName ( const string & s, const string & t, bool identical ) const {
+            if ( s==t ) return true;
+            if ( identical ) return false;
+            auto ls = s.size();
+            auto lt = t.size();
+            if ( ls-lt>3 || lt-ls>3 ) return false;                 // too much difference in length, no way its typo
+            if ( isOperator(s) || isOperator(t) ) return false;
+            string upper_s, upper_t;
+            upper_s.reserve(s.size());
+            for ( auto ch : s ) upper_s.push_back((char)toupper(ch));
+            upper_t.reserve(t.size());
+            for ( auto ch : t ) upper_t.push_back((char)toupper(ch));
+            if ( upper_s==upper_t ) return true;
+            /*
+            Length ≤ 5: Distance ≤ 1 is likely a typo.
+            Length 6–10: Distance ≤ 2 is likely a typo.
+            Length > 10: Distance ≤ 3 might still be a typo.
+            */
+            int longer = int(ls>lt ? ls : lt);
+            int maxDist = 1;
+            if ( longer>10 ) maxDist = 3;
+            else if ( longer>5 ) maxDist = 2;
+            auto dist = levenshtein_distance(upper_s.c_str(),upper_t.c_str());
+            if ( dist <= maxDist ) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        MatchingFunctions findMissingCandidates ( const string & name, bool identicalName ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             getSearchModule(moduleName);
-            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->functionsByName.find(hFuncName);
-                if ( itFnList != mod->functionsByName.end() ) {
-                    auto & goodFunctions = itFnList->second;
-                    result.reserve(result.size()+goodFunctions.size());
-                    for ( auto & it : goodFunctions ) {
-                        result.push_back(it.get());
+                mod->functions.foreach([&](const FunctionPtr & fn) -> bool {
+                    if ( isCloseEnoughName(fn->name,funcName,identicalName) ) {
+                        isCloseEnoughName(fn->name,funcName,identicalName);
+                        result.push_back(fn.get());
                     }
-                }
+                    return true;
+                });
                 return true;
             },moduleName);
             return result;
         }
 
-        MatchingFunctions findCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
-            string moduleName, funcName;
-            splitTypeName(name, moduleName, funcName);
-            MatchingFunctions result;
-            getSearchModule(moduleName);
-            auto hFuncName = hash64z(funcName.c_str());
-            program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->functionsByName.find(hFuncName);
-                if ( itFnList != mod->functionsByName.end() ) {
-                    auto & goodFunctions = itFnList->second;
-                    result.reserve(result.size()+goodFunctions.size());
-                    for ( auto & it : goodFunctions ) {
-                        result.push_back(it.get());
-                    }
-                }
-                return true;
-            },moduleName);
-            return result;
-        }
 
-        MatchingFunctions findGenericCandidates ( const string & name, const vector<MakeFieldDeclPtr> & ) const {
+        MatchingFunctions findMissingGenericCandidates ( const string & name, bool identicalName ) const {
             // TODO: better error reporting
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
             getSearchModule(moduleName);
-            auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->genericsByName.find(hFuncName);
-                if ( itFnList != mod->genericsByName.end() ) {
-                    auto & goodFunctions = itFnList->second;
-                    result.reserve(result.size()+goodFunctions.size());
-                    for ( auto & it : goodFunctions ) {
-                        result.push_back(it.get());
+                mod->generics.foreach([&](const FunctionPtr & fn) -> bool {
+                    if ( isCloseEnoughName(fn->name,funcName,identicalName) ) {
+                        result.push_back(fn.get());
                     }
-                }
-                return true;
-            },moduleName);
-            return result;
-        }
-
-        MatchingFunctions findGenericCandidates ( const string & name, const vector<TypeDeclPtr> & ) const {
-            string moduleName, funcName;
-            splitTypeName(name, moduleName, funcName);
-            MatchingFunctions result;
-            getSearchModule(moduleName);
-            auto hFuncName = hash64z(funcName.c_str());
-            program->library.foreach([&](Module * mod) -> bool {
-                auto itFnList = mod->genericsByName.find(hFuncName);
-                if ( itFnList != mod->genericsByName.end() ) {
-                    auto & goodFunctions = itFnList->second;
-                    result.reserve(result.size()+goodFunctions.size());
-                    for ( auto & it : goodFunctions ) {
-                        result.push_back(it.get());
-                    }
-                }
+                    return true;
+                });
                 return true;
             },moduleName);
             return result;
@@ -1331,6 +1329,9 @@ namespace das {
                         ss << " at " << missFn->at.describe();
                     }
                     ss << "\n";
+                    if ( missFn->name != name ) {
+                        ss << "\t\tname is similar, typo?\n";
+                    }
                     if ( reportDetails ) {
                         if ( missFn->arguments.size() == types2.size() ) {
                             ss << describeMismatchingFunction(missFn, types2, inferAuto, inferBlocks);
@@ -1412,6 +1413,9 @@ namespace das {
                         ss << " at " << missFn->at.describe();
                     }
                     ss << "\n";
+                    if ( missFn->name != name ) {
+                        ss << "\t\tname is similar, typo?\n";
+                    }
                     if ( reportDetails ) {
                         ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
                     }
@@ -5501,8 +5505,8 @@ namespace das {
             } else if ( !expr->type ) {
                 if ( verbose && valT ) {
                     MatchingFunctions mf;
-                    collectMissingOperators(".`"+expr->name,expr->value,nullptr,mf);
-                    collectMissingOperators(".",expr->value,make_smart<ExprConstString>(expr->at,expr->name),mf);
+                    collectMissingOperators(".`"+expr->name,mf,false);
+                    collectMissingOperators(".",mf,true);
                     if ( !mf.empty() ) {
                         reportDualFunctionNotFound(".`"+expr->name, "field '" + expr->name + "' not found in " + describeType(valT),
                                 expr->at, mf, {valT}, {valT, make_smart<TypeDecl>(Type::tString)}, true, false, true,
@@ -5522,13 +5526,10 @@ namespace das {
             propagateTempType(expr->value->type, expr->type);   // a#.foo = foo#
             return Visitor::visit(expr);
         }
-        void collectMissingOperators ( const string & opN, const ExpressionPtr & arg0, const ExpressionPtr & arg1, MatchingFunctions & mf ) {
+        void collectMissingOperators ( const string & opN, MatchingFunctions & mf, bool identicalName ) {
             auto opName = "_::" + opN;
-            vector<TypeDeclPtr> args;
-            args.push_back(arg0->type);
-            if ( arg1 ) args.push_back(arg1->type);
-            auto can1 = findCandidates(opName, args);
-            auto can2 = findGenericCandidates(opName, args);
+            auto can1 = findMissingCandidates(opName,identicalName);
+            auto can2 = findMissingGenericCandidates(opName,identicalName);
             mf.reserve(mf.size()+can1.size()+can2.size());
             mf.insert(mf.end(), can1.begin(), can1.end());
             mf.insert(mf.end(), can2.begin(), can2.end());
@@ -5543,8 +5544,8 @@ namespace das {
             if ( !valT->isPointer() || !valT->firstType ) {
                 if ( verbose && !expr->no_promotion ) {
                     MatchingFunctions mf;
-                    collectMissingOperators("?.`"+expr->name,expr->value,nullptr,mf);
-                    collectMissingOperators("?.",expr->value,make_smart<ExprConstString>(expr->at,expr->name),mf);
+                    collectMissingOperators("?.`"+expr->name,mf,false);
+                    collectMissingOperators("?.",mf,true);
                     if ( !mf.empty() ) {
                         reportDualFunctionNotFound("?.`"+expr->name, "can only safe dereference a pointer to a tuple, a structure or a handle " + describeType(valT),
                                 expr->at, mf, {expr->value->type}, {expr->value->type, make_smart<TypeDecl>(Type::tString)}, true, false, true,
@@ -7557,8 +7558,8 @@ namespace das {
         void reportMissing ( ExprNamedCall * expr, const vector<TypeDeclPtr>& nonNamedArguments, const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
             if ( verbose ) {
-                auto can1 = findCandidates(expr->name, expr->arguments);
-                auto can2 = findGenericCandidates(expr->name, expr->arguments);
+                auto can1 = findMissingCandidates(expr->name, false);
+                auto can2 = findMissingGenericCandidates(expr->name, false);
                 can1.reserve(can1.size()+can2.size());
                 can1.insert(can1.end(), can2.begin(), can2.end());
                 auto nExtra = prepareCandidates(can1, nonNamedArguments, expr->arguments, true, true);
@@ -7621,8 +7622,8 @@ namespace das {
                                     const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
             if ( verbose ) {
-                auto can1 = findCandidates(expr->name, types);
-                auto can2 = findGenericCandidates(expr->name, types);
+                auto can1 = findMissingCandidates(expr->name, false);
+                auto can2 = findMissingGenericCandidates(expr->name, false);
                 can1.reserve(can1.size()+can2.size());
                 can1.insert(can1.end(), can2.begin(), can2.end());
                 auto nExtra = prepareCandidates(can1, types, true, true);
@@ -8770,7 +8771,8 @@ namespace das {
                     vector<TypeDeclPtr> args;
                     args.push_back(expr->makeType);
                     args.push_back(decl->value->type);
-                    auto opName = "_::.`" + decl->name + "`clone";
+                    auto compareName = ".`" + decl->name + "`clone";
+                    auto opName = "_::" + compareName;
                     auto funs = findMatchingFunctions(opName, args);
                     auto gens = findMatchingGenerics(opName, args);
                     bool brokenStrictProperty = false;
@@ -8789,15 +8791,23 @@ namespace das {
                         }
                     }
                     if ( !brokenStrictProperty && verbose ) {
-                        auto can1 = findCandidates(opName, args);
-                        auto can2 = findGenericCandidates(opName, args);
+                        auto can1 = findMissingCandidates(opName, false);
+                        auto can2 = findMissingGenericCandidates(opName, false);
                         can1.reserve(can1.size()+can2.size());
                         can1.insert(can1.end(), can2.begin(), can2.end());
                         for ( auto & fn : can1 ) {
-                            if ( fn->isClassMethod && fn->arguments.size()==2
-                                    && fn->arguments[0]->type->isSameType(*args[0],RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes) ) {
-                                extra << "property " << decl->name << " : " << describeType(fn->arguments[1]->type) << " can't be initialized with " << decl->value->type->describe() << "\n";
-                                break;
+                            if ( fn->isClassMethod && fn->arguments.size()==2 ) {
+                                if ( fn->name != compareName ) {
+                                    // .`name`clone
+                                    auto realName = fn->name.substr(2,fn->name.size()-8);
+                                    extra << "property name " << realName << " is similar, typo?\n";
+                                    if ( !fn->arguments[1]->type->isSameType(*args[1],RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes) ) {
+                                        extra << "\t" << describeType(fn->arguments[1]->type) << " can't be initialized with " << decl->value->type->describe() << "\n";
+                                    }
+
+                                } else if ( !fn->arguments[1]->type->isSameType(*args[1],RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes) ) {
+                                    extra << "property " << decl->name << " : " << describeType(fn->arguments[1]->type) << " can't be initialized with " << decl->value->type->describe() << "\n";
+                                }
                             }
                         }
                     }
