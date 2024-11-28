@@ -27,7 +27,7 @@ class FakeNumericMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting fake_numeric(func_name), incorrect number of arguments")
         let func_name = fakeFuncName(prog,expr.arguments[0])
-        return qmacro_block <|
+        return <-qmacro_block <|
             t |> run($v(func_name)) <| @@ ( t : T? )
                 var fake <- Faker()
                 fuzz <|
@@ -48,7 +48,7 @@ class FakeNumericMacro2 : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting fake_numeric2(func_name), incorrect number of arguments")
         let func_name = fakeFuncName(prog,expr.arguments[0])
-        return qmacro_block <|
+        return <-qmacro_block <|
             t |> run($v(func_name)) <| @@ ( t : T? )
                 var fake <- Faker()
                 fuzz <|
@@ -68,7 +68,7 @@ class FakeNumericMacro3 : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting fake_numeric2(func_name), incorrect number of arguments")
         let func_name = fakeFuncName(prog,expr.arguments[0])
-        return qmacro_block <|
+        return <-qmacro_block <|
             t |> run($v(func_name)) <| @@ ( t : T? )
                 var fake <- Faker()
                 fuzz <|
@@ -89,7 +89,7 @@ class FakeFloatMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting fake_numeric(func_name), incorrect number of arguments")
         let func_name = fakeFuncName(prog,expr.arguments[0])
-        return qmacro_block <|
+        return <-qmacro_block <|
             t |> run($v(func_name)) <| @@ ( t : T? )
                 var fake <- Faker()
                 fuzz <|
@@ -108,7 +108,7 @@ class FakeFloatMacro2 : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting fake_numeric2(func_name), incorrect number of arguments")
         let func_name = fakeFuncName(prog,expr.arguments[0])
-        return qmacro_block <|
+        return <-qmacro_block <|
             t |> run($v(func_name)) <| @@ ( t : T? )
                 var fake <- Faker()
                 fuzz <|
@@ -126,7 +126,7 @@ class FakeFloatMacro3 : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting fake_numeric2(func_name), incorrect number of arguments")
         let func_name = fakeFuncName(prog,expr.arguments[0])
-        return qmacro_block <|
+        return <-qmacro_block <|
             t |> run($v(func_name)) <| @@ ( t : T? )
                 var fake <- Faker()
                 fuzz <|
@@ -145,7 +145,7 @@ class FakeFloatMacro_234 : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting fake_numeric(func_name), incorrect number of arguments")
         let func_name = fakeFuncName(prog,expr.arguments[0])
-        return qmacro_block <|
+        return <-qmacro_block <|
             t |> run($v(func_name)) <| @@ ( t : T? )
                 var fake <- Faker()
                 fuzz <|
@@ -162,7 +162,7 @@ class FakeFloatMacro2_234 : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting fake_numeric2(func_name), incorrect number of arguments")
         let func_name = fakeFuncName(prog,expr.arguments[0])
-        return qmacro_block <|
+        return <-qmacro_block <|
             t |> run($v(func_name)) <| @@ ( t : T? )
                 var fake <- Faker()
                 fuzz <|
