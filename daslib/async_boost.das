@@ -163,7 +163,6 @@ def move_clone_copy(var expr; voidRoutine : bool; var retType : smart_ptr<TypeDe
                                 yield true
                             else
                                 yield <- [[$t(retType) wait=true]]
-                var exprBlock = blk as ExprBlock
                 blk |> force_at(expr.at)
                 return <- blk
     return <- expr
@@ -238,7 +237,7 @@ class CollectAndReplaceIteratorFields : AstVisitor
 
                         v._type |> move_new() <| clone_type(fn.result.firstType.argTypes[0])
 
-                    var name = make_unique_private_name("_async_iterator", expr.at)
+                    let name = make_unique_private_name("_async_iterator", expr.at)
                     let useMove = v.flags.init_via_move
                     let useClone = v.flags.init_via_clone
                     var inscope blk <- qmacro_block <|
@@ -256,7 +255,6 @@ class CollectAndReplaceIteratorFields : AstVisitor
                                     yield true
                                 else
                                     yield <- [[$t(retType) wait=true]]
-                    var exprBlock = blk as ExprBlock
                     blk |> force_at(expr.at)
 
                     var idx = length(blocksStack) - 1
