@@ -42,7 +42,8 @@ class LintVisitor : AstVisitor
     def override preVisitExprBlock(blk:smart_ptr<ExprBlock>) : void
         exprForTerminator |> push(0ul)
     def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
-        exprForTerminator |> pop()
+        if length(exprForTerminator) > 0
+            exprForTerminator |> pop()
         return <- blk
     def override visitExprBlockExpression(blk:smart_ptr<ExprBlock>;var expr:ExpressionPtr) : ExpressionPtr
         let lb = exprForTerminator |> back()
@@ -52,14 +53,17 @@ class LintVisitor : AstVisitor
                 self->lint_error("unreachable code", expr.at)
         return <- expr
     def override preVisitExprLabel(expr:smart_ptr<ExprLabel>) : void
-        exprForTerminator |> pop()
+        if length(exprForTerminator) > 0
+            exprForTerminator |> pop()
         exprForTerminator |> push(0ul)
     def override preVisitExprReturn(expr:smart_ptr<ExprReturn>) : void
-        exprForTerminator |> pop()
+        if length(exprForTerminator) > 0
+            exprForTerminator |> pop()
         exprForTerminator |> push(intptr(get_ptr(expr)))
     def override preVisitExprCall(expr:smart_ptr<ExprCall>): void
         if expr.name |> eq <| "panic" && expr.func._module.name |> eq <| "$"
-            exprForTerminator |> pop()
+            if length(exprForTerminator) > 0
+                exprForTerminator |> pop()
             exprForTerminator |> push(intptr(get_ptr(expr)))
     def override preVisitExprForVariable(expr:smart_ptr<ExprFor>;v:VariablePtr;last:bool) : void
         validate_var(v, false)
