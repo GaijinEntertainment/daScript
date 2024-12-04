@@ -735,6 +735,7 @@ namespace das
         virtual void serialize ( AstSerializer & ser ) override;
         Type    baseType = Type::none;
         vec4f   value = v_zero();
+        bool    foldedNonConst = false;
       };
 #ifdef _MSC_VER
 #pragma warning(pop)

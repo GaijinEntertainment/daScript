@@ -2373,6 +2373,9 @@ namespace das {
             inferred = true;
             return envalue;
         }
+        bool isConstantType ( ExprConst * c ) const {
+            return !c->foldedNonConst;
+        }
         virtual ExpressionPtr visit ( ExprConst * c ) override {
             if ( c->baseType==Type::tEnumeration || c->baseType==Type::tEnumeration8 ||
                 c->baseType==Type::tEnumeration16 || c->baseType==Type::tEnumeration64 ) {
@@ -2381,7 +2384,7 @@ namespace das {
                 c->value = getEnumerationValue(cE, infE);
                 if ( infE ) {
                     c->type = cE->enumType->makeEnumType();
-                    c->type->constant = true;
+                    c->type->constant = isConstantType(c);
                 } else {
                     error("enumeration value not inferred yet " + cE->text,  "", "",
                         c->at, CompilationError::invalid_enumeration);
@@ -2395,7 +2398,7 @@ namespace das {
                 } else {
                     c->type = make_smart<TypeDecl>(Type::tBitfield);
                 }
-                c->type->constant = true;
+                c->type->constant = isConstantType(c);
             } else if ( c->baseType==Type::tPointer ) {
                 c->type = make_smart<TypeDecl>(c->baseType);
                 auto cptr = static_cast<ExprConstPtr *>(c);
@@ -2408,7 +2411,7 @@ namespace das {
                 }
             } else {
                 c->type = make_smart<TypeDecl>(c->baseType);
-                c->type->constant = true;
+                c->type->constant = isConstantType(c);;
             }
             return Visitor::visit(c);
         }
