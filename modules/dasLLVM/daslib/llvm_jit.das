@@ -2800,7 +2800,7 @@ class LlvmJitVisitor : AstVisitor
         for i in range(len)
             let varinfo = g_mod |> LLVMAddGlobal(ty, "varinfo")
             varinfo |> LLVMSetInitializer <| get_value_for_varinfo(unsafe(ei[i]))
-            array_init |> push <| varinfo
+            array_init |> push <| unsafe(reinterpret<LLVMValueRef>(varinfo))
         let my_struct_array_type = LLVMArrayType(LLVMPointerType(ty, 0u), len |> uint())
         let varinfo_array = LLVMAddGlobal(g_mod, my_struct_array_type, "varinfo_ptr_array")
         let initializer = LLVMConstArray(LLVMPointerType(ty, 0u), unsafe(addr(array_init[0])), len |> uint())
@@ -2865,7 +2865,7 @@ class LlvmJitVisitor : AstVisitor
         for i in range(len)
             unsafe
                 let evi = argtypes[i] |> create_type_info_global()
-                array_init |> push <| evi
+                array_init |> push <| unsafe(reinterpret<LLVMValueRef>(evi))
         let tinfo_array_ty = LLVMArrayType(ty, len |> uint())
         var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argtypes")
         global |> LLVMSetInitializer <| LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
