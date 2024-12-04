@@ -168,13 +168,12 @@ namespace das
         virtual bool isSameFileName ( const string & f1, const string & f2 ) const;
         virtual bool isOptionAllowed ( const string & /*opt*/, const string & /*from*/ ) const { return true; }
         virtual bool isAnnotationAllowed ( const string & /*ann*/, const string & /*from*/ ) const { return true; }
-
         // must stop at word boundary
-        virtual bool parseCustomRequire(const char *&src, const char *srcEnd,
-                                        FileInfo *&info,
-                                        const FileAccessPtr &access,
-                                        vector<RequireRecord> &req,
-                                        vector<FileInfo *> &chain) const {
+        virtual bool parseCustomRequire(const char *& /*src*/, const char * /*srcEnd*/,
+                                        FileInfo *& /*info*/,
+                                        const FileAccessPtr & /*access*/,
+                                        vector<RequireRecord> & /*req*/,
+                                        vector<FileInfo *> & /*chain*/ ) const {
             return false;
         }
 

@@ -614,6 +614,7 @@ namespace das {
                     resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
                     resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
                     resT->implicit = (resT->implicit || decl->implicit);
+                    resT->explicitConst = (resT->explicitConst || decl->explicitConst);
                     resT->dim = decl->dim;
                     resT->aotAlias = false;
                     resT->alias.clear();
