@@ -2703,7 +2703,6 @@ namespace das {
                 } else {
                     if ( expr->constructor ) {
                         ss << string(tab,'\t') << mksName(expr) << " = ";
-                        ss << " = ";
                         auto call_func = expr->constructor;
                         if ( isHybridCall(call_func) ) {
                             ss << "das_invoke_function<" << describeCppType(call_func->result) << ">::invoke_cmres";
