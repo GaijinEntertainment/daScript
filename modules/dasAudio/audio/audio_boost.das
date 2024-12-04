@@ -114,7 +114,7 @@ class AudioChannel
     [[do_not_delete]] status : LockBox? = null
     [[do_not_delete]] reverb : I3DL2Reverb?
     hrtf : ma_hrtf
-    def AudioChannel(src : AudioSource?)
+    def AudioChannel(var src : AudioSource?)
         source = src
         // resampler
         var resampler_config <- ma_resampler_config_init(
@@ -371,7 +371,7 @@ class AudioSourceDecoder : AudioSource
         let result = ma_decoder_init_file(filename, unsafe(addr(config)), decoder)
         if result == ma_result MA_SUCCESS
             initFromDecoder(decoder, rate, nChannels)
-    def initFromDecoder(dec : ma_decoder?; rate, nChannels : int)
+    def initFromDecoder(var dec : ma_decoder?; rate, nChannels : int)
         bitrate = rate
         channels = nChannels
         decoder = dec
@@ -442,7 +442,7 @@ def update_hrtf
 
 struct AudioCommandAddDecoder
     sid : SID
-    [[do_not_delete]] decoder : ma_decoder?
+    [[do_not_delete]] decoder : ma_decoder const?
     rate : int
     channels : int
 
@@ -511,7 +511,7 @@ var g_command_channel : Channel?
 var g_collect_channel : Channel?
 
 [pinvoke, export]
-def setup_command_processor(ch, cch : Channel?)
+def setup_command_processor(var ch, cch : Channel?)
     g_command_channel = ch
     g_command_channel |> add_ref
     if cch != null
@@ -827,7 +827,7 @@ def public batch(cb : block)
     unsafe
         delete tempBatch
 
-def push_cmd(cmd : AudioCommand?)
+def push_cmd(var cmd : AudioCommand?)
     if global_batch != null
         *global_batch |> push(cmd)
     else

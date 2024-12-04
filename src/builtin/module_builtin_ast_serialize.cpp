@@ -1433,7 +1433,7 @@ namespace das {
 
     void ExprConst::serialize ( AstSerializer & ser ) {
         Expression::serialize(ser);
-        ser << baseType << value;
+        ser << baseType << value << foldedNonConst;
     }
 
     void ExprConstPtr::serialize( AstSerializer & ser ) {
@@ -2204,7 +2204,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 40;
+        static constexpr uint32_t currentVersion = 41;
         return currentVersion;
     }
 
