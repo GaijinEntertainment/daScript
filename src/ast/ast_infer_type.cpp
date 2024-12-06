@@ -6705,6 +6705,35 @@ namespace das {
                     }
                 }
             }
+            if ( expr->rtti_isSwizzle() ) {
+                auto swz = static_cast<ExprSwizzle *>(expr);
+                if ( swz->value->type ) {
+                    if ( auto cswz = getConstExpr(swz->value.get()) ) {
+                        int dim = swz->value->type->getVectorDim();
+                        vector<uint8_t> fields;
+                        if ( TypeDecl::buildSwizzleMask(swz->mask, dim, fields) ) {
+                            auto baseType = swz->value->type->getVectorBaseType();
+                            vec4f data = static_cast<ExprConst *>(cswz.get())->value;
+                            vec4f resData = v_zero();
+                            if ( baseType!=Type::tInt64 && baseType!=Type::tUInt64 ) {
+                                int32_t * res = (int32_t *)&resData;
+                                int32_t * src = (int32_t *)&data;
+                                for ( auto f : fields ) {
+                                    res[f] = src[f];
+                                }
+                            } else {
+                                int64_t * res = (int64_t *)&resData;
+                                int64_t * src = (int64_t *)&data;
+                                for ( auto f : fields ) {
+                                    res[f] = src[f];
+                                }
+                            }
+                            auto vecType = swz->type->getVectorType(baseType, fields.size());
+                            return program->makeConst(expr->at, make_smart<TypeDecl>(vecType), resData);
+                        }
+                    }
+                }
+            }
             return nullptr;
         }
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * expr ) override {
