@@ -6697,7 +6697,8 @@ namespace das {
                 auto var = static_cast<ExprVar *>(expr);
                 auto variable = var->variable;
                 if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
-                    if ( !var->local && !var->argument && !var->block ) {
+                    if ( /*!var->local &&*/     // this is an interesting question. should we allow local const to be folded?
+                         !var->argument && !var->block ) {
                         if ( variable->init->rtti_isConstant() ) {
                             return variable->init;
                         }
