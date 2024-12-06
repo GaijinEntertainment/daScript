@@ -876,6 +876,42 @@ namespace das {
         }
     }
 
+    Expression * ast_LetList ( yyscan_t scanner, bool kwd_let, bool inScope, vector<VariableDeclaration *> & decl, const LineInfo & kwd_letAt, const LineInfo & declAt ) {
+        auto pLet = new ExprLet();
+        pLet->at = kwd_letAt;
+        pLet->atInit = declAt;
+        pLet->inScope = inScope;
+        for ( auto pDecl : decl ) {
+            if ( pDecl->pTypeDecl ) {
+                for ( const auto & name_at : *pDecl->pNameList ) {
+                    if ( !pLet->find(name_at.name) ) {
+                        VariablePtr pVar = make_smart<Variable>();
+                        pVar->name = name_at.name;
+                        pVar->aka = name_at.aka;
+                        pVar->at = name_at.at;
+                        pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                        if ( pDecl->pInit ) {
+                            pVar->init = pDecl->pInit->clone();
+                            pVar->init_via_move = pDecl->init_via_move;
+                            pVar->init_via_clone = pDecl->init_via_clone;
+                        }
+                        if ( kwd_let ) {
+                            pVar->type->constant = true;
+                        } else {
+                            pVar->type->removeConstant = true;
+                        }
+                        pLet->variables.push_back(pVar);
+                    } else {
+                        das_yyerror(scanner,"local variable is already declared " + name_at.name,name_at.at,
+                            CompilationError::local_variable_already_declared);
+                    }
+                }
+            }
+        }
+        deleteVariableDeclarationList(&decl);
+        return pLet;
+    }
+
     Function * ast_functionDeclarationHeader ( yyscan_t scanner, string * name, vector<VariableDeclaration*> * list,
         TypeDecl * result, const LineInfo & nameAt ) {
         auto pFunction = make_smart<Function>();

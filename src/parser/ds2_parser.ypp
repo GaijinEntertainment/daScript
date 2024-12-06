@@ -369,7 +369,9 @@
 %type <pVarDecl>        function_argument_declaration
 %type <pVarDecl>        structure_variable_declaration
 %type <pVarDecl>        let_variable_declaration
+%type <pVarDeclList>    variable_declaration_list
 %type <pVarDecl>        global_let_variable_declaration
+%type <pVarDeclList>    global_variable_declaration_list
 %type <pVarDecl>        tuple_expansion_variable_declaration
 %type <pVarDecl>        tuple_type
 %type <pVarDeclList>    tuple_type_list
@@ -1435,6 +1437,9 @@ expression_let
     |   kwd_let optional_in_scope tuple_expansion_variable_declaration[decl] {
         $$ = ast_Let(scanner,$kwd_let,$optional_in_scope,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
     }
+    |   kwd_let optional_in_scope '{' variable_declaration_list[decl_list] '}' {
+        $$ = ast_LetList(scanner,$kwd_let,$optional_in_scope,*$decl_list,tokAt(scanner,@kwd_let),tokAt(scanner,@decl_list));
+    }
     ;
 
 expr_cast
@@ -2229,6 +2234,18 @@ global_let_variable_name_with_pos_list
     }
     ;
 
+variable_declaration_list
+    :   {
+        $$ = new vector<VariableDeclaration*>();
+    }
+    |   variable_declaration_list[list] ';' {
+        $$ = $list;
+    }
+    |   variable_declaration_list[list] let_variable_declaration[decl] {
+        $$ = $list;
+        $list->push_back($decl);
+    }
+    ;
 
 let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
     :   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] ';' {
@@ -2280,8 +2297,37 @@ optional_public_or_private_variable
     |   DAS_PUBLIC   { $$ = true; }
     ;
 
+global_variable_declaration_list
+    :   {
+        $$ = new vector<VariableDeclaration*>();
+    }
+    |   global_variable_declaration_list[list] ';' {
+        $$ = $list;
+    }
+    |   global_variable_declaration_list[list] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto tak = tokAt(scanner,@list);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
+        }
+    }   optional_field_annotation[ann] let_variable_declaration[decl] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto tak = tokAt(scanner,@decl);
+            for ( auto & crd : yyextra->g_CommentReaders )
+                for ( auto & nl : *($decl->pNameList) )
+                    crd->afterGlobalVariable(nl.name.c_str(),tak);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterGlobalVariables(tak);
+        }
+        $$ = $list;
+        $decl->annotation = $ann;
+        $list->push_back($decl);
+    }
+    ;
+
 global_let
-    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
+    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] '{' global_variable_declaration_list[list] '}' {
+        ast_globalLetList(scanner,$kwd_let,$glob_shar,$pub_var,$list);
+    }
+    |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@pub_var);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
@@ -3363,13 +3409,13 @@ optional_comma
 
 
 array_comprehension
-    :   '[' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+    :   '[' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
-    |   '[' DAS_ITERATOR DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+    |   '[' DAS_ITERATOR DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
-    |   '{' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
+    |   '{' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
     }
     ;
