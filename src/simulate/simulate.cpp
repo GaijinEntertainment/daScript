@@ -277,8 +277,8 @@ namespace das
 
     vec4f SimNode_CopyRefValue::eval ( Context & context ) {
         DAS_PROFILE_NODE
+        auto pr = r->evalPtr(context);  // right, then left
         auto pl = l->evalPtr(context);
-        auto pr = r->evalPtr(context);
         memcpy ( pl, pr, size );
         return v_zero();
     }
@@ -287,8 +287,8 @@ namespace das
 
     vec4f SimNode_MoveRefValue::eval ( Context & context ) {
         DAS_PROFILE_NODE
+        auto pr = r->evalPtr(context);  // right, then left
         auto pl = l->evalPtr(context);
-        auto pr = r->evalPtr(context);
         if ( pl != pr ) {
             memcpy ( pl, pr, size );
             memset ( pr, 0, size );
