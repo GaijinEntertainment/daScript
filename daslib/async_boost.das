@@ -211,7 +211,7 @@ class CollectAndReplaceIteratorFields : AstVisitor
                 return <- res
         return <- expr
 
-    def override preVisitExprBlock(blk:smart_ptr<ExprBlock>) : void
+    def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
         blocksStack |> push(blk |> get_ptr())
 
     def override visitExprBlock(var blk : smart_ptr<ExprBlock>) : ExpressionPtr
