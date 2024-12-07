@@ -6700,6 +6700,7 @@ namespace das {
                     if ( /*!var->local &&*/     // this is an interesting question. should we allow local const to be folded?
                          !var->argument && !var->block ) {
                         if ( variable->init->rtti_isConstant() ) {
+                            variable->access_fold = true;
                             return variable->init;
                         }
                     }
