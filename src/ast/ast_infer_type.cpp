@@ -6718,14 +6718,16 @@ namespace das {
                             if ( baseType!=Type::tInt64 && baseType!=Type::tUInt64 ) {
                                 int32_t * res = (int32_t *)&resData;
                                 int32_t * src = (int32_t *)&data;
+                                int outI = 0;
                                 for ( auto f : fields ) {
-                                    res[f] = src[f];
+                                    res[outI++] = src[f];
                                 }
                             } else {
                                 int64_t * res = (int64_t *)&resData;
                                 int64_t * src = (int64_t *)&data;
+                                int outI = 0;
                                 for ( auto f : fields ) {
-                                    res[f] = src[f];
+                                    res[outI++] = src[f];
                                 }
                             }
                             auto vecType = swz->type->getVectorType(baseType, fields.size());
