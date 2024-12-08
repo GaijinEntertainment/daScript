@@ -306,14 +306,17 @@ class AstVisitor
     def abstract preVisitExprOp3Left(expr:smart_ptr<ExprOp3>;left:ExpressionPtr): void
     def abstract preVisitExprOp3Right(expr:smart_ptr<ExprOp3>;right:ExpressionPtr): void
 // copy
+    def abstract isRightFirstExprCopy(expr:smart_ptr<ExprCopy>) : bool
     def abstract preVisitExprCopy(expr:smart_ptr<ExprCopy>): void
     def abstract visitExprCopy(expr:smart_ptr<ExprCopy>) : ExpressionPtr
     def abstract preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr): void
 // move
+    def abstract isRightFirstExprMove(expr:smart_ptr<ExprMove>) : bool
     def abstract preVisitExprMove(expr:smart_ptr<ExprMove>): void
     def abstract visitExprMove(expr:smart_ptr<ExprMove>) : ExpressionPtr
     def abstract preVisitExprMoveRight(expr:smart_ptr<ExprMove>;right:ExpressionPtr) : void
 // clone
+    def abstract isRightFirstExprClone(expr:smart_ptr<ExprClone>) : bool
     def abstract preVisitExprClone(expr:smart_ptr<ExprClone>) : void
     def abstract visitExprClone(expr:smart_ptr<ExprClone>) : ExpressionPtr
     def abstract preVisitExprCloneRight(expr:smart_ptr<ExprClone>;right:ExpressionPtr) : void

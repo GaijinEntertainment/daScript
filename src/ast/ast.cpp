@@ -2057,9 +2057,15 @@ namespace das {
 
     ExpressionPtr ExprMove::visit(Visitor & vis) {
         vis.preVisit(this);
-        left = left->visit(vis);
-        vis.preVisitRight(this, right.get());
-        right = right->visit(vis);
+        if ( vis.isRightFirst(this) ) {
+            vis.preVisitRight(this, right.get());
+            right = right->visit(vis);
+            left = left->visit(vis);
+        } else {
+            left = left->visit(vis);
+            vis.preVisitRight(this, right.get());
+            right = right->visit(vis);
+        }
         return vis.visit(this);
     }
 
@@ -2074,9 +2080,15 @@ namespace das {
 
     ExpressionPtr ExprClone::visit(Visitor & vis) {
         vis.preVisit(this);
-        left = left->visit(vis);
-        vis.preVisitRight(this, right.get());
-        right = right->visit(vis);
+        if ( vis.isRightFirst(this) ) {
+            vis.preVisitRight(this, right.get());
+            right = right->visit(vis);
+            left = left->visit(vis);
+        } else {
+            left = left->visit(vis);
+            vis.preVisitRight(this, right.get());
+            right = right->visit(vis);
+        }
         return vis.visit(this);
     }
 
@@ -2090,9 +2102,15 @@ namespace das {
 
     ExpressionPtr ExprCopy::visit(Visitor & vis) {
         vis.preVisit(this);
-        left = left->visit(vis);
-        vis.preVisitRight(this, right.get());
-        right = right->visit(vis);
+        if ( vis.isRightFirst(this) ) {
+            vis.preVisitRight(this, right.get());
+            right = right->visit(vis);
+            left = left->visit(vis);
+        } else {
+            left = left->visit(vis);
+            vis.preVisitRight(this, right.get());
+            right = right->visit(vis);
+        }
         return vis.visit(this);
     }
 

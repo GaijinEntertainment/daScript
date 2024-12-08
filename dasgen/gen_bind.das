@@ -1,5 +1,6 @@
 // options log_infer_passes = true
 // options log_generics = true
+options rtti
 
 require fio
 require rtti
