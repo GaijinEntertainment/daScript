@@ -630,11 +630,14 @@ class LlvmJitVisitor : AstVisitor
         return false if !isCMRES(call.func)
         return call.doesNotNeedSp || call.stackTop==0u
 
+    def isInvoke2CMRES ( expr:ExpressionPtr )
+        return (expr is ExprInvoke) && isCMRESType(expr._type)
+
     def make_call_to_cmres ( expr:ExpressionPtr; v_ptr:LLVMOpaqueValue? )
         if isCall2CMRES(expr)
             call2cmres[get_ptr(expr)] = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMVoidType(),0u), "call_result_{(expr as ExprCall).func.name}")
             return true
-        elif (expr is ExprInvoke) && isCMRESType(expr._type)
+        elif isInvoke2CMRES(expr)
             call2cmres[get_ptr(expr)] = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMVoidType(),0u), "invoke_result_{int(expr.at.line)}")
             return true
         return false
@@ -1751,7 +1754,16 @@ class LlvmJitVisitor : AstVisitor
             else
                 LLVMBuildStoreAligned(g_builder, tsrc, tdst, ralign)
 
+    def override isRightFirstExprCopy(expr:smart_ptr<ExprCopy>): bool
+        if isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)
+            return false
+        if expr.copy_flags.takeOverRightStack
+            return false
+        return true
+
     def override preVisitExprCopyRight(expr:smart_ptr<ExprCopy>;right:ExpressionPtr): void
+        if isRightFirstExprCopy(expr)
+            return // we do not need to do anything here
         var tdst = getE(expr.left)
         if make_call_to_cmres(expr.right, tdst)
             pass
@@ -1806,7 +1818,16 @@ class LlvmJitVisitor : AstVisitor
             else
                 LLVMBuildStoreAligned(g_builder, tsrc, tdst, ralign)
 
+    def override isRightFirstExprMove(expr:smart_ptr<ExprMove>): bool
+        if isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)
+            return false
+        if expr.move_flags.takeOverRightStack
+            return false
+        return true
+
     def override preVisitExprMoveRight(expr:smart_ptr<ExprMove>;right:ExpressionPtr): void
+        if isRightFirstExprMove(expr)
+            return // we do not need to do anything here
         var tdst = getE(expr.left)
         if make_call_to_cmres(expr.right, tdst)
             pass
