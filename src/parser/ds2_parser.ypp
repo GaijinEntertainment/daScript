@@ -2348,10 +2348,12 @@ enum_expression
     :   NAME[name] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $$ = new EnumPair($name,tokAt(scanner,@name));
+        delete $name;
     }
     |   NAME[name] '=' expr[value] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $$ = new EnumPair($name,$value,tokAt(scanner,@name));
+        delete $name;
     }
     ;
 
