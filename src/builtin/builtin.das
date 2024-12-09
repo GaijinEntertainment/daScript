@@ -414,6 +414,24 @@ def get(Tab:table<auto(keyT)>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"get(table<keyT>, ...) is not supported; use 'key_exists' instead")
     return false
 
+def get_value(Tab:table<auto(keyT);auto(valT)> ==const;at:keyT|#):valT
+    concept_assert(false,"can't get value from const table, use Tab?[key] or 'get' instead")
+    return type<valT>
+
+def get_value(var Tab:table<auto(keyT);smart_ptr<auto(valT)>>;at:keyT|#):smart_ptr<valT>
+    concept_assert(false,"can't get smart_ptr value from table")
+    return <- [[smart_ptr<valT>]]
+
+def get_value(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT
+    static_if typeinfo(is_void type<valT>)
+        concept_assert(false,"can't get value, which is void")
+        return type<valT>
+    static_elif typeinfo(can_copy type<valT>)
+        return unsafe(Tab[at])
+    else
+        concept_assert(false,"can't get value, which can't be copied")
+        return type<valT>
+
 // find if exists
 
 [deprecated(message="use tab?[key] or 'get' instead")]
@@ -516,6 +534,49 @@ def erase(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):bool
 def insert(var Tab:table<auto(keyT)>;at:keyT|#)
     __builtin_table_set_insert(Tab,at)
 
+def insert_clone(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;var val:valT ==const|#)
+    static_if typeinfo(can_clone val)
+        unsafe(Tab[at]) := val
+    else
+        concept_assert(false,"can't insert value, which can't be cloned")
+
+def insert_clone(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;val:valT ==const|#)
+    static_if typeinfo(can_clone val)
+        if typeinfo(can_clone_from_const val)
+            unsafe(Tab[at]) := val
+        else
+            concept_assert(false,"can't insert value, which can't be cloned from const")
+    else
+        concept_assert(false,"can't insert value, which can't be cloned")
+
+def insert(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;var val:valT ==const|#)
+    static_if typeinfo(can_copy type<valT>)
+        unsafe(Tab[at]) = val
+    else
+        concept_assert(false,"can't insert value, which can't be copied")
+
+def insert(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;val:valT ==const|#)
+    static_if typeinfo(can_copy type<valT>)
+        static_if typeinfo(can_clone_from_const val)
+            unsafe(Tab[at]) = val
+        else
+            concept_assert(false,"can't insert value, which can't be cloned from const")
+    else
+        concept_assert(false,"can't insert value, which can't be copied")
+
+def emplace(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;var val:valT-#&)
+    static_if typeinfo(can_move val)
+        unsafe(Tab[at]) <- val
+    else
+        concept_assert(false,"can't emplace value, which can't be moved")
+
+def emplace(var Tab:table<auto(keyT);smart_ptr<auto(valT)>>;at:keyT|#;var val:smart_ptr<valT>&)
+    static_if typeinfo(can_move val)
+        unsafe
+            Tab[at] <- val
+    else
+        concept_assert(false,"can't emplace value, which can't be moved")
+
 def key_exists(Tab:table<auto(keyT);auto(valT)>|#;at:string#):bool
     let at_nt := at
     return __builtin_table_key_exists(Tab,at_nt)
@@ -596,13 +657,13 @@ def clone(var a:table<string>;b:table<string>|#)
 def clone(var a:table<auto(KT);auto(VT)>;b:table<KT;VT>|#)
     clear(a)
     for k,v in keys(b),values(b)
-        a[k] := v
+        unsafe(a[k]) := v
 
 def clone(var a:table<string;auto(VT)>;b:table<string;VT>|#)
     clear(a)
     for k,v in keys(b),values(b)
         let kk := k
-        a[kk] := v
+        unsafe(a[kk]) := v
 
 [unsafe_outside_of_for,nodiscard]
 def keys(a:table<auto(keyT);auto(valT)>|#) : iterator<keyT - const>
@@ -807,7 +868,7 @@ def to_array_move(var a:auto(TT) ==const) : array<TT -const>
 def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
     var tab : table<keyT -const;valT>
     for x in a
-        tab[x._0] := x._1
+        unsafe(tab[x._0]) := x._1
     return <- tab
 
 [skip_lock_check]
@@ -841,9 +902,9 @@ def to_table_move(a:auto(keyT)) : table<keyT -const>
 def to_table_move(var a:tuple<auto(keyT);auto(valT)>) : table<keyT -const;valT>
     var tab : table<keyT -const;valT>
     static_if typeinfo(can_copy type<valT>)
-        tab[a._0] = a._1
+        unsafe(tab[a._0]) = a._1
     static_elif typeinfo(can_move type<valT>)
-        tab[a._0] <- a._1
+        unsafe(tab[a._0]) <- a._1
     else
         concept_assert(false,"this array can't be copied or moved")
     return <- tab
@@ -853,10 +914,10 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT
     var tab : table<keyT -const;valT>
     static_if typeinfo(can_copy type<valT>)
         for x in a
-            tab[x._0] = x._1
+            unsafe(tab[x._0]) = x._1
     static_elif typeinfo(can_move type<valT>)
         for x in a
-            tab[x._0] <- x._1
+            unsafe(tab[x._0]) <- x._1
     else
         concept_assert(false,"this array can't be copied or moved")
     return <- tab
@@ -866,10 +927,10 @@ def to_table_move(var a:array<tuple<auto(keyT);auto(valT)>>) : table<keyT -const
     var tab : table<keyT -const;valT>
     static_if typeinfo(can_copy type<valT>)
         for x in a
-            tab[x._0] = x._1
+            unsafe(tab[x._0]) = x._1
     static_elif typeinfo(can_move type<valT>)
         for x in a
-            tab[x._0] <- x._1
+            unsafe(tab[x._0]) <- x._1
     else
         concept_assert(false,"this array can't be copied or moved")
     return <- tab

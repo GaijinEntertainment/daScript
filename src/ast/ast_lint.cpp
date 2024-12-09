@@ -832,6 +832,7 @@ namespace das {
         "indenting",                    Type::tInt,
         "no_unsafe_uninitialized_structures", Type::tBool,
         "relaxed_pointer_const",        Type::tBool,
+        "unsafe_table_lookup",          Type::tBool,
     // debugger
         "debugger",                     Type::tBool,
     // profiler

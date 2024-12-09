@@ -717,6 +717,7 @@ namespace das {
         // rtti
             addField<DAS_BIND_MANAGED_FIELD(rtti)>("rtti");
         // language
+            addField<DAS_BIND_MANAGED_FIELD(unsafe_table_lookup)>("unsafe_table_lookup");
             addField<DAS_BIND_MANAGED_FIELD(relaxed_pointer_const)>("relaxed_pointer_const");
             addField<DAS_BIND_MANAGED_FIELD(version_2_syntax)>("version_2_syntax");
             addField<DAS_BIND_MANAGED_FIELD(gen2_make_syntax)>("gen2_make_syntax");
