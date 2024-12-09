@@ -308,6 +308,9 @@ namespace das {
         bool isPermanent = false;
         bool isEverything = false;
     protected:
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual bool canVisitGlobalVariable ( Variable * var ) override {
             if ( var->aliasesResolved ) return false;
             if ( !var->used && !isEverything ) return false;
