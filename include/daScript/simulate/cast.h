@@ -342,9 +342,9 @@ namespace das
         }
         static __forceinline vec4f from ( const TT & x )       {
 #if __SANITIZE_THREAD__
-            if ( sizeof(TT) != sizeof(float) * 4 )
+            if constexpr ( sizeof(TT) != sizeof(vec4f) )
             {
-              vec4f v;
+              vec4f v = v_zero(); // Init to prevent uninitialized warnings
               memcpy(&v, &x, sizeof(x));
               return v;
             }
@@ -374,9 +374,9 @@ namespace das
         }
         static __forceinline vec4f from ( const TT & x ) {
 #if __SANITIZE_THREAD__
-            if ( sizeof(TT) != sizeof(int) * 4 )
+            if constexpr ( sizeof(TT) != sizeof(vec4f) )
             {
-              vec4f v;
+              vec4f v = v_zero(); // Init to prevent uninitialized warnings
               memcpy(&v, &x, sizeof(x));
               return v;
             }
