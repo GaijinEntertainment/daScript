@@ -252,10 +252,10 @@ def test_tables() {
 
 [export]
 def test_comprehensions {
-	let arr_comp : array<int> <- [for x in range(1,100); x*x; where x%2==0];	// array comprehension
-	let iter_comp : iterator<int> <- [iterator for x in range(1,100); x*x; where x%2==0];	// iterator comprehension
-	let set_comp : table<int> <- {for x in range(1,100); x*x; where x%2==0};	// set comprehension
-	let table_comp : table<int;string> <- {for x in range(1,10); x=>"{x*x}"; where x%2==0};	// table comprehension
+	let arr_comp : array<int> <- [for (x in range(1,100)); x*x; where x%2==0];	// array comprehension
+	let iter_comp : iterator<int> <- [iterator for (x in range(1,100)); x*x; where x%2==0];	// iterator comprehension
+	let set_comp : table<int> <- {for (x in range(1,100)); x*x; where x%2==0};	// set comprehension
+	let table_comp : table<int;string> <- {for (x in range(1,10)); x=>"{x*x}"; where x%2==0};	// table comprehension
 }
 
 ////////////////////
