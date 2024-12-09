@@ -530,6 +530,7 @@ namespace das {
             pVar->source = source->clone();
         pVar->at = at;
         pVar->flags = flags;
+        pVar->access_flags = access_flags;
         pVar->initStackSize = initStackSize;
         pVar->annotation = annotation;
         return pVar;
