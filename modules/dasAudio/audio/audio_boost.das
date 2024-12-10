@@ -194,7 +194,7 @@ class AudioChannel
         if inputFrames != outputFrames
             // resample
             var temp : array<float>
-            temp |> resize(int(outputFrames) * channels)
+            temp |> resize(int(outputFrames) * source.channels)
             ma_resampler_process_pcm_frames(unsafe(addr(resampler)),
                 unsafe(addr(samples[0])),
                 unsafe(addr(inputFrames)),
