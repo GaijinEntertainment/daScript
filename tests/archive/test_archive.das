@@ -34,7 +34,7 @@ def test_save_and_load_mem_table ( t:T? )
     delete data
     t |> equal( length(test), length(reference))
     for k in keys(reference)
-        t |> equal( reference[k], test?[k] ?? -100500)
+        t |> equal( reference?[k] ?? -1, test?[k] ?? -100500)
 
 [test]
 def test_save_and_load_mem_array ( t:T? )

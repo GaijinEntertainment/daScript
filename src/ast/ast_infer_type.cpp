@@ -59,6 +59,7 @@ namespace das {
             alwaysExportInitializer = prog->options.getBoolOption("always_export_initializer", false);
             relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
             relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
+            unsafeTableLookup = prog->options.getBoolOption("unsafe_table_lookup", prog->policies.unsafe_table_lookup);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -100,6 +101,7 @@ namespace das {
         bool                    alwaysExportInitializer = false;
         bool                    relaxedAssign = false;
         bool                    relaxedPointerConst = false;
+        bool                    unsafeTableLookup = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -4678,6 +4680,10 @@ namespace das {
                         return pCall;
                     }
                 }
+                if ( unsafeTableLookup && !safeExpression(expr) ) {
+                    error("table index requires unsafe",  "use 'get_value', 'insert', 'insert_clone' or 'emplace' instead. consider 'get'", "",
+                        expr->at, CompilationError::unsafe);
+                }
                 expr->type = make_smart<TypeDecl>(*seT->secondType);
                 expr->type->ref = true;
                 expr->type->constant |= seT->constant;
@@ -7268,6 +7274,21 @@ namespace das {
                     if ( !safeExpression(expr) ) {
                         error("Uninitialized variable " + var->name + " is unsafe. Use initializer syntax or [safe_when_uninitialized] when intended.", "", "",
                             expr->at, CompilationError::unsafe);
+                    }
+                }
+            }
+            if ( unsafeTableLookup && var->init && var->type && !var->type->ref  ) { // we are looking for tab[at] to make it safe
+                auto pInit = var->init.get();
+                if ( pInit->rtti_isR2V() ) {
+                    pInit = static_cast<ExprRef2Value *>(pInit)->subexpr.get();
+                }
+                if ( pInit->rtti_isAt() ) {
+                    auto pAt = static_cast<ExprAt *>(pInit);
+                    if ( pAt->subexpr->type && pAt->subexpr->type->isGoodTableType() ) {
+                        if ( !pAt->alwaysSafe ) {
+                            pAt->alwaysSafe = true;
+                            reportAstChanged();
+                        }
                     }
                 }
             }
