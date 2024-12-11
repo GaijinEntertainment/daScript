@@ -124,7 +124,7 @@ def private resolve_path_cache(path: string; paths: array<string>; aliases: tabl
     if cache |> key_exists(path)
         return cache?[path] ?? ""
     let absPath = resolve_path(path, paths, aliases)
-    cache[path] = absPath
+    cache |> insert(path,absPath)
     return absPath
 
 def private bytes_hr(value : uint64)
@@ -760,7 +760,7 @@ class private DAgent: DapiDebugAgent
 
         pathAliases |> clear()
         for k, v in keys(aliases), values(aliases)
-            pathAliases[k] = v
+            pathAliases |> insert(k,v)
 
     def override onUninstall(agent:DebugAgent?)
         if agent == thisAgent
@@ -1336,7 +1336,7 @@ class private DAServer: Server
                 let aliasesList & = unsafe(aliases as _object)
                 for k, v in keys(aliasesList), values(aliasesList)
                     if v is _string
-                        pathAliases[k] = v as _string
+                        pathAliases |> insert(k, v as _string)
         agent->setPaths(resPaths, pathAliases)
 
     def setDebuggerSettings(data: JsonValue?)
@@ -1674,7 +1674,7 @@ class private DAServer: Server
                         ctxData.stack[frame] |> iter_top_child_var() <| $(child)
                             if child.typeInfo != null
                                 let tInfo & = unsafe(*child.typeInfo)
-                                vars[child.name] <- [[Result tinfo=tInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)]]
+                                vars |> emplace(child.name, [[Result tinfo=tInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)]])
                         --frame
 
                     var result = debug_eval(vars, ini.expression)

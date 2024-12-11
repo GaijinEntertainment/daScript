@@ -60,30 +60,30 @@ def array_ops ( t : T?; var a:array<Foo>; var e:Foo; var et:Foo# implicit )
 
 def table_ops ( t : T?; var a:table<int;Foo>; var e:Foo; var et:Foo implicit )
     for i in range(10)
-        a[i] = [[Foo a=i]]
+        a |> emplace(i,[[Foo a=i]])
     t |> equal(10, length(a))
     clear(a)
     t |> equal(0, length(a))
     t |> success(empty(a))
-    a[0] = e
-    a[1] = e
-    t |> equal(1, a[0].a)
-    t |> equal(1, a[1].a)
+    a |> insert(0, e)
+    a |> insert(1, e)
+    t |> equal(1, a |> get_value(0).a)
+    t |> equal(1, a |> get_value(1).a)
     t |> equal(2, length(a) )
     clear(a)
-    a[0] = e
-    a[1] = e
+    a |> insert(0, e)
+    a |> insert(1, e)
     var b := a
     a := b
-    t |> equal(1, b[0].a)
-    t |> equal(1, b[1].a)
+    t |> equal(1, b |> get_value(0).a)
+    t |> equal(1, b |> get_value(1).a)
     t |> equal(2, length(b) )
     erase(a, 0)
     erase(a, 1)
     t |> equal(0, length(a))
     a := b
-    t |> equal(1, a[0].a)
-    t |> equal(1, a[1].a)
+    t |> equal(1, a |> get_value(0).a)
+    t |> equal(1, a |> get_value(1).a)
     t |> equal(2, length(a) )
     for k in keys(a)
         t |> equal(1, a?[k]?.a ?? -1)

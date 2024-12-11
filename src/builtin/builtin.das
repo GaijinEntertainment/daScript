@@ -419,7 +419,7 @@ def get_value(Tab:table<auto(keyT);auto(valT)> ==const;at:keyT|#):valT
     return type<valT>
 
 def get_value(var Tab:table<auto(keyT);smart_ptr<auto(valT)>>;at:keyT|#):smart_ptr<valT>
-    concept_assert(false,"can't get smart_ptr value from table")
+    concept_assert(false,"can't get smart_ptr value from table, use clone_value instead")
     return <- [[smart_ptr<valT>]]
 
 def get_value(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT
@@ -431,6 +431,11 @@ def get_value(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT
     else
         concept_assert(false,"can't get value, which can't be copied")
         return type<valT>
+
+def clone_value(var Tab:table<auto(keyT);smart_ptr<auto(valT)>>;at:keyT|#):smart_ptr<valT>
+    unsafe
+        var t := Tab[at]
+        return <- t
 
 // find if exists
 
@@ -576,6 +581,9 @@ def emplace(var Tab:table<auto(keyT);smart_ptr<auto(valT)>>;at:keyT|#;var val:sm
             Tab[at] <- val
     else
         concept_assert(false,"can't emplace value, which can't be moved")
+
+def emplace_new ( var tab : table<auto(kT); smart_ptr<auto(vT)>>; key : kT; var value : smart_ptr<vT> )
+    unsafe(tab[key]) |> move_new <| value
 
 def key_exists(Tab:table<auto(keyT);auto(valT)>|#;at:string#):bool
     let at_nt := at

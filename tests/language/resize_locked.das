@@ -55,11 +55,11 @@ def test_resize_table ( t : T? )
     t |> run("basic locked table") <| @ ( t : T? )
         var a : table<int; int>
         for tt in range(10)
-            a[tt] = tt
+            a |> insert(tt, tt)
         var failed = false
         try
             for x in values(a)
-                a[13] = 133            // can't insert into locked table
+                a |> insert(13, 133)            // can't insert into locked table
         recover
             failed = true
         t |> success(failed)

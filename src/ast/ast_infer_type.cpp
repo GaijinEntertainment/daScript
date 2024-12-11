@@ -5834,6 +5834,13 @@ namespace das {
                             expr->at, CompilationError::operator_not_found);
                         return Visitor::visit(expr);
                     }
+                    if ( unsafeTableLookup && expr->subexpr->rtti_isAt() ) { // tab[expr]++ is always safe
+                        auto pAt = static_cast<ExprAt *>(expr->subexpr.get());
+                        if ( !pAt->alwaysSafe && pAt->subexpr->type && pAt->subexpr->type->isGoodTableType() ) {
+                            pAt->alwaysSafe = true;
+                            reportAstChanged();
+                        }
+                    }
                 }
             }
             auto opName = "_::" + expr->op;

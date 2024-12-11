@@ -97,7 +97,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                 var expectedErrors : table<CompilationError; int>
                 if program != null
                     program |> for_each_expected_error <| $ ( err, count )
-                        expectedErrors[err] = count
+                        expectedErrors |> insert(err, count)
                 var failed = !ok
                 if ok
                     if !empty(output)
@@ -105,7 +105,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                 elif program != null
                     failed = false
                     for err in program.errors
-                        let count = --expectedErrors[err.cerr]
+                        let count = --unsafe(expectedErrors[err.cerr])
                         if count < 0
                             failed = true
 
@@ -121,7 +121,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                         log::blue("Failed to compile {file_name}\n{output}")
                     if program != null
                         for err in program.errors
-                            if expectedErrors[err.cerr] < 0
+                            if expectedErrors |> get_value(err.cerr) < 0
                                 log::error("{describe(err.at)}: {int(err.cerr)}: {err.what}")
                                 if !empty(err.extra)
                                     log::info("{err.extra}")
