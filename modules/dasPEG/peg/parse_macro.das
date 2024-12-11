@@ -388,7 +388,7 @@ class ParseMacro : AstCallMacro
             peek_data($i(name)) <| $ ( inp )
                 parser.input := inp
 
-            var result : $t(gen.return_types[gram[0].name])
+            var result : $t(unsafe(gen.return_types[gram[0].name]))
             result <- $c(parse_main_func)(parser)
 
             if result.success

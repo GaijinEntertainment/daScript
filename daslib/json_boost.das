@@ -427,14 +427,14 @@ def JV(value): JsonValue?
                 pass // skip void?
             static_elif typeinfo(is_pointer field)
                 if field != null
-                    map[name] = _::JV(field)
+                    map |> insert(name, _::JV(field))
             else
-                map[name] = _::JV(field)
+                map |> insert(name, _::JV(field))
         return _::JV(map)
     static_elif typeinfo(is_table value)
         var map: table<string; JsonValue?>
         for k, v in keys(value), values(value)
-            map[k] = _::JV(v)
+            map |> insert(k, _::JV(v))
         return _::JV(map)
     static_elif typeinfo(is_iterable value)
         var arr: array<JsonValue?>
@@ -443,9 +443,9 @@ def JV(value): JsonValue?
         return _::JV(arr)
     static_elif typeinfo(is_variant value)
         var map: table<string; JsonValue?>
-        map["$variant"] = _::JV(variant_index(value))
+        map |> insert("$variant", _::JV(variant_index(value)))
         apply(value) <| $(name: string; field)
-            map[name] = _::JV(field)
+            map |> insert(name, _::JV(field))
         return _::JV(map)
     else
         to_log(LOG_ERROR, "JSON: unsupported type {typeinfo(typename value)}\n")
