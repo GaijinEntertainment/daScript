@@ -1,5 +1,7 @@
 require dastest/testing_boost
 
+options unsafe_table_lookup = false
+
 require jit
 
 

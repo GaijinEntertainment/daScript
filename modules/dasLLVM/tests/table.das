@@ -10,7 +10,8 @@ def make_table
     }}
 
 def test_table ( var tab:table<int; string> )
-    return length(tab)==3 && tab[1]=="1" && tab[2]=="2" && tab[3]=="3"
+    unsafe
+        return length(tab)==3 && tab[1]=="1" && tab[2]=="2" && tab[3]=="3"
 
 [jit]
 def make_table_jit
@@ -22,7 +23,8 @@ def make_table_jit
 
 [jit]
 def test_table_jit ( var tab:table<int; string> )
-    return length(tab)==3 && tab[1]=="1" && tab[2]=="2" && tab[3]=="3"
+    unsafe
+        return length(tab)==3 && tab[1]=="1" && tab[2]=="2" && tab[3]=="3"
 
 [jit]
 def tab_erase ( var tab:table<int;string>; key:int )
