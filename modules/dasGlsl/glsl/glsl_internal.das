@@ -3,6 +3,11 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
 
+// OLD das restrictions
+options unsafe_table_lookup = false
+options strict_smart_pointers = false
+options relaxed_pointer_const = true
+
 module glsl_internal shared public
 
 require ast

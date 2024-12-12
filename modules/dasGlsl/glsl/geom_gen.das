@@ -323,10 +323,10 @@ def load_obj_mesh ( fname:string; canfail:bool=true )
                     ]]
                     let svtx = "{vtx}"
                     if uvtx |> key_exists(svtx)
-                        i012 |> push(uvtx[svtx])
+                        i012 |> push(uvtx |> get_value(svtx))
                     else
                         let i = frag.vertices |> length
-                        uvtx[svtx] = i
+                        uvtx |> insert(svtx, i)
                         i012 |> push(i)
                         frag.vertices |> push(vtx)
                 let li = length(i012)

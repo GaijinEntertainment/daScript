@@ -522,7 +522,7 @@ def add_channel(sid : SID; var channel : AudioChannel?)
     g_channels |> push(channel)
     if sid != INVALID_SID
         channel.sid = sid
-        g_sid_2_channel[sid] = channel
+        g_sid_2_channel |> insert(sid, channel)
 
 def add_channel_3d(sid : SID; position : float3; attenuation : Attenuation; var channel : AudioChannel?)
     channel.position3d = position
