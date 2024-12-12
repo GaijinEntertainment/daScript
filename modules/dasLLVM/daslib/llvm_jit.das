@@ -3,6 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers = false
 options relaxed_pointer_const
+options unsafe_table_lookup = false
 
 module llvm_jit shared private
 
@@ -569,10 +570,10 @@ class LlvmJitVisitor : AstVisitor
                 var after = LLVMAppendBasicBlock(ffunc, "{from_where}_after_call_finally_block_{int(blk.at.line)}_")
                 var after_ptr = LLVMBlockAddress(LLVMGetBasicBlockParent(after),after)
                 LLVMBuildStore(g_builder, after_ptr, callBlock)
-                var fblk = finallyBlocks[get_ptr(blk)]
+                var fblk = finallyBlocks[blk]
                 LLVMBuildBr(g_builder, fblk)
                 LLVMPositionBuilderAtEnd(g_builder, after)
-                afterFinallyBlocks[get_ptr(blk)] |> push(after)
+                afterFinallyBlocks[blk] |> push(after)
                 anyFinallyBlocks = true
         return anyFinallyBlocks
 
@@ -599,7 +600,7 @@ class LlvmJitVisitor : AstVisitor
         afterFinallyBlocks  |> get(blk) <| $ ( AfterFinallyBlocks )
             if length(AfterFinallyBlocks)>0
                 var cc = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt8Type(),0u), callBlock, "")
-                var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
+                var needCond = thisFunc.body!=blk && thisBlock!=blk
                 var do_jump, skip_jump : LLVMOpaqueBasicBlock?
                 if needCond
                     do_jump = LLVMAppendBasicBlock(ffunc, "do_jump_blk_line_{int(blk.at.line)}_")
@@ -1870,7 +1871,7 @@ class LlvmJitVisitor : AstVisitor
             let body = expr.body as ExprBlock
             if length(body.finalList) != 0
                 LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
-                LLVMBuildBr(g_builder, finallyBlocks[get_ptr(body)])
+                LLVMBuildBr(g_builder, finallyBlocks[body])
                 visit_finally(body, adapter)
                 jump_to_next_finally(body)
         return expr
@@ -2194,7 +2195,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_end)                   // LOOP END
         // in for loop closing iterators is included in the finally section
         let body = expr.body as ExprBlock
-        var fblk = finallyBlocks[get_ptr(body)]
+        var fblk = finallyBlocks[body]
         LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
         LLVMBuildBr(g_builder, fblk)
         LLVMPositionBuilderAtEnd(g_builder, fblk)
