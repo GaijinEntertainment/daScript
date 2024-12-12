@@ -188,7 +188,7 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
                 parser |> log_info <| "Entering the leftrec create cycle"
 
             var res = [[$t(return_type)]]
-            $i(cache_table)[mark] = res
+            unsafe($i(cache_table)[mark]) = res
 
             while true
                 parser.index = mark
@@ -206,7 +206,7 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
                 if $v(gen.debug)
                     parser |> log_info <| "Placing result {res} to cache {$v(cache_table)} {mark}"
 
-                $i(cache_table)[mark] = res
+                unsafe($i(cache_table)[mark]) = res
 
             if $v(gen.tracing)
                 parser.tabs--

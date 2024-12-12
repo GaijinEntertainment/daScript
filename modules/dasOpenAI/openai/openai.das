@@ -264,8 +264,8 @@ struct public ChatCompletionResponseChoicesInnerMessagesInner
 def public openai_create_chat_completion ( completion:ChatCompletion )
     //! create a chat completion
     var req_jv <- JV(completion)
-    for msg in (req_jv as _object)["messages"] as _array
-        if (msg as _object)["name"] as _string |> empty
+    for msg in (req_jv as _object) |> get_value("messages") as _array
+        if (msg as _object) |> get_value("name") as _string |> empty
             (msg as _object) |> erase("name")
     var req = write_request_json(req_jv)
     unsafe
@@ -311,7 +311,7 @@ def public openai_create_image ( completion:Image )
     //! create an editimage
     var req_jv <- JV(completion)
     (req_jv as _object) |> erase("size")
-    (req_jv as _object)["size"] = JV("{completion.size}x{completion.size}")
+    (req_jv as _object) |> insert("size", JV("{completion.size}x{completion.size}"))
     var req = write_request_json(req_jv)
     unsafe
         delete req_jv

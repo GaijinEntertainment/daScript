@@ -1421,7 +1421,7 @@ namespace das
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language
-        bool unsafe_table_lookup = false;               // table lookup (tab[key]) to be unsafe
+        bool unsafe_table_lookup = true;                // table lookup (tab[key]) to be unsafe
         bool relaxed_pointer_const = false;             // allow const correctness to be relaxed on pointers
         bool version_2_syntax = false;                  // use syntax version 2
         bool gen2_make_syntax = false;                  // only new make syntax is allowed (no [[...]] or [{...}])

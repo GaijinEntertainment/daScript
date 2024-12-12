@@ -3,6 +3,11 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot
 
+// OLD das restrictions
+options unsafe_table_lookup = false
+options strict_smart_pointers = false
+options relaxed_pointer_const = true
+
 module opengl_boost_internal shared private
 
 require daslib/ast_boost

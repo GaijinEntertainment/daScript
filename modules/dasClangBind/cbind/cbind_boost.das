@@ -2,6 +2,12 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
+// OLD das restrictions
+options unsafe_table_lookup = false
+options strict_smart_pointers = false
+options relaxed_pointer_const = true
+
+
 module cbind_boost shared
 
 require cbind public
@@ -574,8 +580,7 @@ class AnyGenBind
                 searchAndGenConst(reg_def_UINT32, define_const_style_das ? "uint" : "uint32_t", "u", true, ofs, data, dup)
                 searchAndGenConst(reg_def_UINT64, define_const_style_das ? "uint64" : "uint64_t", "ul", true, ofs, data, dup)
     def generateConstants(fname:string)
-        var fnames <- [{ auto[] fname }]
-        defer <| { delete fnames; }
+        var inscope fnames <- [{ auto[] fname }]
         fnames |> generateConstantsFrom()
 
 class DasGenBind : AnyGenBind
