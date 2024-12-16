@@ -82,13 +82,13 @@ class LintVisitor : AstVisitor
         if v.isAccessUnused
             self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
             return
-        if !v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const()
+        if !v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const() && !v.access_flags.access_fold
+            self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it) {v.access_flags}", v.at)
+            return
+        if !v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects) && !v.access_flags.access_fold
             self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
             return
-        if !v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects)
-            self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
-            return
-        if !v.access_flags.access_get && !v.access_flags.access_ref
+        if !v.access_flags.access_get && !v.access_flags.access_ref && (v.init == null)
             let sideEffects = (v.init != null && !v.init.flags.noSideEffects)
             if !sideEffects
                 self->lint_error("variable {v.name}: {describe(v._type)} is never used", v.at)
