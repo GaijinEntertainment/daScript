@@ -2076,6 +2076,7 @@ namespace das {
               << value.macro_context_persistent_heap
               << value.macro_context_collect
               << value.rtti
+              << value.unsafe_table_lookup
               << value.relaxed_pointer_const
               << value.version_2_syntax
               << value.gen2_make_syntax
