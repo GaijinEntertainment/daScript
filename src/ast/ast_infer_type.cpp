@@ -9608,8 +9608,11 @@ namespace das {
         inferTypesDirty(logs, false);
         bool anyMacrosDidWork = false;
         bool anyMacrosFailedToInfer = false;
+        int pass = 0;
+        int  maxPasses = options.getIntOption("max_infer_passes", policies.max_infer_passes);
         if ( failed() ) goto failed_to_infer;
         do {
+            if ( pass++ >= maxPasses ) goto failed_to_infer;
             anyMacrosDidWork = false;
             anyMacrosFailedToInfer = false;
             auto modMacro = [&](Module * mod) -> bool {    // we run all macros for each module
@@ -9656,6 +9659,11 @@ namespace das {
             reportingInferErrors = true;
             inferTypesDirty(logs, true);
             reportingInferErrors = false;
+        }
+        if ( pass >= maxPasses ) {
+            error("type inference exceeded maximum allowed number of passes ("+to_string(maxPasses)+")\n"
+                    "this is likely due to a macro continuesly beeing applied", "", "",
+                LineInfo(), CompilationError::too_many_infer_passes);
         }
     }
 
