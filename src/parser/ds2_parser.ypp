@@ -334,13 +334,6 @@
 %token      '}'                     "end of code block"
 %token      ';'                     "end of expression"
 
-%token      SEMICOLON_CUR_CUR       ";}}"
-%token      SEMICOLON_CUR_SQR       ";}]"
-%token      SEMICOLON_SQR_SQR       ";]]"
-%token      COMMA_SQR_SQR           ",]]"
-%token      COMMA_CUR_SQR           ",}]"
-
-
 %type <pEnum>           enum_name
 %type <pNameList>       bitfield_bits
 %type <pNameList>       bitfield_alias_bits
@@ -441,6 +434,7 @@
 %type <pExpression>     expression_let
 %type <pExpression>     expressions
 %type <pExpression>     expression_block
+%type <pExpression>     expression_block_finally
 %type <pExpression>     expression_with
 %type <pExpression>     expression_with_alias
 %type <pExpression>     expression_while_loop
@@ -1190,18 +1184,37 @@ function_declaration
     }
     ;
 
-expression_block
-    :   '{' [bbegin] expressions[block] '}' [bend] {
-        $$ = $block;
-        $$->at = tokRangeAt(scanner,@bbegin,@bend);
+expression_block_finally
+    :   {
+        $$ = nullptr;
     }
-    |   '{' [bbegin] expressions[block] '}' DAS_FINALLY '{' expressions[final] '}' [bend] {
-        auto pB = (ExprBlock *) $block;
-        auto pF = (ExprBlock *) $final;
-        swap ( pB->finalList, pF->list );
+    | DAS_FINALLY {
+        yyextra->das_indent_level++;
+        yyextra->push_nesteds();
+    } '{' expressions[final] {
+        yyextra->das_indent_level--;
+        yyextra->pop_nesteds();
+    } '}' {
+        $$ = $final;
+    }
+    ;
+
+expression_block
+    :   {
+        yyextra->das_indent_level++;
+        yyextra->push_nesteds();
+    } '{' [bbegin] expressions[block] {
+        yyextra->das_indent_level--;
+        yyextra->pop_nesteds();
+    } '}' expression_block_finally[fin] {
         $$ = $block;
-        $$->at = tokRangeAt(scanner,@bbegin,@bend);
-        delete $final;
+        $$->at = tokRangeAt(scanner,@bbegin,@fin);
+        if ( $fin ) {
+            auto pF = (ExprBlock *) $fin;
+            auto pB = (ExprBlock *) $$;
+            swap ( pB->finalList, pF->list );
+            delete pF;
+        }
     }
     ;
 
@@ -3408,7 +3421,6 @@ optional_comma
     :           { $$ = false; }
     |   ','     { $$ = true; }
     ;
-
 
 array_comprehension
     :   '[' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
