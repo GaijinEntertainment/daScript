@@ -1927,6 +1927,17 @@ namespace das {
             if ( decl.type && decl.type->isExprType() ) {
                 return;
             }
+            if  ( !st->parent && decl.classMethod && decl.type && decl.type->baseType==Type::autoinfer ) {
+                // if its field:auto = cast<auto>(@@fun) - we demote to @@fun; this is only possible when its sealed in the base class
+                if ( decl.init && decl.init->rtti_isCast() ) {
+                    auto castExpr = static_pointer_cast<ExprCast>(decl.init);
+                    if ( castExpr->castType && castExpr->castType->baseType==Type::autoinfer ) {
+                        decl.init = castExpr->subexpr;
+                        reportAstChanged();
+                        return;
+                    }
+                }
+            }
             if ( decl.parentType ) {
                 auto pf = st->parent->findField(decl.name);
                 if ( !pf->type->isAutoOrAlias() ) {
