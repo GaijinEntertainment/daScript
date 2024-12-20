@@ -96,7 +96,7 @@
 %locations
 %verbose
 %no-lines
-// %debug
+/* %debug */
 
 %define parse.error verbose
 
@@ -334,13 +334,6 @@
 %token      '}'                     "end of code block"
 %token      ';'                     "end of expression"
 
-%token      SEMICOLON_CUR_CUR       ";}}"
-%token      SEMICOLON_CUR_SQR       ";}]"
-%token      SEMICOLON_SQR_SQR       ";]]"
-%token      COMMA_SQR_SQR           ",]]"
-%token      COMMA_CUR_SQR           ",}]"
-
-
 %type <pEnum>           enum_name
 %type <pNameList>       bitfield_bits
 %type <pNameList>       bitfield_alias_bits
@@ -429,6 +422,7 @@
 %type <pEnumPair>       enum_expression
 
 %type <pExpression>     expr
+%type <pExpression>     expr_generator
 %type <pExpression>     expr_mtag
 %type <pExpression>     expr_field
 %type <pExpression>     expr_assign
@@ -441,6 +435,7 @@
 %type <pExpression>     expression_let
 %type <pExpression>     expressions
 %type <pExpression>     expression_block
+%type <pExpression>     expression_block_finally
 %type <pExpression>     expression_with
 %type <pExpression>     expression_with_alias
 %type <pExpression>     expression_while_loop
@@ -453,6 +448,7 @@
 %type <pExpression>     expression_yield
 %type <pExpression>     expression_else
 %type <pExpression>     expression_if_then_else
+%type <pExpression>     expression_if_then_else_oneliner
 %type <pExpression>     expression_if_one_liner
 %type <pExpression>     expression_else_one_liner
 %type <pExpression>     expression_try_catch
@@ -788,8 +784,8 @@ elif_or_static_elif
 
 expression_else
     :                                                      { $$ = nullptr; }
-    |   DAS_ELSE expression_block[block]                   { $$ = $block; }
-    |   elif_or_static_elif[loc] '(' expr[cond] ')' expression_block[block] expression_else[then] {
+    |   DAS_ELSE optional_semis expression_block[block]    { $$ = $block; }
+    |   elif_or_static_elif[loc] '(' expr[cond] ')' optional_semis expression_block[block] expression_else[then] {
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
         eite->isStatic = $loc;
@@ -817,26 +813,46 @@ expression_if_one_liner
     |   expression_continue[result]         { $$ = $result; }
     ;
 
+optional_semi_list
+    :   ';'
+    |   optional_semi_list ';'
+    ;
+
+optional_semis
+    :
+    |   optional_semi_list
+    ;
+
 expression_if_then_else
-    :   if_or_static_if[loc] '(' expr[cond] ')' expression_block[block] expression_else[then] {
+    :   {
+        yyextra->das_keyword = true;
+    } if_or_static_if[loc] '(' expr[cond] ')' optional_semis expression_block[block] expression_else[then] {
+        yyextra->das_keyword = false;
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
         eite->isStatic = $loc;
         $$ = eite;
     }
-    |   expression_if_one_liner[if_true] DAS_IF[loc] '(' expr[cond] ')' expression_else_one_liner[if_false] ';' {
+    ;
+
+expression_if_then_else_oneliner
+    :   expression_if_one_liner[if_true] DAS_IF[loc] '(' expr[cond] ')' expression_else_one_liner[if_false] ';' {
         $$ = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),ExpressionPtr(ast_wrapInBlock($if_true)),$if_false ? ExpressionPtr(ast_wrapInBlock($if_false)) : nullptr);
     }
     ;
 
+
 expression_for_loop
-    :   DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' expression_block[block] {
+    :   {
+        yyextra->das_keyword = true;
+    } DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' optional_semis expression_block[block] {
+        yyextra->das_keyword = false;
         $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
     }
     ;
 
 expression_unsafe
-    :   DAS_UNSAFE[loc]  expression_block[block] {
+    :   DAS_UNSAFE[loc] optional_semis expression_block[block] {
         auto pUnsafe = new ExprUnsafe(tokAt(scanner,@loc));
         pUnsafe->body = ExpressionPtr($block);
         $$ = pUnsafe;
@@ -844,7 +860,10 @@ expression_unsafe
     ;
 
 expression_while_loop
-    :   DAS_WHILE[loc] '(' expr[condition] ')' expression_block[block] {
+    :   {
+        yyextra->das_keyword = true;
+    } DAS_WHILE[loc] '(' expr[condition] ')' optional_semis expression_block[block] {
+        yyextra->das_keyword = false;
         auto pWhile = new ExprWhile(tokAt(scanner,@loc));
         pWhile->cond = ExpressionPtr($condition);
         pWhile->body = ExpressionPtr($block);
@@ -854,7 +873,10 @@ expression_while_loop
     ;
 
 expression_with
-    :   DAS_WITH[loc] '(' expr[with] ')' expression_block[block] {
+    :   {
+        yyextra->das_keyword = true;
+    } DAS_WITH[loc] '(' expr[with] ')' optional_semis expression_block[block] {
+        yyextra->das_keyword = false;
         auto pWith = new ExprWith(tokAt(scanner,@loc));
         pWith->with = ExpressionPtr($with);
         pWith->body = ExpressionPtr($block);
@@ -1190,18 +1212,37 @@ function_declaration
     }
     ;
 
-expression_block
-    :   '{' [bbegin] expressions[block] '}' [bend] {
-        $$ = $block;
-        $$->at = tokRangeAt(scanner,@bbegin,@bend);
+expression_block_finally
+    :   {
+        $$ = nullptr;
     }
-    |   '{' [bbegin] expressions[block] '}' DAS_FINALLY '{' expressions[final] '}' [bend] {
-        auto pB = (ExprBlock *) $block;
-        auto pF = (ExprBlock *) $final;
-        swap ( pB->finalList, pF->list );
+    | DAS_FINALLY {
+        yyextra->das_indent_level++;
+        yyextra->push_nesteds();
+    } '{' expressions[final] {
+        yyextra->das_indent_level--;
+        yyextra->pop_nesteds();
+    } '}' {
+        $$ = $final;
+    }
+    ;
+
+expression_block
+    :   {
+        yyextra->das_indent_level++;
+        yyextra->push_nesteds();
+    } '{' [bbegin] expressions[block] {
+        yyextra->das_indent_level--;
+        yyextra->pop_nesteds();
+    } '}' expression_block_finally[fin] {
         $$ = $block;
-        $$->at = tokRangeAt(scanner,@bbegin,@bend);
-        delete $final;
+        $$->at = tokRangeAt(scanner,@bbegin,@fin);
+        if ( $fin ) {
+            auto pF = (ExprBlock *) $fin;
+            auto pB = (ExprBlock *) $$;
+            swap ( pB->finalList, pF->list );
+            delete pF;
+        }
     }
     ;
 
@@ -1233,6 +1274,7 @@ expression_any
     |   expression_return[subexpr] ';'      { $$ = $subexpr; }
     |   expression_yield[subexpr] ';'       { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
+    |   expression_if_then_else_oneliner[subexpr] { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
     |   expression_label[subexpr] ';'       { $$ = $subexpr; }
     |   expression_goto[subexpr] ';'        { $$ = $subexpr; }
@@ -1562,14 +1604,14 @@ optional_capture_list
 
 expr_full_block
     :   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
-                                optional_function_type[result] block_or_simple_block[block] {
+                                optional_function_type[result] optional_semis block_or_simple_block[block] {
         $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
     }
     ;
 
 expr_full_block_assumed_piped
     :   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
-                                optional_function_type[result] expression_block[block] {
+                                optional_function_type[result] optional_semis expression_block[block] {
         $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
     }
     |   '{' expressions[block] '}' {
@@ -1829,17 +1871,7 @@ expr
     |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),ExpressionPtr($subexpr)); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),ExpressionPtr($subexpr)); }
     |   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(scanner,@loc),ExpressionPtr($subexpr)); }
-    |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' ')' {
-        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,nullptr,tokAt(scanner,@loc));
-    }
-    |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' expr[subexpr] ')' {
-        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc));
-    }
-    |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] expression_block[block] {
-        auto closure = new ExprMakeBlock(tokAt(scanner,@block),ExpressionPtr($block));
-        ((ExprBlock *)$block)->returnType = make_smart<TypeDecl>(Type::autoinfer);
-        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,closure,tokAt(scanner,@loc));
-    }
+    |   expr_generator[gen]                        { $$ = $gen; }
     |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokAt(scanner,@loc),ExpressionPtr($subexpr),ExpressionPtr($dval)); }
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(scanner,@loc),"?",ExpressionPtr($subexpr),ExpressionPtr($left),ExpressionPtr($right));
@@ -1901,6 +1933,21 @@ expr
             $$ = $subexpr;
         }
     ;
+
+expr_generator
+    :   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' ')' {
+        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,nullptr,tokAt(scanner,@loc));
+    }
+    |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' expr[subexpr] ')' {
+        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc));
+    }
+    |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] optional_semis expression_block[block] {
+        auto closure = new ExprMakeBlock(tokAt(scanner,@block),ExpressionPtr($block));
+        ((ExprBlock *)$block)->returnType = make_smart<TypeDecl>(Type::autoinfer);
+        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,closure,tokAt(scanner,@loc));
+    }
+    ;
+
 
 expr_mtag
     :   MTAG_E '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"e"); }
@@ -3408,7 +3455,6 @@ optional_comma
     :           { $$ = false; }
     |   ','     { $$ = true; }
     ;
-
 
 array_comprehension
     :   '[' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {

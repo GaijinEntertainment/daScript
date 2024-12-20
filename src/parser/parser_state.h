@@ -8,6 +8,12 @@ namespace das {
         string  keyword;
     };
 
+    struct Nesteds {
+        int     parentheses = 0;
+        int     square_braces = 0;
+        bool    keyword = false;
+    };
+
     struct DasParserState {
         int das_current_line_indent = 0;
         int das_indent_level = 0;
@@ -26,7 +32,9 @@ namespace das {
         bool das_in_normal = false;
         bool das_has_type_declarations = false;
         bool das_gen2_make_syntax = false;
+        bool das_keyword = false;
         vector<int> das_line_no;
+        vector<Nesteds> das_nesteds;
         das_hash_set<string> das_already_include;
         das_hash_map<string,string>   das_module_alias;
         das_hash_map<string,DasKeyword> das_keywords;
@@ -37,5 +45,22 @@ namespace das {
         vector<FileInfo *> g_FileAccessStack;
         FileAccessPtr g_Access;
         ProgramPtr g_Program;
+        void push_nesteds() {
+            // printf("push nesteds\n");
+            das_nesteds.push_back({das_nested_parentheses, das_nested_square_braces, das_keyword});
+            das_nested_parentheses = 0;
+            das_nested_square_braces = 0;
+            das_keyword = false;
+        }
+        void pop_nesteds() {
+            if ( das_nesteds.size() ) {
+                // printf("pop nesteds\n");
+                auto & n = das_nesteds.back();
+                das_nested_parentheses = n.parentheses;
+                das_nested_square_braces = n.square_braces;
+                das_keyword = n.keyword;
+                das_nesteds.pop_back();
+            }
+        }
     };
 }
