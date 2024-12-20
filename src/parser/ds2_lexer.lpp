@@ -702,15 +702,16 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE (with tail end)");
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     #ifdef FLEX_DEBUG
-        printf("indent:%i parentheses:%i squares:%i\n",
-            yyextra->das_indent_level, yyextra->das_nested_parentheses, yyextra->das_nested_square_braces);
+        printf("indent:%i parentheses:%i squares:%i keyword:%s\n",
+            yyextra->das_indent_level, yyextra->das_nested_parentheses, yyextra->das_nested_square_braces,
+            yyextra->das_keyword ? "true" : "false");
     #endif
-    if ( yyextra->das_indent_level ) {
+    if ( yyextra->das_indent_level && !yyextra->das_keyword ) {
         if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_square_braces ) {
             // here, we may need to emit ; if we are in a block
             // yyextra->das_nested_curly_braces is set, but we need to know if we are in the emit block
             #ifdef FLEX_DEBUG
-            printf("emit ; at EOL\n");
+            printf("emit ; at EOL, line %i\n", yylineno);
             #endif
             return ';';
         }
@@ -737,7 +738,7 @@ void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen,
     yyextra->g_FileAccessStack.push_back(infoPtr);
     yyextra->das_line_no.push_back(yylineno);
     yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
-    yy_scan_bytes(seq, seqLen, yyscanner);
+    yy_scan_bytes(seq, (int)seqLen, yyscanner);
     yylineno = lineNo;
     BEGIN(normal);
 }

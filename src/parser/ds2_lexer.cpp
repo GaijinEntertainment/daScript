@@ -3115,15 +3115,16 @@ YY_RULE_SETUP
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE (with tail end)");
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     #ifdef FLEX_DEBUG
-        printf("indent:%i parentheses:%i squares:%i\n",
-            yyextra->das_indent_level, yyextra->das_nested_parentheses, yyextra->das_nested_square_braces);
+        printf("indent:%i parentheses:%i squares:%i keyword:%s\n",
+            yyextra->das_indent_level, yyextra->das_nested_parentheses, yyextra->das_nested_square_braces,
+            yyextra->das_keyword ? "true" : "false");
     #endif
-    if ( yyextra->das_indent_level ) {
+    if ( yyextra->das_indent_level && !yyextra->das_keyword ) {
         if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_square_braces ) {
             // here, we may need to emit ; if we are in a block
             // yyextra->das_nested_curly_braces is set, but we need to know if we are in the emit block
             #ifdef FLEX_DEBUG
-            printf("emit ; at EOL\n");
+            printf("emit ; at EOL, line %i\n", yylineno);
             #endif
             return ';';
         }
@@ -3131,7 +3132,7 @@ YY_RULE_SETUP
 }
 	YY_BREAK
 case YY_STATE_EOF(normal):
-#line 719 "ds2_lexer.lpp"
+#line 720 "ds2_lexer.lpp"
 {
     if ( yyextra->g_FileAccessStack.size()==1 ) {
         YYCOLUMN(yyextra->das_yycolumn = 0,"EOF");
@@ -3146,15 +3147,15 @@ case YY_STATE_EOF(normal):
 	YY_BREAK
 case 228:
 YY_RULE_SETUP
-#line 730 "ds2_lexer.lpp"
+#line 731 "ds2_lexer.lpp"
 return *yytext;
 	YY_BREAK
 case 229:
 YY_RULE_SETUP
-#line 732 "ds2_lexer.lpp"
+#line 733 "ds2_lexer.lpp"
 ECHO;
 	YY_BREAK
-#line 3157 "ds2_lexer.cpp"
+#line 3158 "ds2_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(include):
 	yyterminate();
@@ -4348,7 +4349,7 @@ void yyfree (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 732 "ds2_lexer.lpp"
+#line 733 "ds2_lexer.lpp"
 
 
 void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info ) {
@@ -4357,7 +4358,7 @@ void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen,
     yyextra->g_FileAccessStack.push_back(infoPtr);
     yyextra->das_line_no.push_back(yylineno);
     yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
-    yy_scan_bytes(seq, seqLen, yyscanner);
+    yy_scan_bytes(seq, (int)seqLen, yyscanner);
     yylineno = lineNo;
     BEGIN(normal);
 }

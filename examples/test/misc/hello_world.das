@@ -316,6 +316,18 @@ def test_if_then_else ( cond1,cond2:bool ) {
 	{
 		debug(cond2)
 	}
+	if ( cond1 )
+	{
+		debug(cond1)
+	}
+	elif ( cond2 )
+	{
+		debug(cond2);
+	}
+	else
+	{
+		debug("else")
+	}
 }
 
 ///////////
@@ -330,6 +342,10 @@ def test_for ( i : int ) {
 		debug(x)
 		debug(y)
 	}
+	for ( x in range(1,i) )
+	{
+		debug(x)
+	}
 }
 
 /////////////
@@ -339,6 +355,37 @@ def test_for ( i : int ) {
 def test_while ( cond : bool ) {
 	while ( cond ) {
 		debug(cond)
+	}
+	while ( cond )
+	{
+		debug(cond)
+	}
+}
+
+///////
+// with
+
+[export]
+def test_with ( var a : Mks ) {
+	with ( a ) {
+		b = 13.0
+	}
+	with ( a )
+	{
+		b = 13.0
+	}
+}
+
+/////////
+// unsafe
+
+def test_unsafe {
+	unsafe {
+		debug("unsafe")
+	}
+	unsafe
+	{
+		debug("unsafe")
 	}
 }
 
@@ -386,6 +433,15 @@ def test_pipes() {
 		print("this is lambda which takes 2 arguments")
 		return 13 // and returns value
 	}
+	// whitespace
+	take_anything() $ ( a : int )
+	{
+		print("this is block which takes argument {a};")	// piping block
+	}
+}
+
+[export]
+def test_method_like_call_syntax() {
 	var mks = Mks()
 	mks.take_mks()				// method-like call syntax
 	mks.take_mks_and_int(13)	// method-like call syntax
@@ -435,6 +491,13 @@ def test_lambda_capture ( a : int ) {
 		debug(b)
 		debug(c)
 	};
+	// whitespace (note, only before the block)
+	return @ capture(=a,:=b) ( c : int )
+	{
+		debug(a)
+		debug(b)
+		debug(c)
+	};
 }
 
 ////////////
@@ -476,6 +539,35 @@ def test_generator ( a : int ) {
 		return false
 	}
 	var G3 <- generator<int> capture(=a) () <| ${
+		for ( x in range(1,a) ) {
+			yield x
+		}
+		return false
+	}
+	// whitespace
+	var g22 <- generator<int>
+	{
+		for ( x in range(1,a) ) {
+			yield x
+		}
+		return false
+	}
+	var G22 <- generator<int> capture(=a)
+	{
+		for ( x in range(1,a) ) {
+			yield x
+		}
+		return false
+	}
+	var g33 <- generator<int>() <| $
+	{
+		for ( x in range(1,a) ) {
+			yield x;
+		}
+		return false
+	}
+	var G33 <- generator<int> capture(=a) () <| $
+	{
 		for ( x in range(1,a) ) {
 			yield x
 		}
