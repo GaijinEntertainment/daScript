@@ -658,7 +658,7 @@ namespace das {
                     auto vars = new vector<VariableNameAndPosition>();
                     vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
                     Expression * finit = new ExprAddr(func->at, inThisModule(func->name));
-                    if ( ovr == OVERRIDE_OVERRIDE ) {
+                    if ( ovr == OVERRIDE_OVERRIDE || ovr == OVERRIDE_SEALED ) {
                         finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
                     }
                     VariableDeclaration * decl = new VariableDeclaration(
