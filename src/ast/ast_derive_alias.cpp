@@ -79,6 +79,8 @@ namespace das {
     public:
         SourceCollector ( const ProgramPtr & prog, bool anyC, bool anyG ) : program(prog), anyCallAliasing(anyC), anyGlobals(anyG) {}
     protected:
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
     // this speeds up walking
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override {
             return !disabled;
