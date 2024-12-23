@@ -6617,7 +6617,7 @@ namespace das {
                     }
                 }
                 inferReturnType(func->result, expr);
-                if ( func->moveOnReturn && !expr->moveSemantics ) {
+                if ( func->moveOnReturn && !expr->moveSemantics && expr->subexpr ) {
                     error("this type can't be copied; " + describeType(func->result),"","use return <- instead",
                           expr->at, CompilationError::invalid_return_semantics );
                     if ( canRelaxAssign(expr->subexpr.get()) ) {
