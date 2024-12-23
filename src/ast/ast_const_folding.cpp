@@ -38,9 +38,9 @@ namespace das {
 
     class NoSideEffectVisitor : public Visitor {
     protected:
-        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
-        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
-        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        // virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        // virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        // virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
     // make block
         virtual void preVisit ( ExprMakeBlock * expr ) override {
             Visitor::preVisit(expr);
@@ -453,9 +453,9 @@ namespace das {
             return nullptr;
         }
     protected:
-        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
-        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
-        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        // virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        // virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        // virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
     // swizzle
         virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
             if ( expr->type->baseType == expr->value->type->baseType ) {

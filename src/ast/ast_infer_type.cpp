@@ -1938,7 +1938,7 @@ namespace das {
                     }
                 }
             }
-            if ( decl.parentType ) {
+            if ( decl.parentType && st->parent ) {
                 auto pf = st->parent->findField(decl.name);
                 if ( !pf->type->isAutoOrAlias() ) {
                     decl.type = make_smart<TypeDecl>(*pf->type);
