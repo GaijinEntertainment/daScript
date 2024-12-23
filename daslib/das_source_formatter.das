@@ -911,7 +911,7 @@ def fmt_space_after_cast_type(var ctx: FormatterCtx)
         if ctx.tokens[i].tokenType == TokenType KEYWORD_OR_IDENTIFIER
             if (type_after_keyword |> find_index(ctx.tokens[i].str) >= 0)
                 for j in range(i + 2, length(ctx.tokens))
-                    if !ctx.tokens[j].isInType
+                    if !ctx.tokens[j].isInType && ctx.tokens[j].tokenType != TokenType COMMENT
                         ctx |> add_space_before(j)
                         break
 
