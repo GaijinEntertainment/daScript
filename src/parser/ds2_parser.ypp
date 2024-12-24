@@ -330,9 +330,9 @@
 %token      END_STRING_EXPR         "}"
 %token      END_OF_READ             "end of failed eader macro"
 
-%token      '{'                     "begin of code block"
-%token      '}'                     "end of code block"
-%token      ';'                     "end of expression"
+//%token      '{'                     "begin of code block"
+//%token      '}'                     "end of code block"
+//%token      ';'                     "end of expression"
 
 %type <pEnum>           enum_name
 %type <pNameList>       bitfield_bits
@@ -813,14 +813,14 @@ expression_if_one_liner
     |   expression_continue[result]         { $$ = $result; }
     ;
 
-optional_semi_list
+semis
     :   ';'
-    |   optional_semi_list ';'
+    |   semis ';'
     ;
 
 optional_semis
     :
-    |   optional_semi_list
+    |   semis
     ;
 
 expression_if_then_else
@@ -2131,21 +2131,20 @@ tuple_alias_type_list
     : {
         $$ = new vector<VariableDeclaration*>();
     }
-    | tuple_alias_type_list[list] c_or_s {
-        $$ = $list;
+    | tuple_type[decl] {
+        $$ = new vector<VariableDeclaration*>();
+        $$->push_back($decl);
     }
-    | tuple_alias_type_list[list] tuple_type[decl] c_or_s {
+    | tuple_alias_type_list[list] semis tuple_type[decl] {
         $$ = $list; $list->push_back($decl);
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tokName = tokAt(scanner,@decl);
             for ( auto & crd : yyextra->g_CommentReaders ) {
                 for ( const auto & nl : *($decl->pNameList) ) {
-                    crd->afterVariantEntry(nl.name.c_str(), nl.at);
+                    crd->afterTupleEntry(nl.name.c_str(), nl.at);
                 }
             }
         }
-        */
     }
     ;
 
@@ -2167,10 +2166,11 @@ variant_alias_type_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    | variant_alias_type_list[list] c_or_s {
-        $$ = $list;
+    | variant_type[decl] {
+        $$ = new vector<VariableDeclaration*>();
+        $$->push_back($decl);
     }
-    |   variant_alias_type_list[list] variant_type[decl] c_or_s {
+    |   variant_alias_type_list[list] semis variant_type[decl] {
         $$ = $list; $list->push_back($decl);
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tokName = tokAt(scanner,@decl);
@@ -2513,7 +2513,7 @@ enum_declaration
     :   optional_annotation_list[annL] DAS_ENUM[loc] {
         yyextra->das_indent_char = ',';
         yyextra->das_indent_level++;
-    } optional_public_or_private_enum[pubE] enum_name[edecl] optional_enum_basic_type_declaration[ebt] '{' {
+    } optional_public_or_private_enum[pubE] enum_name[edecl] optional_enum_basic_type_declaration[ebt] optional_commas '{' {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@edecl);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
@@ -3025,7 +3025,9 @@ type_declaration
     ;
 
 tuple_alias_declaration
-    :   DAS_TTUPLE optional_public_or_private_alias[pubA] NAME[vname] {
+    :   DAS_TTUPLE {
+        yyextra->das_indent_level++;
+    } optional_public_or_private_alias[pubA] NAME[vname] optional_semis {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTuple(atvname);
@@ -3035,11 +3037,12 @@ tuple_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTupleEntries(atvname);
         }
-    } tuple_alias_type_list[list] {
+    } tuple_alias_type_list[list] optional_semis {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTupleEntries(atvname);
         }
+        yyextra->das_indent_level--;
     } '}' {
         auto vtype = make_smart<TypeDecl>(Type::tTuple);
         vtype->alias = *$vname;
@@ -3060,7 +3063,9 @@ tuple_alias_declaration
     ;
 
 variant_alias_declaration
-    :   DAS_TVARIANT optional_public_or_private_alias[pubA] NAME[vname] {
+    :   DAS_TVARIANT {
+        yyextra->das_indent_level++;
+    } optional_public_or_private_alias[pubA] NAME[vname] optional_semis {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariant(atvname);
@@ -3071,11 +3076,12 @@ variant_alias_declaration
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariantEntries(atvname);
         }
 
-    } variant_alias_type_list[list] {
+    } variant_alias_type_list[list] optional_semis {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterVariantEntries(atvname);
         }
+        yyextra->das_indent_level--;
     } '}' {
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *$vname;
@@ -3099,7 +3105,7 @@ bitfield_alias_declaration
     :   DAS_TBITFIELD {
         yyextra->das_indent_level++;
         yyextra->das_indent_char = ',';
-    } optional_public_or_private_alias[pubA] NAME[vname] {
+    } optional_public_or_private_alias[pubA] NAME[vname] optional_commas {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
