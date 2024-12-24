@@ -2404,6 +2404,11 @@ enum_expression
     }
     ;
 
+commas
+    :   ','
+    |   commas ','
+    ;
+
 enum_list
     :   {
         $$ = new Enumeration();
@@ -2421,7 +2426,7 @@ enum_list
         }
         delete $eE;
     }
-    |   enum_list[pE] ',' enum_expression[eE] {
+    |   enum_list[pE] commas enum_expression[eE] {
         if ( !$pE->add($eE->name,$eE->expr,$eE->at) ) {
             das2_yyerror(scanner,"enumeration already declared " + $eE->name, $eE->at,
                 CompilationError::enumeration_value_already_declared);
@@ -2499,17 +2504,27 @@ optional_enum_basic_type_declaration
     }
     ;
 
+optional_commas
+    :
+    |   commas
+    ;
+
 enum_declaration
-    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] optional_enum_basic_type_declaration[ebt] '{' {
+    :   optional_annotation_list[annL] DAS_ENUM[loc] {
+        yyextra->das_indent_char = ',';
+        yyextra->das_indent_level++;
+    } optional_public_or_private_enum[pubE] enum_name[edecl] optional_enum_basic_type_declaration[ebt] '{' {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@edecl);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
         }
-    } enum_list[pE] optional_comma {
+    } enum_list[pE] optional_commas {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
         }
+        yyextra->das_indent_level--;
+        yyextra->das_indent_char = ';';
     } '}' {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,@pE);

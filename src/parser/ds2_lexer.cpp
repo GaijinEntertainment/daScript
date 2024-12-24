@@ -3115,8 +3115,8 @@ YY_RULE_SETUP
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE (with tail end)");
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     #ifdef FLEX_DEBUG
-        printf("indent:%i parentheses:%i squares:%i keyword:%s\n",
-            yyextra->das_indent_level, yyextra->das_nested_parentheses, yyextra->das_nested_square_braces,
+        printf("char:%c indent:%i parentheses:%i squares:%i keyword:%s\n",
+            yyextra->das_indent_char, yyextra->das_indent_level, yyextra->das_nested_parentheses, yyextra->das_nested_square_braces,
             yyextra->das_keyword ? "true" : "false");
     #endif
     if ( yyextra->das_indent_level && !yyextra->das_keyword ) {
@@ -3124,9 +3124,9 @@ YY_RULE_SETUP
             // here, we may need to emit ; if we are in a block
             // yyextra->das_nested_curly_braces is set, but we need to know if we are in the emit block
             #ifdef FLEX_DEBUG
-            printf("emit ; at EOL, line %i\n", yylineno);
+            printf("emit %c at EOL, line %i\n", yyextra->das_indent_char, yylineno);
             #endif
-            return ';';
+            return yyextra->das_indent_char;
         }
     }
 }

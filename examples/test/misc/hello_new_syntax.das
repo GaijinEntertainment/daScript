@@ -83,26 +83,38 @@ enum EmptyEnum {
 }
 
 enum MyEnum {
-	ONE,
-	TWO,
+	ONE
+	TWO
 	THREE
 }
 
 enum EnumWithTrailingComma {
-	ONE,
-	TWO,
+	ONE
+	TWO
 }
 
 enum Enum8u : uint8 {
-	ONE,
-	TWO,
+	ONE
+	TWO
 	THREE = 16u8	// TODO: 16i8 causes 2x smart_ptr_leak, note - it causes 1x smart_ptr_leak with old parser
 }
 
 enum private Enum64 : uint64 {	// 64 bit enum, private
-	ONE,
-	TWO,
+	ONE
+	TWO
 	THREE = 16ul
+}
+
+enum WhiteSpaceEnum {
+
+	ONE
+	TWO,,,,,,
+
+	THREE
+
+	FOUR = 4
+	,
+
 }
 
 // TODO: add example of enum with annotation. for now we don't have a builtin enum one
