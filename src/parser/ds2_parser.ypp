@@ -2734,7 +2734,7 @@ bitfield_alias_bits
         }
         delete $name;
     }
-    |   bitfield_alias_bits[list] ',' NAME[name] {
+    |   bitfield_alias_bits[list] commas NAME[name] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $list->push_back(*$name);
         $$ = $list;
@@ -3096,7 +3096,10 @@ variant_alias_declaration
     ;
 
 bitfield_alias_declaration
-    :   DAS_TBITFIELD optional_public_or_private_alias[pubA] NAME[vname] {
+    :   DAS_TBITFIELD {
+        yyextra->das_indent_level++;
+        yyextra->das_indent_char = ',';
+    } optional_public_or_private_alias[pubA] NAME[vname] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
@@ -3106,11 +3109,13 @@ bitfield_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfieldEntries(atvname);
         }
-    } bitfield_alias_bits[list] optional_comma {
+    } bitfield_alias_bits[list] optional_commas {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfieldEntries(atvname);
         }
+        yyextra->das_indent_level--;
+        yyextra->das_indent_char = ';';
     } '}' {
         auto btype = make_smart<TypeDecl>(Type::tBitfield);
         btype->alias = *$vname;
