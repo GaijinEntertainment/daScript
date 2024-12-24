@@ -105,7 +105,9 @@ enum private Enum64 : uint64 {	// 64 bit enum, private
 	THREE = 16ul
 }
 
-enum WhiteSpaceEnum {
+enum WhiteSpaceEnum
+
+{
 
 	ONE
 	TWO,,,,,,
@@ -137,7 +139,9 @@ bitfield MyBitfield {
 	THREE
 }
 
-bitfield WhiteSpaceBitfield {
+bitfield WhiteSpaceBitfield
+
+{
 
 	ONE
 	TWO,,,,,,
@@ -203,9 +207,23 @@ def test_new_struct {
 // tuples
 
 tuple Tup {
-	a : int;
-	b : float;
-	c : string;
+	a : int
+	b : float
+	c : string
+}
+
+tuple WhiteSpaceTuple
+
+{
+
+	a : int
+	b : float;;;;;;;;;;;;
+
+	c : string
+
+	d : int
+	;
+
 }
 
 [export]
@@ -223,9 +241,23 @@ def test_tuples {
 // variants
 
 variant Varr {
-	a : int;
-	b : float;
-	c : string;
+	a : int
+	b : float
+	c : string
+}
+
+variant WhiteSpaceVariant
+
+{
+
+	a : int
+	b : float;;;;;;;;;;;;
+
+	c : string
+
+	d : int
+	;
+
 }
 
 [export]
