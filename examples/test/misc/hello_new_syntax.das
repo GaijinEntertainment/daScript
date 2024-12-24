@@ -132,14 +132,21 @@ bitfield EmptyBitfield {
 }
 
 bitfield MyBitfield {
-	ONE,
-	TWO,
-	THREE,
+	ONE
+	TWO
+	THREE
 }
 
-bitfield BitfieldWithTrailingComma {
-	ONE,
-	TWO,
+bitfield WhiteSpaceBitfield {
+
+	ONE
+	TWO,,,,,,
+
+	THREE
+
+	FOUR
+	,
+
 }
 
 [export]
