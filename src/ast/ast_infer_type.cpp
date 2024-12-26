@@ -5481,7 +5481,7 @@ namespace das {
                     }
                     expr->fieldIndex = index;
                 } else if ( valT->isGoodVariantType() ) {
-                    if ( !safeExpression(expr) ) {
+                                        if ( !safeExpression(expr) ) {
                         error("variant.field requires unsafe", "", "",
                             expr->at, CompilationError::unsafe);
                         return Visitor::visit(expr);
@@ -5562,27 +5562,38 @@ namespace das {
                 if ( auto opE = inferGenericOperatorWithName("?.",expr->at,expr->value,expr->name) ) return opE;
             }
             auto valT = expr->value->type;
-            if ( !valT->isPointer() || !valT->firstType ) {
+            if ( !(valT->isPointer() && valT->firstType) && !valT->isVariant() ) {
                 if ( verbose && !expr->no_promotion ) {
                     MatchingFunctions mf;
                     collectMissingOperators("?.`"+expr->name,mf,false);
                     collectMissingOperators("?.",mf,true);
                     if ( !mf.empty() ) {
-                        reportDualFunctionNotFound("?.`"+expr->name, "can only safe dereference a pointer to a tuple, a structure or a handle " + describeType(valT),
+                        reportDualFunctionNotFound("?.`"+expr->name, "can only safe dereference a variant or a pointer to a tuple, a structure or a handle " + describeType(valT),
                                 expr->at, mf, {expr->value->type}, {expr->value->type, make_smart<TypeDecl>(Type::tString)}, true, false, true,
                             CompilationError::cant_get_field, 0, "");
                     } else {
-                        error("can only safe dereference a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
+                        error("can only safe dereference a variant or a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
                             expr->at, CompilationError::cant_get_field);
                     }
                 } else {
-                    error("can only safe dereference a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
+                    error("can only safe dereference a variant or a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
                         expr->at, CompilationError::cant_get_field);
                 }
                 return Visitor::visit(expr);
             }
             expr->value = Expression::autoDereference(expr->value);
-            if ( valT->firstType->structType ) {
+            if ( valT->isGoodVariantType() || valT->firstType->isGoodVariantType() ) {
+                int index = valT->variantFieldIndex(expr->name);
+                auto argSize = valT->isGoodVariantType() ? valT->argTypes.size() : valT->firstType->argTypes.size();
+                if ( index==-1 || index>=argSize ) {
+                    error("can't get variant field '" + expr->name + "'", "", "",
+                        expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
+                reportAstChanged();
+                auto safeAs = make_smart<ExprSafeAsVariant>(expr->at, expr->value, expr->name);
+                return safeAs;
+            } else if ( valT->firstType->structType ) {
                 expr->field = valT->firstType->structType->findField(expr->name);
                 if ( !expr->field ) {
                     error("can't safe get field '" + expr->name + "'", "", "",
@@ -5602,20 +5613,6 @@ namespace das {
                 int index = valT->tupleFieldIndex(expr->name);
                 if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
                     error("can't get tuple field '" + expr->name + "'", "", "",
-                        expr->at, CompilationError::cant_get_field);
-                    return Visitor::visit(expr);
-                }
-                expr->fieldIndex = index;
-                expr->type = make_smart<TypeDecl>(*valT->firstType->argTypes[expr->fieldIndex]);
-            } else if ( valT->firstType->isGoodVariantType() ) {
-                if ( !safeExpression(expr) ) {
-                    error("variant?.field requires unsafe", "", "",
-                        expr->at, CompilationError::unsafe);
-                    return Visitor::visit(expr);
-                }
-                int index = valT->variantFieldIndex(expr->name);
-                if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
-                    error("can't get variant field '" + expr->name + "'", "", "",
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
