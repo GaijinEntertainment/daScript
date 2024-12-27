@@ -543,14 +543,14 @@ program
     |   program global_let                      { yyextra->das_has_type_declarations = true; }
     |   program global_function_declaration     { yyextra->das_has_type_declarations = true; }
     |   program expect_declaration
-    |   program require_declaration ';'
-    |   program options_declaration ';'
+    |   program require_declaration SEMICOLON
+    |   program options_declaration SEMICOLON
     |   program alias_declaration               { yyextra->das_has_type_declarations = true; }
     |   program variant_alias_declaration       { yyextra->das_has_type_declarations = true; }
     |   program tuple_alias_declaration         { yyextra->das_has_type_declarations = true; }
     |   program bitfield_alias_declaration      { yyextra->das_has_type_declarations = true; }
     |   program top_level_reader_macro
-    |   program ';'
+    |   program SEMICOLON
     ;
 
 COMMA
@@ -564,7 +564,7 @@ SEMICOLON
     ;
 
 top_level_reader_macro
-    :   expr_reader[rdr] ';' {
+    :   expr_reader[rdr] SEMICOLON {
         delete $rdr;    // we do nothing, we don't even attemp to 'visit'
     }
     ;
@@ -1195,7 +1195,7 @@ function_name
     ;
 
 global_function_declaration
-    :   optional_annotation_list[annL] DAS_DEF[from] function_declaration[func] {
+    :   optional_annotation_list_with_emit_semis[annL] DAS_DEF[from] function_declaration[func] {
         $func->atDecl = tokRangeAt(scanner,@from,@func);
         assignDefaultArguments($func);
         runFunctionAnnotations(scanner, yyextra, $func, $annL, tokAt(scanner,@annL));
@@ -1230,7 +1230,7 @@ function_declaration
             auto tak = tokAt(scanner,@pub_func);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
         }
-    } function_declaration_header[func] expression_block[block] {
+    } function_declaration_header[func] optional_emit_semis expression_block[block] {
         $func->body = ExpressionPtr($block);
         $func->privateFunction = !$pub_func;
         $$ = $func;
@@ -2311,7 +2311,7 @@ variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    |   variable_declaration_list[list] ';' {
+    |   variable_declaration_list[list] SEMICOLON {
         $$ = $list;
     }
     |   variable_declaration_list[list] let_variable_declaration[decl] {
@@ -2340,15 +2340,15 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
     ;
 
 global_let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
-    :   global_let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] ';' {
+    :   global_let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] SEMICOLON {
         $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
-    |   global_let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    |   global_let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] SEMICOLON {
         $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   global_let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   global_let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] SEMICOLON {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -2374,7 +2374,7 @@ global_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    |   global_variable_declaration_list[list] ';' {
+    |   global_variable_declaration_list[list] SEMICOLON {
         $$ = $list;
     }
     |   global_variable_declaration_list[list] {
@@ -2502,7 +2502,7 @@ single_alias
     ;
 
 alias_declaration
-    :   DAS_TYPEDEF single_alias ';'
+    :   DAS_TYPEDEF single_alias SEMICOLON
     ;
 
 optional_public_or_private_enum
@@ -2596,7 +2596,7 @@ optional_public_or_private_structure
     ;
 
 optional_struct_variable_declaration_list
-    :   {
+    :   ';' {
         $$ = new vector<VariableDeclaration*>();
     }
     |   '{' struct_variable_declaration_list[list] '}' {
@@ -2605,7 +2605,7 @@ optional_struct_variable_declaration_list
     ;
 
 structure_declaration
-    : optional_annotation_list[annL] {
+    : optional_annotation_list_with_emit_semis[annL] {
         yyextra->push_nesteds(DAS_EMIT_SEMICOLON);
     } class_or_struct[loc] optional_public_or_private_structure[pub_str] {
         if ( !yyextra->g_CommentReaders.empty() ) {
