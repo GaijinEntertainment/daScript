@@ -391,6 +391,7 @@
 %type <fa>              annotation_declaration
 %type <faList>          annotation_list
 %type <faList>          optional_annotation_list
+%type <faList>          optional_annotation_list_with_emit_semis
 %type <pStructure>      structure_name
 %type <aTypePair>       table_type_pair
 
@@ -965,10 +966,10 @@ annotation_argument_list
     ;
 
 metadata_argument_list
-    :   '@' annotation_argument[arg]  {
+    :   '@' annotation_argument[arg] optional_emit_semis {
         $$ = ast_annotationArgumentListEntry(scanner,new AnnotationArgumentList(),$arg);
     }
-    |   metadata_argument_list[argL] '@' annotation_argument[arg] {
+    |   metadata_argument_list[argL] '@' annotation_argument[arg] optional_emit_semis {
         $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
     }
     ;
@@ -1076,8 +1077,13 @@ annotation_list
     ;
 
 optional_annotation_list
-    :                                   { $$ = nullptr; }
-    |   '[' annotation_list[annL] ']'   { $$ = $annL; }
+    :                                  { $$ = nullptr; }
+    |   '[' annotation_list[annL] ']'  { $$ = $annL; }
+    ;
+
+optional_annotation_list_with_emit_semis
+    :                                  { $$ = nullptr; }
+    |   '[' annotation_list[annL] ']' optional_emit_semis { $$ = $annL; }
     ;
 
 optional_function_argument_list
@@ -2059,12 +2065,13 @@ struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
+    |  struct_variable_declaration_list[list] DAS_EMIT_SEMICOLON { $$ = $list; }
     |   struct_variable_declaration_list[list] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@list);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeStructureFields(tak);
         }
-    } structure_variable_declaration[decl] ';' {
+    } structure_variable_declaration[decl] SEMICOLON {
         $$ = $list;
         if ( $decl ) $list->push_back($decl);
         if ( !yyextra->g_CommentReaders.empty() ) {
@@ -2077,26 +2084,26 @@ struct_variable_declaration_list
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterStructureFields(tak);
         }
     }
-    |   struct_variable_declaration_list[list] optional_annotation_list[annL]
+    |   struct_variable_declaration_list[list] optional_annotation_list_with_emit_semis[annL]
             DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT optional_constant[cnst] {
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@isPrivate);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
                 }
-            } function_declaration_header[func] ';' {
+            } function_declaration_header[func] SEMICOLON {
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@func);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
                 }
                 $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$cnst, $func);
             }
-    |   struct_variable_declaration_list[list] optional_annotation_list[annL]
+    |   struct_variable_declaration_list[list] optional_annotation_list_with_emit_semis[annL]
             DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] optional_static_member_variable[isStatic] optional_override[ovr] optional_constant[cnst] {
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@cnst);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
                 }
-            } function_declaration_header[func] expression_block[block] {
+            } function_declaration_header[func] optional_emit_semis expression_block[block] {
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@block);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
@@ -2598,12 +2605,15 @@ optional_struct_variable_declaration_list
     ;
 
 structure_declaration
-    : optional_annotation_list[annL] class_or_struct[loc] optional_public_or_private_structure[pub_str] {
+    : optional_annotation_list[annL] {
+        yyextra->push_nesteds(DAS_EMIT_SEMICOLON);
+    } class_or_struct[loc] optional_public_or_private_structure[pub_str] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@loc);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeStructure(tak);
         }
-    } structure_name[ps] { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } optional_struct_variable_declaration_list[list] {
+    } structure_name[ps] optional_emit_semis { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } optional_struct_variable_declaration_list[list] {
+        yyextra->pop_nesteds();
         if ( $ps ) {
             ast_structureDeclaration ( scanner, $annL, tokAt(scanner,@loc), $ps, tokAt(scanner,@ps), $list );
             if ( !yyextra->g_CommentReaders.empty() ) {

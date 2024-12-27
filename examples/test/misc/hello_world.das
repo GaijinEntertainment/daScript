@@ -27,12 +27,21 @@ let G_A = 5;
 // struct declaration
 
 struct Foo {
-    a : int = 5;
-	b : int;
+    a : int = 5
+	b : int
+}
+
+struct FooWhitespace
+
+{
+
+    a : int = 5
+    b : int
+
 }
 
 struct Bar : Foo {	// structure with inheritance
-	c : float;
+	c : float
 }
 
 [safe_when_uninitialized]	// structure annotation
@@ -45,12 +54,30 @@ struct Baz : Bar {			// structure with methods
 	}
 }
 
+[safe_when_uninitialized]	// structure annotation
+
+struct BazWhitespace : Bar
+
+{
+
+    def Baz
+    {
+        c = 3.14
+    }
+
+    def add ( value:int )
+    {
+        a += value
+    }
+
+}
+
 class Cls {			// class with methods
 	@big			// with metadata
 	@min=13
 	@max=42
-	private foobar : int;
-	static foobars : float;
+	private foobar : int
+	static foobars : float
 	def public foo {
 		debug("foo")
 	}
@@ -60,7 +87,7 @@ class Cls {			// class with methods
 	def static static_method {
 		debug("static_method")
 	}
-	def abstract abstract_method ( a : int ) : float;
+	def abstract abstract_method ( a : int ) : float
 	[unsafe_deref]								// note function annotation
 	def base_method {
 	}
@@ -162,8 +189,8 @@ def bitfield_use_example {
 // making structures
 
 struct Mks {
-	a : int = 1;
-	b : float = 2.0;
+	a : int = 1
+	b : float = 2.0
 	def Mks ( t : int ) {
 		a = t
 		b = float(t)
@@ -503,7 +530,7 @@ def test_method_like_call_syntax() {
 
 [comment (i=1,f=2.0,s="three",b=false)]
 struct Event {
-    i : int;
+    i : int
 }
 
 [export]
