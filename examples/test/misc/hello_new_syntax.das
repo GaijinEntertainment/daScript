@@ -16,15 +16,17 @@ options gen2;
 ////////////////////
 // alias declaration
 
-typedef IntArray = array<int>;	// alias for array of integers
+typedef IntArray = array<int>	// alias for array of integers
 
 //////////////////////////////
 // global variable declaration
 
-let G_A = 5;
+let G_A = 5
 
 /////////////////////
 // struct declaration
+
+struct EmptyStructure;
 
 struct Foo {
     a : int = 5
@@ -150,7 +152,7 @@ enum WhiteSpaceEnum
 
 [export]
 def enum_use_example {
-	let bf : MyEnum = MyEnum.ONE;
+	let bf : MyEnum = MyEnum.ONE
 }
 
 ///////////
@@ -182,7 +184,7 @@ bitfield WhiteSpaceBitfield
 
 [export]
 def bitfield_use_example {
-	let bf : MyBitfield = MyBitfield.ONE;
+	let bf : MyBitfield = MyBitfield.ONE
 }
 
 ////////////////////
@@ -227,7 +229,7 @@ def test_new_struct {
 	unsafe {
 		let j : Mks? = new<Mks>(uninitialized b=2.0)	// Mks* - on heap, uninitialized, a=0, b=2.0
 		let h : Mks? = new default<Mks> uninitialized	// Mks* - on heap, uninitialized, a=0, b=0.0
-	};
+	}
 }
 
 /////////
@@ -353,7 +355,7 @@ def test_return_with_move_syntax ( var a : array<int> ) {
 def test_return_lambda ( a : int ) : lambda<(arg:int):void> {
 	return <- @ ( b : int ) {
 		debug(a+b)
-	};
+	}
 }
 
 [export]
@@ -379,7 +381,7 @@ def test_if_then_else ( cond1,cond2:bool ) {
 	if ( cond1 ) {
 		debug(cond1)
 	} elif ( cond2 ) {
-		debug(cond2);
+		debug(cond2)
 	}
 	// whitespace
 	if ( cond1 )
@@ -400,7 +402,7 @@ def test_if_then_else ( cond1,cond2:bool ) {
 	}
 	elif ( cond2 )
 	{
-		debug(cond2);
+		debug(cond2)
 	}
 	else
 	{
@@ -568,14 +570,14 @@ def test_lambda_capture ( a : int ) {
 		debug(a)
 		debug(b)
 		debug(c)
-	};
+	}
 	// whitespace (note, only before the block)
 	return @ capture(=a,:=b) ( c : int )
 	{
 		debug(a)
 		debug(b)
 		debug(c)
-	};
+	}
 }
 
 ////////////
@@ -612,7 +614,7 @@ def test_generator ( a : int ) {
 	// via pipe
 	var g3 <- generator<int>() <| ${
 		for ( x in range(1,a) ) {
-			yield x;
+			yield x
 		}
 		return false
 	}
@@ -640,7 +642,7 @@ def test_generator ( a : int ) {
 	var g33 <- generator<int>() <| $
 	{
 		for ( x in range(1,a) ) {
-			yield x;
+			yield x
 		}
 		return false
 	}
@@ -665,6 +667,14 @@ def test_whitespace {
 		2,3]
 }
 
+[export]
+
+def test_more_whitespace ()
+
+{
+    pass
+}
+
 ///////
 // main
 
@@ -674,5 +684,5 @@ def main {
 	// debug(f);
 }
 
-options log;
+options log
 

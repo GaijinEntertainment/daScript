@@ -3119,12 +3119,12 @@ YY_RULE_SETUP
             yyextra->das_indent_char, yyextra->das_indent_level, yyextra->das_nested_parentheses, yyextra->das_nested_square_braces,
             yyextra->das_keyword ? "true" : "false");
     #endif
-    if ( yyextra->das_indent_level && !yyextra->das_keyword ) {
+    if ( /*yyextra->das_indent_level &&*/ !yyextra->das_keyword ) {
         if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_square_braces ) {
             // here, we may need to emit ; if we are in a block
             // yyextra->das_nested_curly_braces is set, but we need to know if we are in the emit block
             #ifdef FLEX_DEBUG
-            printf("emit %c at EOL, line %i\n", yyextra->das_indent_char, yylineno);
+            printf("emit %i at EOL, line %i\n", yyextra->das_indent_char, yylineno);
             #endif
             return yyextra->das_indent_char;
         }
@@ -4415,6 +4415,7 @@ void das2_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
 #endif
     yyextra->das_line_no.clear();
     YYCOLUMN(yyextra->das_yycolumn = 0,"YYBEGIN");
+    yyextra->das_indent_char = DAS_EMIT_SEMICOLON;
     yyextra->das_nested_parentheses = 0;
     yyextra->das_nested_curly_braces = 0;
     yyextra->das_nested_square_braces = 0;
