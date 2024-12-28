@@ -90,7 +90,7 @@ VECTORCALL VECMATH_FINLINE bool v_test_all_bits_zeros(vec4f a)
 
 VECTORCALL VECMATH_FINLINE bool v_test_all_bits_ones(vec4f a)
 {
-  return v_test_any_bit_set(v_not(a));
+  return (vgetq_lane_s64(a, 0) & vgetq_lane_s64(a, 1)) == int64_t(-1);
 }
 
 VECTORCALL VECMATH_FINLINE bool v_test_any_bit_set(vec4f a)
@@ -98,24 +98,18 @@ VECTORCALL VECMATH_FINLINE bool v_test_any_bit_set(vec4f a)
   return !v_test_all_bits_zeros(a);
 }
 
-VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_not_zeroi(vec4f a)
-{
-  return v_test_all_bits_zeros(v_cmp_eq(a, v_zero()));
-}
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_true(vec4f a) { return v_test_all_bits_ones(a); }
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_false(vec4f a) { return v_test_all_bits_zeros(a); }
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_any_true(vec4f a) { return v_test_any_bit_set(a); }
 
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_zeroi(vec4f a)
-{
-  return v_test_all_bits_zeros(v_perm_xyzz(a));
-}
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_true(vec4f a) { return v_check_xyzw_all_true(v_perm_xyzz(a)); }
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_false(vec4f a) { return v_check_xyzw_all_false(v_perm_xyzz(a)); }
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_any_true(vec4f a) { return v_check_xyzw_any_true(v_perm_xyzz(a)); }
 
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_not_zeroi(vec4f a)
+VECTORCALL VECMATH_FINLINE vec4f is_neg_special(vec4f a)
 {
-  return v_check_xyzw_all_not_zeroi(v_perm_xyzz(a));
-}
-
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_any_not_zeroi(vec4f a)
-{
-  return v_test_any_bit_set(v_perm_xyzz(a));
+  vec4f msbit = v_msbit();
+  return v_cmp_eqi(v_and(a, msbit), msbit);
 }
 
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_eq(vec4f a, vec4f b) { return (vec4f)vceqq_f32(a, b); }
@@ -1050,12 +1044,12 @@ VECTORCALL VECMATH_FINLINE vec4i v_cvt_hi_ssh_vec4i(vec4i a)
   return vreinterpretq_s64_s16(vzip2q_f32(vreinterpretq_s16_s64(a), vcltq_s16(vreinterpretq_s16_s64(a), vdupq_n_s16(0))));
 }
 
-VECMATH_FINLINE vec4i v_cvt_byte_vec4i(vec4i a)
+VECMATH_FINLINE vec4i v_cvt_byte_vec4i(uint32_t a)
 {
-  int8x8_t a1 = vreinterpret_s8_s16(vget_low_s16(vreinterpretq_s16_s32(a)));
-  int8x8_t b1 = vdup_n_s8(0);
-  int8x8x2_t result = vzip_s8(a1, b1);
-  return vreinterpretq_s32_s8(vcombine_s8(result.val[0], result.val[1]));
+  uint8x16_t u8x16 = vreinterpretq_u8_s64(v_seti_x(a)); /* xxxx xxxx xxxx DCBA */
+  uint16x8_t u16x8 = vmovl_u8(vget_low_u8(u8x16));      /* 0x0x 0x0x 0D0C 0B0A */
+  uint32x4_t u32x4 = vmovl_u16(vget_low_u16(u16x8));    /* 000D 000C 000B 000A */
+  return vreinterpretq_s64_u32(u32x4);
 }
 
 #if __APPLE__ || defined(__clang__) || defined(_MSC_VER) // fix error 'bits is not imm'
