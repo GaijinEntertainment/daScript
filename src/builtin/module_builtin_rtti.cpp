@@ -697,6 +697,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
             addField<DAS_BIND_MANAGED_FIELD(serialize_main_module)>("serialize_main_module");
             addField<DAS_BIND_MANAGED_FIELD(keep_alive)>("keep_alive");
+            addField<DAS_BIND_MANAGED_FIELD(very_safe_context)>("very_safe_context");
         // reporting
             addField<DAS_BIND_MANAGED_FIELD(always_report_candidates_threshold)>("always_report_candidates_threshold");
         // infer passes
