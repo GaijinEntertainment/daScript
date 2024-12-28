@@ -1130,6 +1130,7 @@ namespace das
 
     Context::Context(const Context & ctx, const CopyOptions & opts)
         : stack(opts.stackSize ? opts.stackSize : ctx.stack.size()) {
+        verySafeContext = ctx.verySafeContext;
         persistent = ctx.persistent;
         code = ctx.code;
         constStringHeap = ctx.constStringHeap;
