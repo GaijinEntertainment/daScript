@@ -78,6 +78,10 @@ VECTORCALL VECMATH_FINLINE vec4f v_make_vec3f(vec4f x, vec4f y, vec4f z);
 
 //! unpack 4 low bits from bitmask to 4x32 bits mask, true=0xFFFFFFFF, false=0
 VECTORCALL VECMATH_FINLINE vec4f v_make_vec4f_mask(uint8_t bitmask);
+//! create mask in all 4 elements from single bool, true=0xFFFFFFFF, false=0
+VECTORCALL VECMATH_FINLINE vec4f v_bool_to_mask(bool bool_mask);
+//! set highest bit in all 4 elements if param is true
+VECTORCALL VECMATH_FINLINE vec4f v_bool_to_msbit(bool param);
 
 //! insert one float to vector
 VECTORCALL VECMATH_FINLINE vec4f v_insert_x(vec4f a, float x);
@@ -118,15 +122,20 @@ VECTORCALL VECMATH_FINLINE bool v_test_all_bits_zeros(vec4f a);
 VECTORCALL VECMATH_FINLINE bool v_test_all_bits_ones(vec4f a);
 VECTORCALL VECMATH_FINLINE bool v_test_any_bit_set(vec4f a);
 
-//! component-wise integer check x!=0 && y!=0 && z!=0 && w!=0
-VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_not_zeroi(vec4f a);
+//! component-wise check that ALL selected components set to true (0xFFFFFFFF), not to false (0). Result for values between is UB!
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_true(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_true(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_check_xy_all_true(vec4f a);
 
-//! component-wise integer check !x && !y && !z
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_zeroi(vec4f a);
-//! component-wise integer check x && y && z
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_not_zeroi(vec4f a);
-//! component-wise integer check x || y || z
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_any_not_zeroi(vec4f a);
+//! component-wise check that ANY of selected components set to true (0xFFFFFFFF), not to false (0). Result for values between is UB!
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_any_true(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_any_true(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_check_xy_any_true(vec4f a);
+
+//! component-wise check that ALL selected components set to false (0), not to true (0xFFFFFFFF). Result for values between is UB!
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_false(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_false(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_check_xy_all_false(vec4f a);
 
 //! component-wise comparison: for C={xyzw}  .C = a.C==b.C ? 0xFFFFFFFF : 0
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_eq(vec4f a, vec4f b);
@@ -156,6 +165,9 @@ VECTORCALL VECMATH_FINLINE vec4f v_not(vec4f a);
 //! component-wise select: for C={xyzw}  .C = c.C>=0 ? a.C : b.C
 VECTORCALL VECMATH_FINLINE vec4f v_sel(vec4f a, vec4f b, vec4f c);
 VECTORCALL VECMATH_FINLINE vec4i v_seli(vec4i a, vec4i b, vec4i c);
+//! branchless ternary operator with boolean condition .xyzw = c ? b : a
+VECTORCALL VECMATH_FINLINE vec4f v_sel_b(vec4f a, vec4f b, bool c);
+VECTORCALL VECMATH_FINLINE vec4i v_seli_b(vec4i a, vec4i b, bool c);
 //! bit-wise select: for N={0..127}  .bitN = (c.bitN == 0) ? a.bitN : b.bitN
 VECTORCALL VECMATH_FINLINE vec4f v_btsel(vec4f a, vec4f b, vec4f c);
 VECTORCALL VECMATH_FINLINE vec4i v_btseli(vec4i a, vec4i b, vec4i c);
@@ -181,8 +193,8 @@ VECTORCALL VECMATH_FINLINE vec4i v_cvt_hi_ush_vec4i(vec4i a);
 //! unpacks 4 low/high signed shorts (in low 64 bits of vector, .xy) to 4 ints
 VECTORCALL VECMATH_FINLINE vec4i v_cvt_lo_ssh_vec4i(vec4i a);
 VECTORCALL VECMATH_FINLINE vec4i v_cvt_hi_ssh_vec4i(vec4i a);
-//! unpacks 8 unsigned bytes (in low 64 bits of vector, .xy) to 4 shorts
-VECTORCALL VECMATH_FINLINE vec4i v_cvt_byte_vec4i(vec4i a);
+//! unpacks 4 unsigned bytes to 4 unsigned ints in .xyzw
+VECTORCALL VECMATH_FINLINE vec4i v_cvt_byte_vec4i(uint32_t a);
 
 //! converts float vector to 4 halfs and stores(unaligned)
 VECTORCALL VECMATH_FINLINE void v_float_to_half(uint16_t* __restrict m, const vec4f v);
@@ -312,6 +324,7 @@ VECTORCALL VECMATH_FINLINE bool v_is_relative_equal_vec3f(vec4f a, vec4f b);
 VECTORCALL VECMATH_FINLINE bool v_is_relative_equal_vec4f(vec4f a, vec4f b);
 
 //! check if /a can produce NaN's or inf
+VECTORCALL VECMATH_FINLINE vec4f v_is_unsafe_positive_divisor(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_is_unsafe_divisor(vec4f a);
 
 //! LERP a to b using parameter tttt
@@ -575,16 +588,25 @@ VECTORCALL VECMATH_FINLINE vec4f v_norm4_safe(vec4f a, vec4f def);
 VECTORCALL VECMATH_FINLINE vec4f v_norm3_safe(vec3f a, vec3f def);
 VECTORCALL VECMATH_FINLINE vec4f v_norm2_safe(vec4f a, vec4f def);
 
+//! reset NaN values to 0.f component-wise
 VECTORCALL VECMATH_FINLINE vec4f v_remove_nan(vec4f a);
 //! check for NaN component-wise
 VECTORCALL VECMATH_FINLINE vec4f v_is_nan(vec4f a);
-//! check for negative value component-wise
+//! check that values are finite numbers and not NaN component-wise
+VECTORCALL VECMATH_FINLINE vec4f v_is_finite(vec4f a);
+VECTORCALL VECMATH_FINLINE vec4f v_is_not_finite(vec4f a);
+  //! check for negative value component-wise
 VECTORCALL VECMATH_FINLINE vec4f v_is_neg(vec4f a);
 //! check for NaN in any of component
 VECTORCALL VECMATH_FINLINE bool v_test_xyzw_nan(vec4f a);
 VECTORCALL VECMATH_FINLINE bool v_test_xyz_nan(vec3f a);
 VECTORCALL VECMATH_FINLINE bool v_test_mat43_nan(mat44f m);
 VECTORCALL VECMATH_FINLINE bool v_test_mat44_nan(mat44f m);
+//! check for finite value all selected components
+VECTORCALL VECMATH_FINLINE bool v_test_xyzw_finite(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_test_xyz_finite(vec3f a);
+VECTORCALL VECMATH_FINLINE bool v_test_xy_finite(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_test_x_finite(vec4f a);
 //! nans and infs converted to zero
 VECTORCALL VECMATH_FINLINE vec4f v_remove_not_finite(vec4f a);
 //! test that all of .xyz less than limit by absolute value
@@ -1090,6 +1112,10 @@ VECTORCALL VECMATH_FINLINE vec4f v_rad_to_deg(vec4f rad);
 
 //! normalize angle to (-PI;PI]
 VECTORCALL VECMATH_FINLINE vec4f v_norm_s_angle(vec4f angle);
+
+//! dir<>angle converters
+VECTORCALL VECMATH_FINLINE vec4f v_dir_to_angles(vec3f dir);
+VECTORCALL VECMATH_FINLINE vec3f v_angles_to_dir(vec4f angles);
 
 //! calculate sine or cosine of same angle
 VECTORCALL VECMATH_FINLINE vec4f v_sin_from_cos(vec4f c);

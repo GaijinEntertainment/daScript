@@ -66,6 +66,24 @@ VECTORCALL VECMATH_FINLINE vec4f v_norm_s_angle(vec4f angle)
   return v_sub(angle, v_mul(v_floor(v_mul(v_add(angle, V_C_PI), v_rcp(V_C_TWOPI))), V_C_TWOPI));
 }
 
+VECTORCALL VECMATH_FINLINE vec4f v_dir_to_angles(vec3f dir)
+{
+  vec4f z = v_splat_z(dir);
+  vec4f d = v_length2_x(v_perm_xzxz(dir));
+  vec4f y = v_perm_xaxa(z, v_splat_y(dir));
+  vec4f x = v_perm_xaxa(dir, d);
+  vec4f a = v_atan2(y, x);
+  return v_xor(a, v_cast_vec4f(v_seti_x(0x80000000)));
+}
+
+VECTORCALL VECMATH_FINLINE vec3f v_angles_to_dir(vec4f angles)
+{
+  vec4f s, c;
+  vec4f a = v_xor(angles, v_cast_vec4f(v_seti_x(0x80000000)));
+  v_sincos(a, s, c);
+  return v_make_vec3f(v_extract_x(c) * v_extract_y(c), v_extract_y(s), v_extract_x(s) * v_extract_y(c));
+}
+
 VECTORCALL VECMATH_FINLINE vec4f v_sin_from_cos(vec4f c) { return v_sqrt(v_sub(V_C_ONE, v_sqr(c))); }
 VECTORCALL VECMATH_FINLINE vec4f v_cos_from_sin(vec4f s) { return v_sin_from_cos(s); }
 VECTORCALL VECMATH_FINLINE vec4f v_sin_from_cos_x(vec4f c) { return v_sqrt_x(v_sub_x(V_C_ONE, v_sqr_x(c))); }

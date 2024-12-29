@@ -72,9 +72,14 @@ NO_ASAN_INLINE vec4i v_ldui(const int *m) { return _mm_loadu_si128((const vec4i*
 NO_ASAN_INLINE vec4f v_ldu_x(const float *m) { return _mm_load_ss(m); } // load x, zero others
 #endif
 
-// Always safe loading of float[3], but it uses one more register and one more memory read (slower)
+// Always safe loading of float[3], but it uses [one more register (on SSE2) and] one more memory read (slower)
+#if _TARGET_SIMD_SSE >= 4
+NO_ASAN_INLINE vec3f v_ldu_p3_safe(const float *m) { return _mm_insert_ps(v_ldu_half(m), v_ldu_x(m + 2), _MM_MK_INSERTPS_NDX(0, 2, 1 << 3)); }
+NO_ASAN_INLINE vec4i v_ldui_p3_safe(const int *m) { return _mm_insert_epi32(v_ldui_half(m), m[2], 2); }
+#else
 NO_ASAN_INLINE vec3f v_ldu_p3_safe(const float *m) { return _mm_movelh_ps(v_ldu_half(m), v_ldu_x(m + 2)); }
 NO_ASAN_INLINE vec4i v_ldui_p3_safe(const int *m) { return _mm_unpacklo_epi64(v_ldui_half(m), v_seti_x(m[2])); }
+#endif
 
 VECTORCALL VECMATH_FINLINE vec4i v_ldush(const signed short *m)
 {
@@ -99,7 +104,15 @@ VECTORCALL VECMATH_FINLINE vec4i
 VECTORCALL VECMATH_FINLINE vec4i
   v_cvt_hi_ssh_vec4i(vec4i a) { vec4i sx = _mm_cmplt_epi16(a, _mm_setzero_si128()); return _mm_unpackhi_epi16(a, sx); }
 
-VECTORCALL VECMATH_FINLINE vec4i v_cvt_byte_vec4i(vec4i a) { return _mm_unpacklo_epi8(a, _mm_setzero_si128()); }
+VECTORCALL VECMATH_FINLINE vec4i v_cvt_byte_vec4i(uint32_t a)
+{
+#if _TARGET_SIMD_SSE >= 4
+  return _mm_cvtepu8_epi32(v_seti_x(a));
+#else
+  vec4i u16 = _mm_unpacklo_epi8(v_seti_x(a), _mm_setzero_si128());
+  return v_cvt_lo_ush_vec4i(u16);
+#endif
+}
 
 VECTORCALL VECMATH_FINLINE vec4f v_make_vec4f(float x, float y, float z, float w)
 { return _mm_setr_ps(x, y, z, w); }
@@ -184,27 +197,15 @@ VECTORCALL VECMATH_FINLINE bool v_test_any_bit_set(vec4f a)
   return !v_test_all_bits_zeros(a);
 }
 
-VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_not_zeroi(vec4f a)
-{
-  return v_signmask(v_cmp_eq(a, v_zero())) == 0;
-}
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_true(vec4f a) { return v_signmask(a) == 0b1111; }
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_all_false(vec4f a) { return v_signmask(a) == 0; }
+VECTORCALL VECMATH_FINLINE bool v_check_xyzw_any_true(vec4f a) { return v_signmask(a) != 0; }
 
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_zeroi(vec4f a)
-{
-  vec4f notZeroMask = v_cmp_neq(a, v_zero());
-  return (v_signmask(notZeroMask) & 7) == 0;
-}
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_true(vec4f a) { return (v_signmask(a) & 0b111) == 0b111; }
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_false(vec4f a) { return (v_signmask(a) & 0b111) == 0; }
+VECTORCALL VECMATH_FINLINE bool v_check_xyz_any_true(vec4f a) { return (v_signmask(a) & 0b111) != 0; }
 
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_all_not_zeroi(vec4f a)
-{
-  vec4f zeroMask = v_cmp_eq(a, v_zero());
-  return (v_signmask(zeroMask) & 7) == 0;
-}
-
-VECTORCALL VECMATH_FINLINE bool v_check_xyz_any_not_zeroi(vec4f a)
-{
-  return !v_check_xyz_all_zeroi(a);
-}
+VECTORCALL VECMATH_FINLINE vec4f is_neg_special(vec4f a) { return v_cast_vec4f(v_srai(v_cast_vec4i(a), 31)); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_eq(vec4f a, vec4f b) { return _mm_cmpeq_ps(a, b); }
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_neq(vec4f a, vec4f b) { return _mm_cmpneq_ps(a, b); }
