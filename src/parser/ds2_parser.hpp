@@ -265,8 +265,8 @@ extern int das2_yydebug;
     FLOAT = 415,                   /* "floating point constant"  */
     DOUBLE = 416,                  /* "double constant"  */
     NAME = 417,                    /* "name"  */
-    DAS_EMIT_COMMA = 418,          /* "emitted ,"  */
-    DAS_EMIT_SEMICOLON = 419,      /* "emitted ;"  */
+    DAS_EMIT_COMMA = 418,          /* "new line, comma"  */
+    DAS_EMIT_SEMICOLON = 419,      /* "new line, semicolon"  */
     BEGIN_STRING = 420,            /* "start of the string"  */
     STRING_CHARACTER = 421,        /* STRING_CHARACTER  */
     STRING_CHARACTER_ESC = 422,    /* STRING_CHARACTER_ESC  */

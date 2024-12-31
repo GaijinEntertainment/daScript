@@ -362,6 +362,7 @@ def test_return_lambda ( a : int ) : lambda<(arg:int):void> {
 def test_cond_return ( cond : bool ) {
 	return 13 if (cond)
 	return 42
+	if (cond) return 13
 }
 
 ///////////////
@@ -369,7 +370,6 @@ def test_cond_return ( cond : bool ) {
 
 [export]
 def test_if_then_else ( cond1,cond2:bool ) {
-	// TODO: eventually support if ( cond ) expr; and such
 	if ( cond1 ) {
 		debug(cond1)
 	}
@@ -382,6 +382,11 @@ def test_if_then_else ( cond1,cond2:bool ) {
 		debug(cond1)
 	} elif ( cond2 ) {
 		debug(cond2)
+	}
+	if ( cond1 ) debug(cond1)
+	while (true) {
+		if (cond1) break
+		if (cond2) continue
 	}
 	// whitespace
 	if ( cond1 )
@@ -407,6 +412,16 @@ def test_if_then_else ( cond1,cond2:bool ) {
 	else
 	{
 		debug("else")
+	}
+	if ( cond1 )
+		debug(cond1)
+	while (true)
+	{
+		if (cond1)
+			break
+		if (cond2)
+
+			continue
 	}
 }
 
@@ -682,6 +697,8 @@ def test_more_whitespace ()
 def main {
 	// var f <- {1=>"a", 2=>"b", 3=>"c", 4=>"d"};
 	// debug(f);
+
+    print("foo\n") if ( 3 <= 4 )
 }
 
 options log
