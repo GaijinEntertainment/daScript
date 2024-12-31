@@ -10,6 +10,13 @@
     5. give options where possible              ("try <- instead")
 */
 
+/*
+    grammar errors
+
+    r/r error on '{'.
+        if ( cond ) { foo() } // can't tell block from table<auto>(foo())
+*/
+
 %code requires {
     #include "daScript/misc/platform.h"
     #include "daScript/ast/ast.h"
@@ -320,8 +327,8 @@
 %token<d>       DOUBLE                  "double constant"
 %token<s>       NAME                    "name"
 
-%token      DAS_EMIT_COMMA              "emitted ,"
-%token      DAS_EMIT_SEMICOLON          "emitted ;"
+%token      DAS_EMIT_COMMA              "new line, comma"
+%token      DAS_EMIT_SEMICOLON          "new line, semicolon"
 
 /* %printer { fprintf (yyo, "%i", $$); } <i> */
 
@@ -440,6 +447,7 @@
 %type <pExpression>     expressions
 %type <pExpression>     expression_block
 %type <pExpression>     expression_block_finally
+%type <pExpression>     expression_if_block
 %type <pExpression>     expression_with
 %type <pExpression>     expression_with_alias
 %type <pExpression>     expression_while_loop
@@ -847,13 +855,39 @@ optional_semis
     |   semis
     ;
 
+expression_if_block
+    :   {
+        yyextra->push_nesteds(DAS_EMIT_SEMICOLON);
+    } '{' [bbegin] expressions[block] {
+        yyextra->pop_nesteds();
+    } '}' expression_block_finally[fin] {
+        $$ = $block;
+        $$->at = tokRangeAt(scanner,@bbegin,@fin);
+        if ( $fin ) {
+            auto pF = (ExprBlock *) $fin;
+            auto pB = (ExprBlock *) $$;
+            swap ( pB->finalList, pF->list );
+            delete pF;
+        }
+    }
+    |  {
+        yyextra->das_keyword = false;
+    } expression_if_one_liner[block] SEMICOLON {
+        $$ = $block;
+    }
+    ;
+
 expression_if_then_else
     :   {
         yyextra->das_keyword = true;
-    } if_or_static_if[loc] '(' expr[cond] ')' optional_emit_semis expression_block[block] expression_else[then] {
+    } if_or_static_if[loc] '(' expr[cond] ')' optional_emit_semis expression_if_block[block] expression_else[then] {
         yyextra->das_keyword = false;
+        if ( !$block->rtti_isBlock() && $then) {
+            das2_yyerror(scanner,"if one-liner can't have else clause",tokAt(scanner,@loc), CompilationError::syntax_error);
+        }
+        auto blk = $block->rtti_isBlock() ? static_cast<ExprBlock *>($block) : ast_wrapInBlock($block);
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
-            ExpressionPtr($block),ExpressionPtr($then));
+            blk,ExpressionPtr($then));
         eite->isStatic = $loc;
         $$ = eite;
     }
