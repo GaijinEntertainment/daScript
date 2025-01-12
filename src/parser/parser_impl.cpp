@@ -72,7 +72,7 @@ namespace das {
         if ( arguments ) seq = sequenceToList(arguments);
         args.reserve(declL->size() + seq.size());
         for ( auto & decl : *declL ) args.push_back(ExpressionPtr(decl));
-        for ( auto & arg : seq ) args.push_back(move(arg));
+        for ( auto & arg : seq ) args.push_back(das::move(arg));
         delete declL;
         return args;
     }
