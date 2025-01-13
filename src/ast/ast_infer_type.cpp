@@ -5481,7 +5481,7 @@ namespace das {
                     }
                     expr->fieldIndex = index;
                 } else if ( valT->isGoodVariantType() ) {
-                                        if ( !safeExpression(expr) ) {
+                    if ( !safeExpression(expr) ) {
                         error("variant.field requires unsafe", "", "",
                             expr->at, CompilationError::unsafe);
                         return Visitor::visit(expr);

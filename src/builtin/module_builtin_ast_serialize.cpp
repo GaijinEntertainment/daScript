@@ -2064,6 +2064,7 @@ namespace das {
               << value.completion
               << value.export_all
               << value.keep_alive
+              << value.very_safe_context
               << value.always_report_candidates_threshold
               << value.max_infer_passes
               << value.stack
@@ -2205,7 +2206,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 41;
+        static constexpr uint32_t currentVersion = 42;
         return currentVersion;
     }
 
