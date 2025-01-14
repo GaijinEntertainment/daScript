@@ -1168,29 +1168,27 @@ namespace das {
         string reportMismatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
             auto field = st->findField(name);
             if ( !field ) return "";
-            TextWriter ss;
-            ss << "member function '" << name << "' in '" << st->name << "' does not match\n";
             if ( !field->classMethod ) {
-                ss << "\tis not a class method\n";
-                return ss.str();
+                return "member '" + name + "' is not a method in '" + st->name + "'\n";
             }
-            const auto & fieldArgumentTypes = field->type->argTypes;
-            const auto & fieldArgumentNames = field->type->argNames;
-            if ( fieldArgumentTypes.size() != arguments.size() + 1 ) {  // (self,arg1,arg2,...) vs (arg1,arg2,...)
-                ss << "\tinvalid number of arguments\n";
-                return ss.str();
+            auto addr = field->init;
+            if ( addr->rtti_isCast() ) {
+                addr = static_pointer_cast<ExprCast>(addr)->subexpr;
             }
-            for ( size_t i=0; i!=arguments.size(); ++i ) {
-                if ( fieldArgumentNames[i+1] != arguments[i]->name ) {
-                    ss << "\tinvalid argument name '" << arguments[i]->name << "', expecting '" << fieldArgumentNames[i+1] << "'\n";
-                    return ss.str();
-                }
-                if ( !isMatchingArgument(nullptr, fieldArgumentTypes[i+1], arguments[i]->value->type, false, false) ) {
-                    ss << describeMismatchingArgument(arguments[i]->name, arguments[i]->value->type, fieldArgumentTypes[i+1], (int)i);
-                    return ss.str();
-                }
+            if ( !addr->rtti_isAddr() ) {
+                return "function is not inferred yet\n";
             }
-            return ss.str();
+            auto pAddr = static_pointer_cast<ExprAddr>(addr);
+            if ( !pAddr->func ) {
+                return "expecting @@ in class member initialization\n";
+            }
+            vector<MakeFieldDeclPtr> arguments2 = arguments;
+            auto pSelfVar = make_smart<ExprVar>(LineInfo(), "self");
+            pSelfVar->type = make_smart<TypeDecl>(st);
+            MakeFieldDeclPtr pSelf = make_smart<MakeFieldDecl>(LineInfo(), "self", pSelfVar, false, false);
+            arguments2.insert(arguments2.begin(),pSelf);
+            vector<TypeDeclPtr> nonNamedTypes;
+            return describeMismatchingFunction(pAddr->func, nonNamedTypes, arguments2, false, false);
         }
 
         bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
@@ -1201,20 +1199,24 @@ namespace das {
             if ( !field->classMethod ) {
                 return false;
             }
-            const auto & fieldArgumentTypes = field->type->argTypes;
-            const auto & fieldArgumentNames = field->type->argNames;
-            if ( fieldArgumentTypes.size() != arguments.size() + 1 ) {  // (self,arg1,arg2,...) vs (arg1,arg2,...)
+            auto addr = field->init;
+            if ( addr->rtti_isCast() ) {
+                addr = static_pointer_cast<ExprCast>(addr)->subexpr;
+            }
+            if ( !addr->rtti_isAddr() ) {
                 return false;
             }
-            for ( size_t i=0; i!=arguments.size(); ++i ) {
-                if ( fieldArgumentNames[i+1] != arguments[i]->name ) {
-                    return false;
-                }
-                if ( !isMatchingArgument(nullptr, fieldArgumentTypes[i+1], arguments[i]->value->type, false, false) ) {
-                    return false;
-                }
+            auto pAddr = static_pointer_cast<ExprAddr>(addr);
+            if ( !pAddr->func ) {
+                return false;
             }
-            return true;
+            vector<MakeFieldDeclPtr> arguments2 = arguments;
+            auto pSelfVar = make_smart<ExprVar>(LineInfo(), "self");
+            pSelfVar->type = make_smart<TypeDecl>(st);
+            MakeFieldDeclPtr pSelf = make_smart<MakeFieldDecl>(LineInfo(), "self", pSelfVar, false, false);
+            arguments2.insert(arguments2.begin(),pSelf);
+            vector<TypeDeclPtr> nonNamedTypes;
+            return isFunctionCompatible(pAddr->func, nonNamedTypes, arguments2, false, false);
         }
 
         MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr>& types, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
@@ -7795,7 +7797,7 @@ namespace das {
                     reportAstChanged();
                     return demoteCall(expr,generics.back());
                 } else {
-                    if ( func->isClassMethod && !func->isStaticClassMethod ) {  // if its a class method with 'self'
+                    if ( func && func->isClassMethod && !func->isStaticClassMethod ) {  // if its a class method with 'self'
                         auto selfStruct = func->arguments[0]->type->structType;
                         if ( hasMatchingMemberCall(selfStruct, expr->name, expr->arguments) ) {
                             reportAstChanged();
