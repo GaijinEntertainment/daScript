@@ -968,7 +968,7 @@ namespace das {
             }
 
 
-            size_t fnArgIndex = nonNamedTypes.size();   // note: was 0
+            size_t fnArgIndex = 0;
             for ( size_t ai=0, ais=arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = arguments[ai];
                 for ( ;; ) {
@@ -1093,7 +1093,7 @@ namespace das {
                 return "\t\ttoo many arguments\n";
             }
             TextWriter ss;
-            size_t fnArgIndex = nonNamedTypes.size(); // note: was 0
+            size_t fnArgIndex = 0;
             for ( size_t ai=0, ais=arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = arguments[ai];
                 for ( ;; ) {
@@ -1189,30 +1189,38 @@ namespace das {
             return describeMismatchingFunction(pAddr->func, nna, arguments, false, false);
         }
 
-        bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments, bool methodCall ) const {
+        Function * findMethodFunction ( Structure * st, const string & name ) const {
             if ( name.find("::")!=string::npos ) {
-                return false;
+                return nullptr;
             }
             auto field = st->findField(name);
             if ( !field->classMethod ) {
-                return false;
+                return nullptr;
             }
             auto addr = field->init;
             if ( addr->rtti_isCast() ) {
                 addr = static_pointer_cast<ExprCast>(addr)->subexpr;
             }
             if ( !addr->rtti_isAddr() ) {
-                return false;
+                return nullptr;
             }
             auto pAddr = static_pointer_cast<ExprAddr>(addr);
             if ( !pAddr->func ) {
+                return nullptr;
+            }
+            return pAddr->func;
+        }
+
+        bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments, bool methodCall ) const {
+            auto methodFunc = findMethodFunction(st,name);
+            if ( !methodFunc ) {
                 return false;
             }
             vector<TypeDeclPtr> nna = nonNamedArguments;
             if ( !methodCall ) {
                 nna.insert(nna.begin(),make_smart<TypeDecl>(st));
             }
-            return isFunctionCompatible(pAddr->func, nna, arguments, false, false);
+            return isFunctionCompatible(methodFunc, nna, arguments, false, false);
         }
 
         MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr>& types, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
@@ -7584,8 +7592,8 @@ namespace das {
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
     // ExprNamedCall
-        ExpressionPtr demoteCall ( ExprNamedCall * expr, const FunctionPtr & pFn ) {
-            auto newCall = make_smart<ExprCall>(expr->at,pFn->name);
+        vector<ExpressionPtr> demoteCallArguments( ExprNamedCall * expr, const FunctionPtr & pFn ) {
+            vector<ExpressionPtr> newCallArguments;
             size_t fnArgIndex = 0;
             for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = expr->arguments[ai];
@@ -7597,24 +7605,30 @@ namespace das {
                     }
 
                     if (fnArgIndex < expr->nonNamedArguments.size()) {
-                        newCall->arguments.push_back(expr->nonNamedArguments[fnArgIndex]->clone());
+                        newCallArguments.push_back(expr->nonNamedArguments[fnArgIndex]->clone());
                     }
                     else
                     {
                         DAS_ASSERTF(fnArg->init, "somehow matched function, which does not match. can only skip defaults");
-                        newCall->arguments.push_back(fnArg->init->clone());
+                        newCallArguments.push_back(fnArg->init->clone());
                     }
                     fnArgIndex ++;
                 }
-                newCall->arguments.push_back(arg->value->clone());
+                newCallArguments.push_back(arg->value->clone());
                 fnArgIndex ++;
             }
             while ( fnArgIndex < pFn->arguments.size() ) {
                 auto & fnArg = pFn->arguments[fnArgIndex];
                 DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. tail has to be defaults");
-                newCall->arguments.push_back(fnArg->init->clone());
+                newCallArguments.push_back(fnArg->init->clone());
                 fnArgIndex ++;
             }
+            return newCallArguments;
+
+        }
+        ExpressionPtr demoteCall ( ExprNamedCall * expr, const FunctionPtr & pFn ) {
+            auto newCall = make_smart<ExprCall>(expr->at,pFn->name);
+            newCall->arguments = demoteCallArguments(expr, pFn);
             return newCall;
         }
         virtual void preVisit ( ExprNamedCall * call ) override {
@@ -7808,8 +7822,10 @@ namespace das {
                             if ( hasMatchingMemberCall(callStruct, expr->name, expr->arguments, nonNamedArgumentTypes, true) ) {
                                 reportAstChanged();
                                 auto pInvoke = makeInvokeMethod(expr->at, vSelf.get(), expr->name);
-                                for ( auto & arg : expr->arguments ) {
-                                    pInvoke->arguments.push_back(arg->value->clone());
+                                auto methodFunc = findMethodFunction(callStruct, expr->name);
+                                auto newArguments = demoteCallArguments(expr, methodFunc);
+                                for ( size_t i=1, n=newArguments.size(); i!=n; ++i ) {
+                                    pInvoke->arguments.push_back(newArguments[i]);
                                 }
                                 return pInvoke;
                             }
@@ -7827,8 +7843,11 @@ namespace das {
                             reportAstChanged();
                             auto self = new ExprVar(expr->at, "self");
                             auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
-                            for ( auto & arg : expr->arguments ) {
-                                pInvoke->arguments.push_back(arg->value->clone());
+                            auto methodFunc = findMethodFunction(selfStruct, expr->name);
+                            expr->nonNamedArguments.insert(expr->nonNamedArguments.begin(), self);
+                            auto newArguments = demoteCallArguments(expr, methodFunc);
+                            for ( size_t i=1, n=newArguments.size(); i!=n; ++i ) {
+                                pInvoke->arguments.push_back(newArguments[i]);
                             }
                             return pInvoke;
                         }
