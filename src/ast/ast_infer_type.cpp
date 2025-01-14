@@ -1165,7 +1165,7 @@ namespace das {
             return ss.str();
         }
 
-        string reportMismatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
+        string reportMismatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments ) const {
             auto field = st->findField(name);
             if ( !field ) return "";
             if ( !field->classMethod ) {
@@ -1182,16 +1182,12 @@ namespace das {
             if ( !pAddr->func ) {
                 return "expecting @@ in class member initialization\n";
             }
-            vector<MakeFieldDeclPtr> arguments2 = arguments;
-            auto pSelfVar = make_smart<ExprVar>(LineInfo(), "self");
-            pSelfVar->type = make_smart<TypeDecl>(st);
-            MakeFieldDeclPtr pSelf = make_smart<MakeFieldDecl>(LineInfo(), "self", pSelfVar, false, false);
-            arguments2.insert(arguments2.begin(),pSelf);
-            vector<TypeDeclPtr> nonNamedTypes;
-            return describeMismatchingFunction(pAddr->func, nonNamedTypes, arguments2, false, false);
+            vector<TypeDeclPtr> nna = nonNamedArguments;
+            nna.insert(nna.begin(),make_smart<TypeDecl>(st));
+            return describeMismatchingFunction(pAddr->func, nna, arguments, false, false);
         }
 
-        bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
+        bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments ) const {
             if ( name.find("::")!=string::npos ) {
                 return false;
             }
@@ -1210,13 +1206,9 @@ namespace das {
             if ( !pAddr->func ) {
                 return false;
             }
-            vector<MakeFieldDeclPtr> arguments2 = arguments;
-            auto pSelfVar = make_smart<ExprVar>(LineInfo(), "self");
-            pSelfVar->type = make_smart<TypeDecl>(st);
-            MakeFieldDeclPtr pSelf = make_smart<MakeFieldDecl>(LineInfo(), "self", pSelfVar, false, false);
-            arguments2.insert(arguments2.begin(),pSelf);
-            vector<TypeDeclPtr> nonNamedTypes;
-            return isFunctionCompatible(pAddr->func, nonNamedTypes, arguments2, false, false);
+            vector<TypeDeclPtr> nna = nonNamedArguments;
+            nna.insert(nna.begin(),make_smart<TypeDecl>(st));
+            return isFunctionCompatible(pAddr->func, nna, arguments, false, false);
         }
 
         MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr>& types, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
@@ -7799,7 +7791,11 @@ namespace das {
                 } else {
                     if ( func && func->isClassMethod && !func->isStaticClassMethod ) {  // if its a class method with 'self'
                         auto selfStruct = func->arguments[0]->type->structType;
-                        if ( hasMatchingMemberCall(selfStruct, expr->name, expr->arguments) ) {
+                        vector<TypeDeclPtr> nonNamedArgumentTypes;
+                        for ( auto & arg : expr->nonNamedArguments ) {
+                            nonNamedArgumentTypes.push_back(arg->type);
+                        }
+                        if ( hasMatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes) ) {
                             reportAstChanged();
                             auto self = new ExprVar(expr->at, "self");
                             auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
@@ -7808,7 +7804,7 @@ namespace das {
                             }
                             return pInvoke;
                         }
-                        string moreError = reportMismatchingMemberCall(selfStruct, expr->name, expr->arguments);
+                        string moreError = reportMismatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes);
                         reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true, CompilationError::function_not_found, moreError);
                     } else {
                         reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
