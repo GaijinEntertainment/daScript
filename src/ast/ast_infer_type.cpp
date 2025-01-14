@@ -968,7 +968,7 @@ namespace das {
             }
 
 
-            size_t fnArgIndex = 0;
+            size_t fnArgIndex = nonNamedTypes.size();   // note: was 0
             for ( size_t ai=0, ais=arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = arguments[ai];
                 for ( ;; ) {
@@ -1093,7 +1093,7 @@ namespace das {
                 return "\t\ttoo many arguments\n";
             }
             TextWriter ss;
-            size_t fnArgIndex = 0;
+            size_t fnArgIndex = nonNamedTypes.size(); // note: was 0
             for ( size_t ai=0, ais=arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = arguments[ai];
                 for ( ;; ) {
@@ -1165,7 +1165,7 @@ namespace das {
             return ss.str();
         }
 
-        string reportMismatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments ) const {
+        string reportMismatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments, bool methodCall ) const {
             auto field = st->findField(name);
             if ( !field ) return "";
             if ( !field->classMethod ) {
@@ -1183,11 +1183,13 @@ namespace das {
                 return "expecting @@ in class member initialization\n";
             }
             vector<TypeDeclPtr> nna = nonNamedArguments;
-            nna.insert(nna.begin(),make_smart<TypeDecl>(st));
+            if ( !methodCall ) {
+                nna.insert(nna.begin(),make_smart<TypeDecl>(st));
+            }
             return describeMismatchingFunction(pAddr->func, nna, arguments, false, false);
         }
 
-        bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments ) const {
+        bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments, bool methodCall ) const {
             if ( name.find("::")!=string::npos ) {
                 return false;
             }
@@ -1207,7 +1209,9 @@ namespace das {
                 return false;
             }
             vector<TypeDeclPtr> nna = nonNamedArguments;
-            nna.insert(nna.begin(),make_smart<TypeDecl>(st));
+            if ( !methodCall ) {
+                nna.insert(nna.begin(),make_smart<TypeDecl>(st));
+            }
             return isFunctionCompatible(pAddr->func, nna, arguments, false, false);
         }
 
@@ -7789,13 +7793,37 @@ namespace das {
                     reportAstChanged();
                     return demoteCall(expr,generics.back());
                 } else {
-                    if ( func && func->isClassMethod && !func->isStaticClassMethod ) {  // if its a class method with 'self'
+                    if ( expr->methodCall ) {
+                        auto tp = expr->nonNamedArguments[0]->type.get();
+                        auto vSelf = expr->nonNamedArguments[0];
+                        if ( tp->isPointer() && tp->firstType ) {
+                            tp = tp->firstType.get();
+                            vSelf = make_smart<ExprPtr2Ref>(vSelf->at,vSelf);
+                            vSelf->type = make_smart<TypeDecl>(*tp);
+                        }
+                        if ( tp->isStructure() ) {
+                            auto callStruct = tp->structType;
+                            vector<TypeDeclPtr> nonNamedArgumentTypes;
+                            nonNamedArgumentTypes.push_back(vSelf->type);
+                            if ( hasMatchingMemberCall(callStruct, expr->name, expr->arguments, nonNamedArgumentTypes, true) ) {
+                                reportAstChanged();
+                                auto pInvoke = makeInvokeMethod(expr->at, vSelf.get(), expr->name);
+                                for ( auto & arg : expr->arguments ) {
+                                    pInvoke->arguments.push_back(arg->value->clone());
+                                }
+                                return pInvoke;
+                            }
+                            string moreError = reportMismatchingMemberCall(callStruct, expr->name, expr->arguments, nonNamedArgumentTypes, true);
+                            reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true, CompilationError::function_not_found, moreError);
+                            return Visitor::visit(expr);
+                        }
+                    } else if ( func && func->isClassMethod && !func->isStaticClassMethod ) {  // if its a class method with 'self'
                         auto selfStruct = func->arguments[0]->type->structType;
                         vector<TypeDeclPtr> nonNamedArgumentTypes;
                         for ( auto & arg : expr->nonNamedArguments ) {
                             nonNamedArgumentTypes.push_back(arg->type);
                         }
-                        if ( hasMatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes) ) {
+                        if ( hasMatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes,false) ) {
                             reportAstChanged();
                             auto self = new ExprVar(expr->at, "self");
                             auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
@@ -7804,11 +7832,11 @@ namespace das {
                             }
                             return pInvoke;
                         }
-                        string moreError = reportMismatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes);
+                        string moreError = reportMismatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes, false);
                         reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true, CompilationError::function_not_found, moreError);
-                    } else {
-                        reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
+                        return Visitor::visit(expr);
                     }
+                    reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
                 }
             } else {
                 auto fun = functions.back();

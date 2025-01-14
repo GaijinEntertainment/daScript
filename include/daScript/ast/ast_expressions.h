@@ -1348,6 +1348,7 @@ namespace das
         vector<ExpressionPtr>  nonNamedArguments;
         MakeStruct  arguments;
         bool        argumentsFailedToInfer = false;
+        bool        methodCall = false;
     };
 
     struct ExprMakeLocal : Expression {
