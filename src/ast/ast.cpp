@@ -2522,6 +2522,7 @@ namespace das {
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
         }
+        cexpr->methodCall = methodCall;
         return cexpr;
     }
 

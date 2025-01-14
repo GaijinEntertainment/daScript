@@ -1165,6 +1165,64 @@ namespace das {
             return ss.str();
         }
 
+        string reportMismatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments, bool methodCall ) const {
+            auto field = st->findField(name);
+            if ( !field ) return "";
+            if ( !field->classMethod ) {
+                return "member '" + name + "' is not a method in '" + st->name + "'\n";
+            }
+            auto addr = field->init;
+            if ( addr->rtti_isCast() ) {
+                addr = static_pointer_cast<ExprCast>(addr)->subexpr;
+            }
+            if ( !addr->rtti_isAddr() ) {
+                return "function is not inferred yet\n";
+            }
+            auto pAddr = static_pointer_cast<ExprAddr>(addr);
+            if ( !pAddr->func ) {
+                return "expecting @@ in class member initialization\n";
+            }
+            vector<TypeDeclPtr> nna = nonNamedArguments;
+            if ( !methodCall ) {
+                nna.insert(nna.begin(),make_smart<TypeDecl>(st));
+            }
+            return describeMismatchingFunction(pAddr->func, nna, arguments, false, false);
+        }
+
+        Function * findMethodFunction ( Structure * st, const string & name ) const {
+            if ( name.find("::")!=string::npos ) {
+                return nullptr;
+            }
+            auto field = st->findField(name);
+            if ( !field->classMethod ) {
+                return nullptr;
+            }
+            auto addr = field->init;
+            if ( addr->rtti_isCast() ) {
+                addr = static_pointer_cast<ExprCast>(addr)->subexpr;
+            }
+            if ( !addr->rtti_isAddr() ) {
+                return nullptr;
+            }
+            auto pAddr = static_pointer_cast<ExprAddr>(addr);
+            if ( !pAddr->func ) {
+                return nullptr;
+            }
+            return pAddr->func;
+        }
+
+        bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments, const vector<TypeDeclPtr> & nonNamedArguments, bool methodCall ) const {
+            auto methodFunc = findMethodFunction(st,name);
+            if ( !methodFunc ) {
+                return false;
+            }
+            vector<TypeDeclPtr> nna = nonNamedArguments;
+            if ( !methodCall ) {
+                nna.insert(nna.begin(),make_smart<TypeDecl>(st));
+            }
+            return isFunctionCompatible(methodFunc, nna, arguments, false, false);
+        }
+
         MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr>& types, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -7534,8 +7592,8 @@ namespace das {
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
     // ExprNamedCall
-        ExpressionPtr demoteCall ( ExprNamedCall * expr, const FunctionPtr & pFn ) {
-            auto newCall = make_smart<ExprCall>(expr->at,pFn->name);
+        vector<ExpressionPtr> demoteCallArguments( ExprNamedCall * expr, const FunctionPtr & pFn ) {
+            vector<ExpressionPtr> newCallArguments;
             size_t fnArgIndex = 0;
             for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = expr->arguments[ai];
@@ -7547,24 +7605,30 @@ namespace das {
                     }
 
                     if (fnArgIndex < expr->nonNamedArguments.size()) {
-                        newCall->arguments.push_back(expr->nonNamedArguments[fnArgIndex]->clone());
+                        newCallArguments.push_back(expr->nonNamedArguments[fnArgIndex]->clone());
                     }
                     else
                     {
                         DAS_ASSERTF(fnArg->init, "somehow matched function, which does not match. can only skip defaults");
-                        newCall->arguments.push_back(fnArg->init->clone());
+                        newCallArguments.push_back(fnArg->init->clone());
                     }
                     fnArgIndex ++;
                 }
-                newCall->arguments.push_back(arg->value->clone());
+                newCallArguments.push_back(arg->value->clone());
                 fnArgIndex ++;
             }
             while ( fnArgIndex < pFn->arguments.size() ) {
                 auto & fnArg = pFn->arguments[fnArgIndex];
                 DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. tail has to be defaults");
-                newCall->arguments.push_back(fnArg->init->clone());
+                newCallArguments.push_back(fnArg->init->clone());
                 fnArgIndex ++;
             }
+            return newCallArguments;
+
+        }
+        ExpressionPtr demoteCall ( ExprNamedCall * expr, const FunctionPtr & pFn ) {
+            auto newCall = make_smart<ExprCall>(expr->at,pFn->name);
+            newCall->arguments = demoteCallArguments(expr, pFn);
             return newCall;
         }
         virtual void preVisit ( ExprNamedCall * call ) override {
@@ -7629,14 +7693,14 @@ namespace das {
         }
 
         void reportMissing ( ExprNamedCall * expr, const vector<TypeDeclPtr>& nonNamedArguments, const string & msg, bool reportDetails,
-                                    CompilationError cerror = CompilationError::function_not_found) {
+                                    CompilationError cerror = CompilationError::function_not_found, const string & moreError = "" ) {
             if ( verbose ) {
                 auto can1 = findMissingCandidates(expr->name, false);
                 auto can2 = findMissingGenericCandidates(expr->name, false);
                 can1.reserve(can1.size()+can2.size());
                 can1.insert(can1.end(), can2.begin(), can2.end());
                 auto nExtra = prepareCandidates(can1, nonNamedArguments, expr->arguments, true, true);
-                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror, nExtra, "");
+                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror, nExtra, moreError);
             } else {
                 error("no matching functions or generics: " + expr->name, "", "", expr->at, cerror);
             }
@@ -7743,6 +7807,54 @@ namespace das {
                     reportAstChanged();
                     return demoteCall(expr,generics.back());
                 } else {
+                    if ( expr->methodCall ) {
+                        auto tp = expr->nonNamedArguments[0]->type.get();
+                        auto vSelf = expr->nonNamedArguments[0];
+                        if ( tp->isPointer() && tp->firstType ) {
+                            tp = tp->firstType.get();
+                            vSelf = make_smart<ExprPtr2Ref>(vSelf->at,vSelf);
+                            vSelf->type = make_smart<TypeDecl>(*tp);
+                        }
+                        if ( tp->isStructure() ) {
+                            auto callStruct = tp->structType;
+                            vector<TypeDeclPtr> nonNamedArgumentTypes;
+                            nonNamedArgumentTypes.push_back(vSelf->type);
+                            if ( hasMatchingMemberCall(callStruct, expr->name, expr->arguments, nonNamedArgumentTypes, true) ) {
+                                reportAstChanged();
+                                auto pInvoke = makeInvokeMethod(expr->at, vSelf.get(), expr->name);
+                                auto methodFunc = findMethodFunction(callStruct, expr->name);
+                                auto newArguments = demoteCallArguments(expr, methodFunc);
+                                for ( size_t i=1, n=newArguments.size(); i!=n; ++i ) {
+                                    pInvoke->arguments.push_back(newArguments[i]);
+                                }
+                                return pInvoke;
+                            }
+                            string moreError = reportMismatchingMemberCall(callStruct, expr->name, expr->arguments, nonNamedArgumentTypes, true);
+                            reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true, CompilationError::function_not_found, moreError);
+                            return Visitor::visit(expr);
+                        }
+                    } else if ( func && func->isClassMethod && !func->isStaticClassMethod ) {  // if its a class method with 'self'
+                        auto selfStruct = func->arguments[0]->type->structType;
+                        vector<TypeDeclPtr> nonNamedArgumentTypes;
+                        for ( auto & arg : expr->nonNamedArguments ) {
+                            nonNamedArgumentTypes.push_back(arg->type);
+                        }
+                        if ( hasMatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes,false) ) {
+                            reportAstChanged();
+                            auto self = new ExprVar(expr->at, "self");
+                            auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
+                            auto methodFunc = findMethodFunction(selfStruct, expr->name);
+                            expr->nonNamedArguments.insert(expr->nonNamedArguments.begin(), self);
+                            auto newArguments = demoteCallArguments(expr, methodFunc);
+                            for ( size_t i=1, n=newArguments.size(); i!=n; ++i ) {
+                                pInvoke->arguments.push_back(newArguments[i]);
+                            }
+                            return pInvoke;
+                        }
+                        string moreError = reportMismatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes, false);
+                        reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true, CompilationError::function_not_found, moreError);
+                        return Visitor::visit(expr);
+                    }
                     reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
                 }
             } else {

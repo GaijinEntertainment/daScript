@@ -1934,6 +1934,15 @@ expr_field
         delete $method_name;
         $$ = pInvoke;
     }
+    |   expr[left] '.'[loc] NAME[method_name] '(' '[' make_struct_fields[list] ']' ')' {
+        auto nc = new ExprNamedCall(tokAt(scanner,@method_name),*$method_name);
+        nc->methodCall = true;
+        nc->arguments = *$list;
+        nc->nonNamedArguments.push_back(ExpressionPtr($left));
+        delete $list;
+        delete $method_name;
+        $$ = nc;
+    }
     |   expr[left] '.'[loc] basic_type_declaration[method_type] '(' ')' {
         auto method_name = das_to_string($method_type);
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, method_name);
