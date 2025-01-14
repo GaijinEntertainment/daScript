@@ -1165,6 +1165,58 @@ namespace das {
             return ss.str();
         }
 
+        string reportMismatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
+            auto field = st->findField(name);
+            if ( !field ) return "";
+            TextWriter ss;
+            ss << "member function '" << name << "' in '" << st->name << "' does not match\n";
+            if ( !field->classMethod ) {
+                ss << "\tis not a class method\n";
+                return ss.str();
+            }
+            const auto & fieldArgumentTypes = field->type->argTypes;
+            const auto & fieldArgumentNames = field->type->argNames;
+            if ( fieldArgumentTypes.size() != arguments.size() + 1 ) {  // (self,arg1,arg2,...) vs (arg1,arg2,...)
+                ss << "\tinvalid number of arguments\n";
+                return ss.str();
+            }
+            for ( size_t i=0; i!=arguments.size(); ++i ) {
+                if ( fieldArgumentNames[i+1] != arguments[i]->name ) {
+                    ss << "\tinvalid argument name '" << arguments[i]->name << "', expecting '" << fieldArgumentNames[i+1] << "'\n";
+                    return ss.str();
+                }
+                if ( !isMatchingArgument(nullptr, fieldArgumentTypes[i+1], arguments[i]->value->type, false, false) ) {
+                    ss << describeMismatchingArgument(arguments[i]->name, arguments[i]->value->type, fieldArgumentTypes[i+1], (int)i);
+                    return ss.str();
+                }
+            }
+            return ss.str();
+        }
+
+        bool hasMatchingMemberCall ( Structure * st, const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
+            if ( name.find("::")!=string::npos ) {
+                return false;
+            }
+            auto field = st->findField(name);
+            if ( !field->classMethod ) {
+                return false;
+            }
+            const auto & fieldArgumentTypes = field->type->argTypes;
+            const auto & fieldArgumentNames = field->type->argNames;
+            if ( fieldArgumentTypes.size() != arguments.size() + 1 ) {  // (self,arg1,arg2,...) vs (arg1,arg2,...)
+                return false;
+            }
+            for ( size_t i=0; i!=arguments.size(); ++i ) {
+                if ( fieldArgumentNames[i+1] != arguments[i]->name ) {
+                    return false;
+                }
+                if ( !isMatchingArgument(nullptr, fieldArgumentTypes[i+1], arguments[i]->value->type, false, false) ) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr>& types, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -7629,14 +7681,14 @@ namespace das {
         }
 
         void reportMissing ( ExprNamedCall * expr, const vector<TypeDeclPtr>& nonNamedArguments, const string & msg, bool reportDetails,
-                                    CompilationError cerror = CompilationError::function_not_found) {
+                                    CompilationError cerror = CompilationError::function_not_found, const string & moreError = "" ) {
             if ( verbose ) {
                 auto can1 = findMissingCandidates(expr->name, false);
                 auto can2 = findMissingGenericCandidates(expr->name, false);
                 can1.reserve(can1.size()+can2.size());
                 can1.insert(can1.end(), can2.begin(), can2.end());
                 auto nExtra = prepareCandidates(can1, nonNamedArguments, expr->arguments, true, true);
-                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror, nExtra, "");
+                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror, nExtra, moreError);
             } else {
                 error("no matching functions or generics: " + expr->name, "", "", expr->at, cerror);
             }
@@ -7743,7 +7795,22 @@ namespace das {
                     reportAstChanged();
                     return demoteCall(expr,generics.back());
                 } else {
-                    reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
+                    if ( func->isClassMethod && !func->isStaticClassMethod ) {  // if its a class method with 'self'
+                        auto selfStruct = func->arguments[0]->type->structType;
+                        if ( hasMatchingMemberCall(selfStruct, expr->name, expr->arguments) ) {
+                            reportAstChanged();
+                            auto self = new ExprVar(expr->at, "self");
+                            auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
+                            for ( auto & arg : expr->arguments ) {
+                                pInvoke->arguments.push_back(arg->value->clone());
+                            }
+                            return pInvoke;
+                        }
+                        string moreError = reportMismatchingMemberCall(selfStruct, expr->name, expr->arguments);
+                        reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true, CompilationError::function_not_found, moreError);
+                    } else {
+                        reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
+                    }
                 }
             } else {
                 auto fun = functions.back();
