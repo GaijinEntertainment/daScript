@@ -1552,7 +1552,7 @@ namespace das
         // and call macro
         {
             CallMacroPtr newM = make_smart<MakeFunctionUnsafeCallMacro>();
-            addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
+            addCallMacro(newM->name, [this, newM](const LineInfo & at) -> ExprLooksLikeCall * {
                 auto ecm = new ExprCallMacro(at, newM->name);
                 ecm->macro = newM.get();
                 newM->module = this;
