@@ -1838,12 +1838,12 @@ def private auto_start_debug()
 
 def private use_instruments() // or stepping debugger
     let args <- get_command_line_arguments()
-    return args |> has_value("--das-stepping-debugger")
+    return !has_value(args, "--das-stepping-debugger")
 
 
 def private wait_debugger(): bool
     let args <- get_command_line_arguments()
-    return args |> has_value("--das-wait-debugger")
+    return has_value(args, "--das-wait-debugger")
 
 
 def private loads_itself(): bool
