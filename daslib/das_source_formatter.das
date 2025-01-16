@@ -748,9 +748,12 @@ def is_unary(ctx: FormatterCtx; index: int): bool
         return true
 
     if ctx |> eq(index, "+") || ctx |> eq(index, "-") || ctx |> eq(index, "*")
-        if (tokens_before_unary |> find_index(ctx.tokens[index - 1].str) >= 0) || ctx |> new_line_before(index)
+        var i = index
+        while i - 1 >= 0 && ctx.tokens[i - 1].tokenType == TokenType COMMENT && !ctx |> new_line_before(i)
+            i--
+        if (tokens_before_unary |> find_index(ctx.tokens[i - 1].str) >= 0) || ctx |> new_line_before(i)
             return true
-        return ctx |> need_spaces_around(index - 1)
+        return ctx |> need_spaces_around(i - 1)
     return false
 
 
