@@ -825,12 +825,12 @@ namespace das {
 
     class RunFolding : public FoldingVisitor {
     public:
-        RunFolding( const ProgramPtr & prog, const vector<Function *> & _needRun ) : FoldingVisitor(prog),
+        RunFolding( const ProgramPtr & prog, vector<Function *> & _needRun ) : FoldingVisitor(prog),
             runProgram(prog.get()), needRun(_needRun) {
         }
     protected:
         Program * runProgram = nullptr;
-        const vector<Function *> & needRun;
+        vector<Function *> & needRun;
         bool anySimulated = false;
     protected:
         // ExprCall
@@ -843,6 +843,11 @@ namespace das {
                     }
                 }
                 if ( allConst ) {
+                    auto it = find_if(needRun.begin(), needRun.end(), [&](Function * f) { return f==expr->func; });
+                    if ( it==needRun.end() ) {
+                        needRun.push_back(expr->func);
+                        anySimulated = false;
+                    }
                     if ( !anySimulated ) {          // the reason for lazy simulation is that function can be optimized out during the same pass as it was marked for folding
                         anySimulated = true;
                         TextWriter dummy;
