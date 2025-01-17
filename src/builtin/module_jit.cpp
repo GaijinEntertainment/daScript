@@ -405,11 +405,11 @@ extern "C" {
         }
 
         #if defined(_WIN32) || defined(_WIN64)
-            auto result = fmt::format_to(cmd, "clang-cl {} {} -link -DLL -OUT:{} 2>&1", objFilePath, jitModuleObj, libraryName);
+            auto result = fmt::format_to(cmd, FMT_STRING("clang-cl {} {} -link -DLL -OUT:{} 2>&1"), objFilePath, jitModuleObj, libraryName);
         #elif defined(__APPLE__)
-            auto result = fmt::format_to(cmd, "clang -shared -o {} {} {} 2>&1", libraryName, objFilePath, jitModuleObj);
+            auto result = fmt::format_to(cmd, FMT_STRING("clang -shared -o {} {} {} 2>&1"), libraryName, objFilePath, jitModuleObj);
         #else
-            auto result = fmt::format_to(cmd, "gcc -shared -o {} {} {} 2>&1", libraryName, objFilePath, jitModuleObj);
+            auto result = fmt::format_to(cmd, FMT_STRING("gcc -shared -o {} {} {} 2>&1"), libraryName, objFilePath, jitModuleObj);
         #endif
             *result = '\0';
 

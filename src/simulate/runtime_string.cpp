@@ -169,9 +169,9 @@ namespace das
         char buffer[128];
         char * result;
         if ( hex ) {
-            result = fmt::format_to(buffer,"{:#x}",x);
+            result = fmt::format_to(buffer,FMT_STRING("{:#x}"),x);
         } else {
-            result = fmt::format_to(buffer,"{}",x);
+            result = fmt::format_to(buffer,FMT_STRING("{}"),x);
         }
         *result = 0;
         return __context__->allocateString(buffer,uint32_t(result-buffer),at);
@@ -205,7 +205,7 @@ namespace das
     template <typename TT>
     __forceinline char * das_lexical_cast_fp_T ( TT x, Context * __context__, LineInfoArg * at ) {
         char buffer[128];
-        auto result = fmt::format_to(buffer,"{}",x);
+        auto result = fmt::format_to(buffer,FMT_STRING("{}"),x);
         *result = 0;
         return __context__->allocateString(buffer,uint32_t(result-buffer),at);
     }
@@ -504,7 +504,7 @@ namespace das
         else if ( val==-DBL_MAX ) return "(-DBL_MAX)";
         else {
             char buf[256];
-            auto result = fmt::format_to(buf, "{:e}", val);
+            auto result = fmt::format_to(buf, FMT_STRING("{:e}"), val);
             *result = 0;
             return buf;
         }
@@ -536,7 +536,7 @@ namespace das
         else if ( val==-FLT_MAX ) return "(-FLT_MAX)";
         else {
             char buf[256];
-            auto result = fmt::format_to(buf, "{:e}f", val);
+            auto result = fmt::format_to(buf, FMT_STRING("{:e}f"), val);
             *result = 0;
             return buf;
         }
