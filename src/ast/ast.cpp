@@ -662,12 +662,12 @@ namespace das {
     }
 
     string Function::getMangledName() const {
-        FixedBufferTextWriter ss;
+        TextWriter ss;
         getMangledName(ss);
         return ss.str();
     }
 
-    void Function::getMangledName(FixedBufferTextWriter & ss) const {
+    void Function::getMangledName(TextWriter & ss) const {
         if ( module && !module->name.empty() ) {
             ss << "@" << module->name << "::";
         }
