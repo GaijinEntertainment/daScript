@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, linux_arm, darwin, darwin14, windows]
+        target: [linux, linux_arm, darwin, darwin13, windows]
         architecture: [32, 64]
         cmake_preset: [ Debug, Release ]
 
@@ -45,17 +45,17 @@ jobs:
           - target: linux
             runner: ubuntu-latest
             archive_ext: tar.gz
-            
+
           - target: linux_arm
             runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
           - target: darwin
-            runner: macos-latest
+            runner: macos-latest # arm64
             archive_ext: tar.gz
 
-          - target: darwin14
-            runner: macos-14
+          - target: darwin13
+            runner: macos-13 # x64
             archive_ext: tar.gz
 
           - target: windows
@@ -70,7 +70,7 @@ jobs:
             build_system: cmake
             cmake_generator: Ninja
 
-          - target: darwin14  
+          - target: darwin13
             build_system: cmake
             cmake_generator: Ninja
 
@@ -94,7 +94,7 @@ jobs:
           - target: darwin
             architecture: 32
 
-          - target: darwin14
+          - target: darwin13
             architecture: 32
 
           - target: linux
@@ -135,14 +135,14 @@ jobs:
               libxinerama-dev \
               libxi-dev
             ;;
-          darwin64)
+          darwin1364)
             brew install bison
             echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
             export LDFLAGS="-L/usr/local/opt/bison/lib"
             ;;
-          darwin1464)
+          darwin64)
             brew install bison
-            echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> /Users/runner/.bash_profile
+            echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
             export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
             ;;
         esac
