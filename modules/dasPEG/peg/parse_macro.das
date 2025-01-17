@@ -115,8 +115,8 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         // Bound terminal
 
         var as_expr <- expr as ExprAsVariant
-        var bound_name <- as_expr.name |> string()
-        var bound_rule <- (as_expr.value as ExprVar).name |> string()
+        var bound_name = as_expr.name |> string()
+        var bound_rule = (as_expr.value as ExprVar).name |> string()
 
         if bound_rule == "number"
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal number = bound_name]]]]]]
@@ -134,7 +134,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         var subrule = ((expr as ExprAsVariant).value as ExprCall).arguments[0] |> into_rule_
         subrule.name := as_expr.name
         var inscope t <- [[Rule option <- subrule]]
-        return <- new [[Rule_ rule <- t, name <- as_expr.name |> string()]]
+        return <- new [[Rule_ rule <- t, name = as_expr.name |> string()]]
 
     elif expr is ExprAsVariant && ((expr as ExprAsVariant).value is ExprPtr2Ref)
         var as_expr <- expr as ExprAsVariant

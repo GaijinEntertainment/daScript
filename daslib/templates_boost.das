@@ -302,7 +302,7 @@ def make_expression_block ( var exprs:dasvector`smart_ptr`Expression ) : smart_p
         blk.list |> emplace_new <| clone_expression(e)
     return <- blk
 
-def private add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr; priv:bool )
+def private add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:TypeDeclFlags; var value:ExpressionPtr; priv:bool ) : bool
     var inscope vvar <- new [[Variable() at=vat,
         name:=vname,
         _type <- new [[TypeDecl() at=vat,
@@ -314,7 +314,7 @@ def private add_global_var_any ( mod:Module?; vname:string; vat:LineInfo; vflag:
     vvar.flags |= VariableFlags generated
     if priv
         vvar.flags |= VariableFlags private_variable
-    return <- add_variable(mod, vvar)
+    return add_variable(mod, vvar)
 
 def add_global_var ( mod:Module?; vname:string; vat:LineInfo; var value:ExpressionPtr )
     //! Adds global variable to the module, given name and initial value.
