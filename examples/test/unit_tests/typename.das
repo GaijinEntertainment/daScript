@@ -26,7 +26,7 @@ def test:bool
     assert(typeinfo(typename type<numT>)=="int")
     assert(testInfT(3)=="int")
     assert(testVarRefT(3)=="int")
-    assert(testVarValT(3)=="int")
+    assert(testVarValT(3)=="int const")
     var y : table<string;int>
     assert(tabTypes(y)=="string:int")
     var z : array<float>
@@ -34,4 +34,6 @@ def test:bool
     assert(arrType(z)=="float")
     assert(arrType(ZZ)=="Foo")
     return true
+
+
 

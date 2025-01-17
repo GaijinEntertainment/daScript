@@ -968,14 +968,14 @@ def public format_source_string(file_data: string const& implicit): string
     ctx.data <- [{ for c in file_data; uint8(c) }]
     ctx.data |> push(uint8(0))
     ctx |> do_format()
-    return <- generate_source(ctx)
+    return generate_source(ctx)
 
 
 def format_source(var ctx: FormatterCtx; file_data: array<uint8> const& implicit): string
     ctx.data := file_data
     ctx.data |> push(uint8(0))
     ctx |> do_format()
-    return <- generate_source(ctx)
+    return generate_source(ctx)
 
 
 def public format_source(file_data: array<uint8> const& implicit): string

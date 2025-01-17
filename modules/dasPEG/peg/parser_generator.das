@@ -477,7 +477,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                 var $i("ext_pos_{i}") = parser.index
                 $b(subrule_)
                 var $i("str_{i}") = unsafe(reinterpret<string> unsafe(addr(parser.input[0])))
-                var $i(result_handle): string <- $i("str_{i}") |> slice($i("ext_pos_{i}"), parser.index)
+                var $i(result_handle): string = $i("str_{i}") |> slice($i("ext_pos_{i}"), parser.index)
                 if $v(gen.tracing)
                     parser |> log_info <| "Extracted text from the stream: '{$i(result_handle) |> escape}'"
 
