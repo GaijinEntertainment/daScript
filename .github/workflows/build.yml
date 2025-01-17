@@ -37,13 +37,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, darwin, darwin14, windows]
+        target: [linux, linux_arm, darwin, darwin14, windows]
         architecture: [32, 64]
         cmake_preset: [ Debug, Release ]
 
         include:
           - target: linux
             runner: ubuntu-latest
+            archive_ext: tar.gz
+            
+          - target: linux_arm
+            runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
           - target: darwin
@@ -74,6 +78,10 @@ jobs:
             build_system: cmake
             cmake_generator: Ninja
 
+          - target: linux_arm
+            build_system: cmake
+            cmake_generator: Ninja
+
           - target: windows
             architecture: 32
             architecture_string: Win32
@@ -90,6 +98,9 @@ jobs:
             architecture: 32
 
           - target: linux
+            architecture: 32
+
+          - target: linux_arm
             architecture: 32
 
     steps:
