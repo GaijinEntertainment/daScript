@@ -1293,30 +1293,29 @@ def clear ( var t : table<auto(KT); auto(VT)> )
         _builtin_verify_locks(t)
     _builtin_table_clear(t)
 
-
-def float2(a,b)
+def float2(a,b) : float2 const
     return float2(float(a),float(b))
 
-def float3(a,b,c)
+def float3(a,b,c) : float3 const
     return float3(float(a),float(b),float(c))
 
-def float4(a,b,c,d)
+def float4(a,b,c,d) : float4 const
     return float4(float(a),float(b),float(c),float(d))
 
-def int2(a,b)
+def int2(a,b) : int2 const
     return int2(int(a),int(b))
 
-def int3(a,b,c)
+def int3(a,b,c) : int3 const
     return int3(int(a),int(b),int(c))
 
-def int4(a,b,c,d)
+def int4(a,b,c,d) : int4 const
     return int4(int(a),int(b),int(c),int(d))
 
-def uint2(a,b)
+def uint2(a,b) : uint2 const
     return uint2(uint(a),uint(b))
 
-def uint3(a,b,c)
+def uint3(a,b,c) : uint3 const
     return uint3(uint(a),uint(b),uint(c))
 
-def uint4(a,b,c,d)
+def uint4(a,b,c,d) : uint4 const
     return uint4(uint(a),uint(b),uint(c),uint(d))
