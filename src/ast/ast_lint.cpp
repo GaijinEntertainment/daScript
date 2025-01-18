@@ -250,6 +250,9 @@ namespace das {
         bool isValidStructureName(const string & str) const {
             return !isCppKeyword(str);
         }
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate;     // not a thing with templates
+        }
         virtual void preVisit ( Structure * var ) override {
             Visitor::preVisit(var);
             if (!isValidStructureName(var->name)) {
@@ -642,6 +645,9 @@ namespace das {
         }
         bool isValidFunctionName(const string & str) const {
             return !isCppKeyword(str);
+        }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);

@@ -1962,6 +1962,9 @@ namespace das {
         }
 
     // strcuture
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate; // we don't do a thing with templates
+        }
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             fieldOffset = 0;
@@ -2278,6 +2281,9 @@ namespace das {
             if ( unsafeDepth ) return true;
             if ( expr->alwaysSafe ) return true;
             return false;
+        }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);

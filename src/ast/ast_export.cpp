@@ -7,6 +7,9 @@ namespace das {
 
     class ClearUnusedSymbols : public Visitor {
     public:
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate;    // we don't do a thing with templates
+        }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return true; }
         virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return false; }
         virtual void preVisit(ExprAddr * expr) override {
@@ -59,6 +62,7 @@ namespace das {
         }
         void propagateFunctionUse(const FunctionPtr & fn) {
             assert(fn);
+            if (fn->isTemplate) return;
             if (fn->used) return;
             if (fn->builtIn) return;
             push(fn);
@@ -136,6 +140,9 @@ namespace das {
     public:
         TextWriter * tw = nullptr;
     protected:
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate;    // we don't do a thing with templates
+        }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return false; }
         // global variable declaration

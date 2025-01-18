@@ -1,17 +1,16 @@
-def acall(a:lambda<():void>) {
-    invoke(a);
+options gen2
+
+template struct Foo  {
+    a : $t(TT) = 2
+
+    def add(b : $t(TT)) {
+        a += b
+    }
 }
 
 [export]
 def main() {
-
-    unsafe {
-        var arr = array<float2>() ;
-        acall(@(){
-            let v = float2(0,1);  // it is ok, if not comment~~
-            arr.push(v);            // it is ok, if not comment~~
-            arr.push(float2(0,2));
-        });
-    }
-
+    print("Hello, World!\n")
 }
+
+options log_infer_passes;

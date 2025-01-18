@@ -176,7 +176,7 @@ namespace das {
             "generated", "persistent", "isLambda", "privateStructure",
             "macroInterface", "_sealed", "skipLockCheck", "circular",
             "_generator", "hasStaticMembers", "hasStaticFunctions",
-            "hasInitFields", "safeWhenUninitialized" };
+            "hasInitFields", "safeWhenUninitialized", "isTemplate" };
         return ft;
     }
 
@@ -200,7 +200,7 @@ namespace das {
             "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES",
             "addressTaken", "propertyFunction", "pinvoke", "jitOnly", "isStaticClassMethod", "requestNoJit",
             "jitContextAndLineInfo", "nodiscard", "captureString", "callCaptureString", "hasStringBuilder",
-            "recursive"
+            "recursive", "isTemplate"
         };
         return ft;
     }
