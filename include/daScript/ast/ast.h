@@ -303,6 +303,7 @@ namespace das
                 bool    hasStaticFunctions : 1;
                 bool    hasInitFields : 1;
                 bool    safeWhenUninitialized : 1;
+                bool    isTemplate : 1;
             };
             uint32_t    flags = 0;
         };
@@ -938,6 +939,7 @@ namespace das
                 bool    callCaptureString : 1;
                 bool    hasStringBuilder : 1;
                 bool    recursive : 1;              // this one is detected by the updateKeepAlive during the simulate, if enabled
+                bool    isTemplate : 1;
             };
             uint32_t moreFlags = 0;
         };

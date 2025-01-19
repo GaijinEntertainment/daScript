@@ -177,6 +177,7 @@ namespace das {
             Visitor::preVisit(that);
             logAnnotations(that->annotations);
             if ( that->macroInterface ) ss << "[macro_interface]\n";
+            if ( that->isTemplate ) ss << "template ";
             ss << (that->isClass ? "class " : "struct ");
             ss << (that->privateStructure ? "private " : "public ") << that->name;
             if ( that->parent ) {
@@ -352,6 +353,9 @@ namespace das {
             }
             if ( fn->fromGeneric ) {
                 ss << "// from generic " << fn->fromGeneric->describe() << "\n";
+            }
+            if ( fn->isTemplate ) {
+                ss << "template ";
             }
             ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;
             if ( fn->arguments.size() ) ss << "(";

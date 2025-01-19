@@ -1024,6 +1024,9 @@ namespace das {
         virtual bool canVisitStructureFieldInit ( Structure * ) override {
             return false;
         }
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate;     // not a thing with templates
+        }
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             if ( that->cppLayout ) {
@@ -1148,6 +1151,7 @@ namespace das {
     // function
         virtual bool canVisitFunction ( Function * fun ) override {
             if ( fun->noAot ) return false;
+            if ( fun->isTemplate ) return false;
             return true;
         }
         virtual void preVisit ( Function * fn) override {

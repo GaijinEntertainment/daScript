@@ -20,11 +20,12 @@ namespace das {
         bool                    failedToCMRES = false;
         bool                    isEverything = false;
     protected:
+
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual bool canVisitGlobalVariable ( Variable * var ) override { return isEverything || var->used; }
-        virtual bool canVisitFunction ( Function * fun ) override { return isEverything || fun->used; }
+        virtual bool canVisitFunction ( Function * fun ) override { return !fun->isTemplate && (isEverything || fun->used); }
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -123,6 +124,7 @@ namespace das {
             return true;
         }
         virtual bool canVisitFunction ( Function * fun ) override {
+            if ( fun->isTemplate ) return false;
             if ( fun->stackResolved ) return false;
             if ( !fun->used && !isEverything ) return false;
             fun->stackResolved = isPermanent;
@@ -135,6 +137,9 @@ namespace das {
             return result;
         }
     // structure
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate;     // not a thing with templates
+        }
         virtual void preVisit ( Structure * var ) override {
             Visitor::preVisit(var);
             inStruct = true;
@@ -641,7 +646,9 @@ namespace das {
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
         virtual bool canVisitGlobalVariable ( Variable * var ) override { return var->used; }
-        virtual bool canVisitFunction ( Function * fun ) override { return fun->used; }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate && fun->used;
+        }
         void allocateString ( const string & message ) {
             if ( !message.empty() ) {
                 if ( uniStr.find(message)==uniStr.end() ) {

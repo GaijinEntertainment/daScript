@@ -8,6 +8,9 @@ namespace das {
 
     class TrackVariableFlags : public Visitor {
     protected:
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate;    // we don't do a thing with templates
+        }
         // global let
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
@@ -95,13 +98,13 @@ namespace das {
     public:
         void MarkSideEffects ( Module & mod ) {
             for ( auto & fn : mod.functions.each() ) {
-                if (!fn->builtIn) {
+                if (!fn->isTemplate && !fn->builtIn) {
                     fn->knownSideEffects = false;
                     fn->sideEffectFlags &= ~uint32_t(SideEffects::inferredSideEffects);
                 }
             }
             for ( auto & fn : mod.functions.each() ) {
-                if (!fn->builtIn && !fn->knownSideEffects) {
+                if (!fn->isTemplate && !fn->builtIn && !fn->knownSideEffects) {
                     asked.clear();
                     getSideEffects(fn);
                 }
@@ -243,7 +246,7 @@ namespace das {
             //  do we need to?
         }
         uint32_t getSideEffects ( const FunctionPtr & fnc ) {
-            if ( fnc->builtIn || fnc->knownSideEffects ) {
+            if ( fnc->isTemplate || fnc->builtIn || fnc->knownSideEffects ) {
                 return fnc->sideEffectFlags;
             }
             if ( asked.find(fnc.get())!=asked.end() ) {
@@ -320,6 +323,9 @@ namespace das {
             return flags;
         }
     protected:
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate;    // we don't do a thing with templates
+        }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
@@ -612,6 +618,9 @@ namespace das {
 
     class RemoveUnusedLocalVariables : public PassVisitor {
     protected:
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate;    // we don't do a thing with templates
+        }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }

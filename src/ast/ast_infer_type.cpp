@@ -751,6 +751,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
+                        if ( pFn->isTemplate ) continue;
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
                                 result.push_back(pFn.get());
@@ -1235,6 +1236,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
+                        if ( pFn->isTemplate ) continue;
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
@@ -1264,6 +1266,7 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->jitOnly && !program->policies.jit ) continue;
+                        if ( pFn->isTemplate ) continue;
                         if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
@@ -1293,6 +1296,7 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->jitOnly && !program->policies.jit ) continue;
+                        if ( pFn->isTemplate ) continue;
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 if ( isFunctionCompatible(pFn, types, arguments, true, true) ) {   // infer block here?
@@ -1319,6 +1323,7 @@ namespace das {
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
+                        if ( pFn->isTemplate ) continue;
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
@@ -1415,6 +1420,9 @@ namespace das {
                         }
                         ss << "\n";
                     }
+                    if ( missFn->isTemplate ) {
+                        ss << "\t\tfunction is part of a template, and can't be called without template instance\n";
+                    }
                 }
                 if ( nExtra>0 && candidateFunctions.size()!=0 ) {
                     ss << "also " << nExtra << " more candidates\n";
@@ -1494,6 +1502,9 @@ namespace das {
                             ss << " to module " << missFn->module->name;
                         }
                         ss << "\n";
+                    }
+                    if ( missFn->isTemplate ) {
+                        ss << "\t\tfunction is part of a template, and can't be called without template instance\n";
                     }
                 }
                 if ( nExtra>0 && candidateFunctions.size()!=0 ) {
@@ -1962,6 +1973,9 @@ namespace das {
         }
 
     // strcuture
+        virtual bool canVisitStructure ( Structure * st ) override {
+            return !st->isTemplate; // we don't do a thing with templates
+        }
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             fieldOffset = 0;
@@ -2278,6 +2292,9 @@ namespace das {
             if ( unsafeDepth ) return true;
             if ( expr->alwaysSafe ) return true;
             return false;
+        }
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -2626,6 +2643,9 @@ namespace das {
                                     ss << " to module " << missFn->module->name;
                                 }
                                 ss << "\n";
+                            }
+                            if ( missFn->isTemplate ) {
+                                ss << "\t\tfunction is part of a template, and can't be called without template instance\n";
                             }
                         }
                     }
@@ -8685,8 +8705,8 @@ namespace das {
             }
             if ( func && !expr->func && func->isClassMethod && func->arguments.size()>=1 ) {
                 auto bt = func->arguments[0]->type;
-                if ( bt && bt->isClass() ) {
-                    if ( expr->name.find("::") == string::npos ) {  // we only promote to self->call() if its not blah::call, _::call, or __::call
+                if ( bt && bt->isStructure() ) {
+                    if ( expr->name.find("::") == string::npos ) {  // we only promote to Struct`call() or self->call() if its not blah::call, _::call, or __::call
                         auto memFn = bt->structType->findField(expr->name);
                         if ( memFn && memFn->type ) {
                             if (  memFn->type->dim.size()==0 && (memFn->type->baseType==Type::tBlock || memFn->type->baseType==Type::tLambda || memFn->type->baseType==Type::tFunction) ) {
@@ -8708,6 +8728,20 @@ namespace das {
                                         invokeExpr->arguments.push_back(arg->clone());
                                     }
                                     return invokeExpr;
+                                }
+                            }
+                        } else {
+                            auto staticName = bt->structType->name + "`" + expr->name;
+                            vector<TypeDeclPtr> types;
+                            if ( inferArguments(types, expr->arguments) ) {
+                                auto functions = findMatchingFunctions(staticName, types, true);
+                                if ( functions.size()==1 ) {
+                                    auto staticFunc = functions.back();
+                                    if ( staticFunc->isStaticClassMethod ) {
+                                        reportAstChanged();
+                                        expr->name = staticName;
+                                        return Visitor::visit(expr);
+                                    }
                                 }
                             }
                         }
@@ -9215,6 +9249,15 @@ namespace das {
 
             // see if there are any duplicate fields
             if ( expr->makeType->baseType == Type::tStructure ) {
+                if ( expr->makeType->structType->isTemplate ) {
+                    string extraError;
+                    if ( func ) {
+                        extraError = "while compiling function " + func->describe();
+                    }
+                    error("can't initialize template structure " + expr->makeType->structType->name, extraError, "",
+                        expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                }
                 bool anyDuplicates = false;
                 for ( auto & st : expr->structs ) {
                     das_set<string> fld;
@@ -9234,7 +9277,7 @@ namespace das {
                     for ( auto & stf : expr->makeType->structType->fields  ) {
                         if ( stf.init  ) {
                             if ( !stf.init->type || stf.init->type->isAuto() ) {
-                                error("not fully resolved yet", "", "", expr->at);
+                                error("structure '" + expr->makeType->structType->name + "' is not fully resolved yet", "", "", expr->at);
                                 return Visitor::visit(expr);
                             }
                         }
