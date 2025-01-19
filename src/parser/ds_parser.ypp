@@ -30,6 +30,13 @@
         CorM_CLONE  = (1<<1)
     };
 
+    enum {
+        CorS_Struct = 0,
+        CorS_Class  = 1,
+        CorS_StructTemplate = 2,
+        CorS_ClassTemplate  = 3
+    };
+
     using namespace das;
 
     #include "parser_impl.h"
@@ -248,6 +255,7 @@
 %token  DAS_GENERATOR       "generator"
 %token  DAS_YIELD           "yield"
 %token  DAS_SEALED          "sealed"
+%token  DAS_TEMPLATE        "template"
 
 /* operators */
 %token  ADDEQU              "+="
@@ -392,7 +400,7 @@
 %type <pStructure>      structure_name
 %type <aTypePair>       table_type_pair
 
-%type <b>               class_or_struct
+%type <i>               class_or_struct
 %type <b>               copy_or_move
 %type <i>               optional_override
 %type <b>               optional_constant
@@ -2267,6 +2275,7 @@ struct_variable_declaration_list
                     auto tak = tokAt(scanner,@func);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
                 }
+                $func->isTemplate = yyextra->g_thisStructure->isTemplate;
                 $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$cnst, $func);
             }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
@@ -2280,6 +2289,7 @@ struct_variable_declaration_list
                     auto tak = tokAt(scanner,@block);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
                 }
+                $func->isTemplate = yyextra->g_thisStructure->isTemplate;
                 $$ = ast_structVarDef(scanner,$list,$annL,$isStatic,$isPrivate,$ovr,$cnst,$func,$block,tokRangeAt(scanner,@from,@block),tokAt(scanner,@annL));
             }
     |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
@@ -2716,8 +2726,10 @@ structure_name
     ;
 
 class_or_struct
-    :   DAS_CLASS   { $$ = true; }
-    |   DAS_STRUCT  { $$ = false; }
+    :   DAS_CLASS   { $$ = CorS_Class; }
+    |   DAS_STRUCT  { $$ = CorS_Struct; }
+    |   DAS_TEMPLATE DAS_CLASS   { $$ = CorS_ClassTemplate; }
+    |   DAS_TEMPLATE DAS_STRUCT  { $$ = CorS_StructTemplate; }
     ;
 
 optional_public_or_private_structure
@@ -2741,7 +2753,13 @@ structure_declaration
             auto tak = tokAt(scanner,@loc);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeStructure(tak);
         }
-    } structure_name[ps] { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } optional_struct_variable_declaration_list[list] {
+    } structure_name[ps] {
+        if ( $ps ) {
+            $ps->isClass = $loc==CorS_Class || $loc==CorS_ClassTemplate;
+            $ps->isTemplate = $loc==CorS_ClassTemplate || $loc==CorS_StructTemplate;
+            $ps->privateStructure = !$pub_str;
+        }
+    } optional_struct_variable_declaration_list[list] {
         if ( $ps ) {
             ast_structureDeclaration ( scanner, $annL, tokAt(scanner,@loc), $ps, tokAt(scanner,@ps), $list );
             if ( !yyextra->g_CommentReaders.empty() ) {

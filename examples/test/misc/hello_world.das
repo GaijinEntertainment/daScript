@@ -1,32 +1,30 @@
-options gen2
-
 template struct Foo  {
-    a_t : $t(TT) = 2
+    a_t : $t(TT) = 2;
 
     def add(b : $t(TT)) {
-        a_t += b
+        a_t += b;
     }
 
-    s : int
+    s : int;
 
     def static sum ( a,b : int ) : int {
-        return a + b
+        return a + b;
     }
 
 
     def init() {
-        s = sum(1,2)
+        s = sum(1,2);
     }
 
 }
 
 [export]
 def main() {
-    print("Hello, World!\n")
-    var f = Foo()
-    debug(f)
-    let t = @@Foo`sum
-    debug(t)
+    print("Hello, World!\n");
+    var f = Foo();
+    debug(f);
+    let t = @@Foo`sum;
+    debug(t);
 }
 
 options log;
