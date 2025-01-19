@@ -5,31 +5,31 @@ enum do // 30116: invalid name
     bar
 
 enum foo
-    template = 5    // 30116: invalid name
-    notemplate
+    register = 5    // 30116: invalid name
+    noregister
 
 struct Foo
-    template : string   // 30116: invalid name
+    register : string   // 30116: invalid name
 
-struct template // 30116: invalid name
+struct register // 30116: invalid name
     foo : int
 
 def do(a:int)   // 30116: invalid name
     return a
 
-def foo(template:int)   // 30116: invalid name
-    return template
+def foo(register:int)   // 30116: invalid name
+    return register
 
 def bar(a:int)
-    let template = a        // 30116: invalid name
-    return template
+    let register = a        // 30116: invalid name
+    return register
 
 def any(x)
     invoke(x,12)
 
 def lbm(a:int)
-    any() <| $ ( template : int )   // 30116: invalid name
-        return a + template
+    any() <| $ ( register : int )   // 30116: invalid name
+        return a + register
 
 [export]
 def test
