@@ -1020,6 +1020,7 @@ annotation_declaration_name
     :   name_in_namespace[name]     { $$ = $name; }
     |   DAS_REQUIRE                 { $$ = new string("require"); }
     |   DAS_PRIVATE                 { $$ = new string("private"); }
+    |   DAS_TEMPLATE                { $$ = new string("template"); }
     ;
 
 annotation_declaration_basic
