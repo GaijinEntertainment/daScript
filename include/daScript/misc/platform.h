@@ -370,7 +370,7 @@ inline size_t das_aligned_memsize(void * ptr){
 #endif
 
 #ifndef DAS_AOT_INLINE_LAMBDA
-    #ifdef _MSC_VER
+    #if defined(_MSC_VER) && !defined(__clang__)
         #if __cplusplus >= 202002L
             #define DAS_AOT_INLINE_LAMBDA [[msvc::forceinline]]
         #else
