@@ -69,7 +69,9 @@ class AppendCondAnnotation : AstFunctionAnnotation
       ctxFnArguments |> emplace_new <| clone_variable(arg)
       callInCtxArguments |> emplace_new <| qmacro($i(arg.name))
     if !func.result.isVoid
-      ctxFnArguments |> emplace_new <| qmacro_variable(resName,type<$t(func.result)?>)
+      var inscope resType = clone_type(func.result)
+      resType.flags &= ~TypeDeclFlags constant
+      ctxFnArguments |> emplace_new <| qmacro_variable(resName,type<$t(resType)?>)
       ctxFnBlockList |> emplace_new <| qmacro_expr(${*$i(resName) = $c(ctxCloneFnName)($a(callInCtxArguments));})
     else
       ctxFnBlockList |> emplace_new <| qmacro($c(ctxCloneFnName)($a(callInCtxArguments)))
@@ -107,4 +109,3 @@ class AppendCondAnnotation : AstFunctionAnnotation
           $b(funcBlocklist)
     compiling_module() |> add_function(fn)
     return true
-
