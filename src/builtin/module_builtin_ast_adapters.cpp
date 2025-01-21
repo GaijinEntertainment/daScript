@@ -2542,6 +2542,21 @@ namespace das {
         func->visit(*adapter);
     }
 
+    smart_ptr_raw<TypeDecl> astVisitTypeDecl ( smart_ptr_raw<TypeDecl> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(line_info, "adapter is required");
+        if (!expr)
+            context->throw_error_at(line_info, "expr is required");
+        adapter->preVisit(expr.get());
+        expr->visit(*adapter);
+        smart_ptr<TypeDecl> res = adapter->visit(expr.get());
+        if ( res.get()!=expr.get() ) {
+            DAS_VERIFYF(res->use_count()==1,"visitor returns new value, refcount must be 1 or else there will be a leak");
+            res->addRef();
+        }
+        return res;
+    }
+
     smart_ptr_raw<Expression> astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
@@ -2580,6 +2595,9 @@ namespace das {
                 ->args({"function","adapter","context","line"});
         addExtern<DAS_BIND_FUN(astVisitExpression)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisitExpression")
+                ->args({"expression","adapter","context","line"});
+        addExtern<DAS_BIND_FUN(astVisitTypeDecl)>(*this, lib,  "visit",
+            SideEffects::accessExternal, "astVisitTypeDecl")
                 ->args({"expression","adapter","context","line"});
         addExtern<DAS_BIND_FUN(astVisitBlockFinally)>(*this, lib,  "visit_finally",
             SideEffects::accessExternal, "astVisitBlockFinally")
