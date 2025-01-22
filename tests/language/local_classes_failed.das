@@ -1,4 +1,4 @@
-expect 30104:2
+expect 31300:1
 options no_local_class_members
 
 class A

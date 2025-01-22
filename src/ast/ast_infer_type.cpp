@@ -2056,6 +2056,21 @@ namespace das {
                 error("structure field type can't be declared a reference", "", "",
                     decl.at,CompilationError::invalid_structure_field_type);
             }
+
+            if ( noUnsafeUninitializedStructs && !st->isLambda && !decl.init && decl.type->unsafeInit() ) {
+                bool safeWhenUninitialized = false;
+                for ( auto & ann : decl.annotation ) {
+                    if ( ann.name=="safe_when_uninitialized" ) {
+                        safeWhenUninitialized = true;
+                        break;
+                    }
+                }
+                if ( !safeWhenUninitialized ) {
+                    error("Uninitialized field " + decl.name + " is unsafe. Use initializer syntax or @safe_when_uninitialized when intended.", "", "",
+                        decl.at, CompilationError::unsafe);
+                }
+            }
+
             if ( decl.init ) {
                 if ( decl.init->type ) {
                     if ( !canCopyOrMoveType(decl.type,decl.init->type,TemporaryMatters::yes, decl.init.get(),

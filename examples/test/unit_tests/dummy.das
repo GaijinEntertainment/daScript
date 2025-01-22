@@ -2,7 +2,7 @@ require UnitTest
 
 struct MyStruct
     a : int8
-    b : SomeDummyType   // { int; float }
+    @safe_when_uninitialized b : SomeDummyType   // { int; float }
 
 [export]
 def test
