@@ -177,6 +177,7 @@ namespace das
             *pi = i;
             SimNode ** __restrict body = this->list;
         loopbegin:;
+            DAS_KEEPALIVE_LOOP(&context);
             for (; body!=tail; ++body) {
                 (*body)->eval(context);
                 DAS_PROCESS_LOOP_FLAGS(break);
