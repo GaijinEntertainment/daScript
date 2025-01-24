@@ -4316,7 +4316,6 @@ namespace das {
             }
             // infer
             if ( !expr->subexpr->type->canDelete() ) {
-                expr->subexpr->type->canDelete();
                 error("can't delete " + describeType(expr->subexpr->type), "", "",
                       expr->at, CompilationError::bad_delete);
             } else if ( !expr->subexpr->type->isRef() ) {
@@ -6210,6 +6209,9 @@ namespace das {
                 error("cond operator must return the same types on both sides",
                     "\t" + (verbose ? (expr->left->type->describe() + " vs " + expr->right->type->describe()) :""), "",
                       expr->at, CompilationError::operator_not_found);
+            } else if ( expr->left->type->isVoid() ) {
+                error("cond operator must return a value, not void", "", "",
+                    expr->at, CompilationError::invalid_type);
             } else {
                 if ( expr->left->type->ref ^ expr->right->type->ref ) { // if either one is not ref
                     expr->left = Expression::autoDereference(expr->left);
