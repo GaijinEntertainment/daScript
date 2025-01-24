@@ -377,6 +377,7 @@ namespace das
         while ( !context.stopFlags ) {
             SimNode ** __restrict body = list;
         loopbegin:;
+            DAS_KEEPALIVE_LOOP(&context);
             for (; body!=tail; ++body) {
                 (*body)->eval(context);
                 DAS_PROCESS_LOOP_FLAGS(break);
@@ -705,6 +706,7 @@ namespace das
         while ( cond->evalBool(context) && !context.stopFlags ) {
             SimNode ** __restrict body = list;
         loopbegin:;
+            DAS_KEEPALIVE_LOOP(&context);
             for (; body!=tail; ++body) {
                 (*body)->eval(context);
                 DAS_PROCESS_LOOP_FLAGS(break);
@@ -736,26 +738,6 @@ namespace das
         return v_zero();
     }
 
-#endif
-
-#if DAS_ENABLE_KEEPALIVE
-    vec4f SimNodeKeepAlive_While::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        SimNode ** __restrict tail = list + total;
-        while ( cond->evalBool(context) && !context.stopFlags ) {
-            SimNode ** __restrict body = list;
-        loopbegin:;
-            DAS_KEEPALIVE_LOOP(&context);
-            for (; body!=tail; ++body) {
-                (*body)->eval(context);
-                DAS_PROCESS_LOOP_FLAGS(break);
-            }
-        }
-    loopend:;
-        evalFinal(context);
-        context.stopFlags &= ~EvalFlags::stopForBreak;
-        return v_zero();
-    }
 #endif
 
     // Return
