@@ -7510,7 +7510,13 @@ namespace das {
                 }
             } else {
                 if ( var->init_via_clone ) {
-                    return promoteToCloneToMove(var);
+                    if ( var->init->type->isWorkhorseType() ) {
+                        var->init_via_clone = false;
+                        var->init_via_move = false;
+                        reportAstChanged();
+                    } else {
+                        return promoteToCloneToMove(var);
+                    }
                 }
             }
             return Visitor::visitLetInit(expr, var, init);
