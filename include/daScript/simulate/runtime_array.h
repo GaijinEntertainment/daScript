@@ -149,7 +149,6 @@ namespace das
                 }
                 SimNode ** __restrict body = list;
             loopbegin:;
-                DAS_KEEPALIVE_LOOP(&context);
                 for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
@@ -204,7 +203,6 @@ namespace das
                 ph += stride;
                 SimNode ** __restrict body = list;
             loopbegin:;
-                DAS_KEEPALIVE_LOOP(&context);
                 for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
@@ -657,7 +655,6 @@ namespace das
                 }
                 SimNode ** __restrict body = list;
             loopbegin:;
-                DAS_KEEPALIVE_LOOP(&context);
                 for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
@@ -703,7 +700,6 @@ namespace das
                 ph += stride;
                 SimNode ** __restrict body = list;
             loopbegin:;
-                DAS_KEEPALIVE_LOOP(&context);
                 for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);

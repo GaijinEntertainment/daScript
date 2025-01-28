@@ -3452,6 +3452,12 @@ SIM_NODE_AT_VECTOR(Float, float)
 
 #endif
 
+    struct SimNodeKeepAlive_While : SimNode_While {
+        SimNodeKeepAlive_While ( const LineInfo & at, SimNode * c )
+            : SimNode_While(at,c) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+    };
+
     struct SimNode_ForWithIteratorBase : SimNode_Block {
         SimNode_ForWithIteratorBase ( const LineInfo & at )
             : SimNode_Block(at) { }
@@ -3499,7 +3505,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             while ( !context.stopFlags ) {
                 SimNode ** __restrict body = list;
             loopbegin:;
-                DAS_KEEPALIVE_LOOP(&context);
                 for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
@@ -3557,7 +3562,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             while ( !context.stopFlags ) {
                 SimNode ** __restrict body = list;
             loopbegin:;
-                DAS_KEEPALIVE_LOOP(&context);
                 for (; body!=tail; ++body) {
                     (*body)->eval(context);
                     DAS_PROCESS_LOOP_FLAGS(break);
