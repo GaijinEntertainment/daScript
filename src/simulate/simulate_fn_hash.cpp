@@ -114,20 +114,19 @@ namespace das {
     }
 
     uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context ) {
-        debug_hash("\n%s\n", fun->name.c_str());
+        debug_hash("\n%s\n", fun->getMangledName().c_str());
         SimFnHashVisitor hashV(context);
         // append return type and result type
         uint64_t resT = fun->result->getSemanticHash();
         hashV.write(&resT, sizeof(uint64_t));
-        debug_hash("\nresult = %llx\n", resT);
+        debug_hash("\nresult <%s> = %llx\n", fun->result->getMangledName().c_str(), resT);
         for ( auto & arg : fun->arguments ) {
             uint64_t argT = arg->type->getSemanticHash();
             hashV.write(&argT, sizeof(argT));
-            debug_hash("arg %s = %llx\n", arg->name.c_str(), argT);
+            debug_hash("arg %s <%s> = %llx\n", arg->type->getMangledName().c_str(), arg->name.c_str(), argT);
         }
         // append code
         node->visit(hashV);
-        debug_hash("\n");
         if ( fun->aotHashDeppendsOnArguments ) {
             for ( auto & arg : fun->arguments ) {
                 hashV.write(arg->name.c_str());
@@ -138,7 +137,9 @@ namespace das {
                 }
             }
         }
-        return hashV.getHash();
+        uint64_t res = hashV.getHash();
+        debug_hash("\n%s = %llx\n", fun->getMangledName().c_str(), res);
+        return res;
     }
 
     struct DependencyCollector {
