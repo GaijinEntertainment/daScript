@@ -2410,6 +2410,9 @@ namespace das {
                 if ( auto aT = inferAlias(func->result) ) {
                     func->result = aT;
                     func->result->sanitize();
+                    if ( !func->result->ref && func->result->isWorkhorseType() && !func->result->isPointer() ) {
+                        func->result->constant = true;
+                    }
                     reportAstChanged();
                 } else {
                     error("undefined function result type '" + describeType(func->result) + "'",
@@ -6603,6 +6606,9 @@ namespace das {
                         resT->ref = false;
                         TypeDecl::applyAutoContracts(resT, resType);
                         resType = resT;
+                        if ( !resType->ref && resType->isWorkhorseType() && !resType->isPointer() ) {
+                            resType->constant = true;
+                        }
                         reportAstChanged();
                         return true;
                     }
