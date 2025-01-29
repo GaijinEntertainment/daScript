@@ -176,6 +176,7 @@ namespace das {
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
             logAnnotations(that->annotations);
+            if ( that->hasDefaultInitializer ) ss << "// has default initializer " << that->name << "()\n";
             if ( that->macroInterface ) ss << "[macro_interface]\n";
             if ( that->isTemplate ) ss << "template ";
             ss << (that->isClass ? "class " : "struct ");

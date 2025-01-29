@@ -304,6 +304,7 @@ namespace das
                 bool    hasInitFields : 1;
                 bool    safeWhenUninitialized : 1;
                 bool    isTemplate : 1;
+                bool    hasDefaultInitializer : 1;
             };
             uint32_t    flags = 0;
         };
