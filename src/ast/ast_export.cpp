@@ -75,10 +75,13 @@ namespace das {
             }
             pop();
         }
+        bool isVarExported ( const VariablePtr & var ) const {
+            return var->annotation.getBoolOption("export",false);
+        }
         void markVarsUsed( ModuleLibrary & lib, bool forceAll ){
             lib.foreach([&](Module * pm) {
                 for ( auto & var : pm->globals.each() ) {
-                    if ( forceAll || var->used ) {
+                    if ( forceAll || var->used || isVarExported(var) ) {
                         var->used = false;
                         propageteVarUse(var);
                     }
