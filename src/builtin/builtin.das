@@ -636,6 +636,21 @@ def insert_clone(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;val:valT ==const
     else
         concept_assert(false,"can't insert value, which can't be cloned")
 
+def insert_clone(var Tab:table<auto(keyT);auto(valT)[]>;at:keyT|#;var val:valT[] ==const|#)
+    static_if typeinfo(can_clone val)
+        unsafe(Tab[at]) := val
+    else
+        concept_assert(false,"can't insert value, which can't be cloned")
+
+def insert_clone(var Tab:table<auto(keyT);auto(valT)[]>;at:keyT|#;val:valT[] ==const|#)
+    static_if typeinfo(can_clone val)
+        if typeinfo(can_clone_from_const val)
+            unsafe(Tab[at]) := val
+        else
+            concept_assert(false,"can't insert value, which can't be cloned from const")
+    else
+        concept_assert(false,"can't insert value, which can't be cloned")
+
 def insert(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;var val:valT ==const|#)
     static_if typeinfo(can_copy type<valT>)
         unsafe(Tab[at]) = val
@@ -643,6 +658,21 @@ def insert(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;var val:valT ==const|#
         concept_assert(false,"can't insert value, which can't be copied")
 
 def insert(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;val:valT ==const|#)
+    static_if typeinfo(can_copy type<valT>)
+        static_if typeinfo(can_clone_from_const val)
+            unsafe(Tab[at]) = val
+        else
+            concept_assert(false,"can't insert value, which can't be cloned from const")
+    else
+        concept_assert(false,"can't insert value, which can't be copied")
+
+def insert(var Tab:table<auto(keyT);auto(valT)[]>;at:keyT|#;var val:valT[] ==const|#)
+    static_if typeinfo(can_copy type<valT>)
+        unsafe(Tab[at]) = val
+    else
+        concept_assert(false,"can't insert value, which can't be copied")
+
+def insert(var Tab:table<auto(keyT);auto(valT)[]>;at:keyT|#;val:valT[] ==const|#)
     static_if typeinfo(can_copy type<valT>)
         static_if typeinfo(can_clone_from_const val)
             unsafe(Tab[at]) = val
@@ -661,6 +691,12 @@ def emplace(var Tab:table<auto(keyT);smart_ptr<auto(valT)>>;at:keyT|#;var val:sm
     static_if typeinfo(can_move val)
         unsafe
             Tab[at] <- val
+    else
+        concept_assert(false,"can't emplace value, which can't be moved")
+
+def emplace(var Tab:table<auto(keyT);auto(valT)[]>;at:keyT|#;var val:valT[]-#&)
+    static_if typeinfo(can_move val)
+        unsafe(Tab[at]) <- val
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
