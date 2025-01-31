@@ -384,8 +384,8 @@ namespace das {
         // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
-            if ( call->name=="invoke" ) {   // invoke of anonymous block (only enabled for no arguments)
-                if ( call->arguments.size()==1 && call->arguments[0]->rtti_isMakeBlock() ) {
+            if ( call->name=="invoke" ) {   // invoke of anonymous block
+                if ( call->arguments.size() && call->arguments[0]->rtti_isMakeBlock() ) {
                     auto mkb = static_pointer_cast<ExprMakeBlock>(call->arguments[0]);
                     auto blk = static_pointer_cast<ExprBlock>(mkb->block);
                     blk->aotSkipMakeBlock = true;
