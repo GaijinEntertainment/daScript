@@ -2041,6 +2041,10 @@ namespace das {
 
     template <typename ResType>
     struct das_invoke {
+        template <typename AnonBlock>
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, AnonBlock && blk ) {
+            return blk();
+        }
         // vector cast
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Block & blk ) {
             using BlockFn = callable < ResType () >;

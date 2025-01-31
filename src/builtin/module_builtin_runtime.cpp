@@ -468,7 +468,7 @@ namespace das
     struct SafeWhenUninitializedAnnotation : StructureAnnotation {
         SafeWhenUninitializedAnnotation() : StructureAnnotation("safe_when_uninitialized") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList & args, string & ) override {
+                           const AnnotationArgumentList &, string & ) override {
             ps->safeWhenUninitialized = true;
             return true;
         }
