@@ -492,6 +492,53 @@ def get(var Tab:table<auto(keyT);auto(valT)> ==const;at:keyT|#;blk:block<(var p:
     else
         return false
 
+// same get with []
+
+def get(Tab:table<auto(keyT);auto(valT)[]> ==const #;at:keyT|#;blk:block<(p:valT[typeinfo(dim Tab[type<keyT>])]#&):void>)
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT[typeinfo(dim Tab[type<keyT>])]?#> val))
+        __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
+
+def get(Tab:table<auto(keyT);auto(valT)[]> ==const;at:keyT|#;blk:block<(p:valT[typeinfo(dim Tab[type<keyT>])]&):void>)
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT[typeinfo(dim Tab[type<keyT>])]?> val))
+        __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
+
+def get(var Tab:table<auto(keyT);auto(valT)[]> ==const #;at:keyT|#;blk:block<(var p:valT[typeinfo(dim Tab[type<keyT>])]#&):void>)
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT[typeinfo(dim Tab[type<keyT>])]?#> val))
+        __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
+
+def get(var Tab:table<auto(keyT);auto(valT)[]> ==const;at:keyT|#;blk:block<(var p:valT[typeinfo(dim Tab[type<keyT>])]&):void>)
+    print("this one\n")
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT[typeinfo(dim Tab[type<keyT>])]?> val))
+        __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
+
 def get(Tab:table<auto(keyT)>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"get(table<keyT>, ...) is not supported; use 'key_exists' instead")
     return false
@@ -505,6 +552,16 @@ def get_value(var Tab:table<auto(keyT);smart_ptr<auto(valT)>>;at:keyT|#):smart_p
     return <- [[smart_ptr<valT>]]
 
 def get_value(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT
+    static_if typeinfo(is_void type<valT>)
+        concept_assert(false,"can't get value, which is void")
+        return type<valT>
+    static_elif typeinfo(can_copy type<valT>)
+        return unsafe(Tab[at])
+    else
+        concept_assert(false,"can't get value, which can't be copied")
+        return type<valT>
+
+def get_value(var Tab:table<auto(keyT);auto(valT)[]>;at:keyT|#):valT[typeinfo(dim Tab[type<keyT>])]
     static_if typeinfo(is_void type<valT>)
         concept_assert(false,"can't get value, which is void")
         return type<valT>
@@ -813,6 +870,18 @@ def values(a:table<auto(keyT);auto(valT)> ==const|#) : iterator<valT & const>
 def values(var a:table<auto(keyT);auto(valT)> ==const|#) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
+    return <- it
+
+[unsafe_outside_of_for,nodiscard]
+def values(a:table<auto(keyT);auto(valT)[]> ==const|#) : iterator<valT[typeinfo(dim a[type<keyT>])] & const>
+    var it : iterator<valT[typeinfo(dim a[type<keyT>])] & const>
+    __builtin_table_values(it,a,typeinfo(sizeof type<valT[typeinfo(dim a[type<keyT>])]>))
+    return <- it
+
+[unsafe_outside_of_for,nodiscard]
+def values(var a:table<auto(keyT);auto(valT)[]> ==const|#) : iterator<valT[typeinfo(dim a[type<keyT>])] &>
+    var it : iterator<valT[typeinfo(dim a[type<keyT>])] &>
+    __builtin_table_values(it,a,typeinfo(sizeof type<valT[typeinfo(dim a[type<keyT>])]>))
     return <- it
 
 def finalize_dim(var a : auto(TT)[])
