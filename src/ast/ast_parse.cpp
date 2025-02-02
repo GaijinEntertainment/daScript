@@ -498,12 +498,23 @@ namespace das {
                     das_yybegin(src, len, scanner);
                 }
             }
+            // collect all unique comment readers
+            set<CommentReader *> commentReaders;
+            Module::foreach([&](Module * mod) -> bool {
+                if ( mod->commentReader ) {
+                    commentReaders.insert(mod->commentReader.get());
+                }
+                return true;
+            });
             libGroup.foreach([&](Module * mod){
                 if ( mod->commentReader ) {
-                    parserState.g_CommentReaders.push_back(mod->commentReader.get());
+                    commentReaders.insert(mod->commentReader.get());
                 }
                 return true;
             },"*");
+            for ( auto cr : commentReaders ) {
+                parserState.g_CommentReaders.push_back(cr);
+            }
             if ( gen2 ) {
                 err = das2_yyparse(scanner);
                 das2_yylex_destroy(scanner);
