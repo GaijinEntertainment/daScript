@@ -1585,6 +1585,12 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
+    |   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr_pipe[init] {
+        $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+        $$->isTupleExpansion = true;
+    }
     |   BRABRAB tuple_expansion[list] ']' ']' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
@@ -1595,6 +1601,15 @@ tuple_expansion_variable_declaration
         $$->isTupleExpansion = true;
     }
     |   '(' tuple_expansion[list] ')' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(scanner,@list);
+        typeDecl->ref = $ref;
+        $$ = new VariableDeclaration($list,tokAt(scanner,@list),typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+        $$->isTupleExpansion = true;
+    }
+    |   '(' tuple_expansion[list] ')' optional_ref[ref] copy_or_move_or_clone[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -3622,7 +3637,7 @@ make_dim_decl
         tam->arguments.push_back(ExpressionPtr($mka));
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
