@@ -2667,6 +2667,7 @@ namespace das {
         for ( auto & val : values ) {
             cexpr->values.push_back(val->clone());
         }
+        cexpr->recordNames = recordNames;
         if ( makeType ) {
             cexpr->makeType = make_smart<TypeDecl>(*makeType);
         }

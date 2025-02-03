@@ -1937,6 +1937,15 @@ expr
                 $$ = $subexpr;
             }
         }
+    | '(' make_struct_single[mks] ')' {
+        auto mkt = new ExprMakeTuple(tokAt(scanner,@mks));
+        for ( auto & arg : *(((ExprMakeStruct *)$mks)->structs.back()) ) {
+            mkt->values.push_back(arg->value);
+            mkt->recordNames.push_back(arg->name);
+        }
+        delete $mks;
+        $$ = mkt;
+    }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.' '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index), true); }
     |   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }

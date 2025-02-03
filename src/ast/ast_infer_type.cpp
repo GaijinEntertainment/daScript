@@ -9526,6 +9526,16 @@ namespace das {
                     valT->constant = false;
                     expr->makeType->argTypes.push_back(valT);
                 }
+                if ( expr->recordNames.size() ) {
+                    if ( expr->recordNames.size() != expr->values.size() ) {
+                        error("tuple field names mismatch", "", "",
+                            expr->at, CompilationError::invalid_type);
+                    } else {
+                        for ( size_t ri=0, rsize=expr->recordNames.size(); ri!=rsize; ++ri ) {
+                            expr->makeType->argNames.push_back(expr->recordNames[ri]);
+                        }
+                    }
+                }
             }
             expr->type = make_smart<TypeDecl>(*expr->makeType);
             verifyType(expr->type);
