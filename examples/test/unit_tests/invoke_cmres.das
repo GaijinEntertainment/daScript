@@ -8,32 +8,32 @@ struct Foo
     a, b : int
 
 def func : Foo
-    return [[Foo a = 1, b = 2]]
+    return Foo(uninitialized a = 1, b = 2)
 
 def funcC : Foo const
-    return [[Foo a = 1, b = 2]]
+    return Foo(uninitialized a = 1, b = 2)
 
 def funcA ( t : int ) : Foo
-    return [[Foo a = t, b = t + 1]]
+    return Foo(uninitialized a = t, b = t + 1)
 
 def funcAC ( t : int ) : Foo const
-    return [[Foo a = t, b = t + 1]]
+    return Foo(uninitialized a = t, b = t + 1)
 
 [hybrid]
 def hfunc : Foo
-    return [[Foo a = 1, b = 2]]
+    return Foo(uninitialized a = 1, b = 2)
 
 [hybrid]
 def hfuncC : Foo const
-    return [[Foo a = 1, b = 2]]
+    return Foo(uninitialized a = 1, b = 2)
 
 [hybrid]
 def hfuncA ( t : int ) : Foo
-    return [[Foo a = t, b = t + 1]]
+    return Foo(uninitialized a = t, b = t + 1)
 
 [hybrid]
 def hfuncAC ( t : int ) : Foo const
-    return [[Foo a = t, b = t + 1]]
+    return Foo(uninitialized a = t, b = t + 1)
 
 [sideeffects]
 def check(t:Foo)
@@ -66,20 +66,20 @@ def test
     checkInvoke(1,@@funcAC)
     // invoke block
     checkInvoke() <| $() : Foo
-        return [[Foo a = 1, b = 2]]
+        return Foo(uninitialized a = 1, b = 2)
     checkInvoke() <| $() : Foo const
-        return [[Foo a = 1, b = 2]]
+        return Foo(uninitialized a = 1, b = 2)
     checkInvoke(1) <| $( t : int ) : Foo
-        return [[Foo a = t, b = t + 1]]
+        return Foo(uninitialized a = t, b = t + 1)
     checkInvoke(1) <| $( t : int ) : Foo const
-        return [[Foo a = t, b = t + 1]]
+        return Foo(uninitialized a = t, b = t + 1)
     // invoke lambda
     checkInvoke() <| @() : Foo
-        return [[Foo a = 1, b = 2]]
+        return Foo(uninitialized a = 1, b = 2)
     checkInvoke() <| @() : Foo const
-        return [[Foo a = 1, b = 2]]
+        return Foo(uninitialized a = 1, b = 2)
     checkInvoke(1) <| @( t : int ) : Foo
-        return [[Foo a = t, b = t + 1]]
+        return Foo(uninitialized a = t, b = t + 1)
     checkInvoke(1) <| @( t : int ) : Foo const
-        return [[Foo a = t, b = t + 1]]
+        return Foo(uninitialized a = t, b = t + 1)
     return true

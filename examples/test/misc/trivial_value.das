@@ -23,4 +23,4 @@ class TrivialValueMacro : AstCallMacro
             prog, call.at,"expecting constant value, got {call.arguments[0].__rtti}")
         // build a block which we are planning to return
         return <- qmacro() <| @@ (effects : int) // effects : ArmyEffects
-            return <- [{ auto[] $e(call.arguments[0]) => 1.0 }]
+            return <- array((call.arguments[0], 1.0))

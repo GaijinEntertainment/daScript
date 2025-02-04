@@ -43,16 +43,16 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; frange:range; fnname:string; a
             let fld & = unsafe(stype.structType.fields[fldi])
             names |> push(string(fld.name))
             blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fld.name}"),_`_self.$f(fld.name)))
-            var inscope argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(x:field1type)>
+            var inscope argT <- new TypeDecl(baseType=Type tBlock, at=at)                         // block<(x:field1type)>
             var inscope fldT <- clone_type(fld._type)
             if stype.flags.constant
                 fldT.flags |= TypeDeclFlags constant
             if !fldT.isRefType
                 fldT.flags |= TypeDeclFlags ref
             emplace(argT.argTypes, fldT)
-            move_new(argT.firstType) <| new [[TypeDecl() baseType=Type tVoid,at=at]]
+            move_new(argT.firstType) <| new TypeDecl(baseType=Type tVoid, at=at)
             argT.flags = TypeDeclFlags constant
-            func_args |> emplace_new <| new [[Variable() name := "__arg_{fld.name}", _type <- argT]]
+            func_args |> emplace_new <| new Variable(name := "__arg_{fld.name}", _type <- argT)
     var inscope fn <- qmacro_function(fnname) <| $ [unused_argument( _`_self)] ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
@@ -85,16 +85,16 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; frange:range; fnname:string; at
             let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
             names |> push(fldname)
             blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fldname}"),_`_self.$f(fldname)))
-            var inscope argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(x:field1type)>
+            var inscope argT <- new TypeDecl(baseType=Type tBlock, at=at)                         // block<(x:field1type)>
             var inscope fldT <- clone_type(flda)
             if stype.flags.constant
                 fldT.flags |= TypeDeclFlags constant
             if !fldT.isRefType
                 fldT.flags |= TypeDeclFlags ref
             emplace(argT.argTypes, fldT)
-            move_new(argT.firstType) <| new [[TypeDecl() baseType=Type tVoid,at=at]]
+            move_new(argT.firstType) <| new TypeDecl(baseType=Type tVoid, at=at)
             argT.flags = TypeDeclFlags constant
-            func_args |> emplace_new <| new [[Variable() name := "__arg_{fldname}", _type <- argT]]
+            func_args |> emplace_new <| new Variable(name := "__arg_{fldname}", _type <- argT)
     var inscope fn <- qmacro_function(fnname) <| $ [unused_argument( _`_self)] ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
@@ -135,16 +135,16 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; frange:range; fnname:string; 
                     invoke($i("__arg_{fldname}"),_`_self as $f(fldname))
                     return
             blkList |> emplace(vexpr)
-            var inscope argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(x:field1type)>
+            var inscope argT <- new TypeDecl(baseType=Type tBlock, at=at)                         // block<(x:field1type)>
             var inscope fldT <- clone_type(flda)
             if stype.flags.constant
                 fldT.flags |= TypeDeclFlags constant
             if !fldT.isRefType
                 fldT.flags |= TypeDeclFlags ref
             emplace(argT.argTypes, fldT)
-            move_new(argT.firstType) <| new [[TypeDecl() baseType=Type tVoid,at=at]]
+            move_new(argT.firstType) <| new TypeDecl(baseType=Type tVoid, at=at)
             argT.flags = TypeDeclFlags constant
-            func_args |> emplace_new <| new [[Variable() name:="__arg_{fldname}", _type <- argT]]
+            func_args |> emplace_new <| new Variable(name:="__arg_{fldname}", _type <- argT)
     var inscope fn <- qmacro_function(fnname) <| $ [unused_argument( _`_self)] ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
@@ -165,10 +165,7 @@ def clone_block_with_name ( name:string; blk:ExpressionPtr )
     var rblk = imb._block as ExprBlock
     macro_verify(rblk!=null,this_program(),blk.at,"expecting block")
     macro_verify(rblk.arguments |> length == 2,this_program(),blk.at,"expecting block with 2 arguments")
-    var inscope eassume <- new [[ExprAssume() at=blk.at,
-        alias := rblk.arguments[0].name,
-        subexpr <- new [[ExprConstString() at=blk.at, value := name]]
-    ]]
+    var inscope eassume <- new ExprAssume(at=blk.at, alias := rblk.arguments[0].name, subexpr <- new ExprConstString(at=blk.at, value := name))
     rblk.arguments |> erase(0)
     rblk.list |> emplace(eassume,0)
     return <- res
@@ -210,17 +207,17 @@ class ApplyMacro : AstCallMacro
                 names <- generateApplyVisitVariant(expr.arguments[0]._type,callName,expr.at)
             else
                 macro_error(prog,expr.at,"internal error. can't apply to {describe(argT)}")
-                return <- [[ExpressionPtr]]
+                return <- default<ExpressionPtr>
             // make a collection of calls
             var inscope calls : array<ExpressionPtr>
             for_each_subrange(nfields) <| $ ( frange )
-                var inscope call <- new [[ExprCall() name:="_::{callName}`{frange.x}`{frange.y}", at=expr.at]]
+                var inscope call <- new ExprCall(name:="_::{callName}`{frange.x}`{frange.y}", at=expr.at)
                 emplace_new(call.arguments,clone_expression(expr.arguments[0]))
                 for idx in frange
                     emplace_new(call.arguments,clone_block_with_name(names[idx], expr.arguments[1]))
                 calls |> emplace(call)
             if length(calls)==1
                 return <- calls[0]
-            var inscope callblock <- new [[ExprBlock() at=expr.at, list := calls]]
+            var inscope callblock <- new ExprBlock(at=expr.at, list := calls)
             return <- callblock
-        return <- [[ExpressionPtr]]
+        return <- default<ExpressionPtr>

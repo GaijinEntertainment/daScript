@@ -13,7 +13,7 @@ def operator ?[] ( t:Foo; cmp:string ) : string const?#
             return reinterpret<string const?#> null
 
 def operator . ( t:Foo; name:string )
-    return [[Foo a="{t . . a}.{name}"]]
+    return Foo(uninitialized a="{t . . a}.{name}")
 
 def operator ?. ( t:Foo; name:string ) : string const?#
     if name=="yes"
@@ -24,7 +24,7 @@ def operator ?. ( t:Foo; name:string ) : string const?#
             return reinterpret<string const?#> null
 [export]
 def test
-    var t = [[Foo a="hello"]]
+    var t = Foo(uninitialized a="hello")
     var z = t["blah"]
     var w = t?["blah"] ?? "not_blah"
     var W = t?["hello"] ?? "this???"

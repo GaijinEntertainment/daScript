@@ -33,22 +33,13 @@ def public utf8_encode(var dest_array: array<uint8> &; ch: uint)
 def public utf8_encode(ch: uint): array<uint8>
     //! Converts a codepoint (UTF-32 symbol) to the UTF-8 byte array
     if ch < 0x80
-        return <- [{ uint8[] uint8(ch) }]
+        return <- array(uint8(ch))
     elif ch < 0x800
-        return <- [{ uint8[]
-            uint8(0xC0 + (ch >> 6u));
-            uint8(0x80 + (ch & 0x3F)) }]
+        return <- array(uint8(0xC0 + (ch >> 6u)), uint8(0x80 + (ch & 0x3F)))
     elif ch < 0x10000
-        return <- [{ uint8[]
-            uint8(0xE0 + (ch >> 12u));
-            uint8(0x80 + ((ch >> 6u) & 0x3F));
-            uint8(0x80 + (ch & 0x3F)) }]
+        return <- array(uint8(0xE0 + (ch >> 12u)), uint8(0x80 + ((ch >> 6u) & 0x3F)), uint8(0x80 + (ch & 0x3F)))
     else
-        return <- [{ uint8[]
-            uint8(0xF0 + (ch >> 18u));
-            uint8(0x80 + ((ch >> 12u) & 0x3F));
-            uint8(0x80 + ((ch >> 6u) & 0x3F));
-            uint8(0x80 + (ch & 0x3F)) }]
+        return <- array(uint8(0xF0 + (ch >> 18u)), uint8(0x80 + ((ch >> 12u) & 0x3F)), uint8(0x80 + ((ch >> 6u) & 0x3F)), uint8(0x80 + (ch & 0x3F)))
 
 
 def public utf8_encode(var dest_array: array<uint8> &; source_utf32_string: array<uint> const implicit)
@@ -106,26 +97,7 @@ def public contains_utf8_bom(utf8_string: string const): bool
 // Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
 // See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
 
-let shared s_utf8d <- [[ uint[]
-	// The first part of the table maps bytes to character classes that
-	// to reduce the size of the transition table and create bitmasks.
-   0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;  0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;
-   0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;  0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;
-   0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;  0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;
-   0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;  0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;0u;
-   1u;1u;1u;1u;1u;1u;1u;1u;1u;1u;1u;1u;1u;1u;1u;1u;  9u;9u;9u;9u;9u;9u;9u;9u;9u;9u;9u;9u;9u;9u;9u;9u;
-   7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;  7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;7u;
-   8u;8u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;  2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;2u;
-  10u;3u;3u;3u;3u;3u;3u;3u;3u;3u;3u;3u;3u;4u;3u;3u; 11u;6u;6u;6u;5u;8u;8u;8u;8u;8u;8u;8u;8u;8u;8u;8u;
-
-  // The second part is a transition table that maps a combination
-  // of a state of the automaton and a character class to a state.
-   0u;12u;24u;36u;60u;96u;84u;12u;12u;12u;48u;72u; 12u;12u;12u;12u;12u;12u;12u;12u;12u;12u;12u;12u;
-  12u; 0u;12u;12u;12u;12u;12u; 0u;12u; 0u;12u;12u; 12u;24u;12u;12u;12u;12u;12u;24u;12u;24u;12u;12u;
-  12u;12u;12u;12u;12u;12u;12u;24u;12u;12u;12u;12u; 12u;24u;12u;12u;12u;12u;12u;12u;12u;24u;12u;12u;
-  12u;12u;12u;12u;12u;12u;12u;36u;12u;36u;12u;12u; 12u;36u;12u;12u;12u;12u;12u;36u;12u;36u;12u;12u;
-  12u;36u;12u;12u;12u;12u;12u;12u;12u;12u;12u;12u
-]]
+let shared s_utf8d <- fixed_array(0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u, 8u, 8u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 10u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u, 4u, 3u, 3u, 11u, 6u, 6u, 6u, 5u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 8u, 0u, 12u, 24u, 36u, 60u, 96u, 84u, 12u, 12u, 12u, 48u, 72u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 0u, 12u, 12u, 12u, 12u, 12u, 0u, 12u, 0u, 12u, 12u, 12u, 24u, 12u, 12u, 12u, 12u, 12u, 24u, 12u, 24u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 24u, 12u, 12u, 12u, 12u, 12u, 24u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 24u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 36u, 12u, 36u, 12u, 12u, 12u, 36u, 12u, 12u, 12u, 12u, 12u, 36u, 12u, 36u, 12u, 12u, 12u, 36u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u)
 
 
 let UTF8_ACCEPT = 0u

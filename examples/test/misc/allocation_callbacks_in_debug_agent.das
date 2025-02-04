@@ -46,7 +46,7 @@ def main
 	for j in range(100)
 		arr |> push(j)
 	delete arr
-	var p = new [[Foo]]
+	var p = new Foo(uninitialized)
 	unsafe
 		delete p
 

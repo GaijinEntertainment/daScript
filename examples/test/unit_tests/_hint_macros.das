@@ -26,8 +26,8 @@ class GetHintFnMacro : AstFunctionAnnotation
                 var new_call := call // <- clone_expression(call)
                 let arg2 = reinterpret<ExprConstString?>(call.arguments[1])
                 let hint = hash("{arg2.value}")
-                emplace_new(new_call.arguments, new [[ExprConstUInt64() at=arg2.at, value=hint]])
+                emplace_new(new_call.arguments, new ExprConstUInt64(at=arg2.at, value=hint))
                 return new_call
-        return <-[[ExpressionPtr]]
+        return <-default<ExpressionPtr>
 
 

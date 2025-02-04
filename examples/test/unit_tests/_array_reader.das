@@ -17,11 +17,11 @@ class ArrayReader : AstReaderMacro
             return true
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
         let seqStr = string(expr.sequence)
-        var inscope arrT <- new [[TypeDecl() baseType=Type tInt]]
+        var inscope arrT <- new TypeDecl(baseType=Type tInt)
         push(arrT.dim,length(seqStr))
-        var inscope mkArr <- new [[ExprMakeArray() at = expr.at, makeType <- arrT]]
+        var inscope mkArr <- new ExprMakeArray(at = expr.at, makeType <- arrT)
         for x in seqStr
             if true
-                var inscope mkC <- new [[ExprConstInt() at=expr.at, value=x]]
+                var inscope mkC <- new ExprConstInt(at=expr.at, value=x)
                 emplace(mkArr.values,mkC)
         return <-mkArr

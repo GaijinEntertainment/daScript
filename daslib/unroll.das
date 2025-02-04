@@ -34,22 +34,22 @@ class UnrollMacro : AstFunctionAnnotation
             var blk = reinterpret<ExprBlock?> mblk._block
             if blk.finalList |> length != 0
                 errors := "not expecting finally section in the unroll"
-                return [[ExpressionPtr]]
+                return default<ExpressionPtr>
             if blk.list |> length != 1 || !(blk.list[0] is ExprFor)
                 errors := "expecting unroll <| for ..."
-                return [[ExpressionPtr]]
+                return default<ExpressionPtr>
             let efor = reinterpret<ExprFor?> blk.list[0]
             if !(efor.sources[0] is ExprConstRange)
                 errors := "can only unroll for loop with range"
-                return [[ExpressionPtr]]
+                return default<ExpressionPtr>
             let euc = reinterpret<ExprConstRange?> efor.sources[0]
             let van = "{efor.iterators[0]}"
-            var nblk <- new [[ExprBlock() at=call.at]]
+            var nblk <- new ExprBlock(at=call.at)
             for i in euc.value
                 var iblk <- clone_expression(efor.body)
                 remove_deref(van, iblk)
                 var rules : Template
-                rules |> replaceVariable(van) <| new [[ExprConstInt() at=call.at, value=i]]
+                rules |> replaceVariable(van) <| new ExprConstInt(at=call.at, value=i)
                 rules |> apply_template(call.at,iblk,false)
                 nblk.list |> emplace(iblk)
             return nblk

@@ -23,7 +23,7 @@ def test_temps_strings ( t:T? )
 
         t |> equal(string_heap_bytes_allocated(), 0ul)
 
-        var arr <- [{uint8[] uint8('h'); uint8('e'); uint8('l'); uint8('l'); uint8('o')}]
+        var arr <- array(uint8('h'), uint8('e'), uint8('l'), uint8('l'), uint8('o'))
         temp_string(arr) <| $(s)
             print(s)
             t |> equal(s, "hello")

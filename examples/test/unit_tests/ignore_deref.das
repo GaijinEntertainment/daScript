@@ -5,7 +5,7 @@ class A
 
 [export]
 def test
-	var arr <- [{A? [] new A(); new A() }]
+	var arr <- array(new A(), new A())
 	var a = arr[0] // A?&
 	a->test()
     var b : A? = arr[0] // explicit A?

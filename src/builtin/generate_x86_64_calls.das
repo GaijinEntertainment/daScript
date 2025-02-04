@@ -82,21 +82,7 @@ def genExtraWrapper(name:string; extra:array<WrapperFn>)
             fprint(fout,"    {fn.nargs},{fn.res},{fn.perm},&fastcall64_{fn.nargs}_{fn.res}_{fn.perm},\n")
         fprint(fout, "};\n\n")
 
-let systemV_extra <- [{WrapperFn
-// glPrimitiveBoundingBoxARB
-    nargs=8, res=1, perm=0|ARG0_D|ARG1_D|ARG2_D|ARG3_D|ARG4_D|ARG5_D|ARG6_D|ARG7_D;
-// glDrawVkImageNV
-    nargs=11, res=1, perm=0|ARG2_D|ARG3_D|ARG4_D|ARG5_D|ARG6_D|ARG7_D|ARG8_D|ARG9_D|ARG10_D;
-// glPathGlyphsNV
-    nargs=10, res=1, perm=0|ARG9_D;
-// glPathGlyphRangeNV, glPathMemoryGlyphIndexArrayNV
-    nargs=9, res=1, perm=0|ARG8_D;
-// glPathGlyphIndexArrayNV
-    nargs=8, res=1, perm=0|ARG7_D;
-// DUMMY
-    nargs = 13, res = RES_X,    perm=ARG0_D|ARG13_D;
-    nargs = 13, res = RES_D,    perm=ARG0_D|ARG13_D
-}]
+let systemV_extra <- [WrapperFn(nargs=8, res=1, perm=0|ARG0_D|ARG1_D|ARG2_D|ARG3_D|ARG4_D|ARG5_D|ARG6_D|ARG7_D), WrapperFn(nargs=11, res=1, perm=0|ARG2_D|ARG3_D|ARG4_D|ARG5_D|ARG6_D|ARG7_D|ARG8_D|ARG9_D|ARG10_D), WrapperFn(nargs=10, res=1, perm=0|ARG9_D), WrapperFn(nargs=9, res=1, perm=0|ARG8_D), WrapperFn(nargs=8, res=1, perm=0|ARG7_D), WrapperFn(nargs = 13, res = RES_X, perm=ARG0_D|ARG13_D), WrapperFn(nargs = 13, res = RES_D, perm=ARG0_D|ARG13_D)]
 
 [export]
 def main

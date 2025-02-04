@@ -12,11 +12,7 @@ struct EquipSlot
 	uiOrder : int
 
 let shared
-	squadScheme <- {{
-		"curVehicle" => [[EquipSlot // вот на этой строке
-			itemTypes := [{ auto[] "vehicle" }]
-		]]
-	}}
+	squadScheme <- {"curVehicle" => EquipSlot(uninitialized itemTypes := array("vehicle"))}
 
 [export]
 def test

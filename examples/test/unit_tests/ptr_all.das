@@ -7,7 +7,7 @@ def test_signed( t : auto(TT) )
 	var three = TT(3); three--; three++
 	var neg_one = TT(-1); neg_one--; neg_one++
 	unsafe
-		var a <- [[int 0;1;2;3]]
+		var a <- fixed_array<int>(0, 1, 2, 3)
 		var pA = addr(a[1])			// at 1
 		assert(*pA == 1)
 		pA ++						// at 2
@@ -33,7 +33,7 @@ def test_unsigned( t : auto(TT) )
 	var two = TT(2); two--; two++
 	var three = TT(3); three--; three++
 	unsafe
-		var a <- [[int 0;1;2;3]]
+		var a <- fixed_array<int>(0, 1, 2, 3)
 		var pA = addr(a[1])			// at 1
 		assert(*pA == 1)
 		pA ++						// at 2

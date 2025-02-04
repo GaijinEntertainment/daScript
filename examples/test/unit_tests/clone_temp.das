@@ -4,7 +4,7 @@ struct Foo
 
 def test_c(): Foo const#
 	unsafe
-		return [[Foo# a=4]]
+		return struct<Foo#>(uninitialized a=4)
 
 [export]
 def test()

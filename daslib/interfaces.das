@@ -64,7 +64,7 @@ class ImplementsMacro : AstStructureAnnotation
         cls.annotations |> erase(iface_index)
         // add {st}::_interface_{Foo} : Foo?
         var inscope iface_ptr <- qmacro_type(type<$t(parent)?>)
-        st |> add_structure_field ( iface_var_name, clone_type(iface_ptr), [[ExpressionPtr]]);
+        st |> add_structure_field ( iface_var_name, clone_type(iface_ptr), default<ExpressionPtr>);
         // add function {st}::get`{Foo} : Foo?
         var inscope fn_get_i <- qmacro_method(iface_get_name_func,st) <| $ ( var self: $t(st) ) : $t(iface_ptr)
             if self.$f(iface_var_name) == null
@@ -73,7 +73,7 @@ class ImplementsMacro : AstStructureAnnotation
         add_function(st._module, fn_get_i)
         // add {cls}::_self : {ST}?
         var inscope st_ptr <- qmacro_type(type<$t(st)?>)
-        let fi = cls |> add_structure_field ( "_self", clone_type(st_ptr), [[ExpressionPtr]]);
+        let fi = cls |> add_structure_field ( "_self", clone_type(st_ptr), default<ExpressionPtr>);
         cls.fields[fi].annotation |> add_annotation_argument("do_not_delete",true)
         cls.fields[fi].flags |= FieldDeclarationFlags doNotDelete | FieldDeclarationFlags privateField
         // add {cls} ( var s : {ST}? )
@@ -107,7 +107,7 @@ class ImplementsMacro : AstStructureAnnotation
                         for n,t in cm._type.argNames,cm._type.argTypes
                             if n != "self"
                                 fcall_args |> emplace_new <| qmacro($i(n))
-                                fmethod_args |> emplace_new <| new [[Variable() name:=n, _type<-clone_type(t)]]
+                                fmethod_args |> emplace_new <| new Variable(name:=n, _type<-clone_type(t))
                         var inscope fmethod <- qmacro_method(fmethod_name,cls) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
                             generic_return ( invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) )
                         add_function(st._module, fmethod)

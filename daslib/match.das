@@ -37,7 +37,7 @@ def log_m ( msg:string )
 
 [macro_function]
 def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo ) // !!!do not put access.at in there
-    errors |> push([[MatchError msg=msg, at=unsafe(addr(at))]])
+    errors |> push(MatchError(uninitialized msg=msg, at=unsafe(addr(at))))
 
 enum MatchType
     none
@@ -58,16 +58,10 @@ def get_match_type ( typ:TypeDeclPtr )
 [macro_function]
 def match_as_is ( what:TypeDeclPtr; wths:Expression?; makeType:TypeDeclPtr; as_is_name:das_string; access:ExpressionPtr; var to:MatchTo )
     log_m("\tmatch_as_is {describe(what)} {describe(makeType)} {describe(access)}")
-    var inscope cond_nz <- new [[ExprIsVariant() at=wths.at,
-        value <- clone_expression(access),
-        name := as_is_name
-    ]]
+    var inscope cond_nz <- new ExprIsVariant(at=wths.at, value <- clone_expression(access), name := as_is_name)
     cond_nz |> force_at(wths.at)
     to.conditions |> emplace(cond_nz)
-    var inscope access_expr <- new [[ExprAsVariant() at=wths.at,
-        value <- clone_expression(access),
-        name := as_is_name
-    ]]
+    var inscope access_expr <- new ExprAsVariant(at=wths.at, value <- clone_expression(access), name := as_is_name)
     return match_any(makeType, wths, access_expr, to)
 
 [macro_function]
@@ -258,10 +252,7 @@ def match_variant ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPt
             if ftype == null
                 to.errors |> match_error("variant {mf.name} not found", mf.at)
                 return false
-            to.conditions |> emplace_new <| new [[ExprIsVariant() at=wths.at,
-                value <- clone_expression(access),
-                name := mf.name
-            ]]
+            to.conditions |> emplace_new <| new ExprIsVariant(at=wths.at, value <- clone_expression(access), name := mf.name)
             log_m("\t[[variant {mf.name}]] match passed\n")
             if !match_any(ftype, get_ptr(mf.value), new_access, to)
                 return false
@@ -276,14 +267,8 @@ def match_as_variant ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:Expression
     if ftype == null
         to.errors |> match_error("variant {wthAs.name} not found", wthAs.at)
         return false
-    to.conditions |> emplace_new <| new [[ExprIsVariant() at=wthAs.at,
-        value <- clone_expression(access),
-        name := wthAs.name
-    ]]
-    var inscope new_access <- new [[ExprAsVariant() at=wthAs.at,
-        value <- clone_expression(access),
-        name := wthAs.name
-    ]]
+    to.conditions |> emplace_new <| new ExprIsVariant(at=wthAs.at, value <- clone_expression(access), name := wthAs.name)
+    var inscope new_access <- new ExprAsVariant(at=wthAs.at, value <- clone_expression(access), name := wthAs.name)
     log_m("\tas {wthAs.name} match passed\n")
     return match_any(ftype, get_ptr(wthAs.value), new_access, to)
 
@@ -470,14 +455,14 @@ def match_any ( what:TypeDeclPtr; wth:Expression?; access:ExpressionPtr; var to:
 def join_conditions ( var conditions:array<ExpressionPtr>; at:LineInfo ) : ExpressionPtr
     let clen = length(conditions)
     if clen == 0
-        return <- new [[ExprConstBool() value=true, at=at]]
+        return <- new ExprConstBool(value=true, at=at)
     var inscope tail <- conditions |> back()
     conditions |> pop()
     while length(conditions) > 0
         if true
             var inscope last <- conditions |> back()
             conditions |> pop()
-            var inscope new_tail <- new [[ExprOp2() at=last.at, op:="&&", left<-last, right<-tail]]
+            var inscope new_tail <- new ExprOp2(at=last.at, op:="&&", left<-last, right<-tail)
             move(tail) <| new_tail
     return <- tail
 
@@ -530,8 +515,8 @@ class MatchMacro : AstCallMacro
                 var inscope to : MatchTo
                 if match_any(what._type, get_ptr(eto.cond), access, to)
                     log_m("match_any ok\n\n")
-                    var inscope new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions, eto.at)]]
-                    var inscope nblk <- new [[ExprBlock() at=eto.at]]
+                    var inscope new_iff <- new ExprIfThenElse(at=eto.at, cond<-join_conditions(to.conditions, eto.at))
+                    var inscope nblk <- new ExprBlock(at=eto.at)
                     for l in (eto.if_true as ExprBlock).list
                         nblk.list |> emplace_new <| clone_expression(l)
                     for l in (eto.if_true as ExprBlock).finalList
@@ -564,7 +549,7 @@ class MatchMacro : AstCallMacro
                     for p,i in to.prefix,count(p0)
                         move(prefix[i]) <| p
         if any_errors
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         if multi_match
             for ib in iffb
                 prefix |> emplace(ib)

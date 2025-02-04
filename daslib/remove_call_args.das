@@ -17,7 +17,7 @@ def get_remove_indices(func)
     for ann in func.annotations
         if ann.annotation.name == "remove_call_args"
             return <- get_remove_indices(ann.arguments)
-    return <- [[array<int>]]
+    return <- array<int>()
 
 
 [macro_function]
@@ -59,7 +59,7 @@ class RemoveCallArgsMacro : AstFunctionAnnotation
         var removeIndices <- get_remove_indices(call.func)
 
         if length(removeIndices) == 0
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
 
         var inscope newCall <- clone_expression(call)
         var ncall = newCall as ExprCall

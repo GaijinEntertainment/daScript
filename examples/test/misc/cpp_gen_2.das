@@ -14,9 +14,7 @@ var ast_depth = 0
 
 def parse_node ( f:FILE const?; header:string; offset:int )
     ast_depth ++
-    var node = new [[Node
-        text = slice(header, offset)
-    ]]
+    var node = new Node(uninitialized text = slice(header, offset))
     for ch,sp in node.text,count()
         if ch==' ' || ch=='\n' || ch=='\r'
             node.name = slice(node.text,0,sp)

@@ -62,7 +62,7 @@ def log_cpp_class_adapter ( cpp_file:file; name:string; cinfo:TypeDeclPtr )
     for fld,idx in cinfo.structType.fields,count()
         if !fld._type.isFunction || fld.name=="__finalize" || fld.init!=null
             continue
-        push(methods,[[auto "{fld.name}",idx]])
+        push(methods,("{fld.name}", idx))
         push_clone(types,fld._type)
     let nmet = length(methods)
     fwrite(cpp_file, "class {name} \{\n")

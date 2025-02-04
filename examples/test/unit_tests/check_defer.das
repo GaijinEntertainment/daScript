@@ -12,7 +12,7 @@ def check_def(var x:int&)
     x +=2
 
 def check_def_del(var a:array<int>)
-    a <- [{for x in range(10); x*x}]
+    a <- [for x in range(10); x*x]
     defer_delete(a)
     return length(a)
 

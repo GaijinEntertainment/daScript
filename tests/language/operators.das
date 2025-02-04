@@ -11,12 +11,12 @@ struct Bar
     a : float
 
 def operator as Bar ( a : Foo )
-    return [[Bar a = float(a.a)]]
+    return Bar(uninitialized a = float(a.a))
 
 def operator ?as Bar ( a : Foo? ) : Bar?
     if a == null
         return null
-    return new [[Bar a = float(a.a)]]
+    return new Bar(uninitialized a = float(a.a))
 
 def operator is Bar ( anything )
     return false
@@ -39,7 +39,7 @@ def operator ?[] ( t:Goo; cmp:string ) : string const?#
             return reinterpret<string const?#> null
 
 def operator . ( t:Goo; name:string )
-    return [[Goo a="{t . . a}.{name}"]]
+    return Goo(uninitialized a="{t . . a}.{name}")
 
 def operator ?. ( t:Goo; name:string ) : string const?#
     if name=="yes"
@@ -58,19 +58,19 @@ def operator ?. length ( t:Goo )
 [test]
 def test_operators ( t : T? )
     t |> run("as, ?as, is") <| @ ( t : T? )
-        var f = [[Foo a= 13]]
+        var f = Foo(uninitialized a= 13)
         var b = f as Bar
         t |> equal(13., b.a)
         t |> success(b is Bar)
         t |> success(!(f is Bar))
         var pf = unsafe(addr(f))
-        var pb = pf ?as Bar ?? [[Bar a = 0.0]]
+        var pb = pf ?as Bar ?? Bar(uninitialized a = 0.0)
         t |> equal(13., pb.a)
         var nf : Foo?
-        var nb = nf ?as Bar ?? [[Bar a = 1.0]]
+        var nb = nf ?as Bar ?? Bar(uninitialized a = 1.0)
         t |> equal(1., nb.a)
     t |> run("[], ?[], ., ?.") <| @ ( t : T? )
-        var T = [[Goo a="hello"]]
+        var T = Goo(uninitialized a="hello")
         var z = T["blah"]
         var w = T?["blah"] ?? "not_blah"
         var W = T?["hello"] ?? "this???"
@@ -86,6 +86,6 @@ def test_operators ( t : T? )
         t |> equal(5,T.length)
         t |> equal(6,T?.length)
 
-        var bar : BarOp? <- new [[BarOp() a=42]]
+        var bar : BarOp? <- new BarOp(a=42)
         t |> equal(42, bar.Prop)
 

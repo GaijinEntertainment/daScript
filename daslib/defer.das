@@ -50,7 +50,7 @@ class DeferMacro : AstFunctionAnnotation
                     var inscope from_block <- move_unquote_block(c_arg)
                     from_block.blockFlags ^= ExprBlockFlags isClosure
                     scope.finalList |> emplace(from_block,0)
-        return <- !success ? [[ExpressionPtr]] : quote() <| nada()
+        return <- !success ? default<ExpressionPtr> : quote() <| nada()
 
 [call_macro(name="defer_delete")]
 class DeferDeleteMacro : AstCallMacro
@@ -73,7 +73,5 @@ class DeferDeleteMacro : AstCallMacro
                     compiling_program() |>macro_error(call.at,"defer_delete can't be used in the loop. finally section of the loop only runs one. enclose in `if true` to ensure scope")
                     success = false
                 else
-                    scope.finalList |> emplace_new <| new [[ExprDelete() at=call.at,
-                            subexpr <- clone_expression(call.arguments[0])
-                        ]]
-        return <- !success ? [[ExpressionPtr]] : quote() <| nada()
+                    scope.finalList |> emplace_new <| new ExprDelete(at=call.at, subexpr <- clone_expression(call.arguments[0]))
+        return <- !success ? default<ExpressionPtr> : quote() <| nada()

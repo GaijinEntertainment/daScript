@@ -158,7 +158,7 @@ def main()
                         let uri = ctx.uriPaths ? file_name_to_uri(file) : file
                         let jitstr = jit_enabled() ? "-jit" : ""
                         let singleTest = "{args[0]} {args[1]} {jitstr} -- --run {file} {log::useTtyColors ? " --color" : ""}"
-                        inputChannel |> push_clone([[IsoInput uri=clone_string(uri), cmd=clone_string(singleTest)]])
+                        inputChannel |> push_clone(IsoInput(uninitialized uri=clone_string(uri), cmd=clone_string(singleTest)))
                         inputChannel |> notify()
 
                     for isoRes in each_clone(outputChannel, type<IsolatedResult>)

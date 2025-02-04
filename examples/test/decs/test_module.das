@@ -11,8 +11,8 @@ def game_end(win)
 
     create_entity <| @ ( eid, cmp )
         cmp |> set("eid", eid)
-        apply_decs_template(cmp, [[Text text = text, color = color]])
+        apply_decs_template(cmp, Text(uninitialized text = text, color = color))
 
     create_entity <| @ ( eid, cmp )
         cmp |> set("eid", eid)
-        apply_decs_template(cmp, [[Text text = text, color = color]])
+        apply_decs_template(cmp, Text(uninitialized text = text, color = color))

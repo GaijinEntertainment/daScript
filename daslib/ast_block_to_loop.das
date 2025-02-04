@@ -26,18 +26,12 @@ class B2LVisitor : AstVisitor
                 return <- make_static_assert_false("return is not allowed inside this macros's block", expr.at)
             elif replaceReturnWithContinue
                 if expr.subexpr != null
-                    return  <- new [[ExprIfThenElse() at=expr.at,
-                        cond <- clone_expression(expr.subexpr),
-                        if_true <- new [[ExprReturn() at=expr.at,
-                                subexpr <- new [[ExprConstBool() at=expr.at, value:=true]]
-                            ]],
-                        if_false <- new [[ExprContinue() at=expr.at]]
-                    ]]
+                    return  <- new ExprIfThenElse(at=expr.at, cond <- clone_expression(expr.subexpr), if_true <- new ExprReturn(at=expr.at, subexpr <- new ExprConstBool(at=expr.at, value:=true)), if_false <- new ExprContinue(at=expr.at))
                 else
                     if requireContinueCond
                         macro_error(compiling_program(),expr.at,"expecting return boolean (continue or stop)")
                     else
-                        return <- new [[ExprContinue() at=expr.at]]
+                        return <- new ExprContinue(at=expr.at)
         return <- expr
     def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
         loop_depth |> back ++

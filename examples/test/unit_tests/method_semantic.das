@@ -4,7 +4,7 @@ struct Point
     dot = @@point_dot
 
 def Point(X,Y)
-    return [[Point() x=X,y=Y]]
+    return Point(x=X, y=Y)
 
 def point_magnitude(that:Point)
     return that.x*that.x + that.y*that.y

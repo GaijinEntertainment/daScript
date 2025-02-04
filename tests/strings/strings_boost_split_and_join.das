@@ -65,13 +65,13 @@ def test_split_and_join ( t:T? )
             split_by_chars(txt,delim) <| $ ( foo )
                 t |> success ( length(foo)<=limit)
 
-    t |> equal ( join([{auto "1";"2";"3"}], ","), "1,2,3")
+    t |> equal ( join(array("1", "2", "3"), ","), "1,2,3")
     t |> run("fuzz join") <| @@ ( t : T? )
         let limit = int(re_gen_get_rep_limit())
         var fake <- Faker()
         fuzz <|
             let elem = fake |> random_uint % 10u
-            var arr <- [{for x in urange(elem); fake |> any_string}]
+            var arr <- [for x in urange(elem); fake |> any_string]
             t |> accept ( join(arr, fake |> any_string) )
 
 

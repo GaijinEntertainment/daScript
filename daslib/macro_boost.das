@@ -26,7 +26,7 @@ class MacroVerifyMacro : AstFunctionAnnotation
         var inscope res <- qmacro_block() <|
             if !$e(call.arguments[0])
                 macro_error($e(call.arguments[1]),$e(call.arguments[2]),$e(call.arguments[3]))
-                return <- [[ExpressionPtr]]
+                return <- default<ExpressionPtr>
         res |> force_at(call.at)
         return <- res
 
@@ -60,7 +60,7 @@ def public capture_block(expr:ExpressionPtr) : array<CapturedVariable>
     var astVisitor = new CaptureBlock()
     var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
-    var res <- [{for k,v in keys(astVisitor.captured),values(astVisitor.captured); [[CapturedVariable variable=k,expression=v]] }]
+    var res <- [for k,v in keys(astVisitor.captured),values(astVisitor.captured); CapturedVariable(uninitialized variable=k, expression=v)]
     unsafe
         delete astVisitor
     return <- res
@@ -82,10 +82,10 @@ def public collect_finally(expr:ExpressionPtr; alwaysFor:bool = false)
     //! Collect all finally blocks in the expression.
     //! Returns array of ExprBlock? with all the blocks which have `finally` section
     //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
-    var astVisitor = new [[ColletFinally() alwaysFor=alwaysFor]]
+    var astVisitor = new ColletFinally(alwaysFor=alwaysFor)
     var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
-    var res <- [{for k in keys(astVisitor.blocks); k }]
+    var res <- [for k in keys(astVisitor.blocks); k]
     unsafe
         delete astVisitor
     return <- res
@@ -105,7 +105,7 @@ def public collect_labels(expr:ExpressionPtr)
     var astVisitor = new ColletLabels()
     var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
-    var res <- [{for k in keys(astVisitor.labels); k }]
+    var res <- [for k in keys(astVisitor.labels); k]
     unsafe
         delete astVisitor
     return <- res
@@ -115,8 +115,4 @@ class private ReturnSkipLockcheck : AstCallMacro
     //! this is similar to regular return <-, but it does not check for locks
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify( call.arguments |> length==1,prog,call.at,"expecting return_skip_lockcheck(expr)" )
-        return <- new [[ExprReturn()
-            at=call.at,
-            subexpr <- clone_expression(call.arguments[0]),
-            returnFlags = ExprReturnFlags skipLockCheck | ExprReturnFlags moveSemantics
-        ]]
+        return <- new ExprReturn(at=call.at, subexpr <- clone_expression(call.arguments[0]), returnFlags = ExprReturnFlags skipLockCheck | ExprReturnFlags moveSemantics)

@@ -1,5 +1,5 @@
 var
-    some_a <- [{ auto[] "test"}]
+    some_a <- array("test")
 
 def test_a()
     assert(length(some_a) == 1)

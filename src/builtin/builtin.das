@@ -63,11 +63,11 @@ def resize_and_init(var Arr:array<auto(numT)>;newSize:int)
         static_if typeinfo(is_workhorse type<numT>)
             Arr[i] = numT()
         static_elif typeinfo(can_move type<numT>)
-            Arr[i] <- [[numT()]]
+            Arr[i] <- numT()
         static_elif typeinfo(can_copy type<numT>)
-            Arr[i] = [[numT()]]
+            Arr[i] = numT()
         else
-            Arr[i] := [[numT()]]
+            Arr[i] := numT()
 
 def resize_and_init(var Arr:array<auto(numT)>;newSize:int; initValue:numT)
     static_if typeinfo(need_lock_check type<numT>)
@@ -549,7 +549,7 @@ def get_value(Tab:table<auto(keyT);auto(valT)> ==const;at:keyT|#):valT
 
 def get_value(var Tab:table<auto(keyT);smart_ptr<auto(valT)>>;at:keyT|#):smart_ptr<valT>
     concept_assert(false,"can't get smart_ptr value from table, use clone_value instead")
-    return <- [[smart_ptr<valT>]]
+    return <- default<smart_ptr<valT>>
 
 def get_value(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#):valT
     static_if typeinfo(is_void type<valT>)

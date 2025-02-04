@@ -66,11 +66,7 @@ def gen_sphere ( sectorCount,stackCount:int; cubeUV : bool )
             let y = xy * sin(sectorAngle)
             let s = float(j) / float(sectorCount)
             let t = float(i) / float(stackCount)
-            frag.vertices |> push <| [[GeometryPreviewVertex
-                xyz=float3(x,y,z),
-                normal=normalize(float3(x,y,z)),
-                uv=get_uv(float3(x,y,z),float2(s,t),cubeUV)
-            ]]
+            frag.vertices |> push <| GeometryPreviewVertex(uninitialized xyz=float3(x,y,z), normal=normalize(float3(x,y,z)), uv=get_uv(float3(x,y,z),float2(s,t),cubeUV))
     var indices : array<int>
     var k1, k2 : int
     for i in range(stackCount)
@@ -112,14 +108,9 @@ def private apply_gen_direction_tm ( plt : GenDirection; var frag:GeometryFragme
 
 def gen_plane ( plt : GenDirection )
     var frag : GeometryFragment
-    frag.vertices <- [{GeometryPreviewVertex
-        xyz=float3( 1, 1, 0), normal=float3(  0, 0, 1),  uv=float2(0,0);
-        xyz=float3(-1, 1, 0), normal=float3(  0, 0, 1),  uv=float2(1,0);
-        xyz=float3(-1,-1, 0), normal=float3(  0, 0, 1),  uv=float2(1,1);
-        xyz=float3( 1,-1, 0), normal=float3(  0, 0, 1),  uv=float2(0,1)
-    }]
+    frag.vertices <- [GeometryPreviewVertex(xyz=float3( 1, 1, 0), normal=float3(  0, 0, 1), uv=float2(0,0)), GeometryPreviewVertex(xyz=float3(-1, 1, 0), normal=float3(  0, 0, 1), uv=float2(1,0)), GeometryPreviewVertex(xyz=float3(-1,-1, 0), normal=float3(  0, 0, 1), uv=float2(1,1)), GeometryPreviewVertex(xyz=float3( 1,-1, 0), normal=float3(  0, 0, 1), uv=float2(0,1))]
     apply_gen_direction_tm(plt, frag)
-    frag.indices <- [{int 0; 1; 2; 2; 3; 0 }]
+    frag.indices <- array<int>(0, 1, 2, 2, 3, 0)
     frag.prim = GeometryFragmentType triangles
     gen_bbox(frag)
     return <- frag
@@ -145,16 +136,8 @@ def gen_cylinder(plt:GenDirection; sectorCount:int)
             for j in range(sectorCount+1)                   // sectorCount + 1 vertices for top or bottom
                 let u = unitVertices[j]
                 let s = float(j) / float(sectorCount)
-                frag.vertices |> push([[GeometryPreviewVertex
-                    xyz = float3(u.x,u.y,h),
-                    normal = isTB ? normalize(float3(0.,0.,h)) : normalize(float3(u.x,u.y,0.)),
-                    uv = float2(s, t)
-                ]])
-            frag.vertices |> push([[GeometryPreviewVertex           // + center
-                xyz = float3(0.,0.,h),
-                normal = normalize(float3(0.,0.,h)),
-                uv = float2(0.5, 0.5)
-            ]])
+                frag.vertices |> push(GeometryPreviewVertex(uninitialized xyz = float3(u.x,u.y,h), normal = isTB ? normalize(float3(0.,0.,h)) : normalize(float3(u.x,u.y,0.)), uv = float2(s, t)))
+            frag.vertices |> push(GeometryPreviewVertex(uninitialized xyz = float3(0.,0.,h), normal = normalize(float3(0.,0.,h)), uv = float2(0.5, 0.5)))
     apply_gen_direction_tm(plt, frag)
     // indices
     for i in range(sectorCount)
@@ -198,44 +181,14 @@ def gen_cube
     //  |/      |/
     //  v2------v3
     var frag : GeometryFragment
-    frag.vertices <- [{GeometryPreviewVertex
-        xyz=float3( 1, 1, 1), normal=float3(  0, 0, 1),  uv=float2(0,0);              // v0 (front)
-        xyz=float3(-1, 1, 1), normal=float3(  0, 0, 1),  uv=float2(1,0);              // v1
-        xyz=float3(-1,-1, 1), normal=float3(  0, 0, 1),  uv=float2(1,1);              // v2
-        xyz=float3( 1,-1, 1), normal=float3(  0, 0, 1),  uv=float2(0,1);              // v3
-        xyz=float3( 1, 1, 1), normal=float3(  1, 0, 0),  uv=float2(0,0);              // v0 (right)
-        xyz=float3( 1,-1, 1), normal=float3(  1, 0, 0),  uv=float2(1,0);              // v3
-        xyz=float3( 1,-1,-1), normal=float3(  1, 0, 0),  uv=float2(1,1);              // v4
-        xyz=float3( 1, 1,-1), normal=float3(  1, 0, 0),  uv=float2(0,1);              // v5
-        xyz=float3( 1, 1, 1), normal=float3(  0, 1, 0),  uv=float2(0,0);              // v0 (top)
-        xyz=float3( 1, 1,-1), normal=float3(  0, 1, 0),  uv=float2(1,0);              // v5
-        xyz=float3(-1, 1,-1), normal=float3(  0, 1, 0),  uv=float2(1,1);              // v6
-        xyz=float3(-1, 1, 1), normal=float3(  0, 1, 0),  uv=float2(0,1);              // v1
-        xyz=float3(-1, 1, 1), normal=float3( -1, 0, 0),  uv=float2(0,0);              // v1 (left)
-        xyz=float3(-1, 1,-1), normal=float3( -1, 0, 0),  uv=float2(1,0);              // v6
-        xyz=float3(-1,-1,-1), normal=float3( -1, 0, 0),  uv=float2(1,1);              // v7
-        xyz=float3(-1,-1, 1), normal=float3( -1, 0, 0),  uv=float2(0,1);              // v2
-        xyz=float3(-1,-1,-1), normal=float3(  0,-1, 0),  uv=float2(0,0);              // v7 (bottom)
-        xyz=float3( 1,-1,-1), normal=float3(  0,-1, 0),  uv=float2(1,0);              // v4
-        xyz=float3( 1,-1, 1), normal=float3(  0,-1, 0),  uv=float2(1,1);              // v3
-        xyz=float3(-1,-1, 1), normal=float3(  0,-1, 0),  uv=float2(0,1);              // v2
-        xyz=float3( 1,-1,-1), normal=float3(  0, 0,-1),  uv=float2(0,0);              // v4 (back)
-        xyz=float3(-1,-1,-1), normal=float3(  0, 0,-1),  uv=float2(1,0);              // v7
-        xyz=float3(-1, 1,-1), normal=float3(  0, 0,-1),  uv=float2(1,1);              // v6
-        xyz=float3( 1, 1,-1), normal=float3(  0, 0,-1),  uv=float2(0,1) }]            // v5
-    frag.indices <- [{int
-         0; 1; 2;   2; 3; 0;      // front
-         4; 5; 6;   6; 7; 4;      // right
-         8; 9;10;  10;11; 8;      // top
-        12;13;14;  14;15;12;      // left
-        16;17;18;  18;19;16;      // bottom
-        20;21;22;  22;23;20 }]    // back
+    frag.vertices <- [GeometryPreviewVertex(xyz=float3( 1, 1, 1), normal=float3(  0, 0, 1), uv=float2(0,0)), GeometryPreviewVertex(xyz=float3(-1, 1, 1), normal=float3(  0, 0, 1), uv=float2(1,0)), GeometryPreviewVertex(xyz=float3(-1,-1, 1), normal=float3(  0, 0, 1), uv=float2(1,1)), GeometryPreviewVertex(xyz=float3( 1,-1, 1), normal=float3(  0, 0, 1), uv=float2(0,1)), GeometryPreviewVertex(xyz=float3( 1, 1, 1), normal=float3(  1, 0, 0), uv=float2(0,0)), GeometryPreviewVertex(xyz=float3( 1,-1, 1), normal=float3(  1, 0, 0), uv=float2(1,0)), GeometryPreviewVertex(xyz=float3( 1,-1,-1), normal=float3(  1, 0, 0), uv=float2(1,1)), GeometryPreviewVertex(xyz=float3( 1, 1,-1), normal=float3(  1, 0, 0), uv=float2(0,1)), GeometryPreviewVertex(xyz=float3( 1, 1, 1), normal=float3(  0, 1, 0), uv=float2(0,0)), GeometryPreviewVertex(xyz=float3( 1, 1,-1), normal=float3(  0, 1, 0), uv=float2(1,0)), GeometryPreviewVertex(xyz=float3(-1, 1,-1), normal=float3(  0, 1, 0), uv=float2(1,1)), GeometryPreviewVertex(xyz=float3(-1, 1, 1), normal=float3(  0, 1, 0), uv=float2(0,1)), GeometryPreviewVertex(xyz=float3(-1, 1, 1), normal=float3( -1, 0, 0), uv=float2(0,0)), GeometryPreviewVertex(xyz=float3(-1, 1,-1), normal=float3( -1, 0, 0), uv=float2(1,0)), GeometryPreviewVertex(xyz=float3(-1,-1,-1), normal=float3( -1, 0, 0), uv=float2(1,1)), GeometryPreviewVertex(xyz=float3(-1,-1, 1), normal=float3( -1, 0, 0), uv=float2(0,1)), GeometryPreviewVertex(xyz=float3(-1,-1,-1), normal=float3(  0,-1, 0), uv=float2(0,0)), GeometryPreviewVertex(xyz=float3( 1,-1,-1), normal=float3(  0,-1, 0), uv=float2(1,0)), GeometryPreviewVertex(xyz=float3( 1,-1, 1), normal=float3(  0,-1, 0), uv=float2(1,1)), GeometryPreviewVertex(xyz=float3(-1,-1, 1), normal=float3(  0,-1, 0), uv=float2(0,1)), GeometryPreviewVertex(xyz=float3( 1,-1,-1), normal=float3(  0, 0,-1), uv=float2(0,0)), GeometryPreviewVertex(xyz=float3(-1,-1,-1), normal=float3(  0, 0,-1), uv=float2(1,0)), GeometryPreviewVertex(xyz=float3(-1, 1,-1), normal=float3(  0, 0,-1), uv=float2(1,1)), GeometryPreviewVertex(xyz=float3( 1, 1,-1), normal=float3(  0, 0,-1), uv=float2(0,1))]            // v5
+    frag.indices <- array<int>(0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 8, 9, 10, 10, 11, 8, 12, 13, 14, 14, 15, 12, 16, 17, 18, 18, 19, 16, 20, 21, 22, 22, 23, 20)    // back
     frag.prim = GeometryFragmentType triangles
     gen_bbox(frag)
     return <- frag
 
 def gen_image_checkerboard(w,h:int; c1,c2:uint)
-    var surface <- [[ImageSurface width=w, height=h]]
+    var surface <- ImageSurface(uninitialized width=w, height=h)
     surface.pixels |> resize(w*h)
     for y in range(h)
         for x in range(w)
@@ -243,7 +196,7 @@ def gen_image_checkerboard(w,h:int; c1,c2:uint)
     return <- surface
 
 def gen_image_point(w:int; c:uint)
-    var surface <- [[ImageSurface width=w, height=w]]
+    var surface <- ImageSurface(uninitialized width=w, height=w)
     surface.pixels |> resize(w*w)
     let rad = float(w) / 2.
     for y in range(w)
@@ -270,9 +223,9 @@ def private split_sptn ( sptn:string ) : tuple<p:int;t:int;n:int>
     if !empty(s)
         ptn |> push(s)
     if length(ptn)==1
-        return [[auto s_to_int(ptn[0]),-1,-1]]
+        return (s_to_int(ptn[0]), -1, -1)
     else
-        return [[auto s_to_int(ptn[0]), s_to_int(ptn[1]), s_to_int(ptn[2])]]
+        return (s_to_int(ptn[0]), s_to_int(ptn[1]), s_to_int(ptn[2]))
 
 def load_obj_mesh ( fname:string; path1,path2:string; canfail:bool=true )
     var frag <- load_obj_mesh("{path1}/{fname}",false)
@@ -313,14 +266,10 @@ def load_obj_mesh ( fname:string; canfail:bool=true )
                 delete xyz
             elif st |> starts_with("f ")
                 var f012 <- st |> split(" ")
-                var v012 <- [{for vv in range(1,length(f012)); split_sptn(f012[vv])}]
+                var v012 <- [for vv in range(1,length(f012)); split_sptn(f012[vv])]
                 var i012 : array<int>
                 for pvi in v012
-                    var vtx = [[GeometryPreviewVertex
-                        xyz = pvi.p==-1 ? float3() : v[pvi.p-1],
-                        normal = pvi.n==-1 ? float3(1,0,0) : vn[pvi.n-1],
-                        uv = pvi.t==-1 ? float2() : vt[pvi.t-1]
-                    ]]
+                    var vtx = GeometryPreviewVertex(uninitialized xyz = pvi.p==-1 ? float3() : v[pvi.p-1], normal = pvi.n==-1 ? float3(1,0,0) : vn[pvi.n-1], uv = pvi.t==-1 ? float2() : vt[pvi.t-1])
                     let svtx = "{vtx}"
                     if uvtx |> key_exists(svtx)
                         i012 |> push(uvtx |> get_value(svtx))

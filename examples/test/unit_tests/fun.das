@@ -47,16 +47,16 @@ def verify_14 ( t )
 [export]
 def test
     // compehension
-    verify_even() <| [[for x in range(100); x; where x % 2==0]]
+    verify_even() <| [iterator for x in range(100); x; where x % 2==0]
 
     // array comprehension
-    verify_even() <| [{for x in range(100); x; where x % 2==0}]
+    verify_even() <| [for x in range(100); x; where x % 2==0]
 
     // comprehension iterator with moveable type
-    verify_14() <| [[for x in range(1,4); [{int x;2}] ]]
+    verify_14() <| [iterator for x in range(1,4); array<int>(x, 2)]
 
     // comprehension array with moveable type
-    verify_14() <| [{for x in range(1,4); [{int x;2}] }]
+    verify_14() <| [for x in range(1,4); array<int>(x, 2)]
 
     (   // filter with function
             range(100)
@@ -87,9 +87,9 @@ def test
     )
 
     (   // filter and map with moveable type
-            [[for x in range(100); [{int x;2}] ]]
+            [iterator for x in range(100); array<int>(x, 2)]
         |>  filter( @(x) => x[0] % 2==0 )
-        |>  map ( @(x) : array<int> => <- [{int x[0]; x[0]; x[0] }] )
+        |>  map ( @(x) : array<int> => <- array<int>(x[0], x[0], x[0]) )
         |>  map ( @(x) : int => x[0] )
         |>  verify_even()
     )
@@ -103,7 +103,7 @@ def test
     )
 
     (   // reduce ref iterator with block
-            [[ for x in range(10); x ]]
+            [iterator for x in range(10); x]
         |>  reduce( $(x,y) => x + y )
         |>  is_equal(45)
         |>  verify()
@@ -136,8 +136,8 @@ def test
     (   // reduce ref type
             range(10)
         |>  each()
-        |>  map( @(x : int) => [[auto x, 1.5]] )
-        |>  reduce( $(x,y) => [[auto x._0 + y._0, 2.f]] )
+        |>  map( @(x : int) => (x, 1.5) )
+        |>  reduce( $(x,y) => (x._0 + y._0, 2.f) )
         |>  first()
         |>  is_equal(45)
         |>  verify()
@@ -152,7 +152,7 @@ def test
     )
 
     (   // any (pass)
-            [[bool true;false]]
+            fixed_array<bool>(true, false)
         |>  any()
         |>  verify()
     )
@@ -224,23 +224,23 @@ def test
     |>  each()
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same( [[for x in range(10); (x % 3)+1]] )
+    |>  is_same( [iterator for x in range(10); (x % 3)+1] )
     |>  verify()
     )
 
     (   // cycle <by reference>
-        [[for x in range(1,4); [[tuple<int;float> x,2.5]]]]
+        [iterator for x in range(1,4); (x, 2.5)]
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same([[for x in range(10); [[tuple<int;float> (x%3)+1,2.5]]]])
+    |>  is_same([iterator for x in range(10); ((x%3)+1, 2.5)])
     |>  verify()
     )
 
     (   // cycle <by moveable>
-        [[for x in range(1,4); [{int x;2}] ]]
+        [iterator for x in range(1,4); array<int>(x, 2)]
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same([[for x in range(10); [{int (x%3)+1;2}] ]])
+    |>  is_same([iterator for x in range(10); array<int>((x%3)+1, 2)])
     |>  verify()
     )
 

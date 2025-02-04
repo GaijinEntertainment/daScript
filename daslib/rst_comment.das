@@ -326,7 +326,7 @@ class RstComment : AstCommentReader
                 write_to_detail("function-{prog.thisModuleName}-{function_file_name(fn)}", function_comment)
         else
             if function_comment != ""
-                field_comments |> push([[auto "method",string(fn.name),function_comment]])
+                field_comments |> push(("method", string(fn.name), function_comment))
             state = ParserState structure
         function_comment = ""
     def override beforeStructureFields ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
@@ -341,7 +341,7 @@ class RstComment : AstCommentReader
         state = ParserState field
         if field_comment != ""
             debug_rst("\t-> push {name} // {field_comment}")
-            field_comments |> push([[auto "field",clone_string(name),field_comment]])
+            field_comments |> push(("field", clone_string(name), field_comment))
     def override afterStructureFields ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterStuctureFields")
         if state!=ParserState structure && state!=ParserState field

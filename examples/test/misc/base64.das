@@ -26,7 +26,7 @@ def chunk6 ( var inp : iterator<int> )
         return false
 
 let
-    xlattable64 <- [{for t in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"; t}]
+    xlattable64 <- [for t in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"; t]
 
 // note: this is equivalent to
 //  unsafe

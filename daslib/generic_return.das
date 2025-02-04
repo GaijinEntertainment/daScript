@@ -16,11 +16,11 @@ class GenericReturn : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if expr.arguments |> length !=1
             macro_error(prog,expr.at,"generic_return expecting 1 argument")
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         assume ret_expr = expr.arguments[0]
         if ret_expr._type==null || ret_expr._type.isAutoOrAlias
             macro_error(prog,expr.at,"generic_return requires fully inferred type")
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         if ret_expr._type.isVoid
             return <- qmacro_block <|
                 $e(ret_expr)
@@ -33,5 +33,5 @@ class GenericReturn : AstCallMacro
                 return <- $e(ret_expr)
         else
             macro_error(prog,expr.at,"generic_return for the type {describe(ret_expr._type)}, which can't be copied or moved")
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
 

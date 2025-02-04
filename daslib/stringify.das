@@ -25,4 +25,4 @@ class private LongStringReader : AstReaderMacro
         else
             return true
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
-        return <- new [[ExprConstString() at=expr.at, value:=expr.sequence]]
+        return <- new ExprConstString(at=expr.at, value:=expr.sequence)

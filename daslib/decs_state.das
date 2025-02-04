@@ -71,7 +71,7 @@ class ContextStateAgent : DapiDebugAgent
                 prq.REQUIRE = join(eq.req,",")
             if !empty(eq.reqn)
                 prq.REQUIRE_NOT = join(eq.reqn,",")
-            prq.archetype <- [{for a in eq.archetypes; decsState.allArchetypes[a].hash}]
+            prq.archetype <- [for a in eq.archetypes; decsState.allArchetypes[a].hash]
             report_to_debugger(ctx, "DECS requests", "{prq.hash}", prq)
             delete prq
 

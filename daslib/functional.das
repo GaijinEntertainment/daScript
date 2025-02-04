@@ -220,9 +220,9 @@ def flatten ( var it : iterator<auto(TT)> )
     //! iterates over `it`, than iterates over each element of each element of `it` and yields it
     unsafe
         static_if typeinfo(is_iterator type<TT>)
-            return <- flatten_one ( [[for i in it; flatten(i)]] )
+            return <- flatten_one ( [iterator for i in it; flatten(i)] )
         else
-            return <- [[for i in it; i]]
+            return <- [iterator for i in it; i]
 
 def sorted ( var arr:array<auto> )
     //! iterates over input and returns it sorted version

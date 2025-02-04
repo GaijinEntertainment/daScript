@@ -40,11 +40,11 @@ def test
                 passthroughptr(addr(C)) <| $ ( c )
                     assert(*a==1 && *b==2 && *c==3)
 
-    passthroughFoo([[Foo v=1]]) <| $ ( a )
+    passthroughFoo(Foo(uninitialized v=1)) <| $ ( a )
         assert(a.v==1)
-        passthroughFoo([[Foo v=2]]) <| $ ( b )
+        passthroughFoo(Foo(uninitialized v=2)) <| $ ( b )
             assert(a.v==1 && b.v==2)
-            passthroughFoo([[Foo v=3]]) <| $ ( c )
+            passthroughFoo(Foo(uninitialized v=3)) <| $ ( c )
                 assert(a.v==1 && b.v==2 && c.v==3)
 
     return true

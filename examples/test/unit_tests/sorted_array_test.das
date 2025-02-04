@@ -2,7 +2,7 @@ require daslib/algorithm
 
 [export]
 def test
-    let a <- [{for x in range(10); x; where x!=4}]
+    let a <- [for x in range(10); x; where x!=4]
     for i in range(-2,12)
         let lb = a |> lower_bound(i)
         let bs = a |> binary_search(i)

@@ -1,5 +1,5 @@
 def test_find
-    let const_tab <- {{ "one"=>1; "two"=>2 }}
+    let const_tab <- {"one"=>1, "two"=>2}
     find(const_tab,"one") <| $(num)
         assert(deref(num)==1)
     get(const_tab,"one") <| $(num)
@@ -8,7 +8,7 @@ def test_find
         if num != null
             assert(deref(num)==1)
     assert(const_tab?["one"] ?? 100500 == 1)
-    var tab <- {{ "one"=>1; "two"=>2 }}
+    var tab <- {"one"=>1, "two"=>2}
     find(tab,"one") <| $(num)
         assert(deref(num)==1)
     get(tab,"one") <| $(var num)
@@ -159,7 +159,7 @@ def test : bool
 
 [sideeffects]
 def test_lock_panic
-    var tab <- {{ "one" => 1; "two" => 2 }}
+    var tab <- {"one" => 1, "two" => 2}
     var failed = false
     try
         find(tab,"one") <| $(t)
@@ -208,7 +208,7 @@ def test_erase_collision
     for i in range(1, TOTAL)
         push(names, "name_{i}")
     for n in names
-        t.t |> emplace(n,[[TestStruct test = n ]])
+        t.t |> emplace(n,TestStruct(uninitialized test = n))
     var deletedEntries : array<int>
     verify(check(t, deletedEntries))
     for i in range(1, TOTAL)

@@ -30,7 +30,7 @@ class SafeAddrMacro : AstFunctionAnnotation
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if !is_local_or_global_expr(call.arguments[0])
             compiling_program() |> macro_error(call.at,"not a local value")
-        return <- [[ExpressionPtr]]
+        return <- default<ExpressionPtr>
 
 // [tag_function(temp_addr_tag)]
 def public temp_ptr(x : auto(T)? implicit ==const) : T ? const #

@@ -93,11 +93,11 @@ def private trace_value(value : ReNode?)
 
 def private nada()
     trace_backtrack()
-    return [[MaybeReNode nothing=null]]
+    return MaybeReNode(uninitialized nothing=null)
 
 def private maybe( var value : ReNode? )
     trace_value(value)
-    return [[MaybeReNode value=value]]
+    return MaybeReNode(uninitialized value=value)
 
 def private eos(expr:string; offset:int)
     return offset >= length(expr)
@@ -226,17 +226,17 @@ def private re_char (expr : string; offset:int) : MaybeReNode
                 let hex2 = at(expr,offset+3)
                 if is_hex(hex2)
                     note("hex \\{to_char(hex1)}{to_char(hex2)} {uint(from_hex(hex1,hex2))}", offset)
-                    return maybe(new [[ReNode op=ReOp Char, text=string_from_hex(hex1,hex2), textLen=1, at=range(offset,offset+3)]])
+                    return maybe(new ReNode(uninitialized op=ReOp Char, text=string_from_hex(hex1,hex2), textLen=1, at=range(offset,offset+3)))
             note("hex \\{to_char(hex1)} {uint(from_hex(hex1))}", offset)
-            return maybe(new [[ReNode op=ReOp Char, text=string_from_hex(hex1), textLen=1, at=range(offset,offset+2)]])
+            return maybe(new ReNode(uninitialized op=ReOp Char, text=string_from_hex(hex1), textLen=1, at=range(offset,offset+2)))
         if is_set_character(ech)
             var cset : CharSet
             set_meta(cset,ech)
-            return maybe(new [[ReNode op=ReOp Set, cset=cset, at=range(offset,offset+2)]])
-        return maybe(new [[ReNode op=ReOp Char, text=to_char(ech), textLen=1, at=range(offset,offset+2)]])
+            return maybe(new ReNode(uninitialized op=ReOp Set, cset=cset, at=range(offset,offset+2)))
+        return maybe(new ReNode(uninitialized op=ReOp Char, text=to_char(ech), textLen=1, at=range(offset,offset+2)))
     elif is_meta_character(ch)
         return nada()
-    return maybe(new [[ReNode op=ReOp Char, text=to_char(ch), textLen=1, at=range(offset,offset+1)]])
+    return maybe(new ReNode(uninitialized op=ReOp Char, text=to_char(ch), textLen=1, at=range(offset,offset+1)))
 
 // <set-items>	::=	<set-item> | <set-item> <set-items>
 // <set-item>	::=	<range> | <char>
@@ -324,7 +324,7 @@ def private re_set_items(expr:string; offset:int) : MaybeReNode
         elif !next_range
             note("syntax error???",iofs)
             return nada()
-    return maybe(new [[ReNode op=ReOp Set, cset=cset, at=range(offset,iofs)]])
+    return maybe(new ReNode(uninitialized op=ReOp Set, cset=cset, at=range(offset,iofs)))
 
 // <negative-set>	::=	"[^" <set-items> "]"
 // <positive-set>	::=	"[" <set-items> "]"
@@ -360,7 +360,7 @@ def private re_any(expr:string; offset:int) : MaybeReNode
     if eos(expr,offset)
         return nada()
     if at(expr,offset)=='.'
-        return maybe(new [[ReNode op=ReOp Any, at=range(offset,offset+1)]])
+        return maybe(new ReNode(uninitialized op=ReOp Any, at=range(offset,offset+1)))
     return nada()
 
 // <eos>	::=	"$"
@@ -369,7 +369,7 @@ def private re_eos(expr:string; offset:int) : MaybeReNode
     if eos(expr,offset)
         return nada()
     if at(expr,offset)=='$'
-        return maybe(new [[ReNode op=ReOp Eos, at=range(offset,offset+1)]])
+        return maybe(new ReNode(uninitialized op=ReOp Eos, at=range(offset,offset+1)))
     return nada()
 
 // <group>	::=	"(" <RE> ")"
@@ -385,7 +385,7 @@ def private re_group(expr:string; offset:int) : MaybeReNode
     if at(expr,next(ore))!=')'
         delete ore
         return nada()
-    return maybe(new [[ReNode op=ReOp Group, subexpr=ore as value, at=range(offset,next(ore)+1)]])
+    return maybe(new ReNode(uninitialized op=ReOp Group, subexpr=ore as value, at=range(offset,next(ore)+1)))
 
 // <elementary-RE>	::=	<group> | <any> | <eos> | <set> | <char>
 def private re_elementary(expr:string; offset:int) : MaybeReNode
@@ -431,7 +431,7 @@ def private mk_concat(var left,right:ReNode?)
             delete right
         return left
     else
-        return new [[ReNode op=ReOp Concat, left = left, right = right, at=range(left.at.x,right.at.y)]]
+        return new ReNode(uninitialized op=ReOp Concat, left = left, right = right, at=range(left.at.x,right.at.y))
 
 def private mk_union(var left,right:ReNode?) : ReNode?
     if left.op==ReOp Union
@@ -449,7 +449,7 @@ def private mk_union(var left,right:ReNode?) : ReNode?
         push(right.all,left)                      // union(x,union(y)) = union(xy)
         return right
     else
-        return new [[ReNode op=ReOp Union, all <- [{ReNode? left; right}], at=range(left.at.x,right.at.y)]]
+        return new ReNode(uninitialized op=ReOp Union, all <- array<ReNode?>(left, right), at=range(left.at.x,right.at.y))
 
 // <RE>	::=	<union> | <simple-RE>
 // <union>	::=	<RE> "|" <simple-RE>
@@ -492,11 +492,11 @@ def private re_basic(expr:string; offset:int) : MaybeReNode
         return nada()
     let ch = at(expr,next(oelem))
     if ch=='*'
-        return maybe(new [[ReNode op=ReOp Star, subexpr=oelem as value, at=range(offset,next(oelem)+1)]])
+        return maybe(new ReNode(uninitialized op=ReOp Star, subexpr=oelem as value, at=range(offset,next(oelem)+1)))
     elif ch=='+'
-        return maybe(new [[ReNode op=ReOp Plus, subexpr=oelem as value, at=range(offset,next(oelem)+1)]])
+        return maybe(new ReNode(uninitialized op=ReOp Plus, subexpr=oelem as value, at=range(offset,next(oelem)+1)))
     elif ch=='?'
-        return maybe(new [[ReNode op=ReOp Question, subexpr=oelem as value, at=range(offset,next(oelem)+1)]])
+        return maybe(new ReNode(uninitialized op=ReOp Question, subexpr=oelem as value, at=range(offset,next(oelem)+1)))
     return oelem
 
 def private re_parse ( expr:string ) : ReNode?
@@ -534,12 +534,12 @@ def private re_assign_next ( var re:Regex )
                 sub.next = node.next
 
 def private re_assign_groups ( var re:Regex )
-    push(re.groups, [[auto range(0),""]])
+    push(re.groups, (range(0), ""))
     visit_top_down(re.root) <| $ ( var node )
         if node.op == ReOp Group
             let index = length(re.groups)
             node.index = index
-            push(re.groups, [[auto range(0),"{index}"]])
+            push(re.groups, (range(0), "{index}"))
 
 /*
     matching

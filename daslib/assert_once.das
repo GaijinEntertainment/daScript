@@ -28,7 +28,7 @@ class AssertOnceMacro : AstFunctionAnnotation
         let once_name = make_unique_private_name("__assert_once",call.at)
         if !compiling_module() |> add_global_private_var(once_name, call.at) <| quote(true)
             errors := "can't add global variable {once_name}"
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         // if ..
         var inscope qb <- qmacro_block() <|
             if $i(once_name) && !$e(call.arguments[0])

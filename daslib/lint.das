@@ -107,7 +107,7 @@ class LintVisitor : AstVisitor
             validate_var(v, true)
 
 def public paranoid ( prog:ProgramPtr; compile_time_errors : bool )
-    var astVisitor = new [[LintVisitor() compile_time_errors=compile_time_errors]]
+    var astVisitor = new LintVisitor(compile_time_errors=compile_time_errors)
     unsafe
         astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
     visit ( prog, astVisitor.astVisitorAdapter )

@@ -8,12 +8,7 @@ def ttt
 
 [export]
 def test
-    var hints <- [[HintLookup
-        tab <- {{
-            hash("one") => "one";
-            hash("two") => "two"
-        }}
-    ]]
+    var hints <- HintLookup(uninitialized tab <- {hash("one") => "one", hash("two") => "two"})
     let h1 = get_hint(hints, "one", "no hint")      // static name, fast lookup
     let h2 = get_hint(hints, "three", "no hint")    // static name, fast lookup
     var s3 = "tw"

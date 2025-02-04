@@ -21,16 +21,14 @@ class DecltypeMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if expr.arguments |> length !=1
             macro_error(prog,expr.at,"decltype expecting 1 argument")
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         if expr.arguments[0]._type==null || expr.arguments[0]._type.isAutoOrAlias
             macro_error(prog,expr.at,"decltype requires fully inferred type")
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         var inscope tt <- clone_type(expr.arguments[0]._type)
         if remove_ref
             tt.flags &= ~TypeDeclFlags ref
-        var inscope mkt <- new [[ExprTypeDecl() at=expr.at,
-            typeexpr <- tt
-        ]]
+        var inscope mkt <- new ExprTypeDecl(at=expr.at, typeexpr <- tt)
         return <- mkt
 
 [call_macro(name="decltype_noref")]
@@ -73,7 +71,7 @@ class TemplateMacro : AstFunctionAnnotation
                 return farg.name == t.name
             if argidx==-1
                 errors := "can't find template argument {t.name} (or duplicate)"
-                return <- [[ExpressionPtr]]
+                return <- default<ExpressionPtr>
             if true
                 var inscope argExpr := newcall.arguments[argidx]
                 if (argExpr is ExprRef2Value)
@@ -82,7 +80,7 @@ class TemplateMacro : AstFunctionAnnotation
                 let canStrip = t.basicType==Type tBool ? t.bValue : true
                 if canStrip && !(argExpr is ExprTypeDecl)
                     errors := "template argument must be type<...> and not {describe(newcall.arguments[argidx])}. {newcall.arguments[argidx].__rtti}"
-                    return <- [[ExpressionPtr]]
+                    return <- default<ExpressionPtr>
                 let tname = describe_typedecl(argExpr._type,true,true,true)
                 extra += "`{hash(tname)}"
             fclone.arguments |> erase(argidx)

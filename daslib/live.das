@@ -206,10 +206,10 @@ def public recompile(full_restart:bool=false)
                             set_new_context(context,full_restart)
                         else
                             to_log(LOG_ERROR, "LIVE: {appFile} failed to simulate:\n{issues}\n")
-                            set_new_context([[smart_ptr<Context>]],full_restart)
+                            set_new_context(default<smart_ptr<Context>>,full_restart)
                 else
                     to_log(LOG_ERROR, "LIVE: {appFile} failed to compile:\n{issues}\n")
-                    set_new_context([[smart_ptr<Context>]],full_restart)
+                    set_new_context(default<smart_ptr<Context>>,full_restart)
 
 def public live_keypressed ( keycode, scancode, action, mods : int )
     invoke_live("keypressed", keycode, scancode, action, mods )

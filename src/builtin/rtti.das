@@ -37,7 +37,7 @@ def context_for_each_variable( blk:block<(info:VarInfo):void> )
 def private each_dim_any(info)
     unsafe
         let pinfo = addr(info)
-        return <- [[ for index in range(int(pinfo.dimSize)); get_dim(*pinfo,index) ]]
+        return <- [iterator for index in range(int(pinfo.dimSize)); get_dim(*pinfo,index)]
 
 [generic]
 def each_dim(info:TypeInfo)

@@ -69,13 +69,13 @@ class ConstantExpressionMacro : AstFunctionAnnotation
                             if !isConstantExpression(expr.arguments[fidx])
                                 if arg.bValue
                                     compiling_program() |> macro_error(expr.at,"function {expr.func.name} argument {arg.name} is not a compilation time constant")
-                                return <- [[ExpressionPtr]]
+                                return <- default<ExpressionPtr>
                             argi |> push(fidx)
                 break
         argi |> sort_unique
         argi |> reverse
         if empty(argi)
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         var inscope func_copy <- clone_function(expr.func)
         var func_name = "{func_copy.name}`constant_expression"
         for i in argi

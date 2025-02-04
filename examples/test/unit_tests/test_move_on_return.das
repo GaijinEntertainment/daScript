@@ -6,7 +6,7 @@ def operator delete ( var p : Pipeline )
     p.a = 0
 
 def create_graphics_pipelines
-    return <- [{auto new [[Pipeline a=1]]; new [[Pipeline a=2]] }]
+    return <- array(new Pipeline(uninitialized a=1), new Pipeline(uninitialized a=2))
 
 def fooBar
     var pipelines <- create_graphics_pipelines()

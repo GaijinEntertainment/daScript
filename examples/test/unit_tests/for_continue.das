@@ -21,7 +21,7 @@ def test_for_continue()
 [sideeffects]
 def test_complex_for_continue()
     var y = 0
-    let arr = [[int 0;1;2;3;4;5;6;7;8;9]]
+    let arr = fixed_array<int>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     for x,s in range(10), arr
         assert(x==s)
         if (x & 1) == 0

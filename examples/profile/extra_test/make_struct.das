@@ -12,7 +12,7 @@ def make_1
 
 [sideeffects]
 def make_2
-    return [[Foo x=1, y=2, z=3, w=4]]
+    return Foo(uninitialized x=1, y=2, z=3, w=4)
 
 [sideeffects]
 def test_1

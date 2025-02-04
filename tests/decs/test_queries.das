@@ -114,7 +114,7 @@ struct Something
 def test_query_eid_obj ( t: T? )
     restart()
     let EID = create_entity <| @ ( eid, cmp )
-        cmp |> apply_decs_template([[Something a=1]])
+        cmp |> apply_decs_template(Something(uninitialized a=1))
     commit()
     var count = 0
     query(EID) <| $ ( s : Something )

@@ -23,14 +23,12 @@ def public static_let_finalize ( blk : block )
     pass
 
 def private make_shutdown_function ( varname:string; at:LineInfo )
-    var inscope fn <- new [[Function() at=at, atDecl=at, name:="shutdown`{varname}"]]
+    var inscope fn <- new Function(at=at, atDecl=at, name:="shutdown`{varname}")
     fn.flags |= FunctionFlags generated
     fn.flags |= FunctionFlags shutdown
-    move_new(fn.result) <| new [[TypeDecl() baseType=Type tVoid, at=at]]
-    var inscope blk <- new [[ExprBlock() at=at]]
-    var inscope delv <- new [[ExprDelete() at=at,
-        subexpr <- new [[ExprVar() at=at, name:=varname]]
-    ]]
+    move_new(fn.result) <| new TypeDecl(baseType=Type tVoid, at=at)
+    var inscope blk <- new ExprBlock(at=at)
+    var inscope delv <- new ExprDelete(at=at, subexpr <- new ExprVar(at=at, name:=varname))
     delv.genFlags |= ExprGenFlags alwaysSafe
     emplace(blk.list,delv)
     move(fn.body) <| blk
@@ -45,13 +43,13 @@ class StaticLetMacro : AstFunctionAnnotation
         var blk = mblk._block as ExprBlock
         if blk.finalList |> length != 0
             errors := "not expecting finally section in the static_let"
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         let prefix = "`static`at_line_{int(call.at.line)}`"
         var inscope renames : array<tuple<old_name:string;new_name:string>>
         for ex in blk.list
             if !(ex is ExprLet)
                 errors := "expecting let ... expressions in the static_let"
-                return <- [[ExpressionPtr]]
+                return <- default<ExpressionPtr>
             var lexpr = ex as ExprLet
             for vvar in lexpr.variables
                 if true
@@ -61,14 +59,14 @@ class StaticLetMacro : AstFunctionAnnotation
                     let old_name = "{vclone.name}"
                     let new_name = "{prefix}{vclone.name}"
                     vclone.name := new_name
-                    renames |> push([[auto old_name,new_name]])
+                    renames |> push((old_name, new_name))
                     if !(compiling_module() |> add_variable(vclone))
                         errors := "can't add global variable {new_name}"
-                        return <- [[ExpressionPtr]]
+                        return <- default<ExpressionPtr>
                     if "{call.name}"=="static_let_finalize"
                         if !make_shutdown_function(new_name,vvar.at)
                             errors := "can't add shutdown function {new_name}"
-                            return <- [[ExpressionPtr]]
+                            return <- default<ExpressionPtr>
         var success = true
         compiling_program() |> get_ast_context(call) <| $(valid, astc)
             if !valid
@@ -79,7 +77,7 @@ class StaticLetMacro : AstFunctionAnnotation
                     for r in renames
                         rules |> renameVariable(r.old_name) <| r.new_name
         if !success
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         return <- quote <|
             pass
 

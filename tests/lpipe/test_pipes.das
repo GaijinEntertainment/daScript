@@ -15,7 +15,7 @@ struct Foo
     a : int
 
 def operator + ( a,b:Foo )
-    return [[Foo a=a.a + b.a]]
+    return Foo(uninitialized a=a.a + b.a)
 
 [test]
 def test_lpipe ( t:T? )
@@ -39,9 +39,9 @@ def test_lpipe ( t:T? )
         lpipe(2)
         t |> equal(3, i)
     t |> run("lpipe into move operation") <| @ ( t : T? )
-        var i = [[Foo a=0]]
-        i <- add([[Foo a=1]])
-        lpipe([[Foo a=2]])
+        var i = Foo(uninitialized a=0)
+        i <- add(Foo(uninitialized a=1))
+        lpipe(Foo(uninitialized a=2))
         t |> equal(3, i.a)
     t |> run("lpipe into variable") <| @ ( t : T? )
         g_add_res = 0

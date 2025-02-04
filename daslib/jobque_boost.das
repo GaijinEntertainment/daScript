@@ -47,7 +47,7 @@ class private NewJobMacro : AstFunctionAnnotation
         var inscope stype <- clone_structure(mks._type.structType)
         stype.name := "{stype.name}_new_job_clone"
         var stype_ptr = get_ptr(stype)
-        var inscope sttype <- new [[TypeDecl() at=call.at, baseType=Type tStructure, structType = stype_ptr]]
+        var inscope sttype <- new TypeDecl(at=call.at, baseType=Type tStructure, structType = stype_ptr)
         for fld in stype.fields // TODO: verify field type here
             fld._type.flags &= ~(TypeDeclFlags constant)
             fld.flags &= ~(FieldDeclarationFlags capturedConstant)
@@ -56,17 +56,17 @@ class private NewJobMacro : AstFunctionAnnotation
         compiling_module() |> add_function(pclone)
         compiling_module() |> add_structure(stype)
         // make an @@<function<(var L;L):void> type or @@<function<(var L;var L):void> type - depending on how the capture went
-        var inscope ftype <- new [[TypeDecl() at=call.at, baseType=Type tFunction ]]
-        move_new(ftype.firstType) <| new [[TypeDecl() at=call.at, baseType=Type tVoid]]
+        var inscope ftype <- new TypeDecl(at=call.at, baseType=Type tFunction)
+        move_new(ftype.firstType) <| new TypeDecl(at=call.at, baseType=Type tVoid)
         ftype.argTypes |> emplace_new <| clone_type(sttype)
         ftype.argTypes |> emplace <| sttype
         if const_clone
             ftype.argTypes[1].flags |= TypeDeclFlags constant
         // make a new_job_invoke call
-        var inscope ncall <- new [[ExprCall() at=call.at, name:="{call.name}_invoke"]]
+        var inscope ncall <- new ExprCall(at=call.at, name:="{call.name}_invoke")
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
-        ncall.arguments |> emplace_new <| new [[ExprAddr() at=call.at, target:="clone", funcType <- ftype]]
-        ncall.arguments |> emplace_new <| new [[ExprConstInt() at=call.at, value=int(mks._type.sizeOf)]]
+        ncall.arguments |> emplace_new <| new ExprAddr(at=call.at, target:="clone", funcType <- ftype)
+        ncall.arguments |> emplace_new <| new ExprConstInt(at=call.at, value=int(mks._type.sizeOf))
         return <- ncall
 
 def gather ( ch:Channel?; blk:block<(arg:auto(TT)#):void>)
@@ -309,16 +309,12 @@ def private isPtrToJQ ( typ:TypeDeclPtr; jqt:string ) : bool
 [capture_macro(name=channel_and_status_capture_macro)]
 class private ChannelAndStatusCapture : AstCaptureMacro
     def make_capture_call (expr:ExpressionPtr; name:string): ExpressionPtr
-        var inscope pCall <- new [[ExprCall() at=expr.at, name:=name]]
+        var inscope pCall <- new ExprCall(at=expr.at, name:=name)
         pCall.arguments |> emplace_new <| clone_expression(expr)
         return <- pCall
     def make_release_call (fld:FieldDeclaration; name:string): ExpressionPtr
-        var inscope pCall <- new [[ExprCall() at=fld.at, name:=name]]
-        pCall.arguments |> emplace_new <| new [[ExprField() at=fld.at,
-            value <- new [[ExprVar() at=fld.at, name:="__this"]],
-            name := fld.name,
-            derefFlags = ExprFieldDerefFlags ignoreCaptureConst
-        ]]
+        var inscope pCall <- new ExprCall(at=fld.at, name:=name)
+        pCall.arguments |> emplace_new <| new ExprField(at=fld.at, value <- new ExprVar(at=fld.at, name:="__this"), name := fld.name, derefFlags = ExprFieldDerefFlags ignoreCaptureConst)
         return <- pCall
         //! This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
     //! When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
@@ -330,7 +326,7 @@ class private ChannelAndStatusCapture : AstCaptureMacro
             return <- make_capture_call(expr,"jobque_boost::capture_jobque_job_status")
         elif typ |> isPtrToJQ("LockBox")
             return <- make_capture_call(expr,"jobque_boost::capture_jobque_lock_box")
-        return <- [[ExpressionPtr]]
+        return <- default<ExpressionPtr>
     def override captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
         //! Implementation details for the capture macro.
         if fun.flags._generator // generator gets finally section called every single time. nothing we can do

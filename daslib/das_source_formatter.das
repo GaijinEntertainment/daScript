@@ -11,22 +11,11 @@ require math
 require daslib/defer
 
 
-let sorted_tokens_source <- [[auto "<<<="; ">>>=";
-    "<<="; ">>="; "&&="; "||="; "^^="; "<<<"; ">>>";
-    "::"; "+="; "-="; "/="; "*="; "%="; "|="; "&="; "^="; "<<"; ">>"; "++"; "--"; "<="; ">="; "==";
-    "!="; "->"; "<-"; "??"; "?."; "?["; "<|"; "|>"; ":="; "=>"; "@@"; "&&"; "||"; "^^";
-    "%%"
-    ]]
+let sorted_tokens_source <- fixed_array("<<<=", ">>>=", "<<=", ">>=", "&&=", "||=", "^^=", "<<<", ">>>", "::", "+=", "-=", "/=", "*=", "%=", "|=", "&=", "^=", "<<", ">>", "++", "--", "<=", ">=", "==", "!=", "->", "<-", "??", "?.", "?[", "<|", "|>", ":=", "=>", "@@", "&&", "||", "^^", "%%")
 
-let dont_need_space_around <- [[auto "("; ")"; "["; "]"; "\{"; "\}";
-    "."; ";"; ","; "`"; "::"; "++"; "--"; "?."; "?["; "@@"; "!"; "~"; "#"; "->"; "$"
-    ]]
+let dont_need_space_around <- fixed_array("(", ")", "[", "]", "\{", "\}", ".", ";", ",", "`", "::", "++", "--", "?.", "?[", "@@", "!", "~", "#", "->", "$")
 
-let type_after_keyword <- [[auto "generator"; "cast"; "upcast"; "smart_ptr"; "match_type";
-    "type"; "reinterpret"; "variant"; "variant_index"; "function"; "has_field"; "default";
-    "array"; "fixed_array"; "table"; "iterator"; "tuple"; "struct_get_annotation_argument";
-    "struct_has_annotation_argument"; "class"
-    ]]
+let type_after_keyword <- fixed_array("generator", "cast", "upcast", "smart_ptr", "match_type", "type", "reinterpret", "variant", "variant_index", "function", "has_field", "default", "array", "fixed_array", "table", "iterator", "tuple", "struct_get_annotation_argument", "struct_has_annotation_argument", "class")
 
 enum TokenType
     UNKNOWN
@@ -87,7 +76,7 @@ def initialize_token_templates(var ctx: FormatterCtx)
     ctx.tokenTemplates |> resize(length(sorted_tokens_source))
     for s, tt in sorted_tokens_source, ctx.tokenTemplates
         tt.str = s
-        tt.codes <- [{for c in s; uint8(c)}]
+        tt.codes <- [for c in s; uint8(c)]
         tt.firstChar = int(tt.codes[0])
         tt.length = length(s)
 
@@ -175,11 +164,8 @@ def on_token_added(var ctx: FormatterCtx)
 
 
 def push_token(var ctx: FormatterCtx; from_char_idx, to_char_idx, space_count, new_lines, src_line, column: int; token_type: TokenType)
-    var buf <- [{ for i in range(from_char_idx, to_char_idx); uint8(ctx.data[i]) }]
-    ctx.tokens |> push([[ Token()
-        str = string(buf), spaces = space_count, newLines = new_lines,
-        lineInSource = src_line, column = column, tokenType = token_type
-        ]])
+    var buf <- [for i in range(from_char_idx, to_char_idx); uint8(ctx.data[i])]
+    ctx.tokens |> push(Token(str = string(buf), spaces = space_count, newLines = new_lines, lineInSource = src_line, column = column, tokenType = token_type))
 
     ctx |> on_token_added()
 
@@ -459,10 +445,7 @@ def process_formatter_tokens(var ctx: FormatterCtx)
         let strSize = str |> length()
         if str |> starts_with(formatterTokenPrefix)
             let command = str |> chop(formatterTokenPrefixSize, strSize - formatterTokenPrefixSize)
-            ctx.formatterTokens |> push([[ FormatterToken
-                tokenIndex = i,
-                command = command
-                ]])
+            ctx.formatterTokens |> push(FormatterToken(uninitialized tokenIndex = i, command = command))
 
 def have_formatter_token(ctx: FormatterCtx; command: string)
     for formatterToken in ctx.formatterTokens
@@ -608,7 +591,7 @@ def mark_token_context(var ctx: FormatterCtx)
                 if ctx |> eq(j, "=")
                     ctx.tokens[j].dontAddSpacesAround = true
 
-    let macroEscapes <- {{ /*ident*/"i"; /*value*/"v"; /*expr*/"e"; /*call*/"c"; /*type*/"t"; /*field*/"f"; /*block*/"b"; /*array*/"a" }}
+    let macroEscapes <- {"i", "v", "e", "c", "t", "f", "b", "a"}
     for i in range(1, length(ctx.tokens))
         if !new_line_before(ctx, i) && ctx |> eq(i - 1, "$") && key_exists(macroEscapes, ctx.tokens[i].str)
             ctx.tokens[i - 1].dontAddSpacesAround = true
@@ -736,9 +719,7 @@ def remove_space_before(var ctx: FormatterCtx; i)
     ctx.tokens[i].spaces = 0
 
 
-let tokens_before_unary <- [[auto "("; "["; "?["; "\{"; "auto"; "int"; "float"; "int16"; "int32"; "int8"; ";"; ",";
-    "if"; "elif"; "while"; "switch"; "return"; "yield"; "in"; "="; "!"
-    ]]
+let tokens_before_unary <- fixed_array("(", "[", "?[", "\{", "auto", "int", "float", "int16", "int32", "int8", ";", ",", "if", "elif", "while", "switch", "return", "yield", "in", "=", "!")
 
 def is_unary(ctx: FormatterCtx; index: int): bool
     if ctx |> eq(index, "!") || ctx |> eq(index, "~")
@@ -832,9 +813,7 @@ def fmt_spaces_around_operators(var ctx: FormatterCtx)
                 ctx |> make_spaces_around(i)
 
 
-let space_after_keywords <- [[auto "if"; "elif"; "while"; "switch"; "with";
-        "yield"; "catch"; "static_if"; "static_elif"; "for"; "in";
-    ]]
+let space_after_keywords <- fixed_array("if", "elif", "while", "switch", "with", "yield", "catch", "static_if", "static_elif", "for", "in")
 
 def fmt_space_after_keyword(var ctx: FormatterCtx)
     for i in range(1, length(ctx.tokens) - 1)
@@ -894,7 +873,7 @@ def fmt_remove_space_before_array_of_type(var ctx: FormatterCtx)
             ctx |> remove_space_before(i)
 
 
-let type_specifiers = [[string "?"; "&"; "#"]]
+let type_specifiers = fixed_array<string>("?", "&", "#")
 
 def fmt_glue_type_specifiers(var ctx: FormatterCtx)
     for i in range(1, length(ctx.tokens))
@@ -965,7 +944,7 @@ def do_format(var ctx: FormatterCtx)
 
 def public format_source_string(file_data: string const& implicit): string
     var inscope ctx: FormatterCtx
-    ctx.data <- [{ for c in file_data; uint8(c) }]
+    ctx.data <- [for c in file_data; uint8(c)]
     ctx.data |> push(uint8(0))
     ctx |> do_format()
     return generate_source(ctx)

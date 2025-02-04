@@ -31,10 +31,10 @@ class RegexReader : AstReaderMacro
             unsafe
                 delete regex
             macro_error(prog,expr.at,"regular expression did not compile {expr.sequence}")
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         // TODO: turn into AOT?
         var inscope re_data <- convert_to_expression(regex,expr.at)
         delete regex
-        var inscope creg <- new [[ExprCall() at=expr.at, name:="regex::regex_compile"]]
+        var inscope creg <- new ExprCall(at=expr.at, name:="regex::regex_compile")
         emplace(creg.arguments,re_data)
         return <- creg

@@ -37,7 +37,7 @@ def uri_compose_query_in_order ( query:table<string;string> )
     //! Compose a query string from a table of key-value pairs, in the sorted order.
     var vq : array<tuple<key:string;value:string>>
     for key,value in keys(query),values(query)
-        vq |> push([[auto key,value]])
+        vq |> push((key, value))
     sort(vq) <| $ ( a, b )
         if a.key==b.key
             return a.value < b.value

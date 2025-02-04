@@ -16,7 +16,7 @@ require daslib/strings_boost
 struct InitializeRequestArguments {}
 
 def InitializeRequestArguments(data: JsonValue?)
-    return [[InitializeRequestArguments]]
+    return InitializeRequestArguments(uninitialized)
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Disconnect
@@ -26,10 +26,7 @@ struct DisconnectArguments
     suspendDebuggee: bool
 
 def DisconnectArguments(data: JsonValue?)
-    return [[DisconnectArguments restart=job(data, "restart"),
-                                 terminateDebuggee=job(data, "terminateDebuggee"),
-                                 suspendDebuggee=job(data, "suspendDebuggee")
-            ]]
+    return DisconnectArguments(uninitialized restart=job(data, "restart"), terminateDebuggee=job(data, "terminateDebuggee"), suspendDebuggee=job(data, "suspendDebuggee"))
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Types_Capabilities
@@ -51,7 +48,7 @@ struct SetDataBreakpointsArguments
     breakpoints: array<DataBreakpoint>
 
 def SetDataBreakpointsArguments(data: JsonValue?)
-    var res <- [[SetDataBreakpointsArguments]]
+    var res <- SetDataBreakpointsArguments(uninitialized)
     var breakpoints = joj(data, "breakpoints")
     if breakpoints != null
         for it in breakpoints.value as _array
@@ -68,13 +65,7 @@ struct DataBreakpoint
     enabled: bool
 
 def DataBreakpoint(data: JsonValue?)
-    return [[DataBreakpoint dataId=jos(data, "dataId"),
-                            accessType=jos(data, "accessType"),
-                            condition=jos(data, "condition"),
-                            hitCondition=jos(data, "hitCondition"),
-                            description=jos(data, "description"),
-                            enabled=job(data, "enabled", true)
-            ]]
+    return DataBreakpoint(uninitialized dataId=jos(data, "dataId"), accessType=jos(data, "accessType"), condition=jos(data, "condition"), hitCondition=jos(data, "hitCondition"), description=jos(data, "description"), enabled=job(data, "enabled", true))
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_DataBreakpointInfo
 struct DataBreakpointInfoArguments
@@ -82,10 +73,7 @@ struct DataBreakpointInfoArguments
     name: string
 
 def DataBreakpointInfoArguments(data: JsonValue?)
-    return [[DataBreakpointInfoArguments
-                variablesReference=jon(data, "variablesReference"),
-                name=jos(data, "name")
-            ]]
+    return DataBreakpointInfoArguments(uninitialized variablesReference=jon(data, "variablesReference"), name=jos(data, "name"))
 
 struct DataBreakpointInfoResponse
     dataId: string
@@ -99,8 +87,7 @@ struct SetBreakpointsArguments
     sourceModified: bool
 
 def SetBreakpointsArguments(data: JsonValue?)
-    var res <- [[SetBreakpointsArguments source=Source(joj(data, "source")),
-                                         sourceModified=job(data, "sourceModified") ]]
+    var res <- SetBreakpointsArguments(uninitialized source=Source(joj(data, "source")), sourceModified=job(data, "sourceModified"))
     var breakpoints = joj(data, "breakpoints")
     if breakpoints != null
         for it in breakpoints.value as _array
@@ -114,7 +101,7 @@ struct Source
     path: string
 
 def Source(data: JsonValue?)
-    return [[Source name=jos(data, "name"), path=jos(data, "path") ]]
+    return Source(uninitialized name=jos(data, "name"), path=jos(data, "path"))
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Types_SourceBreakpoint
@@ -122,7 +109,7 @@ struct SourceBreakpoint
     line: double
 
 def SourceBreakpoint(data: JsonValue?)
-    return [[SourceBreakpoint line=jon(data, "line") ]]
+    return SourceBreakpoint(uninitialized line=jon(data, "line"))
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
@@ -157,7 +144,7 @@ struct StackTraceArguments
     levels: double
 
 def StackTraceArguments(data: JsonValue?)
-    return <- [[StackTraceArguments threadId=jon(data, "threadId"), startFrame=jon(data, "startFrame"), levels=jon(data, "levels")]]
+    return <- StackTraceArguments(uninitialized threadId=jon(data, "threadId"), startFrame=jon(data, "startFrame"), levels=jon(data, "levels"))
 
 struct StackTraceResponseBody
     stackFrames: array<StackFrame>
@@ -176,7 +163,7 @@ struct ScopesArguments
     frameId: double
 
 def ScopesArguments(data: JsonValue?)
-    return <- [[ScopesArguments frameId=jon(data, "frameId") ]]
+    return <- ScopesArguments(uninitialized frameId=jon(data, "frameId"))
 
 struct ScopesResponseBody
     scopes: array<Scope>
@@ -195,11 +182,7 @@ struct VariablesArguments
     count: double
 
 def VariablesArguments(data: JsonValue?)
-    return <- [[VariablesArguments
-        variablesReference=jon(data, "variablesReference"),
-        start=jon(data, "start", -1lf),
-        count=jon(data, "count", -1lf)
-    ]]
+    return <- VariablesArguments(uninitialized variablesReference=jon(data, "variablesReference"), start=jon(data, "start", -1lf), count=jon(data, "count", -1lf))
 
 struct VariablesResponseBody
     variables: array<Variable>
@@ -215,13 +198,7 @@ struct Variable
 
 def JV(data: Variable)
     let valStr = unescape(data.value)
-    return JV({{
-        "name"=>JV(data.name);
-        "value"=>JV(valStr);
-        "variablesReference"=>JV(data.variablesReference);
-        "indexedVariables"=>data.indexedVariables > 0lf ? JV(data.indexedVariables) : JVNull();
-        "type"=>JV(data._type)
-    }})
+    return JV({"name"=>JV(data.name), "value"=>JV(valStr), "variablesReference"=>JV(data.variablesReference), "indexedVariables"=>data.indexedVariables > 0lf ? JV(data.indexedVariables) : JVNull(), "type"=>JV(data._type)})
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Events_Output
 struct OutputEventBody
@@ -234,7 +211,7 @@ struct ContinueArguments
     threadId: double
 
 def ContinueArguments(data: JsonValue?)
-    return <- [[ContinueArguments threadId=jon(data, "threadId") ]]
+    return <- ContinueArguments(uninitialized threadId=jon(data, "threadId"))
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Pause
@@ -242,7 +219,7 @@ struct PauseArguments
     threadId: double
 
 def PauseArguments(data: JsonValue?)
-    return <- [[PauseArguments threadId=jon(data, "threadId") ]]
+    return <- PauseArguments(uninitialized threadId=jon(data, "threadId"))
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Pause
@@ -250,7 +227,7 @@ struct StepInArguments
     threadId: double
 
 def StepInArguments(data: JsonValue?)
-    return <- [[StepInArguments threadId=jon(data, "threadId") ]]
+    return <- StepInArguments(uninitialized threadId=jon(data, "threadId"))
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Next
@@ -258,7 +235,7 @@ struct NextArguments
     threadId: double
 
 def NextArguments(data: JsonValue?)
-    return <- [[NextArguments threadId=jon(data, "threadId") ]]
+    return <- NextArguments(uninitialized threadId=jon(data, "threadId"))
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StepOut
@@ -266,7 +243,7 @@ struct StepOutArguments
     threadId: double
 
 def StepOutArguments(data: JsonValue?)
-    return <- [[StepOutArguments threadId=jon(data, "threadId") ]]
+    return <- StepOutArguments(uninitialized threadId=jon(data, "threadId"))
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Evaluate
@@ -276,7 +253,7 @@ struct EvaluateArguments
     context: string
 
 def EvaluateArguments(data: JsonValue?)
-    return <- [[EvaluateArguments frameId=jon(data, "frameId"), expression=jos(data, "expression"), context=jos(data, "context")]]
+    return <- EvaluateArguments(uninitialized frameId=jon(data, "frameId"), expression=jos(data, "expression"), context=jos(data, "context"))
 
 
 struct EvaluateResponse
@@ -286,12 +263,7 @@ struct EvaluateResponse
     indexedVariables: double
 
 def JV(data: EvaluateResponse)
-    return JV({{
-        "result"=>JV(data.result);
-        "variablesReference"=>JV(data.variablesReference);
-        "indexedVariables"=>data.indexedVariables > 0lf ? JV(data.indexedVariables) : JVNull();
-        "type"=>JV(data._type)
-    }})
+    return JV({"result"=>JV(data.result), "variablesReference"=>JV(data.variablesReference), "indexedVariables"=>data.indexedVariables > 0lf ? JV(data.indexedVariables) : JVNull(), "type"=>JV(data._type)})
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Events_Breakpoint

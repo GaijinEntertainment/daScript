@@ -10,7 +10,7 @@ def testFinalizeAndClone
     var x : tuple<int; float; array<int> >
     x._0 = 1
     x._1 = 2.0
-    x._2 <- [{for xx in range(10); xx}]
+    x._2 <- [for xx in range(10); xx]
     var y := x
     assert(y._0==1 && y._1==2.0)
     for t in range(10)
@@ -24,7 +24,7 @@ def testFinalizeAndClone
 
 [export]
 def test:bool
-    let ttt = [[auto 1, 3.14]]
+    let ttt = (1, 3.14)
     assert(testI(ttt))
     assert(testF(ttt))
     assert(ttt._first==1)
@@ -54,19 +54,19 @@ def test:bool
     unsafe
         delete qq
     // make tuple
-    let mkt = [[ tuple<int;float> 1, 2.0]]
+    let mkt = (1, 2.0)
     assert(mkt._0==1 && mkt._1==2.0)
-    let mkta = [[ tuple<int;float> 1, 2.0; 3, 4.0]]
+    let mkta = fixed_array<tuple<int;float>>((1, 2.0), (3, 4.0))
     assert(mkta[0]._0==1 && mkta[0]._1==2.0)
     assert(mkta[1]._0==3 && mkta[1]._1==4.0)
     // make tuple array, auto
-    let ti = [[auto 1; 2; 3; 4]]
+    let ti = fixed_array(1, 2, 3, 4)
     assert(typeinfo(sizeof ti)==16)
     assert(ti[0]==1 && ti[1]==2 && ti[2]==3 && ti[3]==4)
-    let tt = [[auto 1, 2; 3, 4]]
+    let tt = fixed_array((1, 2), (3, 4))
     assert(typeinfo(sizeof tt)==16)
     assert(tt[0]._0==1 && tt[0]._1==2 && tt[1]._0==3 && tt[1]._1==4)
-    let tq = [[auto 1, 2.0]]
+    let tq = (1, 2.0)
     assert(tq._0==1 && tq._1==2.0)
     // extra tests
     testFinalizeAndClone()

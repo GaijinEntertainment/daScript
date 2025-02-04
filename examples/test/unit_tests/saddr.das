@@ -9,7 +9,7 @@ def test
     var pt = safe_addr(t)
     *pt = 2
     assert(t==2)
-    let q = [[Foo a=3]]
+    let q = Foo(uninitialized a=3)
     let pq = safe_addr(q.a)
     assert(*pq==3)
     var w : int[2]

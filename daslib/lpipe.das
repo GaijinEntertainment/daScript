@@ -36,19 +36,19 @@ def lpipe_expr ( var fnCall:ExpressionPtr&; var arg:ExpressionPtr& ) : Expressio
         var pLet = fnCall as ExprLet
         if length(pLet.variables)!=1 || pLet.variables[0].init==null
             delete arg
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         var inscope cLet <- clone_expression(fnCall)
         move_new((cLet as ExprLet).variables[0].init) <| lpipe_expr(pLet.variables[0].init, arg)
         return <- cLet
     elif fnCall |> is_expr_like_call()
         var pCall = unsafe(reinterpret<ExprLooksLikeCall?> fnCall)
         if string(pCall.name)=="lpipe"  // not piping pipe into pipe
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         pCall.arguments |> emplace(arg)
         return <- fnCall
     else
         delete arg
-        return <- [[ExpressionPtr]]
+        return <- default<ExpressionPtr>
 
 
 [call_macro(name="lpipe")]
@@ -94,6 +94,6 @@ class LpipeMacro : AstCallMacro
             delete blk.list[eidx]
             success = true
         if !success
-            return <- [[ExpressionPtr]]
+            return <- default<ExpressionPtr>
         return <- quote <|
             pass

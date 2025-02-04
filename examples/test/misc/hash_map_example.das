@@ -6,7 +6,7 @@ struct ComplexKey
     nocopy : array<int>
 
 def ComplexKey ( k1,k2 : int )
-    return <- [[ComplexKey key=k1,key2=k2]]
+    return <- ComplexKey(uninitialized key=k1, key2=k2)
 
 def operator == ( a,b : ComplexKey )
     return a.key == b.key && a.key2 == b.key2
@@ -17,7 +17,7 @@ struct SomeValue
     nocopy : array<int>
 
 def SomeValue ( v1,v2 : int )
-    return <- [[SomeValue value=v1,value2=v2]]
+    return <- SomeValue(uninitialized value=v1, value2=v2)
 
 %spoof_instance~TFlatHashMap(ExampleHashMap,ComplexKey,SomeValue)%%;
 

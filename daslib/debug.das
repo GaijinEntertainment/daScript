@@ -161,7 +161,7 @@ class DAWalker: DapiDataWalker
     def startCont()
         let n = length(varsStack)
         if varsStack[n-1].children == null
-            varsStack[n-1].children = new [[array<DAVariable>]]
+            varsStack[n-1].children = new array<DAVariable>()
 
     def closeCont()
         let n = length(varsStack)
@@ -177,7 +177,7 @@ class DAWalker: DapiDataWalker
         return true
 
     def override beforeStructure(ps: void const?; si: StructInfo): void
-        visited |> emplace([[auto ps, si.hash]])
+        visited |> emplace((ps, si.hash))
 
     def override beforeStructureField(ps:void?; si: StructInfo; pv: void?; vi:VarInfo; last: bool): void
         self->startCont()
@@ -186,7 +186,7 @@ class DAWalker: DapiDataWalker
             var ti = type_info(vi)
             unsafe
                 var v & = unsafe(varsStack[n - 1])
-                *v.children |> emplace([[DAVariable uid=frame.varId++, name=vi.name, _type=describe(ti), address=intptr(pv), size=ti.size ]])
+                *v.children |> emplace(DAVariable(uninitialized uid=frame.varId++, name=vi.name, _type=describe(ti), address=intptr(pv), size=ti.size))
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override afterStructureField(ps:void?; si: StructInfo; pv: void?; vi:VarInfo; last: bool): void
@@ -241,7 +241,7 @@ class DAWalker: DapiDataWalker
         if n > 0
             unsafe
                 var v & = unsafe(varsStack[n - 1])
-                *v.children |> emplace([[DAVariable uid=frame.varId++, name="{int64(index)}", _type=describe(ti), address=intptr(pe), size=ti.size]])
+                *v.children |> emplace(DAVariable(uninitialized uid=frame.varId++, name="{int64(index)}", _type=describe(ti), address=intptr(pe), size=ti.size))
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override afterArrayElement(ps: void?; ti: TypeInfo; pe: void?; index: uint; last: bool): void
@@ -282,7 +282,7 @@ class DAWalker: DapiDataWalker
         if n > 0
             var v & = unsafe(varsStack[n - 1])
             unsafe
-                *v.children |> emplace([[DAVariable uid=frame.varId++, name=sprint_data(pk, addr(ki), print_flags_debug), _type=describe(ki), address=intptr(pk), size=ki.size]])
+                *v.children |> emplace(DAVariable(uninitialized uid=frame.varId++, name=sprint_data(pk, addr(ki), print_flags_debug), _type=describe(ki), address=intptr(pk), size=ki.size))
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
     def override beforeTableValue(pa: DapiTable; ti: TypeInfo; pv: void?; kv: TypeInfo; index: uint; last: bool): void
@@ -323,7 +323,7 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var v & = unsafe(varsStack[n - 1])
-            *v.children |> emplace([[DAVariable uid=frame.varId++, name="{tupleIndex++}", _type=describe(vi), address=intptr(pv), size=vi.size]])
+            *v.children |> emplace(DAVariable(uninitialized uid=frame.varId++, name="{tupleIndex++}", _type=describe(vi), address=intptr(pv), size=vi.size))
             unsafe
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
 
@@ -513,7 +513,7 @@ class private DAStackWalker: DapiStackWalker
             value = get_context_global_variable(ctx.ctx, vinfo.name)
         let ti = type_info(vinfo)
 
-        var global = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(value), size=ti.size, typeInfo=ti]]
+        var global = DAVariable(uninitialized uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(value), size=ti.size, typeInfo=ti)
 
         if ti != null
             dataWalker->startWalk(frame, global) <| $
@@ -581,10 +581,8 @@ class private DAStackWalker: DapiStackWalker
     def override onBeforeCall(pp: Prologue; sp: void?): void
         let iblock = intptr(pp._block)
         let isBlock = (iblock & 1ul) != 0ul
-        let funcInfo = isBlock ? [[FuncInfo?]] : pp.info
-        ctx.stack |> emplace([[DAStackFrame()
-            func=unsafe(reinterpret<FuncInfo?> funcInfo),
-            isBlock=isBlock, spAddr=intptr(sp) ]])
+        let funcInfo = isBlock ? default<FuncInfo?> : pp.info
+        ctx.stack |> emplace(DAStackFrame(func=unsafe(reinterpret<FuncInfo?> funcInfo), isBlock=isBlock, spAddr=intptr(sp)))
 
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
         if !inScope
@@ -593,7 +591,7 @@ class private DAStackWalker: DapiStackWalker
         if stackLen > 0
             var frame & = unsafe(ctx.stack[stackLen - 1])
             var ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(arg), size=ti.size, typeInfo=ti]]
+            var variable = DAVariable(uninitialized uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(arg), size=ti.size, typeInfo=ti)
             if ti != null
                 dataWalker->startWalk(frame, variable) <| $
                     dataWalkerAdapter |> walk_data(arg, *ti)
@@ -611,7 +609,7 @@ class private DAStackWalker: DapiStackWalker
         if  stackLen > 0
             var frame & = unsafe(ctx.stack[stackLen-1])
             let ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=ti.isRef ? intptr(unsafe(reinterpret<void?>arg)) : 0ul, size=ti.size, typeInfo=ti, rawValue=arg]]
+            var variable = DAVariable(uninitialized uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=ti.isRef ? intptr(unsafe(reinterpret<void?>arg)) : 0ul, size=ti.size, typeInfo=ti, rawValue=arg)
             if ti != null
                 dataWalker->startWalk(frame, variable) <| $
                     dataWalkerAdapter |> walk_data(arg, *ti)
@@ -802,15 +800,10 @@ class private DAgent: DapiDebugAgent
 
         breakpoints |> erase(path)
         if length(ini.breakpoints) >= 0
-            var breaks <- [[array<DABreakpoint>]]
+            var breaks <- array<DABreakpoint>()
             for b in ini.breakpoints
-                breaks |> emplace([[DABreakpoint line=uint(b.line), id=breakpointId ]])
-                res.breakpoints |> emplace([[Breakpoint
-                    verified=!withInstruments,
-                    id=double(breakpointId),
-                    source=ini.source,
-                    line=b.line
-                ]])
+                breaks |> emplace(DABreakpoint(uninitialized line=uint(b.line), id=breakpointId))
+                res.breakpoints |> emplace(Breakpoint(uninitialized verified=!withInstruments, id=double(breakpointId), source=ini.source, line=b.line))
                 breakpointId += 1ul
             breakpoints[path] <- breaks
 
@@ -995,7 +988,7 @@ class private DAgent: DapiDebugAgent
             let stackLen = length(ctxData.stack)
             if  stackLen > 0
                 var frame & = unsafe(ctxData.stack[0])
-                var variable = [[DAVariable uid=frame.varId++, name=name, _type=describe(info), address=intptr(data), size=info.size]]
+                var variable = DAVariable(uninitialized uid=frame.varId++, name=name, _type=describe(info), address=intptr(data), size=info.size)
                 walker.dataWalker->startWalk(frame, variable) <| $
                     walker.dataWalkerAdapter |> walk_data(data, info)
                 if variable.children == null
@@ -1008,7 +1001,7 @@ class private DAgent: DapiDebugAgent
                     if s.name == category
                         s.vars |> emplace(variable)
                         return
-                frame.state |> emplace <| [[auto STATE_VARS+uint64(length(frame.state)), category, [{auto[] variable}] ]]
+                frame.state |> emplace <| (STATE_VARS+uint64(length(frame.state)), category, array(variable))
 
     def sendStopped(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo; reason, text: string; brId: uint64)
         self->log("<< stopped `{reason}` at {path}:{int(at.line)}")
@@ -1092,16 +1085,7 @@ class private DAgent: DapiDebugAgent
             let baseName = fileBr |> base_name()
             for br in brs
                 if br.prevState != br.state
-                    server->sendEvent("breakpoint", JV([[BreakpointEvent
-                        reason="changed",
-                        breakpoint=[[Breakpoint
-                            id=double(br.id),
-                            verified=br.state == DABreakpointState Instrumented,
-                            source=[[ Source path=fileBr, name=baseName]],
-                            line=double(br.line),
-                            message=br.state == DABreakpointState Uninitialized ? "{fileBr}: instrumentation wasn't initined" : br.state == DABreakpointState Initialized ? "{fileBr}: instumentation is inited, but this line is without instructions" : ""
-                        ]]
-                    ]]))
+                    server->sendEvent("breakpoint", JV(BreakpointEvent(uninitialized reason="changed", breakpoint=Breakpoint(uninitialized id=double(br.id), verified=br.state == DABreakpointState Instrumented, source=Source(uninitialized path=fileBr, name=baseName), line=double(br.line), message=br.state == DABreakpointState Uninitialized ? "{fileBr}: instrumentation wasn't initined" : br.state == DABreakpointState Initialized ? "{fileBr}: instumentation is inited, but this line is without instructions" : ""))))
 
     def override onCreateContext(var ctx: Context): void
         // unsafe
@@ -1144,7 +1128,7 @@ class private DAgent: DapiDebugAgent
         if idx >= 0
             return false
         unsafe
-            contexts |> emplace([[DAContext at=ctx_at(ctx), id=contextId, ctx=addr(ctx)]], 0)
+            contexts |> emplace(DAContext(uninitialized at=ctx_at(ctx), id=contextId, ctx=addr(ctx)), 0)
         contextId += 1ul
         contexts |> sort <| $(a, b: DAContext)
             let aid = uint(a.ctx.category)
@@ -1152,10 +1136,7 @@ class private DAgent: DapiDebugAgent
             return aid > bid
 
         if server != null && server.threadsDone
-            server->sendEvent("thread", JV([[ThreadEvent
-                reason="started",
-                threadId=double(contextId)
-            ]]))
+            server->sendEvent("thread", JV(ThreadEvent(uninitialized reason="started", threadId=double(contextId))))
 
         return true
 
@@ -1163,10 +1144,7 @@ class private DAgent: DapiDebugAgent
         let idx = self->getContextIdx(ctx)
         if idx >= 0
             if server != null && server.threadsDone
-                server->sendEvent("thread", JV([[ThreadEvent
-                    reason="exited",
-                    threadId=double(contexts[idx].id)
-                ]]))
+                server->sendEvent("thread", JV(ThreadEvent(uninitialized reason="exited", threadId=double(contexts[idx].id))))
             unsafe
                 delete contexts[idx]
             contexts |> erase(idx)
@@ -1298,16 +1276,7 @@ class private DAServer: Server
 
     def reqInitialize(seq: double; command: string; arguments: JsonValue?)
         // var inscope ini <- InitializeRequestArguments(arguments)
-        var inscope res = [[Capabilities
-                                supportsConfigurationDoneRequest=true,
-                                supportsRestartRequest=false,
-                                supportTerminateDebuggee=true,
-                                supportsTerminateRequest=true,
-                                supportsExceptionOptions=false,
-                                supportsExceptionFilterOptions=false,
-                                supportsDataBreakpoints=true
-                                // supportsDelayedStackTraceLoading=true
-                    ]]
+        var inscope res = Capabilities(uninitialized supportsConfigurationDoneRequest=true, supportsRestartRequest=false, supportTerminateDebuggee=true, supportsTerminateRequest=true, supportsExceptionOptions=false, supportsExceptionFilterOptions=false, supportsDataBreakpoints=true)
         self->sendSuccessResponse(seq, command, JV(res))
         initialized = 100
         // self->sendEvent("initialized")
@@ -1397,7 +1366,7 @@ class private DAServer: Server
                             found = true
                             valid = v.address != 0ul
                             if valid
-                                var inscope res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
+                                var inscope res = DataBreakpointInfoResponse(uninitialized dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})")
                                 self->sendSuccessResponse(seq, command, JV(res))
                         return found
                 elif kind >= STATE_VARS && kind <= BLOCKS_POOL
@@ -1407,7 +1376,7 @@ class private DAServer: Server
                                 found = true
                                 valid = v.address != 0ul
                                 if valid
-                                    var inscope res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
+                                    var inscope res = DataBreakpointInfoResponse(uninitialized dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})")
                                     self->sendSuccessResponse(seq, command, JV(res))
                                 break
                 else
@@ -1417,7 +1386,7 @@ class private DAServer: Server
                                 found = true
                                 valid = vr.address != 0ul
                                 if valid
-                                    var inscope res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{vr.address},{int(vr.size)}", description="{v.name}.{vr.name} ({vr.address}:{min(8, int(vr.size))})" ]]
+                                    var inscope res = DataBreakpointInfoResponse(uninitialized dataId="{intptr(ctxData.ctx)},{vr.address},{int(vr.size)}", description="{v.name}.{vr.name} ({vr.address}:{min(8, int(vr.size))})")
                                     self->sendSuccessResponse(seq, command, JV(res))
                             return found
         if !found || !valid
@@ -1447,7 +1416,7 @@ class private DAServer: Server
                 if setId != -1
                     agent.hwBreakpoints |> push(setId)
                 delete parts
-            res.breakpoints |> emplace([[Breakpoint verified=setId != -1, id=double(hex) ]])
+            res.breakpoints |> emplace(Breakpoint(uninitialized verified=setId != -1, id=double(hex)))
 
         self->sendSuccessResponse(seq, command, JV(res))
 
@@ -1455,7 +1424,7 @@ class private DAServer: Server
         var inscope res: ThreadsResponseBody
         threadsDone = true
         for ctx in agent.contexts
-            res.threads |> emplace([[Thread id=double(ctx.id), name=ctx |> to_string() ]])
+            res.threads |> emplace(Thread(uninitialized id=double(ctx.id), name=ctx |> to_string()))
         self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
 
     def reqStackTrace(seq: double; command: string; data: JsonValue?)
@@ -1463,13 +1432,7 @@ class private DAServer: Server
         var inscope res: StackTraceResponseBody
         agent->getContextData(uint64(ini.threadId)) <| $(var ctxData: DAContext)
             for idx, line in range(ini.levels), ctxData.stack
-                res.stackFrames |> emplace([[StackFrame
-                    id=double(ctxData.id * MAX_STACK + uint64(idx)),
-                    name=line.name,
-                    line=double(line.line),
-                    column=1lf,
-                    source=[[Source name=line.path, path=line.path]]
-                ]])
+                res.stackFrames |> emplace(StackFrame(uninitialized id=double(ctxData.id * MAX_STACK + uint64(idx)), name=line.name, line=double(line.line), column=1lf, source=Source(uninitialized name=line.path, path=line.path)))
             res.totalFrames = double(length(ctxData.stack))
         self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
 
@@ -1489,28 +1452,16 @@ class private DAServer: Server
                     if first || line.spAddr == spAddr
                         globs += length(line.globals)
                         if length(line.variables) > 0
-                            res.scopes |> emplace([[Scope
-                                name=first ? "Locals" : "Locals ({line.name})",
-                                variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + LOCAL_VARS)
-                            ]])
+                            res.scopes |> emplace(Scope(uninitialized name=first ? "Locals" : "Locals ({line.name})", variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + LOCAL_VARS)))
                         if length(line.arguments) > 0
-                            res.scopes |> emplace([[Scope
-                                name=first ? "Arguments" : "Arguments ({line.name})",
-                                variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + ARGUMENT_VARS)
-                            ]])
+                            res.scopes |> emplace(Scope(uninitialized name=first ? "Arguments" : "Arguments ({line.name})", variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + ARGUMENT_VARS)))
                         if length(line.state) > 0
                             for i, state in iter_range(line.state), line.state
-                                res.scopes |> emplace([[Scope
-                                    name=state.name,
-                                    variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + STATE_VARS + uint64(i))
-                                ]])
+                                res.scopes |> emplace(Scope(uninitialized name=state.name, variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + STATE_VARS + uint64(i))))
                         first = false
                     idx += 1
                 if globs > 0
-                    res.scopes |> emplace([[Scope
-                        name="Globals",
-                        variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + GLOBAL_VARS)
-                    ]])
+                    res.scopes |> emplace(Scope(uninitialized name="Globals", variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + GLOBAL_VARS)))
         self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
 
     def reqVariables(seq: double; command: string; data: JsonValue?)
@@ -1524,13 +1475,7 @@ class private DAServer: Server
                     let varsNum = length(*child.children)
                     for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
                         let v & = unsafe((*child.children)[idx])
-                        res.variables |> emplace([[Variable
-                            name=v.name,
-                            value=v.value,
-                            _type=v._type,
-                            indexedVariables=double(v.indexedVariables),
-                            variablesReference=double(v.children != null ? v.uid : 0ul)
-                        ]])
+                        res.variables |> emplace(Variable(uninitialized name=v.name, value=v.value, _type=v._type, indexedVariables=double(v.indexedVariables), variablesReference=double(v.children != null ? v.uid : 0ul)))
         else
             agent->getContextData(ctxId) <| $(var ctxData: DAContext)
                 let frameId = int(ctxAndFrame % MAX_STACK)
@@ -1543,25 +1488,13 @@ class private DAServer: Server
                         for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
                             let v & = unsafe(vars[idx])
                             let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                            res.variables |> emplace([[Variable
-                                name=v.name,
-                                value=v.value,
-                                _type=v._type,
-                                indexedVariables=double(v.indexedVariables),
-                                variablesReference=double(ref)
-                            ]])
+                            res.variables |> emplace(Variable(uninitialized name=v.name, value=v.value, _type=v._type, indexedVariables=double(v.indexedVariables), variablesReference=double(ref)))
                     elif kind >= STATE_VARS && kind <= BLOCKS_POOL
                         for state in line.state
                             if state.uid == kind
                                 for v in state.vars
                                     let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                                    res.variables |> emplace([[Variable
-                                        name=v.name,
-                                        value=v.value,
-                                        _type=v._type,
-                                        indexedVariables=double(v.indexedVariables),
-                                        variablesReference=double(ref)
-                                    ]])
+                                    res.variables |> emplace(Variable(uninitialized name=v.name, value=v.value, _type=v._type, indexedVariables=double(v.indexedVariables), variablesReference=double(ref)))
                                 break
                     else
                         line |> find_child_var(uint64(kind)) <| $(child)
@@ -1570,13 +1503,7 @@ class private DAServer: Server
                                 for idx in range(ini.start < 0lf ? 0 : min(varsNum, int(ini.start)), ini.count < 0lf ? varsNum : min(varsNum, int(ini.start + ini.count)))
                                     let v & = unsafe((*child.children)[idx])
                                     let ref = v.children != null ? ctxAndFrame * MAX_VARIABLES + v.uid : 0ul
-                                    res.variables |> emplace([[Variable
-                                        name=v.name,
-                                        value=v.value,
-                                        _type=v._type,
-                                        indexedVariables=double(v.indexedVariables),
-                                        variablesReference=double(ref)
-                                    ]])
+                                    res.variables |> emplace(Variable(uninitialized name=v.name, value=v.value, _type=v._type, indexedVariables=double(v.indexedVariables), variablesReference=double(ref)))
         self->sendSuccessResponseStr(seq, command, sprint_json(res, false)) // TODO: , false
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
@@ -1631,11 +1558,7 @@ class private DAServer: Server
                     if first || line.spAddr == spAddr
                         found = line |> find_child_var() <| $[unused_argument(varIdx)](child, varIdx)
                             if child.name == ini.expression
-                                var inscope res = [[EvaluateResponse
-                                    result=child.value,
-                                    _type=child._type,
-                                    indexedVariables=double(child.indexedVariables),
-                                    variablesReference=child.children != null ? double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + child.uid) : 0lf]]
+                                var inscope res = EvaluateResponse(uninitialized result=child.value, _type=child._type, indexedVariables=double(child.indexedVariables), variablesReference=child.children != null ? double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + child.uid) : 0lf)
                                 self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
                                 return true
                             return false
@@ -1650,11 +1573,7 @@ class private DAServer: Server
                             agent.walker->collectGlobalAt(vinfo, ctxData.stack[frameId])
                             found = ctxData.stack[frameId] |> find_child_var() <| $[unused_argument(varIdx)](child, varIdx)
                                 if child.name == ini.expression
-                                    var inscope res = [[EvaluateResponse
-                                        result=child.value,
-                                        _type=child._type,
-                                        indexedVariables=double(child.indexedVariables),
-                                        variablesReference=child.children != null ? double((ctxId * MAX_STACK + uint64(frameId)) * MAX_VARIABLES + child.uid) : 0lf]]
+                                    var inscope res = EvaluateResponse(uninitialized result=child.value, _type=child._type, indexedVariables=double(child.indexedVariables), variablesReference=child.children != null ? double((ctxId * MAX_STACK + uint64(frameId)) * MAX_VARIABLES + child.uid) : 0lf)
                                     self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
                                     return true
                                 return false
@@ -1672,7 +1591,7 @@ class private DAServer: Server
                         ctxData.stack[frame] |> iter_top_child_var() <| $(child)
                             if child.typeInfo != null
                                 let tInfo & = unsafe(*child.typeInfo)
-                                vars |> emplace(child.name, [[Result tinfo=tInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)]])
+                                vars |> emplace(child.name, Result(uninitialized tinfo=tInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)))
                         --frame
 
                     var result = debug_eval(vars, ini.expression)
@@ -1683,11 +1602,7 @@ class private DAServer: Server
                         resStr = sprint_data(result.data, unsafe(addr(result.tinfo)), print_flags_debug)
                     else
                         resStr = sprint_data(result.value, unsafe(addr(result.tinfo)), print_flags_debug)
-                    var inscope res = [[EvaluateResponse
-                        result=resStr,
-                        _type=!empty(result.error) ? describe(result.tinfo) : "",
-                        indexedVariables=0lf,
-                        variablesReference=0lf]]
+                    var inscope res = EvaluateResponse(uninitialized result=resStr, _type=!empty(result.error) ? describe(result.tinfo) : "", indexedVariables=0lf, variablesReference=0lf)
                     self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
         if !found
             self->sendSuccessResponse(seq, command, null)
@@ -1698,15 +1613,14 @@ class private DAServer: Server
             self->sendOutput("console", "{msg}\n")
 
     def sendOutput(category: string; output: string)
-        var inscope res = [[OutputEventBody category=category, output=output ]]
-        self->sendRawData(JV({{"type"=>JV("event"); "event"=>JV("output"); "body"=>JV(res)}}), /*log*/false)
+        var inscope res = OutputEventBody(uninitialized category=category, output=output)
+        self->sendRawData(JV({"type"=>JV("event"), "event"=>JV("output"), "body"=>JV(res)}), /*log*/false)
 
     def sendEvent(event: string; body: JsonValue?)
-        self->sendRawData(JV({{"type"=>JV("event"); "event"=>JV(event); "body"=>body}}), /*log*/true)
+        self->sendRawData(JV({"type"=>JV("event"), "event"=>JV(event), "body"=>body}), /*log*/true)
 
     def sendSuccessResponse(id: double; command: string; body: JsonValue?)
-        self->sendRawData(JV({{"request_seq"=>JV(id); "type"=>JV("response");
-                                "body"=>body; "command"=>JV(command); "success"=>JV(true)}}), /*log*/true)
+        self->sendRawData(JV({"request_seq"=>JV(id), "type"=>JV("response"), "body"=>body, "command"=>JV(command), "success"=>JV(true)}), /*log*/true)
 
     def sendSuccessResponseStr(id: double; command: string; body: string)
         // self->sendRawData(JV({{"request_seq"=>JV(id); "type"=>JV("response");
@@ -1735,13 +1649,7 @@ class private DAServer: Server
             self->send(reinterpret<uint8?> packStr, length(packStr))
 
     def sendStopped(ctx: DAContext; reason, text: string; brId: uint64)
-        self->sendEvent("stopped", JV({{
-            "reason"=>JV(reason);
-            "text"=>empty(text) ? JVNull() : JV(text);
-            "threadId"=>JV(double(ctx.id));
-            "allThreadsStopped"=>JV(false);
-            "hitBreakpointIds"=>brId == -1ul ? null : JV([{auto[] JV(brId)}])
-        }}))
+        self->sendEvent("stopped", JV({"reason"=>JV(reason), "text"=>empty(text) ? JVNull() : JV(text), "threadId"=>JV(double(ctx.id)), "allThreadsStopped"=>JV(false), "hitBreakpointIds"=>brId == -1ul ? null : JV(array(JV(brId)))}))
 
 
 
@@ -1762,10 +1670,10 @@ class private EvalWalker : DapiStackWalker
             *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = ")
             if vinfo.basicType==Type tString
                 *W |> write("\"")
-                *W |> write(sprint_data(arg,type_info(vinfo),[[print_flags]]))
+                *W |> write(sprint_data(arg,type_info(vinfo),print_flags(uninitialized)))
                 *W |> write("\"")
             else
-                *W |> write(sprint_data(arg,type_info(vinfo),[[print_flags]]))
+                *W |> write(sprint_data(arg,type_info(vinfo),print_flags(uninitialized)))
             *W |> write("\n")
 
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void

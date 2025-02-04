@@ -11,7 +11,7 @@ def take3(var pfoo:Foo; b,c:int)
 def test
     var pfoo : Foo?
     pfoo |> if_not_null() <| take3(0,0)
-    pfoo = new [[Foo a=1]]
+    pfoo = new Foo(uninitialized a=1)
     pfoo |> if_not_null() <| take3(2,3)
     return true
 

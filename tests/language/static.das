@@ -4,7 +4,7 @@ require dastest/testing_boost public
 
 class StaticCounter
     static count : int = 1
-    static mount : array<int> <- [{int 1;2;3;4}]
+    static mount : array<int> <- array<int>(1, 2, 3, 4)
     def next
         return count++
     def get

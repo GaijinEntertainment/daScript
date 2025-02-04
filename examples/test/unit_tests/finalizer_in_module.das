@@ -12,7 +12,7 @@ def operator delete (var f : Foo)
 [export]
 def test
     var arr : array<Foo>
-    push(arr,[[Foo a=1]])
+    push(arr,Foo(uninitialized a=1))
     delete arr
     assert(all_good)
     return true

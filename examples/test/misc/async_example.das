@@ -37,7 +37,7 @@ struct Data
     var data : Data
     data.a = a
     data.b = "hello"
-    data.arr <- [{int 1; }]
+    data.arr <- array<int>(1)
     yield <- data
 
 [async] def async_range() : int

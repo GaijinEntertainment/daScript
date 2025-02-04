@@ -59,8 +59,8 @@ def operator == ( a,b: NFoo )
 
 [test]
 def struct_types ( t: T? )
-    test_equ(t, [[SFoo a=1,b=2.]])
-    test_equ(t, [[NFoo c=1.lf,s=[[SFoo a=1,b=2.]]]])
+    test_equ(t, SFoo(uninitialized a=1, b=2.))
+    test_equ(t, NFoo(uninitialized c=1.lf, s=SFoo(uninitialized a=1, b=2.)))
 
 def operator == ( a,b:int[4] )
     for A,B in a,b
@@ -76,8 +76,8 @@ def operator == ( a,b:SFoo[2]|# )
 
 [test]
 def dim_types ( t: T? )
-    test_equ(t, [[int 1;2;3;4]])
-    test_equ(t, [[SFoo a=1,b=2.;a=2,b=3.]])
+    test_equ(t, fixed_array<int>(1, 2, 3, 4))
+    test_equ(t, [SFoo(uninitialized a=1, b=2.), SFoo(uninitialized a=2, b=3.)])
 
 def operator == ( a,b:array<int> )
     for A,B in a,b
@@ -93,8 +93,8 @@ def operator == ( a,b:array<SFoo> )
 
 [test]
 def array_types ( t: T? )
-    test_equ(t, [{int 1;2;3;4}])
-    test_equ(t, [{SFoo a=1,b=2.;a=2,b=3.}])
+    test_equ(t, array<int>(1, 2, 3, 4))
+    test_equ(t, [SFoo(a=1, b=2.), SFoo(a=2, b=3.)])
 
 typedef TFoo = tuple<int; float; string>
 
@@ -103,7 +103,7 @@ def operator == ( a,b: TFoo|# )
 
 [test]
 def tuple_types ( t: T? )
-    test_equ(t, [[auto 1,2.0,"3"]])
+    test_equ(t, (1, 2.0, "3"))
 
 def op_equ_tab ( a,b:table<string;auto(TT)> )
     if a|>length != b|> length
@@ -124,8 +124,8 @@ def operator == ( a,b:table<string;SFoo> )
 
 [test]
 def string_table ( t: T? )
-    test_equ(t, {{"one" => 1; "two" => 2}})
-    test_equ(t, {{"tab1" => [[SFoo a=1,b=2.]]; "tab2" => [[SFoo a=2,b=3.]]}})
+    test_equ(t, {"one" => 1, "two" => 2})
+    test_equ(t, {"tab1" => SFoo(uninitialized a=1, b=2.), "tab2" => SFoo(uninitialized a=2, b=3.)})
 
 variant VFoo
     i : int
@@ -141,8 +141,8 @@ def operator == ( a,b:VFoo )
 
 [test]
 def variant_types ( t: T? )
-    test_equ(t, [[VFoo i=1]])
-    test_equ(t, [[VFoo f=1.]])
+    test_equ(t, VFoo(uninitialized i=1))
+    test_equ(t, VFoo(uninitialized f=1.))
 
 struct MFoo
     a : int
@@ -159,4 +159,4 @@ def operator == ( a,b: MFoo )
 
 [test]
 def moveable_struct_types ( t: T? )
-    test_equ(t, [[MFoo a=1,b=2.,c<-[{int 1;2;3}]]])
+    test_equ(t, MFoo(uninitialized a=1, b=2., c<-array<int>(1, 2, 3)))

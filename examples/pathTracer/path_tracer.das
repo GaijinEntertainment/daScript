@@ -77,8 +77,7 @@ def getRay(that:Camera;s,t:float)
     with that
         let rd = lensRadius * random_in_unit_disk(RAND_SEED)
         let offset = mad(u,rd.x,v*rd.y)
-        return [[Ray orig = origin + offset,
-            dir = fast_normalize(mad(vertical,t,mad(horizontal,s,lowerLeftCorner)) - origin - offset) ]]
+        return Ray(uninitialized orig = origin + offset, dir = fast_normalize(mad(vertical,t,mad(horizontal,s,lowerLeftCorner)) - origin - offset))
 
 enum Type
     Lambert
@@ -98,24 +97,24 @@ var [[groupshared]] s_Spheres : Sphere[TOTAL_SPHERES]
 var [[groupshared]] s_SphereMats : Material[TOTAL_SPHERES]
 
 def init_path_tracer
-    s_Spheres[0] = [[Sphere center = float3(0.,-100.5,-1.), radius = 100.,  radius2=100.0*100., iRadius = 1. / 100.]]
-    s_Spheres[1] = [[Sphere center = float3(2.,0.,-1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
-    s_Spheres[2] = [[Sphere center = float3(0.,0.,-1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
-    s_Spheres[3] = [[Sphere center = float3(-2.,0.,-1.),    radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
-    s_Spheres[4] = [[Sphere center = float3(2.,0.,1.),      radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
-    s_Spheres[5] = [[Sphere center = float3(0.,0.,1.),      radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
-    s_Spheres[6] = [[Sphere center = float3(-2.,0.,1.),     radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
-    s_Spheres[7] = [[Sphere center = float3(0.5,1.,0.5),    radius = 0.5,   radius2=0.5*0.5,    iRadius = 1. / .5]]
-    s_Spheres[8] = [[Sphere center = float3(-1.5,1.5,0.),   radius = 0.3,   radius2=0.3*0.3,    iRadius = 1. / .3]]
-    s_SphereMats[0] = [[Material mtype = Type Lambert,    albedo = float3(0.8, 0.8, 0.8), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
-    s_SphereMats[1] = [[Material mtype = Type Lambert,    albedo = float3(0.8, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
-    s_SphereMats[2] = [[Material mtype = Type Lambert,    albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
-    s_SphereMats[3] = [[Material mtype = Type Metal,      albedo = float3(0.4, 0.4, 0.8), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
-    s_SphereMats[4] = [[Material mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 0.]]
-    s_SphereMats[5] = [[Material mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.2, ri = 0.]]
-    s_SphereMats[6] = [[Material mtype = Type Metal,      albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0),     roughness = 0.6, ri = 0.]]
-    s_SphereMats[7] = [[Material mtype = Type Dielectric, albedo = float3(0.4, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 1.5]]
-    s_SphereMats[8] = [[Material mtype = Type Lambert,    albedo = float3(0.8, 0.6, 0.2), emissive = float3(30,25,15),  roughness = 0.,  ri = 0.]]
+    s_Spheres[0] = Sphere(uninitialized center = float3(0.,-100.5,-1.), radius = 100., radius2=100.0*100., iRadius = 1. / 100.)
+    s_Spheres[1] = Sphere(uninitialized center = float3(2.,0.,-1.), radius = 0.5, radius2=0.5*0.5, iRadius = 1. / .5)
+    s_Spheres[2] = Sphere(uninitialized center = float3(0.,0.,-1.), radius = 0.5, radius2=0.5*0.5, iRadius = 1. / .5)
+    s_Spheres[3] = Sphere(uninitialized center = float3(-2.,0.,-1.), radius = 0.5, radius2=0.5*0.5, iRadius = 1. / .5)
+    s_Spheres[4] = Sphere(uninitialized center = float3(2.,0.,1.), radius = 0.5, radius2=0.5*0.5, iRadius = 1. / .5)
+    s_Spheres[5] = Sphere(uninitialized center = float3(0.,0.,1.), radius = 0.5, radius2=0.5*0.5, iRadius = 1. / .5)
+    s_Spheres[6] = Sphere(uninitialized center = float3(-2.,0.,1.), radius = 0.5, radius2=0.5*0.5, iRadius = 1. / .5)
+    s_Spheres[7] = Sphere(uninitialized center = float3(0.5,1.,0.5), radius = 0.5, radius2=0.5*0.5, iRadius = 1. / .5)
+    s_Spheres[8] = Sphere(uninitialized center = float3(-1.5,1.5,0.), radius = 0.3, radius2=0.3*0.3, iRadius = 1. / .3)
+    s_SphereMats[0] = Material(uninitialized mtype = Type Lambert, albedo = float3(0.8, 0.8, 0.8), emissive = float3(0,0,0), roughness = 0., ri = 0.)
+    s_SphereMats[1] = Material(uninitialized mtype = Type Lambert, albedo = float3(0.8, 0.4, 0.4), emissive = float3(0,0,0), roughness = 0., ri = 0.)
+    s_SphereMats[2] = Material(uninitialized mtype = Type Lambert, albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0), roughness = 0., ri = 0.)
+    s_SphereMats[3] = Material(uninitialized mtype = Type Metal, albedo = float3(0.4, 0.4, 0.8), emissive = float3(0,0,0), roughness = 0., ri = 0.)
+    s_SphereMats[4] = Material(uninitialized mtype = Type Metal, albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0), roughness = 0., ri = 0.)
+    s_SphereMats[5] = Material(uninitialized mtype = Type Metal, albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0), roughness = 0.2, ri = 0.)
+    s_SphereMats[6] = Material(uninitialized mtype = Type Metal, albedo = float3(0.4, 0.8, 0.4), emissive = float3(0,0,0), roughness = 0.6, ri = 0.)
+    s_SphereMats[7] = Material(uninitialized mtype = Type Dielectric, albedo = float3(0.4, 0.4, 0.4), emissive = float3(0,0,0), roughness = 0., ri = 1.5)
+    s_SphereMats[8] = Material(uninitialized mtype = Type Lambert, albedo = float3(0.8, 0.6, 0.2), emissive = float3(30,25,15), roughness = 0., ri = 0.)
 
 [hint(unsafe_range_check)]
 def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
@@ -137,9 +136,7 @@ def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
         ++ i
     if id != -1
         let atPos = pointAt(r,hitT)
-        outHit = [[Hit pos = atPos,
-            normal = (atPos - s_Spheres[id].center) * s_Spheres[id].iRadius,
-        t = hitT]]
+        outHit = Hit(uninitialized pos = atPos, normal = (atPos - s_Spheres[id].center) * s_Spheres[id].iRadius, t = hitT)
     return id
 
 def hitWorld(r:Ray const;tMin,tMax:float;var outHit:Hit;var outID:int&)
@@ -151,7 +148,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
     outLightE = float3(0)
     if mat.mtype==Type Lambert
         let target = rec.pos + rec.normal + random_unit_vector(RAND_SEED)
-        scattered = [[Ray orig=rec.pos, dir=fast_normalize(target - rec.pos)]]
+        scattered = Ray(uninitialized orig=rec.pos, dir=fast_normalize(target - rec.pos))
         attenuation = mat.albedo
         let sc = s_Spheres[LIGHT_SPHERE_ID].center
         let sw = fast_normalize(sc-rec.pos)
@@ -168,14 +165,14 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         var lightHit : Hit
         var hitID = 0
         ++inoutRayCount
-        let ray = [[Ray orig=rec.pos, dir=l]]
+        let ray = Ray(uninitialized orig=rec.pos, dir=l)
         if ray|>hitWorld(kMinT,kMaxT,lightHit,hitID) && hitID==LIGHT_SPHERE_ID
             let nl = dot(rec.normal,r_in.dir) < 0. ? rec.normal : -rec.normal
             outLightE += (mat.albedo*s_SphereMats[LIGHT_SPHERE_ID].emissive) * ( saturate(dot(l,nl))*mad(-2.,cosAMax,2.) )
         return true
     elif mat.mtype == Type Metal
         let refl = reflect(r_in.dir,rec.normal)
-        scattered = [[Ray orig=rec.pos, dir=fast_normalize(mad(random_in_unit_sphere(RAND_SEED),mat.roughness,refl))]]
+        scattered = Ray(uninitialized orig=rec.pos, dir=fast_normalize(mad(random_in_unit_sphere(RAND_SEED),mat.roughness,refl)))
         attenuation = mat.albedo
         return dot(scattered.dir,rec.normal) > 0.
     elif mat.mtype == Type Dielectric
@@ -195,12 +192,12 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
             else
                 reflProb = 1.
         if random_float(RAND_SEED) < reflProb
-            scattered = [[Ray orig=rec.pos, dir=fast_normalize(reflect(r_in.dir, rec.normal))]]
+            scattered = Ray(uninitialized orig=rec.pos, dir=fast_normalize(reflect(r_in.dir, rec.normal)))
         else
-            scattered = [[Ray orig=rec.pos, dir=fast_normalize(refr)]]
+            scattered = Ray(uninitialized orig=rec.pos, dir=fast_normalize(refr))
     else
         attenuation = float3(1,0,1)
-        scattered = [[Ray orig=float3(0.), dir=float3(0.)]]
+        scattered = Ray(uninitialized orig=float3(0.), dir=float3(0.))
         return false
     return true
 
