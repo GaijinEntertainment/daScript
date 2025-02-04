@@ -16,8 +16,11 @@
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
-    #include "parser_state.h"
+    #include "../src/parser/parser_state.h"
+    #include "helpers.h"
+    #include "formatter.h"
 
+    #include <iostream>
 #if defined(_MSC_VER) && !defined(__clang__)
     #if defined(DAS_RELWITHDEBINFO)
         #pragma optimize( "s", on )
@@ -39,7 +42,7 @@
 
     using namespace das;
 
-    #include "parser_impl.h"
+    #include "../src/parser/parser_impl.h"
 
     LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
     LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const struct DAS_YYLTYPE & lie );
@@ -67,7 +70,7 @@
     struct DAS_YYLTYPE;
 
     #define YY_NO_UNISTD_H
-    #include "lex.yy.h"
+    #include "../src/parser/lex.yy.h"
 
     void das_yyerror ( DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error );
     void das_yyfatalerror ( DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr );
@@ -694,12 +697,14 @@ expr_reader
         $$ = yyextra->g_ReaderExpr;
         int thisLine = 0;
         FileInfo * info = nullptr;
+        if (!format::is_enabled()) {
         if ( auto seqt = yyextra->g_ReaderMacro->suffix(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, thisLine, info, tokAt(scanner,@seq)) ) {
             das_accept_sequence(scanner,seqt,strlen(seqt),thisLine,info);
             yylloc.first_column = @seq.first_column;
             yylloc.first_line = @seq.first_line;
             yylloc.last_column = @seq.last_column;
             yylloc.last_line = @seq.last_line;
+        }
         }
         delete $mark;
         yyextra->g_ReaderMacro = nullptr;
@@ -1230,10 +1235,26 @@ function_declaration
 
 expression_block
     :   '{' [bbegin] expressions[block] '}' [bend] {
+        if (format::is_replace_braces() &&
+            format::prepare_rule(format::Pos::from_end_prev_line(tokAt(scanner,@bbegin)))) {
+            const auto internal = format::get_substring(format::Pos::from_end_prev_line(tokAt(scanner,@bbegin)),
+                                                          format::Pos::from_last(tokAt(scanner,@bend)));
+            format::get_writer() << "{\n" << internal << "}\n";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@bend)));
+        }
+
         $$ = $block;
         $$->at = tokRangeAt(scanner,@bbegin,@bend);
     }
     |   '{' [bbegin] expressions[block] '}' DAS_FINALLY '{' expressions[final] '}' [bend] {
+        if (format::is_replace_braces() &&
+            format::prepare_rule(format::Pos::from(tokAt(scanner,@bbegin)))) {
+            const auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@bbegin)),
+                                                          format::Pos::from(tokAt(scanner,@bend)));
+            format::get_writer() << " {" << internal << "\n}";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@bend)));
+        }
+
         auto pB = (ExprBlock *) $block;
         auto pF = (ExprBlock *) $final;
         swap ( pB->finalList, pF->list );
@@ -1573,7 +1594,13 @@ tuple_expansion
     ;
 
 tuple_expansion_variable_declaration
-    :   BRABRAB tuple_expansion[list] ']' ']' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    :   BRABRAB[loc] tuple_expansion[list] ']' ']' [end_expansion] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';'[end] {
+        //std::cout << "case11" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            const auto internal = format::get_substring(tokAt(scanner,@list));
+            format::get_writer() << "(" << internal << ")";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_expansion)));
+        }
         $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
@@ -1585,7 +1612,14 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
-    |   BRABRAB tuple_expansion[list] ']' ']' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   BRABRAB [loc] tuple_expansion[list] ']' ']' [end_expansion] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+        //std::cout << "case12" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            const auto internal = format::get_substring(tokAt(scanner,@list));
+            format::get_writer() << "(" << internal << ")";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_expansion)));
+        }
+
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -1763,7 +1797,7 @@ capture_list
 
 optional_capture_list
     :   { $$ = nullptr; }
-    |   BRABRAB capture_list[cl] ']' ']' { $$ = $cl; }
+    |   BRABRAB capture_list[cl] ']' ']' {         /* I guess remains the same */; $$ = $cl; }
     |   DAS_CAPTURE '(' capture_list[cl] ')' { $$ = $cl; }
     ;
 
@@ -2743,7 +2777,16 @@ optional_struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    |   '{' struct_variable_declaration_list[list] '}' {
+    |   '{' [sbegin] struct_variable_declaration_list[list] '}' [send] {
+        if (format::is_replace_braces() &&
+            format::prepare_rule(format::Pos::from_end_prev_line(tokAt(scanner,@sbegin)))) {
+            const auto internal = format::get_substring(format::Pos::from_end_prev_line(tokAt(scanner,@sbegin)),
+                                                          format::Pos::from(tokAt(scanner,@send))); // should be from_last, but location little bit incorrect
+            format::get_writer() << " {" << internal
+                                   << std::string(yyextra->das_indent_level, '\t') // emit tabs
+                                   << "}\n"; // new line
+            format::finish_rule(format::Pos::from(tokAt(scanner,@send)));
+        }
         $$ = $list;
     }
     ;
@@ -3314,53 +3357,53 @@ make_decl
 
 make_struct_fields
     :   NAME[fn] copy_or_move[com] expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@fn),*$fn,ExpressionPtr($value),$com,false);
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@fn, @value),*$fn,ExpressionPtr($value),$com,false);
         delete $fn;
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
     |   NAME[fn] CLONEEQU expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@fn),*$fn,ExpressionPtr($value),false,true);
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@fn, @value),*$fn,ExpressionPtr($value),false,true);
         delete $fn;
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
     |   make_struct_fields[msd] ',' NAME[fn] copy_or_move[com] expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@fn),*$fn,ExpressionPtr($value),$com,false);
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@fn, @value),*$fn,ExpressionPtr($value),$com,false);
         delete $fn;
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
     }
     |   make_struct_fields[msd] ',' NAME[fn] CLONEEQU expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@fn),*$fn,ExpressionPtr($value),false,true);
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@fn, @value),*$fn,ExpressionPtr($value),false,true);
         delete $fn;
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
     }
-    |   MTAG_F '(' expr[subexpr] ')' copy_or_move[com] expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@subexpr),"``MACRO``TAG``FIELD``",ExpressionPtr($value),$com,false);
+    |   MTAG_F [begin] '(' expr[subexpr] ')' copy_or_move[com] expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@begin, @value),"``MACRO``TAG``FIELD``",ExpressionPtr($value),$com,false);
         mfd->tag = ExpressionPtr($subexpr);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
-    |   MTAG_F '(' expr[subexpr] ')' CLONEEQU expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@subexpr),"``MACRO``TAG``FIELD``",ExpressionPtr($value),false,true);
+    |   MTAG_F [begin] '(' expr[subexpr] ')' CLONEEQU expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner, @begin, @value),"``MACRO``TAG``FIELD``",ExpressionPtr($value),false,true);
         mfd->tag = ExpressionPtr($subexpr);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
-    |   make_struct_fields[msd] ',' MTAG_F '(' expr[subexpr] ')' copy_or_move[com] expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@subexpr),"``MACRO``TAG``FIELD``",ExpressionPtr($value),$com,false);
+    |   make_struct_fields[msd] ',' MTAG_F [begin] '(' expr[subexpr] ')' copy_or_move[com] expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@begin,@value),"``MACRO``TAG``FIELD``",ExpressionPtr($value),$com,false);
         mfd->tag = ExpressionPtr($subexpr);
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
     }
-    |   make_struct_fields[msd] ',' MTAG_F '(' expr[subexpr] ')' CLONEEQU expr[value] {
-        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@subexpr),"``MACRO``TAG``FIELD``",ExpressionPtr($value),false,true);
+    |   make_struct_fields[msd] ',' MTAG_F [begin] '(' expr[subexpr] ')' CLONEEQU expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@begin, @value),"``MACRO``TAG``FIELD``",ExpressionPtr($value),false,true);
         mfd->tag = ExpressionPtr($subexpr);
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
@@ -3423,7 +3466,7 @@ optional_make_struct_dim_decl
 
 optional_block
     :   { $$ = nullptr; }
-    |   DAS_WHERE expr_block[blk] { $$ = $blk; }
+    |   DAS_WHERE expr_block[blk] { $blk->at = tokAt(scanner, @blk); $$ = $blk; }
     ;
 
 
@@ -3460,20 +3503,69 @@ use_initializer
     ;
 
 make_struct_decl
-    :   BRABRAB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr {
+    :   BRABRAB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr[end] {
+        //std::cout << "case1" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            auto type = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
+            const bool is_initialized = false;
+            const auto internal = format::handle_msd(static_cast<ExprMakeStruct*>($msd), type, is_initialized);
+            if (static_cast<ExprMakeStruct*>($msd)->structs.size() == 1) {
+                // single struct
+                format::get_writer() << internal;
+                if ($blk != nullptr) {
+                    format::get_writer() << " <| " << format::get_substring($blk->at);
+                }
+            } else {
+                // array of structs
+    //            const auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@msd)),
+    //                                                          format::Pos::from(tokAt(scanner,@end)));
+                format::get_writer() << "[" << internal << "]";
+            }
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end)));
+        }
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(scanner,@loc);
         $$ = $msd;
     }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] optional_block[blk] optional_trailing_delim_sqr_sqr {
+    |   BRABRAB [loc] type_declaration_no_options[mkt] optional_block[blk] optional_trailing_delim_sqr_sqr[end] {
+        // std::cout << "case2" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            auto type = format::type_to_string($mkt, tokAt(scanner,@mkt));
+            std::unordered_set<std::string> always_init = {
+                // Is there a method to describe all this types?
+                "struct<array<",
+                "array<",
+                "bitfield",
+                "string",
+                "int",
+                "float",
+                "variant",
+                "tuple",
+            };
+            if ($mkt->isPointer()) {
+                format::get_writer() << "default<" << type.value() << ">";
+            } else if (std::any_of(always_init.begin(), always_init.end(),
+                            [&type](auto t){ return type.value_or("").find(t) == 0; })) {
+                format::get_writer() << type.value_or("") << "()";
+            } else {
+                format::get_writer() << type.value_or("") << "(uninitialized)";
+            }
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end)));
+        }
+
         auto msd = new ExprMakeStruct();
         msd->makeType = TypeDeclPtr($mkt);
         msd->block = $blk;
         msd->at = tokAt(scanner,@loc);
         $$ = msd;
     }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' optional_block[blk] optional_trailing_delim_sqr_sqr {
+    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' optional_block[blk] optional_trailing_delim_sqr_sqr [end_loc] {
+        //std::cout << "case3" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            format::get_writer() << format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("") << "()";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_loc)));
+        }
         auto msd = new ExprMakeStruct();
         msd->makeType = TypeDeclPtr($mkt);
         msd->useInitializer = true;
@@ -3481,14 +3573,31 @@ make_struct_decl
         msd->at = tokAt(scanner,@loc);
         $$ = msd;
     }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr {
+    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr [end_loc] {
+        //std::cout << "case4" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
+            const auto internal = format::handle_msd(static_cast<ExprMakeStruct*>($msd), type_name);
+//            auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@msd)),
+//                                                    format::Pos::from_last(tokAt(scanner,@blk)));
+            format::get_writer() << internal;
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_loc)));
+        }
+
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(scanner,@loc);
         $$ = $msd;
     }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr {
+    |   BRACBRB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr [end_loc] {
+        //std::cout << "case6" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
+            format::get_writer() << "[" << format::handle_msd(static_cast<ExprMakeStruct*>($msd), type_name) << "]";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_loc)));
+        }
+
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(scanner,@loc);
@@ -3496,7 +3605,16 @@ make_struct_decl
         tam->arguments.push_back(ExpressionPtr($msd));
         $$ = tam;
     }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr {
+    |   BRACBRB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr [end_loc] {
+        //std::cout << "case7" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
+            format::get_writer() << "["
+                                   << format::handle_msd(static_cast<ExprMakeStruct*>($msd), type_name)
+                                   << "]";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_loc)));
+        }
+
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->block = $blk;
@@ -3539,15 +3657,17 @@ make_struct_decl
 
 make_tuple
     :   expr[val] {
+        $val->at = tokAt(scanner,@val);
         $$ = $val;
     }
     |   expr[kval] MAPTO[mkt] expr[vval] {
-        ExprMakeTuple * mt = new ExprMakeTuple(tokAt(scanner,@mkt));
+        ExprMakeTuple * mt = new ExprMakeTuple(tokRangeAt(scanner,@kval, @vval));
         mt->values.push_back(ExpressionPtr($kval));
         mt->values.push_back(ExpressionPtr($vval));
         $$ = mt;
     }
     |   make_tuple[mkt] ',' expr[val] {
+        $val->at = tokAt(scanner,@val);
         ExprMakeTuple * mt;
         if ( $mkt->rtti_isMakeTuple() ) {
             mt = static_cast<ExprMakeTuple *>($mkt);
@@ -3556,13 +3676,14 @@ make_tuple
             mt->values.push_back(ExpressionPtr($mkt));
         }
         mt->values.push_back(ExpressionPtr($val));
+        mt->at = format::concat(mt->at, tokAt(scanner, @val));
         $$ = mt;
     }
     ;
 
 make_map_tuple
     :   expr[kval] MAPTO[mkt] expr[vval] {
-        ExprMakeTuple * mt = new ExprMakeTuple(tokAt(scanner,@mkt));
+        ExprMakeTuple * mt = new ExprMakeTuple(tokRangeAt(scanner,@kval,@vval));
         mt->values.push_back(ExpressionPtr($kval));
         mt->values.push_back(ExpressionPtr($vval));
         $$ = mt;
@@ -3610,12 +3731,38 @@ make_dim_decl
         tam->arguments.push_back(mka);
         $$ = tam;
     }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr {
+    |   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr [end_loc] {
+        //std::cout << "case13" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt));
+            auto internal = format::handle_mka(static_cast<ExprMakeArray*>($mka));
+            if (static_cast<ExprMakeArray*>($mka)->values.size() == 1) {
+                // single element
+                format::get_writer() << internal;
+            } else {
+                format::get_writer() << "fixed_array";
+                if (!$mkt->isAuto()) {
+                    format::get_writer() << "<" << type_name.value() << ">";
+                }
+                format::get_writer() << "(" << internal << ")";
+            }
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_loc)));
+        }
         ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
         $mka->at = tokAt(scanner,@loc);
         $$ = $mka;
     }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_cur_sqr {
+    |   BRACBRB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_cur_sqr [end_loc] {
+        //std::cout << "case8" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            format::get_writer() << "array";
+            if (!$mkt->isAuto()) {
+                format::get_writer() << "<" << format::get_substring(tokAt(scanner,@mkt)) << ">";
+            }
+            format::get_writer() << "(" << format::handle_mka(static_cast<ExprMakeArray*>($mka)) << ")";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_loc)));
+        }
+
         ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
         $mka->at = tokAt(scanner,@loc);
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
@@ -3727,7 +3874,13 @@ make_table_decl
         ttm->arguments.push_back(mka);
         $$ = ttm;
     }
-    |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
+    |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur [end] {
+        //std::cout << "case10" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
+            format::get_writer() << "{" << format::convert_to_string(((ExprMakeArray *)$mka)->values) << "}";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@end)));
+        }
+
         auto mkt = make_smart<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
         ((ExprMakeArray *)$mka)->makeType = mkt;
@@ -3806,16 +3959,35 @@ array_comprehension
     |   '[' DAS_ITERATOR DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
-    |   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
+    |   BRABRAB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
+        //std::cout << "case5" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
+            auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));
+            format::get_writer() << "[iterator " << internal << "]";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@forend)));
+        }
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
-    |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' [forend] {
+    |   BRACBRB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' [forend] {
+        //std::cout << "case9" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
+            auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));
+            format::get_writer() << "[" << internal << "]";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@forend)));
+        }
+
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
     |   '{' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
     }
-    | CBRCBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' '}' [forend] {
+    | CBRCBRB[loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' '}' [forend] {
+        //std::cout << "case12" << std::endl;
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
+            auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));
+            format::get_writer() << "[" << internal << "]";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@forend)));
+        }
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,true);
     }
     ;
