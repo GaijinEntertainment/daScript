@@ -14,7 +14,7 @@ def test
     assert(length(fa.a)==4)
     assert(length(fa2[0].a)==4)
     assert(length(fa2[1].a)==3)
-    let faw <- Foo(uninitialized a := sa, b="a is ")
+    let faw <- Foo(uninitialized a := sa, b="a is ") <| $(var boo) { boo.b+=join(boo.a,"-"); }
     assert(length(faw.a)==4)
     assert(faw.b=="a is 1-2-3-4")
     return true
