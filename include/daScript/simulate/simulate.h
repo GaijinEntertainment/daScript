@@ -789,6 +789,8 @@ namespace das
         bool                            breakOnException = false;
         bool                            alwaysErrorOnException = false;
         bool                            alwaysStackWalkOnException = false;
+        bool                            showLocalVariablesOnException = false;
+        bool                            showArgumentsOnException = false;
         bool                            instrumentAllocations = false;
         bool                            failed = false;
         bool                            verySafeContext = false;    // when true, array and table reserves don't free memory
