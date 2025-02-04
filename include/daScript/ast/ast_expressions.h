@@ -1448,6 +1448,7 @@ namespace das
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual void serialize( AstSerializer & ser ) override;
         bool isKeyValue = false;
+        vector <string> recordNames;
     };
 
     struct ExprArrayComprehension : Expression {
