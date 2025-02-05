@@ -1,6 +1,6 @@
-#line 1 "ds_lexer.cpp"
+#line 2 "ds_lexer.cpp"
 
-#line 3 "ds_lexer.cpp"
+#line 4 "ds_lexer.cpp"
 
 #define  YY_INT_ALIGNED short int
 
@@ -1307,11 +1307,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 #define YY_EXTRA_TYPE das::DasParserState *
 
-#line 1310 "ds_lexer.cpp"
+#line 1311 "ds_lexer.cpp"
 #define YY_NO_UNISTD_H 1
 /* %option debug */
 
-#line 1314 "ds_lexer.cpp"
+#line 1315 "ds_lexer.cpp"
 
 #define INITIAL 0
 #define indent 1
@@ -1595,7 +1595,7 @@ YY_DECL
 #line 76 "ds_lexer.lpp"
 
 
-#line 1598 "ds_lexer.cpp"
+#line 1599 "ds_lexer.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -3220,49 +3220,49 @@ case 200:
 /* rule 200 can match eol */
 YY_RULE_SETUP
 #line 817 "ds_lexer.lpp"
-unput(yytext[yyleng-1]); return MTAG_E;
+unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $"); return MTAG_E;
 	YY_BREAK
 case 201:
 /* rule 201 can match eol */
 YY_RULE_SETUP
 #line 818 "ds_lexer.lpp"
-unput(yytext[yyleng-1]); return MTAG_I;
+unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $"); return MTAG_I;
 	YY_BREAK
 case 202:
 /* rule 202 can match eol */
 YY_RULE_SETUP
 #line 819 "ds_lexer.lpp"
-unput(yytext[yyleng-1]); return MTAG_V;
+unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $"); return MTAG_V;
 	YY_BREAK
 case 203:
 /* rule 203 can match eol */
 YY_RULE_SETUP
 #line 820 "ds_lexer.lpp"
-unput(yytext[yyleng-1]); return MTAG_B;
+unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $"); return MTAG_B;
 	YY_BREAK
 case 204:
 /* rule 204 can match eol */
 YY_RULE_SETUP
 #line 821 "ds_lexer.lpp"
-unput(yytext[yyleng-1]); return MTAG_A;
+unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $"); return MTAG_A;
 	YY_BREAK
 case 205:
 /* rule 205 can match eol */
 YY_RULE_SETUP
 #line 822 "ds_lexer.lpp"
-unput(yytext[yyleng-1]); return MTAG_T;
+unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $"); return MTAG_T;
 	YY_BREAK
 case 206:
 /* rule 206 can match eol */
 YY_RULE_SETUP
 #line 823 "ds_lexer.lpp"
-unput(yytext[yyleng-1]); return MTAG_C;
+unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $"); return MTAG_C;
 	YY_BREAK
 case 207:
 /* rule 207 can match eol */
 YY_RULE_SETUP
 #line 824 "ds_lexer.lpp"
-unput(yytext[yyleng-1]); return MTAG_F;
+unput(yytext[yyleng-1]); YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $"); return MTAG_F;
 	YY_BREAK
 case 208:
 YY_RULE_SETUP
@@ -3661,7 +3661,7 @@ YY_RULE_SETUP
 #line 1021 "ds_lexer.lpp"
 ECHO;
 	YY_BREAK
-#line 3664 "ds_lexer.cpp"
+#line 3665 "ds_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(include):
 	yyterminate();

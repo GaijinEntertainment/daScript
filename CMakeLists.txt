@@ -344,6 +344,8 @@ FLEX(src/parser/ds_lexer.lpp)
 FLEX(src/parser/ds2_lexer.lpp)
 BISON(src/parser/ds_parser.ypp)
 BISON(src/parser/ds2_parser.ypp)
+FLEX(utils/dasFsormatter/ds_lexer.lpp)
+BISON(utils/dasFormatter/ds_parser.ypp)
 
 SET(PARSER_GENERATED_SRC
 # 1st parser
@@ -742,8 +744,10 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
+    SET(SRC_LIBRARIES libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+
     add_executable(daslang ${DAS_DASCRIPT_MAIN_SRC})
-    TARGET_LINK_LIBRARIES(daslang libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+    TARGET_LINK_LIBRARIES(daslang ${SRC_LIBRARIES})
     # ADD_DEPENDENCIES(daslang libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
     SETUP_CPP11(daslang)
     SETUP_LTO(daslang)
@@ -757,6 +761,25 @@ if (NOT ${DAS_TOOLS_DISABLED})
     )
     install(FILES ${DASLIB_SOURCES}
         DESTINATION ${DAS_INSTALL_DASLIBDIR}
+    )
+
+# das formatter
+    SET(DAS_DASCRIPT_FMT_SRC
+        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp
+        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/formatter.cpp
+        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp
+        ${DAS_MODULES_NEED_INC}
+        CACHE INTERNAL "DAS_DASCRIPT_FMT_SRC"
+    )
+
+    add_executable(das-fmt ${DAS_DASCRIPT_FMT_SRC})
+    TARGET_LINK_LIBRARIES(das-fmt ${SRC_LIBRARIES})
+
+    SETUP_CPP11(das-fmt)
+    SETUP_LTO(das-fmt)
+
+    INSTALL(TARGETS das-fmt
+        RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     )
 
     #IF(APPLE)
