@@ -33,14 +33,17 @@ namespace das::format {
             return Pos{info.line, info.column};
         }
 
-        static Pos from_end_prev_line(LineInfo info);
-
         static Pos from_last(LineInfo info) {
             return Pos{info.last_line, info.last_column};
         }
 
         bool operator < (const Pos &rhs) const {
             return line < rhs.line || (line == rhs.line && column < rhs.column);
+        }
+
+
+        bool operator <= (const Pos &rhs) const {
+            return line <= rhs.line || (line == rhs.line && column <= rhs.column);
         }
     };
 
@@ -75,6 +78,9 @@ namespace das::format {
      */
     string get_substring(LineInfo info);
     string get_substring(Pos pos1, Pos pos2);
+
+    // hack to get current identation
+    string get_line(uint32_t line);
 
     // Maybe we should replace it with getConfig(), if there will be a lot of options
     bool is_replace_braces();

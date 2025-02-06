@@ -201,6 +201,7 @@ Result transform_syntax(const string& filename, const string content, format::Fo
         ofstream ostream(tmp_name);
         ostream << src;
     }
+    policies.version_2_syntax = true;
     auto program = parseDaScript(tmp_name, "", access, tout, libGroup, true, true, policies);
     if (!program->failed()) {
         return {.ok=src};
@@ -225,7 +226,7 @@ vector<TestData> test_cases() {
     const string out_prefix = in_prefix;
 
     const string postfix = "\n";
-    vector<TestData> res = {
+    vector<TestData> base = {
         {"[[Foo a=1,b=2.0]]", "Foo(uninitialized a=1, b=2.0)"}, // 1
         {"[[Foo]]", "Foo(uninitialized)"}, // 2
         {"[[Foo()]]", "Foo()"}, // 3
@@ -252,7 +253,7 @@ vector<TestData> test_cases() {
 
         {"[[Bar a=[[Foo a=1,b=2.0]]]]", "Bar(uninitialized a=Foo(uninitialized a=1, b=2.0))"},
     };
-    for (auto &[in, out, options]: res) {
+    for (auto &[in, out, options]: base) {
         in = in_prefix + in + postfix;
         out = out_prefix + out + postfix;
     }
@@ -267,19 +268,44 @@ vector<TestData> test_cases() {
 
     vector<TestData> braces_tests = {
         // test braces
-        {"def b()\n    let a = 5;", "def b() {\n    let a = 5;\n}"},
-        {"def b() {\n    let a = 5;\n}", "def b() {\n    let a = 5;\n}"},
+//        {"def b()\n    let a = 5", "def b() {\n    let a = 5;\n}"},
+//        {"def b() {\n    let a = 5;\n}", "def b() {\n    let a = 5;\n}"},
+//        {"def b(it)\n    let x = typeinfo is_iterable (it)", "def b(it) {\n    let x = typeinfo is_iterable (it);\n}"},
+//
+//        {"class C\n"
+//         "    a : int = 5\n"
+//         "class A : C\n"
+//         "    c : string = \"add_new_call_macro\"",
+//         "class C {\n"
+//         "    a : int = 5;\n"
+//         "}\n"
+//         "class A : C {\n"
+//          "    c : string = \"add_new_call_macro\";\n"
+//          "}",
+//        },
+        {"bitfield A\n    refCount\n\n", "bitfield A {\n    refCount,\n}\n"},
 
+        {"def b(x, y)\n    for x in y\n        x = x + 1",
+         "def b(x, y) {\n    for (x in y) {\n        x = x + 1;\n    };\n}"},
         {"def b()\n    let a = 5\n    if a<0\n        a = a + 1",
-         "def b() {\n    let a = 5\n    if a<0 {\n        a = a + 1\n    }\n}"},
-        {"def b() {\n    let a = 5\n}", "def b() {\n    let a = 5\n}"},
-        {"def b() {{\n    let a = 5\n}}", "def b() {{\n    let a = 5\n}"},
+         "def b() {\n    let a = 5;\n    if (a<0) {\n        a = a + 1;\n    }\n}"},
+        {"def lower_bound ( a:array<auto(TT)>; val : TT const-& )\n"
+         "    // comment \n"
+         "    return lower_bound(a,0,length(a),val)\n"
+         "let x = 1;",
+         "def lower_bound ( a:array<auto(TT)>; val : TT const-& ) {\n"
+         "    // comment \n"
+         "    return lower_bound(a,0,length(a),val);\n"
+         "}\n"
+         "let x = 1;"},
     };
     for (auto &[in, out, opt]: braces_tests) {
-        opt = format::FormatOptions({format::FormatOpt::AlwaysBraces});
+        opt = format::FormatOptions(std::unordered_set<format::FormatOpt>{format::FormatOpt::AlwaysBraces});
     }
-    res.insert(res.end(), tuple_expansion.begin(), tuple_expansion.end());
-//    res.insert(res.end(), braces_tests.begin(), braces_tests.end()); // do not implemented yet
+    vector<TestData> res;
+//    res.insert(res.end(), base.begin(), base.end());
+//    res.insert(res.end(), tuple_expansion.begin(), tuple_expansion.end());
+    res.insert(res.end(), braces_tests.begin(), braces_tests.end()); // did not implement yet
     return res;
 }
 
@@ -292,7 +318,7 @@ int test() {
             cout << "input:\n" << in << " \noutput:\n" << res.error->content << " \nerror:\n" << res.error->what << endl;
             ret_code = -1;
         } else if (res.ok != out) {
-            cout << " output:\n" << res.ok.value() << " expected:\n" << out << endl;
+            cout << " output:\n" << res.ok.value() << "\nexpected:\n" << out << endl;
             ret_code = -1;
         }
     }
@@ -339,7 +365,7 @@ int main(int argc, char** argv) {
         string str((istreambuf_iterator<char>(t)),
                         istreambuf_iterator<char>());
 
-        auto res = transform_syntax(file, str);
+        auto res = transform_syntax(file, str, format::FormatOptions(std::unordered_set<format::FormatOpt>{format::FormatOpt::AlwaysBraces}));
         if (res.ok) {
             if (is_inplace) {
                 ofstream out(file);

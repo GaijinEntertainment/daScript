@@ -317,6 +317,9 @@
 %token  BRABRAB             "[["    /* [[ */
 %token  BRACBRB             "[{"    /* [{ */
 %token  CBRCBRB             "{{"    /* {{ */
+%token<i>  OPEN_BRACE
+%token<i>  CLOSE_BRACE
+%token  SEMICOLON
 
 %token<i>       INTEGER                 "integer constant"
 %token<i64>     LONG_INTEGER            "long integer constant"
@@ -403,6 +406,9 @@
 %type <pStructure>      structure_name
 %type <aTypePair>       table_type_pair
 
+
+%type <i>               open_block
+%type <i>               close_block
 %type <i>               class_or_struct
 %type <b>               copy_or_move
 %type <i>               optional_override
@@ -569,11 +575,49 @@ program
     |   program tuple_alias_declaration         { yyextra->das_has_type_declarations = true; }
     |   program bitfield_alias_declaration      { yyextra->das_has_type_declarations = true; }
     |   program top_level_reader_macro
-    |   program ';'
+    |   program semicolon
     ;
 
+semicolon
+    : SEMICOLON[colon] {
+        if (format::is_replace_braces()) {
+            auto semic_loc = tokAt(scanner,@colon);
+            auto line = format::get_line(semic_loc.line);
+            if (line.back() != ';' && // ad-hoc, fix location
+                format::prepare_rule(format::Pos::from_last(semic_loc))) {
+                format::get_writer() << ";";
+                format::finish_rule(format::Pos::from_last(semic_loc));
+            }
+        }
+    }
+    | ';' {}
+
+semicolon_both
+    : SEMICOLON[colon] {
+        if (format::is_replace_braces()) {
+            auto semic_loc = tokAt(scanner,@colon);
+            auto line = format::get_line(semic_loc.line);
+            if (line.back() != ';' && // ad-hoc, fix location
+                format::prepare_rule(format::Pos::from_last(semic_loc))) {
+                format::get_writer() << ";";
+                format::finish_rule(format::Pos::from_last(semic_loc));
+            }
+        }
+    }
+    | ';'[colon] {
+        if (format::is_replace_braces()) {
+            auto semic_loc = tokAt(scanner,@colon);
+            auto line = format::get_line(semic_loc.line);
+            if (line.back() != ';' && // ad-hoc, fix location
+                format::prepare_rule(format::Pos::from_last(semic_loc))) {
+                format::get_writer() << ";";
+                format::finish_rule(format::Pos::from_last(semic_loc));
+            }
+        }
+    }
+
 top_level_reader_macro
-    :   expr_reader[rdr] ';' {
+    :   expr_reader[rdr] semicolon {
         delete $rdr;    // we do nothing, we don't even attemp to 'visit'
     }
     ;
@@ -829,6 +873,14 @@ expression_else
     :                                                      { $$ = nullptr; }
     |   DAS_ELSE expression_block[block]                   { $$ = $block; }
     |   elif_or_static_elif[loc] expr[cond] expression_block[block] expression_else[then] {
+        if (format::is_replace_braces()) {
+            const auto &internal = format::get_substring(tokAt(scanner,@cond));
+            if (!internal.empty() && internal[0] != '(' && format::prepare_rule(format::Pos::from(tokAt(scanner,@cond)))) {
+                format::get_writer() << "(" << internal << ")";
+                format::finish_rule(format::Pos::from_last(tokAt(scanner,@cond)));
+            }
+        }
+
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
         eite->isStatic = $loc;
@@ -858,18 +910,46 @@ expression_if_one_liner
 
 expression_if_then_else
     :   if_or_static_if[loc] expr[cond] expression_block[block] expression_else[then] {
+        if (format::is_replace_braces()) {
+            const auto &internal = format::get_substring(tokAt(scanner,@cond));
+            if (!internal.empty() && internal[0] != '(' && format::prepare_rule(format::Pos::from(tokAt(scanner,@cond)))) {
+                format::get_writer() << "(" << internal << ")";
+                format::finish_rule(format::Pos::from_last(tokAt(scanner,@cond)));
+            }
+        }
+
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
         eite->isStatic = $loc;
         $$ = eite;
     }
-    |   expression_if_one_liner[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] expression_else_one_liner[if_false] ';' {
+    |   expression_if_one_liner[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] expression_else_one_liner[if_false] semicolon {
+        if (format::is_replace_braces()) {
+            const auto &internal = format::get_substring(tokAt(scanner,@cond));
+            if (!internal.empty() && internal[0] != '(' && format::prepare_rule(format::Pos::from(tokAt(scanner,@cond)))) {
+                format::get_writer() << "(" << internal << ")";
+                format::finish_rule(format::Pos::from_last(tokAt(scanner,@cond)));
+            }
+        }
+
         $$ = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),ExpressionPtr(ast_wrapInBlock($if_true)),$if_false ? ExpressionPtr(ast_wrapInBlock($if_false)) : nullptr);
     }
     ;
 
 expression_for_loop
     :   DAS_FOR[loc] { yyextra->das_need_oxford_comma=false; } variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] expression_block[block] {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner,@iters)))) {
+            const auto &internal = format::get_substring(tokRangeAt(scanner,@iters, @srcs));
+            format::get_writer() << "(" << internal << ")";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@srcs)));
+        }
+
+        $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
+    }
+    |   DAS_FOR[loc] { // Had to add to successfully convert to v2 syntax, just copied from ds2_parser
+                             yyextra->das_keyword = true;
+     }  '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' expression_block[block] {
+        yyextra->das_keyword = false;
         $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
     }
     ;
@@ -884,6 +964,14 @@ expression_unsafe
 
 expression_while_loop
     :   DAS_WHILE[loc] expr[condition] expression_block[block] {
+        if (format::is_replace_braces()) {
+            const auto &internal = format::get_substring(tokAt(scanner,@condition));
+            if (!internal.empty() && internal[0] != '(' && format::prepare_rule(format::Pos::from(tokAt(scanner,@condition)))) {
+                format::get_writer() << "(" << internal << ")";
+                format::finish_rule(format::Pos::from_last(tokAt(scanner,@condition)));
+            }
+        }
+
         auto pWhile = new ExprWhile(tokAt(scanner,@loc));
         pWhile->cond = ExpressionPtr($condition);
         pWhile->body = ExpressionPtr($block);
@@ -965,7 +1053,7 @@ metadata_argument_list
     |   metadata_argument_list[argL] '@' annotation_argument[arg] {
         $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
     }
-    |   metadata_argument_list[argL] ';' {
+    |   metadata_argument_list[argL] semicolon {
         $$ = $argL;
     }
     ;
@@ -1233,26 +1321,43 @@ function_declaration
     }
     ;
 
+open_block
+    : '{' { $$ = 0xdeadbeef; }
+    | OPEN_BRACE[depth] { $$ = $depth; }
+
+close_block
+    : '}' { $$ = 0xdeadbeef; }
+    | CLOSE_BRACE[depth] { $$ = $depth; }
+
 expression_block
-    :   '{' [bbegin] expressions[block] '}' [bend] {
-        if (format::is_replace_braces() &&
-            format::prepare_rule(format::Pos::from_end_prev_line(tokAt(scanner,@bbegin)))) {
-            const auto internal = format::get_substring(format::Pos::from_end_prev_line(tokAt(scanner,@bbegin)),
-                                                          format::Pos::from_last(tokAt(scanner,@bend)));
-            format::get_writer() << "{\n" << internal << "}\n";
-            format::finish_rule(format::Pos::from_last(tokAt(scanner,@bend)));
+    :   open_block [bbegin] expressions[block] close_block [bend] {
+        auto prev_loc = format::Pos::from(tokAt(scanner,@bbegin));
+        if (format::is_replace_braces() && $bbegin != 0xdeadbeef &&
+            format::prepare_rule(prev_loc)) {
+            const auto internal = format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,@block)));
+            format::get_writer() << " {" << internal << "\n" << std::string($bbegin * yyextra->das_tab_size, ' ') + "}";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@block)));
         }
 
         $$ = $block;
         $$->at = tokRangeAt(scanner,@bbegin,@bend);
     }
-    |   '{' [bbegin] expressions[block] '}' DAS_FINALLY '{' expressions[final] '}' [bend] {
-        if (format::is_replace_braces() &&
-            format::prepare_rule(format::Pos::from(tokAt(scanner,@bbegin)))) {
-            const auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@bbegin)),
-                                                          format::Pos::from(tokAt(scanner,@bend)));
-            format::get_writer() << " {" << internal << "\n}";
-            format::finish_rule(format::Pos::from_last(tokAt(scanner,@bend)));
+    |   open_block [bbegin] expressions[block] close_block DAS_FINALLY open_block[bbegin_f] expressions[final] close_block [bend] {
+        auto prev_loc = format::Pos::from(tokAt(scanner,@bbegin));
+        if (format::is_replace_braces() && $bbegin != 0xdeadbeef && format::prepare_rule(prev_loc)) {
+            {
+                const auto internal = format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,@block)));
+                format::get_writer() << " {" << internal << "\n" << std::string($bbegin * yyextra->das_tab_size, ' ') + "}";
+                format::finish_rule(format::Pos::from_last(tokAt(scanner,@block)));
+            }
+
+            auto prev_loc_f = format::Pos::from(tokAt(scanner,@bbegin_f));
+            assert($bbegin_f != 0xdeadbeef);
+            {
+                const auto internal_f = format::get_substring(prev_loc_f, format::Pos::from_last(tokAt(scanner,@final)));
+                format::get_writer() << " finally {" << internal_f << "\n" << std::string($bbegin_f * yyextra->das_tab_size, ' ') + "}";
+                format::finish_rule(format::Pos::from_last(tokAt(scanner,@final)));
+            }
         }
 
         auto pB = (ExprBlock *) $block;
@@ -1289,27 +1394,27 @@ expr_call_pipe
     ;
 
 expression_any
-    :   ';'                                 { $$ = nullptr; }
+    :   semicolon                                 { $$ = nullptr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
     |   expr_keyword[subexpr]               { $$ = $subexpr; }
     |   expr_assign_pipe[subexpr]           { $$ = $subexpr; }
-    |   expr_assign[subexpr] ';'            { $$ = $subexpr; }
-    |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
+    |   expr_assign[subexpr] semicolon            { $$ = $subexpr; }
+    |   expression_delete[subexpr] semicolon      { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_unsafe[subexpr]          { $$ = $subexpr; }
     |   expression_with[subexpr]            { $$ = $subexpr; }
     |   expression_with_alias[subexpr]      { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
-    |   expression_break[subexpr] ';'       { $$ = $subexpr; }
-    |   expression_continue[subexpr] ';'    { $$ = $subexpr; }
+    |   expression_break[subexpr] semicolon       { $$ = $subexpr; }
+    |   expression_continue[subexpr] semicolon    { $$ = $subexpr; }
     |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_yield[subexpr]           { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
-    |   expression_label[subexpr] ';'       { $$ = $subexpr; }
-    |   expression_goto[subexpr] ';'        { $$ = $subexpr; }
-    |   DAS_PASS ';'                        { $$ = nullptr; }
+    |   expression_label[subexpr] semicolon       { $$ = $subexpr; }
+    |   expression_goto[subexpr] semicolon        { $$ = $subexpr; }
+    |   DAS_PASS semicolon                        { $$ = nullptr; }
     ;
 
 expressions
@@ -1520,7 +1625,7 @@ expression_return_no_pipe
     ;
 
 expression_return
-    :   expression_return_no_pipe[result] ';' {
+    :   expression_return_no_pipe[result] semicolon {
         $$ = $result;
     }
     |   DAS_RETURN[loc] expr_pipe[subexpr] {
@@ -1545,7 +1650,7 @@ expression_yield_no_pipe
     ;
 
 expression_yield
-    :   expression_yield_no_pipe[result] ';' {
+    :   expression_yield_no_pipe[result] semicolon {
         $$ = $result;
     }
     |   DAS_YIELD[loc] expr_pipe[subexpr] {
@@ -1594,7 +1699,7 @@ tuple_expansion
     ;
 
 tuple_expansion_variable_declaration
-    :   BRABRAB[loc] tuple_expansion[list] ']' ']' [end_expansion] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';'[end] {
+    :   BRABRAB[loc] tuple_expansion[list] ']' ']' [end_expansion] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] semicolon[end] {
         //std::cout << "case11" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             const auto internal = format::get_substring(tokAt(scanner,@list));
@@ -1606,13 +1711,13 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
-    |   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    |   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] semicolon {
         $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
-    |   BRABRAB [loc] tuple_expansion[list] ']' ']' [end_expansion] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   BRABRAB [loc] tuple_expansion[list] ']' ']' [end_expansion] optional_ref[ref] copy_or_move_or_clone[com] expr[init] semicolon {
         //std::cout << "case12" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             const auto internal = format::get_substring(tokAt(scanner,@list));
@@ -1628,7 +1733,7 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
-    |   '(' tuple_expansion[list] ')' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   '(' tuple_expansion[list] ')' optional_ref[ref] copy_or_move_or_clone[com] expr[init] semicolon {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -1671,7 +1776,13 @@ expr_type_decl
     ;
 
 expr_type_info
-    :   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] expr[subexpr] ')' {
+    :   DAS_TYPEINFO[loc] '(' [par1] name_in_namespace[trait] expr[subexpr] ')' {
+            if (format::prepare_rule(format::Pos::from(tokAt(scanner,@par1)))) {
+                format::get_writer() << " " << format::get_substring(format::Pos::from(tokAt(scanner,@trait)),
+                                                              format::Pos::from(tokAt(scanner,@subexpr))) << "(";
+                format::finish_rule(format::Pos::from(tokAt(scanner,@subexpr)));
+            }
+
             if ( $subexpr->rtti_isTypeDecl() ) {
                 auto ptd = (ExprTypeDecl *)$subexpr;
                 $$ = new ExprTypeInfo(tokAt(scanner,@loc),*$trait,ptd->typeexpr);
@@ -1681,7 +1792,13 @@ expr_type_info
             }
             delete $trait;
     }
-    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] '<' NAME[subtrait] '>' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] '('[par1] name_in_namespace[trait] '<' NAME[subtrait] '>' [rang] expr[subexpr] ')' {
+            if (format::prepare_rule(format::Pos::from(tokAt(scanner,@par1)))) {
+                format::get_writer() << format::get_substring(format::Pos::from(tokAt(scanner,@trait)),
+                                                              format::Pos::from(tokAt(scanner,@subexpr))) << "(";
+                format::finish_rule(format::Pos::from(tokAt(scanner,@subexpr)));
+            }
+
             if ( $subexpr->rtti_isTypeDecl() ) {
                 auto ptd = (ExprTypeDecl *)$subexpr;
                 $$ = new ExprTypeInfo(tokAt(scanner,@loc),*$trait,ptd->typeexpr,*$subtrait);
@@ -1692,7 +1809,13 @@ expr_type_info
             delete $trait;
             delete $subtrait;
     }
-    |   DAS_TYPEINFO[loc] '(' name_in_namespace[trait] '<' NAME[subtrait] c_or_s NAME[extratrait] '>' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] '('[par1] name_in_namespace[trait] '<' NAME[subtrait] c_or_s NAME[extratrait] '>' expr[subexpr] ')' {
+            if (format::prepare_rule(format::Pos::from(tokAt(scanner,@par1)))) {
+                format::get_writer() << format::get_substring(format::Pos::from(tokAt(scanner,@trait)),
+                                                              format::Pos::from(tokAt(scanner,@subexpr))) << "(";
+                format::finish_rule(format::Pos::from_last(tokAt(scanner,@subexpr)));
+            }
+
             if ( $subexpr->rtti_isTypeDecl() ) {
                 auto ptd = (ExprTypeDecl *)$subexpr;
                 $$ = new ExprTypeInfo(tokAt(scanner,@loc),*$trait,ptd->typeexpr,*$subtrait,*$extratrait);
@@ -1726,7 +1849,7 @@ expr_type_info
             delete $trait;
             delete $subtrait;
     }
-    |   DAS_TYPEINFO[loc] name_in_namespace[trait] '<' NAME[subtrait] ';' NAME[extratrait] '>' '(' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] name_in_namespace[trait] '<' NAME[subtrait] semicolon NAME[extratrait] '>' '(' expr[subexpr] ')' {
             if ( $subexpr->rtti_isTypeDecl() ) {
                 auto ptd = (ExprTypeDecl *)$subexpr;
                 $$ = new ExprTypeInfo(tokAt(scanner,@loc),*$trait,ptd->typeexpr,*$subtrait,*$extratrait);
@@ -2179,7 +2302,14 @@ expr
         auto fncall = yyextra->g_Program->makeCall(tokAt(scanner,@type),tokAt(scanner,@type),das_to_string($type));
         $$ = ast_rpipe(scanner,$arg,fncall,tokAt(scanner,@loc));
     }
-    | name_in_namespace[ena] NAME[eni]          { $$ = ast_NameName(scanner,$ena,$eni,tokAt(scanner,@ena),tokAt(scanner,@eni)); }
+    |   name_in_namespace[ena] NAME[eni]          {
+        if (format::prepare_rule(format::Pos::from_last(tokAt(scanner,@ena)))) {
+            format::get_writer() << "." << format::get_substring(tokAt(scanner,@eni));
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@eni)));
+        }
+
+        $$ = ast_NameName(scanner,$ena,$eni,tokAt(scanner,@ena),tokAt(scanner,@eni));
+    }
     |   DAS_UNSAFE '(' expr[subexpr] ')' {
         $subexpr->alwaysSafe = true;
         $subexpr->userSaidItsSafe = true;
@@ -2276,6 +2406,10 @@ structure_variable_declaration
     }
     ;
 
+opt_sem
+    :
+    | opt_sem SEMICOLON
+
 struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
@@ -2285,7 +2419,7 @@ struct_variable_declaration_list
             auto tak = tokAt(scanner,@list);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeStructureFields(tak);
         }
-    } structure_variable_declaration[decl] ';' {
+    } structure_variable_declaration[decl] semicolon_both opt_sem {
         $$ = $list;
         if ( $decl ) $list->push_back($decl);
         if ( !yyextra->g_CommentReaders.empty() ) {
@@ -2305,7 +2439,7 @@ struct_variable_declaration_list
                     auto tak = tokAt(scanner,@isPrivate);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
                 }
-            } function_declaration_header[func] ';' {
+            } function_declaration_header[func] semicolon_both opt_sem {
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@func);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
@@ -2327,7 +2461,7 @@ struct_variable_declaration_list
                 $func->isTemplate = yyextra->g_thisStructure->isTemplate;
                 $$ = ast_structVarDef(scanner,$list,$annL,$isStatic,$isPrivate,$ovr,$cnst,$func,$block,tokRangeAt(scanner,@from,@block),tokAt(scanner,@annL));
             }
-    |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
+    |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' semicolon_both opt_sem {
         das_yyerror(scanner,"structure field or class method annotation expected to remain on the same line with the field or the class",
             tokAt(scanner,@annL), CompilationError::syntax_error);
         delete $annL;
@@ -2356,7 +2490,7 @@ function_argument_declaration
 
 function_argument_list
     :   function_argument_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
-    |   function_argument_list[list] ';' function_argument_declaration[decl]     { $$ = $list; $list->push_back($decl); }
+    |   function_argument_list[list] semicolon function_argument_declaration[decl]     { $$ = $list; $list->push_back($decl); }
     ;
 
 tuple_type
@@ -2521,10 +2655,10 @@ let_variable_name_with_pos_list
     ;
 
 let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
-    :   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] ';' {
+    :   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] semicolon {
         $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
-    |   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    |   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] semicolon {
         $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
@@ -2534,7 +2668,7 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] semicolon {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -2587,7 +2721,7 @@ optional_public_or_private_variable
     ;
 
 global_let
-    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] '{' global_variable_declaration_list[list] '}' {
+    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] open_block global_variable_declaration_list[list] close_block {
         ast_globalLetList(scanner,$kwd_let,$glob_shar,$pub_var,$list);
     }
     |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
@@ -2612,10 +2746,10 @@ enum_list
     :   {
         $$ = new Enumeration();
     }
-    |   enum_list[pE] ';' {
+    |   enum_list[pE] semicolon {
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] ';' {
+    |   enum_list[pE] NAME[name] semicolon {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration already declared " + *$name, tokAt(scanner,@name),
@@ -2630,7 +2764,7 @@ enum_list
         delete $name;
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] '=' expr[value] ';' {
+    |   enum_list[pE] NAME[name] '=' expr[value] semicolon {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,ExpressionPtr($value),tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration value already declared " + *$name, tokAt(scanner,@name),
@@ -2682,13 +2816,13 @@ single_alias
     ;
 
 alias_list
-    :   single_alias ';'
-    |   alias_list single_alias ';'
+    :   single_alias semicolon
+    |   alias_list single_alias semicolon
     ;
 
 alias_declaration
-    :   DAS_TYPEDEF '{' alias_list '}'
-    |   DAS_TYPEDEF { yyextra->das_force_oxford_comma=true;} single_alias ';'
+    :   DAS_TYPEDEF open_block alias_list close_block
+    |   DAS_TYPEDEF { yyextra->das_force_oxford_comma=true;} single_alias semicolon
     ;
 
 optional_public_or_private_enum
@@ -2708,7 +2842,7 @@ enum_name
     ;
 
 enum_declaration
-    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] '{' {
+    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] close_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@edecl);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
@@ -2718,14 +2852,14 @@ enum_declaration
             auto tak = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
         }
-    } '}' {
+    } close_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumeration($edecl->name.c_str(),pubename);
         }
         ast_enumDeclaration(scanner,$annL,tokAt(scanner,@annL),$pubE,$edecl,$pE,Type::tInt);
     }
-    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] ':' enum_basic_type_declaration[ebt] '{' {
+    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] ':' enum_basic_type_declaration[ebt] close_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@edecl);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
@@ -2735,7 +2869,7 @@ enum_declaration
             auto tak = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
         }
-    } '}' {
+    } close_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumeration($edecl->name.c_str(),pubename);
@@ -2777,16 +2911,15 @@ optional_struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    |   '{' [sbegin] struct_variable_declaration_list[list] '}' [send] {
-        if (format::is_replace_braces() &&
-            format::prepare_rule(format::Pos::from_end_prev_line(tokAt(scanner,@sbegin)))) {
-            const auto internal = format::get_substring(format::Pos::from_end_prev_line(tokAt(scanner,@sbegin)),
-                                                          format::Pos::from(tokAt(scanner,@send))); // should be from_last, but location little bit incorrect
-            format::get_writer() << " {" << internal
-                                   << std::string(yyextra->das_indent_level, '\t') // emit tabs
-                                   << "}\n"; // new line
-            format::finish_rule(format::Pos::from(tokAt(scanner,@send)));
+    |   open_block [sbegin] struct_variable_declaration_list[list] close_block [send] {
+        auto prev_loc = format::Pos::from(tokAt(scanner,@sbegin));
+        if (format::is_replace_braces() && $sbegin != 0xdeadbeef &&
+            format::prepare_rule(prev_loc)) {
+            const auto internal = format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,@list)));
+            format::get_writer() << " {" << internal << "\n" << std::string($sbegin * yyextra->das_tab_size, ' ') + "}";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@list)));
         }
+
         $$ = $list;
     }
     ;
@@ -2937,7 +3070,7 @@ bitfield_bits
         $$ = pSL;
         delete $name;
     }
-    |   bitfield_bits[list] ';' NAME[name] {
+    |   bitfield_bits[list] semicolon NAME[name] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $list->push_back(*$name);
         $$ = $list;
@@ -2945,16 +3078,38 @@ bitfield_bits
     }
     ;
 
+
+commas
+    :
+    |   commas ','
+    ;
+
+
 bitfield_alias_bits
     :   {
         auto pSL = new vector<string>();
         $$ = pSL;
 
     }
-    |   bitfield_alias_bits[list] ';' {
+    |   bitfield_alias_bits[list] SEMICOLON {
         $$ = $list;
     }
-    |   bitfield_alias_bits[list] NAME[name] ';' {
+    |   bitfield_alias_bits[list] NAME[name] SEMICOLON {
+        if (format::prepare_rule(format::Pos::from_last(tokAt(scanner,@name)))) {
+            format::get_writer() << ",";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@name)));
+        }
+
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $list->push_back(*$name);
+        $$ = $list;
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@name);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfieldEntry($name->c_str(),atvname);
+        }
+        delete $name;
+    }
+    |   bitfield_alias_bits[list] NAME[name] commas {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $list->push_back(*$name);
         $$ = $list;
@@ -2981,7 +3136,7 @@ bitfield_type_declaration
 
 c_or_s
     :   ','
-    |   ';'
+    |   semicolon
     ;
 
 table_type_pair
@@ -3242,7 +3397,11 @@ tuple_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTuple(atvname);
         }
-    } '{' {
+    } open_block[blk] {
+        if (format::is_replace_braces() && $blk != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, @blk)))) {
+            format::get_writer() << " {";
+            format::finish_rule(format::Pos::from(tokAt(scanner,@blk)));
+        }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTupleEntries(atvname);
@@ -3252,7 +3411,11 @@ tuple_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTupleEntries(atvname);
         }
-    } '}' {
+    } close_block[close] {
+        if (format::is_replace_braces() && $blk != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, @close)))) {
+            format::get_writer() << "\n" << std::string($close * yyextra->das_tab_size, ' ') + "}";
+            format::finish_rule(format::Pos::from(tokAt(scanner,@close)));
+        }
         auto vtype = make_smart<TypeDecl>(Type::tTuple);
         vtype->alias = *$vname;
         vtype->at = tokAt(scanner,@vname);
@@ -3277,7 +3440,11 @@ variant_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariant(atvname);
         }
-    } '{' {
+    } open_block[blk] {
+        if (format::is_replace_braces() && $blk != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, @blk)))) {
+            format::get_writer() << " {";
+            format::finish_rule(format::Pos::from(tokAt(scanner,@blk)));
+        }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariantEntries(atvname);
@@ -3288,7 +3455,11 @@ variant_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterVariantEntries(atvname);
         }
-    } '}' {
+    } close_block[close] {
+        if (format::is_replace_braces() && $close != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, @close)))) {
+            format::get_writer() << "\n" << std::string($close * yyextra->das_tab_size, ' ') + "}";
+            format::finish_rule(format::Pos::from(tokAt(scanner,@close)));
+        }
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *$vname;
         vtype->at = tokAt(scanner,@vname);
@@ -3313,17 +3484,22 @@ bitfield_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
         }
-    } '{' {
+    } open_block[blk] bitfield_alias_bits[list] commas close_block[close] {
+        if (format::is_replace_braces() && $blk != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, @blk)))) {
+            // todo: something wrong with list location
+            format::get_writer() << " {" << format::get_substring(format::Pos::from(tokAt(scanner, @blk)),
+                                                                  format::Pos::from_last(tokAt(scanner,@close)))
+                                 << std::string($blk * yyextra->das_tab_size, ' ') + "}";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@close)));
+        }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfieldEntries(atvname);
         }
-    } bitfield_alias_bits[list] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfieldEntries(atvname);
         }
-    } '}' {
         auto btype = make_smart<TypeDecl>(Type::tBitfield);
         btype->alias = *$vname;
         btype->at = tokAt(scanner,@vname);
@@ -3430,7 +3606,7 @@ make_struct_dim
         msd->structs.push_back(MakeStructPtr($msf));
         $$ = msd;
     }
-    |   make_struct_dim[msd] ';' make_struct_fields[msf] {
+    |   make_struct_dim[msd] semicolon make_struct_fields[msf] {
         ((ExprMakeStruct *) $msd)->structs.push_back(MakeStructPtr($msf));
         $$ = $msd;
     }
@@ -3715,7 +3891,7 @@ make_dim
         mka->values.push_back(ExpressionPtr($val));
         $$ = mka;
     }
-    |   make_dim[mka] ';' make_tuple[val] {
+    |   make_dim[mka] semicolon make_tuple[val] {
         ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
         $$ = $mka;
     }
@@ -3850,7 +4026,7 @@ make_table
         mka->values.push_back(ExpressionPtr($val));
         $$ = mka;
     }
-    |   make_table[mka] ';' make_map_tuple[val] {
+    |   make_table[mka] semicolon make_map_tuple[val] {
         ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
         $$ = $mka;
     }
@@ -3866,7 +4042,7 @@ expr_map_tuple_list
     ;
 
 make_table_decl
-    :   '{' [loc] expr_map_tuple_list[arguments] optional_comma '}' {
+    :   open_block [loc] expr_map_tuple_list[arguments] optional_comma close_block {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
@@ -3943,7 +4119,7 @@ make_table_decl
 
 array_comprehension_where
     :                               { $$ = nullptr; }
-    |   ';' DAS_WHERE expr[clause]  { $$ = $clause; }
+    |   semicolon DAS_WHERE expr[clause]  { $$ = $clause; }
     ;
 
 optional_comma
@@ -3954,9 +4130,30 @@ optional_comma
 
 array_comprehension
     :   '[' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner,@iters)))) {
+            format::get_writer() << "(" << format::get_substring(format::Pos::from(tokAt(scanner,@iters)),
+                                                                 format::Pos::from_last(tokAt(scanner,@srcs))) << ")";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@srcs)));
+        }
+
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
+    // we have to add v2 syntax
+    |   '[' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
+    }
+    |   '[' DAS_ITERATOR DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
+    }
+    |   '{' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
+    }
     |   '[' DAS_ITERATOR DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner,@iters)))) {
+            format::get_writer() << "(" << format::get_substring(format::Pos::from(tokAt(scanner,@iters)),
+                                                                 format::Pos::from_last(tokAt(scanner,@srcs))) << ")";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@srcs)));
+        }
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
     |   BRABRAB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
@@ -3978,10 +4175,15 @@ array_comprehension
 
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
-    |   '{' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
+    |   open_block DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] close_block [forend] {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner,@iters)))) {
+            format::get_writer() << "(" << format::get_substring(format::Pos::from(tokAt(scanner,@iters)),
+                                                                 format::Pos::from_last(tokAt(scanner,@srcs))) << ")";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner,@srcs)));
+        }
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
     }
-    | CBRCBRB[loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' '}' [forend] {
+    | CBRCBRB[loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] close_block close_block [forend] {
         //std::cout << "case12" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
             auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));

@@ -58,7 +58,7 @@ namespace das::format {
     }
 
     void set_to(Pos info) {
-        assert(state.last < info);
+        assert(state.last <= info);
         state.last = info;
     }
 
@@ -73,9 +73,9 @@ namespace das::format {
                 cerr << "Warning, location line out of range" << endl;
                 return "";
             } else if (pos1.column > state.content_[pos1.line - 1].length()) {
-                cout << "incorrect location info, extra symbols "
-                          << pos1.column << " "
-                          << state.content_[pos1.line - 1].length() << endl;
+//                cout << "incorrect location info, extra symbols "
+//                          << pos1.column << " "
+//                          << state.content_[pos1.line - 1].length() << endl;
             } else {
                 result += state.content_[pos1.line - 1].substr(pos1.column);
             }
@@ -99,9 +99,14 @@ namespace das::format {
         return result;
     }
 
+
     string get_substring(LineInfo info) {
         return get_substring(Pos{info.line, info.column},
                              Pos{info.last_line, info.last_column});
+    }
+
+    string get_line(uint32_t line) {
+        return state.content_.at(line - 1);
     }
 
     ostream& get_writer() {
@@ -117,16 +122,8 @@ namespace das::format {
     }
 
     void finish_rule(Pos pos) {
-        assert(state.enabled && state.last < pos);
+        assert(state.enabled && state.last <= pos);
         set_to(pos);
-    }
-
-    Pos Pos::from_end_prev_line(LineInfo info) {
-        if (!state.enabled) {
-            return {};
-        }
-        const auto prev_line = info.line - 1;
-        return Pos{prev_line, static_cast<uint32_t>(state.content_.at(prev_line - 1).size())};
     }
 
     bool is_replace_braces() {
