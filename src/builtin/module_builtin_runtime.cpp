@@ -415,6 +415,19 @@ namespace das
         }
     };
 
+    struct NoDefaultCtorAnnotation : StructureAnnotation {
+        NoDefaultCtorAnnotation() : StructureAnnotation("no_default_initializer") {}
+        virtual bool touch(const StructurePtr & ps, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            ps->genCtor = true;
+            return true;
+        }
+        virtual bool look ( const StructurePtr &, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+    };
+
     struct MacroInterfaceAnnotation : StructureAnnotation {
         MacroInterfaceAnnotation() : StructureAnnotation("macro_interface") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
@@ -1514,6 +1527,7 @@ namespace das
         addReaderMacro(make_smart<UnescapedStringMacro>());
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
+        addAnnotation(make_smart<NoDefaultCtorAnnotation>());
         addAnnotation(make_smart<MacroInterfaceAnnotation>());
         addAnnotation(make_smart<SkipLockCheckStructureAnnotation>());
         addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
