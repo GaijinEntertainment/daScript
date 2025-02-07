@@ -11,6 +11,7 @@
 
 #include "../src/parser/parser_state.h"
 
+//extern int das_yydebug;
 typedef void * yyscan_t;
 union YYSTYPE;
 
@@ -130,6 +131,9 @@ Result transform_syntax(const string& filename, const string content, format::Fo
             auto program = parseDaScript(mod.fileName, mod.moduleName, access, tout, libGroup, true, true, policies);
             policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
             if ( program->failed() ) {
+                for (auto err: program->errors) {
+                    std::cout << err.what << std::endl;
+                }
                 return {};
             }
             if ( program->thisModule->name.empty() ) {
@@ -142,6 +146,7 @@ Result transform_syntax(const string& filename, const string content, format::Fo
     }
 
     int iter = 0;
+//    das_yydebug = 0;
     while (prev != src) {
         prev = src;
 
@@ -201,7 +206,7 @@ Result transform_syntax(const string& filename, const string content, format::Fo
         ofstream ostream(tmp_name);
         ostream << src;
     }
-    policies.version_2_syntax = true;
+    policies.version_2_syntax = options.contains(format::FormatOpt::AlwaysBraces);
     auto program = parseDaScript(tmp_name, "", access, tout, libGroup, true, true, policies);
     if (!program->failed()) {
         return {.ok=src};
@@ -217,7 +222,8 @@ struct TestData {
 };
 
 vector<TestData> test_cases() {
-    const string in_prefix = "struct Foo\n"
+    const string in_prefix = "[safe_when_uninitialized]\n"
+                             "struct Foo\n"
                                "    a : int = 5\n"
                                "    b : float = 3.0\n"
                                "struct Bar\n"
@@ -232,7 +238,7 @@ vector<TestData> test_cases() {
         {"[[Foo()]]", "Foo()"}, // 3
         {"[[Foo() a=1,b=2.0]]", "Foo(a=1, b=2.0)"}, // 4
         {"[[auto 1,2]]", "(1, 2)"}, // 4
-        {"[[for i in [1, 2]; x*x; where x%2 == 0]]", "[iterator for i in [1, 2]; x*x; where x%2 == 0]"}, // 5
+//        {"[[for x in [1, 20]; x*x; where x%2 == 0]];", "[iterator for x in [1, 20]; x*x; where x%2 == 0];"}, // 5 // each result is discarded, which is unsaf
         {"[{Foo a=1,b=2.;a=2,b=1.}]", "[Foo(a=1, b=2.), Foo(a=2, b=1.)]"}, // 6
         {"[{Foo() a=1,b=2.;a=2,b=1.}]", "[Foo(a=1, b=2.), Foo(a=2, b=1.)]"}, // 7
 //        {"[{Foo a=1,b=2.;a=2,b=1. <optional_block>}]", "[Foo(a=1,b=2.),Foo(a=2,b=1.)]"}, // what about optional block in new syntax
@@ -241,13 +247,14 @@ vector<TestData> test_cases() {
         {"[{for x in 0..10; x*x; where x%2==0}]", "[for x in 0..10; x*x; where x%2==0]"}, // 9
         {"{{ 1; 2; 3; 4 }}", "{1, 2, 3, 4}"}, // 10
         {R"({{ 1=>"a"; 2=>"b"; 3=>"c"; 4=>"d" }})", R"({1=>"a", 2=>"b", 3=>"c", 4=>"d"})"}, // 10
-        {"[[auto 1,2.,\"3\"; 1,4,\"2\"]]", "fixed_array((1, 2., \"3\"), (1, 4, \"2\"))"}, // 13
+        {"[[auto 1,2.,\"3\"; 1,4.,\"2\"]]", "fixed_array((1, 2., \"3\"), (1, 4., \"2\"))"}, // 13
 
         // anything
-        {"[[auto 1;\"ttt\"]]", "fixed_array(1, \"ttt\")"},
+        {"[[auto 1;2]]", "fixed_array(1, 2)"},
         {"[[Foo?]]", "default<Foo?>"},
         {"[[Foo#]]", "struct<Foo#>(uninitialized)"},
         {"[[Foo]]", "Foo(uninitialized)"},
+
 
         // nested
 
@@ -283,6 +290,8 @@ vector<TestData> test_cases() {
 //          "    c : string = \"add_new_call_macro\";\n"
 //          "}",
 //        },
+        {"let x = $() 1+2", ""},
+        {"def main()\n    let x = 1    // 123", "def main() {\n    let x = 1;    // 123\n}"},
         {"bitfield A\n    refCount\n\n", "bitfield A {\n    refCount,\n}\n"},
 
         {"def b(x, y)\n    for x in y\n        x = x + 1",

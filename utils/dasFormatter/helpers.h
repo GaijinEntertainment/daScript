@@ -5,6 +5,7 @@
 #include <numeric>
 #include <string>
 #include <vector>
+#include <ostream>
 #include <daScript/ast/ast_typedecl.h>
 
 #include "formatter.h"
@@ -26,7 +27,7 @@ namespace das::format {
     }
 
     optional<string> type_to_string(const TypeDecl *type_decl, LineInfo loc /* pass loc, since it's sometimes incorrect on type itself*/) {
-        if (type_decl->isTemp(false)) {
+        if (type_decl->isTemp(false) || type_decl->alias == "``MACRO``TAG``") {
             return "struct<" + format::get_substring(loc) + ">";
         } else if (type_decl->isAuto() && !type_decl->isPointer()) {
             return nullopt;
@@ -73,6 +74,31 @@ namespace das::format {
             converter("", values.front()).substr(2), // rid of ", "
             converter
         );
+    }
+
+    size_t find_comma_place(const std::string &line) { // dirty hack to find last meaningful character.
+        auto comment_start = line.find("//");
+        const auto npos = -1;
+        if (comment_start == 0) {
+            return 0;
+        }
+        return line.find_last_not_of(" \t\r", comment_start == npos ? npos : comment_start - 1);
+    }
+
+    void handle_brace(Pos prev_loc, int value, const std::string &internal, size_t tab_size, Pos end_loc) {
+        if (format::is_replace_braces() && value != 0xdeadbeef &&
+            format::prepare_rule(prev_loc)) {
+            format::get_writer() << " {" << internal << "\n" << std::string(value * tab_size, ' ') + "}";
+            format::finish_rule(end_loc);
+        }
+    }
+
+    void wrap_par_expr(LineInfo real_expr, LineInfo info_expr) {
+        if (format::is_replace_braces() && real_expr == info_expr && format::prepare_rule(Pos::from(real_expr))) {
+            format::get_writer() << "(" << format::get_substring(real_expr) << ")";
+            format::finish_rule(Pos::from_last(real_expr));
+        }
+
     }
 
     LineInfo concat(LineInfo first, LineInfo last) {

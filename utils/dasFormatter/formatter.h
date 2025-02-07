@@ -37,6 +37,11 @@ namespace das::format {
             return Pos{info.last_line, info.last_column};
         }
 
+
+        bool operator != (const Pos &rhs) const {
+            return line != rhs.line || column != rhs.column;
+        }
+
         bool operator < (const Pos &rhs) const {
             return line < rhs.line || (line == rhs.line && column < rhs.column);
         }

@@ -282,8 +282,8 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         printf("emit {, cli=%i, indent =%i\n", yyextra->das_current_line_indent, yyextra->das_indent_level);
         #endif
 
-        yylloc_param->first_line = yyextra->last_token_end.last_line;
-        yylloc_param->first_column = yyextra->last_token_end.last_column;
+        yylloc_param->first_line = yyextra->last_token_end.line;
+        yylloc_param->first_column = yyextra->last_token_end.column;
         return OPEN_BRACE;
     } else if (yyextra->das_current_line_indent < yyextra->das_indent_level*yyextra->das_tab_size ) {
         yyextra->das_indent_level--;
@@ -998,6 +998,8 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             #ifdef FLEX_DEBUG
             printf("emit ; at EOL\n");
             #endif
+            yylloc_param->first_line = yyextra->last_token_end.line;
+            yylloc_param->first_column = yyextra->last_token_end.column;
             return SEMICOLON;
         }
     }
@@ -1014,6 +1016,8 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
                 #ifdef FLEX_DEBUG
                 printf("emit ; at EOF\n");
                 #endif
+                yylloc_param->first_line = yyextra->last_token_end.line;
+                yylloc_param->first_column = yyextra->last_token_end.column;
                 return SEMICOLON;
             }
         } else {
@@ -1026,7 +1030,6 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         yyextra->das_line_no.pop_back();
     }
 }
-<normal>;                                   {return *yytext; }
 <normal>.                                   return *yytext;
 
 %%
