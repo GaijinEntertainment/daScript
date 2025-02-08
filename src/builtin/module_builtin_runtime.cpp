@@ -1459,6 +1459,14 @@ namespace das
         return false;
     }
 
+    const char * compiling_file_name ( ) {
+        return daScriptEnvironment::bound ? daScriptEnvironment::bound->g_compilingFileName : nullptr;
+    }
+
+    const char * compiling_module_name ( ) {
+        return daScriptEnvironment::bound ? daScriptEnvironment::bound->g_compilingModuleName : nullptr;
+    }
+
 // remove define to enable emscripten version
 #define TRY_MAIN_LOOP   0
 
@@ -1974,6 +1982,11 @@ namespace das
         // folding
         addExtern<DAS_BIND_FUN(is_folding)>(*this, lib, "is_folding",
             SideEffects::worstDefault, "is_folding");
+        // compiling file
+        addExtern<DAS_BIND_FUN(compiling_file_name)>(*this, lib, "compiling_file_name",
+            SideEffects::accessExternal, "compiling_file_name");
+        addExtern<DAS_BIND_FUN(compiling_module_name)>(*this, lib, "compiling_module_name",
+            SideEffects::accessExternal, "compiling_module_name");
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog")->args({"level", "text", "context", "at"});

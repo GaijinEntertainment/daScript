@@ -1730,6 +1730,8 @@ namespace das
         int             das_def_tab_size = 4;
         bool            g_resolve_annotations = true;
         TextWriter *    g_compilerLog = nullptr;
+        const char *    g_compilingFileName = nullptr;
+        const char *    g_compilingModuleName = nullptr;
         int64_t         macroTimeTicks = 0;
         AstSerializer * serializer_read = nullptr;
         AstSerializer * serializer_write = nullptr;
