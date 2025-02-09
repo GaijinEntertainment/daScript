@@ -378,31 +378,6 @@ namespace das {
             return (!mtd || mtd->isAlias()) ? nullptr : mtd;
         }
 
-        // WARNING: this is really really slow, use faster tests when u can isAutoOrAlias for one
-        // type chain is fully resolved, and not aliased \ auto
-        bool isFullySealedType(const TypeDeclPtr & ptr, das_set<const TypeDecl *> & all ) {
-            if (!ptr) return false;
-            if ( ptr->baseType==Type::tStructure || ptr->baseType==Type::tTuple || ptr->baseType==Type::tVariant ) {
-                auto thisType = ptr.get();
-                if ( all.find(thisType)!=all.end() ) return true;
-                all.insert(thisType);
-            }
-            if (ptr->baseType==Type::autoinfer || ptr->baseType==Type::alias) return false;
-            if (ptr->firstType && !isFullySealedType(ptr->firstType,all)) return false;
-            if (ptr->secondType && !isFullySealedType(ptr->secondType,all)) return false;
-            for (auto & argT : ptr->argTypes) {
-                if (argT && !isFullySealedType(argT,all)) return false;
-            }
-            if ( ptr->structType ) {
-                for ( auto & fd : ptr->structType->fields )
-                    if ( !isFullySealedType(fd.type,all) ) return false;
-            }
-            return true;
-        }
-        bool isFullySealedType(const TypeDeclPtr & ptr) {
-            das_set<const TypeDecl *> all;
-            return isFullySealedType(ptr, all);
-        }
         // infer alias type
         TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr, OptionsMap * options = nullptr, bool autoToAlias=false ) const {
             autoToAlias |= decl->autoToAlias;
@@ -2099,9 +2074,6 @@ namespace das {
                     }
                 }
             }
-            // TODO: verify. correct test is in fact the one bellow
-            //  if ( isFullySealedType(decl.type) ) {
-            // isFullyInferred may be sufficient
             if ( decl.type->isFullyInferred() ) {
                 int fieldAlignemnt = decl.type->getAlignOf();
                 int fa = fieldAlignemnt - 1;
@@ -3027,8 +2999,6 @@ namespace das {
                 auto mkBlock = static_pointer_cast<ExprMakeBlock>(expr->arguments[0]);
                 auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
                 if ( auto bT = block->makeBlockType() ) {
-                    // TODO: verify
-                    // if ( !isFullySealedType(bT) ) {
                     if ( bT->isAutoOrAlias() ) {
                         error("can't infer generator block type",  "", "",
                             expr->at, CompilationError::invalid_block);
@@ -3183,8 +3153,6 @@ namespace das {
         ExpressionPtr convertBlockToLambda ( ExprMakeBlock * expr ) {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
             if ( auto bT = block->makeBlockType() ) {
-                // TODO: verify
-                // if ( !isFullySealedType(bT) ) {
                 if ( bT->isAutoOrAlias() ) {
                     error("can't infer lambda block type",  "", "",
                         expr->at, CompilationError::invalid_block);
@@ -3248,8 +3216,6 @@ namespace das {
         ExpressionPtr convertBlockToLocalFunction ( ExprMakeBlock * expr ) {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
             if ( auto bT = block->makeBlockType() ) {
-                // TODO: verify
-                // if ( !isFullySealedType(bT) ) {
                 if ( bT->isAutoOrAlias() ) {
                     error("can't infer local function block type",  "", "",
                         expr->at, CompilationError::invalid_block);
@@ -3280,8 +3246,6 @@ namespace das {
             expr->type = block->makeBlockType();
             if ( expr->isLambda ) {
                 expr->type->baseType = Type::tLambda;
-                // TODO: verify
-                // if ( isFullySealedType(expr->type) ) {
                 if ( !expr->type->isAutoOrAlias() ) {
                     if ( auto unInferred = isFullyInferredBlock(block.get()) ) {
                         TextWriter tt;
@@ -3674,8 +3638,6 @@ namespace das {
                       expr->at, CompilationError::typeinfo_auto);
                 return Visitor::visit(expr);
             }
-            // TODO: verify, is this even necessary now that we have tests above?
-            // if ( !isFullySealedType(expr->typeexpr) ) {
             if ( expr->typeexpr->isAutoOrAlias() ) {
                 error("is " + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + " can't be fully inferred", "", "",
                       expr->at, CompilationError::type_not_found);
@@ -4175,7 +4137,7 @@ namespace das {
                     if ( expr->typeexpr->isStructure() ) {
                         auto decl = expr->typeexpr->structType->findField(expr->subtrait);
                         // NOTE: we do need to check if its fully sealed here
-                        if ( isFullySealedType(expr->typeexpr) ) {
+                        if ( expr->typeexpr->isFullySealed() ) {
                             reportAstChanged();
                             return make_smart<ExprConstInt>(expr->at, decl->offset);
                         } else {
@@ -7542,8 +7504,6 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 for ( auto & var : expr->variables ) {
-                    // TODO: verify
-                    // if ( !isFullySealedType(var->type) ) {
                     if ( var->type->isAutoOrAlias() ) {
                         error("type not ready yet", "", "", var->at);
                         return Visitor::visit(expr);

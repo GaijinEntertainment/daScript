@@ -2382,6 +2382,37 @@ namespace das
         return false;
     }
 
+    // WARNING: this is really really slow, use faster tests when u can isAutoOrAlias for one
+    // type chain is fully resolved, and not aliased \ auto
+    bool TypeDecl::isFullySealed(das_set<const Structure *> & all ) const {
+        if (baseType==Type::autoinfer || baseType==Type::alias) return false;
+        for (auto di : dim) {
+            if (di == TypeDecl::dimAuto) {
+                return false;
+            }
+        }
+        if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                if ( all.find(structType)!=all.end() ) return true;
+                all.insert(structType);
+                for ( auto & fd : structType->fields ) {
+                    if ( !fd.type->isFullySealed(all) ) return false;
+                }
+
+            }
+        }
+        if (firstType && !firstType->isFullySealed(all)) return false;
+        if (secondType && !firstType->isFullySealed(all)) return false;
+        for (auto & argT : argTypes) {
+            if (argT && !argT->isFullySealed(all)) return false;
+        }
+        return true;
+    }
+    bool TypeDecl::isFullySealed() const {
+        das_set<const Structure *> all;
+        return isFullySealed(all);
+    }
+
     bool TypeDecl::isFullyInferred() const {
         das_set<Structure *> dep;
         return isFullyInferred(dep);

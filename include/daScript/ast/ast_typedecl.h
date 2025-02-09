@@ -91,6 +91,10 @@ namespace das {
         __forceinline bool isTempType(bool refMatters = true) const;
         bool isFullyInferred(das_set<Structure*> & dep) const;
         bool isFullyInferred() const;
+        // WARNING: this is really really slow, use faster tests when u can isAutoOrAlias for one
+        // type chain is fully resolved, and not aliased \ auto
+        bool isFullySealed(das_set<const Structure *> & all ) const;
+        bool isFullySealed() const;
         bool isShareable(das_set<Structure*> & dep) const;
         bool isShareable() const;
         bool isIndex() const;
