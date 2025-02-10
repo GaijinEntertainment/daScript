@@ -3765,13 +3765,24 @@ expr_map_tuple_list
     ;
 
 make_table_decl
-    :   '{' [loc] expr_map_tuple_list[arguments] optional_comma '}' {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
-        mka->values = sequenceToList($arguments);
-        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
-        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
-        ttm->arguments.push_back(mka);
-        $$ = ttm;
+    :   '{' [loc] optional_expr_map_tuple_list[arguments] '}' {
+        if ( $arguments ) {
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+            mka->values = sequenceToList($arguments);
+            mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+            auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+            ttm->arguments.push_back(mka);
+            $$ = ttm;
+        } else {
+            auto mks = new ExprMakeStruct();
+            mks->at = tokAt(scanner,@loc);
+            mks->makeType = make_smart<TypeDecl>(Type::tTable);
+            mks->makeType->firstType = make_smart<TypeDecl>(Type::autoinfer);
+            mks->makeType->secondType = make_smart<TypeDecl>(Type::autoinfer);
+            mks->useInitializer = true;
+            mks->alwaysUseInitializer = true;
+            $$ = mks;
+        }
     }
     |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
         auto mkt = make_smart<TypeDecl>(Type::autoinfer);

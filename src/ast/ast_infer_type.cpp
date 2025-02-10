@@ -850,7 +850,8 @@ namespace das {
             }
             // match inferable block
             if (inferBlock && passType->isAuto() &&
-                (passType->isGoodBlockType() || passType->isGoodLambdaType() || passType->isGoodFunctionType() || passType->isGoodArrayType())) {
+                (passType->isGoodBlockType() || passType->isGoodLambdaType() || passType->isGoodFunctionType()
+                    || passType->isGoodArrayType() || passType->isGoodTableType() )) {
                 return TypeDecl::inferGenericType(passType, argType, true, true, options) != nullptr;
             }
             // compare types which don't need inference
@@ -8322,7 +8323,8 @@ namespace das {
                     && "if this happens, we are calling infer function call without checking for '[expr]'. do that from where we call up the stack.");
                 // if its an auto or an alias
                 // we only allow it, if its a block or lambda
-                if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda && ar->type->baseType!=Type::tFunction && ar->type->baseType!=Type::tArray ) {
+                if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda && ar->type->baseType!=Type::tFunction
+                        && ar->type->baseType!=Type::tArray && ar->type->baseType!=Type::tTable ) {
                     if ( ar->type->isAutoOrAlias() ) {
                         return false;
                     }
@@ -8366,11 +8368,11 @@ namespace das {
                                 setBlockCopyMoveFlags(block.get());
                                 reportAstChanged();
                             }
-                        } else if ( arg->type->isGoodArrayType() ) {
+                        } else if ( arg->type->isGoodArrayType() || arg->type->isGoodTableType() ) {
                             if ( arg->rtti_isMakeStruct() ) {   // its always MakeStruct
                                 auto mkStruct = static_pointer_cast<ExprMakeStruct>(arg);
                                 if ( mkStruct->structs.size() ) {
-                                    error("internal compiler error: array<auto> type not under default<array<auto>>", "", "", expr->at);
+                                    error("internal compiler error: array<auto> type not under default<array<auto>> or default<table<auto;auto>>", "", "", expr->at);
                                     return nullptr;
                                 }
                                 auto retT = TypeDecl::inferGenericType(mkStruct->type, funcC->arguments[iF]->type, true, true, nullptr);
