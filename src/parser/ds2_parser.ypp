@@ -1841,8 +1841,7 @@ expr_call
     |   name_in_namespace[name] '(' DAS_UNINITIALIZED ')' {
             auto dd = new ExprMakeStruct(tokAt(scanner,@name));
             dd->at = tokAt(scanner,@name);
-            dd->makeType = new TypeDecl(Type::alias);
-            dd->makeType->alias = *$name;
+            dd->makeType = yyextra->g_Program->makeTypeDeclaration(tokAt(scanner,@name),*$name);
             dd->useInitializer = false;
             dd->alwaysUseInitializer = true;
             delete $name;
@@ -1850,8 +1849,7 @@ expr_call
     }
     |   name_in_namespace[name] '(' make_struct_single[dd] ')' {
             ((ExprMakeStruct *)$dd)->at = tokAt(scanner,@name);
-            ((ExprMakeStruct *)$dd)->makeType = new TypeDecl(Type::alias);
-            ((ExprMakeStruct *)$dd)->makeType->alias = *$name;
+            ((ExprMakeStruct *)$dd)->makeType = yyextra->g_Program->makeTypeDeclaration(tokAt(scanner,@name),*$name);
             ((ExprMakeStruct *)$dd)->useInitializer = true;
             ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
             delete $name;
@@ -1859,8 +1857,7 @@ expr_call
     }
     |   name_in_namespace[name] '(' DAS_UNINITIALIZED make_struct_single[dd] ')' {
             ((ExprMakeStruct *)$dd)->at = tokAt(scanner,@name);
-            ((ExprMakeStruct *)$dd)->makeType = new TypeDecl(Type::alias);
-            ((ExprMakeStruct *)$dd)->makeType->alias = *$name;
+            ((ExprMakeStruct *)$dd)->makeType = yyextra->g_Program->makeTypeDeclaration(tokAt(scanner,@name),*$name);
             ((ExprMakeStruct *)$dd)->useInitializer = false;
             ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
             delete $name;
