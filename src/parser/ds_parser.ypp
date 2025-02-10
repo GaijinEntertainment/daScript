@@ -3497,7 +3497,6 @@ use_initializer
 
 make_struct_decl
     :   BRABRAB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr {
-        TextPrinter tp;
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(scanner,@loc);
