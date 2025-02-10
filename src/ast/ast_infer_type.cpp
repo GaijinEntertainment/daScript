@@ -849,7 +849,9 @@ namespace das {
                 }
             }
             // match inferable block
-            if (inferBlock && passType->isAuto() && (passType->isGoodBlockType() || passType->isGoodLambdaType() || passType->isGoodFunctionType())) {
+            if (inferBlock && passType->isAuto() &&
+                (passType->isGoodBlockType() || passType->isGoodLambdaType() || passType->isGoodFunctionType()
+                    || passType->isGoodArrayType() || passType->isGoodTableType() )) {
                 return TypeDecl::inferGenericType(passType, argType, true, true, options) != nullptr;
             }
             // compare types which don't need inference
@@ -8321,7 +8323,8 @@ namespace das {
                     && "if this happens, we are calling infer function call without checking for '[expr]'. do that from where we call up the stack.");
                 // if its an auto or an alias
                 // we only allow it, if its a block or lambda
-                if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda && ar->type->baseType!=Type::tFunction ) {
+                if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda && ar->type->baseType!=Type::tFunction
+                        && ar->type->baseType!=Type::tArray && ar->type->baseType!=Type::tTable ) {
                     if ( ar->type->isAutoOrAlias() ) {
                         return false;
                     }
@@ -8350,19 +8353,37 @@ namespace das {
                 // infer FORWARD types
                 for ( size_t iF=0, iFs=expr->arguments.size(); iF!=iFs; ++iF ) {
                     auto & arg = expr->arguments[iF];
-                    if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) ) {
-                        if ( arg->rtti_isMakeBlock() ) { // "it's always MakeBlock. unless its function and @@funcName
-                            auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
-                            auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true, nullptr);
-                            DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
-                            TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
-                            block->returnType = make_smart<TypeDecl>(*retT->firstType);
-                            for ( size_t ba=0, bas=retT->argTypes.size(); ba!=bas; ++ba ) {
-                                block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
+                    if ( arg->type->isAuto() ) {
+                        if ( arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType() ) {
+                            if ( arg->rtti_isMakeBlock() ) { // "it's always MakeBlock. unless its function and @@funcName
+                                auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
+                                auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
+                                auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true, nullptr);
+                                DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
+                                TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
+                                block->returnType = make_smart<TypeDecl>(*retT->firstType);
+                                for ( size_t ba=0, bas=retT->argTypes.size(); ba!=bas; ++ba ) {
+                                    block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
+                                }
+                                setBlockCopyMoveFlags(block.get());
+                                reportAstChanged();
                             }
-                            setBlockCopyMoveFlags(block.get());
-                            reportAstChanged();
+                        } else if ( arg->type->isGoodArrayType() || arg->type->isGoodTableType() ) {
+                            if ( arg->rtti_isMakeStruct() ) {   // its always MakeStruct
+                                auto mkStruct = static_pointer_cast<ExprMakeStruct>(arg);
+                                if ( mkStruct->structs.size() ) {
+                                    error("internal compiler error: array<auto> type not under default<array<auto>> or default<table<auto;auto>>", "", "", expr->at);
+                                    return nullptr;
+                                }
+                                auto retT = TypeDecl::inferGenericType(mkStruct->type, funcC->arguments[iF]->type, true, true, nullptr);
+                                DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
+                                TypeDecl::applyAutoContracts(mkStruct->type, funcC->arguments[iF]->type);
+                                mkStruct->makeType = retT;
+                                reportAstChanged();
+                            } else {
+                                error("internal compiler error: unknown array<auto> type not under make strcut", "", "", expr->at);
+                                return nullptr;
+                            }
                         }
                     }
                 }
