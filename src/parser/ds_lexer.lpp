@@ -24,7 +24,8 @@
 
     #define YY_NO_INPUT
 
-    void das_yyfatalerror ( DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error );
+    void
+    das_yyfatalerror ( DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error, CompilationError cerr = CompilationError::syntax_error );
     LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
 
     #define YY_USER_ACTION \
@@ -126,6 +127,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
 }
 <normal>"\/\/" {
+    yyextra->last_token_end = tokAt(yyscanner,*yylloc_param);
     BEGIN(cpp_comment);
     if ( !yyextra->g_CommentReaders.empty() ) {
         auto tak = tokAt(yyscanner,*yylloc_param);
@@ -284,6 +286,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
         yylloc_param->first_line = yyextra->last_token_end.line;
         yylloc_param->first_column = yyextra->last_token_end.column;
+        yylloc_param->last_column -= 1; // idk, remove it?
         return OPEN_BRACE;
     } else if (yyextra->das_current_line_indent < yyextra->das_indent_level*yyextra->das_tab_size ) {
         yyextra->das_indent_level--;
@@ -763,12 +766,35 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\.\."                              return DOTDOT;
 <normal>"\|\>"                              return RPIPE;
 <normal>\<\|[ \t\r]*\/\/.*\n {
+    yyextra->last_token_end = tokAt(yyscanner,*yylloc_param);
+    yyextra->last_token_end.column += 2;
     yyextra->das_need_oxford_comma = false;
     unput('\n');
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     return LBPIPE;
 }
-<normal>\<\|[ \t\r]*\n                      yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;
+
+<normal>\<\|[ \t\r]\$\(\)\{*\n                      {
+    yyextra->das_need_oxford_comma = false;
+    unput('\n');
+    unput('{');
+    YYCOLUMN(yyextra->das_yycolumn -= 5, "UNPUT {"); // maybe 2?
+    return LBPIPE;
+}
+
+<normal>\<\|[ \t\r]\{*\n                      {
+    yyextra->das_need_oxford_comma = false;
+    unput('\n');
+    unput('{');
+    YYCOLUMN(yyextra->das_yycolumn -= 2, "UNPUT {");
+    return LBPIPE;
+}
+<normal>\<\|[ \t\r]*\n                      {
+    yyextra->das_need_oxford_comma = false;
+    unput('\n');
+    YYCOLUMN(yyextra->das_yycolumn -= 1, "UNPUT {");
+    return LBPIPE;
+}
 <normal>\<\|[ \t]\$                         {
     unput('$');
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $");
@@ -928,6 +954,12 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
     }
+    const auto txt = string(yytext);
+    auto offset = txt.rfind('\n');
+    const auto npos = -1;
+    if (offset != npos) {
+        yylloc_param->last_column = txt.size() - (offset + 1);
+    }
     yyextra->das_nested_curly_braces -= 2;
     return SEMICOLON_CUR_CUR;
 }
@@ -940,6 +972,12 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     if ( !yyextra->das_nested_square_braces ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
+    }
+    const auto txt = string(yytext);
+    auto offset = txt.rfind('\n');
+    const auto npos = -1;
+    if (offset != npos) {
+        yylloc_param->last_column = txt.size() - (offset + 1);
     }
     yyextra->das_nested_curly_braces --;
     yyextra->das_nested_square_braces --;
@@ -954,6 +992,12 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     if ( !yyextra->das_nested_square_braces ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
+    }
+    const auto txt = string(yytext);
+    auto offset = txt.rfind('\n');
+    const auto npos = -1;
+    if (offset != npos) {
+        yylloc_param->last_column = txt.size() - (offset + 1);
     }
     yyextra->das_nested_curly_braces --;
     yyextra->das_nested_square_braces --;
@@ -978,11 +1022,13 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return COMMA_SQR_SQR;
 }
 <normal>\\([ \t\r])*\n {
-    yyextra->last_token_end = tokAt(yyscanner,*yylloc_param);
+    // yyextra->last_token_end = tokAt(yyscanner,*yylloc_param); // idk, remove it?
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
 }
 <normal>(\/\/.*)*\n {
-    yyextra->last_token_end = tokAt(yyscanner,*yylloc_param);
+    if (yyextra->last_token_end.line != tokAt(yyscanner,*yylloc_param).line) {
+        yyextra->last_token_end = tokAt(yyscanner,*yylloc_param);
+    }
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
     if  ( !yyextra->das_nested_parentheses && !yyextra->das_nested_curly_braces && !yyextra->das_nested_square_braces ) {

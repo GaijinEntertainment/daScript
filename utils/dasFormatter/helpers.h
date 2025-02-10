@@ -32,7 +32,7 @@ namespace das::format {
         } else if (type_decl->isAuto() && !type_decl->isPointer()) {
             return nullopt;
         } else {
-            return format::get_substring(loc);
+            return get_substring(loc);
         }
     }
 
@@ -78,9 +78,16 @@ namespace das::format {
 
     size_t find_comma_place(const std::string &line) { // dirty hack to find last meaningful character.
         auto comment_start = line.find("//");
-        const auto npos = -1;
         if (comment_start == 0) {
             return 0;
+        }
+        const auto npos = -1;
+        if (comment_start != npos) {
+            const auto &maybe_comment = line.substr(comment_start);
+            const auto quotes = std::count(maybe_comment.begin(), maybe_comment.end(), '"');
+            if (quotes % 2 != 0) {
+                comment_start = line.size();
+            }
         }
         return line.find_last_not_of(" \t\r", comment_start == npos ? npos : comment_start - 1);
     }
@@ -90,6 +97,13 @@ namespace das::format {
             format::prepare_rule(prev_loc)) {
             format::get_writer() << " {" << internal << "\n" << std::string(value * tab_size, ' ') + "}";
             format::finish_rule(end_loc);
+        }
+    }
+
+    void replace_with(Pos start, LineInfo internal, Pos end, const std::string &open, const std::string &close) {
+        if (format::is_replace_braces() && format::prepare_rule(start)) {
+            format::get_writer() << open << format::get_substring(internal) << close;
+            format::finish_rule(end);
         }
     }
 

@@ -16,6 +16,7 @@
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
+    #define DAS_YYDEBUG 1
     #include "../src/parser/parser_state.h"
     #include "helpers.h"
     #include "formatter.h"
@@ -130,6 +131,7 @@
     CaptureEntry *                  pCapt;
     vector<CaptureEntry> *          pCaptList;
     TypePair                        aTypePair;
+    vector<LineInfo> *              positions;
 }
 
 %destructor { delete $$; } <s>
@@ -150,6 +152,7 @@
 %destructor { delete $$; } <pCaptList>
 %destructor { delete $$.firstType; delete $$.secondType; } <aTypePair>
 %destructor { $$->delRef(); } <pFuncDecl>
+%destructor { delete $$; } <positions>
 
 %token  LEXER_ERROR         "lexer error"
 
@@ -408,6 +411,7 @@
 %type <aTypePair>       table_type_pair
 
 
+%type <positions>       alias_list
 %type <i>               open_block
 %type <i>               close_block
 %type <i>               class_or_struct
@@ -1471,6 +1475,11 @@ expression_keyword
 
 expr_pipe
     :   expr_assign[fncall] LBPIPE[loc] expr_block[arg] {
+        const auto &substr = format::get_substring(tokAt(scanner, @arg));
+        if (format::is_replace_braces() && !substr.empty() && substr.at(0) != '$' && substr.at(0) != '@' && format::prepare_rule(format::Pos::from(tokAt(scanner, @arg)))) {
+            format::get_writer() << "$()";
+            format::finish_rule(format::Pos::from(tokAt(scanner, @arg)));
+        }
         Expression * pipeCall = $fncall->tail();
         if ( pipeCall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) pipeCall;
@@ -1777,7 +1786,7 @@ expr_type_info
     }
     |   DAS_TYPEINFO[loc] '('[par1] name_in_namespace[trait] '<' NAME[subtrait] '>' [rang] expr[subexpr] ')' {
             if (format::prepare_rule(format::Pos::from(tokAt(scanner,@par1)))) {
-                format::get_writer() << format::get_substring(format::Pos::from(tokAt(scanner,@trait)),
+                format::get_writer() << " " << format::get_substring(format::Pos::from(tokAt(scanner,@trait)),
                                                               format::Pos::from(tokAt(scanner,@subexpr))) << "(";
                 format::finish_rule(format::Pos::from(tokAt(scanner,@subexpr)));
             }
@@ -2276,11 +2285,11 @@ expr
     |   expr_type_decl[subexpr]                 { $$ = $subexpr; }
     |   expr_cast[subexpr]                      { $$ = $subexpr; }
     |   expr_new[subexpr]                       { $$ = $subexpr; }
-    |   expr_method_call[subexpr]               { $$ = $subexpr; }
+    |   expr_method_call[subexpr]               { $$ = $subexpr; $$->at = tokAt(scanner, @subexpr); }
     |   expr_named_call[subexpr]                { $$ = $subexpr; }
     |   expr_full_block[subexpr]                { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokRangeAt(scanner,@fncall,@arg)); }
-    |   expr[arg] RPIPE[loc] expr[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokRangeAt(scanner,@arg, @fncall)); }
+    |   expr[arg] RPIPE[loc] expr[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokRangeAt(scanner,@arg, @fncall)); $$->at = tokRangeAt(scanner,@arg, @fncall); }
 
     |   expr[arg] RPIPE[loc] basic_type_declaration[type] {
         auto fncall = yyextra->g_Program->makeCall(tokAt(scanner,@type),tokAt(scanner,@type),das_to_string($type));
@@ -2353,7 +2362,15 @@ expr_mtag
 
 optional_field_annotation
     :                                                   { $$ = nullptr; }
-    |   BRABRAB annotation_argument_list[alist] ']' ']' { $$ = $alist; /*this one is gone when BRABRA is disabled*/ }
+    |   BRABRAB[open] annotation_argument_list[alist] ']' ']'[close] {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @open)))) {
+            for (const auto &arg: *$alist) {
+                format::get_writer() << "@" << format::get_substring(arg.at);
+            }
+            format::finish_rule(format::Pos::from_last(tokAt(scanner, @close)));
+        }
+        $$ = $alist; /*this one is gone when BRABRA is disabled*/
+    }
     |   metadata_argument_list[alist]                   { $$ = $alist; }
     ;
 
@@ -2679,7 +2696,7 @@ global_variable_declaration_list
             auto tak = tokAt(scanner,@list);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
         }
-    }   optional_field_annotation[ann] let_variable_declaration[decl] {
+    }   optional_field_annotation[ann] let_variable_declaration[decl] opt_sem {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@decl);
             for ( auto & crd : yyextra->g_CommentReaders )
@@ -2705,7 +2722,11 @@ optional_public_or_private_variable
     ;
 
 global_let
-    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] open_block global_variable_declaration_list[list] close_block {
+    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] open_block[open] global_variable_declaration_list[list] close_block[close] {
+        handle_brace(format::Pos::from(tokAt(scanner, @open)), $open,
+                     format::get_substring(tokRangeAt(scanner, @open, @close)),
+                     yyextra->das_tab_size,
+                     format::Pos::from_last(tokAt(scanner,@close)));
         ast_globalLetList(scanner,$kwd_let,$glob_shar,$pub_var,$list);
     }
     |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
@@ -2714,7 +2735,7 @@ global_let
             auto tak = tokAt(scanner,@pub_var);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
         }
-    } optional_field_annotation[ann] let_variable_declaration[decl] {
+    } optional_field_annotation[ann] let_variable_declaration[decl] opt_sem {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@decl);
             for ( auto & crd : yyextra->g_CommentReaders )
@@ -2810,12 +2831,26 @@ single_alias
     ;
 
 alias_list
-    :   single_alias semicolon
-    |   alias_list single_alias semicolon
+    :   single_alias[alias] semicolon[end] opt_sem {
+        $$ = new vector<LineInfo>(1, tokRangeAt(scanner, @alias, @end));
+    }
+    |   alias_list[others] single_alias[alias] semicolon[end] opt_sem {
+        $others->emplace_back(tokRangeAt(scanner, @alias, @end));
+        $$ = $others;
+    }
     ;
 
 alias_declaration
-    :   DAS_TYPEDEF open_block alias_list close_block
+    :   DAS_TYPEDEF[start] open_block alias_list[alist] close_block[close] {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @start)))) {
+            // todo: comments here and all such places, same rule
+            for (const auto single: *$alist) {
+                format::get_writer() << "typedef " << format::get_substring(single) << '\n';
+            }
+            format::finish_rule(format::Pos::from_last(tokAt(scanner, @close)));
+        }
+
+    }
     |   DAS_TYPEDEF { yyextra->das_force_oxford_comma=true;} single_alias semicolon
     ;
 

@@ -11,7 +11,7 @@
 
 #include "../src/parser/parser_state.h"
 
-//extern int das_yydebug;
+extern int das_yydebug;
 typedef void * yyscan_t;
 union YYSTYPE;
 
@@ -132,7 +132,7 @@ Result transform_syntax(const string& filename, const string content, format::Fo
             policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
             if ( program->failed() ) {
                 for (auto err: program->errors) {
-                    std::cout << err.what << std::endl;
+                    std::cout << err.what << " " << err.at.describe() << std::endl;
                 }
                 return {};
             }
@@ -146,7 +146,8 @@ Result transform_syntax(const string& filename, const string content, format::Fo
     }
 
     int iter = 0;
-//    das_yydebug = 0;
+    das_yydebug = 0;
+    std::cout << "Start" << std::endl;
     while (prev != src) {
         prev = src;
 
@@ -196,6 +197,7 @@ Result transform_syntax(const string& filename, const string content, format::Fo
             if (iter == 0) {
                 return {};
             }
+            std::cout << program->errors.front().at.describe() << std::endl;
             return {.error=Result::ErrorInfo{prev, program->errors.front().what}};
         }
         src = ss.str();
@@ -206,11 +208,12 @@ Result transform_syntax(const string& filename, const string content, format::Fo
         ofstream ostream(tmp_name);
         ostream << src;
     }
-    policies.version_2_syntax = options.contains(format::FormatOpt::AlwaysBraces);
+    policies.version_2_syntax = false; // options.contains(format::FormatOpt::AlwaysBraces);
     auto program = parseDaScript(tmp_name, "", access, tout, libGroup, true, true, policies);
     if (!program->failed()) {
         return {.ok=src};
     } else {
+        std::cout << program->errors.front().at.describe() << std::endl;
         return {.error=Result::ErrorInfo{prev, program->errors.front().what}};
     }
 }

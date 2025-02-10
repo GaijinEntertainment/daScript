@@ -54,6 +54,7 @@ namespace das::format {
         state.ss = nullptr;
         state.enabled = false;
         state.last = {};
+        state.options = {};
         state.content_ = {};
     }
 
