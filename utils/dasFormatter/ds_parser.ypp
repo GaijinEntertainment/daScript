@@ -1380,7 +1380,8 @@ expr_call_pipe
     ;
 
 expression_any
-    :   semicolon                                 { $$ = nullptr; }
+    :   SEMICOLON                           { $$ = nullptr; }
+    |   ';'                                 { $$ = nullptr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
     |   expr_keyword[subexpr]               { $$ = $subexpr; }
     |   expr_assign_pipe[subexpr]           { $$ = $subexpr; }
