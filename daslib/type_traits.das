@@ -66,12 +66,12 @@ class IsSubclassOf : AstCallMacro {
     //! Converts to 'true' if the first type is a subclass of the second type.
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr {
         macro_verify(call.arguments |> length==2,prog,call.at,"expecting is_subclass_of(classptr,typeexpr)");
-        assume classType = call.arguments[0]._type;
+        assume classType = call.arguments[0]._type
         if (!(classType.isStructure && classType.structType.flags.isClass)) {
             macro_error(prog,call.at,"expecting is_subclass_of(class,...)");
             return <- default<ExpressionPtr>;
         }
-        assume typeExpr = call.arguments[1]._type;
+        assume typeExpr = call.arguments[1]._type
         if (!(typeExpr.isStructure && typeExpr.structType.flags.isClass)) {
             macro_error(prog,call.at,"expecting is_subclass_of(...,type<class_typeexpr>)");
             return <- default<ExpressionPtr>;

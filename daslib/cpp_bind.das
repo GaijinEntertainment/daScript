@@ -86,7 +86,7 @@ def log_cpp_class_adapter ( cpp_file:file; name:string; cinfo:TypeDeclPtr ) {
     fwrite(cpp_file, "  enum \{\n");
     for (mn,mni in methods, count()) {
         fwrite(cpp_file, "    __fn_{mn.name} = {mni},\n");
-    };
+    }
     fwrite(cpp_file, "  };\n");
     fwrite(cpp_file, "protected:\n");
     fwrite(cpp_file, "  int _das_class_method_offset[{nmet}];\n");
@@ -94,7 +94,7 @@ def log_cpp_class_adapter ( cpp_file:file; name:string; cinfo:TypeDeclPtr ) {
     fwrite(cpp_file, "  {name} ( const StructInfo * info ) \{\n");
     for (mn,mni in methods, count()) {
         fwrite(cpp_file, "      _das_class_method_offset[__fn_{mn.name}] = info->fields[{mn.index}]->offset;\n");
-    };
+    }
     fwrite(cpp_file, "  \}\n");
     for (mn,mt in methods,types) {
         // get

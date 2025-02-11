@@ -367,8 +367,8 @@ def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
         to.errors |> match_error("match_type expects 2 arguments", wthmt.at);
         return false;
     }
-    assume value = wthmt.arguments[1];
-    assume mtype = wthmt.arguments[0]._type;
+    assume value = wthmt.arguments[1]
+    assume mtype = wthmt.arguments[0]._type
     if (mtype==null) {
         to.errors |> match_error("unresolved type", wthmt.arguments[0].at);
         to.failed = true;
@@ -397,7 +397,7 @@ def match_expr ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
         to.errors |> match_error("match_expr expects 1 argument", wthmt.at);
         return false;
     }
-    assume value = wthmt.arguments[0];
+    assume value = wthmt.arguments[0]
     if (value._type!=null && !is_same_type(what, value._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
         to.errors |> match_error("mismatching expression type {describe(what)} vs {describe(value._type)}", value.at);
         return false;
@@ -406,7 +406,7 @@ def match_expr ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
     apply_template(expr) <| $ ( rules ) {
         for (dv,dn in keys(to.declarations),values(to.declarations)) {
             rules |> replaceVariable(dv) <| clone_expression(dn);
-        };
+        }
         rules |> replaceVarTag("_") <| clone_expression(access);
     }
     var inscope cond <- qmacro($e(access) == $e(expr));
@@ -423,7 +423,7 @@ def match_guards ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:
         apply_template(guards) <| $ ( rules ) {
             for (dv,dn in keys(to.declarations),values(to.declarations)) {
                 rules |> replaceVariable(dv) <| clone_expression(dn);
-            };
+            }
             rules |> replaceVarTag("_") <| clone_expression(access);
         }
         to.conditions |> emplace(guards);
@@ -448,7 +448,7 @@ def match_or ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:Matc
     for (k in keys(to.declarations)) {
         toL.declarations |> erase(k);
         toR.declarations |> erase(k);
-    };
+    }
     if (length(toL.declarations) != length(toR.declarations)) {
         to.errors |> match_error("mismatching variable declarations in ||", wth.at);
         return false;
@@ -630,7 +630,7 @@ class MatchMacro : AstCallMacro {
     }
     def override preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void {
         return  if (length(expr.arguments) != 2);
-        assume blk = expr.arguments[1];
+        assume blk = expr.arguments[1]
         return  if (blk._type==null);
         return  if (!blk._type.isGoodBlockType);
         return  if (!(blk is ExprMakeBlock));
@@ -644,8 +644,8 @@ class MatchMacro : AstCallMacro {
     }
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr {
         macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting match(what) <| block");
-        assume what = expr.arguments[0];
-        assume blk = expr.arguments[1];
+        assume what = expr.arguments[0]
+        assume blk = expr.arguments[1]
         macro_verify(what._type!=null && !what._type.isAutoOrAlias, prog, expr.at, "match `what` argument did not resolve");
         macro_verify(blk._type.isGoodBlockType, prog, expr.at, "match `block` argument did not resolve");
         macro_verify(blk is ExprMakeBlock, prog, expr.at, "match `block` argument must be immediate block declaration");
@@ -676,14 +676,14 @@ class MatchMacro : AstCallMacro {
                     var inscope nblk <- new ExprBlock( at=eto.at);
                     for (l in (eto.if_true as ExprBlock).list) {
                         nblk.list |> emplace_new <| clone_expression(l);
-                    };
+                    }
                     for (l in (eto.if_true as ExprBlock).finalList) {
                         nblk.finalList |> emplace_new <| clone_expression(l);
-                    };
+                    }
                     apply_template(nblk) <| $ ( rules ) {
                         for (dv,dn in keys(to.declarations),values(to.declarations)) {
                             rules |> replaceVariable(dv) <| clone_expression(dn);
-                        };
+                        }
                         rules |> replaceVarTag("_") <| clone_expression(access);
                     }
                     move(new_iff.if_true) <| nblk;
@@ -701,7 +701,7 @@ class MatchMacro : AstCallMacro {
                     if (length(to.errors) != 0) {
                         for (e in to.errors) {
                             macro_error(prog, *e.at, e.msg);
-                        };
+                        }
                     }
                     else {
                         macro_error(prog, eto.at, "unspecified match error");
@@ -711,14 +711,14 @@ class MatchMacro : AstCallMacro {
                 static_if (LOG_MATCH) {
                     for (e in to.errors) {
                         log_m("\tERROR:: {e.msg} at {describe(*e.at)}\n");
-                    };
+                    }
                 }
                 if (length(to.prefix) != 0) {
                     let p0 = length(prefix);
                     prefix |> resize(p0+length(to.prefix));
                     for (p,i in to.prefix,count(p0)) {
                         move(prefix[i]) <| p;
-                    };
+                    }
                 }
             }
         }
@@ -728,7 +728,7 @@ class MatchMacro : AstCallMacro {
         if (multi_match) {
             for (ib in iffb) {
                 prefix |> emplace(ib);
-            };
+            }
             iffb |> clear();
             return <- qmacro($b(prefix));
         }

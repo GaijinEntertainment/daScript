@@ -89,7 +89,7 @@ def public force_dynamic_type_cast(instance; otherclass : auto(TT) ) : TT -const
 [variant_macro(name="ClassAsIs")]
 class ClassAsIs : AstVariantMacro {
     def override visitExprIsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr {
-        assume vtype = expr.value._type;
+        assume vtype = expr.value._type
         if (!(vtype.isPointer && vtype.firstType!=null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)) {
             return <- default<ExpressionPtr>;
         }
@@ -97,7 +97,7 @@ class ClassAsIs : AstVariantMacro {
         return <- qmacro(is_instance_of($e(expr.value), type<$t(atype)>));
     }
     def override visitExprAsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant> ) : ExpressionPtr {
-        assume vtype = expr.value._type;
+        assume vtype = expr.value._type
         if (!(vtype.isPointer && vtype.firstType!=null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)) {
             return <- default<ExpressionPtr>;
         }
@@ -105,7 +105,7 @@ class ClassAsIs : AstVariantMacro {
         return <- qmacro(force_dynamic_type_cast($e(expr.value), type<$t(atype)>));
     }
     def override visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr {
-        assume vtype = expr.value._type;
+        assume vtype = expr.value._type
         if (!(vtype.isPointer && vtype.firstType!=null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)) {
             return <- default<ExpressionPtr>;
         }

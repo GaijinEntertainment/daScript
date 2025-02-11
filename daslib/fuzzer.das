@@ -41,7 +41,7 @@ def public fuzz_debug ( blk : block ) {
     //! this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the purpose of debugging
     for (i in range(total_fuzz_count)) {
         invoke(blk);
-    };
+    }
 }
 
 def public fuzz_debug ( fuzz_count:int; blk : block ) {
@@ -50,7 +50,7 @@ def public fuzz_debug ( fuzz_count:int; blk : block ) {
     //! this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the purpose of debugging
     for (i in range(fuzz_count)) {
         invoke(blk);
-    };
+    }
 }
 
 [constant_expression(funcname)]

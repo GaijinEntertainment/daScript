@@ -80,7 +80,7 @@ class AppendCondAnnotation : AstFunctionAnnotation {
     for (arg in func.arguments) {
       ctxFnArguments |> emplace_new <| clone_variable(arg);
       callInCtxArguments |> emplace_new <| qmacro($i(arg.name));
-    };
+    }
     if (!func.result.isVoid) {
       var inscope resType = clone_type(func.result);
       resType.flags &= ~TypeDeclFlags.constant;

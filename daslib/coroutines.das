@@ -31,7 +31,7 @@ class private YieldFrom : AstCallMacro {
         return <- qmacro_block <| $(){
             for ($i(iname) in $e(call.arguments[0])) {
                 yield $i(iname);
-            };
+            }
         }
     }
 }
@@ -66,7 +66,7 @@ class private CoAwait : AstCallMacro {
         return <- qmacro_block <| $(){
             for ($i(iname) in $e(call.arguments[0])) {
                 yield $i(iname);
-            };
+            }
         }
     }
 }
@@ -102,7 +102,7 @@ def public cr_run ( var a : Coroutine ) {
     //! This function runs coroutine until it is finished.
     for (t in a) {
         pass;
-    };
+    }
 }
 
 def public cr_run_all ( var a : Coroutines ) {

@@ -123,18 +123,18 @@ def levenshtein_distance(s, t: string implicit): int {
     for (i in range(sLen + 1)) {
         d[i] |> resize(tLen + 1);
         d[i][0] = i;
-    };
+    }
     for (j in range(tLen + 1)) {
         d[0][j] = j;
-    };
+    }
 
     for (i in range(1, sLen + 1)) {
         for (j in range(1, tLen + 1)) {
             let substitutionCost = unsafe(character_uat(s, i - 1)) == unsafe(character_uat(t, j - 1)) ? 0 : 1;
             d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1);
             d[i][j] = min(d[i][j], d[i - 1][j - 1] + substitutionCost);
-        };
-    };
+        }
+    }
 
     return d[sLen][tLen];
 } finally {
@@ -152,7 +152,7 @@ def levenshtein_distance_fast(s, t: string implicit): int {
     v1 |> resize(tLen + 1);
     for (i in range(tLen + 1)) {
         v0[i] = i;
-    };
+    }
 
     for (i in range(0, sLen)) {
         v1[0] = i + 1;
@@ -162,10 +162,10 @@ def levenshtein_distance_fast(s, t: string implicit): int {
             let substitutionCost = v0[j] + (unsafe(character_uat(s, i)) == unsafe(character_uat(t, j)) ? 0 : 1);
             v1[j + 1] = min(deletionCost, insertionCost);
             v1[j + 1] = min(v1[j + 1], substitutionCost);
-        };
+        }
 
         swap(v0, v1);
-    };
+    }
 
     return v0[tLen];
 } finally {

@@ -29,7 +29,7 @@ class ApplyMacro : AstCallMacro {
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr {
         macro_verify(expr.arguments |> length==2,prog,expr.at,"expecting 2 arguments, expecting ptr |> if_not_null() <| call()");
         macro_verify(expr.arguments[1] is ExprCall,prog,expr.at,"2nd argument must be call(), expecting ptr |> if_not_null() <| call()");
-        assume PTR = expr.arguments[0];
+        assume PTR = expr.arguments[0]
         if (PTR._type!=null)     {// need value inferred
             macro_verify(PTR._type.isPointer,prog,expr.at,"first argument must be pointer , expecting ptr |> if_not_null() <| call()");
             let ifnn_name = "__ifnn_ptr_{if_not_null_index++}";

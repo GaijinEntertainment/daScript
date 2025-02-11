@@ -68,7 +68,7 @@ def public utf8_encode(var dest_array: array<uint8> &; source_utf32_string: arra
     //! Converts UTF-32 string to UTF-8 and appends it to the UTF-8 byte array
     for (ch in source_utf32_string) {
         dest_array |> utf8_encode(ch);
-    };
+    }
 }
 
 
@@ -78,7 +78,7 @@ def public utf8_encode(source_utf32_string: array<uint> const implicit): array<u
     dest_array |> reserve(length(source_utf32_string));
     for (ch in source_utf32_string) {
         dest_array |> utf8_encode(ch);
-    };
+    }
     return <- dest_array;
 }
 
@@ -165,7 +165,7 @@ def public is_utf8_string_valid(utf8_string: array<uint8> const implicit): bool 
         let type_ = s_utf8d[byte];
         codepoint = (state != UTF8_ACCEPT) ? (byte & 0x3F) | (codepoint << 6u) : (0xFF >> type_) & byte;
         state = s_utf8d[256u + state + type_];
-    };
+    }
     return state == UTF8_ACCEPT;
 }
 
@@ -178,7 +178,7 @@ def public is_utf8_string_valid(utf8_string: string const): bool {
         let type_ = s_utf8d[byte];
         codepoint = (state != UTF8_ACCEPT) ? (byte & 0x3F) | (codepoint << 6u) : (0xFF >> type_) & byte;
         state = s_utf8d[256u + state + type_];
-    };
+    }
     return state == UTF8_ACCEPT;
 }
 

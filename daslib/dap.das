@@ -61,7 +61,7 @@ def SetDataBreakpointsArguments(data: JsonValue?) {
     if (breakpoints != null) {
         for (it in breakpoints.value as _array) {
             res.breakpoints |> emplace(DataBreakpoint(it));
-        };
+        }
     }
     return <- res;
 }
@@ -119,7 +119,7 @@ def SetBreakpointsArguments(data: JsonValue?) {
     if (breakpoints != null) {
         for (it in breakpoints.value as _array) {
             res.breakpoints |> emplace(SourceBreakpoint(it));
-        };
+        }
     }
     return <- res;
 }

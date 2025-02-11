@@ -53,7 +53,7 @@ class private NewJobMacro : AstFunctionAnnotation {
         for (fld in stype.fields)  {// TODO: verify field type here
             fld._type.flags &= ~(TypeDeclFlags.constant);
             fld.flags &= ~(FieldDeclarationFlags.capturedConstant);
-        };
+        }
         var inscope pclone <- make_clone_structure(stype_ptr);
         let const_clone = pclone.arguments[1]._type.flags.constant;
         compiling_module() |> add_function(pclone);
@@ -203,7 +203,7 @@ def push_batch_clone ( channel:Channel?; data : array<auto(TT)> ) {
         var tt = new TT;
         *tt := d;
         heap_data |> push(tt);
-    };
+    }
     _builtin_channel_push(channel, heap_data);
     heap_data |> resize(0);
     unsafe {

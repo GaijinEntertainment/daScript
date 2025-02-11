@@ -291,7 +291,7 @@ def public hash0 ( s : string ) : uint64 {
     for (c in s) {
         a = (a + uint64(c)) % MOD_ADLER;
         b = (b + a) % MOD_ADLER;
-    };
+    }
     return (uint64(b) << 32ul) | uint64(a);
 }
 

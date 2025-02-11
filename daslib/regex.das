@@ -166,25 +166,25 @@ def private set_or_char(var cset:CharSet; ch:int) {
 def private set_or_range(var cset:CharSet; bits:range) {
     for (ch in range(bits.x,bits.y+1)) {
         cset[ch>>5] |= uint(1 << (ch & 31));
-    };
+    }
 }
 
 def private set_invert(var cset:CharSet) {
     for (x in cset) {
         x ^= 0xffffffff;
-    };
+    }
 }
 
 def private set_or_set(var cset:CharSet; eset:CharSet) {
     for (x,y in cset,eset) {
         x |= y;
-    };
+    }
 }
 
 def private set_negative(var cset:CharSet) {
     for (x in cset) {
         x = ~x;
-    };
+    }
 }
 
 def private set_meta(var cset:CharSet; che:int) {
@@ -564,7 +564,7 @@ def private mk_union(var left,right:ReNode?) : ReNode? {
         if (right.op==ReOp.Union)                     {// union(union(x),union(y)) = union(xy)
             for (x in right.all) {
                 push(left.all,x);
-            };
+            }
             unsafe {
                 delete right;
             }
@@ -663,7 +663,7 @@ def public visit_top_down ( var node:ReNode?; blk : block<(var n:ReNode?):void> 
     invoke(blk,node);
     for (x in node.all) {
         visit_top_down(x, blk);
-    };
+    }
     if (node.subexpr!=null) {
         visit_top_down(node.subexpr, blk);
     }
@@ -689,7 +689,7 @@ def private re_assign_next ( var re:Regex ) {
         elif (node.op == ReOp.Union) {
             for (sub in node.all) {
                 sub.next = node.next;
-            };
+            }
         }
     }
 }
@@ -1081,7 +1081,7 @@ def private re_early_out ( var cset:CharSet; node:ReNode? ) : bool {
     elif (node.op==ReOp.Any) {
         for (x in cset) {
             x = 0xffffffffu;
-        };
+        }
         return false;
     }
     elif (node.op==ReOp.Eos) {
@@ -1109,7 +1109,7 @@ def private re_early_out ( var cset:CharSet; node:ReNode? ) : bool {
         var any = false;
         for (sub in node.all) {
             any = re_early_out(cset,sub) || any;
-        };
+        }
         return any;
     }
     else {
@@ -1306,7 +1306,7 @@ def regex_debug ( regex:Regex ) {
         print("groups:");
         for (g in regex.groups) {
             print("\t{g._1}\n");
-        };
+        }
     }
 }
 
@@ -1387,7 +1387,7 @@ def private debug_re ( node: ReNode?; tab:int ) {
             print("{repeat("\t",tab)}");
             debug_re(sub,tab+1);
             print("\n");
-        };
+        }
         print("{repeat("\t",tab-1)})");
     }
     else {
@@ -1505,7 +1505,7 @@ def private re_gen2_plus ( var node:ReNode?; var rnd:ReGenRandom; var str:String
     if (nsub!=null) {
         for (i in urange(cnt)) {
             invoke(nsub.gen2,nsub,rnd,str);
-        };
+        }
     }
     var node2 = node.next;
     if (node2!=null) {
@@ -1524,7 +1524,7 @@ def private re_gen2_star ( var node:ReNode?; var rnd:ReGenRandom; var str:String
     if (nsub!=null) {
         for (i in urange(cnt)) {
             invoke(nsub.gen2,nsub,rnd,str);
-        };
+        }
     }
     var node2 = node.next;
     if (node2!=null) {

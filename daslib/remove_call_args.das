@@ -49,13 +49,13 @@ class RemoveCallArgsMacro : AstFunctionAnnotation {
 
         for (arg in func.arguments) {
             arg.flags |= VariableFlags.marked_used; // to disable errors: unused function argument
-        };
+        }
 
         var inscope fn <- clone_function(func);
         fn.flags |= FunctionFlags.generated | FunctionFlags.exports;
         for (idx in removeIndices) {
             fn.arguments |> erase(idx);
-        };
+        }
 
         for (i in iter_range(fn.annotations)) {
             if (fn.annotations[i].annotation.name == "remove_call_args") {
@@ -79,7 +79,7 @@ class RemoveCallArgsMacro : AstFunctionAnnotation {
         var ncall = newCall as ExprCall;
         for (idx in removeIndices) {
             ncall.arguments |> erase(idx);
-        };
+        }
         return <- newCall;
     }
 }

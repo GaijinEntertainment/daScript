@@ -30,7 +30,7 @@ class TypeVisitor : AstVisitor {
                 usedTypes.st[reinterpret<Structure?> typ.structType] = true;
                 for (fld in typ.structType.fields) {
                     self->collect ( fld._type );
-                };
+                }
             }
             if (typ.enumType != null) {
                 usedTypes.en[reinterpret<Enumeration?> typ.enumType] = true;
@@ -44,7 +44,7 @@ class TypeVisitor : AstVisitor {
         }
         for (arg in typ.argTypes) {
             self->collect ( arg );
-        };
+        }
     }
     def override preVisitTypeDecl(typ:TypeDeclPtr) : void {
         self->collect(typ);
@@ -63,7 +63,7 @@ def public collect_used_types(vfun:array<Function?>; vvar:array<Variable?>; blk:
     }
     for (v in vvar) {
         astVisitor->collect(v._type);
-    };
+    }
     invoke(blk, astVisitor.usedTypes);
     unsafe {
         delete astVisitor;

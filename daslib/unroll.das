@@ -56,7 +56,7 @@ class UnrollMacro : AstFunctionAnnotation {
                 rules |> replaceVariable(van) <| new ExprConstInt( at=call.at, value=i);
                 rules |> apply_template(call.at,iblk,false);
                 nblk.list |> emplace(iblk);
-            };
+            }
             return nblk;
         }
     }

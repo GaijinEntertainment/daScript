@@ -132,7 +132,7 @@ def sum(it:iterator<auto(TT)>) {
     var temp : TT -&;
     for (x in it) {
         temp += x;
-    };
+    }
     return temp;
 }
 
@@ -178,11 +178,11 @@ def cycle(var src:iterator<auto(TT)>) {
             for (x in src) {
                 yield x;
                 push(arr,x);
-            };
+            }
             while (true) {
                 for (x in arr) {
                     yield x;
-                };
+                }
             }
             return false;
         } finally {
@@ -195,11 +195,11 @@ def cycle(var src:iterator<auto(TT)>) {
             for (x in src) {
                 yield x;
                 push_clone(arr,x);
-            };
+            }
             while (true) {
                 for (x in arr) {
                     yield x;
-                };
+                }
             }
             return false;
         } finally {
@@ -255,7 +255,7 @@ def repeat(value : auto(TT); var count : int = 0) {
         }
         for (x in range(count)) {
             yield value;
-        };
+        }
         return false;
     }
 }
@@ -287,8 +287,8 @@ def private flatten_one ( var src : iterator<iterator<auto(TT)>> ) {
             for (i in src) {
                 for (j in i) {
                     yield j;
-                };
-            };
+                }
+            }
             return false;
         }
     }
@@ -297,8 +297,8 @@ def private flatten_one ( var src : iterator<iterator<auto(TT)>> ) {
             for (i in src) {
                 for (j in i) {
                     yield j;
-                };
-            };
+                }
+            }
             return false;
         }
     }
@@ -329,7 +329,7 @@ def sorted ( var it:iterator<auto(TT)> ) {
     return <- generator<TT> capture(<-arr) () <| $(){
         for (x in arr) {
             yield x;
-        };
+        }
         return false;
     }
 }

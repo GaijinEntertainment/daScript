@@ -143,7 +143,7 @@ class LintVisitor : AstVisitor {
     def override preVisitExprLet(expr:smart_ptr<ExprLet>) : void {
         for (v in expr.variables) {
             validate_var(v, true);
-        };
+        }
     }
 }
 

@@ -299,7 +299,7 @@ def describe_type(td:TypeDeclPtr) {
             write(writer,"[");
             write(writer,d);
             write(writer,"]");
-        };
+        }
         if (td.flags.ref) {
             write(writer,"&");
         }
@@ -345,14 +345,14 @@ def make_header(name,lab:string) {
 def private write_table_separator(var writer:StringBuilderWriter; wid:array<int>; sep:string="-") {
     for (x in wid) {
         write(writer,"+{strings::repeat(sep,x)}");
-    };
+    }
     write(writer,"+\n");
 }
 
 def private write_table_line(var writer:StringBuilderWriter;line:array<string>;wid:array<int>) {
     for (x,l in wid,line) {
         write(writer,"+{wide(l,x)}");
-    };
+    }
     write(writer,"+\n");
 }
 
@@ -362,18 +362,18 @@ def make_table(tab:array<array<string>>;withHeader:bool=false) {
         var cols = 0;
         for (c in tab) {
             cols = max(cols,length(c));
-        };
+        }
         var wid : array<int>;
         resize(wid,cols);
         for (cc in tab) {
             for (x in range(cols)) {
                 wid[x] = max(wid[x], length(cc[x]));
-            };
-        };
+            }
+        }
         for (ccc,idx in tab,count()) {
             write_table_separator(writer,wid,(idx==1 && withHeader) ? "=" : "-");
             write_table_line(writer,ccc,wid);
-        };
+        }
         write_table_separator(writer,wid);
         write(writer,"\n\n");
     }
@@ -416,7 +416,7 @@ def document_bitfield(doc_file:file; value:TypeDeclPtr) {
         push(line,string(bit));
         push(line,string(1 << bit));
         emplace(tab,line);
-    };
+    }
     fwrite(doc_file,make_table(tab,true));
 }
 
@@ -427,7 +427,7 @@ def document_variant(doc_file:file; value:TypeDeclPtr) {
         push(line,string(an));
         push(line,describe_type(at));
         emplace(tab,line);
-    };
+    }
     fwrite(doc_file,make_table(tab));
 }
 
@@ -438,7 +438,7 @@ def document_tuple(doc_file:file; value:TypeDeclPtr) {
         push(line,string(an));
         push(line,describe_type(at));
         emplace(tab,line);
-    };
+    }
     fwrite(doc_file,make_table(tab));
 }
 
@@ -532,7 +532,7 @@ def document_enumeration(doc_file:file;mod:Module?;value) {
         push(line,string(en.name));
         push(line,describe(en.value));
         emplace(tab,line);
-    };
+    }
     fwrite(doc_file,make_table(tab));
     document_topic(doc_file,topic("enumeration",mod,string(value.name)));
 }
@@ -673,7 +673,7 @@ def document_structure(doc_file:file;mod:Module?;value:StructurePtr) {
         push(line,string(fld.name));
         push(line,describe_type(fld._type));
         emplace(tab,line);
-    };
+    }
     fwrite(doc_file,"{value.name} fields are\n\n");
     fwrite(doc_file,make_table(tab));
     document_topic(doc_file,topic("structure",mod,string(value.name)));
@@ -1061,7 +1061,7 @@ def document_functions(doc_file:file;mod:Module?;var groups:array<DocGroup>) {
             if (!show_hidden_groups && grp.hidden) {
                 for (func in grp.func) {
                     tab |> insert(func, true);
-                };
+                }
             }
             else {
                 fwrite(doc_file,make_group(grp.name));
@@ -1130,7 +1130,7 @@ def debug_group(var group:DocGroup) {
     to_log(LOG_DEBUG, "Group {group.name}\n");
     for (func in group.func) {
         to_log(LOG_DEBUG, "\t{describe_function_short(func)}\n");
-    };
+    }
     return <- group;
 }
 

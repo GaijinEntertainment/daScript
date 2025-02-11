@@ -77,7 +77,7 @@ def public long_string ( var faker:Faker ) : string {
         var Ch = 0u;
         faker.rnd |> next(Ch);
         arr |> push(uint8(Ch));
-    };
+    }
     return string(arr);
 }
 
@@ -264,7 +264,7 @@ def public any_set ( var faker:Faker ) : uint[8] {
     var ch : uint[8];
     for (c in ch) {
         faker.rnd |> next( c);
-    };
+    }
     return ch;
 }
 

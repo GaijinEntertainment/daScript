@@ -19,7 +19,7 @@ class TemplateMacro : AstFunctionAnnotation {
         func.sideEffectFlags |= FunctionSideEffectFlags.userScenario;
         for (arg in func.arguments) {
             arg.flags |= VariableFlags.marked_used;
-        };
+        }
         if (func.result.baseType == Type.tVoid) {
             return true;
         }

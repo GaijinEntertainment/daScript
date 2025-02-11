@@ -633,13 +633,13 @@ def find_child_var(stack: DAStackFrame; cb: block<(res:DAVariable; idx: uint64):
 def iter_top_child_var(stack: DAStackFrame; cb: block<(res:DAVariable): void>) {
     for (c in stack.variables) {
         cb |> invoke(c);
-    };
+    }
     for (c in stack.arguments) {
         cb |> invoke(c);
-    };
+    }
     for (c in stack.globals) {
         cb |> invoke(c);
-    };
+    }
 }
     // for c in stack.state
     //     cb |> invoke(c)
@@ -975,7 +975,7 @@ class private DAgent: DapiDebugAgent {
         pathsCache |> clear();
         for (path in paths) {
             self->addPath(path);
-        };
+        }
 
         let dasRoot = get_das_root();
         if (!empty(dasRoot) && dasRoot != ".") {
@@ -986,7 +986,7 @@ class private DAgent: DapiDebugAgent {
         pathAliases |> clear();
         for (k, v in keys(aliases), values(aliases)) {
             pathAliases |> insert(k,v);
-        };
+        }
     }
 
     def override onUninstall(agent:DebugAgent?) {
@@ -1055,7 +1055,7 @@ class private DAgent: DapiDebugAgent {
                     line=b.line
                 ));
                 breakpointId += 1ul;
-            };
+            }
             breakpoints[path] <- breaks;
         }
 
@@ -1065,7 +1065,7 @@ class private DAgent: DapiDebugAgent {
 
         for (resBr in res.breakpoints) {
             resBr.message = "{path}: instrumentation wasn't initined";
-        };
+        }
 
         for (ctx in contexts) {
             if (ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick || ctx.ctx.category.dead) {
@@ -1286,7 +1286,7 @@ class private DAgent: DapiDebugAgent {
                 let q = j - 1;
                 ctxData.stack[j].path = ctxData.stack[q].path;
                 ctxData.stack[j].line = ctxData.stack[q].line;
-            };
+            }
             ctxData.stack[0].path = path;
             ctxData.stack[0].line = at.line;
 
@@ -1392,8 +1392,8 @@ class private DAgent: DapiDebugAgent {
         for (brs in values(breakpoints)) {
             for (br in brs) {
                 br.prevState = br.state;
-            };
-        };
+            }
+        }
 
         let found = self->getContextDataFor(ctx) <| $(var ctxData: DAContext)  {// TODO: speedup getContextDataFor
             *ctxData.ctx |> clear_instruments();
@@ -1796,10 +1796,10 @@ class private DAServer: Server {
         for (ctx in agent.contexts) {
             ctx |> reset_debug_flags();
             ctx.continueRequested = true;
-        };
+        }
         for (it in values(agent.breakpoints)) {
             delete it;
-        };
+        }
         agent.breakpoints |> clear();
         // ini.arguments.restart
         disconnected = true;
@@ -1920,7 +1920,7 @@ class private DAServer: Server {
         threadsDone = true;
         for (ctx in agent.contexts) {
             res.threads |> emplace(Thread( id=double(ctx.id), name=ctx |> to_string() ));
-        };
+        }
         self->sendSuccessResponseStr(seq, command, sprint_json(res, false));
     }
 
@@ -1936,7 +1936,7 @@ class private DAServer: Server {
                     column=1lf,
                     source=Source( name=line.path, path=line.path)
                 ));
-            };
+            }
             res.totalFrames = double(length(ctxData.stack));
         }
         self->sendSuccessResponseStr(seq, command, sprint_json(res, false));
@@ -1975,7 +1975,7 @@ class private DAServer: Server {
                                     name=state.name,
                                     variablesReference=double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + STATE_VARS + uint64(i))
                                 ));
-                            };
+                            }
                         }
                         first = false;
                     }
@@ -2010,7 +2010,7 @@ class private DAServer: Server {
                             indexedVariables=double(v.indexedVariables),
                             variablesReference=double(v.children != null ? v.uid : 0ul)
                         ));
-                    };
+                    }
                 }
             }
         }
@@ -2033,7 +2033,7 @@ class private DAServer: Server {
                                 indexedVariables=double(v.indexedVariables),
                                 variablesReference=double(ref)
                             ));
-                        };
+                        }
                     }
                     elif (kind >= STATE_VARS && kind <= BLOCKS_POOL) {
                         for (state in line.state) {
@@ -2047,7 +2047,7 @@ class private DAServer: Server {
                                         indexedVariables=double(v.indexedVariables),
                                         variablesReference=double(ref)
                                     ));
-                                };
+                                }
                                 break;
                             }
                         }
@@ -2066,7 +2066,7 @@ class private DAServer: Server {
                                         indexedVariables=double(v.indexedVariables),
                                         variablesReference=double(ref)
                                     ));
-                                };
+                                }
                             }
                         }
                     }

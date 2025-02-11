@@ -18,7 +18,7 @@ class GenericReturn : AstCallMacro {
             macro_error(prog,expr.at,"generic_return expecting 1 argument");
             return <- default<ExpressionPtr>;
         }
-        assume ret_expr = expr.arguments[0];
+        assume ret_expr = expr.arguments[0]
         if (ret_expr._type==null || ret_expr._type.isAutoOrAlias) {
             macro_error(prog,expr.at,"generic_return requires fully inferred type");
             return <- default<ExpressionPtr>;

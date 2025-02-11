@@ -30,7 +30,7 @@ class EachBitfieldMacro : AstFunctionAnnotation {
         var inscope yields : array<ExpressionPtr>;
         for (name in call.arguments[0]._type.argNames) {
             yields |> emplace_new <| qmacro_expr(${ yield $v(string(name)); });
-        };
+        }
         let call_name = "field`names";
         var inscope qfn <- qmacro_function(call_name) <| $(){
             return <- generator<string>() <| $(){

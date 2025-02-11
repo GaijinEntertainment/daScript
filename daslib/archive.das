@@ -185,7 +185,7 @@ def public serialize ( var arch:Archive; var value : auto(TT)& ) {
 def public serialize ( var arch:Archive; var value : auto(TT)[] ) {
     for (element in value) {
         arch |> _::serialize(element);
-    };
+    }
 }
 
 def public serialize ( var arch:Archive; var value : array<auto(TT)> ) {
@@ -198,14 +198,14 @@ def public serialize ( var arch:Archive; var value : array<auto(TT)> ) {
         value |> resize(len);
         for (element in value) {
             arch |> _::serialize(element);
-        };
+        }
     }
     else {
         var len = length(value);
         arch |> write_raw(len);
         for (element in value) {
             arch |> _::serialize(element);
-        };
+        }
     }
 }
 
@@ -218,7 +218,7 @@ def public serialize ( var arch:Archive; var value : table<auto(KT);auto(VT)> ) 
             var k : KT-const-&-#;
             arch |> _::serialize(k);
             arch |> _::serialize(unsafe(value[k]));
-        };
+        }
     }
     else {
         var len = length(value);
@@ -227,7 +227,7 @@ def public serialize ( var arch:Archive; var value : table<auto(KT);auto(VT)> ) 
             var K = k;
             arch |> _::serialize(K);
             arch |> _::serialize(v);
-        };
+        }
     }
 }
 

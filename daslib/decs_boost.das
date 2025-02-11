@@ -48,7 +48,7 @@ class DecsTemplate : AstStructureAnnotation {
         for (fld in st.fields) {
             blkApply |> emplace_new <| qmacro(decs::set(cmp,$v("{prefix}{fld.name}"),src.$f(fld.name)));
             blkErase |> emplace_new <| qmacro(decs::remove(cmp,$v("{prefix}{fld.name}")));
-        };
+        }
         var inscope fnApply <- qmacro_function("apply_decs_template") <| $ ( var cmp:ComponentMap; var src:$t(st) ) : void {
             $b(blkApply);
         }
@@ -111,7 +111,7 @@ def build_req_from_args ( qblk:ExprBlock? ) : EcsRequest {
             if (detp is yes) {
                 for (f in a._type.structType.fields) {
                     req.req |> push("{detp as yes}{f.name}");
-                };
+                }
             }
             else {
                 if (!(find_arg(a.annotation,"optional") ?as tBool ?? false)) {
@@ -337,7 +337,7 @@ class DecsQueryMacro : AstCallMacro {
     def implement ( var expr:smart_ptr<ExprCallMacro>; block_arg_index:int; qt:DecsQueryType ) : ExpressionPtr {
         for (arg in expr.arguments) {
             macro_verify(!arg._type.isAutoOrAlias,compiling_program(),expr.at,"argument types are not fully inferred");
-        };
+        }
         macro_verify(expr.arguments[block_arg_index] is ExprMakeBlock,compiling_program(),expr.at,"expecting $(block_with_arguments)");
         let mblk = expr.arguments[block_arg_index] as ExprMakeBlock;
         let qblk = mblk._block as ExprBlock;
@@ -374,10 +374,10 @@ class DecsQueryMacro : AstCallMacro {
             }
             for (l in qblk.list) {
                 qlbody.list |> emplace_new <| clone_expression(l);
-            };
+            }
             for (fl in qblk.finalList) {
                 qlbody.finalList |> emplace_new <| clone_expression(fl);
-            };
+            }
             convert_block_to_loop(qlbody, true, false, false);
             move(qtop) <| qlbody;
         }
@@ -405,10 +405,10 @@ class DecsQueryMacro : AstCallMacro {
             var inscope qlbody <- new ExprBlock( at=qblk.at);
             for (l in qblk.list) {
                 qlbody.list |> emplace_new <| clone_expression(l);
-            };
+            }
             for (fl in qblk.finalList) {
                 qlbody.finalList |> emplace_new <| clone_expression(fl);
-            };
+            }
             if (qt==DecsQueryType.query) {
                 convert_block_to_loop(qlbody, false, true, false );
             }
@@ -421,13 +421,13 @@ class DecsQueryMacro : AstCallMacro {
         apply_template(qtop) <| $ ( rules ) {
             for (kb in kaboom) {
                 rules |> kaboomVarField(kb._0,kb._1,kb._2);
-            };
+            }
         }
         if (length(kaboom) > 0) {
             apply_template(qtop) <| $ ( rules ) {
                 for (kb in kaboom) {
                     rules |> replaceVariable(kb._0) <| make_static_assert_false("decs_template variables can only be accessed by fields", expr.at);
-                };
+                }
             }
         }
         var inscope qblock : ExpressionPtr;
@@ -550,7 +550,7 @@ class DecsEcsMacro : AstFunctionAnnotation {
             }
             for (rq in req) {
                 decl.arguments |> add_annotation_argument(rq, true);
-            };
+            }
             qblk.annotations |> emplace(decl);
         }
         if (!nreq |> empty) {
@@ -561,23 +561,23 @@ class DecsEcsMacro : AstFunctionAnnotation {
             }
             for (rq in nreq) {
                 decl.arguments |> add_annotation_argument(rq, true);
-            };
+            }
             qblk.annotations |> emplace(decl);
         }
         var fnbody = func.body as ExprBlock;
         for (el in fnbody.list)                                            {// list goes to inside query
             qblk.list |> emplace_new <| clone_expression(el);
-        };
+        }
         for (ef in fnbody.finalList)                                       {// finally goes to new finally
             fblk.finalList |> emplace_new <| clone_expression(ef);
-        };
+        }
         for (arg in func.arguments)                                        {// add function arguments to query arguments
             qblk.arguments |> emplace_new <| new Variable( at=arg.at,
                 name := arg.name,
                 _type <- clone_type(arg._type),
                 init <- clone_expression(arg.init)
             );
-        };
+        }
         func.arguments |> clear;
         cquery.arguments |> emplace_new <| new ExprMakeBlock( _block <- qblk, at=func.at);
         fblk.list |> emplace(cqq);

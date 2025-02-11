@@ -99,7 +99,7 @@ class ConstantExpressionMacro : AstFunctionAnnotation {
         for (i in argi) {
             let fhash = hash(describe(expr.arguments[i]));
             func_name += "`{fhash}";
-        };
+        }
         func_copy.name := func_name;
         if (expr.func.fromGeneric != null) {
             func_copy.body := null;
@@ -113,11 +113,11 @@ class ConstantExpressionMacro : AstFunctionAnnotation {
         apply_template(func_copy.body) <| $ ( rules ) {
             for (i in argi) {
                 rules |> replaceVariable(string(expr.func.arguments[i].name)) <| clone_expression(expr.arguments[i]);
-            };
+            }
         }
         for (i in argi) {
             func_copy.arguments |> erase(i);
-        };
+        }
         // func_copy.flags |= FunctionFlags exports
         func_copy.flags |= FunctionFlags.generated;
         func_copy.annotations |> erase(anni);
@@ -127,7 +127,7 @@ class ConstantExpressionMacro : AstFunctionAnnotation {
         ncall.name := func_name;
         for (i in argi) {
             ncall.arguments |> erase(i);
-        };
+        }
         return <- new_call;
     }
 }

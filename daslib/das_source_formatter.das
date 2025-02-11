@@ -96,7 +96,7 @@ def initialize_token_templates(var ctx: FormatterCtx) {
         tt.codes <- [for (c in s); uint8(c)];
         tt.firstChar = int(tt.codes[0]);
         tt.length = length(s);
-    };
+    }
 }
 
 
@@ -185,7 +185,7 @@ def skip_spaces(var ctx: FormatterCtx) {
 
 
 def on_token_added(var ctx: FormatterCtx) {
-    assume t = ctx.tokens[length(ctx.tokens) - 1];
+    assume t = ctx.tokens[length(ctx.tokens) - 1]
     if (ctx.indenting == 0 && ctx.newLineCounter > 0 && ctx.spaceCounter > 0 && t.tokenType != TokenType.COMMENT) {
         ctx.indenting = ctx.spaceCounter;
     }
@@ -319,7 +319,7 @@ def parse_token(var ctx: FormatterCtx) {
             if (match) {
                 for (_ in range(0, tt.length)) {
                     ctx |> next_char();
-                };
+                }
                 ctx |> push_token(from, ctx.pos, ctx.spaceCounter, ctx.newLineCounter, ctx.srcLine, fromColumn, TokenType.UNKNOWN);
                 return;
             }
@@ -364,7 +364,7 @@ def parse_all_tokens(var ctx: FormatterCtx) {
 
     for (_ in range(8)) {
         ctx.tokens |> push(emptyToken);
-    };
+    }
 }
 
 
@@ -642,7 +642,7 @@ def mark_token_context(var ctx: FormatterCtx) {
             let endParams = ctx |> find_pair_paren(i + 2);
             for (j in range(i, endParams + 1)) {
                 ctx.tokens[j].isInType = true;
-            };
+            }
             for (j in range(endParams + 1, length(ctx.tokens))) {
                 if (!(ctx |> eq(j, "-", "#", "&", "?") || ctx |> eq(j, "==", "const", "implicit"))) {
                     break;
@@ -841,7 +841,7 @@ def fmt_remove_space_before_args(var ctx: FormatterCtx) {
 def debug_print_tokens(ctx: FormatterCtx) {
     for (t in ctx.tokens) {
         to_log(LOG_DEBUG, "{t.isInFunctionParam ? ">" : " "}{t.isInType ? "*" : " "} '{t.str}'\n");
-    };
+    }
 }
 
 
@@ -874,12 +874,12 @@ def generate_source(ctx: FormatterCtx): string {
         for (_ in range(spaces)) {
             res |> push(uint8(' '));
             column++;
-        };
+        }
 
         for (c in t.str) {
             res |> push(uint8(c));
             column++;
-        };
+        }
     }
 
     return string(res);
@@ -889,7 +889,7 @@ def generate_source(ctx: FormatterCtx): string {
 
 
 def need_spaces_around(ctx: FormatterCtx; index: int): bool {
-    assume t = ctx.tokens[index];
+    assume t = ctx.tokens[index]
     if (t.tokenType != TokenType.UNKNOWN || t.dontFormat || t.dontAddSpacesAround) {
         return false;
     }
@@ -900,7 +900,7 @@ def need_spaces_around(ctx: FormatterCtx; index: int): bool {
         return false;
     }
     if (index < length(ctx.tokens) - 1) {
-        assume next = ctx.tokens[index + 1];
+        assume next = ctx.tokens[index + 1]
         if (t.str == "@" && next.tokenType == TokenType.KEYWORD_OR_IDENTIFIER) {
             return false;
         }
@@ -910,7 +910,7 @@ def need_spaces_around(ctx: FormatterCtx; index: int): bool {
 
 
 def need_space_only_before(ctx: FormatterCtx; index: int): bool {
-    assume t = ctx.tokens[index];
+    assume t = ctx.tokens[index]
     if (!t.isInType) {
         return false;
     }
@@ -924,7 +924,7 @@ def need_space_only_before(ctx: FormatterCtx; index: int): bool {
         return false;
     }
     if (index < length(ctx.tokens) - 1) {
-        assume next = ctx.tokens[index + 1];
+        assume next = ctx.tokens[index + 1]
         if (next.str == ">" || next.str == ">>" || next.str == ">>>" || next.str == ";") {
             return true;
         }
@@ -1329,7 +1329,7 @@ def public format_file(file_name: string const&) {
 def public format_files(var ctx: FormatterCtx; file_names: array<string>&) {
     for (fname in file_names) {
         ctx |> format_file(fname);
-    };
+    }
 }
 
 

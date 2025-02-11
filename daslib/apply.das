@@ -91,7 +91,7 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; frange:range; fnname:string; at
     var inscope func_args : array<VariablePtr>;
     for (fldi in frange) {
         if (true) {
-            assume flda = stype.argTypes[fldi];
+            assume flda = stype.argTypes[fldi]
             let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}";
             names |> push(fldname);
             blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fldname}"),_`_self.$f(fldname)));
@@ -145,7 +145,7 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; frange:range; fnname:string; 
     var inscope func_args : array<VariablePtr>;
     for (fldi in frange) {
         if (true) {
-            assume flda = stype.argTypes[fldi];
+            assume flda = stype.argTypes[fldi]
             let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}";
             names |> push(fldname);
             var inscope vexpr <- qmacro_block <| $(){
@@ -251,7 +251,7 @@ class ApplyMacro : AstCallMacro {
                 emplace_new(call.arguments,clone_expression(expr.arguments[0]));
                 for (idx in frange) {
                     emplace_new(call.arguments,clone_block_with_name(names[idx], expr.arguments[1]));
-                };
+                }
                 calls |> emplace(call);
             }
             if (length(calls)==1) {

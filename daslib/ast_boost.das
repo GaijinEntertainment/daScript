@@ -18,7 +18,7 @@ def clone ( var args : dasvector`das_string; var nargs:array<string> ) {
     args |> resize ( tot );
     for (i in range(tot)) {
         args[i] := nargs[i];
-    };
+    }
     delete nargs;
 }
 
@@ -26,7 +26,7 @@ def clone ( var args : dasvector`smart_ptr`TypeDecl; var nargs:array<TypeDeclPtr
     args |> clear;
     for (narg in nargs) {
         args |> emplace(narg);
-    };
+    }
     delete nargs;
 }
 
@@ -34,7 +34,7 @@ def clone ( var args : dasvector`smart_ptr`Variable; var nargs:array<VariablePtr
     args |> clear;
     for (narg in nargs) {
         args |> emplace(narg);
-    };
+    }
     delete nargs;
 }
 
@@ -42,7 +42,7 @@ def clone ( var args : dasvector`smart_ptr`Expression; var nargs:array<Expressio
     args |> clear;
     for (narg in nargs) {
         args |> emplace(narg);
-    };
+    }
     delete nargs;
 }
 
@@ -1053,7 +1053,7 @@ def public function_to_type ( fn : FunctionPtr ) : TypeDeclPtr {
     for (arg,argi in fn.arguments,count()) {
         td.argTypes |> emplace_new <| clone_type(arg._type);
         td.argNames[argi] := arg.name;
-    };
+    }
     return <- td;
 }
 

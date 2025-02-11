@@ -46,7 +46,7 @@ def uri_compose_query_in_order ( query:table<string;string> ) {
     var vq : array<tuple<key:string;value:string>>;
     for (key,value in keys(query),values(query)) {
         vq |> push(( key,value));
-    };
+    }
     sort(vq) <| $ ( a, b ) {
         if (a.key==b.key) {
             return a.value < b.value;

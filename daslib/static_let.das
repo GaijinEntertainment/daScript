@@ -90,7 +90,7 @@ class StaticLetMacro : AstFunctionAnnotation {
                 apply_template(astc.scopes[astc.scopes |> length-1]) <| $ ( rules ) {
                     for (r in renames) {
                         rules |> renameVariable(r.old_name) <| r.new_name;
-                    };
+                    }
                 }
             }
         }
