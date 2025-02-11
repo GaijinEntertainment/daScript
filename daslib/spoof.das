@@ -24,9 +24,9 @@ def spoof_args ( invocation:string; blk:block<(var res : array<tuple<string;stri
             return e
         var element : tuple<string;string>
         rule(ident_ as e, WS, "=", WS, element_value as v) <|
-            return (e, v)
+            return [[auto e, v]]
         rule(ident_ as e) <|
-            return (e, "")
+            return [[auto e, ""]]
         var sub_element : string
         rule("\\", "{set(0..255)}" as Ch) <|    // escape
             return string(Ch)
@@ -68,7 +68,7 @@ def instance_spoof ( temp:string; passed_arguments:array<string> ) : tuple<resul
         else
             args <- res
     if args |> length == 0
-        return (error, false)
+        return [[auto error, false]]
     // compare argument counts
     var instance_arguments : array<string>
     for a,ai in args,count()
@@ -77,7 +77,7 @@ def instance_spoof ( temp:string; passed_arguments:array<string> ) : tuple<resul
         elif !empty(a.init)
             instance_arguments |> push <| a.init
         else
-            return ("invalid number of arguments", false)
+            return [[auto "invalid number of arguments", false]]
     // skip to next line
     var it <- unsafe(each(temp))
     var Ch = -1
@@ -88,7 +88,7 @@ def instance_spoof ( temp:string; passed_arguments:array<string> ) : tuple<resul
             pass
         Ch = -1
     if Ch==-1
-        return ("unexpected end of file", false)
+        return [[auto "unexpected end of file", false]]
     // now, lets apply the arguments
     var result : array<uint8>
     var pendingCh : int
@@ -113,11 +113,11 @@ def instance_spoof ( temp:string; passed_arguments:array<string> ) : tuple<resul
             elif Ch==-1
                 break   // eof
             else
-                return ("invalid sequence after %", false)
+                return [[auto "invalid sequence after %", false]]
         else
             result |> push(uint8(Ch))
 
-    return (string(result), true)
+    return [[auto string(result), true]]
 
 
 [reader_macro(name="spoof_template")]
@@ -131,7 +131,7 @@ class SpoofTemplateReader : AstReaderMacro
         else
             return true
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
-        return <- new ExprConstString(at=expr.at, value:=expr.sequence)
+        return <- new [[ExprConstString() at=expr.at, value:=expr.sequence]]
 
 struct SpoofInvocation
     varName : string
@@ -141,9 +141,9 @@ def instance_args ( invocation:string; blk:block<(var res : SpoofInvocation; err
     parse invocation
         var macro_invocation : SpoofInvocation
         rule(WS, class_name as cn, WS, "(", element_list as el, WS, ")") <|
-            return <- SpoofInvocation(uninitialized varName=cn, args <- el)
+            return <- [[SpoofInvocation varName=cn, args <- el]]
         rule(WS, class_name as cn, WS, "(", WS, ")") <|
-            return <- SpoofInvocation(uninitialized varName=cn)
+            return <- [[SpoofInvocation varName=cn]]
         var element_list : array<string>
         rule(*comma_separated_elements as els, WS, element as last) <|
             els |> push <| last

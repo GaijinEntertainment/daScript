@@ -78,7 +78,7 @@ struct EcsRequestPos
 
 def EcsRequestPos(at: rtti::LineInfo): EcsRequestPos
     //! Constructs EcsRequestPos from rtti::LineInfo.
-    return EcsRequestPos(uninitialized file=at.fileInfo != null ? string(at.fileInfo.name) : "", line=at.line)
+    return [[EcsRequestPos file=at.fileInfo != null ? string(at.fileInfo.name) : "", line=at.line]]
 
 struct public EcsRequest
     //! Individual ESC requests. Contains list of required components, list of components which are required to be absent.
@@ -113,7 +113,7 @@ var private deferActions : array<DeferAction>
 var private decsPasses : array<DecsPass>
 var private insideQuery : int
 
-let INVALID_ENTITY_ID = decs::EntityId(uninitialized)  //! Entity ID which represents invalid entity.
+let INVALID_ENTITY_ID = [[decs::EntityId]]  //! Entity ID which represents invalid entity.
 
 def operator ==(a, b: decs::EntityId implicit)
     //! Equality operator for entity IDs.
@@ -132,9 +132,9 @@ def public operator . ( var cmp:ComponentMap; name:string ) : ComponentValue &
     //!
     //!     create_entity <| @ ( eid, cmp )
     //!         cmp.pos := float3(i)    // same as cmp |> set("pos",float3(i))
-    let idx = lower_bound(cmp,ComponentValue(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if !(idx<length(cmp) && cmp[idx].name==name)
-        cmp |> push(ComponentValue(uninitialized name=name), idx)
+        cmp |> push([[ComponentValue name=name]], idx)
     unsafe
         return cmp[idx]
 
@@ -198,7 +198,7 @@ def public serialize ( var arch:Archive; var src:Component )
 
 def public register_decs_stage_call ( name:string; pcall:PassFunction )
     //! Registration of a single pass callback. This is a low-level function, used by decs_boost macros.
-    var dpass <- DecsPass(uninitialized name=name)
+    var dpass <- [[DecsPass name=name]]
     let idx = lower_bound(decsPasses,dpass) <| $ ( x,y ) => x.name < y.name
     if idx<length(decsPasses) && decsPasses[idx].name==name
         decsPasses[idx].calls |> push(pcall)
@@ -210,7 +210,7 @@ def public decs_stage ( name : string )
     //! Invokes specific ECS pass.
     //! `commit` is called before and after the invocation.
     commit()
-    let idx = lower_bound(decsPasses,DecsPass(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    let idx = lower_bound(decsPasses,[[DecsPass name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(decsPasses) && decsPasses[idx].name==name
         for cll in decsPasses[idx].calls
             invoke ( cll )
@@ -237,7 +237,7 @@ def private new_entity_id()
         decsState.entityFreeList |> pop
     else
         eid.id = uint(length(decsState.entityLookup))
-        decsState.entityLookup |> push((0, 0ul, 0))
+        decsState.entityLookup |> push([[auto 0,0ul,0]])
     eid.generation ++
     return eid
 
@@ -290,7 +290,7 @@ def public debug_dump
 def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype; idx:int; isNew:bool ):void> )
     var afound & = unsafe(decsState.archetypeLookup[hash])
     if afound==0
-        decsState.allArchetypes |> emplace(Archetype(uninitialized hash=hash))
+        decsState.allArchetypes |> emplace([[Archetype hash=hash]])
         afound = length(decsState.allArchetypes)
         ++insideQuery; invoke(blk, decsState.allArchetypes[afound-1], afound-1, true); --insideQuery
     else
@@ -307,7 +307,12 @@ def private create_archetype ( var arch:Archetype; cmp:ComponentMap; idx:int )
         else
             ct = kv.info
         let chash = hash(kv.name)
-        arch.components |> emplace <| Component(uninitialized name=kv.name, hash=chash, stride=int(kv.info.size), info=kv.info)
+        arch.components |> emplace <| [[Component
+            name=kv.name,
+            hash=chash,
+            stride=int(kv.info.size),
+            info=kv.info
+        ]]
         if kv.name=="eid"
             assert(arch.eidIndex==-1)
             arch.eidIndex = kvi
@@ -356,7 +361,7 @@ def private req_hash ( erq : EcsRequest )
 
 def public has ( arch:Archetype; name:string )
     //! Returns true if object has specified subobjec.
-    return arch.components |> binary_search ( Component(uninitialized name=name) ) <| $ ( x, y ) => x.name < y.name
+    return arch.components |> binary_search ( [[Component name=name]] ) <| $ ( x, y ) => x.name < y.name
 
 def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
     if erq.hash==arch.hash
@@ -372,11 +377,11 @@ def private can_process_request ( var erq : EcsRequest; var arch : Archetype )
 def public verify_request ( var erq : EcsRequest ) : tuple<ok:bool;error:string>
     //! Verifies ESC request. Returns pair of boolean (true for OK) and error message.
     if erq.hash==0ul || (empty(erq.req) && empty(erq.reqn))
-        return (true, "")    // this queries just about everything
+        return [[auto true, ""]]    // this queries just about everything
     for N in erq.reqn   // assuming require_not is typically shorter
         if erq.req |> binary_search(N)
-            return (false, "duplicate req and neq {N}")
-    return (true, "")
+            return [[auto false, "duplicate req and neq {N}"]]
+    return [[auto true,""]]
 
 def public compile_request ( var erq : EcsRequest )
     //! Compiles ESC request, by creating request hash.
@@ -478,7 +483,7 @@ def decs_array ( atype:auto(TT); src:array<uint8>; capacity:int )
 def public get ( arch:Archetype; name:string; value:auto(TT) )
     //! Creates temporary array of component given specific name and type of component.
     //! If component is not found - panic.
-    let idx = arch.components |> lower_bound(Component(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = unsafe(arch.components[idx])
         if comp.name==name
@@ -497,9 +502,9 @@ def public get ( arch:Archetype; name:string; value:auto(TT) )
     panic("decs: component array {name} not found")
     unsafe
         static_if typeinfo(is_dim value)
-            return <- array<TT[typeinfo(dim value)]-const-&-#>()
+            return <- [[array<TT[typeinfo(dim value)]-const-&-#> ]]
         else
-            return <- array<TT-const-&-#>()
+            return <- [[array<TT-const-&-#> ]]
 
 [expect_dim(value)]
 def public get_ro ( arch:Archetype; name:string; value:auto(TT)[] ) : array<TT[typeinfo(sizeof value)]-const-&-#> const
@@ -516,7 +521,7 @@ def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-con
 def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iterator<TT const &>
     //! Returns const iterator of component given specific name and type of component.
     //! If component is not found - iterator will kepp returning the specified value.
-    let idx = arch.components |> lower_bound(Component(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = unsafe(arch.components[idx])
         if comp.name==name
@@ -541,7 +546,7 @@ def public get_default_ro ( arch:Archetype; name:string; value:auto(TT) ) : iter
 def public get_optional ( arch:Archetype; name:string; value:auto(TT)? ) : iterator<TT-const-&-#?>
     //! Returns const iterator of component given specific name and type of component.
     //! If component is not found - iterator will kepp returning default value for the component type.
-    let idx = arch.components |> lower_bound(Component(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    let idx = arch.components |> lower_bound([[Component name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(arch.components)
         let comp & = unsafe(arch.components[idx])
         if comp.name==name
@@ -553,7 +558,7 @@ def public get_optional ( arch:Archetype; name:string; value:auto(TT)? ) : itera
             unsafe
                 _builtin_make_fixed_array_iterator(it,addr(comp.data[0]),arch.size,comp.stride)
             return <- it
-    return <- repeat(default<TT-const-&-#?>,arch.size)
+    return <- repeat([[TT-const-&-#?]],arch.size)
 
 def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     var lookup = decsState.entityLookup[eid.id]
@@ -567,7 +572,7 @@ def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
         var arch & = unsafe(decsState.allArchetypes[arch_index])
         cmp |> reserve ( length(arch.components) )
         for c in arch.components
-            var value = ComponentValue(uninitialized name=c.name, info=c.info)
+            var value = [[ComponentValue name=c.name, info=c.info]]
             unsafe
                 memcpy ( addr(value.data), addr(c.data[eidx*c.stride]), c.stride)
             cmp |> push(value)
@@ -585,7 +590,7 @@ def private update_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
             if isNew
                 narch |> create_archetype(cmp, idx)
             let neidx = narch |> create_entity(eid, cmp)
-            decsState.entityLookup[eid.id] = (eid.generation, new_ahash, neidx)
+            decsState.entityLookup[eid.id] = [[auto eid.generation,new_ahash,neidx]]
     delete cmp
 
 def private create_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
@@ -598,7 +603,7 @@ def private create_entity_imm ( eid:EntityId; blk : lambda<(eid:EntityId; var cm
         if isNew
             arch |> create_archetype(cmp, idx)
         let eidx = arch |> create_entity(eid,cmp)
-        decsState.entityLookup[eid.id] = (eid.generation, ahash, eidx)
+        decsState.entityLookup[eid.id] = [[auto eid.generation,ahash,eidx]]
     delete cmp
 
 def private delete_entity_imm ( eid:EntityId )
@@ -613,21 +618,21 @@ def public update_entity ( entityid:EntityId implicit; var blk : lambda<(eid:Ent
     //! Creates deferred action to update entity specified by id.
     var deval <- @ <| [[<-blk]] ( var act:DeferAction )
         update_entity_imm(act.eid,blk)
-    deferActions |> emplace(DeferAction(uninitialized action<-deval, eid=entityid))
+    deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
 
 def public create_entity ( var blk : lambda<(eid:EntityId; var cmp:ComponentMap):void> )
     //! Creates deferred action to create entity.
     var deval <- @ <| [[<-blk]] ( var act:DeferAction )
         create_entity_imm(act.eid, blk)
     var eid = new_entity_id()
-    deferActions |> emplace(DeferAction(uninitialized action<-deval, eid=eid))
+    deferActions |> emplace([[DeferAction action<-deval, eid=eid]])
     return eid
 
 def public delete_entity ( entityid:EntityId implicit )
     //! Creates deferred action to delete entity specified by id.
     var deval <- @ <| ( var act:DeferAction )
         delete_entity_imm(act.eid)
-    deferActions |> emplace(DeferAction(uninitialized action<-deval, eid=entityid))
+    deferActions |> emplace([[DeferAction action<-deval, eid=entityid]])
 
 def public commit
     //! Finishes all deferred actions.
@@ -641,7 +646,7 @@ def public commit
 def public get ( var cmp:ComponentMap; name:string; var value:auto(TT) )
     //! Gets component value specified by name and type.
     //! Will panic if name matches but type does not.
-    let idx = lower_bound(cmp,ComponentValue(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         unsafe
             var cvinfo : TypeInfo const?
@@ -787,7 +792,7 @@ def private make_callbacks ( var cv:ComponentValue; value:auto(TT) )
                         delete * adel
 
 def private make_component ( name:string; value:auto(TT) )
-    var cv = ComponentValue(uninitialized name=name)
+    var cv = [[ComponentValue name=name]]
     unsafe
         var tinfo : TypeInfo const?
         var tname : string
@@ -797,7 +802,8 @@ def private make_component ( name:string; value:auto(TT) )
         else
             tinfo = addr(typeinfo(rtti_typeinfo type<TT-const-&-#>))
             tname = typeinfo(fulltypename type<TT-const-&-#>)
-        cv.info = CTypeInfo(uninitialized basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo), fullName=tname, hash=tinfo.hash, size=tinfo.size)
+        cv.info = [[CTypeInfo basicType=tinfo.basicType, mangledName=get_mangled_name(tinfo),
+            fullName=tname,hash=tinfo.hash, size=tinfo.size]]
         make_callbacks(cv, value)
         memcpy ( addr(cv.data), addr(value), typeinfo(sizeof value))
     return cv
@@ -807,7 +813,7 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
     //! If value already exists, it is overwritten. If already existing value type is not the same - panic.
     concept_assert(typeinfo(sizeof value)<=typeinfo(sizeof cmp[0].data), "unsupported component type {typeinfo(typename value)} (its too big)")
     let cv = make_component(name, value)
-    let idx = lower_bound(cmp,ComponentValue(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         if cmp[idx].info.hash != cv.info.hash
             panic("decs: set component {name} type mismatch, expecting {describe(cmp[idx].info)} vs vs {describe(cv.info)} MNH={cv.info.mangledName} hash={cv.info.hash} size={cv.info.size}")
@@ -816,11 +822,11 @@ def public set ( var cmp:ComponentMap; name:string; value:auto(TT) )
         cmp |> push(cv, idx)    // insert new one
 
 def public has ( var cmp:ComponentMap; name:string )
-    return binary_search(cmp,ComponentValue(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    return binary_search(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
 
 def public remove ( var cmp:ComponentMap; name:string )
     //! Removes speicified value from the component map.
-    let idx = lower_bound(cmp,ComponentValue(uninitialized name=name)) <| $ ( x,y ) => x.name < y.name
+    let idx = lower_bound(cmp,[[ComponentValue name=name]]) <| $ ( x,y ) => x.name < y.name
     if idx<length(cmp) && cmp[idx].name==name
         cmp |> erase(idx)
 

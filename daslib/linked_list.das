@@ -46,4 +46,4 @@ class %ListClass
                 yield node.data
                 node = node.next
             return false
-%%
+%%;
