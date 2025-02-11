@@ -10,6 +10,7 @@ namespace das::format {
         FormatOptions options;
         vector<string> content_;
         Pos last;
+        ProgramPtr program;
         bool enabled = false;
         stringstream *ss;
     };
@@ -29,7 +30,7 @@ namespace das::format {
     }
 
 
-    void init(stringstream *ss, string content, FormatOptions options) {
+    void init(stringstream *ss, string content, FormatOptions options, ProgramPtr program) {
         string line;
         content.push_back('\n'); // easiest way to flush the last line
         for (const auto c: content) {
@@ -43,6 +44,7 @@ namespace das::format {
         state.ss = ss;
         state.enabled = true;
         state.last = {.line=1, .column=0};
+        state.program = program;
         state.options = move(options);
     }
 
@@ -130,6 +132,53 @@ namespace das::format {
     void finish_rule(Pos pos) {
         assert(state.enabled && state.last <= pos);
         set_to(pos);
+    }
+
+    optional<StructurePtr> try_find_struct(const string &name) {
+        if (state.program != nullptr) {
+            const auto library = state.program->library;
+//            das::vector<das::AnnotationPtr> handles;
+//            das::vector<das::EnumerationPtr> enums;
+            auto structs = state.program->findStructure(name);
+            auto aliases = state.program->findAlias(name);
+            if (!structs.empty()) {
+                assert(structs.size() == 1);
+                assert(aliases.empty());
+                return structs.front();
+            } else if (!aliases.empty()) {
+                assert(aliases.size() == 1);
+            }
+        }
+        return std::nullopt;
+    }
+
+    bool can_default_init(const string &name) {
+        auto maybe_struct = try_find_struct(name);
+        if (!maybe_struct) {
+            return false;
+        } else {
+            for (auto field: maybe_struct->get()->fields) {
+                if (!field.init) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    CanInit can_init_with(const string &name, uint32_t arg_cnt) {
+        if (arg_cnt == 0) {
+            if (can_default_init(name)) {
+                return CanInit::Can;
+            } else {
+                return CanInit::Cannot;
+            }
+        }
+        auto maybe_struct = try_find_struct(name);
+        if (!maybe_struct) {
+            return CanInit::Unknown;
+        }
+        return (*maybe_struct)->fields.size() == arg_cnt ? CanInit::Can : CanInit::Unknown;
     }
 
     bool is_replace_braces() {

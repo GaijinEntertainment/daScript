@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <ostream>
+#include <iostream>
 #include <daScript/ast/ast_typedecl.h>
 
 #include "formatter.h"
@@ -24,9 +25,13 @@ namespace das::format {
         std::for_each(vec.begin()+1, vec.end(), [&last, &prev_sep, &result, &sep](const auto& el) {
             auto concat = format::get_substring(last, Pos::from(el->at));
             auto prev_end = concat.find(prev_sep);
-            assert(prev_end != npos); // incorrect prev_sep
+//            assert(prev_end != npos); // incorrect prev_sep
             if (prev_end != npos) {
                 concat.replace(prev_end, prev_sep.size(), sep);
+            } else {
+                assert(concat.find("=>") != npos);
+                cerr << "Be careful, => is not safe yet" << endl;
+                concat.replace(concat.find("=>"), 2, ","); // It's not safe!
             }
             auto new_line = format::get_substring(el->at);
             result += concat;
@@ -53,9 +58,9 @@ namespace das::format {
             return "";
         }
         const string prev_sep = ";";
-        auto maybe_uninit = is_initialized ? "" : "uninitialized";
-        const string prefix = type_name + "(" + maybe_uninit;
-        const string sep = "), " + prefix;
+        string maybe_uninit = is_initialized ? "" : "uninitialized";
+        const string prefix = type_name + "(";
+        const string sep = "), ";
         const string suffix = ")";
 
         const auto front = structs.front();
@@ -66,10 +71,19 @@ namespace das::format {
             auto concat = format::substring_between(last, el->front()->at);
             auto prev_end = concat.find(prev_sep);
             assert(i == 0 || prev_end != npos); // incorrect prev_sep
+            {
+                auto can_init = can_init_with(type_name, el->size());
+                switch (can_init) {
+                    case CanInit::Can: maybe_uninit.clear(); break;
+                    case CanInit::Cannot: maybe_uninit = "uninitialized"; break;
+                    case CanInit::Unknown: break;
+                }
+            }
+            const auto cur_prefix = prefix + maybe_uninit;
             if (i == 0) {
-                concat = prefix + concat;
+                concat = cur_prefix + concat;
             } else if (prev_end != npos) {
-                concat.replace(prev_end, prev_sep.size(), sep);
+                concat.replace(prev_end, prev_sep.size(), sep + cur_prefix);
             } else {
                 std::abort();
             }

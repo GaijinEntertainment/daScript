@@ -11,7 +11,7 @@
 
 #include "../src/parser/parser_state.h"
 
-extern int das_yydebug;
+//extern int das_yydebug;
 typedef void * yyscan_t;
 union YYSTYPE;
 
@@ -146,12 +146,19 @@ Result transform_syntax(const string& filename, const string content, format::Fo
     }
 
     int iter = 0;
-    das_yydebug = 0;
+//    das_yydebug = 0;
+    policies.version_2_syntax = false;
+    const auto tmp_name1 = "/tmp/tmp1.das";
+    {
+        ofstream ostream(tmp_name1);
+        ostream << src;
+    }
+    auto src_program = parseDaScript(tmp_name1, "", access, tout, libGroup, true, true, policies);
     while (prev != src) {
         prev = src;
 
         stringstream ss;
-        format::init(&ss, src.c_str(), options);
+        format::init(&ss, src.c_str(), options, src_program);
 
         // All initialization and parsing took from daslang source
         yyscan_t scanner = nullptr;
@@ -206,8 +213,9 @@ Result transform_syntax(const string& filename, const string content, format::Fo
     {
         ofstream ostream(tmp_name);
         ostream << src;
+        ostream.flush();
     }
-    policies.version_2_syntax = false; // options.contains(format::FormatOpt::AlwaysBraces);
+    policies.version_2_syntax = options.contains(format::FormatOpt::AlwaysBraces);
     auto program = parseDaScript(tmp_name, "", access, tout, libGroup, true, true, policies);
     if (!program->failed()) {
         return {.ok=src};
@@ -235,21 +243,21 @@ vector<TestData> test_cases() {
 
     const string postfix = "\n";
     vector<TestData> base = {
-//        {"[[/**/Foo a/*a*/=/**/1/*a*///abc\n,//dsa\n/*dsa*/\nb=2.0/**/\n//dsa\n]]",
-//         "/**/Foo(uninitialized a/*a*/=/**/1/*a*///abc\n,//dsa\n/*dsa*/\nb=2.0/**/\n//dsa\n)"}, // 1
-//        {"[[/**/Foo/**/]]", "/**/Foo(uninitialized/**/)"}, // 2
-//        {"[[/*a*/Foo(/*b*/)/*c*/]]", "/*a*/Foo(/*b*/)/*c*/"}, // 3
-//        {"[[/*a*/Foo(/*b*/)/*c*/ a=1/*d*/,/*e*/b=2.0/*f*/]]", "/*a*//*b*/Foo(/*c*/ a=1/*d*/,/*e*/b=2.0/*f*/)"}, // 4
-//        {"[[/*a*/auto/*b*/1/*c*/,/*d*/2/*e*/]]", "/*a*/(/*b*/1/*c*/,/*d*/2/*e*/)"}, // 13
-////        {"[[for x in [1, 20]; x*x; where x%2 == 0]];", "[iterator for x in [1, 20]; x*x; where x%2 == 0];"}, // 5 // each result is discarded, which is unsaf
-//        {"[{/*a*/Foo/*b*/a=1/*c*/,/*d*/b=2./*e*/;/*f*/a=2/*g*/,/*h*/b=1./*i*/}]",
-//         "/*a*/[Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*f*/a=2/*g*/,/*h*/b=1./*i*/)]"}, // 6
-//        {"[{/*a*/Foo()/*b*/a=1/*c*/,/*d*/b=2./*e*/;/*g*/a=2/*h*/,/*i*/b=1./*j*/}]",
-//         "/*a*/[Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*g*/a=2/*h*/,/*i*/b=1./*j*/)]"}, // 7
-////        {"[{Foo a=1,b=2.;a=2,b=1. <optional_block>}]", "[Foo(a=1,b=2.),Foo(a=2,b=1.)]"}, // what about optional block in new syntax
-//        {"[{/*a*/auto/*b*/1/*c*/;/*d*/2/*e*/;/*f*/3/*g*/;/*h*/4/*i*/}]",
-//         "/*a*/[/*b*/1/*c*/,/*d*/2/*e*/,/*f*/3/*g*/,/*h*/4/*i*/]"}, // 8
-//        {"[{/*a*/auto/*b*/1/*c*/,/*d*/2.2/*e*/}]", "/*a*/[(/*b*/1/*c*/,/*d*/2.2/*e*/)]"}, // 8
+        {"[[/**/Foo/*0*/a/*a*/=/**/1/*a*///abc\n,//dsa\n/*dsa*/\nb=2.0/**/\n//dsa\n]]",
+         "/**/Foo(/*0*/a/*a*/=/**/1/*a*///abc\n,//dsa\n/*dsa*/\nb=2.0/**/\n//dsa\n)"}, // 1 // no uninit because it's redundant
+        {"[[/**/Foo/**/]]", "/**/Foo(uninitialized/**/)"}, // 2
+        {"[[/*a*/Foo(/*b*/)/*c*/]]", "/*a*/Foo(/*b*/)/*c*/"}, // 3
+        {"[[/*a*/Foo(/*b*/)/*c*/ a=1/*d*/,/*e*/b=2.0/*f*/]]", "/*a*//*b*/Foo(/*c*/ a=1/*d*/,/*e*/b=2.0/*f*/)"}, // 4
+        {"[[/*a*/auto/*b*/1/*c*/,/*d*/2/*e*/]]", "/*a*/(/*b*/1/*c*/,/*d*/2/*e*/)"}, // 13
+//        {"[[for x in [1, 20]; x*x; where x%2 == 0]];", "[iterator for x in [1, 20]; x*x; where x%2 == 0];"}, // 5 // each result is discarded, which is unsaf
+        {"[{/*a*/Foo/*b*/a=1/*c*/,/*d*/b=2./*e*/;/*f*/a=2/*g*/,/*h*/b=1./*i*/}]",
+         "/*a*/[Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*f*/a=2/*g*/,/*h*/b=1./*i*/)]"}, // 6
+        {"[{/*a*/Foo()/*b*/a=1/*c*/,/*d*/b=2./*e*/;/*g*/a=2/*h*/,/*i*/b=1./*j*/}]",
+         "/*a*/[Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*g*/a=2/*h*/,/*i*/b=1./*j*/)]"}, // 7
+//        {"[{Foo a=1,b=2.;a=2,b=1. <optional_block>}]", "[Foo(a=1,b=2.),Foo(a=2,b=1.)]"}, // what about optional block in new syntax
+        {"[{/*a*/auto/*b*/1/*c*/;/*d*/2/*e*/;/*f*/3/*g*/;/*h*/4/*i*/}]",
+         "/*a*/[/*b*/1/*c*/,/*d*/2/*e*/,/*f*/3/*g*/,/*h*/4/*i*/]"}, // 8
+        {"[{/*a*/auto/*b*/1/*c*/,/*d*/2.2/*e*/}]", "/*a*/[(/*b*/1/*c*/,/*d*/2.2/*e*/)]"}, // 8
         {"[{/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/}]",
          "[/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/]"}, // 9
         {"{{/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/}}",

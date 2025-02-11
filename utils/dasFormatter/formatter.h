@@ -11,6 +11,11 @@ namespace das::format {
     // formatter config
     enum class FormatOpt {
         AlwaysBraces,
+        // in some cases old -> new syntax conversion depends on actual types
+        // It can't be done just during parser
+        // This flags enables such checks
+        // (e.g. [[A()]] can be A() or A(uninitialized))
+        TypeCheckDefaultInit,
     };
 
     class FormatOptions {
@@ -53,7 +58,7 @@ namespace das::format {
     };
 
     // Should be called before and after each formatting operation. Maintains internal compiler state
-    void init(stringstream *ss, string content, FormatOptions options);
+    void init(stringstream *ss, string content, FormatOptions options, ProgramPtr program);
     void destroy();
 
     /**
@@ -87,6 +92,18 @@ namespace das::format {
 
     // hack to get current identation
     string get_line(uint32_t line);
+
+    //
+    optional<StructurePtr> try_find_struct(const string &name);
+
+    enum class CanInit {
+        Can,
+        Cannot,
+        Unknown,
+    };
+
+    bool can_default_init(const string &name);
+    CanInit can_init_with(const string &name, uint32_t arg_cnt);
 
     // Maybe we should replace it with getConfig(), if there will be a lot of options
     bool is_replace_braces();

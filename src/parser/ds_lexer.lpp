@@ -977,6 +977,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     auto offset = txt.rfind('\n');
     const auto npos = -1;
     if (offset != npos) {
+        yylloc_param->first_line -= 1;
         yylloc_param->last_column = txt.size() - (offset + 1);
     }
     yyextra->das_nested_curly_braces --;

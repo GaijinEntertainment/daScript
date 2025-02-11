@@ -16,7 +16,6 @@
     #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
-    #define DAS_YYDEBUG 1
     #include "../src/parser/parser_state.h"
     #include "helpers.h"
     #include "formatter.h"
@@ -1656,7 +1655,16 @@ expression_yield
     ;
 
 expression_try_catch
-    :   DAS_TRY[loc] expression_block[tryBlock] DAS_CATCH expression_block[catchBlock] {
+    :   DAS_TRY[loc] expression_block[tryBlock] DAS_CATCH[catch] expression_block[catchBlock] {
+        if (format::is_replace_braces()) {
+            if (tokAt(scanner, @catch).line != tokAt(scanner, @tryBlock).last_line && // ad-hoc, fix location
+                format::prepare_rule(format::Pos::from_last(tokAt(scanner, @tryBlock)))) {
+                // skip \n after }
+                format::get_writer() << " ";
+                format::finish_rule(format::Pos::from(tokAt(scanner, @catch)));
+            }
+        }
+
         $$ = new ExprTryCatch(tokAt(scanner,@loc),ExpressionPtr($tryBlock),ExpressionPtr($catchBlock));
     }
     ;
@@ -1920,7 +1928,16 @@ capture_list
 
 optional_capture_list
     :   { $$ = nullptr; }
-    |   BRABRAB capture_list[cl] ']' ']' {         /* I guess remains the same */; $$ = $cl; }
+    |   BRABRAB[open] capture_list[cl] ']'[sq_end] ']'[close] {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @open)))) {
+            format::get_writer() << format::substring_between(tokAt(scanner, @open), tokAt(scanner, @cl))
+                      << "capture(" << format::get_substring(tokAt(scanner, @cl)) << ")"
+                      << format::substring_between(tokAt(scanner, @cl), tokAt(scanner, @sq_end));
+            format::finish_rule(format::Pos::from_last(tokAt(scanner, @close)));
+        }
+
+         ; $$ = $cl;
+    }
     |   DAS_CAPTURE '(' capture_list[cl] ')' { $$ = $cl; }
     ;
 
@@ -3789,10 +3806,10 @@ make_struct_decl
     |   BRABRAB [loc] type_declaration_no_options[mkt] '('[l_par] ')' [r_par] optional_block[blk] optional_trailing_delim_sqr_sqr [end_loc] {
         // std::cout << "case3" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
-            // auto maybe_init = ($mkt->hasNonTrivialCtor()) ? "" : "uninitialized";
-            auto maybe_init = "";
+            const auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt));
+            auto maybe_init = (format::can_default_init(type_name.value_or(""))) ? "" : "uninitialized";
             format::get_writer() << format::substring_between(tokAt(scanner,@loc), tokAt(scanner, @mkt))
-                                 << format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("") << "("
+                                 << type_name.value_or("") << "("
                                  << format::substring_between(tokAt(scanner,@l_par), tokAt(scanner, @r_par))
                                  << maybe_init << ")"
                                  << format::substring_between(tokAt(scanner,@r_par), tokAt(scanner, @end_loc));
