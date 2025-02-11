@@ -83,6 +83,7 @@ namespace das::format {
      */
     string get_substring(LineInfo info);
     string get_substring(Pos pos1, Pos pos2);
+    string substring_between(LineInfo info1, LineInfo info2);
 
     // hack to get current identation
     string get_line(uint32_t line);

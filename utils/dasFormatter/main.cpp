@@ -147,7 +147,6 @@ Result transform_syntax(const string& filename, const string content, format::Fo
 
     int iter = 0;
     das_yydebug = 0;
-    std::cout << "Start" << std::endl;
     while (prev != src) {
         prev = src;
 
@@ -236,32 +235,41 @@ vector<TestData> test_cases() {
 
     const string postfix = "\n";
     vector<TestData> base = {
-        {"[[Foo a=1,b=2.0]]", "Foo(uninitialized a=1, b=2.0)"}, // 1
-        {"[[Foo]]", "Foo(uninitialized)"}, // 2
-        {"[[Foo()]]", "Foo()"}, // 3
-        {"[[Foo() a=1,b=2.0]]", "Foo(a=1, b=2.0)"}, // 4
-        {"[[auto 1,2]]", "(1, 2)"}, // 4
-//        {"[[for x in [1, 20]; x*x; where x%2 == 0]];", "[iterator for x in [1, 20]; x*x; where x%2 == 0];"}, // 5 // each result is discarded, which is unsaf
-        {"[{Foo a=1,b=2.;a=2,b=1.}]", "[Foo(a=1, b=2.), Foo(a=2, b=1.)]"}, // 6
-        {"[{Foo() a=1,b=2.;a=2,b=1.}]", "[Foo(a=1, b=2.), Foo(a=2, b=1.)]"}, // 7
-//        {"[{Foo a=1,b=2.;a=2,b=1. <optional_block>}]", "[Foo(a=1,b=2.),Foo(a=2,b=1.)]"}, // what about optional block in new syntax
-        {"[{auto 1;2;3;4}]", "array(1, 2, 3, 4)"}, // 8
-        {"[{auto 1,2.2}]", "array((1, 2.2))"}, // 8
-        {"[{for x in 0..10; x*x; where x%2==0}]", "[for x in 0..10; x*x; where x%2==0]"}, // 9
-        {"{{ 1; 2; 3; 4 }}", "{1, 2, 3, 4}"}, // 10
-        {R"({{ 1=>"a"; 2=>"b"; 3=>"c"; 4=>"d" }})", R"({1=>"a", 2=>"b", 3=>"c", 4=>"d"})"}, // 10
-        {"[[auto 1,2.,\"3\"; 1,4.,\"2\"]]", "fixed_array((1, 2., \"3\"), (1, 4., \"2\"))"}, // 13
-
-        // anything
-        {"[[auto 1;2]]", "fixed_array(1, 2)"},
-        {"[[Foo?]]", "default<Foo?>"},
-        {"[[Foo#]]", "struct<Foo#>(uninitialized)"},
-        {"[[Foo]]", "Foo(uninitialized)"},
-
+//        {"[[/**/Foo a/*a*/=/**/1/*a*///abc\n,//dsa\n/*dsa*/\nb=2.0/**/\n//dsa\n]]",
+//         "/**/Foo(uninitialized a/*a*/=/**/1/*a*///abc\n,//dsa\n/*dsa*/\nb=2.0/**/\n//dsa\n)"}, // 1
+//        {"[[/**/Foo/**/]]", "/**/Foo(uninitialized/**/)"}, // 2
+//        {"[[/*a*/Foo(/*b*/)/*c*/]]", "/*a*/Foo(/*b*/)/*c*/"}, // 3
+//        {"[[/*a*/Foo(/*b*/)/*c*/ a=1/*d*/,/*e*/b=2.0/*f*/]]", "/*a*//*b*/Foo(/*c*/ a=1/*d*/,/*e*/b=2.0/*f*/)"}, // 4
+//        {"[[/*a*/auto/*b*/1/*c*/,/*d*/2/*e*/]]", "/*a*/(/*b*/1/*c*/,/*d*/2/*e*/)"}, // 13
+////        {"[[for x in [1, 20]; x*x; where x%2 == 0]];", "[iterator for x in [1, 20]; x*x; where x%2 == 0];"}, // 5 // each result is discarded, which is unsaf
+//        {"[{/*a*/Foo/*b*/a=1/*c*/,/*d*/b=2./*e*/;/*f*/a=2/*g*/,/*h*/b=1./*i*/}]",
+//         "/*a*/[Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*f*/a=2/*g*/,/*h*/b=1./*i*/)]"}, // 6
+//        {"[{/*a*/Foo()/*b*/a=1/*c*/,/*d*/b=2./*e*/;/*g*/a=2/*h*/,/*i*/b=1./*j*/}]",
+//         "/*a*/[Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*g*/a=2/*h*/,/*i*/b=1./*j*/)]"}, // 7
+////        {"[{Foo a=1,b=2.;a=2,b=1. <optional_block>}]", "[Foo(a=1,b=2.),Foo(a=2,b=1.)]"}, // what about optional block in new syntax
+//        {"[{/*a*/auto/*b*/1/*c*/;/*d*/2/*e*/;/*f*/3/*g*/;/*h*/4/*i*/}]",
+//         "/*a*/[/*b*/1/*c*/,/*d*/2/*e*/,/*f*/3/*g*/,/*h*/4/*i*/]"}, // 8
+//        {"[{/*a*/auto/*b*/1/*c*/,/*d*/2.2/*e*/}]", "/*a*/[(/*b*/1/*c*/,/*d*/2.2/*e*/)]"}, // 8
+        {"[{/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/}]",
+         "[/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/]"}, // 9
+        {"{{/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/}}",
+         "[/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/]"}, // 12
+        {"{{/*a*/1/*b*/;/*c*/2/*d*/;/*e*/3/*f*/;/*g*/4/*h*/}}", "{/*a*/1/*b*/,/*c*/2/*d*/,/*e*/3/*f*/,/*g*/4/*h*/}"}, // 10
+        {R"({{/*a*/1=>"a"/*b*/;/*c*/2=>"b"/*d*/;/*e*/3=>"c"/*f*/;/*g*/4=>"d"/*h*/}})",
+         R"({/*a*/1=>"a"/*b*/,/*c*/2=>"b"/*d*/,/*e*/3=>"c"/*f*/,/*g*/4=>"d"/*h*/})"}, // 10
+        {R"([[/*a*/auto/*b*/1/*c*/,/*d*/2./*e*/,/*f*/"3"/*g*/;/*h*/1/*i*/,/*j*/4./*k*/,/*l*/"2"/*m*/]])",
+         R"(/*a*/fixed_array((/*b*/1/*c*/,/*d*/2./*e*/,/*f*/"3"/*g*/),(/*h*/1/*i*/,/*j*/4./*k*/,/*l*/"2"/*m*/)))"}, // 13
+//
+//        // anything
+        {"[[/*a*/auto/*b*/1/*c*/;/*d*/2/*e*/]]",
+         "/*a*/fixed_array(/*b*/1/*c*/,/*d*/2/*e*/)"},
+        {"[[/*a*/Foo?/*b*/]]", "/*a*/default<Foo?>/*b*/"},
+        {"[[/*a*/Foo#/*b*/]]", "/*a*/struct<Foo#>(uninitialized/*b*/)"},
 
         // nested
 
-        {"[[Bar a=[[Foo a=1,b=2.0]]]]", "Bar(uninitialized a=Foo(uninitialized a=1, b=2.0))"},
+        {"[[/*a*/Bar/*b*/a=[[/*c*/Foo/*d*/a=1/*e*/,/*f*/b=2.0/*g*/]]/*h*/]]",
+         "/*a*/Bar(uninitialized/*b*/a=/*c*/Foo(uninitialized/*d*/a=1/*e*/,/*f*/b=2.0/*g*/)/*h*/)"},
     };
     for (auto &[in, out, options]: base) {
         in = in_prefix + in + postfix;
@@ -270,31 +278,30 @@ vector<TestData> test_cases() {
 
     vector<TestData> tuple_expansion = {
         // tuple expansion (doesn't work in global scope!)
-        {"def main()\n    var [[a, b]] = (123, 321);",
-         "def main()\n    var (a, b) = (123, 321);"},
-        {"def main()\n    var [[a, b]]: tuple<int, int> = (123, 321);",
-         "def main()\n    var (a, b): tuple<int, int> = (123, 321);"},
+        {"def main()\n    var [[/*a*/a/*b*/,/*c*/b/*d*/]] = (123, 321);",
+         "def main()\n    var (/*a*/a/*b*/,/*c*/b/*d*/) = (123, 321);"},
+        {"def main()\n    var [[/*a*/a/*b*/,/*c*/b/*d*/]]: tuple<int, int> = (123, 321);",
+         "def main()\n    var (/*a*/a/*b*/,/*c*/b/*d*/): tuple<int, int> = (123, 321);"},
     };
 
     vector<TestData> braces_tests = {
         // test braces
-//        {"def b()\n    let a = 5", "def b() {\n    let a = 5;\n}"},
-//        {"def b() {\n    let a = 5;\n}", "def b() {\n    let a = 5;\n}"},
-//        {"def b(it)\n    let x = typeinfo is_iterable (it)", "def b(it) {\n    let x = typeinfo is_iterable (it);\n}"},
-//
-//        {"class C\n"
-//         "    a : int = 5\n"
-//         "class A : C\n"
-//         "    c : string = \"add_new_call_macro\"",
-//         "class C {\n"
-//         "    a : int = 5;\n"
-//         "}\n"
-//         "class A : C {\n"
-//          "    c : string = \"add_new_call_macro\";\n"
-//          "}",
-//        },
-        {"let x = $() 1+2", ""},
-        {"def main()\n    let x = 1    // 123", "def main() {\n    let x = 1;    // 123\n}"},
+        {"def b()/**/\n    /**/let a = 5", "def b()/**/ {\n    /**/let a = 5;\n}"},
+        {"def b() /**/{\n    let a = 5;/**/\n}", "def b() /**/{\n    let a = 5;/**/\n}"},
+        {"def b(it)\n    let x = typeinfo is_iterable (it)", "def b(it) {\n    let x = typeinfo is_iterable (it);\n}"},
+
+        {"class C\n"
+         "    a : int = 5\n"
+         "class A : C\n"
+         "    c : string = \"add_new_call_macro\"",
+         "class C {\n"
+         "    a : int = 5;\n"
+         "}\n"
+         "class A : C {\n"
+          "    c : string = \"add_new_call_macro\";\n"
+          "}",
+        },
+        {"def main()//aa\n    /**/let x = 1    // 123", "def main() {//aa\n    /**/let x = 1;    // 123\n}"},
         {"bitfield A\n    refCount\n\n", "bitfield A {\n    refCount,\n}\n"},
 
         {"def b(x, y)\n    for x in y\n        x = x + 1",
@@ -315,8 +322,8 @@ vector<TestData> test_cases() {
         opt = format::FormatOptions(std::unordered_set<format::FormatOpt>{format::FormatOpt::AlwaysBraces});
     }
     vector<TestData> res;
-//    res.insert(res.end(), base.begin(), base.end());
-//    res.insert(res.end(), tuple_expansion.begin(), tuple_expansion.end());
+    res.insert(res.end(), base.begin(), base.end());
+    res.insert(res.end(), tuple_expansion.begin(), tuple_expansion.end());
     res.insert(res.end(), braces_tests.begin(), braces_tests.end()); // did not implement yet
     return res;
 }

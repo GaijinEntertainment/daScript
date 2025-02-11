@@ -106,6 +106,11 @@ namespace das::format {
                              Pos{info.last_line, info.last_column});
     }
 
+    string substring_between(LineInfo info1, LineInfo info2) {
+        return get_substring(Pos{info1.last_line, info1.last_column},
+                             Pos{info2.line, info2.column});
+    }
+
     string get_line(uint32_t line) {
         return state.content_.at(line - 1);
     }

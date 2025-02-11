@@ -12,18 +12,28 @@
 
 namespace das::format {
 
+    static inline constexpr int npos = -1;
+
     template <typename T>
-    string convert_to_string(const vector<T> &vec, string sep = ", ") {
+    string convert_to_string(const vector<T> &vec, string sep = ",", string prev_sep = ",") {
         if (vec.empty()) {
             return "";
         }
-        return accumulate(
-            next(vec.begin()), vec.end(),
-            format::get_substring(vec.front()->at),
-            [sep] (const string& a, const T &b) {
-                return a + sep + format::get_substring(b->at);
+        string result = format::get_substring(vec.front()->at);
+        Pos last = Pos::from_last(vec.front()->at);
+        std::for_each(vec.begin()+1, vec.end(), [&last, &prev_sep, &result, &sep](const auto& el) {
+            auto concat = format::get_substring(last, Pos::from(el->at));
+            auto prev_end = concat.find(prev_sep);
+            assert(prev_end != npos); // incorrect prev_sep
+            if (prev_end != npos) {
+                concat.replace(prev_end, prev_sep.size(), sep);
             }
-        );
+            auto new_line = format::get_substring(el->at);
+            result += concat;
+            result += new_line;
+            last = Pos::from_last(el->at);
+        });
+        return result;
     }
 
     optional<string> type_to_string(const TypeDecl *type_decl, LineInfo loc /* pass loc, since it's sometimes incorrect on type itself*/) {
@@ -36,44 +46,93 @@ namespace das::format {
         }
     }
 
-    string handle_msd(ExprMakeStruct* msd, string type_name, bool is_initialized = true) {
+    string handle_msd(LineInfo start, ExprMakeStruct* msd, LineInfo end, string type_name, bool is_initialized = true) {
+        // ";" -> ","
         auto structs = msd->structs;
         if (structs.empty()) {
             return "";
         }
-        auto maybe_uninit = is_initialized ? "" : "uninitialized ";
-        auto converter = [&type_name, &maybe_uninit] (string a, MakeStructPtr tuple) {
-            a += ", " + type_name + "(" + maybe_uninit + das::format::convert_to_string(*tuple.get()) + ")";
-            return a;
-        };
+        const string prev_sep = ";";
+        auto maybe_uninit = is_initialized ? "" : "uninitialized";
+        const string prefix = type_name + "(" + maybe_uninit;
+        const string sep = "), " + prefix;
+        const string suffix = ")";
 
-        return accumulate(
-            next(structs.begin()), structs.end(),
-            converter("", structs.front()).substr(2), // rid of ", "
-            converter
-        );
+        const auto front = structs.front();
+        string result;
+        auto last = start;
+        for (size_t i = 0; i < structs.size(); i++) {
+            const auto &el = structs.at(i);
+            auto concat = format::substring_between(last, el->front()->at);
+            auto prev_end = concat.find(prev_sep);
+            assert(i == 0 || prev_end != npos); // incorrect prev_sep
+            if (i == 0) {
+                concat = prefix + concat;
+            } else if (prev_end != npos) {
+                concat.replace(prev_end, prev_sep.size(), sep);
+            } else {
+                std::abort();
+            }
+            auto new_line = convert_to_string(*el.get());
+            result
+                .append(concat)
+                .append(new_line);
+            last = el->back()->at;
+        }
+        result.append(format::substring_between(last, end))
+              .append(suffix);
+        return result;
     }
 
-    string handle_mka(ExprMakeArray* mka) {
+    string handle_mka(LineInfo start, ExprMakeArray* mka, LineInfo end) {
         const auto &values = mka->values;
         if (values.empty()) {
             return "";
         }
-        auto converter = [] (string a, const ExpressionPtr &tuple) {
-            a += ", ";
-            if ( tuple->rtti_isMakeTuple() ) {
-                a += "(" + das::format::convert_to_string(static_cast<ExprMakeTuple *>(tuple.get())->values) + ")";
-            } else {
-                a += das::format::get_substring(tuple->at);
-            }
-            return a;
-        };
+        const string prev_sep = ";";
+        const string sep = ",";
 
-        return accumulate(
-            next(values.begin()), values.end(),
-            converter("", values.front()).substr(2), // rid of ", "
-            converter
-        );
+        const auto &front = static_cast<ExprMakeTuple *>(values.front().get())->values;
+        string result;
+        string suffix;
+        Pos last = Pos::from_last(start);
+        for (size_t i = 0; i < values.size(); i++) {
+            const auto &el = values.at(i);
+            string middle;
+            string prefix;
+            Pos from;
+            Pos to;
+            auto real_sep = suffix + sep;
+            if ( el->rtti_isMakeTuple() ) {
+                const auto &values = static_cast<ExprMakeTuple *>(el.get())->values;
+                prefix = "(";
+                suffix = ")";
+                middle = convert_to_string(values);
+                from = Pos::from(values.front()->at);
+                to = Pos::from_last(values.back()->at);
+            } else {
+                suffix.clear();
+                middle = format::get_substring(el->at);
+                from = Pos::from(el->at);
+                to = Pos::from_last(el->at);
+            }
+            auto concat = format::get_substring(last, from);
+            auto prev_end = concat.find(prev_sep);
+            assert(i == 0 || prev_end != npos); // incorrect prev_sep
+            if (i == 0) {
+                concat = prefix + concat;
+            } else if (prev_end != npos) {
+                real_sep.append(prefix);
+                concat.replace(prev_end, prev_sep.size(), real_sep);
+            }
+            result.append(concat)
+                  .append(middle);
+            last = to;
+        }
+        result.append(get_substring(last, Pos::from(end)))
+              .append(suffix);
+
+        return result;
     }
 
     size_t find_comma_place(const std::string &line) { // dirty hack to find last meaningful character.
@@ -81,7 +140,6 @@ namespace das::format {
         if (comment_start == 0) {
             return 0;
         }
-        const auto npos = -1;
         if (comment_start != npos) {
             const auto &maybe_comment = line.substr(comment_start);
             const auto quotes = std::count(maybe_comment.begin(), maybe_comment.end(), '"');
