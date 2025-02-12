@@ -2282,6 +2282,9 @@ struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
+    |   struct_variable_declaration_list[list] ';' {
+        $$ = $list;
+    }
     |   struct_variable_declaration_list[list] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@list);
