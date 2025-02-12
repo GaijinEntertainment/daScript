@@ -1,5 +1,6 @@
 #include "daScript/daScript.h"
 #include "daScript/simulate/fs_file_info.h"
+#include "../dasFormatter/fmt.h"
 
 using namespace das;
 
@@ -408,6 +409,7 @@ void print_help() {
         << "    -v2syntax   enable version 2 syntax (experimental)\n"
         << "    -jit        enable JIT\n"
         << "    -project <path.das_project> path to project file\n"
+        << "    -run-fmt    <inplace/dry> <v2/v1> run formatter, requires 2 arguments\n"
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
         << "    -dry-run    compile and simulate script without execution\n"
@@ -459,6 +461,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool outputProgramCode = false;
     bool pauseAfterDone = false;
     bool dryRun = false;
+    optional<format::FormatOptions> formatter;
     for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
             string cmd(argv[i]+1);
@@ -489,6 +492,31 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 outputProgramCode = true;
             } else if ( cmd=="dry-run" ) {
                 dryRun = true;
+            } else if ( cmd=="run-fmt" ) {
+                formatter.emplace();
+                if ( i+2 > argc ) {
+                    printf("formatter requires 2 arguments\n");
+                    print_help();
+                    return -1;
+                }
+                const string mode = string(argv[i+1]);
+                if (mode == "-i" || mode == "--inplace") {
+                    formatter->insert(format::FormatOpt::Inplace);
+                } else if (string(argv[i+1]) == "-d" || string(argv[i+1]) == "--dry") {
+                } else {
+                    print_help();
+                    return -1;
+                }
+                i += 1;
+                const string to_v2 = string(argv[i+1]);
+                if (to_v2 == "-v2") {
+                    formatter->insert(format::FormatOpt::V2Syntax);
+                } else if (to_v2 == "-v1") {
+                } else {
+                    print_help();
+                    return -1;
+                }
+                i++;
             } else if ( cmd=="args" ) {
                 break;
             } else if ( cmd=="pause" ) {
@@ -585,6 +613,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
+
+    if (formatter) {
+        return format::run(formatter.value(), files);
+    }
     // compile and run
     int failedFiles = 0;
     for ( auto & fn : files ) {

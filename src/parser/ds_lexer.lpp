@@ -286,7 +286,9 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
         yylloc_param->first_line = yyextra->last_token_end.line;
         yylloc_param->first_column = yyextra->last_token_end.column;
-        yylloc_param->last_column -= 1; // idk, remove it?
+        yylloc_param->last_line = yyextra->last_token_end.line;
+        yylloc_param->last_column = yyextra->last_token_end.column;
+        // yylloc_param->last_column -= 1;
         return OPEN_BRACE;
     } else if (yyextra->das_current_line_indent < yyextra->das_indent_level*yyextra->das_tab_size ) {
         yyextra->das_indent_level--;
@@ -294,6 +296,8 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         printf("emit }, cli=%i, indent =%i\n", yyextra->das_current_line_indent, yyextra->das_indent_level);
         #endif
         yylval_param->i = yyextra->das_indent_level;
+        yylloc_param->first_line = yyextra->last_token_end.last_line;
+        yylloc_param->first_column = yyextra->last_token_end.last_column;
         yylloc_param->last_line = yyextra->last_token_end.last_line;
         yylloc_param->last_column = yyextra->last_token_end.last_column;
         return CLOSE_BRACE;
@@ -309,7 +313,9 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             #ifdef FLEX_DEBUG
             printf("emit }\n");
             #endif
-            return '}';
+            yylloc_param->first_line = yylloc_param->last_line;
+            yylloc_param->first_column = yylloc_param->last_column;
+            return CLOSE_BRACE;
         } else {
             return 0;
         }

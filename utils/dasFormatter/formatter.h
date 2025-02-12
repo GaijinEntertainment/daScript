@@ -5,17 +5,19 @@
 #include <optional>
 #include <utility>
 #include "daScript/daScript.h"
+#include "daScript/das_config.h"
 
 namespace das::format {
 
     // formatter config
     enum class FormatOpt {
-        AlwaysBraces,
+        Inplace,
+        V2Syntax,
         // in some cases old -> new syntax conversion depends on actual types
         // It can't be done just during parser
         // This flags enables such checks
         // (e.g. [[A()]] can be A() or A(uninitialized))
-        TypeCheckDefaultInit,
+        VerifyUninitialized,
     };
 
     class FormatOptions {
@@ -23,9 +25,14 @@ namespace das::format {
         FormatOptions() = default;
         FormatOptions(unordered_set<FormatOpt> options_) : options(move(options_)) {}
 
-        bool contains(FormatOpt opt) {
+        bool contains(FormatOpt opt) const {
             return options.count(opt);
         }
+
+        void insert(FormatOpt opt) {
+            options.emplace(opt);
+        }
+
     private:
         unordered_set<FormatOpt> options;
     };

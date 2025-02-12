@@ -169,8 +169,18 @@ namespace das::format {
             format::prepare_rule(prev_loc)) {
             format::get_writer() << " {" << internal << "\n" << std::string(value * tab_size, ' ') + "}";
             format::finish_rule(end_loc);
+//            format::get_writer() << " {"
+//                                 << substring_between(prev_loc, mid)
+//                                 << internal()
+//                                 << substring_between(mid, end_loc)
+//                                 << "}";
+//            format::finish_rule(Pos::from_last(end_loc));
         }
     }
+
+//    void handle_brace(LineInfo prev_loc, int value, LineInfo mid, LineInfo end_loc) {
+//        handle_brace(prev_loc, value, mid, [&mid](){ return get_substring(mid);}, end_loc);
+//    }
 
     void replace_with(Pos start, LineInfo internal, Pos end, const std::string &open, const std::string &close) {
         if (format::is_replace_braces() && format::prepare_rule(start)) {

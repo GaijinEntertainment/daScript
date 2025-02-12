@@ -3921,5 +3921,3 @@ LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const str
         li.first_column,li.first_line,
         lie.last_column,lie.last_line);
 }
-
-

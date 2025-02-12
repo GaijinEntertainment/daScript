@@ -182,7 +182,7 @@ namespace das::format {
     }
 
     bool is_replace_braces() {
-        return state.options.contains(FormatOpt::AlwaysBraces);
+        return state.options.contains(FormatOpt::V2Syntax);
     }
 
     bool is_enabled() {
