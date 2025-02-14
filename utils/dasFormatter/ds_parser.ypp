@@ -2752,7 +2752,8 @@ sem_or_comm
     : SEMICOLON[loc] {
         format::try_emit_at_eol(format::Pos::from_last(tokAt(scanner,@loc)), ',');
     }
-    | ',' sem_or_comm
+    | commas SEMICOLON
+    | commas
 
 enum_list
     :   {

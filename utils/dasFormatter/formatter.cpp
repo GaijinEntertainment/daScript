@@ -42,6 +42,9 @@ namespace das::format {
         state.last = {.line=1, .column=0};
         state.program = program;
         state.options = move(options);
+        if ((state.content_.empty() || state.content_.front() != "options gen2;") && state.options.contains(FormatOpt::V2Syntax)) {
+            *state.ss << "options gen2;\n";
+        }
     }
 
     void destroy() {
