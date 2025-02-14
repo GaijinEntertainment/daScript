@@ -208,16 +208,17 @@ vector<TestData> test_cases() {
 }
 
 int test() {
+    TextPrinter tp;
     auto cases = test_cases();
     int ret_code = 0;
     for (const auto &[in, out, cfg]: cases) {
         auto res = transform_syntax("test.das", in, cfg); // any filename
         if (!res.ok) {
-            cout << "input:\n" << in << " \noutput:\n" << res.error->content << " \nerror:\n" << res.error->what
+            tp << "input:\n" << in << " \noutput:\n" << res.error->content << " \nerror:\n" << res.error->what
                  << "\n";
             ret_code = -1;
         } else if (res.ok != out) {
-            cout << " output:\n" << res.ok.value() << "\nexpected:\n" << out << "\n";
+            tp << " output:\n" << res.ok.value() << "\nexpected:\n" << out << "\n";
             ret_code = -1;
         }
     }
@@ -227,9 +228,10 @@ int test() {
 int main(int argc, char** argv) {
     format::FormatOptions opts;
     bool is_tests = false;
+    TextPrinter tp;
     vector<string> files;
     if (argc < 2) {
-        cout << help();
+        tp << help();
         return -1;
     }
     for (size_t i = 1; i < argc; i++) {
@@ -244,12 +246,12 @@ int main(int argc, char** argv) {
             } else if (arg == "-v2" || arg == "--v2") {
                 opts.insert(format::FormatOpt::V2Syntax);
             } else {
-                cout << help();
+                tp << help();
             }
         }
     }
     if (!is_tests && files.empty()) {
-        cout << "no files" << "\n";
+        tp << "no files" << "\n";
     }
     InitModules();
     if (is_tests) {

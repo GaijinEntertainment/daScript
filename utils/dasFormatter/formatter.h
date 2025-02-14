@@ -6,6 +6,7 @@
 #include "daScript/das_config.h"
 
 using std::optional;
+using std::nullopt;
 
 namespace das::format {
 

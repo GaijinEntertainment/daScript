@@ -875,12 +875,6 @@ expression_for_loop
     :   DAS_FOR[loc] { yyextra->das_need_oxford_comma=false; } variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] expression_block[block] {
         $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
     }
-    |   DAS_FOR[loc] { // Had to add to successfully convert to v2 syntax, just copied from ds2_parser
-                             yyextra->das_keyword = true;
-     }  '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' expression_block[block] {
-        yyextra->das_keyword = false;
-        $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
-    }
     ;
 
 expression_unsafe
@@ -2636,23 +2630,14 @@ global_let
     }
     ;
 
-commas
-    :
-    |   commas ','
-    ;
-
-
-sem_or_comm
-    : commas semicolon
-
 enum_list
     :   {
         $$ = new Enumeration();
     }
-    |   enum_list[pE] sem_or_comm {
+    |   enum_list[pE] semicolon {
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] sem_or_comm {
+    |   enum_list[pE] NAME[name] semicolon {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration already declared " + *$name, tokAt(scanner,@name),
@@ -2667,7 +2652,7 @@ enum_list
         delete $name;
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] '=' expr[value] sem_or_comm {
+    |   enum_list[pE] NAME[name] '=' expr[value] semicolon {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,ExpressionPtr($value),tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration value already declared " + *$name, tokAt(scanner,@name),
@@ -3520,7 +3505,7 @@ optional_trailing_delim_sqr_sqr
     ;
 
 optional_trailing_delim_cur_sqr
-    : close_block ']'
+    : '}' ']'
     | SEMICOLON_CUR_SQR
     | COMMA_CUR_SQR
     ;
@@ -3880,7 +3865,7 @@ array_comprehension
     |   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
-    |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] close_block ']' [forend] {
+    |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
     |   '{' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {

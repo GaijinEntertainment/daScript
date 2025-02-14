@@ -2410,7 +2410,7 @@ structure_variable_declaration
 
 opt_sem
     :
-    | opt_sem SEMICOLON
+    | SEMICOLON
 
 struct_variable_declaration_list
     :   {
@@ -2736,7 +2736,7 @@ global_let
             auto tak = tokAt(scanner,@pub_var);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeGlobalVariables(tak);
         }
-    } optional_field_annotation[ann] let_variable_declaration[decl] opt_sem {
+    } optional_field_annotation[ann] let_variable_declaration[decl] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@decl);
             for ( auto & crd : yyextra->g_CommentReaders )
@@ -2752,8 +2752,7 @@ sem_or_comm
     : SEMICOLON[loc] {
         format::try_emit_at_eol(format::Pos::from_last(tokAt(scanner,@loc)), ',');
     }
-    | commas SEMICOLON
-    | commas
+    | ',' sem_or_comm
 
 enum_list
     :   {
