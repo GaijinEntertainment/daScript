@@ -108,6 +108,7 @@ namespace das {
         vector<tuple<string, uint64_t, ProgramPtr, Module*>> parsedModules;
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
+        bool                                        ignoreEmptyExternal = false;
         void tag   ( const char * name );
         template<typename T>
         void read  ( T & data ) { buffer->read(data); }
