@@ -350,8 +350,6 @@
 %token      COMMA_CUR_SQR           ",}]"
 
 
-%type <i>               open_block
-%type <i>               close_block
 %type <pEnum>           enum_name
 %type <pNameList>       bitfield_bits
 %type <pNameList>       bitfield_alias_bits
@@ -1246,12 +1244,12 @@ function_declaration
 
 
 open_block
-    : '{' { $$ = 0xdeadbeef; }
-    | OPEN_BRACE[depth] { $$ = $depth; }
+    : '{'
+    | OPEN_BRACE[depth]
 
 close_block
-    : '}' { $$ = 0xdeadbeef; }
-    | CLOSE_BRACE[depth] { $$ = $depth; }
+    : '}'
+    | CLOSE_BRACE[depth]
 
 expression_block
     :   open_block [bbegin] expressions[block] close_block [bend] {
@@ -2645,9 +2643,7 @@ commas
 
 
 sem_or_comm
-    : semicolon
-    | commas semicolon
-    | commas
+    : commas semicolon
 
 enum_list
     :   {
@@ -3462,7 +3458,7 @@ make_struct_dim
         msd->structs.push_back(MakeStructPtr($msf));
         $$ = msd;
     }
-    |   make_struct_dim[msd] semicolon make_struct_fields[msf] {
+    |   make_struct_dim[msd] ';' make_struct_fields[msf] {
         ((ExprMakeStruct *) $msd)->structs.push_back(MakeStructPtr($msf));
         $$ = $msd;
     }
@@ -3669,7 +3665,7 @@ make_dim
         mka->values.push_back(ExpressionPtr($val));
         $$ = mka;
     }
-    |   make_dim[mka] semicolon make_tuple[val] {
+    |   make_dim[mka] ';' make_tuple[val] {
         ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
         $$ = $mka;
     }
@@ -3778,7 +3774,7 @@ make_table
         mka->values.push_back(ExpressionPtr($val));
         $$ = mka;
     }
-    |   make_table[mka] semicolon make_map_tuple[val] {
+    |   make_table[mka] ';' make_map_tuple[val] {
         ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
         $$ = $mka;
     }
@@ -3794,7 +3790,7 @@ expr_map_tuple_list
     ;
 
 make_table_decl
-    :   open_block [loc] expr_map_tuple_list[arguments] optional_comma close_block {
+    :   '{' [loc] expr_map_tuple_list[arguments] optional_comma '}' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
@@ -3887,10 +3883,10 @@ array_comprehension
     |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] close_block ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
-    |   open_block DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] close_block [forend] {
+    |   '{' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
     }
-    | CBRCBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] close_block close_block [forend] {
+    | CBRCBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' '}' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,true);
     }
     ;

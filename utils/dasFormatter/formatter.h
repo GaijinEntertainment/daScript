@@ -1,9 +1,7 @@
 #ifndef DAS_FORMATTER_H
 #define DAS_FORMATTER_H
 
-#include <string>
 #include <optional>
-#include <utility>
 #include "daScript/daScript.h"
 #include "daScript/das_config.h"
 
@@ -23,7 +21,7 @@ namespace das::format {
     class FormatOptions {
     public:
         FormatOptions() = default;
-        FormatOptions(unordered_set<FormatOpt> options_) : options(move(options_)) {}
+        FormatOptions(das_hash_set<FormatOpt> options_) : options(move(options_)) {}
 
         bool contains(FormatOpt opt) const {
             return options.count(opt);
@@ -34,7 +32,7 @@ namespace das::format {
         }
 
     private:
-        unordered_set<FormatOpt> options;
+        das_hash_set<FormatOpt> options;
     };
 
     struct Pos {
@@ -60,7 +58,7 @@ namespace das::format {
 
 
         bool operator <= (const Pos &rhs) const {
-            return line <= rhs.line || (line == rhs.line && column <= rhs.column);
+            return line < rhs.line || (line == rhs.line && column <= rhs.column);
         }
     };
 

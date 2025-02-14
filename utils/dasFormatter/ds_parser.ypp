@@ -586,46 +586,16 @@ program
 
 semicolon
     : SEMICOLON[colon] {
-        if (format::is_replace_braces()) {
-            auto semic_loc = tokAt(scanner,@colon);
-            const auto &line = format::get_line(semic_loc.last_line);
-            auto comma_place = format::find_comma_place(line);
-            semic_loc.last_column = comma_place + 1;
-            if (line.at(comma_place) != ';' && // ad-hoc, fix location
-                format::prepare_rule(format::Pos::from_last(semic_loc))) {
-                format::get_writer() << ";";
-                format::finish_rule(format::Pos::from_last(semic_loc));
-            }
-        }
+        format::try_emit_at_eol(format::Pos::from_last(tokAt(scanner,@colon)), ';');
     }
     | ';' {}
 
 semicolon_both
     : SEMICOLON[colon] {
-        if (format::is_replace_braces()) {
-            auto semic_loc = tokAt(scanner,@colon);
-            const auto &line = format::get_line(semic_loc.last_line);
-            auto comma_place = format::find_comma_place(line);
-            semic_loc.last_column = comma_place + 1;
-            if (line.at(comma_place) != ';' && // ad-hoc, fix location
-                format::prepare_rule(format::Pos::from_last(semic_loc))) {
-                format::get_writer() << ";";
-                format::finish_rule(format::Pos::from_last(semic_loc));
-            }
-        }
+        format::try_emit_at_eol(format::Pos::from_last(tokAt(scanner,@colon)), ';');
     }
     | ';'[colon] {
-        if (format::is_replace_braces()) {
-            auto semic_loc = tokAt(scanner,@colon);
-            const auto &line = format::get_line(semic_loc.last_line);
-            auto comma_place = format::find_comma_place(line);
-            semic_loc.last_column = comma_place + 1;
-            if (line.at(comma_place) != ';' && // ad-hoc, fix location
-                format::prepare_rule(format::Pos::from_last(semic_loc))) {
-                format::get_writer() << ";";
-                format::finish_rule(format::Pos::from_last(semic_loc));
-            }
-        }
+        format::try_emit_at_eol(format::Pos::from_last(tokAt(scanner,@colon)), ';');
     }
 
 top_level_reader_macro
@@ -915,7 +885,7 @@ expression_if_one_liner
     ;
 
 expression_if_then_else
-    :   if_or_static_if[loc] expr[cond] expression_block[block] expression_else[then] {
+    :   if_or_static_if[loc] expr[cond] expression_block[block] opt_sem expression_else[then] {
         format::wrap_par_expr(tokAt(scanner,@cond), $cond->at);
 
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
@@ -970,6 +940,7 @@ expression_while_loop
 
 expression_with
     :   DAS_WITH[loc] expr[with] expression_block[block] {
+        format::wrap_par_expr(tokAt(scanner,@with), $with->at);
         auto pWith = new ExprWith(tokAt(scanner,@loc));
         pWith->with = ExpressionPtr($with);
         pWith->body = ExpressionPtr($block);
@@ -978,7 +949,7 @@ expression_with
     ;
 
 expression_with_alias
-    :   DAS_ASSUME[loc] NAME[aname] '=' { yyextra->das_need_oxford_comma=true; } expr[subexpr] {
+    :   DAS_ASSUME[loc] NAME[aname] '=' { yyextra->das_need_oxford_comma=true; } expr[subexpr] semicolon {
         $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, $subexpr );
         delete $aname;
     }
@@ -1323,7 +1294,7 @@ expression_block
         if (format::is_replace_braces() && $bbegin != 0xdeadbeef &&
             format::prepare_rule(prev_loc)) {
             const auto internal = format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,@block)));
-            format::get_writer() << " {" << internal << "\n" << std::string($bbegin * yyextra->das_tab_size, ' ') + "}";
+            format::get_writer() << " {" << internal << "\n" << string($bbegin * yyextra->das_tab_size, ' ') + "}";
             format::finish_rule(format::Pos::from_last(tokAt(scanner,@block)));
         }
 
@@ -1335,7 +1306,7 @@ expression_block
         if (format::is_replace_braces() && $bbegin != 0xdeadbeef && format::prepare_rule(prev_loc)) {
             {
                 const auto internal = format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,@block)));
-                format::get_writer() << " {" << internal << "\n" << std::string($bbegin * yyextra->das_tab_size, ' ') + "}";
+                format::get_writer() << " {" << internal << "\n" << string($bbegin * yyextra->das_tab_size, ' ') + "}";
                 format::finish_rule(format::Pos::from_last(tokAt(scanner,@block)));
             }
 
@@ -1343,7 +1314,7 @@ expression_block
             assert($bbegin_f != 0xdeadbeef);
             {
                 const auto internal_f = format::get_substring(prev_loc_f, format::Pos::from_last(tokAt(scanner,@final)));
-                format::get_writer() << " finally {" << internal_f << "\n" << std::string($bbegin_f * yyextra->das_tab_size, ' ') + "}";
+                format::get_writer() << " finally {" << internal_f << "\n" << string($bbegin_f * yyextra->das_tab_size, ' ') + "}";
                 format::finish_rule(format::Pos::from_last(tokAt(scanner,@final)));
             }
         }
@@ -1659,13 +1630,15 @@ expression_yield
 
 expression_try_catch
     :   DAS_TRY[loc] expression_block[tryBlock] DAS_CATCH[catch] expression_block[catchBlock] {
-        if (format::is_replace_braces()) {
-            if (tokAt(scanner, @catch).line != tokAt(scanner, @tryBlock).last_line && // ad-hoc, fix location
-                format::prepare_rule(format::Pos::from_last(tokAt(scanner, @tryBlock)))) {
-                // skip \n after }
-                format::get_writer() << " ";
-                format::finish_rule(format::Pos::from(tokAt(scanner, @catch)));
-            }
+        const auto end_block = format::Pos::from_last(tokAt(scanner, @tryBlock));
+        const auto start = format::Pos::from(tokAt(scanner, @loc));
+        if (format::is_replace_braces() &&
+            format::get_indent(end_block, yyextra->das_tab_size) == format::get_indent(start, yyextra->das_tab_size) &&
+            tokAt(scanner, @catch).line != end_block.line && format::prepare_rule(end_block)) {
+
+            // skip \n after }
+            format::get_writer() << " ";
+            format::finish_rule(format::Pos::from(tokAt(scanner, @catch)));
         }
 
         $$ = new ExprTryCatch(tokAt(scanner,@loc),ExpressionPtr($tryBlock),ExpressionPtr($catchBlock));
@@ -2777,10 +2750,7 @@ global_let
 
 sem_or_comm
     : SEMICOLON[loc] {
-        if (format::prepare_rule(format::Pos::from_last(tokAt(scanner,@loc)))) {
-            format::get_writer() << ",";
-            format::finish_rule(format::Pos::from_last(tokAt(scanner,@loc)));
-        }
+        format::try_emit_at_eol(format::Pos::from_last(tokAt(scanner,@loc)), ',');
     }
     | commas SEMICOLON
     | commas
@@ -2919,17 +2889,20 @@ enum_declaration
         }
         ast_enumDeclaration(scanner,$annL,tokAt(scanner,@annL),$pubE,$edecl,$pE,Type::tInt);
     }
-    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] ':' enum_basic_type_declaration[ebt] open_block {
+    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] ':' enum_basic_type_declaration[ebt] open_block[begin] enum_list[pE] close_block[end] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@edecl);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
         }
-    } enum_list[pE] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
         }
-    } close_block {
+        const auto first_loc = format::Pos::from(tokAt(scanner,@begin));
+        handle_brace(first_loc, $begin,
+                     format::get_substring(first_loc, format::Pos::from_last(tokAt(scanner,@pE))),
+                     yyextra->das_tab_size,
+                     format::Pos::from_last(tokAt(scanner,@pE)));
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumeration($edecl->name.c_str(),pubename);
@@ -3470,7 +3443,7 @@ tuple_alias_declaration
         }
     } close_block[close] {
         if (format::is_replace_braces() && $blk != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, @close)))) {
-            format::get_writer() << "\n" << std::string($close * yyextra->das_tab_size, ' ') + "}";
+            format::get_writer() << "\n" << string($close * yyextra->das_tab_size, ' ') + "}";
             format::finish_rule(format::Pos::from(tokAt(scanner,@close)));
         }
         auto vtype = make_smart<TypeDecl>(Type::tTuple);
@@ -3514,7 +3487,7 @@ variant_alias_declaration
         }
     } close_block[close] {
         if (format::is_replace_braces() && $close != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, @close)))) {
-            format::get_writer() << "\n" << std::string($close * yyextra->das_tab_size, ' ') + "}";
+            format::get_writer() << "\n" << string($close * yyextra->das_tab_size, ' ') + "}";
             format::finish_rule(format::Pos::from(tokAt(scanner,@close)));
         }
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
@@ -3542,13 +3515,11 @@ bitfield_alias_declaration
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
         }
     } open_block[blk] bitfield_alias_bits[list] commas close_block[close] {
-        if (format::is_replace_braces() && $blk != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, @blk)))) {
-            // todo: something wrong with list location
-            format::get_writer() << " {" << format::get_substring(format::Pos::from(tokAt(scanner, @blk)),
-                                                                  format::Pos::from_last(tokAt(scanner,@close)))
-                                 << std::string($blk * yyextra->das_tab_size, ' ') + "}";
-            format::finish_rule(format::Pos::from_last(tokAt(scanner,@close)));
-        }
+        const auto prev_loc = format::Pos::from(tokAt(scanner,@blk));
+        handle_brace(prev_loc, $blk,
+                     format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,@list))),
+                     yyextra->das_tab_size,
+                     format::Pos::from_last(tokAt(scanner,@list)));
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfieldEntries(atvname);
@@ -3741,8 +3712,7 @@ make_struct_decl
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
             const bool is_initialized = false;
-            const auto before = format::get_substring(format::Pos::from_last(tokAt(scanner,@loc)),
-                                                      format::Pos::from(tokAt(scanner, @mkt)));
+            const auto before = format::substring_between(tokAt(scanner,@loc), tokAt(scanner, @mkt));
             const auto internal = format::handle_msd(tokAt(scanner, @mkt),
                                                      static_cast<ExprMakeStruct*>($msd),
                                                      tokAt(scanner, $blk != nullptr ? @blk : @end),
@@ -3770,7 +3740,7 @@ make_struct_decl
         // // std::cout << "case2" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type = format::type_to_string($mkt, tokAt(scanner,@mkt));
-            std::unordered_set<std::string> always_init = {
+            das_hash_set<string> always_init = {
                 // Is there a method to describe all this types?
                 "struct<array<",
                 "array<",
@@ -3790,7 +3760,7 @@ make_struct_decl
             if ($mkt->isPointer()) {
                 format::get_writer() << "default<" << type.value() << ">";
                 suffix.clear();
-            } else if (std::any_of(always_init.begin(), always_init.end(),
+            } else if (any_of(always_init.begin(), always_init.end(),
                             [&type](auto t){ return type.value_or("").find(t) == 0; })) {
                 format::get_writer() << type.value_or("") << "(";
             } else {

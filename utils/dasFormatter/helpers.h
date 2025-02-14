@@ -30,7 +30,7 @@ namespace das::format {
                 concat.replace(prev_end, prev_sep.size(), sep);
             } else {
                 assert(concat.find("=>") != npos);
-                cerr << "Be careful, => is not safe yet" << endl;
+                cerr << "Be careful, => is not safe yet\n";
                 concat.replace(concat.find("=>"), 2, ","); // It's not safe!
             }
             auto new_line = format::get_substring(el->at);
@@ -164,11 +164,40 @@ namespace das::format {
         return line.find_last_not_of(" \t\r", comment_start == npos ? npos : comment_start - 1);
     }
 
+    void try_emit_at_eol(Pos loc, char sep) {
+        if (format::is_replace_braces()) {
+            const auto &line = format::get_line(loc.line);
+            auto comma_place = format::find_comma_place(line);
+            loc.column = comma_place + 1;
+            if (line.at(comma_place) != sep && // ad-hoc, fix location
+                format::prepare_rule(loc)) {
+                format::get_writer() << sep;
+                format::finish_rule(loc);
+            }
+        }
+
+    }
+
+    bool get_indent(Pos loc, size_t tab_size) {
+        auto start = loc;
+        start.column = 0;
+        auto substr = get_substring(start, loc);
+        count(substr.begin(), substr.end(), ' ');
+        count(substr.begin(), substr.end(), '\t');
+        return count(substr.begin(), substr.end(), '\t') + count(substr.begin(), substr.end(), ' ') / tab_size;
+    }
+
     void handle_brace(Pos prev_loc, int value, const std::string &internal, size_t tab_size, Pos end_loc) {
         if (format::is_replace_braces() && value != 0xdeadbeef &&
             format::prepare_rule(prev_loc)) {
-            format::get_writer() << " {" << internal << "\n" << std::string(value * tab_size, ' ') + "}";
-            format::finish_rule(end_loc);
+            const auto &line = format::get_line(prev_loc.line);
+            auto brace_column = format::find_comma_place(line);
+            prev_loc.column = brace_column + 1;
+
+            if (format::prepare_rule(prev_loc)) {
+                format::get_writer() << " {" << internal << "\n" << std::string(value * tab_size, ' ') + "}";
+                format::finish_rule(end_loc);
+            }
 //            format::get_writer() << " {"
 //                                 << substring_between(prev_loc, mid)
 //                                 << internal()

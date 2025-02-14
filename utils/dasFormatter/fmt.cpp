@@ -98,7 +98,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
         prev = src;
 
         stringstream ss;
-        format::init(&ss, src.c_str(), options, src_program);
+        format::init(&ss, src, options, src_program);
 
         // All initialization and parsing took from daslang source
         yyscan_t scanner = nullptr;

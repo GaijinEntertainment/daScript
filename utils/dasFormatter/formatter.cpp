@@ -73,7 +73,7 @@ namespace das::format {
         string result;
         for (; pos1.line < pos2.line; pos1.line++, pos1.column = 0) {
             if (pos1.line > state.content_.size()) {
-                cerr << "Warning, location line out of range" << endl;
+                cerr << "Warning, location line out of range\n";
                 return "";
             } else if (pos1.column > state.content_[pos1.line - 1].length()) {
 //                cout << "incorrect location info, extra symbols "
@@ -91,11 +91,11 @@ namespace das::format {
         }
 
         if (pos1.line > state.content_.size()) {
-            cerr << "Warning, location line out of range" << endl;
+            cerr << "Warning, location line out of range\n";
             return "";
         }
         if (pos1.column > state.content_[pos1.line - 1].size()) {
-            cerr << "Warning, location column out of range" << endl;
+            cerr << "Warning, location column out of range\n";
             return "";
         }
         result += state.content_[pos1.line - 1].substr(pos1.column, pos2.column - pos1.column);
@@ -122,7 +122,7 @@ namespace das::format {
     }
 
     bool prepare_rule(Pos pos) {
-        if (state.enabled && state.last < pos) {
+        if (state.enabled && state.last <= pos) {
             try_print_until(pos);
             return true;
         }

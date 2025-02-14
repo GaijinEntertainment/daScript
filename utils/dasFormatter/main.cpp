@@ -106,8 +106,8 @@ vector<TestData> test_cases() {
 
         // nested
 
-        {"[[/*a*/Bar/*b*/a=[[/*c*/Foo/*d*/a=1/*e*/,/*f*/b=2.0/*g*/]]/*h*/]]",
-                                                                "/*a*/Bar(uninitialized/*b*/a=/*c*/Foo(uninitialized/*d*/a=1/*e*/,/*f*/b=2.0/*g*/)/*h*/)"},
+        {"[[/*a*/Bar/*b*/a=[[/*c*/Foo/*f*/b=2.0/*g*/]]/*h*/]]",
+         "/*a*/Bar(/*b*/a=/*c*/Foo(uninitialized/*f*/b=2.0/*g*/)/*h*/)"},
     };
     for (auto &[in, out, options]: base) {
         in = in_prefix + in + postfix;
@@ -140,10 +140,10 @@ vector<TestData> test_cases() {
                                                              "}",
         },
         {"def main()//aa\n    /**/let x = 1    // 123",      "def main() {//aa\n    /**/let x = 1;    // 123\n}"},
-        {"bitfield A\n    refCount\n\n",                     "bitfield A {\n    refCount,\n}\n"},
+        {"bitfield A\n    refCount",                     "bitfield A {\n    refCount,\n}"},
 
         {"def b(x, y)\n    for x in y\n        x = x + 1",
-                                                             "def b(x, y) {\n    for (x in y) {\n        x = x + 1;\n    };\n}"},
+                                                             "def b(x, y) {\n    for (x in y) {\n        x = x + 1;\n    }\n}"},
         {"def b()\n    let a = 5\n    if a<0\n        a = a + 1",
                                                              "def b() {\n    let a = 5;\n    if (a<0) {\n        a = a + 1;\n    }\n}"},
         {"def lower_bound ( a:array<auto(TT)>; val : TT const-& )\n"
@@ -156,20 +156,49 @@ vector<TestData> test_cases() {
                                                              "}\n"
                                                              "let x = 1;"},
         {
-         "bitfield/*a*/Test/*b*/\n"
-         "/*c*/one /*d*/\n"
-         "/*e*/two/*f*/\n"
-         "/*g*/three/*h*/\n"
-         "/*i*/\n",
-                                                             "bitfield/*a*/Test {/*b*/\n"
-                                                             "/*c*/one;/*d*/\n"
-                                                             "/*e*/two;/*f*/\n"
-                                                             "/*g*/three;/*h*/\n"
-                                                             "}\n"
-                                                             "/*i*/"},
+         "bitfield/*a*/Test// b\n"
+         "    one //c\n"
+         "    two //d\n"
+         "    three//e",
+                                                             "bitfield/*a*/Test {// b\n"
+                                                             "    one, //c\n"
+                                                             "    two, //d\n"
+                                                             "    three,//e\n"
+                                                             "}"},
+        {
+            "enum/*a*/Test/*b*/:/*c*/int// a\n"
+            "    b// d\n",
+            "enum/*a*/Test/*b*/:/*c*/int {// a\n"
+            "    b,// d\n"
+            "}\n"
+        },
+        {
+            "def test()//a\n"
+            "    try//b\n"
+            "        for i in range(0, 1)\n"
+            "            assert(false)// d\n"
+            "    recover//c\n"
+            "        assert(false)\n",
+            "def test() {//a\n"
+            "    try {//b\n"
+            "        for (i in range(0, 1)) {\n"
+            "            assert(false);// d\n"
+            "        }\n"
+            "    } recover {//c\n"
+            "        assert(false);\n"
+            "    }\n"
+            "}\n",
+        },
+        {
+            "def f()\n"
+            "    assume x = 1",
+            "def f() {\n"
+            "    assume x = 1;\n"
+            "}",
+        },
     };
     for (auto &[in, out, opt]: braces_tests) {
-        opt = format::FormatOptions(std::unordered_set<format::FormatOpt>{format::FormatOpt::V2Syntax});
+        opt = format::FormatOptions(das_hash_set<format::FormatOpt>{format::FormatOpt::V2Syntax});
     }
     vector<TestData> res;
     res.insert(res.end(), base.begin(), base.end());
@@ -185,10 +214,10 @@ int test() {
         auto res = transform_syntax("test.das", in, cfg); // any filename
         if (!res.ok) {
             cout << "input:\n" << in << " \noutput:\n" << res.error->content << " \nerror:\n" << res.error->what
-                 << endl;
+                 << "\n";
             ret_code = -1;
         } else if (res.ok != out) {
-            cout << " output:\n" << res.ok.value() << "\nexpected:\n" << out << endl;
+            cout << " output:\n" << res.ok.value() << "\nexpected:\n" << out << "\n";
             ret_code = -1;
         }
     }
@@ -220,7 +249,7 @@ int main(int argc, char** argv) {
         }
     }
     if (!is_tests && files.empty()) {
-        cout << "no files" << endl;
+        cout << "no files" << "\n";
     }
     InitModules();
     if (is_tests) {
