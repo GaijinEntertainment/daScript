@@ -584,11 +584,12 @@ namespace das
         return context->allocateString(bytes.data, bytes.size, at);
     }
 
-    void delete_string ( char * & str, Context * context, LineInfoArg * at ) {
-        if ( !str ) return;
+    bool delete_string ( char * & str, Context * context, LineInfoArg * at ) {
+        if ( !str ) return false;
         uint32_t len = stringLengthSafe(*context, str);
-        context->freeString(str, len, at);
+        bool res = context->freeString(str, len, at);
         str = nullptr;
+        return res;
     }
 
     void builtin_append_char_to_string(string & str, int32_t Ch) {
