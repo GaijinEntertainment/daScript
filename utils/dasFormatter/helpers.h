@@ -1,12 +1,6 @@
 #ifndef DAS_HELPERS_H
 #define DAS_HELPERS_H
 
-#include <algorithm>
-#include <numeric>
-#include <string>
-#include <vector>
-#include <ostream>
-#include <iostream>
 #include <daScript/ast/ast_typedecl.h>
 
 #include "formatter.h"
@@ -22,7 +16,7 @@ namespace das::format {
         }
         string result = format::get_substring(vec.front()->at);
         Pos last = Pos::from_last(vec.front()->at);
-        std::for_each(vec.begin()+1, vec.end(), [&last, &prev_sep, &result, &sep](const auto& el) {
+        for_each(vec.begin()+1, vec.end(), [&last, &prev_sep, &result, &sep](const auto& el) {
             auto concat = format::get_substring(last, Pos::from(el->at));
             auto prev_end = concat.find(prev_sep);
 //            assert(prev_end != npos); // incorrect prev_sep
@@ -30,7 +24,7 @@ namespace das::format {
                 concat.replace(prev_end, prev_sep.size(), sep);
             } else {
                 assert(concat.find("=>") != npos);
-                cerr << "Be careful, => is not safe yet\n";
+                TextPrinter() << "Be careful, => is not safe yet\n";
                 concat.replace(concat.find("=>"), 2, ","); // It's not safe!
             }
             auto new_line = format::get_substring(el->at);
@@ -149,14 +143,14 @@ namespace das::format {
         return result;
     }
 
-    size_t find_comma_place(const std::string &line) { // dirty hack to find last meaningful character.
+    size_t find_comma_place(const string &line) { // dirty hack to find last meaningful character.
         auto comment_start = line.find("//");
         if (comment_start == 0) {
             return 0;
         }
         if (comment_start != npos) {
             const auto &maybe_comment = line.substr(comment_start);
-            const auto quotes = std::count(maybe_comment.begin(), maybe_comment.end(), '"');
+            const auto quotes = count(maybe_comment.begin(), maybe_comment.end(), '"');
             if (quotes % 2 != 0) {
                 comment_start = line.size();
             }
@@ -187,7 +181,7 @@ namespace das::format {
         return count(substr.begin(), substr.end(), '\t') + count(substr.begin(), substr.end(), ' ') / tab_size;
     }
 
-    void handle_brace(Pos prev_loc, int value, const std::string &internal, size_t tab_size, Pos end_loc) {
+    void handle_brace(Pos prev_loc, int value, const string &internal, size_t tab_size, Pos end_loc) {
         if (format::is_replace_braces() && value != 0xdeadbeef &&
             format::prepare_rule(prev_loc)) {
             const auto &line = format::get_line(prev_loc.line);
@@ -195,7 +189,7 @@ namespace das::format {
             prev_loc.column = brace_column + 1;
 
             if (format::prepare_rule(prev_loc)) {
-                format::get_writer() << " {" << internal << "\n" << std::string(value * tab_size, ' ') + "}";
+                format::get_writer() << " {" << internal << "\n" << string(value * tab_size, ' ') + "}";
                 format::finish_rule(end_loc);
             }
 //            format::get_writer() << " {"
@@ -211,7 +205,7 @@ namespace das::format {
 //        handle_brace(prev_loc, value, mid, [&mid](){ return get_substring(mid);}, end_loc);
 //    }
 
-    void replace_with(Pos start, LineInfo internal, Pos end, const std::string &open, const std::string &close) {
+    void replace_with(Pos start, LineInfo internal, Pos end, const string &open, const string &close) {
         if (format::is_replace_braces() && format::prepare_rule(start)) {
             format::get_writer() << open << format::get_substring(internal) << close;
             format::finish_rule(end);

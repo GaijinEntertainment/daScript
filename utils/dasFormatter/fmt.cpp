@@ -1,7 +1,8 @@
 #include "daScript/daScript.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "../src/parser/parser_state.h"
-#include <iostream>
+
+#include <fstream>
 
 #include "daScript/ast/ast.h"
 
@@ -20,11 +21,6 @@ union YYSTYPE;
 
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
 int fmt_yyparse(yyscan_t scanner);
-
-#include <vector>
-#include <string>
-#include <sstream>
-#include <fstream>
 
 das::FileAccessPtr get_file_access(char *pak);//link time resolved dependencies
 
@@ -58,6 +54,8 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     policies.fail_on_lack_of_aot_export = false;
     policies.version_2_syntax = false;
 
+    TextPrinter tp;
+
     uint64_t preqT = 0;
     auto access = get_file_access(nullptr);
     TextPrinter tout;
@@ -71,8 +69,8 @@ Result transform_syntax(const string &filename, const string content, format::Fo
                                          policies);
             policies.threadlock_context |= program->options.getBoolOption("threadlock_context", false);
             if (program->failed()) {
-                for (auto err: program->errors) {
-                    std::cout << err.what << " " << err.at.describe() << std::endl;
+                for (const auto& err: program->errors) {
+                    tp << err.what << " " << err.at.describe() << '\n';
                 }
                 return {};
             }
@@ -91,13 +89,13 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     const auto tmp_name1 = "/tmp/tmp1.das";
     {
         ofstream ostream(tmp_name1);
-        ostream << src;
+        ostream << src.c_str();
     }
     auto src_program = parseDaScript(tmp_name1, "", access, tout, libGroup, true, true, policies);
     while (prev != src) {
         prev = src;
 
-        stringstream ss;
+        TextWriter ss;
         format::init(&ss, src, options, src_program);
 
         // All initialization and parsing took from daslang source
@@ -143,7 +141,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
             if (iter == 0) {
                 return {};
             }
-            std::cout << program->errors.front().at.describe() << std::endl;
+            tp << program->errors.front().at.describe() << '\n';
             return {.error=Result::ErrorInfo{prev, program->errors.front().what}};
         }
         src = ss.str();
@@ -152,7 +150,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     const auto tmp_name = "/tmp/tmp.das";
     {
         ofstream ostream(tmp_name);
-        ostream << src;
+        ostream << src.c_str();
         ostream.flush();
     }
     policies.version_2_syntax = options.contains(format::FormatOpt::V2Syntax);
@@ -160,19 +158,20 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     if (!program->failed()) {
         return {.ok=src};
     } else {
-        std::cout << program->errors.front().at.describe() << std::endl;
+        tp << program->errors.front().at.describe() << '\n';
         return {.error=Result::ErrorInfo{prev, program->errors.front().what}};
     }
 }
 
 int run(FormatOptions opts, const vector<string> &files) {
     int ret_code = 0;
+    TextPrinter tp;
     if (files.size() > 1 && !opts.contains(FormatOpt::Inplace)) {
-        cerr << "Expected inplace mode in case of more than 1 file" << endl;
+        tp << "Expected inplace mode in case of more than 1 file\n";
     }
     for (const auto &file: files) {
-        cout << "input file=" << file << endl;
-        ifstream t(file);
+        tp << "input file=" << file << '\n';
+        std::ifstream t(file.c_str());
 
         string str((istreambuf_iterator<char>(t)),
                    istreambuf_iterator<char>());
@@ -183,16 +182,16 @@ int run(FormatOptions opts, const vector<string> &files) {
                 ofstream out(file);
                 out << res.ok.value();
             } else {
-                cout << res.ok.value();
+                tp << res.ok.value();
             }
         } else if (res.error) {
             if (!opts.contains(FormatOpt::Inplace)) {
-                cout << res.error->content << endl;
+                tp << res.error->content << '\n';
             }
-            cout << file << endl << res.error->what << endl;
+            tp << file << '\n' << res.error->what << '\n';
             ret_code = -1;
         } else {
-            cout << "cant_compile=" << file << endl;
+            tp << "cant_compile=" << file << '\n';
         }
     }
     return ret_code;

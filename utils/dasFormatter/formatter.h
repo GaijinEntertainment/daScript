@@ -5,6 +5,8 @@
 #include "daScript/daScript.h"
 #include "daScript/das_config.h"
 
+using std::optional;
+
 namespace das::format {
 
     // formatter config
@@ -63,13 +65,13 @@ namespace das::format {
     };
 
     // Should be called before and after each formatting operation. Maintains internal compiler state
-    void init(stringstream *ss, string content, FormatOptions options, ProgramPtr program);
+    void init(TextWriter *ss, string content, FormatOptions options, ProgramPtr program);
     void destroy();
 
     /**
      * @return output stream
      */
-    ostream& get_writer();
+    TextWriter& get_writer();
 
     /**
      * This function should be called before handling each rule

@@ -1,9 +1,5 @@
 #include "formatter.h"
 
-#include <vector>
-#include <iostream>
-#include <sstream>
-
 namespace das::format {
 
     struct State {
@@ -12,7 +8,7 @@ namespace das::format {
         Pos last;
         ProgramPtr program;
         bool enabled = false;
-        stringstream *ss;
+        TextWriter *ss;
     };
 
     static State state;
@@ -30,7 +26,7 @@ namespace das::format {
     }
 
 
-    void init(stringstream *ss, string content, FormatOptions options, ProgramPtr program) {
+    void init(TextWriter *ss, string content, FormatOptions options, ProgramPtr program) {
         string line;
         content.push_back('\n'); // easiest way to flush the last line
         for (const auto c: content) {
@@ -70,10 +66,11 @@ namespace das::format {
             return "";
         }
 
+        TextPrinter tp;
         string result;
         for (; pos1.line < pos2.line; pos1.line++, pos1.column = 0) {
             if (pos1.line > state.content_.size()) {
-                cerr << "Warning, location line out of range\n";
+                tp << "Warning, location line out of range\n";
                 return "";
             } else if (pos1.column > state.content_[pos1.line - 1].length()) {
 //                cout << "incorrect location info, extra symbols "
@@ -91,11 +88,11 @@ namespace das::format {
         }
 
         if (pos1.line > state.content_.size()) {
-            cerr << "Warning, location line out of range\n";
+            tp << "Warning, location line out of range\n";
             return "";
         }
         if (pos1.column > state.content_[pos1.line - 1].size()) {
-            cerr << "Warning, location column out of range\n";
+            tp << "Warning, location column out of range\n";
             return "";
         }
         result += state.content_[pos1.line - 1].substr(pos1.column, pos2.column - pos1.column);
@@ -117,7 +114,7 @@ namespace das::format {
         return state.content_.at(line - 1);
     }
 
-    ostream& get_writer() {
+    TextWriter& get_writer() {
         return *state.ss;
     }
 
