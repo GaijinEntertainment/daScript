@@ -94,6 +94,7 @@
     void das2_yybegin_reader ( yyscan_t yyscanner );
     void das2_yyend_reader ( yyscan_t yyscanner );
     void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info );
+    void das2_strfmt ( yyscan_t yyscanner );
 
     namespace das { class Module; }
     void das2_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
@@ -396,6 +397,8 @@
 %type <s>               optional_structure_parent
 %type <s>               require_module_name
 %type <s>               annotation_argument_name
+%type <s>               format_string
+%type <s>               optional_format_string
 %type <aa>              annotation_argument
 %type <aa>              annotation_argument_value
 %type <aaList>          annotation_argument_list
@@ -626,6 +629,16 @@ string_constant
     |   BEGIN_STRING END_STRING                            { $$ = new string(); }
     ;
 
+format_string
+    :   { $$ = new string(); }
+    |   format_string[ss] STRING_CHARACTER[char] { $$ = $ss; $ss->push_back($char); }
+    ;
+
+optional_format_string
+    :   { $$ = new string(""); }
+    |   ':' { das2_strfmt(scanner); } format_string[fmt] { $$ = $fmt; }
+    ;
+
 string_builder_body
     :   {
         $$ = new ExprStringBuilder();
@@ -641,10 +654,17 @@ string_builder_body
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
         $$ = $sb;
     }
-    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] END_STRING_EXPR %prec BEGIN_STRING_EXPR {
-        auto se = ExpressionPtr($subexpr);
+    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] optional_format_string[sfmt] END_STRING_EXPR %prec BEGIN_STRING_EXPR {
+        auto se = $subexpr;
+        if ( !$sfmt->empty() ) {
+            auto call_fmt = new ExprCall(tokAt(scanner,@sfmt), "_::fmt");
+            call_fmt->arguments.push_back(make_smart<ExprConstString>(tokAt(scanner,@sfmt),":" + *$sfmt));
+            call_fmt->arguments.push_back(se);
+            se = call_fmt;
+        }
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(se);
         $$ = $sb;
+        delete $sfmt;
     }
     ;
 
