@@ -5434,7 +5434,9 @@ namespace das {
                 }
                 if ( possibleEnums.size()==1 ) {
                     auto td = make_smart<TypeDecl>(possibleEnums.back());
-                    return make_smart<ExprConstEnumeration>(expr->at, expr->name, td);
+                    auto res = make_smart<ExprConstEnumeration>(expr->at, expr->name, td);
+                    res->type = td;
+                    return res;
                 } else if ( possibleBitfields.size()==1 ) {
                     auto alias = possibleBitfields.back();
                     int bit = alias->findArgumentIndex(expr->name);
@@ -5443,6 +5445,7 @@ namespace das {
                         td->ref = false;
                         auto bitConst = new ExprConstBitfield(expr->at, 1u << bit);
                         bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
+                        bitConst->type = td;
                         return bitConst;
                     } else {
                         error("bitfield '" + expr->name + "' not found in " + describeType(alias), "", "",
