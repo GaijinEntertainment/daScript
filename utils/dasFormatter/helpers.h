@@ -1,78 +1,223 @@
 #ifndef DAS_HELPERS_H
 #define DAS_HELPERS_H
 
-#include <algorithm>
-#include <numeric>
-#include <string>
-#include <vector>
 #include <daScript/ast/ast_typedecl.h>
 
 #include "formatter.h"
 
 namespace das::format {
 
+    static inline constexpr int npos = -1;
+
     template <typename T>
-    string convert_to_string(const vector<T> &vec, string sep = ", ") {
+    string convert_to_string(const vector<T> &vec, string sep = ",", string prev_sep = ",") {
         if (vec.empty()) {
             return "";
         }
-        return accumulate(
-            next(vec.begin()), vec.end(),
-            format::get_substring(vec.front()->at),
-            [sep] (const string& a, const T &b) {
-                return a + sep + format::get_substring(b->at);
+        string result = format::get_substring(vec.front()->at);
+        Pos last = Pos::from_last(vec.front()->at);
+        for_each(vec.begin()+1, vec.end(), [&last, &prev_sep, &result, &sep](const auto& el) {
+            auto concat = format::get_substring(last, Pos::from(el->at));
+            auto prev_end = concat.find(prev_sep);
+//            assert(prev_end != npos); // incorrect prev_sep
+            if (prev_end != npos) {
+                concat.replace(prev_end, prev_sep.size(), sep);
+            } else {
+                assert(concat.find("=>") != npos);
+                TextPrinter() << "Be careful, => is not safe yet\n";
+                concat.replace(concat.find("=>"), 2, ","); // It's not safe!
             }
-        );
+            auto new_line = format::get_substring(el->at);
+            result += concat;
+            result += new_line;
+            last = Pos::from_last(el->at);
+        });
+        return result;
     }
 
     optional<string> type_to_string(const TypeDecl *type_decl, LineInfo loc /* pass loc, since it's sometimes incorrect on type itself*/) {
-        if (type_decl->isTemp(false)) {
+        if (type_decl->isTemp(false) || type_decl->alias == "``MACRO``TAG``") {
             return "struct<" + format::get_substring(loc) + ">";
         } else if (type_decl->isAuto() && !type_decl->isPointer()) {
             return nullopt;
         } else {
-            return format::get_substring(loc);
+            return get_substring(loc);
         }
     }
 
-    string handle_msd(ExprMakeStruct* msd, string type_name, bool is_initialized = true) {
+    string handle_msd(LineInfo start, ExprMakeStruct* msd, LineInfo end, string type_name, bool is_initialized = true) {
+        // ";" -> ","
         auto structs = msd->structs;
         if (structs.empty()) {
             return "";
         }
-        auto maybe_uninit = is_initialized ? "" : "uninitialized ";
-        auto converter = [&type_name, &maybe_uninit] (string a, MakeStructPtr tuple) {
-            a += ", " + type_name + "(" + maybe_uninit + das::format::convert_to_string(*tuple.get()) + ")";
-            return a;
-        };
+        const string prev_sep = ";";
+        string maybe_uninit = is_initialized ? "" : "uninitialized";
+        const string prefix = type_name + "(";
+        const string sep = "), ";
+        const string suffix = ")";
 
-        return accumulate(
-            next(structs.begin()), structs.end(),
-            converter("", structs.front()).substr(2), // rid of ", "
-            converter
-        );
+        const auto front = structs.front();
+        string result;
+        auto last = start;
+        for (size_t i = 0; i < structs.size(); i++) {
+            const auto &el = structs.at(i);
+            auto concat = format::substring_between(last, el->front()->at);
+            auto prev_end = concat.find(prev_sep);
+            assert(i == 0 || prev_end != npos); // incorrect prev_sep
+            {
+                auto can_init = can_init_with(type_name, el->size());
+                switch (can_init) {
+                    case CanInit::Can: maybe_uninit.clear(); break;
+                    case CanInit::Cannot: maybe_uninit = "uninitialized"; break;
+                    case CanInit::Unknown: break;
+                }
+            }
+            const auto cur_prefix = prefix + maybe_uninit;
+            if (i == 0) {
+                concat = cur_prefix + concat;
+            } else if (prev_end != npos) {
+                concat.replace(prev_end, prev_sep.size(), sep + cur_prefix);
+            } else {
+                std::abort();
+            }
+            auto new_line = convert_to_string(*el.get());
+            result
+                .append(concat)
+                .append(new_line);
+            last = el->back()->at;
+        }
+        result.append(format::substring_between(last, end))
+              .append(suffix);
+        return result;
     }
 
-    string handle_mka(ExprMakeArray* mka) {
+    string handle_mka(LineInfo start, ExprMakeArray* mka, LineInfo end) {
         const auto &values = mka->values;
         if (values.empty()) {
             return "";
         }
-        auto converter = [] (string a, const ExpressionPtr &tuple) {
-            a += ", ";
-            if ( tuple->rtti_isMakeTuple() ) {
-                a += "(" + das::format::convert_to_string(static_cast<ExprMakeTuple *>(tuple.get())->values) + ")";
-            } else {
-                a += das::format::get_substring(tuple->at);
-            }
-            return a;
-        };
+        const string prev_sep = ";";
+        const string sep = ",";
 
-        return accumulate(
-            next(values.begin()), values.end(),
-            converter("", values.front()).substr(2), // rid of ", "
-            converter
-        );
+        const auto &front = static_cast<ExprMakeTuple *>(values.front().get())->values;
+        string result;
+        string suffix;
+        Pos last = Pos::from_last(start);
+        for (size_t i = 0; i < values.size(); i++) {
+            const auto &el = values.at(i);
+            string middle;
+            string prefix;
+            Pos from;
+            Pos to;
+            auto real_sep = suffix + sep;
+            if ( el->rtti_isMakeTuple() ) {
+                const auto &values = static_cast<ExprMakeTuple *>(el.get())->values;
+                prefix = "(";
+                suffix = ")";
+                middle = convert_to_string(values);
+                from = Pos::from(values.front()->at);
+                to = Pos::from_last(values.back()->at);
+            } else {
+                suffix.clear();
+                middle = format::get_substring(el->at);
+                from = Pos::from(el->at);
+                to = Pos::from_last(el->at);
+            }
+            auto concat = format::get_substring(last, from);
+            auto prev_end = concat.find(prev_sep);
+            assert(i == 0 || prev_end != npos); // incorrect prev_sep
+            if (i == 0) {
+                concat = prefix + concat;
+            } else if (prev_end != npos) {
+                real_sep.append(prefix);
+                concat.replace(prev_end, prev_sep.size(), real_sep);
+            }
+            result.append(concat)
+                  .append(middle);
+            last = to;
+        }
+        result.append(get_substring(last, Pos::from(end)))
+              .append(suffix);
+
+        return result;
+    }
+
+    size_t find_comma_place(const string &line) { // dirty hack to find last meaningful character.
+        auto comment_start = line.find("//");
+        if (comment_start == 0) {
+            return 0;
+        }
+        if (comment_start != npos) {
+            const auto &maybe_comment = line.substr(comment_start);
+            const auto quotes = count(maybe_comment.begin(), maybe_comment.end(), '"');
+            if (quotes % 2 != 0) {
+                comment_start = line.size();
+            }
+        }
+        return line.find_last_not_of(" \t\r", comment_start == npos ? npos : comment_start - 1);
+    }
+
+    void try_emit_at_eol(Pos loc, char sep) {
+        if (format::is_replace_braces()) {
+            const auto &line = format::get_line(loc.line);
+            auto comma_place = format::find_comma_place(line);
+            loc.column = comma_place + 1;
+            if (line.at(comma_place) != sep && // ad-hoc, fix location
+                format::prepare_rule(loc)) {
+                format::get_writer() << sep;
+                format::finish_rule(loc);
+            }
+        }
+
+    }
+
+    bool get_indent(Pos loc, size_t tab_size) {
+        auto start = loc;
+        start.column = 0;
+        auto substr = get_substring(start, loc);
+        count(substr.begin(), substr.end(), ' ');
+        count(substr.begin(), substr.end(), '\t');
+        return count(substr.begin(), substr.end(), '\t') + count(substr.begin(), substr.end(), ' ') / tab_size;
+    }
+
+    void handle_brace(Pos prev_loc, int value, const string &internal, size_t tab_size, Pos end_loc) {
+        if (format::is_replace_braces() && value != 0xdeadbeef &&
+            format::prepare_rule(prev_loc)) {
+            const auto &line = format::get_line(prev_loc.line);
+            auto brace_column = format::find_comma_place(line);
+            prev_loc.column = brace_column + 1;
+
+            if (format::prepare_rule(prev_loc)) {
+                format::get_writer() << " {" << internal << "\n" << string(value * tab_size, ' ') + "}";
+                format::finish_rule(end_loc);
+            }
+//            format::get_writer() << " {"
+//                                 << substring_between(prev_loc, mid)
+//                                 << internal()
+//                                 << substring_between(mid, end_loc)
+//                                 << "}";
+//            format::finish_rule(Pos::from_last(end_loc));
+        }
+    }
+
+//    void handle_brace(LineInfo prev_loc, int value, LineInfo mid, LineInfo end_loc) {
+//        handle_brace(prev_loc, value, mid, [&mid](){ return get_substring(mid);}, end_loc);
+//    }
+
+    void replace_with(Pos start, LineInfo internal, Pos end, const string &open, const string &close) {
+        if (format::is_replace_braces() && format::prepare_rule(start)) {
+            format::get_writer() << open << format::get_substring(internal) << close;
+            format::finish_rule(end);
+        }
+    }
+
+    void wrap_par_expr(LineInfo real_expr, LineInfo info_expr) {
+        if (format::is_replace_braces() && real_expr == info_expr && format::prepare_rule(Pos::from(real_expr))) {
+            format::get_writer() << "(" << format::get_substring(real_expr) << ")";
+            format::finish_rule(Pos::from_last(real_expr));
+        }
+
     }
 
     LineInfo concat(LineInfo first, LineInfo last) {
