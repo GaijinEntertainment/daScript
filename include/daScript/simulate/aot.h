@@ -2139,6 +2139,10 @@ namespace das {
         static __forceinline enable_if_t<is_invocable_v<BLK, ArgType...>, ResType> invoke_cmres ( Context *, LineInfo *, const BLK & blk, ArgType ...arg ) {
             return blk(das::forward<ArgType>(arg)...);
         }
+        template <typename ...ArgType, typename BLK>
+        static __forceinline enable_if_t<is_invocable_v<BLK, ArgType...>, ResType> invoke ( Context *, LineInfo *, const BLK & blk, ArgType ...arg ) {
+            return blk(das::forward<ArgType>(arg)...);
+        }
     };
 
     template <>

@@ -400,9 +400,15 @@ namespace das
             }
         }
 
-        __forceinline void freeString ( char * ptr, uint32_t length, const LineInfo * at) {
-            if ( instrumentAllocations ) onFreeString(ptr, at ? *at : LineInfo());
-            stringHeap->impl_freeString(ptr, length);
+        __forceinline bool freeString ( char * ptr, uint32_t length, const LineInfo * at) {
+            uint32_t size = length + 1;
+            size = (size + 15) & ~15;
+            if (stringHeap->isOwnPtr(ptr, size)) {
+                if ( instrumentAllocations ) onFreeString(ptr, at ? *at : LineInfo());
+                stringHeap->impl_freeString(ptr, length);
+                return true;
+            }
+            return false;
         }
 
         __forceinline void freeTempString ( char * ptr, const LineInfo * at ) {
@@ -789,6 +795,8 @@ namespace das
         bool                            breakOnException = false;
         bool                            alwaysErrorOnException = false;
         bool                            alwaysStackWalkOnException = false;
+        bool                            showLocalVariablesOnException = false;
+        bool                            showArgumentsOnException = false;
         bool                            instrumentAllocations = false;
         bool                            failed = false;
         bool                            verySafeContext = false;    // when true, array and table reserves don't free memory

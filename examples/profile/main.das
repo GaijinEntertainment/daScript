@@ -5,6 +5,8 @@ require rtti
 require debugapi
 require math
 
+options unsafe_table_lookup = false
+
 var HTML_TEST_MODE = false
 
 var LOG_TEST_COMPILATION_TIME = false

@@ -4,6 +4,8 @@ namespace das {
     bool is_in_aot();
     bool is_in_completion();
     bool is_folding();
+    const char * compiling_file_name ( );
+    const char * compiling_module_name ( );
     void setCommandLineArguments ( int argc, char * argv[] );
     void getCommandLineArguments( Array & arr );
     bool is_compiling ( );

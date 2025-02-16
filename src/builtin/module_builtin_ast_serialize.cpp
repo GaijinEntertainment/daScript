@@ -422,12 +422,16 @@ namespace das {
         string moduleName, mangledName;
         *this << moduleName << mangledName;
         auto funcModule = moduleLibrary->findModule(moduleName);
-        SERIALIZER_VERIFYF(funcModule!=nullptr, "module '%s' is not found", moduleName.c_str());
+        SERIALIZER_VERIFYF(ignoreEmptyExternal || funcModule, "das: serialize: module '%s' is not found", moduleName.c_str());
         return {funcModule, mangledName};
     }
 
     void AstSerializer::findExternal ( Function * & func ) {
         auto [funcModule, mangledName] = readModuleAndName();
+        if ( !funcModule ) {
+          func = nullptr;
+          return;
+        }
         auto f = funcModule->findFunction(mangledName);
         func = f ? f.get() : funcModule->findGeneric(mangledName).get();
         if ( func == nullptr && funcModule->wasParsedNameless ) {
@@ -1095,7 +1099,10 @@ namespace das {
         ser.tag("FieldDeclaration");
         ser << name << at;
         ser << type;
-        ser << init << annotation << offset << flags;
+        ser.ignoreEmptyExternal = true;
+        ser << init;
+        ser.ignoreEmptyExternal = false;
+        ser << annotation << offset << flags;
     }
 
     void Enumeration::EnumEntry::serialize( AstSerializer & ser ) {
@@ -1170,9 +1177,11 @@ namespace das {
     void Function::serialize ( AstSerializer & ser ) {
         ser.tag("Function");
         ser << name;
-    // Note: importatnt fields are placed separately for easier debugging
+        // Note: important fields are placed separately for easier debugging
         serializeAnnotationList(ser, annotations);
+        ser.ignoreEmptyExternal = true;
         ser << arguments;
+        ser.ignoreEmptyExternal = false;
         ser << result;
         ser << body;
         ser << classParent;
@@ -1599,7 +1608,7 @@ namespace das {
 
     void ExprMakeTuple::serialize ( AstSerializer & ser ) {
         ExprMakeArray::serialize(ser);
-        ser << isKeyValue;
+        ser << isKeyValue << recordNames;
     }
 
     void ExprArrayComprehension::serialize ( AstSerializer & ser ) {
@@ -1769,7 +1778,7 @@ namespace das {
                 ser << builtin;
                 if ( builtin ) {
                     string module;
-                    uint64_t mnh;
+                    uint64_t mnh = 0;
                     ser << module << mnh;
                     auto fun = ser.moduleLibrary->findModule(module)->findFunctionByMangledNameHash(mnh);
                     SERIALIZER_VERIFYF(fun, "expected to find function");
@@ -1813,7 +1822,7 @@ namespace das {
                 ser << builtin;
                 if ( builtin ) {
                     string module;
-                    uint64_t mnh;
+                    uint64_t mnh = 0;
                     ser << module << mnh;
                     auto fun = ser.moduleLibrary->findModule(module)->findFunctionByMangledNameHash(mnh);
                     SERIALIZER_VERIFYF(fun, "expected to find function");
@@ -2190,11 +2199,12 @@ namespace das {
                     continue;
                 }
 
+                auto deser = new Module();
+                program->library.addModule(deser);
                 try {
-                    auto deser = new Module();
-                    program->library.addModule(deser);
                     ser << *deser;
                 } catch ( std::runtime_error & r ) {
+                    delete deser;
                     LOG(LogLevel::warning) << r.what();
                     program->failToCompile = true;
                     return;
@@ -2206,7 +2216,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 43;
+        static constexpr uint32_t currentVersion = 45;
         return currentVersion;
     }
 

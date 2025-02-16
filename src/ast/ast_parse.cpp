@@ -455,6 +455,8 @@ namespace das {
         int err;
         daScriptEnvironment::bound->g_Program = program;
         daScriptEnvironment::bound->g_compilerLog = &logs;
+        daScriptEnvironment::bound->g_compilingFileName = fileName.c_str();
+        daScriptEnvironment::bound->g_compilingModuleName = moduleName.c_str();
         program->promoteToBuiltin = false;
         program->isCompiling = true;
         program->isDependency = isDep;
@@ -498,12 +500,23 @@ namespace das {
                     das_yybegin(src, len, scanner);
                 }
             }
+            // collect all unique comment readers
+            set<CommentReader *> commentReaders;
+            Module::foreach([&](Module * mod) -> bool {
+                if ( mod->commentReader ) {
+                    commentReaders.insert(mod->commentReader.get());
+                }
+                return true;
+            });
             libGroup.foreach([&](Module * mod){
                 if ( mod->commentReader ) {
-                    parserState.g_CommentReaders.push_back(mod->commentReader.get());
+                    commentReaders.insert(mod->commentReader.get());
                 }
                 return true;
             },"*");
+            for ( auto cr : commentReaders ) {
+                parserState.g_CommentReaders.push_back(cr);
+            }
             if ( gen2 ) {
                 err = das2_yyparse(scanner);
                 das2_yylex_destroy(scanner);
@@ -516,6 +529,8 @@ namespace das {
             program->isCompiling = false;
             daScriptEnvironment::bound->g_Program.reset();
             daScriptEnvironment::bound->g_compilerLog = nullptr;
+            daScriptEnvironment::bound->g_compilingFileName = nullptr;
+            daScriptEnvironment::bound->g_compilingModuleName = nullptr;
             return program;
         }
         parserState = DasParserState();
@@ -523,6 +538,8 @@ namespace das {
         if ( err || program->failed() ) {
             daScriptEnvironment::bound->g_Program.reset();
             daScriptEnvironment::bound->g_compilerLog = nullptr;
+            daScriptEnvironment::bound->g_compilingFileName = nullptr;
+            daScriptEnvironment::bound->g_compilingModuleName = nullptr;
             sort(program->errors.begin(),program->errors.end());
             program->isCompiling = false;
             return program;
@@ -583,6 +600,8 @@ namespace das {
                 }
             }
             daScriptEnvironment::bound->g_compilerLog = nullptr;
+            daScriptEnvironment::bound->g_compilingFileName = nullptr;
+            daScriptEnvironment::bound->g_compilingModuleName = nullptr;
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
             if ( !program->failed() ) {

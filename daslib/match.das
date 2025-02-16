@@ -285,7 +285,7 @@ def match_as_variant ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:Expression
         name := wthAs.name
     ]]
     log_m("\tas {wthAs.name} match passed\n")
-    return match_any(ftype, get_ptr(wthAs.value), access, to)
+    return match_any(ftype, get_ptr(wthAs.value), new_access, to)
 
 [macro_function]
 def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to:MatchTo )
@@ -409,6 +409,8 @@ def match_any ( what:TypeDeclPtr; wth:Expression?; access:ExpressionPtr; var to:
         return true
     elif wth is ExprMakeStruct
         return match_struct(what, wth as ExprMakeStruct, access, to)
+    elif wth is ExprMakeTuple
+        return match_tuple(what, wth as ExprMakeTuple, access, to)
     elif wth is ExprMakeArray
         var mka = wth as ExprMakeArray
         if length(mka.values)==1 && (mka.values[0] is ExprMakeTuple)

@@ -401,6 +401,7 @@ namespace das {
 
     bool Structure::unsafeInit ( das_set<Structure *> & dep ) const {
         if ( safeWhenUninitialized ) return false;
+        if ( hasDefaultInitializer ) return true;
         for ( const auto & fd : fields ) {
             if ( fd.init ) return true;
             if ( fd.type && fd.type->unsafeInit(dep) ) return true;
@@ -2666,6 +2667,7 @@ namespace das {
         for ( auto & val : values ) {
             cexpr->values.push_back(val->clone());
         }
+        cexpr->recordNames = recordNames;
         if ( makeType ) {
             cexpr->makeType = make_smart<TypeDecl>(*makeType);
         }

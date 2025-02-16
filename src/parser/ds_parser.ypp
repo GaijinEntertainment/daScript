@@ -81,6 +81,8 @@
     namespace das { class Module; }
     void das_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
 
+    void das_strfmt ( yyscan_t yyscanner );
+
     #undef yyextra
     #define yyextra (*((das::DasParserState **)(scanner)))
 %}
@@ -387,6 +389,8 @@
 %type <s>               optional_structure_parent
 %type <s>               require_module_name
 %type <s>               annotation_argument_name
+%type <s>               format_string
+%type <s>               optional_format_string
 %type <aa>              annotation_argument
 %type <aa>              annotation_argument_value
 %type <aaList>          annotation_argument_list
@@ -616,6 +620,16 @@ string_constant
     |   BEGIN_STRING END_STRING                            { $$ = new string(); }
     ;
 
+format_string
+    :   { $$ = new string(); }
+    |   format_string[ss] STRING_CHARACTER[char] { $$ = $ss; $ss->push_back($char); }
+    ;
+
+optional_format_string
+    :   { $$ = new string(""); }
+    |   ':' { das_strfmt(scanner); } format_string[fmt] { $$ = $fmt; }
+    ;
+
 string_builder_body
     :   {
         $$ = new ExprStringBuilder();
@@ -631,10 +645,17 @@ string_builder_body
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
         $$ = $sb;
     }
-    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] END_STRING_EXPR %prec BEGIN_STRING_EXPR {
-        auto se = ExpressionPtr($subexpr);
+    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] optional_format_string[sfmt] END_STRING_EXPR %prec BEGIN_STRING_EXPR {
+        auto se = $subexpr;
+        if ( !$sfmt->empty() ) {
+            auto call_fmt = new ExprCall(tokAt(scanner,@sfmt), "_::fmt");
+            call_fmt->arguments.push_back(make_smart<ExprConstString>(tokAt(scanner,@sfmt),":" + *$sfmt));
+            call_fmt->arguments.push_back(se);
+            se = call_fmt;
+        }
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(se);
         $$ = $sb;
+        delete $sfmt;
     }
     ;
 
@@ -1579,7 +1600,19 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
+    |   BRABRAB tuple_expansion[list] ']' ']' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr_pipe[init] {
+        $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+        $$->isTupleExpansion = true;
+    }
     |   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+        $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+        $$->isTupleExpansion = true;
+    }
+    |   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr_pipe[init] {
         $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
@@ -1594,7 +1627,25 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
+    |   BRABRAB tuple_expansion[list] ']' ']' optional_ref[ref] copy_or_move_or_clone[com] expr_pipe[init] {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(scanner,@list);
+        typeDecl->ref = $ref;
+        $$ = new VariableDeclaration($list,tokAt(scanner,@list),typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+        $$->isTupleExpansion = true;
+    }
     |   '(' tuple_expansion[list] ')' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(scanner,@list);
+        typeDecl->ref = $ref;
+        $$ = new VariableDeclaration($list,tokAt(scanner,@list),typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+        $$->isTupleExpansion = true;
+    }
+    |   '(' tuple_expansion[list] ')' optional_ref[ref] copy_or_move_or_clone[com] expr_pipe[init] {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -1978,8 +2029,7 @@ expr_call
     |   name_in_namespace[name] '(' DAS_UNINITIALIZED ')' {
             auto dd = new ExprMakeStruct(tokAt(scanner,@name));
             dd->at = tokAt(scanner,@name);
-            dd->makeType = new TypeDecl(Type::alias);
-            dd->makeType->alias = *$name;
+            dd->makeType = yyextra->g_Program->makeTypeDeclaration(tokAt(scanner,@name),*$name);
             dd->useInitializer = false;
             dd->alwaysUseInitializer = true;
             delete $name;
@@ -1987,8 +2037,7 @@ expr_call
     }
     |   name_in_namespace[name] '(' make_struct_single[dd] ')' {
             ((ExprMakeStruct *)$dd)->at = tokAt(scanner,@name);
-            ((ExprMakeStruct *)$dd)->makeType = new TypeDecl(Type::alias);
-            ((ExprMakeStruct *)$dd)->makeType->alias = *$name;
+            ((ExprMakeStruct *)$dd)->makeType = yyextra->g_Program->makeTypeDeclaration(tokAt(scanner,@name),*$name);
             ((ExprMakeStruct *)$dd)->useInitializer = true;
             ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
             delete $name;
@@ -1996,8 +2045,7 @@ expr_call
     }
     |   name_in_namespace[name] '(' DAS_UNINITIALIZED make_struct_single[dd] ')' {
             ((ExprMakeStruct *)$dd)->at = tokAt(scanner,@name);
-            ((ExprMakeStruct *)$dd)->makeType = new TypeDecl(Type::alias);
-            ((ExprMakeStruct *)$dd)->makeType->alias = *$name;
+            ((ExprMakeStruct *)$dd)->makeType = yyextra->g_Program->makeTypeDeclaration(tokAt(scanner,@name),*$name);
             ((ExprMakeStruct *)$dd)->useInitializer = false;
             ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
             delete $name;
@@ -2074,6 +2122,15 @@ expr
                 $$ = $subexpr;
             }
         }
+    | '(' make_struct_single[mks] ')' {
+        auto mkt = new ExprMakeTuple(tokAt(scanner,@mks));
+        for ( auto & arg : *(((ExprMakeStruct *)$mks)->structs.back()) ) {
+            mkt->values.push_back(arg->value);
+            mkt->recordNames.push_back(arg->name);
+        }
+        delete $mks;
+        $$ = mkt;
+    }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.' '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index), true); }
     |   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
@@ -2246,6 +2303,9 @@ struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
+    |   struct_variable_declaration_list[list] ';' {
+        $$ = $list;
+    }
     |   struct_variable_declaration_list[list] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@list);
@@ -2276,7 +2336,7 @@ struct_variable_declaration_list
                     auto tak = tokAt(scanner,@func);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
                 }
-                $func->isTemplate = yyextra->g_thisStructure->isTemplate;
+                $func->isTemplate = yyextra->g_thisStructure ? yyextra->g_thisStructure->isTemplate : false;
                 $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$cnst, $func);
             }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
@@ -2290,7 +2350,7 @@ struct_variable_declaration_list
                     auto tak = tokAt(scanner,@block);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
                 }
-                $func->isTemplate = yyextra->g_thisStructure->isTemplate;
+                $func->isTemplate = yyextra->g_thisStructure ? yyextra->g_thisStructure->isTemplate : false;
                 $$ = ast_structVarDef(scanner,$list,$annL,$isStatic,$isPrivate,$ovr,$cnst,$func,$block,tokRangeAt(scanner,@from,@block),tokAt(scanner,@annL));
             }
     |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
@@ -3601,14 +3661,24 @@ make_dim
     ;
 
 make_dim_decl
-    :   '[' [loc] expr_list[arguments] optional_comma ']' {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
-        mka->values = sequenceToList($arguments);
-        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
-        mka->gen2 = true;
-        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
-        tam->arguments.push_back(mka);
-        $$ = tam;
+    :   '[' [loc] optional_expr_list[arguments] ']' {
+        if ( $arguments ) {
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+            mka->values = sequenceToList($arguments);
+            mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+            mka->gen2 = true;
+            auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
+            tam->arguments.push_back(mka);
+            $$ = tam;
+        } else {
+            auto mks = new ExprMakeStruct();
+            mks->at = tokAt(scanner,@loc);
+            mks->makeType = make_smart<TypeDecl>(Type::tArray);
+            mks->makeType->firstType = make_smart<TypeDecl>(Type::autoinfer);
+            mks->useInitializer = true;
+            mks->alwaysUseInitializer = true;
+            $$ = mks;
+        }
     }
     |   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr {
         ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
@@ -3622,7 +3692,7 @@ make_dim_decl
         tam->arguments.push_back(ExpressionPtr($mka));
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
@@ -3719,13 +3789,24 @@ expr_map_tuple_list
     ;
 
 make_table_decl
-    :   '{' [loc] expr_map_tuple_list[arguments] optional_comma '}' {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
-        mka->values = sequenceToList($arguments);
-        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
-        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
-        ttm->arguments.push_back(mka);
-        $$ = ttm;
+    :   '{' [loc] optional_expr_map_tuple_list[arguments] '}' {
+        if ( $arguments ) {
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+            mka->values = sequenceToList($arguments);
+            mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+            auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+            ttm->arguments.push_back(mka);
+            $$ = ttm;
+        } else {
+            auto mks = new ExprMakeStruct();
+            mks->at = tokAt(scanner,@loc);
+            mks->makeType = make_smart<TypeDecl>(Type::tTable);
+            mks->makeType->firstType = make_smart<TypeDecl>(Type::autoinfer);
+            mks->makeType->secondType = make_smart<TypeDecl>(Type::autoinfer);
+            mks->useInitializer = true;
+            mks->alwaysUseInitializer = true;
+            $$ = mks;
+        }
     }
     |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
         auto mkt = make_smart<TypeDecl>(Type::autoinfer);

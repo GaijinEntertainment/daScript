@@ -415,6 +415,19 @@ namespace das
         }
     };
 
+    struct NoDefaultCtorAnnotation : StructureAnnotation {
+        NoDefaultCtorAnnotation() : StructureAnnotation("no_default_initializer") {}
+        virtual bool touch(const StructurePtr & ps, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            ps->genCtor = true;
+            return true;
+        }
+        virtual bool look ( const StructurePtr &, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+    };
+
     struct MacroInterfaceAnnotation : StructureAnnotation {
         MacroInterfaceAnnotation() : StructureAnnotation("macro_interface") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
@@ -468,7 +481,7 @@ namespace das
     struct SafeWhenUninitializedAnnotation : StructureAnnotation {
         SafeWhenUninitializedAnnotation() : StructureAnnotation("safe_when_uninitialized") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList & args, string & ) override {
+                           const AnnotationArgumentList &, string & ) override {
             ps->safeWhenUninitialized = true;
             return true;
         }
@@ -1446,6 +1459,14 @@ namespace das
         return false;
     }
 
+    const char * compiling_file_name ( ) {
+        return daScriptEnvironment::bound ? daScriptEnvironment::bound->g_compilingFileName : nullptr;
+    }
+
+    const char * compiling_module_name ( ) {
+        return daScriptEnvironment::bound ? daScriptEnvironment::bound->g_compilingModuleName : nullptr;
+    }
+
 // remove define to enable emscripten version
 #define TRY_MAIN_LOOP   0
 
@@ -1514,6 +1535,7 @@ namespace das
         addReaderMacro(make_smart<UnescapedStringMacro>());
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
+        addAnnotation(make_smart<NoDefaultCtorAnnotation>());
         addAnnotation(make_smart<MacroInterfaceAnnotation>());
         addAnnotation(make_smart<SkipLockCheckStructureAnnotation>());
         addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
@@ -1960,6 +1982,11 @@ namespace das
         // folding
         addExtern<DAS_BIND_FUN(is_folding)>(*this, lib, "is_folding",
             SideEffects::worstDefault, "is_folding");
+        // compiling file
+        addExtern<DAS_BIND_FUN(compiling_file_name)>(*this, lib, "compiling_file_name",
+            SideEffects::accessExternal, "compiling_file_name");
+        addExtern<DAS_BIND_FUN(compiling_module_name)>(*this, lib, "compiling_module_name",
+            SideEffects::accessExternal, "compiling_module_name");
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog")->args({"level", "text", "context", "at"});

@@ -176,7 +176,7 @@ namespace das {
             "generated", "persistent", "isLambda", "privateStructure",
             "macroInterface", "_sealed", "skipLockCheck", "circular",
             "_generator", "hasStaticMembers", "hasStaticFunctions",
-            "hasInitFields", "safeWhenUninitialized", "isTemplate" };
+            "hasInitFields", "safeWhenUninitialized", "isTemplate", "hasDefaultInitializer" };
         return ft;
     }
 

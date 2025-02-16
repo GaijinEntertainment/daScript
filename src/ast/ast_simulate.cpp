@@ -2651,7 +2651,7 @@ namespace das
 #endif
 #if DAS_ENABLE_KEEPALIVE
         if ( context.thisProgram->policies.keep_alive ) {
-            whileNode = context.code->makeNode<SimNode_While>(at, cond->simulate(context));
+            whileNode = context.code->makeNode<SimNodeKeepAlive_While>(at, cond->simulate(context));
         } else
 #endif
         {

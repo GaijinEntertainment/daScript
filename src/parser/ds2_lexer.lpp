@@ -63,6 +63,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 %x normal
 %x strb
+%x strfmt
 %x c_comment
 %x cpp_comment
 %x include
@@ -200,6 +201,28 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return STRING_CHARACTER;
 }
 <strb>.                 {
+    yylval_param->ch = *yytext;
+    return STRING_CHARACTER;
+}
+<strfmt><<EOF>>             {
+    das2_yyfatalerror(yylloc_param,yyscanner,"string format exceeds file", CompilationError::string_constant_exceeds_file);
+    BEGIN(normal);
+    return END_STRING;
+}
+<strfmt>\n                {
+    yylval_param->ch = *yytext;
+    YY2NEWLINE(yyscanner);
+    return STRING_CHARACTER;
+}
+<strfmt>\t                {
+    yylval_param->ch = *yytext;
+    return STRING_CHARACTER;
+}
+<strfmt>\}                {
+    BEGIN(normal);
+    unput('}');
+}
+<strfmt>.                 {
     yylval_param->ch = *yytext;
     return STRING_CHARACTER;
 }
@@ -732,6 +755,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>.                                   return *yytext;
 
 %%
+
+void das2_strfmt ( yyscan_t yyscanner ) {
+    struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
+    BEGIN(strfmt);
+}
 
 void das2_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;

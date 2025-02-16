@@ -105,7 +105,7 @@ jobs:
 
     steps:
     - name: "SCM Checkout"
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
@@ -168,8 +168,7 @@ jobs:
               *)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
                 cd build
-                ninja daslang
-                ninja daScriptTest
+                ninja
                 ;;
             esac
             ;;

@@ -8,15 +8,15 @@ def each_a(r:range) : array<int>
         push(a,x)
     return <- a
 
-def map_a(src:array<auto(TT)>; blk:block<(what:TT):auto(QQ)>) : array<QQ>
-    var a : array<QQ>
+def map_a(src:array<auto(TT)>; blk:block<(what:TT):auto(QQ)>) : array<QQ-const>
+    var a : array<QQ-const>
     reserve(a, length(src))
     for x in src
         push(a,invoke(blk,x))
     return <- a
 
-def filter_a(src:array<auto(TT)>; blk:block<(what:TT):bool> ) : array<TT>
-    var a : array<TT>
+def filter_a(src:array<auto(TT)>; blk:block<(what:TT):bool> ) : array<TT-const>
+    var a : array<TT-const>
     for x in src
         if invoke(blk,x)
             push(a,x)
