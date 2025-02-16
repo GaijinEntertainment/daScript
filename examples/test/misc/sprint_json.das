@@ -31,22 +31,6 @@ struct Foo
 
 [export]
 def main
-    var a <- [[Foo
-        v_int = 1,
-        bar <- [[Bar
-            arr_int <- [{auto 1;2;3}]
-        ]],
-        v_float = 2.34,
-        en1 = AnyThing any,
-        en2 = AnyThing thing,
-        _type = 0x1234567890abcdeful,
-        v_str = "hello\nworld \{ 2,3,4 \}",
-        v_unescaped_str = "hello\nworld",
-        v_embed = "[22,32,43]",
-        tab <- {{ "hello" => 1; "world" => 2 }},
-        tup = [[auto 3,.141592]],
-        v_var = [[Moo f=3.141592]],
-        ptr = null
-    ]]
+    var a <- Foo(uninitialized v_int = 1, bar <- Bar(uninitialized arr_int <- array(1, 2, 3)), v_float = 2.34, en1 = AnyThing any, en2 = AnyThing thing, _type = 0x1234567890abcdeful, v_str = "hello\nworld \{ 2,3,4 \}", v_unescaped_str = "hello\nworld", v_embed = "[22,32,43]", tab <- {"hello" => 1, "world" => 2}, tup = (3, .141592), v_var = Moo(uninitialized f=3.141592), ptr = null)
     let t = sprint_json(a,true)
     print("t = {t}\n")

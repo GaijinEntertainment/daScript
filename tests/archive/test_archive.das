@@ -9,7 +9,7 @@ variant FooBar
 [test]
 def test_save_and_load_variant ( t:T? )
     // save
-    var reference = [[auto [[FooBar a=13.]]; [[FooBar b="hello"]]  ]]
+    var reference = fixed_array(FooBar(uninitialized a=13.), FooBar(uninitialized b="hello"))
     var data <- mem_archive_save(reference)
     t |> equal( reference[0] as a, 13.)
     t |> equal( reference[1] as b, "hello")
@@ -23,10 +23,7 @@ def test_save_and_load_variant ( t:T? )
 [test]
 def test_save_and_load_mem_table ( t:T? )
     // save
-    var reference <- {{
-        "one" => 1;
-        "two" => 2
-    }}
+    var reference <- {"one" => 1, "two" => 2}
     var data <- mem_archive_save(reference)
     // load
     var test : table<string;int>
@@ -39,7 +36,7 @@ def test_save_and_load_mem_table ( t:T? )
 [test]
 def test_save_and_load_mem_array ( t:T? )
     // save
-    var reference <- [{for tt in range(10); tt+1}]
+    var reference <- [for tt in range(10); tt+1]
     var data <- mem_archive_save(reference)
     // load
     var test : array<int>
@@ -52,7 +49,7 @@ def test_save_and_load_mem_array ( t:T? )
 [test]
 def test_save_and_load_mem_dim ( t:T? )
     // save
-    var reference = [[int 1;2;3;4;5]]
+    var reference = fixed_array<int>(1, 2, 3, 4, 5)
     var data <- mem_archive_save(reference)
     // load
     var test : int[5]
@@ -68,7 +65,7 @@ struct Foo
 [test]
 def test_save_and_load_struct ( t:T? )
     // save
-    var reference = [[Foo a=13.,b="hello"]]
+    var reference = Foo(uninitialized a=13., b="hello")
     var data <- mem_archive_save(reference)
     t |> equal( reference.a, 13.)
     t |> equal( reference.b, "hello")
@@ -82,7 +79,7 @@ def test_save_and_load_struct ( t:T? )
 [test]
 def test_save_and_load_tuple ( t:T? )
     // save
-    var reference = [[auto 13.,"hello"]]
+    var reference = (13., "hello")
     var data <- mem_archive_save(reference)
     t |> equal( reference._0, 13.)
     t |> equal( reference._1, "hello")
@@ -134,7 +131,7 @@ def test_save_and_load_manual ( t:T? )
     var reference = 13
     // saving
     var mems = new MemSerializer()
-    var sarch = [[Archive reading=false, stream=mems]]
+    var sarch = Archive(uninitialized reading=false, stream=mems)
     sarch |> serialize(reference)
     var data <- mems->extractData()
     t |> equal( length(data), typeinfo(sizeof reference))
@@ -142,7 +139,7 @@ def test_save_and_load_manual ( t:T? )
     // restoring
     var test : int
     var memr = new MemSerializer(data)
-    var rarch = [[Archive reading=true, stream=memr]]
+    var rarch = Archive(uninitialized reading=true, stream=memr)
     rarch |> serialize(test)
     if !memr->OK()
         t->fatal(memr->getLastError())

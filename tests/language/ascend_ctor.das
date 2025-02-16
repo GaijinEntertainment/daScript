@@ -8,7 +8,7 @@ class Foo
 
 [sideeffects]
 def test_ascend_ctor ( t : T ? )
-    var foo = new [[Foo() b=42]]
+    var foo = new Foo(b=42)
     t |> equal(13, foo.a)
     t |> equal(42, foo.b)
 

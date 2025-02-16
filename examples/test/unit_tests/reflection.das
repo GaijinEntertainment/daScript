@@ -57,18 +57,18 @@ def describeType(info)
             res = "table"
     elif info.basicType==Type tTuple
         if info.argTypes!=null
-            res = "tuple<" + join([{for argtype in arg_types(info); describeType(argtype)}],";") + ">"
+            res = "tuple<" + join([for argtype in arg_types(info); describeType(argtype)],";") + ">"
         else
             res += "tuple"
     elif info.basicType==Type tVariant
         if info.argTypes!=null && info.argNames!=null
-            res = "variant<" +  join([{for argname,argtype in arg_names(info),arg_types(info); "{argname}:{describeType(argtype)}"}],";") + ">"
+            res = "variant<" +  join([for argname,argtype in arg_names(info),arg_types(info); "{argname}:{describeType(argtype)}"],";") + ">"
         else
             res += "variant"
     elif info.basicType==Type tFunction || info.basicType==Type tLambda || info.basicType==Type tBlock
         res = "{get_das_type_name(info.basicType)}<"
         if info.argTypes!=null
-            res += "(" + join([{for argtype in arg_types(info); describeType(argtype)}],";") + ")"
+            res += "(" + join([for argtype in arg_types(info); describeType(argtype)],";") + ")"
         if info.firstType!=null
             if info.argTypes!=null
                 res += ":"
@@ -76,7 +76,7 @@ def describeType(info)
         res += ">"
     else
         res = get_das_type_name(info.basicType)
-    res += join([{for d in each_dim(info); d!=-1 ? "[{d}]" : "[]"}],"")
+    res += join([for d in each_dim(info); d!=-1 ? "[{d}]" : "[]"],"")
     if info.isConst
         res += " const"
     if info.isRef
@@ -90,7 +90,7 @@ def describeType(info)
 def describeFunction(finfo)
     print("def {finfo.name} ")
     if finfo.count != 0u
-        let argT = join([{for arg in finfo; "{arg.name}:{describeType(arg)}"}],"; ")
+        let argT = join([for arg in finfo; "{arg.name}:{describeType(arg)}"],"; ")
         print("( {argT} ) ")
     if finfo.result != null
         print ( ": {describeType(*(finfo.result))}")
@@ -110,7 +110,7 @@ def describeVariable(glob;extra="")
 def describeStructure(sinfo)
     var anyAnn = false
     structure_for_each_annotation(sinfo) <| $(ann; annArgs)
-        let argT = join([{for arg in annArgs; "{arg.name}{describeValue(get_annotation_argument_value(arg))}"}],",")
+        let argT = join([for arg in annArgs; "{arg.name}{describeValue(get_annotation_argument_value(arg))}"],",")
         print("[{ann.name}({argT})]\n")
     print("struct {sinfo.name}\n")
     for sfield in sinfo

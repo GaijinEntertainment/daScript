@@ -24,12 +24,12 @@ def test(a:Bar;b:Foo)
 	return "bar foo"
 
 def test_distance
-	assert( test([[Foo]],[[Foo]])=="foo foo")	// 0 cast
-	assert( test([[Foo]],[[Bar]])=="foo bar")	// 0 cast
-	assert( test([[Bar]],[[Foo]])=="bar foo")	// 0 cast
-	assert( test([[Far]],[[Bar]])=="foo bar")	// 1 cast
+	assert( test(Foo(uninitialized),Foo(uninitialized))=="foo foo")	// 0 cast
+	assert( test(Foo(uninitialized),Bar(uninitialized))=="foo bar")	// 0 cast
+	assert( test(Bar(uninitialized),Foo(uninitialized))=="bar foo")	// 0 cast
+	assert( test(Far(uninitialized),Bar(uninitialized))=="foo bar")	// 1 cast
 	static_if allow_broken
-		test([[Bar]],[[Bar]])					// won't compile
+		test(Bar(uninitialized),Bar(uninitialized))					// won't compile
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 //  one generic is more specialized than the other, if ALL arguments are more specialized or the same
@@ -43,7 +43,7 @@ def gen_1(a;b)
 	return "* *"
 
 def test_gen_1
-	assert( gen_1([[Foo]],[[Foo]])=="Foo *" )
+	assert( gen_1(Foo(uninitialized),Foo(uninitialized))=="Foo *" )
 
 // 2. if both non-auto, the one without cast is more specialized
 
@@ -54,7 +54,7 @@ def gen_2(a:Bar;b)
 	return "Bar *"
 
 def test_gen_2
-	assert( gen_2([[Bar]],[[Foo]])=="Bar *" )
+	assert( gen_2(Bar(uninitialized),Foo(uninitialized))=="Bar *" )
 
 // 3. one with dim is more specialized, than one without
 //      if both have dim, one with actual value is more specialized, than the other one
@@ -69,8 +69,8 @@ def gen_3 ( arr : auto[3] )
 	return "[3]"
 
 def test_gen_3
-	assert ( gen_3([[int 1;2;3;4]])=="[*]" )
-	assert ( gen_3([[int 1;2;3]])=="[3]" )
+	assert ( gen_3(fixed_array<int>(1, 2, 3, 4))=="[*]" )
+	assert ( gen_3(fixed_array<int>(1, 2, 3))=="[3]" )
 
 // 4. the one with base type of auto\alias is less specialized
 //      if both are auto\alias - we assume its the same level of specialization

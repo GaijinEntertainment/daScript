@@ -44,7 +44,7 @@ def test_query_nested_macro
     restart()
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            apply_decs_template(cmp, [[Particle pos=float3(i), vel=float3(i+1)]])
+            apply_decs_template(cmp, Particle(uninitialized pos=float3(i), vel=float3(i+1)))
     commit()
     // debug_dump()
     query <| $ ( var q : Particle )
@@ -131,7 +131,7 @@ def test_arrays
     restart()
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            cmp |> set("values", [{for x in range(i+1); x}])
+            cmp |> set("values", [for x in range(i+1); x])
     commit()
     print("BEFORE GC:\n")
     debug_dump()
@@ -226,10 +226,7 @@ def test_query
     commit()
     // query 1
     static_let <|
-        var erq1 <- [[EcsRequest
-            req <- [{string "pos"; "vel"}],
-            at <- EcsRequestPos(get_line_info())
-        ]]
+        var erq1 <- EcsRequest(uninitialized req <- array<string>("pos", "vel"), at <- EcsRequestPos(get_line_info()))
     var total1 = 0
     erq1 |> for_each_archetype <| $ ( arch )
         for pos, vel in get(arch,"pos",type<float3>), get(arch,"vel",type<float3>)
@@ -239,10 +236,7 @@ def test_query
     // query 2
     var total2 = 0
     static_let <|
-        var erq2 <- [[EcsRequest
-            req <- [{string "pos"; "col"}],
-            at <- EcsRequestPos(get_line_info())
-        ]]
+        var erq2 <- EcsRequest(uninitialized req <- array<string>("pos", "col"), at <- EcsRequestPos(get_line_info()))
     erq2 |> for_each_archetype <| $ ( arch )
         for col,pos in get(arch,"col",type<uint>),get_ro(arch,"pos",type<float3>)
             if pos.x > 101.
@@ -254,10 +248,7 @@ def test_query
     var total3 = 0
     var found3 = 0
     static_let <|
-        var erq3 <- [[EcsRequest
-            req <- [{string "pos"}],
-            at <- EcsRequestPos(get_line_info())
-        ]]
+        var erq3 <- EcsRequest(uninitialized req <- array<string>("pos"), at <- EcsRequestPos(get_line_info()))
     erq3 |> for_each_archetype <| $ ( arch )
         for col,pos in get_default_ro(arch,"col",0x12345678), get(arch,"pos",type<float3>)
             if col==0xff00ffff
@@ -269,11 +260,7 @@ def test_query
     debug_dump()
     var total4 = 0
     static_let <|
-        var erq4 <- [[EcsRequest
-            req <- [{string "pos"}],
-            reqn <- [{string "col"}],
-            at <- EcsRequestPos(get_line_info())
-        ]]
+        var erq4 <- EcsRequest(uninitialized req <- array<string>("pos"), reqn <- array<string>("col"), at <- EcsRequestPos(get_line_info()))
     erq4 |> for_each_archetype <| $ ( arch )
         for pos in get(arch,"pos",type<float3>)
             pos.y -= 0.001
@@ -350,7 +337,7 @@ def test_create_delete
         cmp.name := "entity_once"
     create_entity <| @ ( eid, cmp )
         print("eid = {eid}\n")
-        var foo = [[Foo pos=float3(1.), name="from template",eid=eid]]
+        var foo = Foo(uninitialized pos=float3(1.), name="from template", eid=eid)
         apply(foo) <| $ ( n, v )
             cmp |> set ( n, v)
 

@@ -22,7 +22,7 @@ def test:bool
     push(a,3.0)
     let t = join(a)
     assert(t==6.0)
-    let tab <- {{ "one" => 1; "two" => 2 }}
+    let tab <- {"one" => 1, "two" => 2}
     unsafe
         verify(findObject(tab,"one") ?? 0==1)
         verify(findObject(tab,"two") ?? 0==2)

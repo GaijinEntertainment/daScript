@@ -97,12 +97,7 @@ def test_uri_query ( t : T? )
             t |> equal(count, 4)
     t |> run("compose query") <| @@ ( t : T? )
         unsafe
-            var qq <- {{
-                "one" => "1";
-                "two" => "2";
-                "three" => "3";
-                "nothing" => ""
-            }}
+            var qq <- {"one" => "1", "two" => "2", "three" => "3", "nothing" => ""}
             let path_str = uri_compose_query_in_order(qq)
             delete qq
             var quri <- Uri("http://www.google.com")

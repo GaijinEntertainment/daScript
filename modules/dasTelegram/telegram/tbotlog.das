@@ -18,7 +18,7 @@ class LoggerAgent : DapiDebugAgent
         flog = fopen(log_file,"wb")
         if flog == null
             panic("Cannot open log file {log_file}")
-        let bang = [[uint8 0xefu8; 0xbbu8; 0xbfu8]]
+        let bang = fixed_array<uint8>(0xefu8, 0xbbu8, 0xbfu8)
         fwrite(flog, bang)
         print("Telegram bot log file at {log_file}\n")
     def operator delete

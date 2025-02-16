@@ -229,8 +229,8 @@ typedef RunT = variant<lmd1: lambda<(t: T?): void>; func1: function<(t: T?): voi
 
 
 def run(t: T?; name: string; var cb: lambda<(t: T?): void>)
-    t.onRun |> invoke(name, [[RunT lmd1<-cb]])
+    t.onRun |> invoke(name, RunT(uninitialized lmd1<-cb))
 
 
 def run(t: T?; name: string; func: function<(t: T?): void>)
-    t.onRun |> invoke(name, [[RunT func1=func]])
+    t.onRun |> invoke(name, RunT(uninitialized func1=func))

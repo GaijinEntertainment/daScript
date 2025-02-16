@@ -11,7 +11,7 @@ def test
         // jobs and status
         with_job_status(5) <| $ ( status )
             for x in range(5)
-                var y <- [{for t in range(3); t+x}]
+                var y <- [for t in range(3); t+x]
                 new_job <| @ [[<-y]]
                     assert(length(y)==3)
                     for t,c in range(3),y
@@ -23,7 +23,7 @@ def test
             for x in range(5)
                 new_job <| @
                     for t in range(3)
-                        channel |> push_clone ( [[Work x=x, t=t]] )
+                        channel |> push_clone ( Work(uninitialized x=x, t=t) )
                     channel |> notify_and_release                               // at this point we are done with the channel on this job
             var summ = 0
             channel |> for_each_clone <| $ ( w : Work# )
@@ -36,7 +36,7 @@ def test
             for x in range(5)
                 new_job <| @
                     for t in range(3)
-                        channel |> push_clone ( [[Work x=x, t=t]] )
+                        channel |> push_clone ( Work(uninitialized x=x, t=t) )
                     channel |> notify_and_release                               // at this point we are done with the channel on this job
             var summ = 0
             for w in each_clone(channel,type<Work>)

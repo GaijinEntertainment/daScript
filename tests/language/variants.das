@@ -10,10 +10,7 @@ variant Foo
 	a: A
     b: B
 
-let foo <- [[Foo
-	[[Foo a=[[A a=1]] ]];
-	[[Foo b=[[B b=2]] ]]
-]]
+let foo <- fixed_array<Foo>(Foo(uninitialized a=A(uninitialized a=1)), Foo(uninitialized b=B(uninitialized b=2)))
 
 [test]
 def test_multiple_variants ( t : T? )

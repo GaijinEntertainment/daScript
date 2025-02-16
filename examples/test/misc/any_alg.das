@@ -2,7 +2,7 @@ require daslib/algorithm
 
 [export]
 def main
-    var a <- [{for x in range(10); x}]
+    var a <- [for x in range(10); x]
     var b : int[10]
     for A,B in a,b
         B = A

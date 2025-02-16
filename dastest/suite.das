@@ -64,7 +64,7 @@ def FileCtx(ctx: SuiteCtx): FileCtx
 
 
 def private internalFileCtx(ctx: SuiteCtx): FileCtx
-    return <- [[FileCtx() uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
+    return <- FileCtx(uriPaths=ctx.uriPaths, verbose=ctx.verbose)
 
 
 def private match_test_name(name: string; ctx: SuiteCtx)

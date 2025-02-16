@@ -11,7 +11,7 @@ def operator delete ( f : Foo )
 def test_delete
 	var pA = new Foo
 	var pB = new Foo
-	var C = [[Foo]]
+	var C = Foo(uninitialized)
 	var lam <- @ <| [[<-pB,:=pC]]
 		assert(pA.dummy==0)
 		assert(pB.dummy==0)
@@ -25,9 +25,9 @@ def test_delete
 
 [export]
 def test
-	var a1 <- [{int 1;2}]
-	var a2 <- [{int 1;2}]
-	var a3 <- [{int 1;2}]
+	var a1 <- array<int>(1, 2)
+	var a2 <- array<int>(1, 2)
+	var a3 <- array<int>(1, 2)
 	unsafe
 		var lam <- @ <| [[&a1,<-a2,:=a3]]	// due to &a1
 			push(a1,1)

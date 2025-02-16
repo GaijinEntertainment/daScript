@@ -8,6 +8,6 @@ def Foo ( p : Foo? )
 
 [export]
 def main
-    let a = new [[Foo a=1,b=2.]]
+    let a = new Foo(uninitialized a=1, b=2.)
     let b = new Foo(a)
     print("a={a}\nb={b}\n")

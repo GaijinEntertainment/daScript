@@ -5,7 +5,7 @@ def foo
 
 [test]
 def test_tuple_expansion ( t : T? )
-    let [[i,s,f]] = foo()
+    let (i,s,f) = foo()
     t |> equal(i, 1)
     t |> equal(s, "2")
     t |> equal(f, 3.0)

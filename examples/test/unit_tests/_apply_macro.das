@@ -5,9 +5,9 @@ require daslib/ast_boost
 
 def private prepend_cond(var fn:FunctionPtr; cond:string)
     var inscope iblk <- fn.body
-    var inscope blk <- new [[ExprBlock() at=fn.at]]
-    var inscope ifm <- new [[ExprCall() at=fn.at, name:=cond]]
-    var inscope ife <- new [[ExprIfThenElse() at=fn.at, cond<-ifm, if_true<-iblk]]
+    var inscope blk <- new ExprBlock(at=fn.at)
+    var inscope ifm <- new ExprCall(at=fn.at, name:=cond)
+    var inscope ife <- new ExprIfThenElse(at=fn.at, cond<-ifm, if_true<-iblk)
     emplace(blk.list,ife)
     fn.body |> move() <| blk
 

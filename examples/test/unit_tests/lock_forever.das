@@ -1,9 +1,5 @@
 let
-    num_2_name <- lock_forever ( {{
-        0 => "zero";
-        1 => "one";
-        2 => "two"
-    }} )
+    num_2_name <- lock_forever ( {0 => "zero", 1 => "one", 2 => "two"} )
 
 [export]
 def test

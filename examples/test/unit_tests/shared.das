@@ -1,5 +1,5 @@
 let shared
-    g_foo <- {{ "one" => 1; "two" => 2 }}
+    g_foo <- {"one" => 1, "two" => 2}
 
 [export]
 def test

@@ -95,13 +95,13 @@ def test_convert_with_errors ( t:T? )
 [test]
 def test_convert ( t:T? )
 
-    let a8 <- [{uint8 uint8('A'); uint8('B'); uint8('C')}]
+    let a8 <- array<uint8>(uint8('A'), uint8('B'), uint8('C'))
     t |> equal(string(a8),"ABC")
     t |> run("fuzz string from array") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
             let len = fake |> random_uint % 10u
-            var arr <- [{for q in urange(len); uint8(fake |> random_int % 256)}]
+            var arr <- [for q in urange(len); uint8(fake |> random_int % 256)]
             t |> accept ( string(arr) )
             delete arr
 

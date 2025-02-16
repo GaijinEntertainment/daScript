@@ -23,10 +23,7 @@ def coroutine_example(name:string;count:int)
 
 [export]
 def main
-    var crs <- [{auto
-        coroutine_example("co1",1);
-        coroutine_example("co2",2)
-    }]
+    var crs <- array(coroutine_example("co1",1), coroutine_example("co2",2))
     cr_run_all(crs)
 
 

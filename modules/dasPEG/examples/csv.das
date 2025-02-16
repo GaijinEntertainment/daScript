@@ -26,9 +26,9 @@ def parse_csv ( CSV:string; blk: block<( val:array<Row>; err:array<ParsingError>
 
         var cell : Cell
         rule(string_ as text, TS) <|
-            return [[Cell text=text]]
+            return Cell(uninitialized text=text)
         rule(double_ as value, TS) <|
-            return [[Cell value=value]]
+            return Cell(uninitialized value=value)
 
         var comma_separated_cell : Cell
         rule(cell as cell, ",", TS) <|

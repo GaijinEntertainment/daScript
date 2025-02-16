@@ -11,7 +11,7 @@ struct Foo
 
 [export]
 def main
-	let foo = [[Foo i=1, s="hello", q=[[double 1lf;2lf;3lf]], b=[[Bar x=13,y=14]] ]]
+	let foo = Foo(uninitialized i=1, s="hello", q=fixed_array<double>(1lf, 2lf, 3lf), b=Bar(uninitialized x=13, y=14))
 
 	var js_foo = JV(foo)
 	print("{write_json(js_foo)}\n")

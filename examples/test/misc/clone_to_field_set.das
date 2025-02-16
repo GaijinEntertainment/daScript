@@ -14,7 +14,7 @@ def operator . center := ( var self:Box; at:float2 )
 
 [export]
 def main
-    var box = [[Box min=float2(-1,-1), max=float2(1,1)]]
+    var box = Box(uninitialized min=float2(-1,-1), max=float2(1,1))
     print("box = {box}\n")
     print("box.center = {box.center}\n")
     box.center := float2(2,2)

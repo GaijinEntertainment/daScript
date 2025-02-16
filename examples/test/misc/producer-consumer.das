@@ -5,7 +5,7 @@ struct OneJob
 
 [export]
 def main
-    let some_job_list <- [{for x in range(10); "job_{x}"}]
+    let some_job_list <- [for x in range(10); "job_{x}"]
     let total_jobs = length(some_job_list)
     let total_threads = 3 // get_total_hw_threads() - 2
     with_channel(total_jobs) <| $ ( channel )
@@ -24,7 +24,7 @@ def main
             // this could be anywhere
             print("pushing jobs\n")
             for jb in some_job_list
-                channel |> push_clone([[OneJob name=jb]])
+                channel |> push_clone(OneJob(uninitialized name=jb))
                 channel |> notify
             print("done pushing jobs\n")
             // wait for threads to finish

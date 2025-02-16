@@ -8,14 +8,14 @@ variant FooBar
 [test]
 def test_apply_variant ( t:T? )
     t |> run("contents") <| @ ( t : T? )
-        apply([[FooBar foo=1]]) <| $ ( name, field )
+        apply(FooBar(uninitialized foo=1)) <| $ ( name, field )
             if name!="foo"
                 t->fatal("unknown field")
             static_if typeinfo(stripped_typename field) == "int"
                 t |> equal( field, 1)
             else
                 t->fatal("we got unsupported field here")
-        apply([[FooBar bar="hello"]]) <| $ ( name, field )
+        apply(FooBar(uninitialized bar="hello")) <| $ ( name, field )
             if name!="bar"
                 t->fatal("unknown field")
             static_if typeinfo(stripped_typename field)=="string"
@@ -30,7 +30,7 @@ struct Foo
 [test]
 def test_apply_struct ( t:T? )
     t |> run("contents") <| @ ( t : T? )
-        var foo = [[Foo a=1, b="hello"]]
+        var foo = Foo(uninitialized a=1, b="hello")
         apply(foo) <| $ ( name, field )
             if name!="a" && name!="b"
                 t->fatal("unknown field")
@@ -39,7 +39,7 @@ def test_apply_struct ( t:T? )
             static_elif typeinfo(stripped_typename field)=="string"
                 t |> equal( field, "hello")
     t |> run("assign") <| @ ( t : T? )
-        var foo = [[Foo a=1, b="hello"]]
+        var foo = Foo(uninitialized a=1, b="hello")
         apply(foo) <| $ ( name, field )
             static_if typeinfo(stripped_typename field)=="int"
                 field = 13
@@ -51,7 +51,7 @@ def test_apply_struct ( t:T? )
 [test]
 def test_apply_tuple ( t:T? )
     t |> run("contents") <| @ ( t : T? )
-        var foo = [[auto 1, "hello"]]
+        var foo = (1, "hello")
         apply(foo) <| $ ( name, field )
             if name!="_0" && name!="_1"
                 t->fatal("unknown field")
@@ -60,7 +60,7 @@ def test_apply_tuple ( t:T? )
             static_elif typeinfo(stripped_typename field)=="string"
                 t |> equal( field, "hello")
     t |> run("assign") <| @ ( t : T? )
-        var foo = [[auto 1, "hello"]]
+        var foo = (1, "hello")
         apply(foo) <| $ ( name, field )
             static_if typeinfo(stripped_typename field)=="int"
                 field = 13
@@ -71,7 +71,7 @@ def test_apply_tuple ( t:T? )
 
 [test]
 def test_apply_named_tuple ( t:T? )
-    var foo : tuple<a:int;b:string> = [[auto 1, "hello"]]
+    var foo : tuple<a:int;b:string> = (1, "hello")
     apply(foo) <| $ ( name, field )
         if name!="a" && name!="b"
             t->fatal("unknown field")
@@ -102,7 +102,7 @@ def test_static_assert_on_name ( t:T? )
 			assert( value == 1 )
         else
             assert( value == 2.0 )
-	var gg = [[Foot a=1, b=2.0]]
+	var gg = Foot(uninitialized a=1, b=2.0)
 	apply(gg) <| $ ( name, value )
 		static_if name=="a"
 			assert( value == 1 )

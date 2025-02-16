@@ -28,7 +28,7 @@ struct TestFile
     monoFile  : string // csharp mono
     dotNetFile  : string // csharp .net
 
-let ENCODING = string([{auto 0xefu8; 0xbbu8; 0xbfu8;}])
+let ENCODING = string(array(0xefu8, 0xbbu8, 0xbfu8))
 
 [no_jit,no_aot]
 def run_and_gun ( lang,cmdLine:string )

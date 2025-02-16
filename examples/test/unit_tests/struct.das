@@ -49,7 +49,7 @@ var
 
 [export]
 def test:bool
-    assert ( typeinfo(sizeof [[Dummy]])==0 )
+    assert ( typeinfo(sizeof Dummy(uninitialized))==0 )
     if true
         var b:Ball? = new Ball
         b.position = float3(1.0,2.0,3.0)

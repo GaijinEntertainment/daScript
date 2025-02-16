@@ -60,7 +60,7 @@ def test_create_from_templates( t: T?)
     restart()
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            apply_decs_template(cmp, [[Particle pos=float3(i), vel=float3(i+1)]])
+            apply_decs_template(cmp, Particle(uninitialized pos=float3(i), vel=float3(i+1)))
     commit()
     var count = 0
     query <| $ ( p:Particle )
@@ -77,7 +77,7 @@ def test_create_from_prefixless_templates( t: T?)
     restart()
     for i in range(3)
         create_entity <| @ ( eid, cmp )
-            apply_decs_template(cmp, [[Prefixless value=i]])
+            apply_decs_template(cmp, Prefixless(uninitialized value=i))
     commit()
     var count = 0
     query <| $ ( p:Prefixless; value:int )  // access the same thing as template, and as value
@@ -94,7 +94,7 @@ struct Foo
 def test_create_via_apply( t: T?)
     restart()
     create_entity <| @ ( eid, cmp )
-        var foo = [[Foo pos=float3(1.), name="from template",eid=eid]]
+        var foo = Foo(uninitialized pos=float3(1.), name="from template", eid=eid)
         apply(foo) <| $ ( n, v )
             cmp |> set ( n, v)
     commit()

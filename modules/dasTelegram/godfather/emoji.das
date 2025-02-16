@@ -10,42 +10,7 @@ require daslib/regex_boost
 require daslib/strings_boost
 require daslib/utf8_utils
 
-let replacing_emoji <- [{auto
-// regular smiles
-    ":)" => "🙂";
-    ":)" => "🙂";
-    ":(" => "☹️";
-    ":D" => "😀";
-    ";)" => "😉";
-    ":-|" => "😐";
-// *foo* format
-    "*smirk*" => "😏";
-    "*smile*" => "😊";
-    "*wink*" => "😉";
-    "*angry*" => "😠";
-    "*neutral_face*" => "😐";
-    "*grin*" => "😁";
-    "*innocent*" => "😇";
-    "*heart_eyes*" => "😍";
-    "*kissing_heart*" => "😘";
-// :foo: format
-    ":smirk" => "😏";
-    ":smile" => "😊";
-    ":wink" => "😉";
-    ":angry:" => "😠";
-    ":neutral_face:" => "😐";
-    ":grin:" => "😁";
-    ":innocent:" => "😇";
-    ":heart_eyes:" => "😍";
-    ":kissing_heart:" => "😘";
-// bad unicode?
-    "ðŸ˜" => "😃";
-    "ðŸ˜Ž" => "😄";
-    "ðŸ§" => "👀";
-    "ðŸ¤‘" => "😂";
-    "ðŸ•¶ï¸" => "👍";
-    "ðŸ˜’" => "😀"
-}]
+let replacing_emoji <- array((":)", "🙂"), (":)", "🙂"), (":(", "☹️"), (":D", "😀"), (";)", "😉"), (":-|", "😐"), ("*smirk*", "😏"), ("*smile*", "😊"), ("*wink*", "😉"), ("*angry*", "😠"), ("*neutral_face*", "😐"), ("*grin*", "😁"), ("*innocent*", "😇"), ("*heart_eyes*", "😍"), ("*kissing_heart*", "😘"), (":smirk", "😏"), (":smile", "😊"), (":wink", "😉"), (":angry:", "😠"), (":neutral_face:", "😐"), (":grin:", "😁"), (":innocent:", "😇"), (":heart_eyes:", "😍"), (":kissing_heart:", "😘"), ("ðŸ˜", "😃"), ("ðŸ˜Ž", "😄"), ("ðŸ§", "👀"), ("ðŸ¤‘", "😂"), ("ðŸ•¶ï¸", "👍"), ("ðŸ˜’", "😀"))
 
 def public fix_emoji ( str:string )
     return str |> replace_multiple(replacing_emoji)

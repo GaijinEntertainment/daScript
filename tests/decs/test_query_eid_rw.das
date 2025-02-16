@@ -16,8 +16,8 @@ struct CmpTwo
 def test_qeid_rw( t: T?)
     create_entity <| @ ( eid, cmp )
         cmp |> set("eid", eid)
-        apply_decs_template(cmp, [[ CmpOne ]])
-        apply_decs_template(cmp, [[ CmpTwo ]])
+        apply_decs_template(cmp, CmpOne(uninitialized))
+        apply_decs_template(cmp, CmpTwo(uninitialized))
     commit()
     query <| $ (var c1: CmpOne; eid: EntityId)
         c1.num++

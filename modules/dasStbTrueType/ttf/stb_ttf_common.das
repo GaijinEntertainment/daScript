@@ -102,21 +102,21 @@ def public create_quads ( font:Font; text:string; at:float2 = float2(0.) )
                 Ch-font.pwh.x,
                 safe_addr(x),safe_addr(y),
                 safe_addr(q),1)
-        quads |> push <| [[FontVertex xy=float2(q.x0,q.y0), uv=float2(q.s0, q.t0)]]
-        quads |> push <| [[FontVertex xy=float2(q.x1,q.y0), uv=float2(q.s1, q.t0)]]
-        quads |> push <| [[FontVertex xy=float2(q.x1,q.y1), uv=float2(q.s1, q.t1)]]
-        quads |> push <| [[FontVertex xy=float2(q.x0,q.y1), uv=float2(q.s0, q.t1)]]
+        quads |> push <| FontVertex(uninitialized xy=float2(q.x0,q.y0), uv=float2(q.s0, q.t0))
+        quads |> push <| FontVertex(uninitialized xy=float2(q.x1,q.y0), uv=float2(q.s1, q.t0))
+        quads |> push <| FontVertex(uninitialized xy=float2(q.x1,q.y1), uv=float2(q.s1, q.t1))
+        quads |> push <| FontVertex(uninitialized xy=float2(q.x0,q.y1), uv=float2(q.s0, q.t1))
     return <- quads
 
 def public quads_dim ( quads : array<FontVertex> ) : tuple<vmin:float2;vmax:float2>
     if empty(quads)
-        return [[auto float2(0.), float2(0.)]]
+        return (float2(0.), float2(0.))
     var vmin = float2(FLT_MAX,FLT_MAX)
     var vmax = float2(-FLT_MAX,-FLT_MAX)
     for q in quads
         vmin = min(vmin, q.xy)
         vmax = max(vmax, q.xy)
-    return [[auto vmin, vmax]]
+    return (vmin, vmax)
 
 enum public HJust
     left
@@ -130,7 +130,7 @@ enum public VJust
 
 def public quads_view ( quads : array<FontVertex>; scale:float2; h:HJust = HJust center; v:VJust = VJust center )
     if empty(quads)
-        return [[float4x4]]
+        return float4x4()
     let d = quads_dim(quads)
     var o : float2
     if h==HJust left

@@ -6,7 +6,7 @@ var g = 0
 [export]
 def test
     // void, no arg
-    let localVar = [[Foo a=34]]
+    let localVar = Foo(uninitialized a=34)
     var localVoidNoArgBlock = $ <|
         g = localVar.a
     g = 0
@@ -45,7 +45,7 @@ def test
     // result cmres, arg
     let localCmresResultArgBlock = $ <| ( x : int ) : Foo
         g = localVar.a + x
-        return [[Foo a = localVar.a+x]]
+        return Foo(uninitialized a = localVar.a+x)
     g = 0
     let res4 = localCmresResultArgBlock |> invoke( 3 )
     assert(g==localVar.a+3)

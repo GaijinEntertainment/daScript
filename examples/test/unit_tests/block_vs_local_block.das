@@ -7,7 +7,7 @@ def radd(var ext : int; b : block<(arg : int)>)
     invoke(b, ext)
 
 def testLocalBlockVar()
-    let localVar = [[Foo a=34]]
+    let localVar = Foo(uninitialized a=34)
     var localBlock = $ <| (arg : int)
         g = localVar.a + arg
     g = 0

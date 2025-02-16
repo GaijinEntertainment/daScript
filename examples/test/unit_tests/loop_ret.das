@@ -11,7 +11,7 @@ def foo(var attached_fires : array<Foo>)
     for x in attached_fires
         if x._0 == t
             return
-    push(attached_fires,[[auto t,float3(0)]])
+    push(attached_fires,(t, float3(0)))
 
 [export]
 def test

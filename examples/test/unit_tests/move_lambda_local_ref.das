@@ -6,9 +6,7 @@ def Bar(var arr : array<int>)
 		return <-clone_to_move(arr)
 
 let
-	foo = new [[ Foo
-		bar <- Bar([{ auto[] 1; 2 ;3 }])
-	]]
+	foo = new Foo(uninitialized bar <- Bar(array(1, 2, 3)))
 
 [export]
 def test()

@@ -17,37 +17,37 @@ def dim_test
         create_entity <| @ ( eid, cmp )
             let ft = float(t)
             cmp |> set("eid", eid)
-            apply_decs_template(cmp, [[Coord xyz <- [[float 1. + ft; 2. + ft; 3. + ft]]]])
+            apply_decs_template(cmp, Coord(uninitialized xyz <- fixed_array<float>(1. + ft, 2. + ft, 3. + ft)))
             migr = eid
     commit()
 
     update_entity(migr) <| @ ( eid, cmp )
         verify(cmp |> has("Coord_xyz"))
-        cmp |> set("Coord_xyz", [[float -1.; -2.; -3.]])
+        cmp |> set("Coord_xyz", fixed_array<float>(-1., -2., -3.))
     commit()
 
     var i = 0
     query<| $ ( c : Coord )
         if i==0
-            verify(c.xyz==[[float 1.;2.;3.]])
+            verify(c.xyz==fixed_array<float>(1., 2., 3.))
         elif i==1
-            verify(c.xyz==[[float 2.;3.;4.]])
+            verify(c.xyz==fixed_array<float>(2., 3., 4.))
         elif i==2
-            verify(c.xyz==[[float -1.;-2.;-3.]])
+            verify(c.xyz==fixed_array<float>(-1., -2., -3.))
         i ++
     assert(i==3)
 
     query <| $ ( var c : Coord )
-        c.xyz = [[float 13.; 14.; 15.]]
+        c.xyz = fixed_array<float>(13., 14., 15.)
 
     query(migr) <| $ ( var c : Coord )
-        c.xyz = [[float -1.;-2.;-3.]]
+        c.xyz = fixed_array<float>(-1., -2., -3.)
 
     i = 0
     query<| $ ( c : Coord )
         if i==0 || i==1
-            verify(c.xyz==[[float 13.;14.;15.]])
+            verify(c.xyz==fixed_array<float>(13., 14., 15.))
         elif i==2
-            verify(c.xyz==[[float -1.;-2.;-3.]])
+            verify(c.xyz==fixed_array<float>(-1., -2., -3.))
         i ++
     assert(i==3)

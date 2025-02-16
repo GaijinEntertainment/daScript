@@ -73,7 +73,7 @@ struct Float2Int
 
 [sideeffects]
 def test_reinterpret()
-    let f2i = [[Int2Float iv=0x3f400000,fv=1.0]]
+    let f2i = Int2Float(uninitialized iv=0x3f400000, fv=1.0)
     unsafe
         let i2f = reinterpret<Float2Int>(f2i)
         assert(i2f.fv==0.75 && i2f.iv==0x3f800000)

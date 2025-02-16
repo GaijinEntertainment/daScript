@@ -6,7 +6,7 @@ struct LookAheadBuffer
 
 def look_ahead ( src:string; blk:block<(var buf:LookAheadBuffer):void>)
     unsafe
-        var la <- [[LookAheadBuffer src<-each(src)]]        // unsafe due to 'each' on string
+        var la <- LookAheadBuffer(uninitialized src<-each(src))        // unsafe due to 'each' on string
         invoke(blk, la)
         delete la
 
@@ -57,9 +57,7 @@ def accept ( var buf:LookAheadBuffer; st:string ) : bool
     return true
 
 
-let tokens <- [{string
-    "<<"; ">>"
-}]
+let tokens <- array<string>("<<", ">>")
 
 def tokenize ( inp:string )                                 // TODO: turn into generator
     look_ahead(inp) <| $ ( var tin )

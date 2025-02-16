@@ -1,8 +1,8 @@
 [export]
 def test
     // regular to-array
-    let d = [[ int 1; 2; 3; 4 ]]
-    let a <- to_array([[ int 1; 2; 3; 4 ]])
+    let d = fixed_array<int>(1, 2, 3, 4)
+    let a <- to_array(fixed_array<int>(1, 2, 3, 4))
     for x,y in d,a
         assert(x==y)
     // range

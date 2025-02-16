@@ -39,7 +39,7 @@ def test_resize_array ( t : T? )
         var failed = false
         try
             for x in a[0].foo.a
-                a |> emplace([[Bar]])   // exception: object contains locked elements and can't be resized
+                a |> emplace(Bar(uninitialized))   // exception: object contains locked elements and can't be resized
         recover
             failed = true
         t |> success(failed)
@@ -66,21 +66,17 @@ def test_resize_table ( t : T? )
     t |> run("nested locked table") <| @ ( t_ : T? )
         var a : table<int; array<int>>
         for tt in range(10)
-            a[tt] <- [{for x in range(tt+1); x}]
+            a[tt] <- [for x in range(tt+1); x]
         var failed = false
         try
             for x in a[3]
-                a[13] <- [{for q in range(3); x}]       // object contains locked elements and can't be resized
+                a[13] <- [for q in range(3); x]       // object contains locked elements and can't be resized
         recover
             failed = true
             t_ |> success(failed)
     t |> run("nested complicated table") <| @ ( t : T? )
         var a : table< int; Bag >
-        a[10] <- [[Bag
-            foo <- [[Goo
-                a <- {{ 1=>1; 2=>2 }}
-            ]]
-        ]]
+        a[10] <- Bag(uninitialized foo <- Goo(uninitialized a <- {1=>1, 2=>2}))
         var failed = false
         try
             for x in values(a[10].foo.a)

@@ -26,7 +26,7 @@ def get_parser_with( email:string; blk: block<( email:Email; err:array<ParsingEr
         var email: Email
 
         rule("{alnums}" as username, "@", "{domain}" as domain) <|
-            return [[Email username = username, domain = domain]]
+            return Email(uninitialized username = username, domain = domain)
 
         var alnums: void? // Just a pattern to be interpreted later
 

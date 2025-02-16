@@ -3,7 +3,7 @@ require strings
 [sideeffects]
 def checkz ( txt:string; fn:function<(arg:string):auto(TT)> )
     let t = invoke(fn, txt)
-    assert(t == [[TT]])
+    assert(t == TT(uninitialized))
 
 
 [export]

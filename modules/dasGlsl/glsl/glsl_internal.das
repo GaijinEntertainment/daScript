@@ -70,12 +70,12 @@ class GlslShader : AstFunctionAnnotation
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         func.flags |= FunctionFlags exports // note: this is temporary, until we are done with dependency collecting etc
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`shader_text"
-        if !add_global_var(compiling_module(),argName, new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
+        if !add_global_var(compiling_module(),argName, new TypeDecl(at=func.at, baseType=Type tString), func.at, false)
             errors := "can't add global variable {argName}"
             return false
         if output_inout_decl
             let decl_name = "{argName}_DECL"
-            if !add_global_var(compiling_module(), decl_name, new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
+            if !add_global_var(compiling_module(), decl_name, new TypeDecl(at=func.at, baseType=Type tString), func.at, false)
                 errors := "can't add global variable {decl_name}"
                 return false
         self->generate_bind_uniform_dummy(func)
@@ -141,10 +141,7 @@ class GlslShader : AstFunctionAnnotation
                 var caps = self->buildCaps()
                 let gres = generate_glsl(func, err, shaderType, version, compute_local_size, caps)
                 let shader_text = "{gres.inout_stub}{self->get_glsl_prefix()}{gres.body}"
-                glob.init <- new [[ExprConstString() at=func.at,
-                    value := shader_text,
-                    _type <- new [[TypeDecl() at=func.at, baseType=Type tString]]
-                ]]
+                glob.init <- new ExprConstString(at=func.at, value := shader_text, _type <- new TypeDecl(at=func.at, baseType=Type tString))
                 if ! err |> empty()
                     glob.init := null
                 else
@@ -153,10 +150,7 @@ class GlslShader : AstFunctionAnnotation
                         let decl_name = "{argName}_DECL"
                         var glob_def <- find_variable(compiling_module(), decl_name)
                         if glob_def!=null
-                            glob_def.init <- new [[ExprConstString() at=func.at,
-                                value := gres.inout_decl,
-                                _type <- new [[TypeDecl() at=func.at, baseType=Type tString]]
-                            ]]
+                            glob_def.init <- new ExprConstString(at=func.at, value := gres.inout_decl, _type <- new TypeDecl(at=func.at, baseType=Type tString))
                             glob_def := null
         glob := null
         if !err |> empty()
@@ -164,84 +158,15 @@ class GlslShader : AstFunctionAnnotation
             return false
         return true
 
-let private glsl_restricted_vertex_attribute_names <- {{
-    "a_position"    => true;
-    "a_normal"      => true;
-    "a_tangent"     => true;
-    "a_bitangent"   => true;
-    "a_color0"      => true;
-    "a_color1"      => true;
-    "a_color2"      => true;
-    "a_color3"      => true;
-    "a_indices"     => true;
-    "a_weight"      => true;
-    "a_texcoord0"   => true;
-    "a_texcoord1"   => true;
-    "a_texcoord2"   => true;
-    "a_texcoord3"   => true;
-    "a_texcoord4"   => true;
-    "a_texcoord5"   => true;
-    "a_texcoord6"   => true;
-    "a_texcoord7"   => true
-}}
+let private glsl_restricted_vertex_attribute_names <- {"a_position"    => true, "a_normal"      => true, "a_tangent"     => true, "a_bitangent"   => true, "a_color0"      => true, "a_color1"      => true, "a_color2"      => true, "a_color3"      => true, "a_indices"     => true, "a_weight"      => true, "a_texcoord0"   => true, "a_texcoord1"   => true, "a_texcoord2"   => true, "a_texcoord3"   => true, "a_texcoord4"   => true, "a_texcoord5"   => true, "a_texcoord6"   => true, "a_texcoord7"   => true}
 
-let private glsl_types <- {{
-    Type tFloat         => "float";
-    Type tFloat2        => "vec2";
-    Type tFloat3        => "vec3";
-    Type tFloat4        => "vec4";
-    Type tInt           => "int";
-    Type tInt2          => "ivec2";
-    Type tInt3          => "ivec3";
-    Type tInt4          => "ivec4";
-    Type tBool          => "bool";
-    Type tRange         => "ivec2";
-    Type tURange        => "uvec2";
-    Type tVoid          => "void";
-    Type tEnumeration   => "int"
-}}
+let private glsl_types <- {Type tFloat         => "float", Type tFloat2        => "vec2", Type tFloat3        => "vec3", Type tFloat4        => "vec4", Type tInt           => "int", Type tInt2          => "ivec2", Type tInt3          => "ivec3", Type tInt4          => "ivec4", Type tBool          => "bool", Type tRange         => "ivec2", Type tURange        => "uvec2", Type tVoid          => "void", Type tEnumeration   => "int"}
 
-let private glsl_handle_types <- {{
-    "float4x4"      => "mat4";
-    "float3x3"      => "mat3"
-}}
+let private glsl_handle_types <- {"float4x4"      => "mat4", "float3x3"      => "mat3"}
 
-let private glsl_functions <- {{
-    "float3x3"  =>  "mat3";
-    "float2"    =>  "vec2";
-    "float3"    =>  "vec3";
-    "float4"    =>  "vec4";
-    "int2"    =>  "ivec2";
-    "int3"    =>  "ivec3";
-    "int4"    =>  "ivec4";
-    "uint2"    =>  "uvec2";
-    "uint3"    =>  "uvec3";
-    "uint4"    =>  "uvec4";
-    "floori"    =>  "floor";
-    "lerp"      =>  "mix";
-    "fast_normalize" => "normalize";
-    "saturate"  =>  "SATURATE";
-    "int_bits_to_float" => "intBitsToFloat";
-    "uint_bits_to_float" => "uintBitsToFloat";
-    "float_bits_to_int" => "floatBitsToInt";
-    "float_bits_to_uint" => "floatBitsToUint";
-    "discard"   =>  "_discard";
-    "_"         =>  "_"
-}}
+let private glsl_functions <- {"float3x3"  =>  "mat3", "float2"    =>  "vec2", "float3"    =>  "vec3", "float4"    =>  "vec4", "int2"    =>  "ivec2", "int3"    =>  "ivec3", "int4"    =>  "ivec4", "uint2"    =>  "uvec2", "uint3"    =>  "uvec3", "uint4"    =>  "uvec4", "floori"    =>  "floor", "lerp"      =>  "mix", "fast_normalize" => "normalize", "saturate"  =>  "SATURATE", "int_bits_to_float" => "intBitsToFloat", "uint_bits_to_float" => "uintBitsToFloat", "float_bits_to_int" => "floatBitsToInt", "float_bits_to_uint" => "floatBitsToUint", "discard"   =>  "_discard", "_"         =>  "_"}
 
-let private glsl_compatibility_constructors <- {{
-    "float4x4"  =>  "MAT4";
-    "float3x3"  =>  "MAT3";
-    "float4"  =>  "VEC4";
-    "float3"  =>  "VEC3";
-    "float2"  =>  "VEC2";
-    "int4"  =>  "IVEC4";
-    "int3"  =>  "IVEC3";
-    "int2"  =>  "IVEC2";
-    "uint4"  =>  "UVEC4";
-    "uint3"  =>  "UVEC3";
-    "uint2"  =>  "UVEC2"
-}}
+let private glsl_compatibility_constructors <- {"float4x4"  =>  "MAT4", "float3x3"  =>  "MAT3", "float4"  =>  "VEC4", "float3"  =>  "VEC3", "float2"  =>  "VEC2", "int4"  =>  "IVEC4", "int3"  =>  "IVEC3", "int2"  =>  "IVEC2", "uint4"  =>  "UVEC4", "uint3"  =>  "UVEC3", "uint2"  =>  "UVEC2"}
 
 class GlslExport : AstVisitor
     errors : array<string>
@@ -900,7 +825,7 @@ class GlslExport : AstVisitor
                 inout_stub += "$input {arg.name}\n"
                 if caps.restrict_vertex_attribute_names
                     if !glsl_restricted_vertex_attribute_names |> key_exists("{arg.name}")
-                        var names <- [{for n in keys(glsl_restricted_vertex_attribute_names); n}]
+                        var names <- [for n in keys(glsl_restricted_vertex_attribute_names); n]
                         let allowed_names = join(names,",")
                         self->error("invalid vertex attribute name {arg.name}, supported names are {allowed_names}", arg.at)
                         delete names
@@ -999,15 +924,15 @@ class GlslExport : AstVisitor
 // op2
     def getReplaceOp2(expr:smart_ptr<ExprOp2>) : tuple<fun:string;replOp:bool>
         if expr.op=="%" && !expr._type.isInteger
-            return [[auto "mod",true]]
+            return ("mod", true)
         if caps.replace_hlsl_incompatible_operations
             if expr.op=="*"
                 if is_any_matrix(expr.left._type) || is_any_matrix(expr.right._type)
-                    return [[auto "MUL",true]]
+                    return ("MUL", true)
             if expr.op=="==" || expr.op=="!="
                 if is_any_matrix(expr.left._type) || expr.left._type.isVectorType || is_any_matrix(expr.right._type) || expr.right._type.isVectorType
-                    return [[auto "all", false]]
-        return [[auto "",false]]
+                    return ("all", false)
+        return ("", false)
     def override preVisitExprOp2(expr:smart_ptr<ExprOp2>)
         let repl = self->getReplaceOp2(expr)
         *writer |> write("{repl.fun}(")
@@ -1109,7 +1034,7 @@ class GlslExport : AstVisitor
                 let sdim = source._type.dim[length(source._type.dim)-1]
                 *writer |> write("{svar.name}!={sdim}")
                 let newsrc = "{self->describe_subexpression(source)}[{svar.name}]"
-                renames |> push([[auto "{iter}", newsrc]])
+                renames |> push(("{iter}", newsrc))
             elif self->isRangeFor(source)
                 *writer |> write("{svar.name}!=_for_range_{svar.name}.y")
         *writer |> write(" )")
@@ -1275,7 +1200,7 @@ class GlslExport : AstVisitor
 // swizzle
     def override visitExprSwizzle(expr:smart_ptr<ExprSwizzle>) : ExpressionPtr
         *writer |> write(".")
-        let f2name = [[string "x";"y";"z";"w"]]
+        let f2name = fixed_array<string>("x", "y", "z", "w")
         for fch in expr.fields
             let f = int(fch)
             *writer |> write("{f>=0 && f<=3 ? f2name[f] : "?"}")
@@ -1493,7 +1418,7 @@ def generate_glsl(fnMain:FunctionPtr; var errors:array<string>; shaderType:Shade
             delete astVisitor
     if DEBUG_SHADER_TEXT
         print("{st}\n\n")
-    return [[auto st, inout_stub, inout_decl]]
+    return (st, inout_stub, inout_decl)
 
 [macro_function]
 def bind_uniform_function_name(fnMain:FunctionPtr)
@@ -1535,13 +1460,8 @@ def get_decl_type_from_name ( name:string )
 [macro_function]
 def get_decl_info ( typ:TypeDeclPtr; arguments:AnnotationArgumentList ) : tuple<ok:bool; info:FieldDeclInfo>
     if length(typ.dim)>0 || !(typ.isNumeric || typ.isVectorType)
-        return [[auto false, [[FieldDeclInfo]]]]
-    var fdi = [[FieldDeclInfo
-        sizei = arguments |> find_arg("size") ?as tInt ?? -1,
-        typet = get_decl_type_from_name(arguments |> find_arg("type") ?as tString ?? ""),
-        normalized = arguments |> find_arg("normalized") ?as tBool ?? false,
-        as_int = arguments |> find_arg("as_int") ?as tBool ?? false
-    ]]
+        return (false, FieldDeclInfo(uninitialized))
+    var fdi = FieldDeclInfo(uninitialized sizei = arguments |> find_arg("size") ?as tInt ?? -1, typet = get_decl_type_from_name(arguments |> find_arg("type") ?as tString ?? ""), normalized = arguments |> find_arg("normalized") ?as tBool ?? false, as_int = arguments |> find_arg("as_int") ?as tBool ?? false)
     if fdi.sizei==-1
         fdi.sizei = typ.isVectorType ? typ.vectorDim : 1
     if fdi.typet == Type none
@@ -1549,25 +1469,6 @@ def get_decl_info ( typ:TypeDeclPtr; arguments:AnnotationArgumentList ) : tuple<
             fdi.typet = Type tFloat
         elif typ.baseType==Type tUInt8 || typ.baseType==Type tInt16 || typ.baseType==Type tDouble
             fdi.typet = typ.baseType
-    return fdi.typet!=Type none ? [[auto true, fdi]] : [[auto false, [[FieldDeclInfo]]]]
+    return fdi.typet!=Type none ? (true, fdi) : (false, FieldDeclInfo(uninitialized))
 
-var public glsl_supported_semantics <- {{
-	"POSITION" => true;
-	"NORMAL" => true;
-	"TANGENT" => true;
-	"BITANGENT" => true;
-	"COLOR0" => true;
-	"COLOR1" => true;
-	"COLOR2" => true;
-	"COLOR3" => true;
-	"INDICES" => true;
-	"WEIGHT" => true;
-	"TEXCOORD0" => true;
-	"TEXCOORD1" => true;
-	"TEXCOORD2" => true;
-	"TEXCOORD3" => true;
-	"TEXCOORD4" => true;
-	"TEXCOORD5" => true;
-	"TEXCOORD6" => true;
-	"TEXCOORD7" => true
-}}
+var public glsl_supported_semantics <- {"POSITION" => true, "NORMAL" => true, "TANGENT" => true, "BITANGENT" => true, "COLOR0" => true, "COLOR1" => true, "COLOR2" => true, "COLOR3" => true, "INDICES" => true, "WEIGHT" => true, "TEXCOORD0" => true, "TEXCOORD1" => true, "TEXCOORD2" => true, "TEXCOORD3" => true, "TEXCOORD4" => true, "TEXCOORD5" => true, "TEXCOORD6" => true, "TEXCOORD7" => true}

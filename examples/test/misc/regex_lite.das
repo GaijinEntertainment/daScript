@@ -88,36 +88,36 @@ def test_replace(var regex:Regex;input:string;expected:string)
 
 def test_regex
     // character
-    test_re(%regex~a%%, [{string[] "a"}], [{string ""; "b"; "ba"}])
+    test_re(%regex~a%%, array("a"), array<string>("", "b", "ba"))
     // union
-    test_re(%regex~cat|dog%%, [{string "cat";"dog";"cats"}], [{string "at";" cat";"doog"}])
-    test_re(%regex~cat|dog|bat%%, [{string "cat";"dog";"cats";"bats"}], [{string "at";" cat";"doog";"at"}])
+    test_re(%regex~cat|dog%%, array<string>("cat", "dog", "cats"), array<string>("at", " cat", "doog"))
+    test_re(%regex~cat|dog|bat%%, array<string>("cat", "dog", "cats", "bats"), array<string>("at", " cat", "doog", "at"))
     // set & negatvie set
-    test_re(%regex~[0-9a-zA-Z_]%%,[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
-    test_re(%regex~[\w]%%,[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
-    test_re(%regex~\w%%,[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}], [{string "#";"*"}])
-    test_re(%regex~[^0-9a-zA-Z_]%%,[{string "#";"*"}],[{string "0";"3";"9";"a";"e";"z";"A";"Q";"Z";"_"}])
+    test_re(%regex~[0-9a-zA-Z_]%%,array<string>("0", "3", "9", "a", "e", "z", "A", "Q", "Z", "_"), array<string>("#", "*"))
+    test_re(%regex~[\w]%%,array<string>("0", "3", "9", "a", "e", "z", "A", "Q", "Z", "_"), array<string>("#", "*"))
+    test_re(%regex~\w%%,array<string>("0", "3", "9", "a", "e", "z", "A", "Q", "Z", "_"), array<string>("#", "*"))
+    test_re(%regex~[^0-9a-zA-Z_]%%,array<string>("#", "*"),array<string>("0", "3", "9", "a", "e", "z", "A", "Q", "Z", "_"))
     // any, concat
-    test_re(%regex~cat.%%, [{string "catt";"cats"}], [{string "cat";" cat"}])
-    test_re(%regex~(cat)(dog)(bat)%%, [{string[] "catdogbat"}], [{string "cat";" cat"; "catdog"; "dogbat"}])
+    test_re(%regex~cat.%%, array<string>("catt", "cats"), array<string>("cat", " cat"))
+    test_re(%regex~(cat)(dog)(bat)%%, array("catdogbat"), array<string>("cat", " cat", "catdog", "dogbat"))
     // eos
-    test_re(%regex~cat$%%, [{string[] "cat"}], [{string "cattt";" cat"}])
+    test_re(%regex~cat$%%, array("cat"), array<string>("cattt", " cat"))
     // +
-    test_re(%regex~ab+%%, [{string "ab";"abb";"abbbc"}], [{string "a";" ab"; "bbb"}])
-    test_re(%regex~(cat)+%%,[{string "cat";"catcat"}], [{string "dog";"caat"}])
+    test_re(%regex~ab+%%, array<string>("ab", "abb", "abbbc"), array<string>("a", " ab", "bbb"))
+    test_re(%regex~(cat)+%%,array<string>("cat", "catcat"), array<string>("dog", "caat"))
     // *
-    test_re(%regex~ab*%%, [{string "a";"ab";"abb";"abbbc"}], [{string " ab"; "bbb"}])
-    test_re(%regex~a(cat)*%%,[{string "a";"acat";"acatcat"}], [{string "dog";"caat";"cat"}])
-    test_re(%regex~a*(cat)%%,[{string "cat";"acat";"aaacat"}], [{string "dog";"caat"}])
+    test_re(%regex~ab*%%, array<string>("a", "ab", "abb", "abbbc"), array<string>(" ab", "bbb"))
+    test_re(%regex~a(cat)*%%,array<string>("a", "acat", "acatcat"), array<string>("dog", "caat", "cat"))
+    test_re(%regex~a*(cat)%%,array<string>("cat", "acat", "aaacat"), array<string>("dog", "caat"))
     // ?
-    test_re(%regex~ab?%%, [{string "a";"ab";"abb"}], [{string "b";" ab"; "bbb"}])
-    test_re(%regex~(cat)?x%%,[{string "catx";"x"}], [{string "dog";"caat"}])
+    test_re(%regex~ab?%%, array<string>("a", "ab", "abb"), array<string>("b", " ab", "bbb"))
+    test_re(%regex~(cat)?x%%,array<string>("catx", "x"), array<string>("dog", "caat"))
     // match2
-    test_re(%regex~[a-z.]+.com%%, [{string[] "abra.com"}], [{string "1"; "2"}])
+    test_re(%regex~[a-z.]+.com%%, array("abra.com"), array<string>("1", "2"))
 
     // gropus
-    test_group ( %regex~i have a (cat|dog)%%, "i have a cat.", [{string[] "cat"}])
-    test_group ( %regex~(this|that) is a (book|table|car)%%, "that is a table", [{string "that";"table"}])
+    test_group ( %regex~i have a (cat|dog)%%, "i have a cat.", array("cat"))
+    test_group ( %regex~(this|that) is a (book|table|car)%%, "that is a table", array<string>("that", "table"))
 
     // replace
     test_replace ( %regex~[^a-z]*%%, "ch!ar#l@y123be&%rt!", "charlybert" )

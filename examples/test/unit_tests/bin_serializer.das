@@ -16,7 +16,7 @@ struct Foo
     data_int:int = 1
     data_float:float = 3.14
     data_bar:Bar <- Bar()
-    data_uint_3 : uint[3] = [[ uint 1u; 2u; 3u ]]
+    data_uint_3 : uint[3] = fixed_array<uint>(1u, 2u, 3u)
 
 [export]
 def test

@@ -10,12 +10,7 @@ struct Node
 def test_topological_sort ( t: T? )
     // 0 -> 1 -> 3
     // 0 -> 2 -> 3
-    var nodes <- [{Node
-        id=3, before <- {{1; 2}};
-        id=0;
-        id=2, before <- {{0}};
-        id=1, before <- {{0}}
-    }]
+    var nodes <- [Node(id=3, before <- {1, 2}), Node(id=0), Node(id=2, before <- {0}), Node(id=1, before <- {0})]
     var res <- topological_sort(nodes)
     t |> success ( length(res)==4, "expecting all the same nodes")
     var good : bool[4]
