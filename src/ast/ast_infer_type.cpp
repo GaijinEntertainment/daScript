@@ -5435,7 +5435,9 @@ namespace das {
                 if ( possibleEnums.size()==1 ) {
                     auto td = make_smart<TypeDecl>(possibleEnums.back());
                     auto res = make_smart<ExprConstEnumeration>(expr->at, expr->name, td);
-                    res->type = td;
+                    bool infE = false;
+                    res->value = getEnumerationValue(res.get(), infE);
+                    if ( infE ) res->type = td;
                     return res;
                 } else if ( possibleBitfields.size()==1 ) {
                     auto alias = possibleBitfields.back();
