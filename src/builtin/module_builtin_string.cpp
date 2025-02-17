@@ -587,9 +587,11 @@ namespace das
     bool delete_string ( char * & str, Context * context, LineInfoArg * at ) {
         if ( !str ) return false;
         uint32_t len = stringLengthSafe(*context, str);
-        bool res = context->freeString(str, len, at);
-        str = nullptr;
-        return res;
+        if ( context->freeString(str, len, at) ) {
+            str = nullptr;
+            return true;
+        }
+        return false;
     }
 
     void builtin_append_char_to_string(string & str, int32_t Ch) {
