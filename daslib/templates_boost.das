@@ -270,6 +270,27 @@ def apply_template ( var rules:Template; at:LineInfo; var expr:smart_ptr<Express
         delete astVisitor
     return <- expr
 
+def private visit_type ( var typ:TypeDeclPtr&; var adapter:smart_ptr<VisitorAdapter> )
+    unsafe
+        // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
+        var newType <- typ |> visit(adapter)
+        if typ != newType
+            typ := null
+        typ <- newType
+
+def apply_template ( var rules:Template; at:LineInfo; var typ:smart_ptr<TypeDecl>; forceAt:bool = true ) : TypeDeclPtr
+    //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
+    var astVisitor = new TemplateVisitor(unsafe(addr(rules)))
+    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
+    visit_type(typ, astVisitorAdapter)
+    /*
+    if forceAt
+        expr |> force_at(at)
+    */
+    unsafe
+        delete astVisitor
+    return <- typ
+
 def unquote_block ( expr:ExpressionPtr ) : smart_ptr<ExprBlock>
     //! Returns the corresponding block subexpression expression form the ExprMakeBlock.
     assert(expr is ExprMakeBlock)
