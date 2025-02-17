@@ -1,8 +1,8 @@
 //require baseCoreEvent//not working!
 struct BaseCoreEvent
-    [skipCpp=true] vtbl__:uint?
-    [skipCpp=true] eventName:string
-    [skipCpp=true] eventType:uint
+    [skipCpp=true] vtbl__ : uint?
+    [skipCpp=true] eventName : string
+    [skipCpp=true] eventType : uint
 /*
 struct SomeEvent
     pos,vel:float3
@@ -26,6 +26,6 @@ struct TestEvent
 */
 
 
-[comment (sValue="hello,world",iValue=5,fValue=2.0,bValue=true)]
+[comment(sValue="hello,world", iValue=5, fValue=2.0, bValue=true)]
 struct Dummy {}
 

@@ -1,12 +1,14 @@
-let
-    num_2_name <- lock_forever ( {{
-        0 => "zero";
-        1 => "one";
+options gen2
+let {
+    num_2_name <- lock_forever ( {
+        0 => "zero",
+        1 => "one",
         2 => "two"
-    }} )
+    } )
+}
 
 [export]
-def test
+def test {
     let n0 = num_2_name?[0] ?? "0"
     assert(n0=="zero")
     let n1 = num_2_name?[1] ?? "1"
@@ -16,3 +18,4 @@ def test
     let n3 = num_2_name?[3] ?? "3"
     assert(n3=="3")
     return true
+}

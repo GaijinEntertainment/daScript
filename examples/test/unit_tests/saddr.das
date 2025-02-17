@@ -1,15 +1,17 @@
+options gen2
 require daslib/safe_addr
 
-struct Foo
+struct Foo {
     a : int
+}
 
 [export]
-def test
+def test {
     var t = 1
     var pt = safe_addr(t)
     *pt = 2
     assert(t==2)
-    let q = [[Foo a=3]]
+    let q = Foo( a=3)
     let pq = safe_addr(q.a)
     assert(*pq==3)
     var w : int[2]
@@ -17,5 +19,6 @@ def test
     let pw = safe_addr(w[1])
     assert(*pw==4)
     return true
+}
 
 

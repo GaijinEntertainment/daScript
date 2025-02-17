@@ -1,47 +1,59 @@
+options gen2
 // options print_ref = true, print_var_access = true, log = true// , log_optimization_passes = true
 
-def strcat(a,b)
+def strcat(a,b) {
     var c = a
     c += b                  // this will not prevent folding
     return c
+}
 
-def make_name(x)
+def make_name(x) {
     return strcat("hello_",x)
+}
 
-var
+var {
     g_cond = true
+}
 
-def make_another_name(x)
+def make_another_name(x) {
     assert(x=="modify_arg")
-    if g_cond
+    if (g_cond) {
         print("{x}")// this will prevent folding
+    }
     return x + "_ok"
+}
 
-let
+let {
     g_name = "_global_ok"
+}
 
-def make_g_name(x)
+def make_g_name(x) {
     return x + g_name
+}
 
-struct Foo
+struct Foo {
     a : int = 19
     b : float = 20.
+}
 
-def up_foo(var a)
+def up_foo(var a) {
     a.a ++
+}
 
-def name_foo()
+def name_foo() {
     var t = Foo()
     up_foo(t)
     return "{t}"        // this will fold
+}
 
-def stil_not_writing(var a:string&;b:string&)
+def stil_not_writing(var a:string&;b:string&) {
     assert(a=="blah")
     assert(b=="_global_ok")
     a = "it"
+}
 
 [export]
-def test
+def test {
     g_cond = false
     let t = make_name("world")
     assert("{t}"=="hello_world")
@@ -59,3 +71,4 @@ def test
     T = "blah"
     stil_not_writing(T,tt)
     return true
+}

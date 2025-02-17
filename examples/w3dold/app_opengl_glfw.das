@@ -1,3 +1,4 @@
+options gen2
 module app_opengl_glfw private
 
 require rast2d public
@@ -9,20 +10,22 @@ require daslib/defer
 require daslib/safe_addr
 require math
 
-var [[in, location=0]] v_position : float2
-var [[in, location=2]] v_texcoord : float2
-var [[inout]] f_texcoord : float2
-var [[uniform]] f_tex : sampler2D
-var [[out]] f_FragColor : float4
+var @in @location v_position : float2
+var @in @location v_texcoord : float2
+var @inout f_texcoord : float2
+var @uniform f_tex : sampler2D
+var @out f_FragColor : float4
 
 [vertex_program]
-def vs_main
+def vs_main {
     f_texcoord = v_texcoord
     gl_Position = float4(v_position, 0.0, 1.0)
+}
 
 [fragment_program]
-def fs_main
-    f_FragColor = texture(f_tex,f_texcoord)
+def fs_main {
+    f_FragColor = texture(f_tex, f_texcoord)
+}
 
 var program : uint
 var vao : uint
@@ -31,54 +34,59 @@ var ebo : uint
 var texture : uint
 
 [vertex_buffer]
-struct Vertex
+struct Vertex {
     xy  : float2
     rgb : float3
     uv  : float2
+}
 
-let vertices = [[Vertex
-    xy=float2(-1.0, 1.0), uv=float2(0.0,0.0);
-    xy=float2( 1.0, 1.0), uv=float2(1.0,0.0);
-    xy=float2( 1.0,-1.0), uv=float2(1.0,1.0);
-    xy=float2(-1.0,-1.0), uv=float2(0.0,1.0)
-]]
+let vertices = [Vertex(
+    xy=float2(-1.0, 1.0), uv=float2(0.0, 0.0)), Vertex(
+    xy=float2(1.0, 1.0), uv=float2(1.0, 0.0)), Vertex(
+    xy=float2(1.0, -1.0), uv=float2(1.0, 1.0)), Vertex(
+    xy=float2(-1.0, -1.0), uv=float2(0.0, 1.0)
+)];
 
-let indices = [[int 0; 1; 2; 2; 3; 0]]
+let indices = fixed_array<int>(0, 1, 2, 2, 3, 0)
 
 var bb_width = 0
 var bb_height = 0
 var bb_data : array<uint>
 
-def public get_screen_size
-    return int2(bb_width,bb_height)
+def public get_screen_size {
+    return int2(bb_width, bb_height)
+}
 
-def update_bb ( var w, h : int )
-    w = (w+3) & ~3
-    h = (h+3) & ~3
-    if w==bb_width && h==bb_height
+def update_bb(var w, h : int) {
+    w = (w + 3) & ~3
+    h = (h + 3) & ~3
+    if (w == bb_width && h == bb_height) {
         return false
+    }
     bb_width = w
     bb_height = h
     bb_data |> clear()
-    bb_data |> resize(w*h)
+    bb_data |> resize(w * h)
     return true
+}
 
-def create_gl_objects(w,h : int)
-    program = create_shader_program(@@vs_main,@@fs_main)
+def create_gl_objects(w, h : int) {
+    program = create_shader_program(@@vs_main, @@fs_main)
     // vao
     glGenVertexArrays(1, safe_addr(vao))
-    glBindVertexArray(vao);
+    glBindVertexArray(vao)
     // vbo
     glGenBuffers(1, safe_addr(vbo))
     glBindBuffer(GL_ARRAY_BUFFER, vbo)
     glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW)
-    bind_vertex_buffer(null,type<Vertex>)
+    bind_vertex_buffer(null, type<Vertex>)
     // ebo
     glGenBuffers(1, safe_addr(ebo))
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW)
     // texture
-    update_bb(w,h)
+    update_bb(w, h)
+}
 
 var window : GLFWwindow?
 
@@ -106,25 +114,31 @@ let public VK_SPACE = GLFW_KEY_SPACE
 let public VK_A = GLFW_KEY_A
 let public VK_D = GLFW_KEY_D
 
-def public is_key_pressed ( key:int )
-    return glfwGetKey(window, key)!=0
+def public is_key_pressed(key : int) {
+    return glfwGetKey(window, key) != 0
+}
 
 var dt_sec = 0.0lf
 
-def public get_delta_time_sec
+def public get_delta_time_sec {
     return float(dt_sec)
+}
 
-def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
-    if glfwInit()==0
-		panic("can't init glfw")
-    defer <|
+def public raster_app_main(blk : block<(var back_buffer : Bitmap) : void>) {
+    if (glfwInit() == 0) {
+        panic("can't init glfw")
+    }
+    defer <| $() {
         glfwTerminate()
-    glfwInitOpenGL(3,3)
+    }
+    glfwInitOpenGL(3, 3)
     window = glfwCreateWindow(1920, 1080, "RASTER2D", null, null)
-    if window==null
-		panic("can't create window")
-    defer <|
+    if (window == null) {
+        panic("can't create window")
+    }
+    defer <| $() {
         glfwDestroyWindow(window)
+    }
     glfwMakeContextCurrent(window)
     var display_w, display_h : int
     glfwGetFramebufferSize(window, display_w, display_h)
@@ -132,23 +146,24 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
     var tframe = ref_time_ticks()
     var prev_sec = glfwGetTime()
     var msecs = 12.
-    while glfwWindowShouldClose(window)==0
+    while (glfwWindowShouldClose(window) == 0) {
         var tsec = glfwGetTime()
         dt_sec = tsec - prev_sec
         prev_sec = tsec
         var dt_frame = get_time_usec(tframe)
         tframe = ref_time_ticks()
-        unsafe
-            heap_collect(true,true)
+        unsafe {
+            heap_collect(true, true)
+        }
         glfwPollEvents()
         glfwGetFramebufferSize(window, display_w, display_h)
         update_bb(display_w, display_h)
         // callbakc
-        var bmp = [[Bitmap size=int2(bb_width,bb_height), data=unsafe(addr(bb_data[0]))]]
+        var bmp = Bitmap(size = int2(bb_width, bb_height), data = unsafe(addr(bb_data[0])))
         let t0 = ref_time_ticks()
         invoke(blk, bmp)
         let dt = get_time_usec(t0)
-        msecs = msecs*0.95 + float(dt/100)*0.05
+        msecs = msecs * 0.95 + float(dt / 100) * 0.05
         let it  = int(msecs)
         glfwSetWindowTitle(window, "RASTER2D {bb_width}x{bb_height} frame:{dt_frame/1000}ms rast:{it/10}.{it%10}ms")
         // make a texture
@@ -177,3 +192,5 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
         // swap buffersa
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
+    }
+}

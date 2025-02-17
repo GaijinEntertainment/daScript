@@ -1,22 +1,29 @@
+options gen2
 // options log_nodes = true, log_stack = true
 
-struct Foo
+struct Foo {
     x,y,z,w:int
+}
 
-def testA(var a)
-    unsafe
-        for x in range(10)
+def testA(var a) {
+    unsafe {
+        for (x in range(10)) {
             a[x].y = x
+        }
         a[3].z = 13
-        for x in range(10)
-            if x!=3
+        for (x in range(10)) {
+            if (x!=3) {
                 assert(a[x].x==0 && a[x].y==x && a[x].z==0 && a[x].w==0)
-            else
+            } else {
                 assert(a[x].x==0 && a[x].y==x && a[x].z==13 && a[x].w==0)
+            }
+        }
         assert(a[3].z==13)
+    }
+}
 
 [export]
-def test
+def test {
     // regular array, struct
     var a : Foo[10]
     testA(a)
@@ -28,5 +35,6 @@ def test
     var c : table<int;Foo>
     testA(c)
     return true
+}
 
 

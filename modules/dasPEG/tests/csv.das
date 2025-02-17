@@ -17,20 +17,20 @@ require daslib/fio
 require peg/peg
 
 
-def get_parser_with(csv: string; blk: block<(email:array<string>; err:array<ParsingError>):void>)
+def get_parser_with(csv : string; blk : block<(email : array<string>; err : array<ParsingError>) : void>)
     parse csv
-        var Row: array<string>
+        var Row : array<string>
 
         rule(*CommarSeparatedCell as cells, Cell as c, EOL) <|
             cells |> push <| c
             return <- cells
 
-        var CommarSeparatedCell: string
+        var CommarSeparatedCell : string
 
         rule(Cell as c, ",") <|
             return <- c
 
-        var Cell: string
+        var Cell : string
 
         rule(PEEK("\""), commit, // Now we can not turn back
              QuotedCell as qc) <|
@@ -45,17 +45,17 @@ def get_parser_with(csv: string; blk: block<(email:array<string>; err:array<Pars
 
 
 
-        var QuotedCell: string
+        var QuotedCell : string
 
         rule("\"", "{EscapedChars}" as chars, "\"") <|
             return chars
 
-        var EscapedChars: void?
+        var EscapedChars : void?
 
         rule(*EscapedChar) <|
             return null
 
-        var EscapedChar: void?
+        var EscapedChar : void?
 
         rule("\"\"") <|
             return null
@@ -65,23 +65,23 @@ def get_parser_with(csv: string; blk: block<(email:array<string>; err:array<Pars
 
 
 
-        var NonQuotedCell: string
+        var NonQuotedCell : string
 
         rule("{CellContents}" as contents) <|
             return contents
 
-        var CellContents: void?
+        var CellContents : void?
 
         rule(*CellSymbol) <|
             return null
 
-        var CellSymbol: void?
+        var CellSymbol : void?
 
         // Cell symbol is any symbol that is not NotCellContents
         rule(!NotCellContents, any) <|
             return null
 
-        var NotCellContents: void?
+        var NotCellContents : void?
 
         rule(EOL) <|
             return null
@@ -89,7 +89,7 @@ def get_parser_with(csv: string; blk: block<(email:array<string>; err:array<Pars
             return null
 
 
-        var EOL: void?
+        var EOL : void?
 
         rule("\r\n") <|
             return null
@@ -100,7 +100,7 @@ def get_parser_with(csv: string; blk: block<(email:array<string>; err:array<Pars
 
 
 [test]
-def test_basic_csv(t: T?)
+def test_basic_csv(t : T?)
     var input = "John,Doe,30\n"
     var inscope expected_res <-  [{string "John"; "Doe"; "30"}]
 
@@ -113,7 +113,7 @@ def test_basic_csv(t: T?)
 
 
 [test]
-def test_quoted_fields(t: T?)
+def test_quoted_fields(t : T?)
     let input = %stringify~"John Doe","123, Main Street, NY","123-456-7890"
     %%
     var inscope expected_res <-  [{string "John Doe"; "123, Main Street, NY"; "123-456-7890"}]
@@ -128,7 +128,7 @@ def test_quoted_fields(t: T?)
 
 
 [test]
-def test_special_chars(t: T?)
+def test_special_chars(t : T?)
     var input = "John Doe,john.doe@example.com\n"
     var inscope expected_res <-  [{string "John Doe"; "john.doe@example.com"}]
 
@@ -141,7 +141,7 @@ def test_special_chars(t: T?)
             t |> equal(a, b)
 
 [test]
-def test_escaped_quotes(t: T?)
+def test_escaped_quotes(t : T?)
     let input = %stringify~1,"She said, ""Hello, world!"""
     %%
     var inscope expected_res <-  [{string "1"; "She said, \"\"Hello, world!\"\""}]
@@ -155,7 +155,7 @@ def test_escaped_quotes(t: T?)
             t |> equal(a, b)
 
 [test]
-def test_leading_trailing_spaces(t: T?)
+def test_leading_trailing_spaces(t : T?)
     var input = " John Doe , 123 Main Street, NY , 123-456-7890 \n"
     var inscope expected_res <-  [{string " John Doe "; " 123 Main Street"; " NY "; " 123-456-7890 "}]
 
@@ -168,7 +168,7 @@ def test_leading_trailing_spaces(t: T?)
             t |> equal(a, b)
 
 [test]
-def test_all_empty_fields(t: T?)
+def test_all_empty_fields(t : T?)
     var input = ",,\n"
     var inscope expected_res <-  [{string ""; ""; ""}]
 
@@ -184,7 +184,7 @@ def test_all_empty_fields(t: T?)
 // Test errors
 
 [test]
-def test_no_eol(t: T?)
+def test_no_eol(t : T?)
     let input = %stringify~1,True%%
 
     get_parser_with(input) <| $(email; errors)
@@ -193,7 +193,7 @@ def test_no_eol(t: T?)
             return
 
 [test]
-def test_missing_quote(t: T?)
+def test_missing_quote(t : T?)
     let input = %stringify~1,"True
     %%
 

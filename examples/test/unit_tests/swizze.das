@@ -1,16 +1,19 @@
+options gen2
  // options log = true, log_nodes =true, print_ref = true, print_var_access = true // , log_optimization_passes = true
 
 // options logAot=true, log_nodes=true
 
-struct Foo
+struct Foo {
     t : bool
     v : int3 = int3(1,2,3)
+}
 
-def funV(v:int3):int3
+def funV(v:int3):int3 {
     return v
+}
 
 [export]
-def test
+def test {
     // REGULAR V
     var v = int3(1,2,3)
     assert(v==int3(1,2,3))
@@ -54,3 +57,4 @@ def test
     fv.v.xyz = int3(11,22,33)
     assert(fv.v.xyz==int3(11,22,33))
     return true
+}

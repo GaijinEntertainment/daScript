@@ -108,7 +108,7 @@ def private create_chat_table
         return false
     return true
 
-def public reset_chat ( chat_id : int64 )
+def public reset_chat(chat_id : int64)
     var sql = "DELETE FROM chat_log WHERE chat_id = {chat_id};";
     var rc = sqlite3_exec(g_db, sql, null)
     if rc != SQLITE_OK
@@ -121,14 +121,14 @@ def public reset_chat ( chat_id : int64 )
         return false
     return true
 
-def public create_chat_log ( dbname:string )
+def public create_chat_log(dbname : string)
     var rc = sqlite3_open(dbname, g_db)
     if rc != SQLITE_OK
         to_log(LOG_ERROR, "Cannot open database: {sqlite3_errmsg(g_db)}\n")
         sqlite3_close(g_db)
         g_db = null
         return false
-    rc = sqlite3_exec(g_db, "PRAGMA journal_mode=WAL",null)
+    rc = sqlite3_exec(g_db, "PRAGMA journal_mode=WAL", null)
     if rc != SQLITE_OK
         to_log(LOG_ERROR, "Cannot set journal mode: {sqlite3_errmsg(g_db)}\n")
         sqlite3_close(g_db)
@@ -140,7 +140,7 @@ def public create_chat_log ( dbname:string )
         return false
     return true
 
-def public write_to_log ( entry:ChatLogEntry )
+def public write_to_log(entry : ChatLogEntry)
     var sql = "INSERT INTO chat_log (chat_id, message_id, date, from_id, reply_to_message, text, transcription) VALUES (?, ?, ?, ?, ?, ?, ?)"
     var stmt : sqlite3_stmt?
     var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
@@ -162,7 +162,7 @@ def public write_to_log ( entry:ChatLogEntry )
 finally
     sqlite3_finalize(stmt)
 
-def public write_user ( user:UserEntry )
+def public write_user(user : UserEntry)
     var sql = "INSERT OR IGNORE INTO users (user_id, is_bot, first_name, last_name, user_name) VALUES (?, ?, ?, ?, ?)"
     var stmt : sqlite3_stmt?
     var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
@@ -182,7 +182,7 @@ def public write_user ( user:UserEntry )
 finally
     sqlite3_finalize(stmt)
 
-def public write_summary ( summary:SummaryEntry )
+def public write_summary(summary : SummaryEntry)
     var sql = "INSERT OR IGNORE INTO summary_log (chat_id, id, text) VALUES (?, ?, ?)"
     var stmt : sqlite3_stmt?
     var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
@@ -200,7 +200,7 @@ def public write_summary ( summary:SummaryEntry )
 finally
     sqlite3_finalize(stmt)
 
-def public write_api_use ( api_use : ApiUseEntry )
+def public write_api_use(api_use : ApiUseEntry)
     var sql = "INSERT INTO api_use (user_id, server_time, chat_id, message_id, tokens, voice_bytes) VALUES (?, ?, ?, ?, ?, ?)"
     var stmt : sqlite3_stmt?
     var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
@@ -221,7 +221,7 @@ def public write_api_use ( api_use : ApiUseEntry )
 finally
     sqlite3_finalize(stmt)
 
-def public list_unique_users ( chat_id:int64 ) : array<int64>
+def public list_unique_users(chat_id : int64) : array<int64>
     var sql = "SELECT DISTINCT from_id FROM chat_log WHERE chat_id = ?"
     var stmt : sqlite3_stmt?
     var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
@@ -242,7 +242,7 @@ def public list_unique_users ( chat_id:int64 ) : array<int64>
 finally
     sqlite3_finalize(stmt)
 
-def public list_chat_users ( chat_id:int64; blk:block<(entry:UserEntry):void>)
+def public list_chat_users(chat_id : int64; blk : block<(entry : UserEntry) : void>)
     var stmt : sqlite3_stmt?
     var inscope users <- list_unique_users(chat_id)
     if users |> empty
@@ -271,12 +271,12 @@ def public list_chat_users ( chat_id:int64; blk:block<(entry:UserEntry):void>)
                 last_name = sqlite3_column_text_(stmt, 3),
                 user_name = sqlite3_column_text_(stmt, 4)
             ]]
-            invoke(blk,entry)
+            invoke(blk, entry)
     return true
 finally
     sqlite3_finalize(stmt)
 
-def public list_all_users ( blk : block<(entry:chat_db::UserEntry const):void> )
+def public list_all_users(blk : block<(entry : chat_db::UserEntry const) : void>)
     var sql = "SELECT user_id, is_bot, first_name, last_name, user_name FROM users"
     var stmt : sqlite3_stmt?
     var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
@@ -297,12 +297,12 @@ def public list_all_users ( blk : block<(entry:chat_db::UserEntry const):void> )
             last_name = sqlite3_column_text_(stmt, 3),
             user_name = sqlite3_column_text_(stmt, 4)
         ]]
-        invoke(blk,entry)
+        invoke(blk, entry)
     return true
 finally
     sqlite3_finalize(stmt)
 
-def public list_chat_log ( chat_id:int64; last_n_entries:int; blk:block<(entry:ChatLogEntry):void>)
+def public list_chat_log(chat_id : int64; last_n_entries : int; blk : block<(entry : ChatLogEntry) : void>)
     var sql = "SELECT id, message_id, date, from_id, reply_to_message, text, transcription
                 FROM chat_log
                 WHERE chat_id = @cid
@@ -332,12 +332,12 @@ def public list_chat_log ( chat_id:int64; last_n_entries:int; blk:block<(entry:C
             text = sqlite3_column_text_(stmt, 5),
             transcription = sqlite3_column_text_(stmt, 6)
         ]]
-        invoke(blk,entry)
+        invoke(blk, entry)
     return true
 finally
     sqlite3_finalize(stmt)
 
-def public list_conversation_log ( chat_id, bot_id:int64; bot_name:string; n_entries:int; blk:block<(entry:ChatLogEntry):void>)
+def public list_conversation_log(chat_id, bot_id : int64; bot_name : string; n_entries : int; blk : block<(entry : ChatLogEntry) : void>)
     var sql = "SELECT id, message_id, date, from_id, reply_to_message, text, transcription
                 FROM chat_log
                 WHERE chat_id = @cid
@@ -372,12 +372,12 @@ def public list_conversation_log ( chat_id, bot_id:int64; bot_name:string; n_ent
             text = sqlite3_column_text_(stmt, 5),
             transcription = sqlite3_column_text_(stmt, 6)
         ]]
-        invoke(blk,entry)
+        invoke(blk, entry)
     return true
 finally
     sqlite3_finalize(stmt)
 
-def public get_first_summary ( chat_id:int64; dayZ:int64 ) : tuple<id:int64;text:string>
+def public get_first_summary(chat_id : int64; dayZ : int64) : tuple<id : int64; text : string>
     var sql = "SELECT id, text
                 FROM summary_log
                 WHERE chat_id=@cid AND id<@dayZ
@@ -396,11 +396,11 @@ def public get_first_summary ( chat_id:int64; dayZ:int64 ) : tuple<id:int64;text
     if rc != SQLITE_ROW
         to_log(LOG_ERROR, "Error reading data: {sqlite3_errmsg(g_db)}\n")
         return [[auto -1l, ""]]
-    return [[auto sqlite3_column_int64(stmt,0), sqlite3_column_text_(stmt, 1)]]
+    return [[auto sqlite3_column_int64(stmt, 0), sqlite3_column_text_(stmt, 1)]]
 finally
     sqlite3_finalize(stmt)
 
-def public list_channel_rights ( blk:block<(rights:ChannelRights):void> )
+def public list_channel_rights(blk : block<(rights : ChannelRights) : void>)
     var sql = "SELECT chat_id, description, decode_voice, draw_pictures, bot_answers, summary
                 FROM channel_rights
                 ORDER BY chat_id"
@@ -424,12 +424,12 @@ def public list_channel_rights ( blk:block<(rights:ChannelRights):void> )
             bot_answers = sqlite3_column_int(stmt, 4) != 0,
             summary = sqlite3_column_int(stmt, 5) != 0
         ]]
-        invoke(blk,rights)
+        invoke(blk, rights)
     return true
 finally
     sqlite3_finalize(stmt)
 
-def public get_channel_rights ( chat_id:int64 )
+def public get_channel_rights(chat_id : int64)
     var sql = "SELECT description, decode_voice, draw_pictures, bot_answers, summary
                 FROM channel_rights
                 WHERE chat_id = ?"
@@ -456,7 +456,7 @@ def public get_channel_rights ( chat_id:int64 )
 finally
     sqlite3_finalize(stmt)
 
-def public set_channel_rights ( rights : ChannelRights )
+def public set_channel_rights(rights : ChannelRights)
     var sql = "INSERT OR REPLACE INTO channel_rights (chat_id, description, decode_voice, draw_pictures, bot_answers, summary) VALUES (?, ?, ?, ?, ?, ?)"
     var stmt : sqlite3_stmt?
     var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
@@ -477,7 +477,7 @@ def public set_channel_rights ( rights : ChannelRights )
 finally
     sqlite3_finalize(stmt)
 
-def public delete_channel_rights ( chat_id : int64 )
+def public delete_channel_rights(chat_id : int64)
     var sql = "DELETE FROM channel_rights WHERE chat_id=?"
     var stmt : sqlite3_stmt?
     var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
@@ -493,7 +493,7 @@ def public delete_channel_rights ( chat_id : int64 )
 finally
     sqlite3_finalize(stmt)
 
-def public get_all_api_use ( blk:block<(use:ApiUseEntry):void>)
+def public get_all_api_use(blk : block<(use : ApiUseEntry) : void>)
     let sql = "SELECT user_id, SUM(tokens) AS total_tokens, SUM(voice_bytes) AS total_voice_bytes
                 FROM api_use
                 GROUP BY user_id ORDER BY total_tokens DESC"
@@ -514,7 +514,7 @@ def public get_all_api_use ( blk:block<(use:ApiUseEntry):void>)
             tokens = sqlite3_column_int64(stmt, 1),
             voice_bytes = sqlite3_column_int64(stmt, 2)
         ]]
-        invoke(blk,use)
+        invoke(blk, use)
     return true
 finally
     sqlite3_finalize(stmt)

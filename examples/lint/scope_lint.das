@@ -10,7 +10,7 @@ require daslib/strings_boost
 
 [lint_macro]
 class ScopeLint : AstPassMacro
-    def override apply ( prog:ProgramPtr; mod:Module? ) : bool
+    def override apply(prog : ProgramPtr; mod : Module?) : bool
         paranoid(prog, true)
         return true
 
@@ -19,38 +19,38 @@ class LintVisitor : AstVisitor
     noLint : bool = false
     def LintVisitor()
         pass
-    def lint_error ( text:string; at:LineInfo ) : void
+    def lint_error(text : string; at : LineInfo) : void
         if noLint
             return
         if compile_time_errors
             compiling_program() |> macro_error(at, text)
         else
             error("{text} at {describe(at)}\n")
-    def override preVisitFunction(fun:FunctionPtr) : void
+    def override preVisitFunction(fun : FunctionPtr) : void
         noLint = false
         for ann in fun.annotations
-            if ann.annotation.name=="no_lint"
+            if ann.annotation.name == "no_lint"
                 noLint = true
                 break
-    def override visitFunction(var fun:FunctionPtr) : FunctionPtr
+    def override visitFunction(var fun : FunctionPtr) : FunctionPtr
         noLint = false
         return <- fun
-    def override preVisitExprLet(expr:smart_ptr<ExprLet>) : void
+    def override preVisitExprLet(expr : smart_ptr<ExprLet>) : void
         print("let {describe(expr)}\n")
         for v in expr.variables
             if !v.flags.inScope && v._type |> aggresiveInScope
                 lint_error("variable {v.name} is not in scope", v.at)
 
 [macro_function]
-def paranoid ( prog:ProgramPtr; compile_time_errors : bool )
+def paranoid(prog : ProgramPtr; compile_time_errors : bool)
     var astVisitor = new [[LintVisitor() compile_time_errors=compile_time_errors]]
     var astVisitorAdapter <- make_visitor(*astVisitor)
-    visit ( prog, astVisitorAdapter )
+    visit(prog, astVisitorAdapter)
     astVisitorAdapter := null
     unsafe
         delete astVisitor
 
-def aggresiveInScope ( t : TypeDeclPtr; var dep : table<Structure?> ) : bool
+def aggresiveInScope(t : TypeDeclPtr; var dep : table<Structure?>) : bool
     if t.baseType == Type tStructure
         if dep |> key_exists(t.structType)
             return false
@@ -70,6 +70,6 @@ def aggresiveInScope ( t : TypeDeclPtr; var dep : table<Structure?> ) : bool
         return t.flags.smartPtr
     return false
 
-def aggresiveInScope ( t : TypeDeclPtr )
+def aggresiveInScope(t : TypeDeclPtr)
     var inscope dep : table<Structure?>
     return t |> aggresiveInScope(dep)

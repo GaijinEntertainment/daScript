@@ -31,6 +31,6 @@ def main
     print("{summary_so_far}\n")
     */
 
-    var latest = get_first_summary(chat_id, LONG_MAX )
+    var latest = get_first_summary(chat_id, LONG_MAX)
     print("{latest}\n")
 

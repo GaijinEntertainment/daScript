@@ -1,3 +1,4 @@
+options gen2
 //options log_infer_passes = true
 //options log = true
 //options log_nodes = true
@@ -6,57 +7,73 @@
 
 require daslib/functional
 
-def is_even(x:int)
+def is_even(x:int) {
     return x % 2 == 0
+}
 
-def twice(x:int)
+def twice(x:int) {
     return x + x
+}
 
-def add(a,b:int)
+def add(a,b:int) {
     return a + b
+}
 
 [sideeffects]
-def verify_even(arr)
-    for x,y in arr,range(50)
+def verify_even(arr) {
+    for (x,y in arr,range(50)) {
         assert(x==y*2)
+    }
+}
 
-def first(x)
+def first(x) {
     return x._0
+}
 
-def operator != ( a,b : tuple<int;float> )
+def operator != ( a,b : tuple<int;float> ) {
     return a._0!=b._0 || a._1!=b._1
+}
 
-def operator != ( a,b : array<int> )
-    if length(a) != length(b)
+def operator != ( a,b : array<int> ) {
+    if (length(a) != length(b)) {
         return true
-    for x,y in a,b
-        if x != y
+    }
+    for (x,y in a,b) {
+        if (x != y) {
             return true
+        }
+    }
     return false
+}
 
-def is_same(a,b)
-    for x,y in a,b
-        if x != y
+def is_same(a,b) {
+    for (x,y in a,b) {
+        if (x != y) {
             return false
+        }
+    }
     return true
+}
 
-def verify_14 ( t )
-    for x,y in range(1,4),t
+def verify_14 ( t ) {
+    for (x,y in range(1,4),t) {
         assert(y[0]==x && y[1]==2)
+    }
+}
 
 [export]
-def test
+def test {
     // compehension
-    verify_even() <| [[for x in range(100); x; where x % 2==0]]
+    verify_even() <| [iterator for (x in range(100)); x; where x % 2==0]
 
     // array comprehension
-    verify_even() <| [{for x in range(100); x; where x % 2==0}]
+    verify_even() <| [for (x in range(100)); x; where x % 2==0]
 
     // comprehension iterator with moveable type
-    verify_14() <| [[for x in range(1,4); [{int x;2}] ]]
+    verify_14() <| [iterator for (x in range(1,4)); array<int>( x,2)]
 
     // comprehension array with moveable type
-    verify_14() <| [{for x in range(1,4); [{int x;2}] }]
+    verify_14() <| [for (x in range(1,4)); array<int>( x,2) ]
 
     (   // filter with function
             range(100)
@@ -87,9 +104,9 @@ def test
     )
 
     (   // filter and map with moveable type
-            [[for x in range(100); [{int x;2}] ]]
+            [iterator for (x in range(100)); array<int>( x,2)]
         |>  filter( @(x) => x[0] % 2==0 )
-        |>  map ( @(x) : array<int> => <- [{int x[0]; x[0]; x[0] }] )
+        |>  map ( @(x) : array<int> => <- array<int>( x[0], x[0], x[0] ) )
         |>  map ( @(x) : int => x[0] )
         |>  verify_even()
     )
@@ -103,7 +120,7 @@ def test
     )
 
     (   // reduce ref iterator with block
-            [[ for x in range(10); x ]]
+            [iterator for (x in range(10)); x]
         |>  reduce( $(x,y) => x + y )
         |>  is_equal(45)
         |>  verify()
@@ -136,8 +153,8 @@ def test
     (   // reduce ref type
             range(10)
         |>  each()
-        |>  map( @(x : int) => [[auto x, 1.5]] )
-        |>  reduce( $(x,y) => [[auto x._0 + y._0, 2.f]] )
+        |>  map( @(x : int) => ( x, 1.5) )
+        |>  reduce( $(x,y) => ( x._0 + y._0, 2.f) )
         |>  first()
         |>  is_equal(45)
         |>  verify()
@@ -152,7 +169,7 @@ def test
     )
 
     (   // any (pass)
-            [[bool true;false]]
+            fixed_array<bool>( true,false)
         |>  any()
         |>  verify()
     )
@@ -224,25 +241,26 @@ def test
     |>  each()
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same( [[for x in range(10); (x % 3)+1]] )
+    |>  is_same( [iterator for (x in range(10)); (x % 3)+1] )
     |>  verify()
     )
 
     (   // cycle <by reference>
-        [[for x in range(1,4); [[tuple<int;float> x,2.5]]]]
+        [iterator for (x in range(1,4)); ( x,2.5)]
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same([[for x in range(10); [[tuple<int;float> (x%3)+1,2.5]]]])
+    |>  is_same([iterator for (x in range(10)); ( (x%3)+1,2.5)])
     |>  verify()
     )
 
     (   // cycle <by moveable>
-        [[for x in range(1,4); [{int x;2}] ]]
+        [iterator for (x in range(1,4)); array<int>( x,2)]
     |>  cycle()
     |>  islice(0,10)
-    |>  is_same([[for x in range(10); [{int (x%3)+1;2}] ]])
+    |>  is_same([iterator for (x in range(10)); array<int>( (x%3)+1,2)])
     |>  verify()
     )
 
     return true
+}
 

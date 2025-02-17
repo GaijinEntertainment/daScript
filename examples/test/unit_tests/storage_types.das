@@ -1,13 +1,15 @@
-struct Storage
+options gen2
+struct Storage {
     i8 : int8
     ui8 : uint8
     i16 : int16
     ui16 : uint16
+}
 
 [export]
-def test:bool
+def test:bool {
     var t, q : Storage
-    assert(typeinfo(sizeof type<Storage>)==6)
+    assert(typeinfo sizeof(type<Storage>)==6)
     t.i8 = int8(1)
     t.ui8 = uint8(2)
     t.i16 = int16(3)
@@ -17,5 +19,6 @@ def test:bool
     q.i8 = i8
     assert(int(q.i8)==1)
     return true
+}
 
 

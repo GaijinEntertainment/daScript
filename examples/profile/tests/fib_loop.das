@@ -14,18 +14,18 @@ def fibI(n)
         last = tmp
     return cur
 
-[export,no_jit,no_aot]
+[export, no_jit, no_aot]
 def main
-	var f1 = 0
-    profile(20,"fibonacci loop") <|
+    var f1 = 0
+    profile(20, "fibonacci loop") <|
         f1 = fibI(6511134)
-	assert(f1==1781508648)
+    assert(f1 == 1781508648)
     if is_cpp_time()
         cpp_label()
         var f4 = 0
-        profile(20,"fibonacci loop") <|
+        profile(20, "fibonacci loop") <|
             f4 = testProfile::testFibI(6511134)
-        assert(f4==1781508648)
+        assert(f4 == 1781508648)
         run_files([[TestFile
             luauFile = "fib_loop.luau",
             luaFile = "fib_loop.lua",

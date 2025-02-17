@@ -20,14 +20,14 @@ require strings
 struct public configuration
     token : string
 
-def public telegram_set_configuration ( conf:configuration )
+def public telegram_set_configuration(conf : configuration)
     BOT_TOKEN = conf.token
 
 var private BOT_TOKEN : string
 var private LAST_ERROR = ""
 var private LOG_API_CALLS = false
 
-def private write_request_json ( JV:JsonValue? )
+def private write_request_json(JV : JsonValue?)
     var ontz = set_no_trailing_zeros(true)
     var nea = set_no_empty_arrays(true)
     var text = write_json(JV)
@@ -39,7 +39,7 @@ def public telegram_get_last_error
     //! return error made via last request
     return LAST_ERROR
 
-def private telegram_call ( METHOD:string; updates:auto; var res:auto(RES_TYPE) )
+def private telegram_call(METHOD : string; updates : auto; var res : auto(RES_TYPE))
     var req_jv <- JV(updates)
     let headers = write_request_json(req_jv)
     unsafe
@@ -48,16 +48,16 @@ def private telegram_call ( METHOD:string; updates:auto; var res:auto(RES_TYPE) 
     LAST_ERROR = ""
     if LOG_API_CALLS
         to_log(LOG_INFO, "API CALL: {url}\n{headers}\n")
-    POST(url,headers,{{"Content-Type" => "application/json"}}) <| $ (resp)
+    POST(url, headers, {{"Content-Type" => "application/json"}}) <| $(resp)
         if resp.status_code == http_status OK
-            peek(resp.body) <| $ ( text )
-                var JV = read_json(text,LAST_ERROR)
+            peek(resp.body) <| $(text)
+                var JV = read_json(text, LAST_ERROR)
                 if JV != null
-                    if  (JV as _object)["ok"] as _bool
+                    if (JV as _object)["ok"] as _bool
                         static_if typeinfo(can_copy type<RES_TYPE>)
-                            res = from_JV((JV as _object)["result"],type<RES_TYPE>)
+                            res = from_JV((JV as _object)["result"], type<RES_TYPE>)
                         else
-                            res <- from_JV((JV as _object)["result"],type<RES_TYPE>)
+                            res <- from_JV((JV as _object)["result"], type<RES_TYPE>)
                     else
                         LAST_ERROR = "API returned not OK\n{resp.body}"
                 else
@@ -67,19 +67,19 @@ def private telegram_call ( METHOD:string; updates:auto; var res:auto(RES_TYPE) 
         else
             LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.body}\n"
 
-def public telegram_getupdates ( updates:getupdates )
+def public telegram_getupdates(updates : getupdates)
     //! get updates from telegram
     var res : array<update>
-    telegram_call("getupdates",updates,res)
+    telegram_call("getupdates", updates, res)
     return <- res
 
-def public telegram_sendMessage ( msg:sendmessage )
+def public telegram_sendMessage(msg : sendmessage)
     //! send message to telegram char or user
     var res : message
-    telegram_call("sendMessage",msg,res)
+    telegram_call("sendMessage", msg, res)
     return <- res
 
-def public telegram_sendLongMessage ( _msg:sendmessage; maxlength:int=4096; prefix:string=""; suffix:string="" )
+def public telegram_sendLongMessage(_msg : sendmessage; maxlength : int = 4096; prefix : string = ""; suffix : string = "")
     //! send long message to telegram char or user
     var msg := _msg
     var res : array<message>
@@ -98,18 +98,18 @@ def public telegram_sendLongMessage ( _msg:sendmessage; maxlength:int=4096; pref
             break
     return <- res
 
-def public telegram_getFile ( msg:getfile )
+def public telegram_getFile(msg : getfile)
     //! get file information from telegram
     var res : tbotapi::file
-    telegram_call("getFile",msg,res)
+    telegram_call("getFile", msg, res)
     return <- res
 
-def public telegram_download ( file:tbotapi::file )
+def public telegram_download(file : tbotapi::file)
     //! download file from telegram
     LAST_ERROR = ""
     let url = "https://api.telegram.org/file/bot{BOT_TOKEN}/{file.file_path}"
     var bytes : array<uint8>
-    GET(url) <| $ ( resp )
+    GET(url) <| $(resp)
         if resp.status_code != http_status OK
             LAST_ERROR = "GET failed with status {resp.status_code}\n{resp.body}"
             return
@@ -119,7 +119,7 @@ def public telegram_download ( file:tbotapi::file )
 def public telegram_getMe
     //! get information about bot
     var res : user
-    telegram_call("getMe",[[getme]],res)
+    telegram_call("getMe", [[getme]], res)
     return <- res
 
 struct public sendphoto
@@ -129,23 +129,23 @@ struct public sendphoto
     caption : string
     parse_mode : string
 
-def public telegram_sendPhoto ( photo : tbot::sendphoto )
+def public telegram_sendPhoto(photo : tbot::sendphoto)
     //! send photo to telegram char or user
-    var settings <-{{"photo" => "@{photo.file}"; "chat_id" => "{photo.chat_id}"}}
+    var settings <- {{"photo" => "@{photo.file}"; "chat_id" => "{photo.chat_id}"}}
     if photo.reply_to_message_id != 0l
-        settings["reply_to_message_id"] ="{photo.reply_to_message_id}"
+        settings["reply_to_message_id"] = "{photo.reply_to_message_id}"
     if !empty(photo.caption)
         settings["caption"] = "{photo.caption}"
         if !empty(photo.parse_mode)
             settings["parse_mode"] = "{photo.parse_mode}"
     LAST_ERROR = ""
-    POST("https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", "", {{"Content-Type" => "multipart/form-data"}}, settings ) <| $ ( resp )
+    POST("https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", "", {{"Content-Type" => "multipart/form-data"}}, settings) <| $(resp)
         if resp.status_code != http_status OK
             LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
 
-def public telegram_setMyCommands ( commands : setmycommands )
+def public telegram_setMyCommands(commands : setmycommands)
     var res : bool
-    telegram_call("setMyCommands",commands,res)
+    telegram_call("setMyCommands", commands, res)
     return res
 
 /*
@@ -155,9 +155,9 @@ Tilde (~)   Greater than sign (>)   Hash (#)    Plus sign (+)   Minus sign (-)
 Equals sign (=) Vertical bar (|)    Left curly brace ({)    Right curly brace (})
 Period (.)  Exclamation mark (!)
 */
-def public telegram_escapeMarkdownV2 ( text:string )
-    return build_string <| $ ( writer )
+def public telegram_escapeMarkdownV2(text : string)
+    return build_string <| $(writer)
         for Ch in text
-            if Ch=='_' || Ch=='*' || Ch=='`' || Ch=='[' || Ch==']' || Ch=='(' || Ch==')' || Ch=='~' || Ch=='>' || Ch=='#' || Ch=='+' || Ch=='-' || Ch=='=' || Ch=='|' || Ch=='{' || Ch=='}' || Ch=='.' || Ch=='!'
+            if Ch == '_' || Ch == '*' || Ch == '`' || Ch == '[' || Ch == ']' || Ch == '(' || Ch == ')' || Ch == '~' || Ch == '>' || Ch == '#' || Ch == '+' || Ch == '-' || Ch == '=' || Ch == '|' || Ch == '{' || Ch=='}' || Ch == '.' || Ch == '!'
                 writer |> write_char('\\')
             writer |> write_char(Ch)

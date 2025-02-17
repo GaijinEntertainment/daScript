@@ -13,24 +13,24 @@ def isprime(n)
 [sideeffects]
 def primes(n)
     var count = 0
-    for i in range(2, n+1)
+    for i in range(2, n + 1)
         if isprime(i)
             ++count
     return count
 
 
-[export,no_jit,no_aot]
+[export, no_jit, no_aot]
 def main
-	var f1 = 0
-    profile(20,"primes loop") <|
+    var f1 = 0
+    profile(20, "primes loop") <|
         f1 = primes(14000)
-	assert(f1==1652)
+    assert(f1 == 1652)
     if is_cpp_time()
         cpp_label()
         var f3 = 0
-        profile(20,"primes loop") <|
+        profile(20, "primes loop") <|
             f3 = testProfile::testPrimes(14000)
-        assert(f3==1652)
+        assert(f3 == 1652)
         run_files([[TestFile
             luauFile = "primes.luau",
             luaFile = "primes.lua",

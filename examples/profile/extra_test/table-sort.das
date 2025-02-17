@@ -3,10 +3,10 @@
 require math
 require testProfile
 
-def makeRandomSequence(var src:array<int>)
+def makeRandomSequence(var src : array<int>)
     let n = 2000000
     let seed = 1u
-    resize(src,n)
+    resize(src, n)
     for i in range(n)
         src[i] = int(uint_noise_1D(i, seed))
 
@@ -14,10 +14,10 @@ def makeRandomSequence(var src:array<int>)
 def main
     var tab : array<int>
     makeRandomSequence(tab)
-	profile(1,"table-sort") <|
+    profile(1, "table-sort") <|
         sort(tab)
     makeRandomSequence(tab)
-	profile(1,"table-sort-cmp") <|
-        sort ( tab, $(a,b) => !(a < b) )
+    profile(1, "table-sort-cmp") <|
+        sort(tab, $(a, b) => !(a < b))
 
 

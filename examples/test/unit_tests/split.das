@@ -1,47 +1,58 @@
+options gen2
 require daslib/strings_boost
 
 [sideeffects]
-def expect0(a)
+def expect0(a) {
     assert(length(a)==1)
     assert(a[0]=="")
+}
 
 [sideeffects]
-def expect1(a)
+def expect1(a) {
     assert(length(a)==1)
     assert(a[0]=="one")
+}
 
 [sideeffects]
-def expect2(a)
+def expect2(a) {
     assert(length(a)==2)
     assert(a[0]=="one")
     assert(a[1]=="two")
+}
 
 [sideeffects]
-def expect3(a)
+def expect3(a) {
     assert(length(a)==3)
     assert(a[0]=="one")
     assert(a[1]=="two")
     assert(a[2]=="three")
+}
 
 [sideeffects]
-def expect3o(a)
+def expect3o(a) {
     assert(length(a)==3)
     assert(a[0]=="o")
     assert(a[1]=="n")
     assert(a[2]=="e")
+}
 
 [export]
-def test
-    split("","") <| $ ( a )
+def test {
+    split("","") <| $ ( a ) {
         expect0(a)
-    split("one",",") <| $ ( a )
+    }
+    split("one",",") <| $ ( a ) {
         expect1(a)
-    split("one,two",",") <| $ ( a )
+    }
+    split("one,two",",") <| $ ( a ) {
         expect2(a)
-    split("one, two, three",", ") <| $ ( a )
+    }
+    split("one, two, three",", ") <| $ ( a ) {
         expect3(a)
-    split("one","") <| $ ( a )
+    }
+    split("one","") <| $ ( a ) {
         expect3o(a)
+    }
     expect0(split("",""))
     expect0(split("","."))
     expect1(split("one",","))
@@ -71,3 +82,4 @@ def test
     assert(length(e3)==3)
     assert(e3[0]=="1" && e3[1]=="2" && e3[2]=="3")
     return true
+}

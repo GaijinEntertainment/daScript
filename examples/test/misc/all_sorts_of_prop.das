@@ -1,40 +1,56 @@
-def get(cb : block<(a : string#) : void>)
-	unsafe
+options gen2
+def get(cb : block<(a : string#) : void>) {
+	unsafe {
 		cb |> invoke(reinterpret<string#> "foo")
+    }
+}
 
-struct Foo
+struct Foo {
 	resz : string
+}
 
-def operator . res := ( var f : Foo; st : string# )
+def operator . res := ( var f : Foo; st : string# ) {
 	f.resz := st
+}
 
 [export]
-def main()
-	if true
+def main() {
+	if (true) {
 		var res : string
-		get() <| $ (name)
+		get() <| $ (name) {
 			res := name
+        }
 		debug(res)
-	if true
+    }
+	if (true) {
 		var f : Foo
-		get() <| $ (name)
+		get() <| $ (name) {
 			f.resz := name
+        }
 		debug(f)
-	if true
+    }
+	if (true) {
 		var f : Foo
-		get() <| $ (name)
+		get() <| $ (name) {
 			f.res := name
+        }
 		debug(f)
+    }
+}
 
-class sealed UIFrame
-    def const operator . sizezz() : float2
+class sealed UIFrame {
+    def const operator . sizezz() : float2 {
 		print("get value")
         return float2(1,2)
-    def operator . sizezz :=(value : float2)
+    }
+    def operator . sizezz :=(value : float2) {
         print("set {value}\n")
+    }
+}
 
 [export]
-def apply_canvas_anchoring(var frame : UIFrame?; parentSize : float2 )
+def apply_canvas_anchoring(var frame : UIFrame?; parentSize : float2 ) {
 	frame.sizezz := parentSize
+}
 
 options log

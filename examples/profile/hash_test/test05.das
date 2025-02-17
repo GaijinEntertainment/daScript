@@ -7,7 +7,7 @@ require daslib/hash_map
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%;
 
 [sideeffects]
-def test ( hmap : auto(HashMapType); dummy )
+def test(hmap : auto(HashMapType); dummy)
     var inscope hashMap : HashMapType
     static_if !typeinfo(is_table type<HashMapType>)
         hashMap <- HashMapType()
@@ -18,9 +18,9 @@ def test ( hmap : auto(HashMapType); dummy )
 [export]
 def main
     print("test05 - insert 300000 elements of the same value 250 times\n")
-    profile_test("table<int;int>", type<table<int;int>>,0)
+    profile_test("table<int;int>", type<table<int; int>>, 0)
     profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, 0)
-    profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>,0)
+    profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, 0)
 
 
 

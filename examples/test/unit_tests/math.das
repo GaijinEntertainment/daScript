@@ -1,13 +1,15 @@
+options gen2
 require math
 
 options optimize=false
 
 [sideeffects]
-def rightPolicyCeili(a:float):int
+def rightPolicyCeili(a:float):int {
     return ceili(a)
+}
 
 [export]
-def test
+def test {
     assert(uint32_hash(1U) != 1U)
     var seed:uint = 1U
     let position:int = 1
@@ -87,3 +89,4 @@ def test
     let mme = "{FLT_MIN} {FLT_MAX} {FLT_EPSILON}"
     assert(mme=="1.1754944e-38 3.4028235e+38 1.1920929e-07")
     return true
+}

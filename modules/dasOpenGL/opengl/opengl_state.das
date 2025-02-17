@@ -144,66 +144,66 @@ let shared opengl_debug_severity <- {{
     GL_DEBUG_SEVERITY_NOTIFICATION => "GL_DEBUG_SEVERITY_NOTIFICATION"
 }}
 
-def report_to_debugger ( var ctx:Context; category,name:string; value:auto(TT) )
+def report_to_debugger(var ctx : Context; category, name : string; value : auto(TT))
     unsafe
         let tinfo = typeinfo(rtti_typeinfo value)
         let pdata = addr(value)
         report_context_state(ctx, category, name, addr(tinfo), pdata)
 
-def report_bool ( var ctx:Context; what:uint; category,name:string )
+def report_bool(var ctx : Context; what : uint; category, name : string)
     var any_test = false
     glGetBooleanv(what, safe_addr(any_test))
     report_to_debugger(ctx, category, name, any_test)
     return any_test
 
-def report_bool4 ( var ctx:Context; what:uint; category,name:string )
+def report_bool4(var ctx : Context; what : uint; category, name : string)
     var any_test : bool[4]
     glGetBooleanv(what, safe_addr(any_test))
     report_to_debugger(ctx, category, name, any_test)
     return <- any_test
 
-def report_uint ( var ctx:Context; what:uint; category,name:string )
+def report_uint(var ctx : Context; what : uint; category, name : string)
     var f : int
     glGetIntegerv(what, safe_addr(f))
     report_to_debugger(ctx, category, name, uint(f))
     return uint(f)
 
-def report_float ( var ctx:Context; what:uint; category,name:string )
+def report_float(var ctx : Context; what : uint; category, name : string)
     var f : float
     glGetFloatv(what, safe_addr(f))
     report_to_debugger(ctx, category, name, f)
     return f
 
-def report_float2 ( var ctx:Context; what:uint; category,name:string )
+def report_float2(var ctx : Context; what : uint; category, name : string)
     var f : float2
     glGetFloatv(what, safe_addr(f.x))
     report_to_debugger(ctx, category, name, f)
     return f
 
-def report_float4 ( var ctx:Context; what:uint; category,name:string )
+def report_float4(var ctx : Context; what : uint; category, name : string)
     var f : float4
     glGetFloatv(what, safe_addr(f.x))
     report_to_debugger(ctx, category, name, f)
     return f
 
-def report_enum ( var ctx:Context; what:uint; category,name:string; en:table<uint;string> )
+def report_enum(var ctx : Context; what : uint; category, name : string; en : table<uint; string>)
     var d32 : int
     glGetIntegerv(what, safe_addr(d32))
-    let found = en |> get(uint(d32)) <| $ ( pname )
+    let found = en |> get(uint(d32)) <| $(pname)
         report_to_debugger(ctx, category, name, pname)
     if !found
         report_to_debugger(ctx, category, name, uint(d32))
 
 class ContextStateAgent : DapiDebugAgent
-    def logDebugMessages(var ctx:Context)
+    def logDebugMessages(var ctx : Context)
         var msg_maxlen, msg_count : int
         glGetIntegerv(GL_MAX_DEBUG_MESSAGE_LENGTH, safe_addr(msg_maxlen))
         glGetIntegerv(GL_MAX_DEBUG_LOGGED_MESSAGES, safe_addr(msg_count))
-        var msg_sources, msg_types, msg_ids,msg_severities : array<uint>
+        var msg_sources, msg_types, msg_ids, msg_severities : array<uint>
         resize(msg_sources, msg_count)
         resize(msg_types, msg_count)
         resize(msg_ids, msg_count)
-        resize(msg_severities,msg_count)
+        resize(msg_severities, msg_count)
         var msg_lengths : array<int>
         resize(msg_lengths, msg_count)
         var msg_logs : array<uint8>
@@ -239,24 +239,24 @@ class ContextStateAgent : DapiDebugAgent
         delete msg_logs
 
 
-    def override onCollect(var ctx:Context; at:LineInfo)
+    def override onCollect(var ctx : Context; at : LineInfo)
         if !ctx.category.opengl
             return
         // error
         var err = glGetError()
-        let found = opengl_last_error |> get(err) <| $ ( pname )
+        let found = opengl_last_error |> get(err) <| $(pname)
             report_to_debugger(ctx, "OPENGL", "last error", pname)
         if !found
             report_to_debugger(ctx, "OPENGL", "last error", err)
         var flags : int
         glGetIntegerv(GL_CONTEXT_FLAGS, safe_addr(flags))
-        if (uint(flags) & GL_CONTEXT_FLAG_DEBUG_BIT)!=0u
+        if (uint(flags) & GL_CONTEXT_FLAG_DEBUG_BIT) != 0u
             self->logDebugMessages(ctx)
         // program
         report_uint(ctx, GL_CURRENT_PROGRAM, "OPENGL program", "GL_CURRENT_PROGRAM")
         // array
         report_uint(ctx, GL_ARRAY_BUFFER_BINDING, "OPENGL arrays", "GL_ARRAY_BUFFER_BINDING")
-        report_uint(ctx, GL_ELEMENT_ARRAY_BUFFER_BINDING, "OPENGL arrays","GL_ELEMENT_ARRAY_BUFFER_BINDING");
+        report_uint(ctx, GL_ELEMENT_ARRAY_BUFFER_BINDING, "OPENGL arrays", "GL_ELEMENT_ARRAY_BUFFER_BINDING");
         // framebuffer
         report_uint(ctx, GL_DRAW_FRAMEBUFFER_BINDING, "OPENGL framebuffer", "GL_DRAW_FRAMEBUFFER_BINDING")
         report_uint(ctx, GL_READ_FRAMEBUFFER_BINDING, "OPENGL framebuffer", "GL_READ_FRAMEBUFFER_BINDING")
@@ -300,10 +300,10 @@ class ContextStateAgent : DapiDebugAgent
         report_uint(ctx, GL_TEXTURE_BINDING_BUFFER, "OPENGL texture", "GL_TEXTURE_BINDING_BUFFER")
 
 [export]
-def opengl_state_agent ( ctx : Context )
+def opengl_state_agent(ctx : Context)
     install_new_debug_agent(new ContextStateAgent(), "opengl")
 
-[init,export]
+[init, export]
 def private auto_start_opengl_state()
     if !is_in_debug_agent_creation()
         if !has_debug_agent_context("opengl")

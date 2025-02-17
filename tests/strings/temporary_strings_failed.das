@@ -9,7 +9,7 @@ def get_str() : string
     return payload
 
 [test]
-def test_temps_strings ( t:T? )
+def test_temps_strings(t : T?)
 
     // unable to use temp_string with a variable
     temp_string(payload) <| $(s) // 40102: call annotated by TempStringMacro failed

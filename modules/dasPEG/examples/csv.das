@@ -12,7 +12,7 @@ struct Table
     rows  : array<Row>
     errors : array<ParsingError>
 
-def parse_csv ( CSV:string; blk: block<( val:array<Row>; err:array<ParsingError>):void>) // The same as the first `parse` arg
+def parse_csv(CSV : string; blk : block<(val : array<Row>; err : array<ParsingError>) : void>)// The same as the first `parse` arg
     parse CSV
         // The parsing begins from the first rule
         var rows : array<Row>
