@@ -155,7 +155,7 @@ Daslang accepts integer numbers, unsigned integers, floating and double point nu
 | ``"``                         | String                                   |
 +-------------------------------+------------------------------------------+
 
-Pesudo BNF:
+Pseudo BNF:
 
 .. productionlist::
     IntegerLiteral : [1-9][0-9]* | '0x' [0-9A-Fa-f]+ | ''' [.]+ ''' | 0[0-7]+
