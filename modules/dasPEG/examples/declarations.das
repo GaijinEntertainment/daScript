@@ -13,9 +13,9 @@ require dastest/testing_boost
 require daslib/utf8_utils
 require peg/peg
 
-def one( greeting: string; blk: block<( a:bool; err:array<ParsingError> ):void>)
+def one(greeting : string; blk : block<(a : bool; err : array<ParsingError>) : void>)
     parse greeting
-        var greeting: bool
+        var greeting : bool
 
         rule("Hello, ", "{+not_bang}" as name, "!") <|
             return true
@@ -26,15 +26,15 @@ def one( greeting: string; blk: block<( a:bool; err:array<ParsingError> ):void>)
         option(tracing)
         option(color)
 
-        var not_bang: void?
+        var not_bang : void?
 
         rule(!set('!', '1'..'9'), any) <|
             return null
 
 
-def two( prog:string; blk: block<( a:bool; err:array<ParsingError> ):void>)
+def two(prog : string; blk : block<(a : bool; err : array<ParsingError>) : void>)
     parse prog
-        var prog: bool
+        var prog : bool
 
         // option(tracing)
         // option(color)
@@ -42,7 +42,7 @@ def two( prog:string; blk: block<( a:bool; err:array<ParsingError> ):void>)
         rule(decl) <|
             return true
 
-        var decl: bool
+        var decl : bool
 
         rule("def ", commit,
                     "{ident_}" as name,
@@ -69,41 +69,41 @@ def two( prog:string; blk: block<( a:bool; err:array<ParsingError> ):void>)
 
 
 
-        var argument_last: string
+        var argument_last : string
         rule("{+alpha}" as name, WS) <|
             return name
 
-        var argument: string
+        var argument : string
         rule("{+alpha}" as name, WS, ",", WS) <|
             return name
 
 
 
 
-        var typing: void?
+        var typing : void?
         rule(":", "void?") <|
             return null
 
-        var initializer: void?
+        var initializer : void?
         rule("=", "null") <|
             return null
 
 
 
-        var ident: string
+        var ident : string
         rule("{ident}" as ident) <|
             return ident
 
-        var ident_: void?
+        var ident_ : void?
         rule(alpha, *alnum) <|
             return null
 
-        var alpha: void?
+        var alpha : void?
 
         rule(set('a'..'z', 'A'..'Z')) <|
             return null
 
-        var alnum: void?
+        var alnum : void?
 
         rule(alpha) <|
             return null

@@ -2,7 +2,7 @@ expect 31300:1
 options no_local_class_members
 
 class A
-	a : int = 12
+    a : int = 12
 
 class B
     a : A  // OK?

@@ -91,7 +91,7 @@ class AsyncMacro : AstFunctionAnnotation
             return false
 
         var inscope blk <- qmacro_expr <|
-            return <- generator<$t(retT)> () <|
+            return <- generator<$t(retT)>() <|
                 $e(func.body)
                 return false
 
@@ -190,13 +190,13 @@ class CollectAndReplaceIteratorFields : AstVisitor
         res |> force_at(expr.at)
         return <- res
 
-    def override visitExprCopy(var expr:smart_ptr<ExprCopy>) : ExpressionPtr
+    def override visitExprCopy(var expr : smart_ptr<ExprCopy>) : ExpressionPtr
         return <- move_clone_copy(expr, voidRoutine, retType, errors, AssignOp copy)
 
-    def override visitExprMove(var expr:smart_ptr<ExprMove>) : ExpressionPtr
+    def override visitExprMove(var expr : smart_ptr<ExprMove>) : ExpressionPtr
         return <- move_clone_copy(expr, voidRoutine, retType, errors, AssignOp move)
 
-    def override visitExprClone(var expr:smart_ptr<ExprClone>) : ExpressionPtr
+    def override visitExprClone(var expr : smart_ptr<ExprClone>) : ExpressionPtr
         return <- move_clone_copy(expr, voidRoutine, retType, errors, AssignOp clone)
 
     def override visitExprCall(var expr : smart_ptr<ExprCall>) : ExpressionPtr
@@ -211,7 +211,7 @@ class CollectAndReplaceIteratorFields : AstVisitor
                 return <- res
         return <- expr
 
-    def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
+    def override preVisitExprBlock(var blk : smart_ptr<ExprBlock>) : void
         blocksStack |> push(blk |> get_ptr())
 
     def override visitExprBlock(var blk : smart_ptr<ExprBlock>) : ExpressionPtr

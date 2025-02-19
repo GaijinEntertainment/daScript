@@ -8,7 +8,7 @@ class ImguiGen : CppGenBind
     override func_to_stdout = false
     override generate_constant_decl = true
     imgui_skip_func : table<string; bool>
-    def ImguiGen(mod_name,das_mod_name,pfn,pfp:string)
+    def ImguiGen(mod_name, das_mod_name, pfn, pfp : string)
         bind_root = "{get_das_root()}/Modules/dasImgui/src"
         bind_module = mod_name
         bind_das_module = das_mod_name
@@ -24,11 +24,11 @@ class ImguiGen : CppGenBind
             "-DIMGUI_DISABLE_OBSOLETE_FUNCTIONS"
         }]
         func_per_chunk = 20
-        init_args(pfn,pfp,args)
+        init_args(pfn, pfp, args)
         init_rename()
         setDefaultFiles()
         openAllFiles()
-    def override get_module_temp_fn: string
+    def override get_module_temp_fn : string
         return ", imguiTempFn"
     def init_rename
         aot_alias <- {{
@@ -88,7 +88,7 @@ class ImguiGen : CppGenBind
         }}
         for v in values(alias2type)
             enums_with_flags[v] = true
-    def override skip_anyFunction ( var c : CXCursor; isMethod : bool )
+    def override skip_anyFunction(var c : CXCursor; isMethod : bool)
         if AnyGenBind`skip_anyFunction(self, c, isMethod)
             return true
         let function_name = namespace_name(string(clang_getCursorSpelling(c)))
@@ -96,7 +96,7 @@ class ImguiGen : CppGenBind
             to_log(LOG_INFO, "skipping IMGUI blocked function {function_name} at {clang_getCursorLocationDescription(c)}")
             return true
         return false
-    def override isArgByValue ( name:string )
+    def override isArgByValue(name : string)
         return true
     def override generateModuleHPrefix
         module_h_file |> fwrite("#include \"cb_dasIMGUI.h\"\n")
@@ -104,10 +104,10 @@ class ImguiGen : CppGenBind
 class ImguiSubmoduleGen : ImguiGen
     cb_extra : string = ""
     temp_fn_extra : string = ""
-    def override get_module_temp_fn: string
+    def override get_module_temp_fn : string
         return "{temp_fn_extra}"
-    def ImguiSubmoduleGen(mod_name,das_mod_name,pfn,pfp:string)
-        ImguiGen`ImguiGen(self,mod_name,das_mod_name,pfn,pfp)
+    def ImguiSubmoduleGen(mod_name, das_mod_name, pfn, pfp : string)
+        ImguiGen`ImguiGen(self, mod_name, das_mod_name, pfn, pfp)
     def override generateModuleHPrefix
         module_h_file |> fwrite("#include \"cb_dasIMGUI.h\"\n")
         if cb_extra != ""
@@ -117,14 +117,14 @@ class ImguiSubmoduleGen : ImguiGen
 [export]
 def main
     if true
-        var cgb = new ImguiGen("dasIMGUI","imgui","imgui.h","{get_das_root()}/Modules/dasImgui/imgui/")
+        var cgb = new ImguiGen("dasIMGUI", "imgui", "imgui.h", "{get_das_root()}/Modules/dasImgui/imgui/")
         defer <|
             unsafe
                 delete cgb
         cgb->generate()
         cgb->genCMakeDecl("DAS_IMGUI_BIND")
     if true
-        var cgb = new ImguiSubmoduleGen("dasIMNODES","imnodes","imnodes.h","{get_das_root()}/Modules/dasImgui/imnodes/")
+        var cgb = new ImguiSubmoduleGen("dasIMNODES", "imnodes", "imnodes.h", "{get_das_root()}/Modules/dasImgui/imnodes/")
         defer <|
             unsafe
                 delete cgb
@@ -136,7 +136,7 @@ def main
         cgb->generate()
         cgb->genCMakeDecl("DAS_IMNODES_BIND")
     if true
-        var cgb = new ImguiSubmoduleGen("dasIMGUI_NODE_EDITOR","imgui_node_editor","imgui_node_editor.h","{get_das_root()}/Modules/dasImgui/imgui-node-editor/")
+        var cgb = new ImguiSubmoduleGen("dasIMGUI_NODE_EDITOR", "imgui_node_editor", "imgui_node_editor.h", "{get_das_root()}/Modules/dasImgui/imgui-node-editor/")
         defer <|
             unsafe
                 delete cgb

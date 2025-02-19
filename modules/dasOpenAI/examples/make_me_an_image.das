@@ -6,11 +6,11 @@ require daslib/base64
 require fio
 require daslib/strings_boost
 
-def get_test_file_name(name:string)
+def get_test_file_name(name : string)
     let test_dir = "{get_das_root()}/modules/dasOpenAI/tests"
     return "{test_dir}/{name}"
 
-def get_temp_file_name(name:string)
+def get_temp_file_name(name : string)
     let temp_dir = "{get_das_root()}/temp"
     mkdir(temp_dir)
     return "{temp_dir}/{name}"
@@ -29,7 +29,7 @@ def main
         ]])
         if image |> is_valid
             if image.data |> length == 1
-                fopen(get_temp_file_name("image.png"), "wb") <| $ ( f )
+                fopen(get_temp_file_name("image.png"), "wb") <| $(f)
                     if f != null
                         var inscope bytes : array<uint8>
                         let res = base64_decode(image.data[0].b64_json, bytes)
@@ -48,7 +48,7 @@ def main
         ]])
         if image |> is_valid
             if image.data |> length == 1
-                fopen(get_temp_file_name("image_variation.png"), "wb") <| $ ( f )
+                fopen(get_temp_file_name("image_variation.png"), "wb") <| $(f)
                     if f != null
                         var inscope bytes : array<uint8>
                         let res = base64_decode(image.data[0].b64_json, bytes)

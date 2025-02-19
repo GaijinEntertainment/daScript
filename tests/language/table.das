@@ -1,3 +1,4 @@
+options gen2
 options persistent_heap = true
 options gc
 
@@ -5,9 +6,9 @@ require dastest/testing_boost public
 
 
 [test]
-def test_tombstones ( t : T? )
+def test_tombstones(t : T?) {
     var tab : table<int; int>
-    unsafe
+    unsafe {
         tab[2] = 2          // note : i'm too lazy to change this into tab |> insert(2, 2)
         tab |> erase(2)
         tab[2] = 2
@@ -29,10 +30,14 @@ def test_tombstones ( t : T? )
         tab[14] = 14        // entire table is values or tombstones
         tab |> erase(14)
         tab[15] = 15
+    }
     t |> equal(3, length(tab))
-    for key in keys(tab)
-        if !(key==15 || key==8 || key==2)
+    for (key in keys(tab)) {
+        if (!(key == 15 || key == 8 || key == 2)) {
             t |> failure("unexpected key {key}")
+        }
+    }
+}
 
 
 

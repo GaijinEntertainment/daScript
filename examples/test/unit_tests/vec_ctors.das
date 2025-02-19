@@ -1,9 +1,10 @@
+options gen2
 // note: don't enable optimize on the math runtime tests
 // functions bellow optimizes to literally nothing otherwise
 options log=false, optimize=false
 options no_unused_function_arguments = false
 
-def test_vec2(a:auto(vec2) -const -&; isRange = false)
+def test_vec2(a:auto(vec2) -const -&; isRange = false) {
     let f2_0  = vec2()
     let f2_x  = vec2(1.0,2.0)
     let f2_y  = vec2(1,2)
@@ -18,18 +19,20 @@ def test_vec2(a:auto(vec2) -const -&; isRange = false)
     assert("{f2_y}"=="1{VEC_SEP}2")
     assert("{f2_z}"=="1{VEC_SEP}2")
     assert("{f2_w}"=="1{VEC_SEP}2")
-    if isRange
+    if (isRange) {
         assert("{f2_xx}"=="0{VEC_SEP}1")
         assert("{f2_yy}"=="0{VEC_SEP}1")
         assert("{f2_zz}"=="0{VEC_SEP}1")
         assert("{f2_ww}"=="0{VEC_SEP}1")
-    else
+    } else {
         assert("{f2_xx}"=="1{VEC_SEP}1")
         assert("{f2_yy}"=="1{VEC_SEP}1")
         assert("{f2_zz}"=="1{VEC_SEP}1")
         assert("{f2_ww}"=="1{VEC_SEP}1")
+    }
+}
 
-def test_vec3(a:auto(vec3) -const -&)
+def test_vec3(a:auto(vec3) -const -&) {
     let f3_0  = vec3()
     let f3_x  = vec3(1.0,2.0,3.0)
     let f3_y  = vec3(1,2,3)
@@ -48,8 +51,9 @@ def test_vec3(a:auto(vec3) -const -&)
     assert("{f3_yy}"=="1{VEC_SEP}1{VEC_SEP}1")
     assert("{f3_zz}"=="1{VEC_SEP}1{VEC_SEP}1")
     assert("{f3_ww}"=="1{VEC_SEP}1{VEC_SEP}1")
+}
 
-def test_vec4(a:auto(vec4) -const -&)
+def test_vec4(a:auto(vec4) -const -&) {
     let f4_0  = vec4()
     let f4_x  = vec4(1.0,2.0,3.0,4.0)
     let f4_y  = vec4(1,2,3,4)
@@ -68,9 +72,10 @@ def test_vec4(a:auto(vec4) -const -&)
     assert("{f4_yy}"=="1{VEC_SEP}1{VEC_SEP}1{VEC_SEP}1")
     assert("{f4_zz}"=="1{VEC_SEP}1{VEC_SEP}1{VEC_SEP}1")
     assert("{f4_ww}"=="1{VEC_SEP}1{VEC_SEP}1{VEC_SEP}1")
+}
 
 [sideeffects]
-def test_cvt(a,b,c,d:int)
+def test_cvt(a,b,c,d:int) {
     assert(float2(int2(a,b))    ==float2(a,b))
     assert(float3(int3(a,b,c))  ==float3(a,b,c))
     assert(float4(int4(a,b,c,d))==float4(a,b,c,d))
@@ -83,9 +88,10 @@ def test_cvt(a,b,c,d:int)
     assert(uint2(float2(a,b))    ==uint2(a,b))
     assert(uint3(float3(a,b,c))  ==uint3(a,b,c))
     assert(uint4(float4(a,b,c,d))==uint4(a,b,c,d))
+}
 
 [export]
-def test
+def test {
     test_vec2(float2())
     test_vec3(float3())
     test_vec4(float4())
@@ -101,3 +107,4 @@ def test
     test_vec2(urange64(),true)
     test_cvt(1,2,3,4)
     return true
+}

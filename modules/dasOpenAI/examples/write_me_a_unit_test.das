@@ -86,8 +86,8 @@ def test_add_and_sub ( t:T? )
 
 %%
 
-def generate_test ( func, description : string ) : string
-    var prompt = build_string <| $ ( writer )
+def generate_test(func, description : string) : string
+    var prompt = build_string <| $(writer)
         writer |> write(unit_test_prompt) |> write(func) |> write("\n[test] // ") |> write(description) |> write("\ndef test_")
     var ccr <- openai_create_completion([[Completion()
         model = unit_test_model,
@@ -101,7 +101,7 @@ def generate_test ( func, description : string ) : string
         stop <- [{string "// --"; "\}"}]
     ]])
     if ccr |> is_valid
-        var choice = ccr.choices[0].text |> replace("\\r","") |> safe_unescape
+        var choice = ccr.choices[0].text |> replace("\\r", "") |> safe_unescape
         return build_string <| $(writer)
             writer |> write("[test] // ") |> write(description) |> write("\ndef test_") |> write(choice)
     else

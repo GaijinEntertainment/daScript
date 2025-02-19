@@ -7,16 +7,16 @@ include ../config.das
 [sideeffects]
 def testAdds()
     var count = 0
-    for i in range( 10000000)
+    for i in range(10000000)
         count = AddOne(count)
     return count
 
-[export,no_aot,no_jit]
+[export, no_aot, no_jit]
 def main
-	var count = 0
-    profile(20,"native loop") <|
+    var count = 0
+    profile(20, "native loop") <|
         count = testAdds()
-	assert(10000000==count)
+    assert(10000000 == count)
     if is_cpp_time()
         run_files([[TestFile
             asFile = "native.as",

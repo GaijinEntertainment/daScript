@@ -4,7 +4,7 @@ require _framework
 require daslib/hash_map
 
 [sideeffects]
-def test ( hmap : auto(HashMapType); dummy )
+def test(hmap : auto(HashMapType); dummy)
     var inscope hashMap : HashMapType
     static_if !typeinfo(is_table type<HashMapType>)
         hashMap <- HashMapType()
@@ -18,7 +18,7 @@ def test ( hmap : auto(HashMapType); dummy )
 %spoof_instance~TFlatHashMap(FlatHashMap_test_inline,int,int,hash_inline)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test0,int,int,hash0)%%;
 
-def hash_inline ( i : int ) : uint64
+def hash_inline(i : int) : uint64
     let DAS_WYHASH_SEED = 0x1234567890abcdeful
     let u = uint64(i)
     let ab = mul128(u, DAS_WYHASH_SEED)
@@ -28,7 +28,7 @@ def hash_inline ( i : int ) : uint64
 [export]
 def main
     print("test02 - insert 600000 elements in a hash map 25 times, with clear inbetween\n")
-    profile_test("table<int;int>", type<table<int;int>>, 0)
+    profile_test("table<int;int>", type<table<int; int>>, 0)
     profile_test("TCuckooHashMap<int,int> hash(x)->x/hash", type<CuckooHashMap_test>, 0)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, 0)
     profile_test("TFlatHashMap<int,int> with hash intrinsic", type<FlatHashMap_test_inline>, 0)

@@ -1,13 +1,18 @@
-def safe_addr(var a)
-    unsafe
+options gen2
+def safe_addr(var a) {
+    unsafe {
         return addr(a)
+    }
+}
 
-def safe_addr_val(var a : auto&)
-    unsafe
+def safe_addr_val(var a : auto&) {
+    unsafe {
         return addr(a)
+    }
+}
 
 [export]
-def test()
+def test() {
 
     var ar : array<int>
     var dummy : int
@@ -95,3 +100,4 @@ def test()
     assert(dummy==3)
 
     return true
+}

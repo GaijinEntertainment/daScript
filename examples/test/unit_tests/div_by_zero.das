@@ -1,25 +1,30 @@
+options gen2
 [sideeffects]
-def div_by_zero(num:auto(numT))
+def div_by_zero(num:auto(numT)) {
     var ex = false
-    try
+    try {
         return num / numT(0)
-    recover
+    } recover {
         ex = true
+    }
     assert(ex)
     return num
+}
 
 [sideeffects]
-def mod_by_zero(num:auto(numT))
+def mod_by_zero(num:auto(numT)) {
     var ex = false
-    try
+    try {
         return num % numT(0)
-    recover
+    } recover {
         ex = true
+    }
     assert(ex)
     return num
+}
 
 [export]
-def test()
+def test() {
     // int
     verify(div_by_zero(1)==1)
     verify(mod_by_zero(1)==1)
@@ -33,4 +38,5 @@ def test()
     verify(div_by_zero(1ul)==1ul)
     verify(mod_by_zero(1ul)==1ul)
     return true
+}
 

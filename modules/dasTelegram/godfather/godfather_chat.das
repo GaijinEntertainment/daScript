@@ -30,7 +30,7 @@ let public BOT_RETRY_ATTEMPTS = 3
 let public BOT_RETRY_DELAY = 20        // in seconds
 
 let public BOT_SUMMARY_SIZE = 4096
-let public BOT_SHORTCUT_SUMMARY_SIZE = 1024+512
+let public BOT_SHORTCUT_SUMMARY_SIZE = 1024 + 512
 
 let BOT_TEST_SKIP_LAST_N_MESSAGES = 0
 
@@ -50,7 +50,7 @@ let BOT_CHAT_PROMPT_SUFFIX = "Answer in character as the Godfather in JSON:"
 
 let BOT_SUMMARY_PROMPT = "Give detailed combined summary. Focus on facts, names, dates. Answer with summary only."
 
-def public sanitize_content ( text : string )
+def public sanitize_content(text : string)
     return text |> fix_broken_utf16 |> fix_broken_utf32 |> fix_emoji |> strip
 
 struct public UserMessage
@@ -61,11 +61,11 @@ struct public UserMessage
 def get_server_time : int64
     let t = get_clock()
     unsafe
-        return * reinterpret<int64?>(addr(t))
+        return *reinterpret<int64?>(addr(t))
 
-def public write_ussage ( message:UserMessage; tokens:int64; voice_bytes:int64 )
+def public write_ussage(message : UserMessage; tokens : int64; voice_bytes : int64)
     //! write usage to db
-    to_log(LOG_INFO,"chat {message.chat_id}, user {message.user_id}: {tokens} tokens, {voice_bytes} bytes\n")
+    to_log(LOG_INFO, "chat {message.chat_id}, user {message.user_id}: {tokens} tokens, {voice_bytes} bytes\n")
     write_api_use([[ApiUseEntry
         user_id = message.user_id,
         server_time = get_server_time(),
@@ -81,11 +81,11 @@ struct public GodfatherMessage
     draw : string
     code : string
 
-def generate_chat_completion_result  ( message:UserMessage; messages:array<ChatCompletionMessage>; temperature:float=1.0; top_p:float=1.0 ) : GodfatherMessage
+def generate_chat_completion_result(message : UserMessage; messages : array<ChatCompletionMessage>; temperature : float = 1.0; top_p : float = 1.0) : GodfatherMessage
     //! generate completion result given chat completion messages
-    to_log(LOG_INFO,"\n\n\ngenerating chat completion:\n")
+    to_log(LOG_INFO, "\n\n\ngenerating chat completion:\n")
     for msg in messages
-        to_log(LOG_INFO,"{msg.role} <{msg.name}>:  {msg.content}\n")
+        to_log(LOG_INFO, "{msg.role} <{msg.name}>:  {msg.content}\n")
     var chat : ChatCompletionResponse
     for i in range(BOT_RETRY_ATTEMPTS)
         chat <- openai_create_chat_completion([[ChatCompletion()
@@ -101,8 +101,8 @@ def generate_chat_completion_result  ( message:UserMessage; messages:array<ChatC
             break
         to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
         delete chat
-        sleep(uint(BOT_RETRY_DELAY)*1000u)
-    if !chat|> is_valid
+        sleep(uint(BOT_RETRY_DELAY) * 1000u)
+    if !chat |> is_valid
         to_log(LOG_ERROR, "openai_create_chat_completion failed: {openai_get_last_error()}\n")
         return [[GodfatherMessage result="error", message=openai_get_last_error()]]
     to_log(LOG_INFO, "chat completion: {chat.choices[0].message.content}\n")
@@ -113,13 +113,13 @@ def generate_chat_completion_result  ( message:UserMessage; messages:array<ChatC
     write_ussage(message, int64(chat.usage.total_tokens), 0l)
     return [[GodfatherMessage result="ok", message=chat.choices[0].message.content]]
 
-def get_message_content ( entry : ChatLogEntry; use_js : bool = true )
-    let isBot = entry.from_id==BOT_ID
+def get_message_content(entry : ChatLogEntry; use_js : bool = true)
+    let isBot = entry.from_id == BOT_ID
     if isBot
         var content = entry.text
         var error : string
         var json = content |> read_json(error)
-        if json==null || !empty(error)
+        if json == null || !empty(error)
             if use_js
                 content = "\{ \"result\":\"nothing\", \"message\":\"{escape(content)}\" \}"
             else
@@ -146,13 +146,13 @@ def get_message_content ( entry : ChatLogEntry; use_js : bool = true )
     else
         return "{entry.text |> sanitize_content} {entry.transcription |> sanitize_content}" |> strip
 
-def generate_completion_request ( message:UserMessage )
+def generate_completion_request(message : UserMessage)
     //! generate completion request given chat id
     // lets get previous conversation summary first
-    let summary_so_far = generate_previous_conversation_summary(message,"in english")
+    let summary_so_far = generate_previous_conversation_summary(message, "in english")
     // build user lookup
     var users : array<UserEntry>
-    list_chat_users(message.chat_id) <| $ ( user )
+    list_chat_users(message.chat_id) <| $(user)
         users |> push(user)
     var user_lookup : table<int64; UserEntry>
     for user in users
@@ -160,7 +160,7 @@ def generate_completion_request ( message:UserMessage )
     // get chat entries
     var entries : array<ChatLogEntry>
     entries |> reserve(BOT_TOTAL_MESSAGES)
-    list_conversation_log(message.chat_id,BOT_ID,BOT_NAME,BOT_TOTAL_MESSAGES) <| $ ( msg )
+    list_conversation_log(message.chat_id, BOT_ID, BOT_NAME, BOT_TOTAL_MESSAGES) <| $(msg)
         entries |> push(msg)
     entries |> reverse
     // this is here for debugging only
@@ -174,18 +174,18 @@ def generate_completion_request ( message:UserMessage )
     if !empty(summary_so_far)
         messages |> push([[ChatCompletionMessage role="system", content="Summary of the conversation so far: {summary_so_far}"]])
     for entry in entries
-        let isBot = entry.from_id==BOT_ID
+        let isBot = entry.from_id == BOT_ID
         let content = get_message_content(entry)
         if isBot
             messages |> push([[ChatCompletionMessage role="assistant", content=content]])
         else
             let user = user_lookup[entry.from_id]
-            let clean_content = content |> sanitize_content |> replace("@{BOT_NAME}","")
+            let clean_content = content |> sanitize_content |> replace("@{BOT_NAME}", "")
             messages |> push([[ChatCompletionMessage role="user", name=user.user_name, content = "{user.first_name} {user.last_name}: {clean_content}"]])
     messages |> push([[ChatCompletionMessage role="system", name="", content=BOT_CHAT_PROMPT_SUFFIX]])
     return <- messages
 
-def flatten_json_reply ( var writer:StringBuilderWriter; var reply : JsonValue? )
+def flatten_json_reply(var writer : StringBuilderWriter; var reply : JsonValue?)
     //! this function flattens the json reply into a string
     if reply is _object
         for key in (reply as _object) |> keys
@@ -203,7 +203,7 @@ def flatten_json_reply ( var writer:StringBuilderWriter; var reply : JsonValue? 
         writer |> write("{reply as _bool}")
         writer |> write(" ")
 
-def fix_malformed_completion ( var json : JsonValue? )
+def fix_malformed_completion(var json : JsonValue?)
     //! here is collection of workarounds for the mallformed output
     if json == null
         return
@@ -212,16 +212,16 @@ def fix_malformed_completion ( var json : JsonValue? )
     if obj |> key_exists("draw")
         if obj["draw"] is _object
             assume draw = obj["draw"] as _object
-            var req = build_string <| $ ( writer )
+            var req = build_string <| $(writer)
                 flatten_json_reply(writer, obj["draw"])
             obj |> erase("draw")
             obj["draw"] = JV(req)
             to_log(LOG_INFO, "adjusting draw to {req}\n")
 
-def try_parse_json ( var json_str:string; var error:string& ) : JsonValue?
+def try_parse_json(var json_str : string; var error : string&) : JsonValue?
     //! this is a workaround for the broken json, which bot produces all the time
     let ofs = json_str |> find("\{")
-    if ofs==-1
+    if ofs == -1
         // there is no opening brace, so its just answer. let see
         var resp : GodfatherMessage
         resp.result = "nothing"
@@ -230,7 +230,7 @@ def try_parse_json ( var json_str:string; var error:string& ) : JsonValue?
         return JV(resp)
     json_str = json_str |> slice(ofs)
     var old_adc = set_allow_duplicate_keys(true)
-    var json <- read_json(json_str,error)
+    var json <- read_json(json_str, error)
     set_allow_duplicate_keys(old_adc)
     if json != null
         error = ""
@@ -239,7 +239,7 @@ def try_parse_json ( var json_str:string; var error:string& ) : JsonValue?
     let fixed_json = try_fixing_broken_json(json_str)
     to_log(LOG_ERROR, "fixed_json: {fixed_json}\n")
     old_adc = set_allow_duplicate_keys(true)
-    var new_json <- read_json(fixed_json,error)
+    var new_json <- read_json(fixed_json, error)
     set_allow_duplicate_keys(old_adc)
     if new_json != null
         to_log(LOG_ERROR, "that fixed it\n")
@@ -247,7 +247,7 @@ def try_parse_json ( var json_str:string; var error:string& ) : JsonValue?
     to_log(LOG_ERROR, "that didn't fix it\n")
     return null
 
-def parse_chat_reply ( reply : GodfatherMessage )
+def parse_chat_reply(reply : GodfatherMessage)
     //! parse chat reply
     let json_str = reply.message
     to_log(LOG_INFO, "parse_chat_reply: {json_str}\n")
@@ -255,45 +255,45 @@ def parse_chat_reply ( reply : GodfatherMessage )
         to_log(LOG_WARNING, "empty json_str\n")
         return [[GodfatherMessage result="error", message="says nothing in return"]]
     var error : string
-    var json <- try_parse_json(json_str,error)
-    if !empty(error) || json==null
+    var json <- try_parse_json(json_str, error)
+    if !empty(error) || json == null
         unsafe
             delete json
         to_log(LOG_ERROR, "read_json failed: {error}\n")
         return [[GodfatherMessage result="error", message=error]]
     fix_malformed_completion(json)
-    var res = from_JV(json,type<GodfatherMessage>)
+    var res = from_JV(json, type<GodfatherMessage>)
     unsafe
         delete json
     return res
 
-def public generate_bot_reply ( message:UserMessage )
+def public generate_bot_reply(message : UserMessage)
     //! given chat_id generate bot reply
     var messags <- generate_completion_request(message)
-    var result = generate_chat_completion_result(message,messags)
+    var result = generate_chat_completion_result(message, messags)
     if result.result == "error"
         return result
     return parse_chat_reply(result)
 
-def public convert_completion ( messages : array<ChatCompletionMessage> )
-    return build_string <| $ ( writer )
+def public convert_completion(messages : array<ChatCompletionMessage>)
+    return build_string <| $(writer)
         for message in messages
             writer |> write(message.content)
-            if message.role=="system"
+            if message.role == "system"
                 writer |> write("\n")
             writer |> write("\n")
 
-def public setup_chat ( botid : int64; botname, botNickName : string )
+def public setup_chat(botid : int64; botname, botNickName : string)
     //! setup chat
     BOT_ID = botid
     BOT_NAME = botname
     BOT_NICKNAME = botNickName
     to_log(LOG_INFO, "setup_chat: {BOT_ID} {BOT_NAME}\n")
 
-def sanitize_json_reply ( reply : string )
+def sanitize_json_reply(reply : string)
     //! take json reply, remove all \n,\r,\t and replace them with spaces. remove \n\r\t from inbetween quotes when broken
-    return build_string <| $ ( writer )
-        peek_data(reply) <| $ ( str )
+    return build_string <| $(writer)
+        peek_data(reply) <| $(str)
             var i = 0
             let len = length(str)
             var instring = false
@@ -301,14 +301,14 @@ def sanitize_json_reply ( reply : string )
                 if str[i] == '"'u8
                     instring = !instring
                 elif str[i] == '\\'u8
-                    if i+1 < len
-                        let nc = str[i+1]
+                    if i + 1 < len
+                        let nc = str[i + 1]
                         if instring // we stay in string if we have escaped quote
                             writer |> write_char('\\')
                             writer |> write_char(int(nc))
                             i += 2
                             continue
-                        if nc=='n'u8 || nc=='r'u8 || nc=='t'u8  // we replace \n,\r,\t with ' '
+                        if nc == 'n'u8 || nc == 'r'u8 || nc == 't'u8// we replace \n,\r,\t with ' '
                             writer |> write_char(' ')
                             i += 2
                             continue
@@ -320,15 +320,15 @@ def sanitize_json_reply ( reply : string )
                 writer |> write_char(int(str[i]))   // we write everything else
                 i ++
 
-def get_summary_message ( entry:ChatLogEntry; var user_lookup:table<int64; UserEntry>)
+def get_summary_message(entry : ChatLogEntry; var user_lookup : table<int64; UserEntry>)
     let user = user_lookup[entry.from_id]
     var text = user.is_bot ? BOT_NICKNAME : "{user.first_name} {user.last_name}"
     let content = get_message_content(entry, false)
     return "{text}: {content}"
 
-def public generate_previous_conversation_summary ( message:UserMessage; extra_prompt:string )
+def public generate_previous_conversation_summary(message : UserMessage; extra_prompt : string)
     var users : array<UserEntry>
-    list_chat_users(message.chat_id) <| $ ( user )
+    list_chat_users(message.chat_id) <| $(user)
         users |> push(user)
     var user_lookup : table<int64; UserEntry>
     for user in users
@@ -336,7 +336,7 @@ def public generate_previous_conversation_summary ( message:UserMessage; extra_p
     // get chat entries
     var entries : array<ChatLogEntry>
     entries |> reserve(BOT_TOTAL_MESSAGES)
-    list_conversation_log(message.chat_id,BOT_ID,BOT_NAME,BOT_TOTAL_CONTEXT_MESSAGES) <| $ ( msg )
+    list_conversation_log(message.chat_id, BOT_ID, BOT_NAME, BOT_TOTAL_CONTEXT_MESSAGES) <| $(msg)
         entries |> push(msg)
     if entries |> empty
         return ""
@@ -344,13 +344,13 @@ def public generate_previous_conversation_summary ( message:UserMessage; extra_p
     entries |> reverse
     to_log(LOG_INFO, "total entries after the reverse: {length(entries)}\n")
     // latest are at the end, so we need to remove some
-    entries |> resize ( max(0,length(entries)-(BOT_TOTAL_MESSAGES-1)) )
+    entries |> resize(max(0, length(entries) - (BOT_TOTAL_MESSAGES - 1)))
     var dayZ = -1L
     if !empty(entries)
         dayZ = (entries |> back).id
         entries |> pop
     // let see if we need to skip some entires, for we already have summary
-    var latest = get_first_summary(message.chat_id, dayZ )
+    var latest = get_first_summary(message.chat_id, dayZ)
     dayZ = latest.id
     // now, lets start building completion request
     var llen = length(entries)
@@ -364,9 +364,9 @@ def public generate_previous_conversation_summary ( message:UserMessage; extra_p
         if entries[i].id <= dayZ
             i ++
             continue
-        var text = get_summary_message(entries[i],user_lookup)
+        var text = get_summary_message(entries[i], user_lookup)
         i ++
-        while i<llen && length(text)<BOT_SUMMARY_SIZE
+        while i < llen && length(text) < BOT_SUMMARY_SIZE
             text = "{text}\n{get_summary_message(entries[i],user_lookup)}"
             last_id = entries[i].id
             i ++
@@ -393,29 +393,29 @@ def public generate_previous_conversation_summary ( message:UserMessage; extra_p
     to_log(LOG_INFO, "Overall summary:\n{prev_summary}\n\n\n")
     return prev_summary
 
-def public generate_summary ( message:UserMessage; text : string )
+def public generate_summary(message : UserMessage; text : string)
     var inscope messages <- [{ChatCompletionMessage
-        role="system", content=BOT_SUMMARY_PROMPT;
-        role="user", content=text}]
-    var res = generate_chat_completion_result(message,messages,0.,0.)
-    if res.result=="error"
+        role = "system", content = BOT_SUMMARY_PROMPT;
+        role = "user", content = text}]
+    var res = generate_chat_completion_result(message, messages, 0., 0.)
+    if res.result == "error"
         return ""
     return res.message
 
-def public decode_voice ( message:UserMessage; temp_mp3_file_name:string )
+def public decode_voice(message : UserMessage; temp_mp3_file_name : string)
     to_log(LOG_INFO, "creating transcription for {temp_mp3_file_name}\n")
     var inscope ru : TranscriptionResult
     for i in range(BOT_RETRY_ATTEMPTS)
         ru <- openai_create_transcription([[Transcription() file = temp_mp3_file_name, language = ""]])
         if empty(ru.error)
             break
-        if ! (ru.error |> starts_with("curl timeout") || ru.error |> starts_with("HTTPS post failed"))
+        if !(ru.error |> starts_with("curl timeout") || ru.error |> starts_with("HTTPS post failed"))
             break
         to_log(LOG_ERROR, "retrying, reason: {ru.error}\n")
         delete ru
-        sleep(uint(BOT_RETRY_DELAY)*1000u)
+        sleep(uint(BOT_RETRY_DELAY) * 1000u)
     if !empty(ru.error)
-        to_log(LOG_ERROR,"transcription failed {ru.error}\n")
+        to_log(LOG_ERROR, "transcription failed {ru.error}\n")
         return ""
     write_ussage(message, 0l, int64(ru.text |> length))
     return ru.text

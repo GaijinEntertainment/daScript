@@ -1,42 +1,48 @@
+options gen2
 // options log=true,optimize=true,log_optimization_passes=false
 
 // options logCpp=true
 
 require strings
 
-def failUint(val: string)
-    try
+def failUint(val: string) {
+    try {
         debug(uint(val), "=")
         assert(false, "can't convert non uint string without exception")
-    recover {}
+    } recover {}
+}
 
-def failInt(val: string)
-    try
+def failInt(val: string) {
+    try {
         debug(int(val), "=")
         assert(false, "can't convert non int string without exception")
-    recover {}
+    } recover {}
+}
 
 
-def failFloat(val: string)
-    try
+def failFloat(val: string) {
+    try {
         debug(float(val), "=")
         assert(false, "can't convert non float string without exception")
-    recover {}
+    } recover {}
+}
 
-def failDouble(val: string)
-    try
+def failDouble(val: string) {
+    try {
         debug(double(val), "=")
         assert(false, "can't convert non double string without exception")
-    recover {}
+    } recover {}
+}
 
-def failAll(val: string)
+def failAll(val: string) {
     failUint(val)
     failInt(val)
     failFloat(val)
     failDouble(val)
+}
 
 [export]
-def test:bool
+def test:bool {
     let s:string = "hello, world!"
     assert(to_upper(s) == "HELLO, WORLD!")
     assert(to_lower(to_upper(s)) == s)
@@ -103,33 +109,41 @@ multi line string"
     assert(fmt(":.2f",1.234)=="1.23")
 // this string is not a valid format string
     var failed = false
-    try
+    try {
         var t : string
         t = "blah"
         var x = fmt(t,13)
         assert(x=="13")
-    recover
+    } recover {
         failed = true
+    }
     assert(failed)
     // string builder
-    let st = build_string() <| $ (var writer : StringBuilderWriter)
+    let st = build_string() <| $ (var writer : StringBuilderWriter) {
         write(writer,"255 hex is ")
         format(writer,"%2x",255)
+    }
     assert(st=="255 hex is ff")
     // string iterator
     var count = 0
     var index = 0
-    for ch in st
-        if ch=='5'
+    for (ch in st) {
+        if (ch=='5') {
             count ++
+        }
         let chAt = character_at(st,index)
         assert(ch==chAt)
         index ++
+    }
     assert(count==2)
     // check if builder does its jo, and deletes
-    var zzs = build_string() <| $ ( writer )
-        for zzx in range(100500)
+    var zzs = build_string() <| $ ( writer ) {
+        for (zzx in range(100500)) {
             write(writer,zzx)
-    unsafe
+        }
+    }
+    unsafe {
         delete_string(zzs)
+    }
     return true
+}

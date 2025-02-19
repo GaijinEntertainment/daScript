@@ -1,11 +1,13 @@
+options gen2
 // options log=true
 
-def pass_array ( var arr )
+def pass_array ( var arr ) {
     push(arr,4)
+}
 
 [export]
-def test
-    if true
+def test {
+    if (true) {
         var arr,arr2:array<int>
         let val2 = 2
         assert(length(arr)==0,"array starts at 0 length")
@@ -29,8 +31,9 @@ def test
         assert(length(arr)==0)
         assert(length(arr2)==4)
         var index = 0
-        while index < 4
+        while (index < 4) {
             arr2[index++]++
+        }
         arr <- arr2
         assert(length(arr2)==0)
         assert(length(arr)==4)
@@ -39,22 +42,27 @@ def test
         resize(arr,4)
         assert(arr[3]==0,"new element after resize is 0")
         push(arr,1,0)
-        for t in range(1,5)
+        for (t in range(1,5)) {
             assert(arr[t-1]==t)
+        }
         resize(arr,4)
         push(arr,5,4)
         push(arr,7,2)
         erase(arr,2)
-        for t in range(1,5)
+        for (t in range(1,5)) {
             assert(arr[t-1]==t)
+        }
         erase(arr,0)
         erase(arr,3)
-        for t in range(2,4)
+        for (t in range(2,4)) {
             assert(arr[t-2]==t)
+        }
         // move while initializing
         var a:array<int>
         push(a,1)
         push(a,2)
         let b <- a
         assert(length(a)==0 && length(b)==2)
+    }
     return true
+}

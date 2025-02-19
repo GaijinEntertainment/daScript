@@ -10,33 +10,33 @@ struct NObject
     position : float3
     velocity : float3
 
-[hint(noalias=objects,vec3_ldu)]
-def testSimI(var objects:array<NObject>)
+[hint(noalias=objects, vec3_ldu)]
+def testSimI(var objects : array<NObject>)
     for obj in objects
         obj.position += obj.velocity
 
-[hint(noalias=objects,vec3_ldu)]
-def testSim2I(var objects:array<NObject>; count:int)
+[hint(noalias=objects, vec3_ldu)]
+def testSim2I(var objects : array<NObject>; count : int)
     for i in range(count)
         testSimI(objects)
 
-def init(var objects:array<NObject>)
+def init(var objects : array<NObject>)
     resize(objects, 50000)
     var i = 0
     for obj in objects
-        obj.position=float3(i++,i+1,i+2)
-        obj.velocity=float3(1.0,2.0,3.0)
-    assert(i==length(objects))
+        obj.position = float3(i++, i + 1, i + 2)
+        obj.velocity = float3(1.0, 2.0, 3.0)
+    assert(i == length(objects))
 
-[export,no_aot,no_jit]
+[export, no_aot, no_jit]
 def main
-    var objects:array<NObject>
+    var objects : array<NObject>
     init(objects)
-    profile(20,"particles kinematics") <|
-        testSim2I(objects,100)
+    profile(20, "particles kinematics") <|
+        testSim2I(objects, 100)
     if is_cpp_time()
         cpp_label()
-        profile(20,"particles kinematics") <|
+        profile(20, "particles kinematics") <|
             testProfile::testParticlesI(100)
         run_files([[TestFile
             luauFile = "particles.luau",

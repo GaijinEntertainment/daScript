@@ -810,7 +810,7 @@ def public end_batch()
     g_command_channel |> push_batch(*global_batch)
     *global_batch |> resize(0)
     unsafe
-        delete *global_batch
+        delete * global_batch
     global_batch = null
 
 def public batch(cb : block)
@@ -995,7 +995,7 @@ def public set_playback_position(sid : SID; position : uint64)
     push_cmd <| new [[AudioCommand set_playback_position=[[auto sid, position]]]]
     return sid
 
-def public decode_audio(data : array<uint8> |#; var channels, rate : int&) : array<float>
+def public decode_audio(data : array<uint8> | #; var channels, rate : int&) : array<float>
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format ma_format_f32, 0u, 0u)
     let result = ma_decoder_init_memory(unsafe(addr(data[0])), uint64(length(data)), unsafe(addr(config)), decoder)

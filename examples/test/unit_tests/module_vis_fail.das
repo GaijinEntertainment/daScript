@@ -1,24 +1,30 @@
+options gen2
 require _module_b
 
-var
+var {
     global_1 = "local"
     global_3 = "local"
     global_4 = "local"
+}
 
-def fun_1
+def fun_1 {
     return "local"
+}
 
-def fun_3
+def fun_3 {
     return "local"
+}
 
-def fun_4
+def fun_4 {
     return "local"
+}
 
-def fun_5
+def fun_5 {
     return "local"
+}
 
 [export]
-def test
+def test {
 
     verify(::global_1=="local")
     //verify(module_a::global_1=="from_a")  // 30305: can't locate variable module_a::global_1, not visible
@@ -43,3 +49,4 @@ def test
     verify(from_b_get_own_fun_5()=="from_b")
 
     return true
+}

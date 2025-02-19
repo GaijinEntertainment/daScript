@@ -14,15 +14,15 @@ require strings
 
 let LOG_REFACTOR = 100500
 
-[tag_function(extract_method_tag),sideeffects]
-def public extract_method ( method_name:string; blk:block )
+[tag_function(extract_method_tag), sideeffects]
+def public extract_method(method_name : string; blk : block)
     invoke(blk)
 
-[tag_function(extract_method_tag),sideeffects]
-def public extract_expression ( method_name:string; expr )
+[tag_function(extract_method_tag), sideeffects]
+def public extract_expression(method_name : string; expr)
     return expr
 
-def log_range ( at:LineInfo )
+def log_range(at : LineInfo)
     return "{describe(at)}-{int(at.last_line)}:{int(at.last_column)}"
 
 struct ExtractMethodDesc
@@ -32,8 +32,8 @@ struct ExtractMethodDesc
     call_at : LineInfo
     function_body_at : LineInfo
 
-def JV ( li:LineInfo )
-    let fname = li.fileInfo!=null ? string(li.fileInfo.name) : ""
+def JV(li : LineInfo)
+    let fname = li.fileInfo != null ? string(li.fileInfo.name) : ""
     let tabSize = li.fileInfo?.tabSize ?? 4
     var inscope kv <- {{
         "line" => "{int(li.line)}";
@@ -48,18 +48,18 @@ def JV ( li:LineInfo )
 [tag_function_macro(tag="extract_method_tag")]
 class ExtractMethodMacro : AstFunctionAnnotation
     method_tag = "!!!extract_method"
-    def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+    def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool
         if !(call.arguments[0] is ExprConstString)
             print("extract_method: first argument must be a string literal")
             return false
         var captured <- capture_block(call.arguments[1])
-        sort(captured) <| $ ( a,b ) => string(a.variable.name) < string(b.variable.name)
+        sort(captured) <| $(a, b) => string(a.variable.name) < string(b.variable.name)
         var call_name = string((call.arguments[0] as ExprConstString).value)
-        let function_declaration = build_string <| $ ( writer )
-            writer |> write ( "def ")
-            writer |> write ( call_name )
+        let function_declaration = build_string <| $(writer)
+            writer |> write("def ")
+            writer |> write(call_name)
             if length(captured) != 0
-                writer |> write ( " ( " )
+                writer |> write(" ( ")
                 var first = true
                 for v in captured
                     if first
@@ -67,17 +67,17 @@ class ExtractMethodMacro : AstFunctionAnnotation
                     else
                         writer |> write("; ")
                     if !v.variable._type.flags.constant && v.variable.access_flags.access_ref
-                        writer |> write ( "var " )
-                    writer |> write ( v.variable.name )
-                    writer |> write ( ":")
-                    writer |> write ( describe(v.variable._type) )
+                        writer |> write("var ")
+                    writer |> write(v.variable.name)
+                    writer |> write(":")
+                    writer |> write(describe(v.variable._type))
                     if v.variable._type.isWorkhorseType && v.variable.access_flags.access_ref
                         writer |> write("&")
-                writer |> write ( " )" )
+                writer |> write(" )")
 
-        let call_expression = build_string <| $ ( writer )
-            writer |> write ( call_name )
-            writer |> write ( "(" )
+        let call_expression = build_string <| $(writer)
+            writer |> write(call_name)
+            writer |> write("(")
             if length(captured) != 0
                 var first = true
                 for v in captured
@@ -85,8 +85,8 @@ class ExtractMethodMacro : AstFunctionAnnotation
                         first = false
                     else
                         writer |> write(",")
-                    writer |> write ( v.variable.name )
-            writer |> write ( ")" )
+                    writer |> write(v.variable.name)
+            writer |> write(")")
         assume atCall = call.atEnclosure
         assume atBlock = call.arguments[1].at
         var jv <- JV([[ExtractMethodDesc
@@ -109,24 +109,24 @@ struct ExtractVariableDesc
     call_at : LineInfo
     variable_init_at : LineInfo
 
-[tag_function(extract_variable_tag),sideeffects]
-def public extract_variable_nonref ( method_name:string; expr )
+[tag_function(extract_variable_tag), sideeffects]
+def public extract_variable_nonref(method_name : string; expr)
     return expr
 
-[tag_function(extract_variable_tag),sideeffects]
-def public extract_variable_ref ( method_name:string; var expr:auto(TT)& ==const ) : TT&
+[tag_function(extract_variable_tag), sideeffects]
+def public extract_variable_ref(method_name : string; var expr : auto(TT)& ==const) : TT&
     unsafe
         return expr
 
 [call_macro(name="extract_variable")]
 class ExtractVariableMacro : AstCallMacro
-    def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr
         if !(expr.arguments[0] is ExprConstString)
-            macro_error(prog,expr.at,"extract_variable: first argument must be a string literal")
+            macro_error(prog, expr.at, "extract_variable: first argument must be a string literal")
             return <- [[ExpressionPtr]]
         assume varType = expr.arguments[1]._type
-        if varType==null || varType.isAutoOrAlias
-            macro_error(prog,expr.at,"extract_variable: unresolve expression type")
+        if varType == null || varType.isAutoOrAlias
+            macro_error(prog, expr.at, "extract_variable: unresolve expression type")
             return <- [[ExpressionPtr]]
         var inscope ccall <- new [[ExprCall() at=expr.at]]
         ccall.name := (varType.isRef && !varType.isConst) ? "extract_variable_ref" : "extract_variable_nonref"
@@ -137,16 +137,16 @@ class ExtractVariableMacro : AstCallMacro
 [tag_function_macro(tag="extract_variable_tag")]
 class ExtractVariableFunction : AstFunctionAnnotation
     method_tag = "!!!extract_variable"
-    def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
+    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr
         assume cffg = call.func.fromGeneric
         assume varType = call.arguments[1]._type
-        if call.func!=null && cffg!=null && cffg.name=="extract_variable"
+        if call.func != null && cffg != null && cffg.name == "extract_variable"
             if varType.isConst || !varType.isRef
                 var inscope ccall <- clone_expression(call)
                 (ccall as ExprCall).name := "extract_variable_nonref"
                 return <- ccall
         return <- [[ExpressionPtr]]
-    def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+    def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool
         if !(call.arguments[0] is ExprConstString)
             print("extract_variable: first argument must be a string literal")
             return false

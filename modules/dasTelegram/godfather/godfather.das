@@ -32,9 +32,9 @@ var g_botConfig : BotConfig
 var g_userGodfather : user
 var g_adminId : int64
 
-def read_bot_config(configfile:string)
+def read_bot_config(configfile : string)
     var config : BotConfig
-    fopen(configfile,"rb") <| $ (f)
+    fopen(configfile, "rb") <| $(f)
         if f != null
             var data = fread(f)
             var error = ""
@@ -46,7 +46,7 @@ def read_bot_config(configfile:string)
                 delete json
     return <- config
 
-def get_user_name ( user:user? )
+def get_user_name(user : user?)
     if user == null
         return "unknown"
     if user.username |> empty
@@ -54,27 +54,27 @@ def get_user_name ( user:user? )
     else
         return user.username
 
-def UserMessage ( message:tbotapi::message )
+def UserMessage(message : tbotapi::message)
     return [[UserMessage
         user_id = message.from.id,
         chat_id = message.chat.id,
         message_id = message.message_id]]
 
-def get_temp_file_name(name:string)
+def get_temp_file_name(name : string)
     let temp_dir = "{get_das_root()}/temp"
     mkdir(temp_dir)
     return "{temp_dir}/{name}"
 
-def convert_to_mp3 ( fin,fout:string )
+def convert_to_mp3(fin, fout : string)
     to_log(LOG_INFO, "converting {fin} to {fout}\n")
     let cmd = "{g_botConfig.path_to_ffmpeg}/ffmpeg -loglevel quiet -y -i {fin} -ar 22050 {fout}"
-    let exit_code = unsafe(popen(cmd)) <| $ (f)
+    let exit_code = unsafe(popen(cmd)) <| $(f)
         pass
     if exit_code != 0
         to_log(LOG_ERROR, "convert to mp3 failed\n{cmd}\nffmpeg failed with exit code {exit_code}\n")
-    return exit_code==0
+    return exit_code == 0
 
-def decode_voice_message ( message:tbotapi::message ) : string
+def decode_voice_message(message : tbotapi::message) : string
     to_log(LOG_INFO, "decoding voice message {message.voice.file_id}\n")
     var inscope waveBytes : array<uint8>
     var inscope file <- telegram_getFile([[getfile
@@ -87,25 +87,25 @@ def decode_voice_message ( message:tbotapi::message ) : string
     if waveBytes |> empty
         to_log(LOG_ERROR, "download failed: {telegram_get_last_error()}\n")
         return ""
-    let temp_file_name = get_temp_file_name(file.file_path |> replace("/","_"))
+    let temp_file_name = get_temp_file_name(file.file_path |> replace("/", "_"))
     var saved = false
-    fopen(temp_file_name,"wb") <| $ (f)
+    fopen(temp_file_name, "wb") <| $(f)
         if f != null
-            to_log(LOG_INFO,"saving voice message to {temp_file_name}\n")
-            fwrite(f,waveBytes)
+            to_log(LOG_INFO, "saving voice message to {temp_file_name}\n")
+            fwrite(f, waveBytes)
             saved = true
     if !saved
         to_log(LOG_ERROR, "failed to save {temp_file_name}\n")
         return ""
     let temp_mp3_file_name = "{temp_file_name}.mp3"
-    if !convert_to_mp3(temp_file_name,temp_mp3_file_name)
+    if !convert_to_mp3(temp_file_name, temp_mp3_file_name)
         return ""
-    let voice_text = decode_voice(UserMessage(message),temp_mp3_file_name)
+    let voice_text = decode_voice(UserMessage(message), temp_mp3_file_name)
     if empty(voice_text)
         return ""
     let transcription_text = sanitize_content(voice_text)
     if transcription_text |> empty
-        to_log(LOG_INFO,"nothing to work with - empty text\n")
+        to_log(LOG_INFO, "nothing to work with - empty text\n")
         return ""
     to_log(LOG_INFO, "transcription: {transcription_text}\n")
     to_log(LOG_INFO, "sending transcription to {message.chat.id}, replying to {message.message_id}\n")
@@ -119,14 +119,14 @@ def decode_voice_message ( message:tbotapi::message ) : string
         return ""
     return transcription_text
 
-def is_someone_asking_bot_to_say_something ( message:tbotapi::message  )
+def is_someone_asking_bot_to_say_something(message : tbotapi::message)
     if message.text |> find("@{g_botConfig.id}") != -1
         return true
     if message.reply_to_message?.from?.id ?? 0l == g_userGodfather.id
         return true
     return false
 
-def process_error_message ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
+def process_error_message(message : tbotapi::message; whatGodfatherSaid : GodfatherMessage)
     to_log(LOG_ERROR, "generate_chat_reply failed: {whatGodfatherSaid.message}\n{whatGodfatherSaid}\n")
     telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
@@ -137,7 +137,7 @@ def process_error_message ( message:tbotapi::message; whatGodfatherSaid:Godfathe
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
 
-def send_system_message ( message:tbotapi::message; text:string )
+def send_system_message(message : tbotapi::message; text : string)
     to_log(LOG_INFO, "text\n")
     print("{text}\n")
     telegram_sendLongMessage([[sendmessage
@@ -148,10 +148,10 @@ def send_system_message ( message:tbotapi::message; text:string )
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
 
-def fix_message ( text:string )
+def fix_message(text : string)
     return text |> fix_emoji
 
-def write_user_to_log ( user:tbotapi::user )
+def write_user_to_log(user : tbotapi::user)
     write_user([[UserEntry
                 user_id = user.id,
                 is_bot = user.is_bot,
@@ -159,7 +159,7 @@ def write_user_to_log ( user:tbotapi::user )
                 last_name = user.last_name,
                 user_name = user.username]])
 
-def write_message_to_log ( message:tbotapi::message; transcription:string )
+def write_message_to_log(message : tbotapi::message; transcription : string)
     write_to_log([[ChatLogEntry
                 chat_id = message.chat.id,
                 message_id = message.message_id,
@@ -173,10 +173,10 @@ def write_message_to_log ( message:tbotapi::message; transcription:string )
     if message.reply_to_message != null && message.reply_to_message.from != null
         write_user_to_log(*message.reply_to_message.from)
 
-def write_message_to_log ( message:tbotapi::message )
-    write_message_to_log(message,"")
+def write_message_to_log(message : tbotapi::message)
+    write_message_to_log(message, "")
 
-def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage; rights:ChannelRights )
+def process_chat_reply(message : tbotapi::message; whatGodfatherSaid : GodfatherMessage; rights : ChannelRights)
     to_log(LOG_INFO, "{g_botConfig.name}: {whatGodfatherSaid}\n")
     var inscope messages <- telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
@@ -201,10 +201,10 @@ def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMe
             text = reply_json,
             transcription = ""
         ]])
-    process_chat_reply_draw ( message, whatGodfatherSaid, rights )
-    process_char_reply_code ( message, whatGodfatherSaid, rights )
+    process_chat_reply_draw(message, whatGodfatherSaid, rights)
+    process_char_reply_code(message, whatGodfatherSaid, rights)
 
-def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage; rights:ChannelRights )
+def process_char_reply_code(message : tbotapi::message; whatGodfatherSaid : GodfatherMessage; rights : ChannelRights)
     if !empty(whatGodfatherSaid.code)
         to_log(LOG_INFO, "writing code:\n{whatGodfatherSaid.code}\n")
         telegram_sendLongMessage([[sendmessage
@@ -212,9 +212,9 @@ def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:Godfat
             reply_to_message_id = message.message_id,
             text = whatGodfatherSaid.code,
             parse_mode = "MarkdownV2"
-        ]], 4096-10,"```\n","\n```")
+        ]], 4096 - 10, "```\n", "\n```")
 
-def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage; rights:ChannelRights )
+def process_chat_reply_draw(message : tbotapi::message; whatGodfatherSaid : GodfatherMessage; rights : ChannelRights)
     let draw_prompt = whatGodfatherSaid.draw |> strip
     if !empty(draw_prompt)
         if !rights.draw_pictures
@@ -236,7 +236,7 @@ def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:Godfat
         // save last one to image.png
         var photo_ok = false
         let photo_file_name = get_temp_file_name("image.{message.message_id}.png")
-        fopen(photo_file_name, "wb") <| $ ( f )
+        fopen(photo_file_name, "wb") <| $(f)
             if f != null
                 var inscope bytes : array<uint8>
                 let res = base64_decode(image.data[0].b64_json, bytes)
@@ -258,7 +258,7 @@ def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:Godfat
             to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
             return
 
-def generate_chat_summary ( message:tbotapi::message; last_n_messages:int; extp:string)
+def generate_chat_summary(message : tbotapi::message; last_n_messages : int; extp : string)
     to_log(LOG_INFO, "Generating chat summary for {message.chat.id} last {last_n_messages} messages\n\n\n")
     var inscope log <- collect_chat_log(message.chat.id, last_n_messages)
     var i = 0
@@ -267,13 +267,13 @@ def generate_chat_summary ( message:tbotapi::message; last_n_messages:int; extp:
     var prev_summary = ""
     while i < llen
         var text = log[i]
-        while i<llen && length(text)<BOT_SUMMARY_SIZE
+        while i < llen && length(text) < BOT_SUMMARY_SIZE
             text = "{text}\n{log[i]}"
             i ++
         if !empty(text)
             let summary_prompt = "Previous section summary:\n{prev_summary}\n---\nText:\n{text}\n---\nSummary of the text above {extp}:"
             to_log(LOG_INFO, "Generating summary for {length(summary_prompt)} bytes\n{summary_prompt}\n\n\n")
-            let summary = generate_summary(UserMessage(message),summary_prompt)
+            let summary = generate_summary(UserMessage(message), summary_prompt)
             to_log(LOG_INFO, "Summary: {summary}\n\n")
             total_summary = "{total_summary}\n{summary}"
             prev_summary = summary
@@ -291,7 +291,7 @@ def setup_bot_commands
         to_log(LOG_ERROR, "telegram_setMyCommands failed: {telegram_get_last_error()}\n")
         return
 
-def process_bot_commands ( message:message; rights:ChannelRights )
+def process_bot_commands(message : message; rights : ChannelRights)
     //! process bot commands. currently supported
     //! /summary - generate summary for the last n messages
     //! /samara - сгенерировать сводку по последним n сообщениям
@@ -301,7 +301,7 @@ def process_bot_commands ( message:message; rights:ChannelRights )
     if summary || samara
         if rights.summary
             let len_cmd = length("/summary@{g_botConfig.id}")
-            let num_substr = message.text |> slice(len_cmd+1)
+            let num_substr = message.text |> slice(len_cmd + 1)
             var max_messages = 100
             if !empty(num_substr)
                 max_messages = int(num_substr)
@@ -325,12 +325,12 @@ def process_bot_commands ( message:message; rights:ChannelRights )
 def main
     var args <- get_command_line_arguments()
     var configPath = ""
-    for arg,argi in args,count()
-        if arg=="-bot-config"
-            if argi == length(args)-1
+    for arg, argi in args, count()
+        if arg == "-bot-config"
+            if argi == length(args) - 1
                 panic("expecting missing bot config file name")
             else
-                configPath = args[argi+1]
+                configPath = args[argi + 1]
     if configPath |> empty
         panic("bot config file name is not set. use -bot-config <config file name> command line argument")
     if !openai_key_is_set()
@@ -347,7 +347,7 @@ def main
     setup_chat(g_userGodfather.id, g_botConfig.id, g_botConfig.name)
     print("{g_botConfig.name} {g_userGodfather.username} ({g_userGodfather.id}) is listening...\n")
     while true
-        unsafe(heap_collect(true,true))
+        unsafe(heap_collect(true, true))
         if true
             var inscope res <- telegram_getupdates([[getupdates
                 offset = last_update,
@@ -360,12 +360,12 @@ def main
                 sleep(uint(BOT_UPDATE_RETRY_TIMEOUT))
                 continue
             for r in res
-                last_update = max(last_update, r.update_id+1l)
+                last_update = max(last_update, r.update_id + 1l)
                 if r.message != null
                     if process_admin_commands(*r.message, g_botConfig.id, g_adminId)
                         continue
                     var rights = get_channel_rights(r.message.chat.id)
-                    if rights.chat_id==0l
+                    if rights.chat_id == 0l
                         continue
                     to_log(LOG_INFO, "message from {get_user_name(r.message.from)} at {r.message.chat.id}: {r.message.text |> sanitize_content}\n")
                     if BOT_DEBUG_MODE
@@ -375,7 +375,7 @@ def main
                         continue
                     if r.message.reply_to_message != null
                         to_log(LOG_INFO, "reply to {get_user_name(r.message.reply_to_message.from)}: {r.message.reply_to_message.text}\n")
-                    if r.message.voice!=null
+                    if r.message.voice != null
                         if rights.decode_voice
                             to_log(LOG_INFO, "contains voice message\n")
                             write_message_to_log(*r.message, decode_voice_message(*r.message))
@@ -396,6 +396,6 @@ def main
                         if reply.result == "debug"
                             print("debug: {reply.message}\n")
                         if reply.result != "error"
-                            process_chat_reply(*r.message,reply,rights)
+                            process_chat_reply(*r.message, reply, rights)
                         else
-                            process_error_message(*r.message,reply)
+                            process_error_message(*r.message, reply)

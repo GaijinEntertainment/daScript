@@ -1,5 +1,6 @@
+options gen2
 [export]
-def test
+def test {
     var a : int = 1
     var b : int& = a
     b = 2
@@ -13,3 +14,4 @@ def test
     let e <- c
     assert(length(e)==3 && length(c)==0 && length(d)==0)
     return true
+}

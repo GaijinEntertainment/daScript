@@ -12,9 +12,9 @@ struct Particle {}
 // expecting at least one field in the desc_template Particle
 
 [test]
-def test_create_from_templates( t: T?)
+def test_create_from_templates(t : T?)
     restart()
     for i in range(3)
-        create_entity <| @ ( eid, cmp )
+        create_entity <| @(eid, cmp)
             apply_decs_template(cmp, [[Particle]])
     commit()

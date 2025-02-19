@@ -10,7 +10,7 @@ def main
         to_log(LOG_ERROR, "Cannot open database: sqlite3_errmsg(db)\n")
         sqlite3_close(db)
         return
-    var res:sqlite3_stmt?
+    var res : sqlite3_stmt?
     rc = sqlite3_prepare_v2(db, "SELECT Id, Name FROM Cars WHERE Id = @id", -1, unsafe(addr(res)), null)
     if rc == SQLITE_OK
         let idx = sqlite3_bind_parameter_index(res, "@id")

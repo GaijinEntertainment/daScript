@@ -10,7 +10,7 @@ def main
         to_log(LOG_ERROR, "Cannot open database: sqlite3_errmsg(db)\n")
         sqlite3_close(db)
         return
-    var res:sqlite3_stmt?
+    var res : sqlite3_stmt?
     rc = sqlite3_prepare_v2(db, "SELECT Id, Name FROM Cars WHERE Id = ?", -1, unsafe(addr(res)), null)
     if rc == SQLITE_OK
         sqlite3_bind_int(res, 1, 3)

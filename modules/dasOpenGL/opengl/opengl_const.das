@@ -1,3 +1,4 @@
+options gen2
 let GL_DEPTH_BUFFER_BIT = uint(0x00000100u)
 let GL_STENCIL_BUFFER_BIT = uint(0x00000400u)
 let GL_COLOR_BUFFER_BIT = uint(0x00004000u)

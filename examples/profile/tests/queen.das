@@ -6,7 +6,7 @@ options solid_context
 
 let N = 8
 
-def isplaceok ( a:int[8]; n,c,cmn,cpn:int )
+def isplaceok(a : int[8]; n, c, cmn, cpn : int)
     for i in range(n)
         let ai = a[i]
         if ai == c || ai == cmn + i || ai  == cpn - i
@@ -15,11 +15,11 @@ def isplaceok ( a:int[8]; n,c,cmn,cpn:int )
 
 var solutions : int
 
-def addqueen ( var a:int[8]; n:int )
+def addqueen(var a : int[8]; n : int)
     for c in range(N)
-        if isplaceok(a, n, c, c-n, c+n)
+        if isplaceok(a, n, c, c - n, c + n)
             a[n] = c
-            if n == (N-1)
+            if n == (N - 1)
                 solutions++
             else
                 addqueen(a, n + 1)
@@ -27,10 +27,10 @@ def addqueen ( var a:int[8]; n:int )
 def test()
     solutions = 0
     var a : int[8]
-    addqueen(a,0)
+    addqueen(a, 0)
     assert(solutions == 92)
 
-[export,no_jit,no_aot]
+[export, no_jit, no_aot]
 def main
     profile(20, "queen")  <|
         test()

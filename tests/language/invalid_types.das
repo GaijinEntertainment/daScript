@@ -10,16 +10,16 @@ struct Foo                          // 30101: structure Foo is too big
     a : int[32676][32767]
 
 [export]
-def argument_too_big ( a : foo )    // 30108: argument variable a is too big
+def argument_too_big(a : foo)       // 30108: argument variable a is too big
     print("a = {a}\n")
-    var b <- @ <| ( b : foo )       // 30108: argument variable b is too big
+    var b <- @ <| (b : foo)         // 30108: argument variable b is too big
         print("b = {b}\n")
-    invoke() <| $ ( c : foo )       // 30108: block argument variable c is too big
+    invoke() <| $(c : foo)          // 30108: block argument variable c is too big
         print("c = {c}\n")
     lpipe(a)
 
 [test]
-def test_invalid_types ( t : T? )
+def test_invalid_types(t : T?)
     var a : int[32767][32767]       // 30108: local variable a is too big
     print("a = {a}\n")
     var p = new Foo()               // 30109: can't new to a type that is too big

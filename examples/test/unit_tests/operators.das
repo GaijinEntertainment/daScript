@@ -1,12 +1,15 @@
-def charg(var t:int):int
+options gen2
+def charg(var t:int):int {
     t++
     return t
+}
 
-def checkInc(var val : int&)
+def checkInc(var val : int&) {
   	val++
+}
 
 [export]
-def test:bool
+def test:bool {
     let x = 1
     var y:int
     y=charg(x)
@@ -26,4 +29,5 @@ def test:bool
   	checkInc(idx)
 	assert(idx==2)
     return true
+}
 

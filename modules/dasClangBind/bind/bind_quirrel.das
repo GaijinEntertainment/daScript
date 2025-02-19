@@ -34,7 +34,7 @@ class QuirrelGen : CppGenBind
             "-DCINDEX_EXPORTS"
         }]
         func_per_chunk = 20
-        init_args(pfn,pfp,args)
+        init_args(pfn, pfp, args)
         setDefaultFiles()
 //        init_enum_prefix()
         openAllFiles()
@@ -49,28 +49,28 @@ class QuirrelGen : CppGenBind
 */
     def override open_file_name : string
         return "{PARSE_FILE_PREFIX}{PARSE_FILE_NAME}"
-    def override isArgByValue ( name:string )
+    def override isArgByValue(name : string)
         return true
-    def override skip_file ( fname:string ) : bool
+    def override skip_file(fname : string) : bool
         let ufname = to_upper(fname)
-        if ! any <| [[for h in quirrel_c_headers; ufname |> ends_with(h)]]
+        if !any <| [[for h in quirrel_c_headers; ufname |> ends_with(h)]]
             return true
         return false
-    def override skip_alias ( var c : CXCursor )
+    def override skip_alias(var c : CXCursor)
         let aliasn = string(clang_getCursorSpelling(c))
-        if aliasn=="SQPRINTFUNCTION"
+        if aliasn == "SQPRINTFUNCTION"
             return true
         let aliasf = to_upper(clang_getCursorLocationFileName(c))
-        if ! any <| [[for h in quirrel_c_headers; aliasf |> ends_with(h)]]
+        if !any <| [[for h in quirrel_c_headers; aliasf |> ends_with(h)]]
             return true
         return false
-    def override skip_enum ( ns_en, en : string )
+    def override skip_enum(ns_en, en : string)
         return false
-    def override skip_struct ( sn:string )
+    def override skip_struct(sn : string)
         if sn |> starts_with("__crt")
             return true
         return false
-    def override skip_function ( var c : CXCursor ) : bool
+    def override skip_function(var c : CXCursor) : bool
     /*
         let function_name = string(clang_getCursorSpelling(c))
         if (function_name == "QUIRRELConstGEP2" || function_name == "QUIRRELConstInBoundsGEP2"
