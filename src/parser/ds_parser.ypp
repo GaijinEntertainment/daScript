@@ -316,6 +316,9 @@
 %token  BRABRAB             "[["    /* [[ */
 %token  BRACBRB             "[{"    /* [{ */
 %token  CBRCBRB             "{{"    /* {{ */
+%token<i>  OPEN_BRACE       "new scope"
+%token<i>  CLOSE_BRACE      "close scope"
+%token  SEMICOLON           "end of line"
 
 %token<i>       INTEGER                 "integer constant"
 %token<i64>     LONG_INTEGER            "long integer constant"
@@ -570,11 +573,11 @@ program
     |   program tuple_alias_declaration         { yyextra->das_has_type_declarations = true; }
     |   program bitfield_alias_declaration      { yyextra->das_has_type_declarations = true; }
     |   program top_level_reader_macro
-    |   program ';'
+    |   program semicolon
     ;
 
 top_level_reader_macro
-    :   expr_reader[rdr] ';' {
+    :   expr_reader[rdr] semicolon {
         delete $rdr;    // we do nothing, we don't even attemp to 'visit'
     }
     ;
@@ -852,6 +855,11 @@ expression_else
     }
     ;
 
+semicolon
+    : SEMICOLON[colon] {}
+    | ';' {}
+
+
 if_or_static_if
     :   DAS_IF          { $$ = false; }
     |   DAS_STATIC_IF   { $$ = true; }
@@ -879,7 +887,7 @@ expression_if_then_else
         eite->isStatic = $loc;
         $$ = eite;
     }
-    |   expression_if_one_liner[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] expression_else_one_liner[if_false] ';' {
+    |   expression_if_one_liner[if_true] DAS_IF[loc] { yyextra->das_need_oxford_comma = true; } expr[cond] expression_else_one_liner[if_false] semicolon {
         $$ = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),ExpressionPtr(ast_wrapInBlock($if_true)),$if_false ? ExpressionPtr(ast_wrapInBlock($if_false)) : nullptr);
     }
     ;
@@ -981,7 +989,7 @@ metadata_argument_list
     |   metadata_argument_list[argL] '@' annotation_argument[arg] {
         $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
     }
-    |   metadata_argument_list[argL] ';' {
+    |   metadata_argument_list[argL] semicolon {
         $$ = $argL;
     }
     ;
@@ -1249,12 +1257,21 @@ function_declaration
     }
     ;
 
+
+open_block
+    : '{'
+    | OPEN_BRACE[depth]
+
+close_block
+    : '}'
+    | CLOSE_BRACE[depth]
+
 expression_block
-    :   '{' [bbegin] expressions[block] '}' [bend] {
+    :   open_block [bbegin] expressions[block] close_block [bend] {
         $$ = $block;
         $$->at = tokRangeAt(scanner,@bbegin,@bend);
     }
-    |   '{' [bbegin] expressions[block] '}' DAS_FINALLY '{' expressions[final] '}' [bend] {
+    |   open_block [bbegin] expressions[block] close_block DAS_FINALLY open_block expressions[final] close_block [bend] {
         auto pB = (ExprBlock *) $block;
         auto pF = (ExprBlock *) $final;
         swap ( pB->finalList, pF->list );
@@ -1289,27 +1306,27 @@ expr_call_pipe
     ;
 
 expression_any
-    :   ';'                                 { $$ = nullptr; }
+    :   semicolon                                 { $$ = nullptr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
     |   expr_keyword[subexpr]               { $$ = $subexpr; }
     |   expr_assign_pipe[subexpr]           { $$ = $subexpr; }
-    |   expr_assign[subexpr] ';'            { $$ = $subexpr; }
-    |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
+    |   expr_assign[subexpr] semicolon            { $$ = $subexpr; }
+    |   expression_delete[subexpr] semicolon      { $$ = $subexpr; }
     |   expression_let[subexpr]             { $$ = $subexpr; }
     |   expression_while_loop[subexpr]      { $$ = $subexpr; }
     |   expression_unsafe[subexpr]          { $$ = $subexpr; }
     |   expression_with[subexpr]            { $$ = $subexpr; }
     |   expression_with_alias[subexpr]      { $$ = $subexpr; }
     |   expression_for_loop[subexpr]        { $$ = $subexpr; }
-    |   expression_break[subexpr] ';'       { $$ = $subexpr; }
-    |   expression_continue[subexpr] ';'    { $$ = $subexpr; }
+    |   expression_break[subexpr] semicolon       { $$ = $subexpr; }
+    |   expression_continue[subexpr] semicolon    { $$ = $subexpr; }
     |   expression_return[subexpr]          { $$ = $subexpr; }
     |   expression_yield[subexpr]           { $$ = $subexpr; }
     |   expression_if_then_else[subexpr]    { $$ = $subexpr; }
     |   expression_try_catch[subexpr]       { $$ = $subexpr; }
-    |   expression_label[subexpr] ';'       { $$ = $subexpr; }
-    |   expression_goto[subexpr] ';'        { $$ = $subexpr; }
-    |   DAS_PASS ';'                        { $$ = nullptr; }
+    |   expression_label[subexpr] semicolon       { $$ = $subexpr; }
+    |   expression_goto[subexpr] semicolon        { $$ = $subexpr; }
+    |   DAS_PASS semicolon                        { $$ = nullptr; }
     ;
 
 expressions
@@ -1520,7 +1537,7 @@ expression_return_no_pipe
     ;
 
 expression_return
-    :   expression_return_no_pipe[result] ';' {
+    :   expression_return_no_pipe[result] semicolon {
         $$ = $result;
     }
     |   DAS_RETURN[loc] expr_pipe[subexpr] {
@@ -1545,7 +1562,7 @@ expression_yield_no_pipe
     ;
 
 expression_yield
-    :   expression_yield_no_pipe[result] ';' {
+    :   expression_yield_no_pipe[result] semicolon {
         $$ = $result;
     }
     |   DAS_YIELD[loc] expr_pipe[subexpr] {
@@ -1594,7 +1611,7 @@ tuple_expansion
     ;
 
 tuple_expansion_variable_declaration
-    :   BRABRAB tuple_expansion[list] ']' ']' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    :   BRABRAB tuple_expansion[list] ']' ']' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] semicolon {
         $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
@@ -1606,7 +1623,7 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
-    |   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    |   '(' tuple_expansion[list] ')' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] semicolon {
         $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
@@ -1618,7 +1635,7 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
-    |   BRABRAB tuple_expansion[list] ']' ']' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   BRABRAB tuple_expansion[list] ']' ']' optional_ref[ref] copy_or_move_or_clone[com] expr[init] semicolon {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -1636,7 +1653,7 @@ tuple_expansion_variable_declaration
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
         $$->isTupleExpansion = true;
     }
-    |   '(' tuple_expansion[list] ')' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   '(' tuple_expansion[list] ')' optional_ref[ref] copy_or_move_or_clone[com] expr[init] semicolon {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -2311,7 +2328,7 @@ struct_variable_declaration_list
             auto tak = tokAt(scanner,@list);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeStructureFields(tak);
         }
-    } structure_variable_declaration[decl] ';' {
+    } structure_variable_declaration[decl] semicolon {
         $$ = $list;
         if ( $decl ) $list->push_back($decl);
         if ( !yyextra->g_CommentReaders.empty() ) {
@@ -2331,7 +2348,7 @@ struct_variable_declaration_list
                     auto tak = tokAt(scanner,@isPrivate);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
                 }
-            } function_declaration_header[func] ';' {
+            } function_declaration_header[func] semicolon {
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@func);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
@@ -2353,7 +2370,7 @@ struct_variable_declaration_list
                 $func->isTemplate = yyextra->g_thisStructure ? yyextra->g_thisStructure->isTemplate : false;
                 $$ = ast_structVarDef(scanner,$list,$annL,$isStatic,$isPrivate,$ovr,$cnst,$func,$block,tokRangeAt(scanner,@from,@block),tokAt(scanner,@annL));
             }
-    |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' ';' {
+    |   struct_variable_declaration_list[list] '[' annotation_list[annL] ']' semicolon {
         das_yyerror(scanner,"structure field or class method annotation expected to remain on the same line with the field or the class",
             tokAt(scanner,@annL), CompilationError::syntax_error);
         delete $annL;
@@ -2382,7 +2399,7 @@ function_argument_declaration
 
 function_argument_list
     :   function_argument_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
-    |   function_argument_list[list] ';' function_argument_declaration[decl]     { $$ = $list; $list->push_back($decl); }
+    |   function_argument_list[list] semicolon function_argument_declaration[decl]     { $$ = $list; $list->push_back($decl); }
     ;
 
 tuple_type
@@ -2547,10 +2564,10 @@ let_variable_name_with_pos_list
     ;
 
 let_variable_declaration    /* let x; is prohibited. this one can't have uninitialized variable which has no type */
-    :   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] ';' {
+    :   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] semicolon {
         $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
-    |   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+    |   let_variable_name_with_pos_list[list] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] semicolon {
         $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
@@ -2560,7 +2577,7 @@ let_variable_declaration    /* let x; is prohibited. this one can't have uniniti
         $$->init_via_move  = ($com & CorM_MOVE) !=0;
         $$->init_via_clone = ($com & CorM_CLONE) !=0;
     }
-    |   let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+    |   let_variable_name_with_pos_list[list] optional_ref[ref] copy_or_move_or_clone[com] expr[init] semicolon {
         auto typeDecl = new TypeDecl(Type::autoinfer);
         typeDecl->at = tokAt(scanner,@list);
         typeDecl->ref = $ref;
@@ -2613,7 +2630,7 @@ optional_public_or_private_variable
     ;
 
 global_let
-    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] '{' global_variable_declaration_list[list] '}' {
+    :   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] open_block global_variable_declaration_list[list] close_block {
         ast_globalLetList(scanner,$kwd_let,$glob_shar,$pub_var,$list);
     }
     |   kwd_let optional_shared[glob_shar] optional_public_or_private_variable[pub_var] {
@@ -2638,10 +2655,10 @@ enum_list
     :   {
         $$ = new Enumeration();
     }
-    |   enum_list[pE] ';' {
+    |   enum_list[pE] semicolon {
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] ';' {
+    |   enum_list[pE] NAME[name] semicolon {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration already declared " + *$name, tokAt(scanner,@name),
@@ -2656,7 +2673,7 @@ enum_list
         delete $name;
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] '=' expr[value] ';' {
+    |   enum_list[pE] NAME[name] '=' expr[value] semicolon {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,ExpressionPtr($value),tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration value already declared " + *$name, tokAt(scanner,@name),
@@ -2708,13 +2725,13 @@ single_alias
     ;
 
 alias_list
-    :   single_alias ';'
-    |   alias_list single_alias ';'
+    :   single_alias semicolon
+    |   alias_list single_alias semicolon
     ;
 
 alias_declaration
-    :   DAS_TYPEDEF '{' alias_list '}'
-    |   DAS_TYPEDEF { yyextra->das_force_oxford_comma=true;} single_alias ';'
+    :   DAS_TYPEDEF open_block alias_list close_block
+    |   DAS_TYPEDEF { yyextra->das_force_oxford_comma=true;} single_alias semicolon
     ;
 
 optional_public_or_private_enum
@@ -2734,7 +2751,7 @@ enum_name
     ;
 
 enum_declaration
-    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] '{' {
+    :   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] open_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@edecl);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
@@ -2744,14 +2761,14 @@ enum_declaration
             auto tak = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
         }
-    } '}' {
+    } close_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumeration($edecl->name.c_str(),pubename);
         }
         ast_enumDeclaration(scanner,$annL,tokAt(scanner,@annL),$pubE,$edecl,$pE,Type::tInt);
     }
-    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] ':' enum_basic_type_declaration[ebt] '{' {
+    |   optional_annotation_list[annL] DAS_ENUM[loc] optional_public_or_private_enum[pubE] enum_name[edecl] ':' enum_basic_type_declaration[ebt] open_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@edecl);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeEnumerationEntries(tak);
@@ -2761,7 +2778,7 @@ enum_declaration
             auto tak = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
         }
-    } '}' {
+    } close_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,@pE);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumeration($edecl->name.c_str(),pubename);
@@ -2803,7 +2820,7 @@ optional_struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    |   '{' struct_variable_declaration_list[list] '}' {
+    |   open_block struct_variable_declaration_list[list] close_block {
         $$ = $list;
     }
     ;
@@ -2954,7 +2971,7 @@ bitfield_bits
         $$ = pSL;
         delete $name;
     }
-    |   bitfield_bits[list] ';' NAME[name] {
+    |   bitfield_bits[list] semicolon NAME[name] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $list->push_back(*$name);
         $$ = $list;
@@ -2968,10 +2985,10 @@ bitfield_alias_bits
         $$ = pSL;
 
     }
-    |   bitfield_alias_bits[list] ';' {
+    |   bitfield_alias_bits[list] semicolon {
         $$ = $list;
     }
-    |   bitfield_alias_bits[list] NAME[name] ';' {
+    |   bitfield_alias_bits[list] NAME[name] semicolon {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         $list->push_back(*$name);
         $$ = $list;
@@ -2998,7 +3015,7 @@ bitfield_type_declaration
 
 c_or_s
     :   ','
-    |   ';'
+    |   semicolon
     ;
 
 table_type_pair
@@ -3259,7 +3276,7 @@ tuple_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTuple(atvname);
         }
-    } '{' {
+    } open_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTupleEntries(atvname);
@@ -3269,7 +3286,7 @@ tuple_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTupleEntries(atvname);
         }
-    } '}' {
+    } close_block {
         auto vtype = make_smart<TypeDecl>(Type::tTuple);
         vtype->alias = *$vname;
         vtype->at = tokAt(scanner,@vname);
@@ -3294,7 +3311,7 @@ variant_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariant(atvname);
         }
-    } '{' {
+    } open_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariantEntries(atvname);
@@ -3305,7 +3322,7 @@ variant_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterVariantEntries(atvname);
         }
-    } '}' {
+    } close_block {
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *$vname;
         vtype->at = tokAt(scanner,@vname);
@@ -3330,7 +3347,7 @@ bitfield_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
         }
-    } '{' {
+    } open_block {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfieldEntries(atvname);
@@ -3340,7 +3357,7 @@ bitfield_alias_declaration
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfieldEntries(atvname);
         }
-    } '}' {
+    } close_block {
         auto btype = make_smart<TypeDecl>(Type::tBitfield);
         btype->alias = *$vname;
         btype->at = tokAt(scanner,@vname);
@@ -3927,5 +3944,3 @@ LineInfo tokRangeAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li, const str
         li.first_column,li.first_line,
         lie.last_column,lie.last_line);
 }
-
-

@@ -25,3 +25,8 @@ I used this command to inplace transform all `.das` files syntax in current fold
 ```
 find . -name "*.das" | tr '\n' ' ' | xargs ./bin/das-fmt -i
 ```
+After that I suggest to run it again on failed files one by one
+```
+./bin/das-fmt <filename>
+```
+To get them at least to be partly formatted and manually edit remaining parts.
