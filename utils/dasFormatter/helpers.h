@@ -46,7 +46,7 @@ namespace das::format {
 
     void try_semicolon_at_eol(Pos loc);
 
-    bool get_indent(Pos loc, size_t tab_size);
+    size_t get_indent(Pos loc, size_t tab_size);
 
     void handle_brace(Pos prev_loc, int value, const string &internal, size_t tab_size, Pos end_loc);
 
@@ -57,6 +57,8 @@ namespace das::format {
     void wrap_par_expr(LineInfo real_expr, LineInfo info_expr);
 
     LineInfo concat(LineInfo first, LineInfo last);
+
+    void skip_spaces_or_print(LineInfo prev, LineInfo block, LineInfo next, size_t tab_size, const string& change = " ");
 }
 
 #endif //DAS_HELPERS_H

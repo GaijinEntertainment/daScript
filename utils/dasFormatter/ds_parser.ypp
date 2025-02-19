@@ -846,6 +846,9 @@ expression_else
     |   DAS_ELSE expression_block[block]                   { $$ = $block; }
     |   elif_or_static_elif[loc] expr[cond] expression_block[block] expression_else[then] {
         format::wrap_par_expr(tokAt(scanner,@cond), $cond->at);
+        if (!format::is_else_newline() && $then != nullptr) {
+            format::skip_spaces_or_print(tokAt(scanner,@loc), tokAt(scanner,@block), tokAt(scanner,@then), yyextra->das_tab_size);
+        }
 
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
@@ -877,6 +880,9 @@ expression_if_one_liner
 expression_if_then_else
     :   if_or_static_if[loc] expr[cond] expression_block[block] opt_sem expression_else[then] {
         format::wrap_par_expr(tokAt(scanner,@cond), $cond->at);
+        if (!format::is_else_newline() && $then != nullptr) {
+            format::skip_spaces_or_print(tokAt(scanner,@loc), tokAt(scanner,@block), tokAt(scanner,@then), yyextra->das_tab_size);
+        }
 
         auto eite = new ExprIfThenElse(tokAt(scanner,@loc),ExpressionPtr($cond),
             ExpressionPtr($block),ExpressionPtr($then));
@@ -1603,13 +1609,8 @@ expression_try_catch
     :   DAS_TRY[loc] expression_block[tryBlock] DAS_CATCH[catch] expression_block[catchBlock] {
         const auto end_block = format::Pos::from_last(tokAt(scanner, @tryBlock));
         const auto start = format::Pos::from(tokAt(scanner, @loc));
-        if (format::is_replace_braces() &&
-            format::get_indent(end_block, yyextra->das_tab_size) == format::get_indent(start, yyextra->das_tab_size) &&
-            tokAt(scanner, @catch).line != end_block.line && format::prepare_rule(end_block)) {
-
-            // skip \n after }
-            format::get_writer() << " ";
-            format::finish_rule(format::Pos::from(tokAt(scanner, @catch)));
+        if (format::is_replace_braces()) {
+            format::skip_spaces_or_print(tokAt(scanner, @loc), tokAt(scanner, @tryBlock), tokAt(scanner, @catch), yyextra->das_tab_size);
         }
 
         $$ = new ExprTryCatch(tokAt(scanner,@loc),ExpressionPtr($tryBlock),ExpressionPtr($catchBlock));
@@ -2710,18 +2711,11 @@ global_let
     }
     ;
 
-sem_or_comm
-    : SEMICOLON[loc] {
-        format::try_emit_at_eol(format::Pos::from_last(tokAt(scanner,@loc)), ',');
-    }
-    | commas SEMICOLON
-    | commas
-
 enum_list
     :   {
         $$ = new Enumeration();
     }
-    |   enum_list[pE] NAME[name] sem_or_comm {
+    |   enum_list[pE] NAME[name] opt_sem {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration already declared " + *$name, tokAt(scanner,@name),
@@ -2736,7 +2730,7 @@ enum_list
         delete $name;
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] '=' expr[value] sem_or_comm {
+    |   enum_list[pE] NAME[name] '=' expr[value] opt_sem {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,ExpressionPtr($value),tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration value already declared " + *$name, tokAt(scanner,@name),
@@ -3088,7 +3082,7 @@ bitfield_alias_bits
         $$ = $list;
     }
     |   bitfield_alias_bits[list] NAME[name] SEMICOLON {
-        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from_last(tokAt(scanner,@name)))) {
+        if (format::enum_bitfield_with_comma() && format::is_replace_braces() && format::prepare_rule(format::Pos::from_last(tokAt(scanner,@name)))) {
             format::get_writer() << ",";
             format::finish_rule(format::Pos::from_last(tokAt(scanner,@name)));
         }
@@ -3727,7 +3721,7 @@ make_struct_decl
                             [&type](auto t){ return type.value_or("").find(t) == 0; })) {
                 format::get_writer() << type.value_or("") << "(";
             } else {
-                format::get_writer() << type.value_or("") << "(uninitialized";
+                format::get_writer() << type.value_or("") << "("; // Possible uninitialized
             }
             format::get_writer() << after << suffix;
             format::finish_rule(format::Pos::from_last(tokAt(scanner,@end)));
@@ -3743,7 +3737,7 @@ make_struct_decl
         // std::cout << "case3" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             const auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt));
-            auto maybe_init = (format::can_default_init(type_name.value_or(""))) ? "" : "uninitialized";
+            auto maybe_init = (format::can_default_init(type_name.value_or(""))) ? "" : ""; // Possible uninitialized
             format::get_writer() << format::substring_between(tokAt(scanner,@loc), tokAt(scanner, @mkt))
                                  << type_name.value_or("") << "("
                                  << format::substring_between(tokAt(scanner,@l_par), tokAt(scanner, @r_par))

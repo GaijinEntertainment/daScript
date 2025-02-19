@@ -42,8 +42,13 @@ namespace das::format {
         state.last = Pos{1, 0};
         state.program = program;
         state.options = move(options);
-        if ((state.content_.empty() || state.content_.front() != "options gen2;") && state.options.contains(FormatOpt::V2Syntax)) {
-            *state.ss << "options gen2;\n";
+        if ((state.content_.empty() || state.content_.front().substr(0, strlen("options gen2")) != "options gen2") &&
+             state.options.contains(FormatOpt::V2Syntax)) {
+            *state.ss << "options gen2";
+            if (state.options.contains(FormatOpt::SemicolonEOL)) {
+                *state.ss << ";";
+            }
+            *state.ss << "\n";
         }
     }
 
@@ -167,6 +172,8 @@ namespace das::format {
     }
 
     CanInit can_init_with(const string &name, uint32_t arg_cnt) {
+        return CanInit::Can;
+        // Possible uninitialized
         if (arg_cnt == 0) {
             if (can_default_init(name)) {
                 return CanInit::Can;
@@ -181,12 +188,20 @@ namespace das::format {
         return (*maybe_struct)->fields.size() == arg_cnt ? CanInit::Can : CanInit::Unknown;
     }
 
+    bool is_else_newline() {
+        return state.options.contains(FormatOpt::ElseNewLine);
+    }
+
     bool is_replace_braces() {
         return state.options.contains(FormatOpt::V2Syntax);
     }
 
     bool end_with_semicolon() {
         return true; // state.options.contains(FormatOpt::SemicolonEOL);
+    }
+
+    bool enum_bitfield_with_comma() {
+        return state.options.contains(FormatOpt::CommaAtEndOfEnumBitfield);
     }
 
     bool is_formatter_enabled() {

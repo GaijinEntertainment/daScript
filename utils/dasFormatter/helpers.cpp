@@ -151,13 +151,21 @@ namespace das::format {
         }
     }
 
-    bool get_indent(Pos loc, size_t tab_size) {
+    size_t get_indent(Pos loc, size_t tab_size) {
         auto start = loc;
         start.column = 0;
         auto substr = get_substring(start, loc);
-        count(substr.begin(), substr.end(), ' ');
-        count(substr.begin(), substr.end(), '\t');
-        return count(substr.begin(), substr.end(), '\t') + count(substr.begin(), substr.end(), ' ') / tab_size;
+        size_t result = 0;
+        for (auto c: substr) {
+            if (c == ' ') {
+                result += 1;
+            } else if (c == '\t') {
+                result += tab_size;
+            } else {
+                break;
+            }
+        }
+        return result;
     }
 
     void handle_brace(Pos prev_loc, int value, const string &internal, size_t tab_size, Pos end_loc) {
@@ -200,5 +208,20 @@ namespace das::format {
             first.line,
             last.last_column,
             last.last_line);
+    }
+
+    static bool is_empty(const string &str) {
+        return all_of(str.begin(), str.end(), [](auto c)
+        { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; });
+    }
+
+    void skip_spaces_or_print(LineInfo prev, LineInfo block, LineInfo next, size_t tab_size, const string& change) {
+        auto internal = format::substring_between(block, next);
+        auto same_depth = format::get_indent(format::Pos::from_last(block), tab_size) ==
+                          format::get_indent(format::Pos::from(next), tab_size);
+        if (is_empty(internal) && same_depth && internal != change && format::prepare_rule(Pos::from_last(block))) {
+            format::get_writer() << change;
+            format::finish_rule(Pos::from(next));
+        }
     }
 }

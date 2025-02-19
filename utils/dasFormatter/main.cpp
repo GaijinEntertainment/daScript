@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "daScript/ast/ast.h"
 #include "daScript/daScriptModule.h"
 #include "daScript/ast/ast_serializer.h"
@@ -116,10 +114,10 @@ vector<TestData> test_cases() {
 
     vector<TestData> tuple_expansion = {
         // tuple expansion (doesn't work in global scope!)
-        {"def main()\n    var [[/*a*/a/*b*/,/*c*/b/*d*/]] = (123, 321);",
-            "def main()\n    var (/*a*/a/*b*/,/*c*/b/*d*/) = (123, 321);"},
-        {"def main()\n    var [[/*a*/a/*b*/,/*c*/b/*d*/]]: tuple<int, int> = (123, 321);",
-            "def main()\n    var (/*a*/a/*b*/,/*c*/b/*d*/): tuple<int, int> = (123, 321);"},
+        {"def main()\n    var [[/*a*/a/*b*/,/*c*/b/*d*/]] = (123, 321)",
+            "def main()\n    var (/*a*/a/*b*/,/*c*/b/*d*/) = (123, 321)"},
+        {"def main()\n    var [[/*a*/a/*b*/,/*c*/b/*d*/]]: tuple<int, int> = (123, 321)",
+            "def main()\n    var (/*a*/a/*b*/,/*c*/b/*d*/): tuple<int, int> = (123, 321)"},
     };
 
     vector<TestData> braces_tests = {
@@ -171,7 +169,7 @@ vector<TestData> test_cases() {
             "enum/*a*/Test/*b*/:/*c*/int// a\n"
             "    b// d\n",
             "enum/*a*/Test/*b*/:/*c*/int {// a\n"
-            "    b,// d\n"
+            "    b// d\n"
             "}\n"
         },
         {
@@ -208,7 +206,7 @@ vector<TestData> test_cases() {
 //        },
     };
     for (auto &[in, out, opt]: braces_tests) {
-        opt = format::FormatOptions(das_hash_set<format::FormatOpt>{format::FormatOpt::V2Syntax});
+        opt = format::FormatOptions(das_hash_set<format::FormatOpt>{format::FormatOpt::V2Syntax, format::FormatOpt::SemicolonEOL});
         out = "options gen2;\n" + out;
     }
     vector<TestData> res;

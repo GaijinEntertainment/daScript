@@ -14,6 +14,8 @@ namespace das::format {
     enum class FormatOpt {
         Inplace,
         V2Syntax,
+        ElseNewLine,
+        CommaAtEndOfEnumBitfield,
         SemicolonEOL,
         // in some cases old -> new syntax conversion depends on actual types
         // It can't be done just during parser
@@ -116,7 +118,9 @@ namespace das::format {
 
     // Maybe we should replace it with getConfig(), if there will be a lot of options
     bool is_replace_braces();    // use v2 syntax
+    bool is_else_newline();    // start else from new line
     bool end_with_semicolon();   // end statements with ';'
+    bool enum_bitfield_with_comma();   // end statements with ','
     bool is_formatter_enabled(); // are formatter enabled mode
 }
 

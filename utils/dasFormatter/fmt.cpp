@@ -28,6 +28,12 @@ das::FileAccessPtr get_file_access(char *pak);//link time resolved dependencies
 
 namespace das::format {
 
+enum class NoCommentReason {
+    OpenComment,
+    CloseComment,
+    String,
+};
+
 /**
  * Removes all useless semicolons
  * @param str
@@ -38,29 +44,53 @@ string remove_semicolons(string_view str) {
     size_t line_end = -1;
     int par_balance = 0; // ()
     int sq_braces_balance = 0; // []
+    vector<NoCommentReason> disables;
     do {
         size_t offset = line_end + 1;
         line_end = str.find('\n', offset);
         bool is_eof = str.size() <= offset;
         bool indent_non_zero = (!is_eof && (str.at(offset) == ' ' || str.at(offset) == '\t'));
         auto last_char_idx = offset + format::find_comma_place(str.substr(offset, line_end - offset));
-        if (indent_non_zero) {
-            for (auto c: str.substr(offset, last_char_idx - offset)) {
-                switch (c) {
-                    case '(': par_balance += 1; break;
-                    case ')': par_balance -= 1; break;
-                    case '[': sq_braces_balance += 1; break;
-                    case ']': sq_braces_balance -= 1; break;
-                    default: break;
-                }
-            }
-        } else {
+        if (!indent_non_zero) {
             par_balance = 0;
             sq_braces_balance = 0;
         }
+        auto cur_line = str.substr(offset, last_char_idx - offset + 1);
+        for (size_t i = 0; i < cur_line.size(); i++) {
+            const auto c = cur_line.at(i);
+            optional<NoCommentReason> maybe_reason;
+            if (c == '"') {
+                maybe_reason = NoCommentReason::String;
+            } else if (c == '/' && cur_line.size() > i + 1 && cur_line.at(i + 1) == '*') {
+                maybe_reason = NoCommentReason::OpenComment;
+            } else if (c == '*' && cur_line.size() > i + 1 && cur_line.at(i + 1) == '/') {
+                maybe_reason = NoCommentReason::CloseComment;
+            }
+            if (maybe_reason) {
+                if (!disables.empty() && disables.back() == maybe_reason) {
+                    disables.pop_back();
+                } else {
+                    if (maybe_reason == NoCommentReason::OpenComment) {
+                        maybe_reason = NoCommentReason::CloseComment;
+                    }
+                    if (disables.empty() || disables.back() != NoCommentReason::String) {
+                        disables.emplace_back(maybe_reason.value());
+                    }
+                }
+            }
+            if (!disables.empty()) {
+                continue;
+            }
+            switch (c) {
+                case '(': par_balance += 1; break;
+                case ')': par_balance -= 1; break;
+                case '[': sq_braces_balance += 1; break;
+                case ']': sq_braces_balance -= 1; break;
+                default: break;
+            }
+        }
         if (par_balance == 0 &&
             sq_braces_balance == 0 &&
-            indent_non_zero &&
             last_char_idx != offset - 1 &&
             str.at(last_char_idx) == ';') {
             result += string(str.substr(offset, last_char_idx - offset));
@@ -69,7 +99,6 @@ string remove_semicolons(string_view str) {
             result += string(str.substr(offset, line_end + 1 - offset));
         }
     } while (line_end != -1);
-
     return result;
 }
 
