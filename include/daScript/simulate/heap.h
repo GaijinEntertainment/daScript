@@ -11,9 +11,9 @@ namespace das {
         StackAllocator(const StackAllocator &) = delete;
         StackAllocator & operator = (const StackAllocator &) = delete;
 
-        StackAllocator(uint32_t size) {
+        StackAllocator(uint32_t size, void *mem = nullptr) {
             stackSize = size;
-            stack = stackSize ? (char*)das_aligned_alloc16(stackSize) : nullptr;
+            stack = stackSize ? (char*)(mem ? mem : das_aligned_alloc16(stackSize)) : nullptr;
             reset();
         }
 
@@ -24,7 +24,7 @@ namespace das {
             }
         }
 
-        virtual ~StackAllocator() {
+        ~StackAllocator() {
             strip();
         }
 
