@@ -8,7 +8,7 @@ expect 30304
 some random text
 require _test2_require_comment
 
-*/
+* /
 
 [export]
 def test

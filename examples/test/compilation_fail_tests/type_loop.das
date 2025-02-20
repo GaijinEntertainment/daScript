@@ -1,13 +1,13 @@
-options max_infer_passes=5
+options max_infer_passes = 5
 
 expect 41000
 
-def infinite(a:auto(ptrt)?)
-    let t : ptrt ? ?
+def infinite(a : auto(ptrt)?)
+    let t : ptrt??
     infinite(t)
 
 struct Foo
-    bar:int
+    bar : int
 
 def test
     infinite(new Foo)

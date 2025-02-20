@@ -158,6 +158,6 @@ Period (.)  Exclamation mark (!)
 def public telegram_escapeMarkdownV2(text : string)
     return build_string <| $(writer)
         for Ch in text
-            if Ch == '_' || Ch == '*' || Ch == '`' || Ch == '[' || Ch == ']' || Ch == '(' || Ch == ')' || Ch == '~' || Ch == '>' || Ch == '#' || Ch == '+' || Ch == '-' || Ch == '=' || Ch == '|' || Ch == '{' || Ch=='}' || Ch == '.' || Ch == '!'
+            if Ch == '_' || Ch == '*' || Ch == '`' || Ch == '[' || Ch == ']' || Ch == '(' || Ch == ')' || Ch == '~' || Ch == '>' || Ch == '#' || Ch == '+' || Ch == '-' || Ch == '=' || Ch == '|' || Ch == '{' || Ch == '}' || Ch == '.' || Ch == '!'
                 writer |> write_char('\\')
             writer |> write_char(Ch)

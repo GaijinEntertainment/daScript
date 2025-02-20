@@ -2,7 +2,7 @@ options gen2
 [persistent]
 class Foo {
     count : int = 0
-    def Foo ( ic : int ) {
+    def Foo(ic : int) {
         count = ic
     }
     def update {
@@ -18,8 +18,8 @@ def test {
     unsafe {
         delete pFoo
     }
-    assert(up1==13)
-    assert(up2==14)
+    assert(up1 == 13)
+    assert(up2 == 14)
     return true
 }
 

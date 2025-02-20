@@ -15,7 +15,7 @@ def foo(var attached_fires : array<Foo>) {
             return
         }
     }
-    push(attached_fires,( t,float3(0)))
+    push(attached_fires, (t, float3(0)))
 }
 
 [export]
@@ -24,6 +24,6 @@ def test {
     for (x in range(1000)) {
         foo(a)
     }
-    assert(length(a)==100)
+    assert(length(a) == 100)
     return true
 }

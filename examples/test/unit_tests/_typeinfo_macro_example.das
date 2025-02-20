@@ -8,9 +8,9 @@ require daslib/ast_boost
 
 [typeinfo_macro(name="alias_name")]
 class TypeInfoGetAliasName : AstTypeInfoMacro {
-    def override getAstChange ( expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : ExpressionPtr {
+    def override getAstChange(expr : smart_ptr<ExprTypeInfo>; var errors : das_string) : ExpressionPtr {
         if (expr.typeexpr != null) {
-            return <- new ExprConstString( at=expr.at, value:=expr.typeexpr.alias)
+            return <- new ExprConstString(at = expr.at, value := expr.typeexpr.alias)
         }
         errors := "type is missing or not inferred"
         return <- default<ExpressionPtr>

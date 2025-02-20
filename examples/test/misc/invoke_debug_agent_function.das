@@ -2,23 +2,23 @@ options gen2
 require debugapi
 
 class MyDebugAgent : DapiDebugAgent {
-    def add_ii ( var res:int&; a,b:int ) {
+    def add_ii(var res : int&; a, b : int) {
         print("add method {a} {b}\n")
         res = a + b
     }
-    def add ( a,b : int ) : int {
+    def add(a, b : int) : int {
         return a + b
     }
 }
 
-def debug_agent ( ctx : Context ) {
+def debug_agent(ctx : Context) {
     install_new_debug_agent(new MyDebugAgent(), "sample")
 }
 
 [export]
-def add ( var self:MyDebugAgent; var res:int&; a,b : int ) {
+def add(var self : MyDebugAgent; var res : int&; a, b : int) {
     print("add function {a} {b}\n")
-    res = self->add(a,b)
+    res = self->add(a, b)
 }
 
 [export]

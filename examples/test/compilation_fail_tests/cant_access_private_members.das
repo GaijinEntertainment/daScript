@@ -2,7 +2,7 @@ expect 30503:3, 30301:1
 
 class A
     private name : string
-    def A ( n:string )
+    def A(n : string)
         name = n
     def private func()
         print("123")

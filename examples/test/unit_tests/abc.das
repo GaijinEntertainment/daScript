@@ -6,6 +6,6 @@ require _a
 
 [export]
 def test {
-    verify ( a_func(13) )
+    verify(a_func(13))
     return true
 }

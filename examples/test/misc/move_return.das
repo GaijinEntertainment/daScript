@@ -1,9 +1,9 @@
 options gen2
-def iliketomoveitmoveit ( var a ) {
+def iliketomoveitmoveit(var a) {
     return <- a // TODO: should kaboom here
 }
 
-def takeit ( var a ) {
+def takeit(var a) {
     print("takit it {a} LC = {lock_count(a)}\n")
 }
 

@@ -1,14 +1,14 @@
 options gen2
 // options print_ref = true, print_var_access = true, log = true// , log_optimization_passes = true
 
-def strcat(a,b) {
+def strcat(a, b) {
     var c = a
     c += b                  // this will not prevent folding
     return c
 }
 
 def make_name(x) {
-    return strcat("hello_",x)
+    return strcat("hello_", x)
 }
 
 var {
@@ -16,7 +16,7 @@ var {
 }
 
 def make_another_name(x) {
-    assert(x=="modify_arg")
+    assert(x == "modify_arg")
     if (g_cond) {
         print("{x}")// this will prevent folding
     }
@@ -46,9 +46,9 @@ def name_foo() {
     return "{t}"        // this will fold
 }
 
-def stil_not_writing(var a:string&;b:string&) {
-    assert(a=="blah")
-    assert(b=="_global_ok")
+def stil_not_writing(var a : string&; b : string&) {
+    assert(a == "blah")
+    assert(b == "_global_ok")
     a = "it"
 }
 
@@ -56,19 +56,19 @@ def stil_not_writing(var a:string&;b:string&) {
 def test {
     g_cond = false
     let t = make_name("world")
-    assert("{t}"=="hello_world")
+    assert("{t}" == "hello_world")
     let q = make_another_name("modify_arg")
-    assert("{q}"=="modify_arg_ok")
+    assert("{q}" == "modify_arg_ok")
     let w = name_foo()
     print("w = {w}\n")
-    assert("{w}"=="[[ 20; 20]]")
+    assert("{w}" == "[[ 20; 20]]")
     let g = make_g_name("touch_global")
-    assert("{g}"=="touch_global_global_ok")
+    assert("{g}" == "touch_global_global_ok")
     var T = "blah"
-    stil_not_writing(T,g_name)
-    assert(T=="it")
+    stil_not_writing(T, g_name)
+    assert(T == "it")
     let tt = "_global_ok"
     T = "blah"
-    stil_not_writing(T,tt)
+    stil_not_writing(T, tt)
     return true
 }

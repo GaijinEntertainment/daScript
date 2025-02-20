@@ -1,5 +1,5 @@
 options gen2
-options optimize=false
+options optimize = false
 
 require math
 require foo_bar
@@ -11,7 +11,7 @@ def test {
     if (false) {
         print("require not_a_require_either")
     }
-    assert(foo_bar::getValue()==13)
+    assert(foo_bar::getValue() == 13)
     return true
 }
 

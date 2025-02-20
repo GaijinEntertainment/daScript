@@ -12,5 +12,5 @@ var
 [export]
 def test
     push(g.a, 10)
-    assert(g.i==5)
+    assert(g.i == 5)
     return true

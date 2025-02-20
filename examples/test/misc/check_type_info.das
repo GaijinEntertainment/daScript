@@ -3,7 +3,7 @@ require UnitTest
 require rtti
 require ast
 
-def log_type ( t : auto(TT)? )
+def log_type(t : auto(TT)?)
     print("
         {typeinfo(typename type<TT>)}:
             isLocal = {typeinfo(is_local type<TT>)}

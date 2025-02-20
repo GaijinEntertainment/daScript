@@ -5,7 +5,7 @@ require strings
 //  unsafe
 //      return <- each(input)
 // unsafe is required due to lifetime of inp. version bellow will keep string alive
-def from_sv ( inp : string ) {
+def from_sv(inp : string) {
     return <- generator<int>() <| $() {
         for (x in inp) {
             yield x
@@ -14,8 +14,8 @@ def from_sv ( inp : string ) {
     }
 }
 
-def chunk6 ( var inp : iterator<int> ) {
-    return <- generator<int> capture(<-inp) () <| $() {
+def chunk6(var inp : iterator<int>) {
+    return <- generator<int> capture(<- inp) () <| $() {
         var b0 = 0
         while (next(inp, b0)) {
             var b1, b2 = 0
@@ -42,8 +42,8 @@ let {
 //  unsafe
 //      return <- [[ for i in inp; yield xlattable64[i] ]]
 // unsafe is required due to implicit capture of inp
-def xlat ( var inp : iterator<int> ) {
-    return <- generator<int> capture(<-inp) () <| $() {
+def xlat(var inp : iterator<int>) {
+    return <- generator<int> capture(<- inp) () <| $() {
         for (i in inp) {
             yield xlattable64[i]
         }
@@ -51,8 +51,8 @@ def xlat ( var inp : iterator<int> ) {
     }
 }
 
-def pad4 ( var inp : iterator<int> ) {
-    return <- generator<int> capture(<-inp) () <| $() {
+def pad4(var inp : iterator<int>) {
+    return <- generator<int> capture(<- inp) () <| $() {
         var len = 0
         for (c in inp) {
             yield c
@@ -65,11 +65,11 @@ def pad4 ( var inp : iterator<int> ) {
     }
 }
 
-def linebreak ( var inp : iterator<int>; linewidth = 76 ) {
-    return <- generator<int> capture(<-inp) () <| $() {
-        for (c,len in inp, range(1,INT_MAX)) {
+def linebreak(var inp : iterator<int>; linewidth = 76) {
+    return <- generator<int> capture(<- inp) () <| $() {
+        for (c, len in inp, range(1, INT_MAX)) {
             yield c
-            if ((len % linewidth)==0) {
+            if ((len % linewidth) == 0) {
                 yield '\n'
             }
         }
@@ -77,8 +77,8 @@ def linebreak ( var inp : iterator<int>; linewidth = 76 ) {
     }
 }
 
-def base64 ( inp : string; linewidth = 76 ) {
-    return <- generator<int> () <| $() {
+def base64(inp : string; linewidth = 76) {
+    return <- generator<int>() <| $() {
         var lb <- inp |> from_sv() |> chunk6() |> xlat() |> pad4() |> linebreak(linewidth)
         for (c in lb) {
             yield c

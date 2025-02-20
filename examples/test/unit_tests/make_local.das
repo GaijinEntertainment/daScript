@@ -3,19 +3,19 @@ options gen2
 
 [safe_when_uninitialized]
 struct Bar {
-    x:int = 1
-    y:int = 2
-    z:int = 3
-    w:int = 4
+    x : int = 1
+    y : int = 2
+    z : int = 3
+    w : int = 4
 }
 
 def test_bar {
     let tf = Bar()
-    assert(tf.x==1 && tf.y==2 && tf.z==3 && tf.w==4)
-    let t0 = Bar(uninitialized x=13)
-    assert(t0.x==13 && t0.y==0 && t0.z==0 && t0.w==0)
-    let t1 = Bar( x=13)
-    assert(t1.x==13 && t1.y==2 && t1.z==3 && t1.w==4)
+    assert(tf.x == 1 && tf.y == 2 && tf.z == 3 && tf.w == 4)
+    let t0 = Bar(uninitialized x = 13)
+    assert(t0.x == 13 && t0.y == 0 && t0.z == 0 && t0.w == 0)
+    let t1 = Bar(x = 13)
+    assert(t1.x == 13 && t1.y == 2 && t1.z == 3 && t1.w == 4)
     return true
 }
 
@@ -31,27 +31,27 @@ let {
 }
 
 let {
-    jestFoo = Foo( i=3, f=4., s="blah")
+    jestFoo = Foo(i = 3, f = 4., s = "blah")
 }
 
 [export]
 def test {
     test_bar()
-    assert(testFoo.i==5 && testFoo.f==6. && testFoo.s=="hello")
-    assert(jestFoo.i==3 && jestFoo.f==4. && jestFoo.s=="blah")
+    assert(testFoo.i == 5 && testFoo.f == 6. && testFoo.s == "hello")
+    assert(jestFoo.i == 3 && jestFoo.f == 4. && jestFoo.s == "blah")
     let t = Foo()
-    assert(t.i==5)
-    assert(t.f==6.0)
-    assert(t.s=="hello")
-    let q = Foo(uninitialized i=6, s="world")
-    assert(q.i==6)
-    assert(q.f==0.0)
-    assert(q.s=="world")
+    assert(t.i == 5)
+    assert(t.f == 6.0)
+    assert(t.s == "hello")
+    let q = Foo(uninitialized i = 6, s = "world")
+    assert(q.i == 6)
+    assert(q.f == 0.0)
+    assert(q.s == "world")
     let qq3 = [Foo(uninitialized i=1), Foo(uninitialized i=2), Foo(uninitialized i=3)]
-    assert(qq3[0].i==1 && qq3[1].i==2 && qq3[2].i==3)
-    let ar = fixed_array<int>( 1 , 2 , 3 , 4)
-    assert(ar[0]==1 && ar[1]==2 && ar[2]==3 && ar[3]==4)
-    let arf = fixed_array<Foo>( Foo(), Foo())
-    assert(arf[0].i==5 && arf[1].i==5)
+    assert(qq3[0].i == 1 && qq3[1].i == 2 && qq3[2].i == 3)
+    let ar = fixed_array<int>(1, 2, 3, 4)
+    assert(ar[0] == 1 && ar[1] == 2 && ar[2] == 3 && ar[3] == 4)
+    let arf = fixed_array<Foo>(Foo(), Foo())
+    assert(arf[0].i == 5 && arf[1].i == 5)
     return true
 }

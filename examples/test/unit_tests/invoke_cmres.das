@@ -10,44 +10,44 @@ struct Foo {
 }
 
 def func : Foo {
-    return Foo( a = 1, b = 2)
+    return Foo(a = 1, b = 2)
 }
 
 def funcC : Foo const {
-    return Foo( a = 1, b = 2)
+    return Foo(a = 1, b = 2)
 }
 
-def funcA ( t : int ) : Foo {
-    return Foo( a = t, b = t + 1)
+def funcA(t : int) : Foo {
+    return Foo(a = t, b = t + 1)
 }
 
-def funcAC ( t : int ) : Foo const {
-    return Foo( a = t, b = t + 1)
+def funcAC(t : int) : Foo const {
+    return Foo(a = t, b = t + 1)
 }
 
 [hybrid]
 def hfunc : Foo {
-    return Foo( a = 1, b = 2)
+    return Foo(a = 1, b = 2)
 }
 
 [hybrid]
 def hfuncC : Foo const {
-    return Foo( a = 1, b = 2)
+    return Foo(a = 1, b = 2)
 }
 
 [hybrid]
-def hfuncA ( t : int ) : Foo {
-    return Foo( a = t, b = t + 1)
+def hfuncA(t : int) : Foo {
+    return Foo(a = t, b = t + 1)
 }
 
 [hybrid]
-def hfuncAC ( t : int ) : Foo const {
-    return Foo( a = t, b = t + 1)
+def hfuncAC(t : int) : Foo const {
+    return Foo(a = t, b = t + 1)
 }
 
 [sideeffects]
-def check(t:Foo) {
-    assert(t.a==1 && t.b==2)
+def check(t : Foo) {
+    assert(t.a == 1 && t.b == 2)
 }
 
 [sideeffects]
@@ -56,8 +56,8 @@ def checkInvoke(obj) {
 }
 
 [sideeffects]
-def checkInvoke(arg;obj) {
-    check(invoke(obj,arg))
+def checkInvoke(arg; obj) {
+    check(invoke(obj, arg))
 }
 
 [export]
@@ -74,34 +74,34 @@ def test {
     check(hfuncAC(1))
     // invoke function
     checkInvoke(@@func)
-    checkInvoke(1,@@funcA)
+    checkInvoke(1, @@funcA)
     checkInvoke(@@funcC)
-    checkInvoke(1,@@funcAC)
+    checkInvoke(1, @@funcAC)
     // invoke block
     checkInvoke() <| $() : Foo {
-        return Foo( a = 1, b = 2)
+        return Foo(a = 1, b = 2)
     }
     checkInvoke() <| $() : Foo const {
-        return Foo( a = 1, b = 2)
+        return Foo(a = 1, b = 2)
     }
-    checkInvoke(1) <| $( t : int ) : Foo {
-        return Foo( a = t, b = t + 1)
+    checkInvoke(1) <| $(t : int) : Foo {
+        return Foo(a = t, b = t + 1)
     }
-    checkInvoke(1) <| $( t : int ) : Foo const {
-        return Foo( a = t, b = t + 1)
+    checkInvoke(1) <| $(t : int) : Foo const {
+        return Foo(a = t, b = t + 1)
     }
     // invoke lambda
     checkInvoke() <| @() : Foo {
-        return Foo( a = 1, b = 2)
+        return Foo(a = 1, b = 2)
     }
     checkInvoke() <| @() : Foo const {
-        return Foo( a = 1, b = 2)
+        return Foo(a = 1, b = 2)
     }
-    checkInvoke(1) <| @( t : int ) : Foo {
-        return Foo( a = t, b = t + 1)
+    checkInvoke(1) <| @(t : int) : Foo {
+        return Foo(a = t, b = t + 1)
     }
-    checkInvoke(1) <| @( t : int ) : Foo const {
-        return Foo( a = t, b = t + 1)
+    checkInvoke(1) <| @(t : int) : Foo const {
+        return Foo(a = t, b = t + 1)
     }
     return true
 }

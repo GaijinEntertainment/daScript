@@ -1,7 +1,7 @@
 options gen2
 // options log=true,log_infer_passes=true,optimize=true
 
-def join(a:array<auto(numt)>) {
+def join(a : array<auto(numt)>) {
     var t : numt = numt(0)
     for (x in a) {
         t += x
@@ -10,7 +10,7 @@ def join(a:array<auto(numt)>) {
 }
 
 [unsafe_operation]
-def findObject(objects : table<string; auto(T)>; guid : string): T? {
+def findObject(objects : table<string; auto(T)>; guid : string) : T? {
     var foundObj : T?
     get(objects, guid) <| $(obj) {
         unsafe {
@@ -21,17 +21,17 @@ def findObject(objects : table<string; auto(T)>; guid : string): T? {
 }
 
 [export]
-def test:bool {
-    var a:array<float>
-    push(a,1.0)
-    push(a,2.0)
-    push(a,3.0)
+def test : bool {
+    var a : array<float>
+    push(a, 1.0)
+    push(a, 2.0)
+    push(a, 3.0)
     let t = join(a)
-    assert(t==6.0)
+    assert(t == 6.0)
     let tab <- { "one" => 1, "two" => 2 }
     unsafe {
-        verify(findObject(tab,"one") ?? 0==1)
-        verify(findObject(tab,"two") ?? 0==2)
+        verify(findObject(tab, "one") ?? 0 == 1)
+        verify(findObject(tab, "two") ?? 0 == 2)
     }
     return true
 }

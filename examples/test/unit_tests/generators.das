@@ -1,17 +1,17 @@
 options gen2
 [sideeffects]
-def checkIt ( gen : iterator<int> ) {
+def checkIt(gen : iterator<int>) {
     //print("testing:\n")
     var count = 0
     for (x, y in gen, count()) {
         //print("{x} vs {y}\n")
         if (y >= 10) {
-            assert(false,"output too long")
+            assert(false, "output too long")
         }
-        assert(x==y,"value mismatch")
+        assert(x == y, "value mismatch")
         count ++
     }
-    assert(count==10,"output too short")
+    assert(count == 10, "output too short")
 }
 
 def test_yield {
@@ -52,7 +52,7 @@ def test_local {
 def test_local_ref {
     let gen <- generator<int>() <| $() {
         var t = 0
-        var T : int & = t
+        var T : int& = t
         yield t++
         yield T++
         yield t++
@@ -95,7 +95,7 @@ def test_if {
         // if-elif-else
         if (t == 13) {
             yield 0
-        } elif (t ==4) {
+        } elif (t == 4) {
             yield t++
         } else {
             yield -1
@@ -156,7 +156,7 @@ def test_while_nested {
         while (q < 2) {
             var t = 0
             while (t < 5) {
-                yield q*5 + t ++
+                yield q * 5 + t ++
             }
             q ++
         }
@@ -218,7 +218,7 @@ def test_for_nested {
     let gen <- generator<int>() <| $() {
         for (q in range(2)) {
             for (t in range(5)) {
-                yield q*5 + t
+                yield q * 5 + t
             }
         }
         return false
