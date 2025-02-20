@@ -388,6 +388,39 @@ namespace das
 
     // semantic hash
 
+    __forceinline uint64_t hashmix ( uint64_t hash, uint64_t key ) {
+        hash ^= key;
+        hash *= UINT64_C(0x9e3779b97f4a7c15);
+        hash ^= rotr64_c(hash,31);
+        hash *= UINT64_C(0x9e3779b97f4a7c15);
+        hash ^= rotr64_c(hash, 28);
+        return hash;
+    }
+
+    void TypeDecl::getLookupHash(uint64_t & hash) const {
+        hash = hashmix(hash, baseType);
+        hash = hashmix(hash, flags);
+        for ( auto d : dim ) {
+            hash = hashmix(hash, d);
+        }
+        if ( structType ) {
+            hash = hashmix(hash, intptr_t(structType));
+        } else if ( enumType ) {
+            hash = hashmix(hash, intptr_t(enumType));
+        } else if ( annotation ) {
+            hash = hashmix(hash, intptr_t(annotation));
+        }
+        if ( firstType ) {
+            firstType->getLookupHash(hash);
+        }
+        if ( secondType ) {
+            secondType->getLookupHash(hash);
+        }
+        for ( auto & argT : argTypes ) {
+            argT->getLookupHash(hash);
+        }
+    }
+
     uint64_t TypeDecl::getSemanticHash() const {
         HashBuilder hb;
         return getSemanticHash(hb);
