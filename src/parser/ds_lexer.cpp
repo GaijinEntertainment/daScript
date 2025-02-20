@@ -1,6 +1,6 @@
-#line 2 "ds_lexer.cpp"
+#line 1 "ds_lexer.cpp"
 
-#line 4 "ds_lexer.cpp"
+#line 3 "ds_lexer.cpp"
 
 #define  YY_INT_ALIGNED short int
 
@@ -1323,11 +1323,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 #define YY_EXTRA_TYPE das::DasParserState *
 
-#line 1327 "ds_lexer.cpp"
+#line 1326 "ds_lexer.cpp"
 #define YY_NO_UNISTD_H 1
 /* %option debug */
 
-#line 1331 "ds_lexer.cpp"
+#line 1330 "ds_lexer.cpp"
 
 #define INITIAL 0
 #define indent 1
@@ -1612,7 +1612,7 @@ YY_DECL
 #line 77 "ds_lexer.lpp"
 
 
-#line 1616 "ds_lexer.cpp"
+#line 1615 "ds_lexer.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -3803,7 +3803,7 @@ YY_RULE_SETUP
 #line 1119 "ds_lexer.lpp"
 ECHO;
 	YY_BREAK
-#line 3807 "ds_lexer.cpp"
+#line 3806 "ds_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(include):
 	yyterminate();
