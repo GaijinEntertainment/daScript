@@ -3,7 +3,7 @@ options gen2
 
 require _hint_macros
 
-[tag_function (good,bad)]
+[tag_function(good, bad)]
 def ttt {
     return true
 }
@@ -21,9 +21,9 @@ def test {
     var s3 = "tw"
     s3 += "o"
     let h3 = get_hint(hints, s3, "no hint")         // this one with dynamic name
-    assert(h1=="one")
-    assert(h2=="no hint")
-    assert(h3=="two")
-    assert(g_non_hints==1)  // only one with dynamic name
+    assert(h1 == "one")
+    assert(h2 == "no hint")
+    assert(h3 == "two")
+    assert(g_non_hints == 1)// only one with dynamic name
     return true
 }

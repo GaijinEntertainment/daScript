@@ -10,11 +10,11 @@ def test
     tab |> erase(EntityId(3))
     assert(length(tab) == 2)
 
-    tab |> find(EntityId(2)) <| $ ( val )
-        assert(val!=null && *val=="world")
+    tab |> find(EntityId(2)) <| $(val)
+        assert(val != null && *val == "world")
 
-    tab |> get(EntityId(1)) <| $ ( val )
-        assert(val=="hello")
+    tab |> get(EntityId(1)) <| $(val)
+        assert(val == "hello")
 
     if tab |> key_exists(EntityId(1))
         assert(true)
@@ -22,19 +22,19 @@ def test
         assert(false)
 
     let t = tab ?[EntityId(1)] ?? "goodbye"
-    assert(t=="hello")
+    assert(t == "hello")
     var ptab = unsafe(addr(tab))
     let q = ptab ?[EntityId(2)] ?? "goodbye"
-    assert(q=="world")
+    assert(q == "world")
 
     var count = 0
-    for k,v in keys(tab),values(tab)
+    for k, v in keys(tab), values(tab)
         if int(k) == 1
-            assert(v=="hello")
+            assert(v == "hello")
         if int(k) == 2
-            assert(v=="world")
+            assert(v == "world")
         count ++
-    assert(count==2)
+    assert(count == 2)
 
     var set : table<EntityId>
     set |> insert(EntityId(1))

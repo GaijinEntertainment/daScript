@@ -6,7 +6,7 @@ require daslib/templates_boost
 
 [type_macro(name="padd_dim")]
 class PaddDimMacro : AstTypeMacro
-    def override visit ( prog:ProgramPtr; mod:Module?; td:TypeDeclPtr ) : TypeDeclPtr
+    def override visit(prog : ProgramPtr; mod : Module?; td : TypeDeclPtr) : TypeDeclPtr
         if length(td.dimExpr) != 3
             macro_error(compiling_program(), td.at, "expecting 2 arguments")
             return <- [[TypeDeclPtr()]]

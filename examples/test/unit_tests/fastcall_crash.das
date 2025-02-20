@@ -1,9 +1,9 @@
 options gen2
-def cast_fn(a: int): int {
+def cast_fn(a : int) : int {
     return a
 }
 
-def fn(b: int) {
+def fn(b : int) {
     return
 }
 

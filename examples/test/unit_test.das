@@ -1,4 +1,4 @@
-options remove_unused_symbols=false
+options remove_unused_symbols = false
 
 require UnitTest
 

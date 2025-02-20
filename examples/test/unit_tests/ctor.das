@@ -21,8 +21,8 @@ def Bar {
 [export]
 def test {
     let t = Foo()
-    assert(t.i==5)
+    assert(t.i == 5)
     let b = Bar()
-    assert(b.i==13)
+    assert(b.i == 13)
     return true
 }

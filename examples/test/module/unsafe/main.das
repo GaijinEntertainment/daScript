@@ -2,7 +2,7 @@ options gen2
 require something_unsafe
 
 // uncomment implicit for failed compilation
-def implicit_print_failed(s:string /*implicit*/) {
+def implicit_print_failed(s : string /*implicit*/) {
     print(s)
 }
 

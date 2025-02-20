@@ -16,26 +16,26 @@ require daslib/templates_boost
 // require daslib/debug
 
 [tag_function(debug_function)]
-def public debug_print ( message:string="" )
+def public debug_print(message : string = "")
     print(message)
 
 [tag_function_macro(tag="debug_function")]
 class TestDebugMacro : AstFunctionAnnotation
 
-    def show_AnnotationList ( list:AnnotationList )
+    def show_AnnotationList(list : AnnotationList)
         print("AnnotationList is {list}\n")
         show_AnnotationDeclaration(list[0])
         show_AnnotationDeclaration([[AnnotationDeclarationPtr]])
 
-    def show_AnnotationDeclaration ( decl:smart_ptr<AnnotationDeclaration> )
+    def show_AnnotationDeclaration(decl : smart_ptr<AnnotationDeclaration>)
         print("AnnotationList is {decl}\n")
         if decl != null
             show_AnnotationArgument(decl.arguments)
 
-    def show_AnnotationArgument ( arg:AnnotationArgumentList )
+    def show_AnnotationArgument(arg : AnnotationArgumentList)
         print("AnnotationArgumentList is {arg}\n")
 
-    def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
+    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr
         // TypeDeclPtr
         var t : TypeDeclPtr <- call._type
         print("TypeDeclPtr is {t}\n")

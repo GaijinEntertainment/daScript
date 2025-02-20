@@ -1,15 +1,15 @@
 expect 30801, 30304:2, 32102, 32101, 30102  // invalid_block
 
-def take_any(b:block)
+def take_any(b : block)
     invoke(b)
 
-def take_int(b:block<int>):int
+def take_int(b : block<int>) : int
     return invoke(b)
 
-def test:bool
+def test : bool
     if true
-        var a:int
-        var b:float
+        var a : int
+        var b : float
         take_any(${ a++; })
         while true
             take_any() <|

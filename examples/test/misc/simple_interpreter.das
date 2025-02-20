@@ -1,6 +1,6 @@
 options gen2
 class Node {
-    def eval ( i : int ) {
+    def eval(i : int) {
         pass
     }
 }
@@ -9,16 +9,16 @@ class Node {
 //  need to go to appropriate source out, not just endloop
 
 [jit]
-def eval ( var a : array<Node?> ) {
-    for (n,i in a,count()) {
+def eval(var a : array<Node?>) {
+    for (n, i in a, count()) {
         (*n)->eval(i)
     }
 }
 
 [export]
 def main {
-    var A <- array<int>( 1,2,3,4,5,6,7,8,9)
-    for (a,c in A,count(0,2)) {
+    var A <- array<int>(1, 2, 3, 4, 5, 6, 7, 8, 9)
+    for (a, c in A, count(0, 2)) {
         print("a = {a} c = {c}\n")
     }
 }

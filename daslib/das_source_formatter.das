@@ -247,14 +247,31 @@ def parse_token(var ctx : FormatterCtx) {
         return
     }
 
-    // characters and strings
-    if (ctx.c == '"' || ctx.c == int(0x27)) {// TODO: fix ' symbol
+    if (ctx.c == int(0x27)) {// TODO: fix ' symbol
         let savedLine = ctx.newLineCounter;
         let savedSpace = ctx.spaceCounter;
-        let openChar = ctx.c;
+        ctx |> next_char();
+        while (!ctx.eof && ctx.c != int(0x27)) {
+            if (ctx.c == '\\') {
+                ctx |> next_char();
+            }
+            ctx |> next_char();
+        }
+        if (ctx.c == int(0x27)) {
+            ctx |> next_char()
+        }
+
+        ctx |> push_token(from, ctx.pos, savedSpace, savedLine, ctx.srcLine, fromColumn, TokenType.STRING)
+        return
+    }
+
+    // characters and strings
+    if (ctx.c == '"') {
+        let savedLine = ctx.newLineCounter;
+        let savedSpace = ctx.spaceCounter;
         var depth = 0;
         ctx |> next_char();
-        while (!ctx.eof && (ctx.c != openChar || depth > 0)) {
+        while (!ctx.eof && (ctx.c != '"' || depth > 0)) {
             if (ctx.c == '{') {
                 depth++;
             }
@@ -267,7 +284,7 @@ def parse_token(var ctx : FormatterCtx) {
             ctx |> next_char();
         }
 
-        if (ctx.c == openChar) {
+        if (ctx.c == '"') {
             ctx |> next_char()
         }
 
@@ -1364,7 +1381,7 @@ def main() {
             }
         }
     }
-
     format_files(fileNames)
 }
 */
+

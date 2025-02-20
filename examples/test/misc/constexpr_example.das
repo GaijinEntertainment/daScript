@@ -2,8 +2,8 @@ options log
 
 require daslib/constant_expression
 
-[constexpr (a)]
-def foo ( t:string; a : int )
+[constexpr(a)]
+def foo(t : string; a : int)
     print("{t} = {a}\n")
 
 var BOO = 13

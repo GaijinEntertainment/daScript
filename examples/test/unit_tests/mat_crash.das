@@ -4,10 +4,10 @@ require math
 
 [export]
 def test {
-    var a,b : float3x4
+    var a, b : float3x4
     identity(a)
     identity(b)
-    a = a*b
+    a = a * b
     a := b
     return true
 }

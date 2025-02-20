@@ -9,6 +9,6 @@ include include_file.das_inc
 [export]
 def test
     let y = inc_add_2(3)
-    assert(y==5)    // blah
+    assert(y == 5)  // blah
     return true
 

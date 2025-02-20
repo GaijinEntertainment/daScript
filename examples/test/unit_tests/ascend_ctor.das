@@ -9,7 +9,7 @@ class Foo {
 
 [sideeffects]
 def test_ascend_ctor {
-    var foo = new Foo( b=42)
+    var foo = new Foo(b = 42)
     assert(13 == foo.a)
     assert(42 == foo.b)
 }

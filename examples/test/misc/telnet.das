@@ -10,7 +10,7 @@ class TelnetServer : Server
     done : bool = false
     def TelnetServer
         Server`Server(cast<Server> self)
-    def override onError(msg:string; code:int)
+    def override onError(msg : string; code : int)
         print("server error:{code} - {msg}\n")
     def override onConnect
         print("connected\n")
@@ -24,23 +24,23 @@ class TelnetServer : Server
             var session : smart_ptr<NetworkServer>
             self->save(session)
             gc0_save_smart_ptr("telnet-session", session)
-    def override onData(msg:uint8?; size:int)
+    def override onData(msg : uint8?; size : int)
         for i in range(size)
-            var ch: uint8
+            var ch : uint8
             unsafe
                 ch = msg[i]
             let ich = int(ch)
-            if ich=='\r'
+            if ich == '\r'
                 continue
-            elif ich=='\n'
+            elif ich == '\n'
                 print("`{string(current_string)}` length={length(current_string)}\n")
                 var new_msg = "length = {length(current_string)}\n"
                 unsafe
                     self->send(reinterpret<uint8?> new_msg, length(new_msg))
                 var str = string(current_string)
-                if str=="quit"
+                if str == "quit"
                     done = true
-                elif str=="restart"
+                elif str == "restart"
                     if isContDev
                         print("restarting via telnet command")
                         done = true

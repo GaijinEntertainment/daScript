@@ -1,20 +1,20 @@
 options gen2
 struct Foo {
-	a : int = 10
-	s : string = "bar"
+    a : int = 10
+    s : string = "bar"
 }
 
-def test_c(): Foo const# {
-	unsafe {
-		return struct<Foo#>(uninitialized a=4)
+def test_c() : Foo const# {
+    unsafe {
+        return struct<Foo#>(uninitialized a = 4)
     }
 }
 
 [export]
 def test() {
-	let foo = test_c()
-	let cop := foo
-	assert(foo.a==4)
-    assert(cop.a==4)
+    let foo = test_c()
+    let cop := foo
+    assert(foo.a == 4)
+    assert(cop.a == 4)
     return true
 }

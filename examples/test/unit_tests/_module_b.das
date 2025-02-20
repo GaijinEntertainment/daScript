@@ -32,12 +32,12 @@ def from_b_get_fun_3() {
 
 [generic]
 def from_b_get_fun_4() {
-    return  _::fun_4()
+    return _::fun_4()
 }
 
 [generic]
 def from_b_get_fun_5() {
-    return  __::fun_5()
+    return __::fun_5()
 }
 
 [generic]

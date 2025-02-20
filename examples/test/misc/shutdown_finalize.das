@@ -14,7 +14,7 @@ def Foo() {
     return f
 }
 
-def operator delete(var f:Foo) {
+def operator delete(var f : Foo) {
     print("killing foo\n")
 }
 

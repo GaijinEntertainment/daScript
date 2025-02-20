@@ -1,8 +1,8 @@
 options gen2
-options log=true, log_infer_passes=true
+options log = true, log_infer_passes = true
 require daslib/contracts
 
-def test(a:int=1; b:int) {
+def test(a : int = 1; b : int) {
     print("{a},{b}\n")
 }
 
