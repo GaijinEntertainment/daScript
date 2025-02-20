@@ -20,9 +20,9 @@ def test3
     let v4 : auto[3][2] = arr           // 31102, can't infer, array dimension mismatch
     let v5 : auto? = x                  // 31102, can't infer, expecting pointer
     let pT : int?
-    let ppT : int??
-    let ppA : auto?? = ppT
-    let v6 : auto?? = pT                // 31102, can't infer, expecting pointer to pointer
+    let ppT : int ??
+    let ppA : auto ?? = ppT
+    let v6 : auto ?? = pT               // 31102, can't infer, expecting pointer to pointer
     blk() <| $(a)
         return a + 1
     blk() <| $(a : int) : auto?         // 30304: no matching function (blk block<(int):auto?>)
