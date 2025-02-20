@@ -255,10 +255,10 @@ def parse_token(var ctx : FormatterCtx) {
         var depth = 0;
         ctx |> next_char();
         while (!ctx.eof && (ctx.c != openChar || depth > 0)) {
-            if (ctx.c == '{') {
+            if (ctx.c == '{' && openChar == '"') {
                 depth++;
             }
-            if (ctx.c == '}') {
+            if (ctx.c == '}' && openChar == '"') {
                 depth--;
             }
             if (ctx.c == '\\') {
