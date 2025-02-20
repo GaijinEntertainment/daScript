@@ -490,7 +490,7 @@ def match_tag(what : TypeDeclPtr; wth : Expression?; access : ExpressionPtr; var
 def is_match_call(wth : Expression?; name : string) {
     return (wth is ExprCall) && (
             (wth as ExprCall).name == "match_{name}" ||
-            (wth as ExprCall).name == "__::match`match_{name}" ||
+            string((wth as ExprCall).name).starts_with("__::match`match_{name}") ||
             (wth as ExprCall).name == "match::match_{name}")
 }
 
@@ -523,7 +523,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : ExpressionPtr; var
         return match_type(what, wth as ExprCall, access, to)
     } elif (wth |> is_match_call("expr")) {
         return match_expr(what, wth as ExprCall, access, to)
-    } elif ((wth is ExprCall) && ((wth as ExprCall).name == "to_array_move" || (wth as ExprCall).name == "__::builtin`to_array_move")) {
+    } elif ((wth is ExprCall) && ((wth as ExprCall).name == "to_array_move" || string((wth as ExprCall).name).starts_with("__::builtin`to_array_move") )) {
         var cll = wth as ExprCall
         if (length(cll.arguments) != 1) {
             to.errors |> match_error("to_array_move expects 1 argument", cll.at)

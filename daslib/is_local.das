@@ -10,6 +10,7 @@ module is_local shared public
 require ast public
 require rtti
 require daslib/ast_boost
+require strings
 
 def is_shared_expr(expr : ExpressionPtr) {
     //! Returns true if the expression is local to the current scope.
@@ -26,7 +27,7 @@ def is_shared_expr(expr : ExpressionPtr) {
         let ecall = expr as ExprCall
         print("ecall `{ecall.func.name}` `{ecall.func._module.name}`\n")
         if (ecall.func != null && ecall.func._module != null &&
-            (ecall.func.name == "builtin`keys" || ecall.func.name == "builtin`values")) {
+            (string(ecall.func.name).starts_with("builtin`keys`") || string(ecall.func.name).starts_with("builtin`values`"))) {
             return is_shared_expr(ecall.arguments[0])
         }
         return false

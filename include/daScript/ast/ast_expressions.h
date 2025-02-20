@@ -413,6 +413,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         Function *      func = nullptr;
         uint32_t        stackTop = 0;
+        bool            genericFunction = false; // do not clone, do not serialize. used only for infer
     };
 
     struct ExprOp : ExprCallFunc {
