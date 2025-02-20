@@ -1230,6 +1230,15 @@ namespace das {
             return result;
         }
 
+        uint64_t getLookupHash ( const vector<TypeDeclPtr> & types ) const {
+            uint64_t argHash = UINT64_C(14695981039346656037);
+            for ( auto & arg : types ) {
+                arg->getLookupHash(argHash);
+            }
+            DAS_VERIFY(argHash);
+            return argHash;
+        }
+
         MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false, bool visCheck = true ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
@@ -1237,6 +1246,9 @@ namespace das {
             auto inWhichModule = getSearchModule(moduleName);
             auto thisModule = program->thisModule.get();
             auto hFuncName = hash64z(funcName.c_str());
+#if DAS_FUNCTION_HASH_LOOKUP
+            uint64_t argHash = 0;
+#endif
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(hFuncName);
                 if ( itFnList != mod->functionsByName.end() ) {
@@ -1247,9 +1259,29 @@ namespace das {
                         if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
+#if !(DAS_FUNCTION_HASH_LOOKUP)
                                     if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                         result.push_back(pFn.get());
                                     }
+#else
+
+                                    if ( !argHash ) {
+                                        argHash = getLookupHash(types);
+                                    }
+                                    auto itLook = pFn->lookup.find(argHash);    // if found in lookup
+                                    if ( itLook != pFn->lookup.end() ) {
+                                        if ( itLook->second ) {
+                                            result.push_back(pFn.get());
+                                        }
+                                        continue;
+                                    }
+                                    if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
+                                        result.push_back(pFn.get());
+                                        pFn->lookup[argHash] = true;
+                                    } else {
+                                        pFn->lookup[argHash] = false;
+                                    }
+#endif
                                 }
                             }
                         }
@@ -9883,6 +9915,9 @@ namespace das {
                 auto mnh = fn->getMangledNameHash();
                 if ( hash != mnh ) {
                     refreshFunctions.emplace_back(make_tuple(fn.get(), hash, mnh));
+#if DAS_FUNCTION_HASH_LOOKUP
+                    { AstFuncLookup dummy; swap(fn->lookup,dummy); }    // invalidate lookup hash, something changed
+#endif
                 }
             });
             for ( auto rfn : refreshFunctions ) {

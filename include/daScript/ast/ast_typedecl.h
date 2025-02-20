@@ -231,6 +231,7 @@ namespace das {
         uint64_t getOwnSemanticHash(HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep) const;
         uint64_t getSemanticHash() const;
         uint64_t getSemanticHash(HashBuilder & hb) const;
+        void getLookupHash(uint64_t & hash) const;
     public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;

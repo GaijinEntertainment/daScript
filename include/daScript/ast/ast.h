@@ -21,6 +21,10 @@
 #define DAS_THREAD_SAFE_ANNOTATIONS    1
 #endif
 
+#ifndef DAS_FUNCTION_HASH_LOOKUP
+#define DAS_FUNCTION_HASH_LOOKUP        1
+#endif
+
 namespace das
 {
     struct AstSerializer;
@@ -793,6 +797,8 @@ namespace das
           static_cast<std::underlying_type<SideEffects>::type>(rhs));
     }
 
+    typedef das_hash_map<uint64_t,bool> AstFuncLookup;
+
     struct InferHistory {
         LineInfo    at;
         Function *  func = nullptr;
@@ -858,6 +864,9 @@ namespace das
         int32_t             totalGenLabel = 0;
         LineInfo            at, atDecl;
         Module *            module = nullptr;
+#if DAS_FUNCTION_HASH_LOOKUP
+        AstFuncLookup       lookup;
+#endif
         das_set<Function *>     useFunctions;
         das_set<Variable *>     useGlobalVariables;
         Structure *         classParent = nullptr;

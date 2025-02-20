@@ -207,6 +207,14 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
     return _rotr(a, b);
 }
 
+__forceinline uint64_t rotl64_c(uint64_t a, uint64_t b) {
+    return _rotl64(a, int(b));
+}
+
+__forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
+    return _rotr64(a, int(b));
+}
+
 #else
 
 __forceinline uint32_t rotl_c(uint32_t a, uint32_t b) {
@@ -214,7 +222,15 @@ __forceinline uint32_t rotl_c(uint32_t a, uint32_t b) {
 }
 
 __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
-    return (a >> (b &31)) | (a << ((32 - b) & 31));
+    return (a >> (b & 31)) | (a << ((32 - b) & 31));
+}
+
+__forceinline uint64_t rotl64_c(uint64_t a, uint64_t b) {
+    return (a << (b & 63)) | (a >> ((64 - b) & 63));
+}
+
+__forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
+    return (a >> (b & 63)) | (a << ((64 - b) & 63));
 }
 
 #endif
