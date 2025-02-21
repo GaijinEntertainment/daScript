@@ -1,5 +1,5 @@
 options gen2
-options aot_prologue=true
+options aot_prologue = true
 
 def fnBottom {
     stackwalk()

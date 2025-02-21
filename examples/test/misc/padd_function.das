@@ -8,7 +8,7 @@ struct public PaddStructureBase
 
 [type_macro(name="padd_structure")]
 class PaddDimMacro : AstTypeMacro
-    def override visit ( prog:ProgramPtr; mod:Module?; td, passT:TypeDeclPtr ) : TypeDeclPtr
+    def override visit(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr
         if length(td.dimExpr) != 3
             macro_error(compiling_program(), td.at, "expecting 2 arguments")
             return <- [[TypeDeclPtr()]]
@@ -26,11 +26,11 @@ class PaddDimMacro : AstTypeMacro
         let pbase = compiling_program() |> find_unique_structure("padd_function::PaddStructureBase")
         if td.dimExpr[1]._type == null
             // we are inferring generic here
-            if passT ==null
+            if passT == null
                 macro_error(compiling_program(), td.at, "expecting argument type to infer")
                 return <- [[TypeDeclPtr()]]
             // so we return whatever was passed, assuming its a PaddStructure
-            if passT.baseType == Type tStructure && passT.structType.parent==pbase
+            if passT.baseType == Type tStructure && passT.structType.parent == pbase
                 let field = passT.structType |> find_structure_field("data")
                 // we need to check if size matches
                 if field == null || field._type == null
@@ -75,7 +75,7 @@ class PaddDimMacro : AstTypeMacro
                 st.flags |= StructureFlags privateStructure | StructureFlags generated
                 st.parent = pbase
                 elemType.dim |> push(count)
-                st |> add_structure_field ( "data", clone_type(elemType), [[ExpressionPtr]])
+                st |> add_structure_field("data", clone_type(elemType), [[ExpressionPtr]])
                 st_ptr = get_ptr(st)
                 compiling_module() |> add_structure(st)
             return <- new [[TypeDecl() at=td.at, baseType=Type tStructure, structType=st_ptr]]

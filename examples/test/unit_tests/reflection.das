@@ -42,41 +42,41 @@ def main
 
 def describeType(info) {
     var res : string
-    if (info.basicType==Type.tHandle) {
+    if (info.basicType == Type.tHandle) {
         res = string(info.annotation.name)
-    } elif (info.basicType==Type.tStructure) {
+    } elif (info.basicType == Type.tStructure) {
         res = info.structType?.name ?? "structure"
-    } elif (info.basicType==Type.tEnumeration || info.basicType==Type.tEnumeration8 || info.basicType==Type.tEnumeration16 || info.basicType==Type.tEnumeration64) {
+    } elif (info.basicType == Type.tEnumeration || info.basicType == Type.tEnumeration8 || info.basicType == Type.tEnumeration16 || info.basicType == Type.tEnumeration64) {
         res = info.enumType?.name ?? "enumeration"
-    } elif (info.basicType==Type.tPointer) {
-        res = info.firstType!=null ? "{describeType(*(info.firstType))}?" : "void?"
-    } elif (info.basicType==Type.tArray) {
-        res = info.firstType!=null ? "array<{describeType(*(info.firstType))}>" : "array"
-    } elif (info.basicType==Type.tTable) {
-        if (info.firstType!=null && info.secondType!=null) {
+    } elif (info.basicType == Type.tPointer) {
+        res = info.firstType != null ? "{describeType(*(info.firstType))}?" : "void?"
+    } elif (info.basicType == Type.tArray) {
+        res = info.firstType != null ? "array<{describeType(*(info.firstType))}>" : "array"
+    } elif (info.basicType == Type.tTable) {
+        if (info.firstType != null && info.secondType != null) {
             res = "table<{describeType(deref(info.firstType))};{describeType(deref(info.secondType))}>"
         } else {
             res = "table"
         }
-    } elif (info.basicType==Type.tTuple) {
-        if (info.argTypes!=null) {
-            res = "tuple<" + join([for (argtype in arg_types(info)); describeType(argtype)],";") + ">"
+    } elif (info.basicType == Type.tTuple) {
+        if (info.argTypes != null) {
+            res = "tuple<" + join([for (argtype in arg_types(info)); describeType(argtype)], ";") + ">"
         } else {
             res += "tuple"
         }
-    } elif (info.basicType==Type.tVariant) {
-        if (info.argTypes!=null && info.argNames!=null) {
-            res = "variant<" +  join([for (argname,argtype in arg_names(info),arg_types(info)); "{argname}:{describeType(argtype)}"],";") + ">"
+    } elif (info.basicType == Type.tVariant) {
+        if (info.argTypes != null && info.argNames != null) {
+            res = "variant<" +  join([for (argname, argtype in arg_names(info), arg_types(info)); "{argname}:{describeType(argtype)}"], ";") + ">"
         } else {
             res += "variant"
         }
-    } elif (info.basicType==Type.tFunction || info.basicType==Type.tLambda || info.basicType==Type.tBlock) {
+    } elif (info.basicType == Type.tFunction || info.basicType == Type.tLambda || info.basicType == Type.tBlock) {
         res = "{get_das_type_name(info.basicType)}<"
-        if (info.argTypes!=null) {
-            res += "(" + join([for (argtype in arg_types(info)); describeType(argtype)],";") + ")"
+        if (info.argTypes != null) {
+            res += "(" + join([for (argtype in arg_types(info)); describeType(argtype)], ";") + ")"
         }
-        if (info.firstType!=null) {
-            if (info.argTypes!=null) {
+        if (info.firstType != null) {
+            if (info.argTypes != null) {
                 res += ":"
             }
             res += "{describeType(*(info.firstType))}"
@@ -85,7 +85,7 @@ def describeType(info) {
     } else {
         res = get_das_type_name(info.basicType)
     }
-    res += join([for (d in each_dim(info)); d!=-1 ? "[{d}]" : "[]"],"")
+    res += join([for (d in each_dim(info)); d != -1 ? "[{d}]" : "[]"], "")
     if (info.isConst) {
         res += " const"
     }
@@ -104,11 +104,11 @@ def describeType(info) {
 def describeFunction(finfo) {
     print("def {finfo.name} ")
     if (finfo.count != 0u) {
-        let argT = join([for (arg in finfo); "{arg.name}:{describeType(arg)}"],"; ")
+        let argT = join([for (arg in finfo); "{arg.name}:{describeType(arg)}"], "; ")
         print("( {argT} ) ")
     }
     if (finfo.result != null) {
-        print ( ": {describeType(*(finfo.result))}")
+        print(": {describeType(*(finfo.result))}")
     }
     print("\n")
 }
@@ -123,19 +123,19 @@ def describeValue(value) {
     }
 }
 
-def describeVariable(glob;extra="") {
+def describeVariable(glob; extra = "") {
     print("{extra}{glob.name} : {describeType(glob)}{describeValue(get_variable_value(glob))}\n")
 }
 
 def describeStructure(sinfo) {
     var anyAnn = false
     structure_for_each_annotation(sinfo) <| $(ann; annArgs) {
-        let argT = join([for (arg in annArgs); "{arg.name}{describeValue(get_annotation_argument_value(arg))}"],",")
+        let argT = join([for (arg in annArgs); "{arg.name}{describeValue(get_annotation_argument_value(arg))}"], ",")
         print("[{ann.name}({argT})]\n")
     }
     print("struct {sinfo.name}\n")
     for (sfield in sinfo) {
-        describeVariable(sfield,"\t")
+        describeVariable(sfield, "\t")
     }
 }
 
@@ -151,7 +151,7 @@ def describeAnnotation(ann) {
         unsafe {
             let sann & = reinterpret<BasicStructureAnnotation&>(ann)
             print("struct {sann.name} // {sann.fieldCount} {sann.cppName}\n")
-            basic_struct_for_each_field(sann) <| $ ( name,cppName,xtype,offset) {
+            basic_struct_for_each_field(sann) <| $(name, cppName, xtype, offset) {
                 print("\t{name}:{describeType(xtype)} // {cppName} at {offset}\n")
             }
         }
@@ -166,22 +166,22 @@ def describeAnnotation(ann) {
 }
 
 def describeModule(mod) {
-    module_for_each_enumeration(mod) <| $ ( einfo ) {
+    module_for_each_enumeration(mod) <| $(einfo) {
         describeEnumeration(einfo)
     }
-    module_for_each_structure(mod) <| $ ( sinfo ) {
+    module_for_each_structure(mod) <| $(sinfo) {
         describeStructure(sinfo)
     }
-    module_for_each_annotation(mod) <| $ ( ann ) {
+    module_for_each_annotation(mod) <| $(ann) {
         describeAnnotation(ann)
     }
-    module_for_each_function(mod) <| $ ( finfo ) {
+    module_for_each_function(mod) <| $(finfo) {
         describeFunction(finfo)
     }
-    module_for_each_generic(mod) <| $ ( finfo ) {
+    module_for_each_generic(mod) <| $(finfo) {
         describeFunction(finfo)
     }
-    module_for_each_global(mod) <| $ ( glob ) {
+    module_for_each_global(mod) <| $(glob) {
         describeVariable(glob)
     }
 }
@@ -189,17 +189,17 @@ def describeModule(mod) {
 [export]
 def main {
     // global modules
-    program_for_each_registered_module() <| $ ( mod ) {
+    program_for_each_registered_module() <| $(mod) {
         describeModule(mod)
     }
     describeModule(get_module("$"))
     // sample program
-    compile("sample",sample, CodeOfPolicies()) <| $ ( ok; prog; errors ) {
+    compile("sample", sample, CodeOfPolicies()) <| $(ok; prog; errors) {
         if (ok) {
             print("compiled\n")
             let thisMod = get_this_module(prog)
-            program_for_each_module(prog) <| $ ( mod ) {
-                if (mod==thisMod) {
+            program_for_each_module(prog) <| $(mod) {
+                if (mod == thisMod) {
                     describeModule(mod)
                 }
             }
@@ -209,10 +209,10 @@ def main {
         }
     }
     // current context
-    context_for_each_function() <| $ ( finfo ) {
+    context_for_each_function() <| $(finfo) {
         describeFunction(finfo)
     }
-    context_for_each_variable() <| $ ( vinfo ) {
+    context_for_each_variable() <| $(vinfo) {
         describeVariable(vinfo)
     }
     return true

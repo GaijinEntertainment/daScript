@@ -4,11 +4,11 @@ require rtti
 require debugapi
 
 class SampleDebugAgent : DapiDebugAgent
-    def override onInstrumentFunction ( var ctx:Context; fun:SimFunction?; entering:bool; userData:uint64 ) : void
+    def override onInstrumentFunction(var ctx : Context; fun : SimFunction?; entering : bool; userData : uint64) : void
         print("{entering} {fun.mangledName} - {userData}\n")
 
 [export]
-def debug_agent ( ctx : Context )
+def debug_agent(ctx : Context)
     assert(this_context().category.debug_context)
     install_new_debug_agent(new SampleDebugAgent(), "debug")
 
@@ -19,20 +19,20 @@ struct Bar
     b = true
 
 struct Foo
-    a: int
+    a : int
     arr = [[auto[] true; false]]
     arr2 = [[Bar[] [[Bar]]; [[Bar]]]]
-    ref: Foo?
+    ref : Foo?
 
-def operator delete (var a:Foo&)
+def operator delete(var a : Foo&)
     print("destroy Foo[{a.a}]\n")
 
 [export]
 def main()
     this_context().name := "stackwalk main context"
     var count = 0
-    instrument_all_functions(this_context()) <| $ ( fn, sfn )
-        let info = get_function_info(this_context(),fn)
+    instrument_all_functions(this_context()) <| $(fn, sfn)
+        let info = get_function_info(this_context(), fn)
         print("instrumenting {sfn.mangledName}\n")
         return uint64(count++)
     fork_debug_agent_context(@@debug_agent)

@@ -4,11 +4,11 @@ typedef
     TestObjectSmartPtr = smart_ptr<TestObjectSmart>
 
 [export]
-def mks ()
+def mks()
     return <- [[TestObjectSmartPtr]]
 
 [export]
 def test
     var inscope p <- mks()
-    verify(get_ptr(p)==null)
+    verify(get_ptr(p) == null)
     return true

@@ -4,7 +4,7 @@ struct Foo {
 }
 
 [sideeffects]
-def buggy(skip:bool) {
+def buggy(skip : bool) {
     var a = new Foo
     if (skip) {
         return

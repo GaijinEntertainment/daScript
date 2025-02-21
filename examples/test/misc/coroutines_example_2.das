@@ -6,7 +6,7 @@ struct Tree {
     left, right : Tree?
 }
 
-let tree = new  Tree( data = 5,
+let tree = new  Tree(data = 5,
     left = new Tree(uninitialized data = 1),
     right = new Tree(uninitialized data = 7,
         right = new Tree(uninitialized data = 10)

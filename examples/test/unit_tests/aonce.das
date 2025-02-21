@@ -11,7 +11,7 @@ def test {
     var count = 0
     label 0:
     try {
-        assert_once(t==0)
+        assert_once(t == 0)
     } recover {
         count ++
     }
@@ -19,7 +19,7 @@ def test {
     if (t != 5) {
         goto 0
     }
-    assert(count==1)
+    assert(count == 1)
     return true
 }
 

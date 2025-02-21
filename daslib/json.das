@@ -112,7 +112,7 @@ def private _lexer(var stext : string implicit) {
             if (empty(tin)) {
                 return false
             }
-            if (ahead == '[' || ahead == ']' || ahead == '{' || ahead=='}' || ahead == ':' || ahead == ',') {
+            if (ahead == '[' || ahead == ']' || ahead == '{' || ahead == '}' || ahead == ':' || ahead == ',') {
                 yield TokenAt(value = Token(_symbol = ahead), line = line, row = row)
                 next(tin, ahead)
             } elif (ahead == '"') {
@@ -286,7 +286,7 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
             var tab : table<string; JsonValue?>;
             while (!empty(itv)) {
                 if (!expect_token(itv, ahead, Token_string, error)) {
-                    if ((ahead.value is _symbol) && (ahead.value as _symbol)=='}' && length(tab)==0) {
+                    if ((ahead.value is _symbol) && (ahead.value as _symbol) == '}' && length(tab) == 0) {
                         error = "";
                         return JV(tab);
                     }
@@ -300,11 +300,11 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
                 if (value == null) {
                     return null;
                 }
-                if (!allow_duplicate_keys && key_exists(tab,key)) {
+                if (!allow_duplicate_keys && key_exists(tab, key)) {
                     error = "duplicate key {key} at {ahead.line}:{ahead.row}";
                     return null;
                 }
-                tab |> insert(key,value);
+                tab |> insert(key, value);
                 if (!expect_token(itv, ahead, Token_symbol, error)) {
                     return null;
                 }
@@ -339,27 +339,27 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
     }
 }
 
-def read_json ( text : string implicit; var error : string& ) : JsonValue? {
+def read_json(text : string implicit; var error : string&) : JsonValue? {
     //! reads JSON from the `text` string.
     //! if `error` is not empty, it contains the parsing error message.
     error = ""
     var lex <- lexer(text)
-    var res = parse_value(lex,error)
+    var res = parse_value(lex, error)
     delete lex
     return res
 }
 
-def read_json ( text : array<uint8>; var error : string& ) : JsonValue? {
+def read_json(text : array<uint8>; var error : string&) : JsonValue? {
     error = ""
     var lex <- lexer(text)
-    var res = parse_value(lex,error)
+    var res = parse_value(lex, error)
     delete lex
     return res
 }
 
 var private no_trailing_zeros = false
 
-def set_no_trailing_zeros ( value : bool ) {
+def set_no_trailing_zeros(value : bool) {
     //! if `value` is true, then numbers are written without trailing zeros.
     let old_ntz = no_trailing_zeros
     no_trailing_zeros = value
@@ -368,7 +368,7 @@ def set_no_trailing_zeros ( value : bool ) {
 
 var private no_empty_arrays = false
 
-def set_no_empty_arrays ( value : bool ) {
+def set_no_empty_arrays(value : bool) {
     //! if `value` is true, then empty arrays are not written at all
     let old_nea = no_empty_arrays
     no_empty_arrays = value
@@ -377,7 +377,7 @@ def set_no_empty_arrays ( value : bool ) {
 
 var private allow_duplicate_keys = false
 
-def set_allow_duplicate_keys ( value : bool ) {
+def set_allow_duplicate_keys(value : bool) {
     //! if `value` is true, then duplicate keys are allowed in objects. the later key overwrites the earlier one.
     let old_adc = allow_duplicate_keys
     allow_duplicate_keys = value
@@ -385,7 +385,7 @@ def set_allow_duplicate_keys ( value : bool ) {
 }
 
 // note - we use StringBuilderWriter for performance reasons here
-def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : int ) {
+def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; depth : int) {
     if (jsv == null) {
         write(writer, "null")
     } elif (jsv.value is _string) {
@@ -394,12 +394,12 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
         write(writer, "\"")
     } elif (jsv.value is _number) {
         if (no_trailing_zeros) {
-            write(writer, fmt(":.17f",jsv.value as _number) |> rtrim("0") |> rtrim("."))
+            write(writer, fmt(":.17f", jsv.value as _number) |> rtrim("0") |> rtrim("."))
         } else {
             write(writer, jsv.value as _number)
         }
     } elif (jsv.value is _array) {
-        if (length(jsv.value as _array)==0) {
+        if (length(jsv.value as _array) == 0) {
             write(writer, "[]")
         } else {
             write(writer, "[\n")
@@ -408,17 +408,17 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
                 if (first) {
                     first = false
                 } else {
-                    write(writer,",\n")
+                    write(writer, ",\n")
                 }
-                write_chars(writer,'\t',depth+1)
-                write_value(writer, elem, depth+1)
+                write_chars(writer, '\t', depth + 1)
+                write_value(writer, elem, depth + 1)
             }
             write(writer, "\n")
             write_chars(writer, '\t', depth)
             write(writer, "]")
         }
     } elif (jsv.value is _object) {
-        if (length(jsv.value as _object)==0) {
+        if (length(jsv.value as _object) == 0) {
             write(writer, "\{\}")
         } else {
             write(writer, "\{\n")
@@ -426,7 +426,7 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
             for (elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)) {
                 if (no_empty_arrays) {
                     if (elemV.value is _array) {
-                        if (length(elemV.value as _array)==0) {
+                        if (length(elemV.value as _array) == 0) {
                             continue
                         }
                     }
@@ -434,16 +434,16 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
                 if (first) {
                     first = false
                 } else {
-                    write(writer,",\n")
+                    write(writer, ",\n")
                 }
-                write_chars(writer,'\t',depth+1)
+                write_chars(writer, '\t', depth + 1)
                 write(writer, "\"");
                 write_escape_string(writer, elemK);
                 write(writer, "\" : ")
-                write_value(writer, elemV, depth+1)
+                write_value(writer, elemV, depth + 1)
             }
             write(writer, "\n")
-            write_chars(writer, '\t',depth)
+            write_chars(writer, '\t', depth)
             write(writer, "\}")
         }
     } elif (jsv.value is _bool) {
@@ -459,15 +459,15 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
     }
 }
 
-def write_json ( val : JsonValue? ) : string {
+def write_json(val : JsonValue?) : string {
     //! returns JSON (textual) representation of JsonValue as a string.
-    let st = build_string() <| $ (var writer) {
+    let st = build_string() <| $(var writer) {
         write_value(writer, val, 0)
     }
     return st
 }
 
-def write_json ( val : JsonValue? # ) : string {
+def write_json(val : JsonValue?#) : string {
     //! Overload accepting temporary type
     unsafe {// Fine, as json doesn't escape the function
         return write_json(reinterpret<JsonValue?> val)

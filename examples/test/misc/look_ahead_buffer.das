@@ -6,22 +6,22 @@ struct LookAheadBuffer {
     que : array<int>
 }
 
-def look_ahead ( src:string; blk:block<(var buf:LookAheadBuffer):void>) {
+def look_ahead(src : string; blk : block<(var buf : LookAheadBuffer) : void>) {
     unsafe {
-        var la <- LookAheadBuffer(uninitialized src<-each(src))        // unsafe due to 'each' on string
+        var la <- LookAheadBuffer(uninitialized src <- each(src))      // unsafe due to 'each' on string
         invoke(blk, la)
         delete la
     }
 }
 
-def empty ( var buf:LookAheadBuffer ) : bool {
+def empty(var buf : LookAheadBuffer) : bool {
     if (length(buf.que) > 0) {
         return false
     }
     return buf.src |> empty()
 }
 
-def next ( var buf:LookAheadBuffer; var value : int& ) : bool {
+def next(var buf : LookAheadBuffer; var value : int&) : bool {
     if (length(buf.que) > 0) {
         value = buf.que[0]
         buf.que |> erase(0)
@@ -30,7 +30,7 @@ def next ( var buf:LookAheadBuffer; var value : int& ) : bool {
     return buf.src |> next(value)
 }
 
-def skip ( var buf:LookAheadBuffer; var total:int=1 ) {
+def skip(var buf : LookAheadBuffer; var total : int = 1) {
     let lbq = length(buf.que)
     if (total <= lbq) {
         total -= lbq
@@ -43,7 +43,7 @@ def skip ( var buf:LookAheadBuffer; var total:int=1 ) {
     }
 }
 
-def ahead ( var buf:LookAheadBuffer; var value : int&; offset:int = 0 ) : bool {
+def ahead(var buf : LookAheadBuffer; var value : int&; offset : int = 0) : bool {
     while (length(buf.que) <= offset) {
         var Ch = 0
         if (buf.src |> next(Ch)) {
@@ -59,12 +59,12 @@ def ahead ( var buf:LookAheadBuffer; var value : int&; offset:int = 0 ) : bool {
     return false
 }
 
-def accept ( var buf:LookAheadBuffer; st:string ) : bool {
+def accept(var buf : LookAheadBuffer; st : string) : bool {
     let slen = length(st)
     var Ch = 0
-    for (sc,i in st,range(slen)) {
-        if (buf |> ahead(Ch,i)) {
-            if (Ch!=sc) {
+    for (sc, i in st, range(slen)) {
+        if (buf |> ahead(Ch, i)) {
+            if (Ch != sc) {
                 return false
             }
         } else {
@@ -80,11 +80,11 @@ let tokens <- array<string>(
     "<<", ">>"
 );
 
-def tokenize ( inp:string ) {// TODO: turn into generator
-    look_ahead(inp) <| $ ( var tin ) {
+def tokenize(inp : string) { // TODO: turn into generator
+    look_ahead(inp) <| $(var tin) {
         var Ch = 0
         while (!empty(tin)) {
-            while (ahead(tin,Ch) && is_white_space(Ch)) {
+            while (ahead(tin, Ch) && is_white_space(Ch)) {
                 tin |> next(Ch)
             }
             var found = false

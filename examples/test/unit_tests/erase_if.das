@@ -1,14 +1,14 @@
 require UnitTest
 require math
 
-def test_erase_if(var arr: array<int>)
+def test_erase_if(var arr : array<int>)
     let cloned := arr
     var maxVal = -1
 
     for v in arr
         maxVal = max(maxVal, v)
 
-    arr |> erase_if() <| $(v: int)
+    arr |> erase_if() <| $(v : int)
         return v < 0
 
     var ok = true
@@ -27,7 +27,7 @@ def test_erase_if(var arr: array<int>)
 
 [export]
 def test
-    var t: array<int>
+    var t : array<int>
     test_erase_if(t)
     var t0 <- array(0)
     test_erase_if(t0)

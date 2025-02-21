@@ -45,12 +45,12 @@ def test_reader
 [export]
 def test
     test_reader()
-    for jidx in range(1,9)
+    for jidx in range(1, 9)
         let fname = "D:/Work/daScript/examples/test/json/{jidx}.json"
         // let fname = "/Users/borisbatkin/Work/yzg/examples/test/json/{jidx}.json"
-        fopen(fname, "rb") <| $ ( f )
-            fread(f) <| $ ( data )
-                print ( "\n{fname}\n" )
+        fopen(fname, "rb") <| $(f)
+            fread(f) <| $(data)
+                print("\n{fname}\n")
                 // print("before read {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
                 var error = ""
                 var json = read_json(data, error)

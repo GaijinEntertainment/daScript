@@ -10,10 +10,10 @@ def basic_goto() {
     if (i < 10) {
         goto label 0
         fail = true
-        assert(false,"unreachable code")    // not a static assert without optimizations
+        assert(false, "unreachable code")   // not a static assert without optimizations
     }
     for (t in range(10)) {
-        assert(arr[t]==t)
+        assert(arr[t] == t)
     }
     assert(!fail)
 }
@@ -34,7 +34,7 @@ def nested_goto() {
         fail = true
     }
     for (t in range(10)) {
-        assert(arr[t]==t)
+        assert(arr[t] == t)
     }
 }
 
@@ -52,12 +52,12 @@ def for_goto() {
             fail = true
         }
         for (t in range(10)) {
-            assert(arr[t]==t + j)
+            assert(arr[t] == t + j)
         }
         assert(!fail)
     }
     for (t in range(10)) {
-        assert(arr[t]==t + 9)
+        assert(arr[t] == t + 9)
     }
     assert(!fail)
 }
@@ -77,19 +77,19 @@ def while_goto() {
             fail = true
         }
         for (t in range(10)) {
-            assert(arr[t]==t + j)
+            assert(arr[t] == t + j)
         }
         assert(!fail)
         j ++
     }
     for (t in range(10)) {
-        assert(arr[t]==t + 9)
+        assert(arr[t] == t + 9)
     }
     assert(!fail)
 }
 
 [sideeffects]
-def finally_goto(yes:bool = true) {
+def finally_goto(yes : bool = true) {
     var fail = true
     if (yes) {
         fail = true
@@ -102,7 +102,7 @@ def finally_goto(yes:bool = true) {
 }
 
 [sideeffects]
-def gotoN(n:int) {
+def gotoN(n : int) {
     var res = -1
     goto n
     label 0:
@@ -120,10 +120,10 @@ def gotoN(n:int) {
 
 [sideeffects]
 def N_goto() {
-    verify(gotoN(0)==0)
-    verify(gotoN(1)==1)
-    verify(gotoN(2)==2)
-    verify(gotoN(3)==-1)
+    verify(gotoN(0) == 0)
+    verify(gotoN(1) == 1)
+    verify(gotoN(2) == 2)
+    verify(gotoN(3) == -1)
 }
 
 [export]

@@ -4,16 +4,16 @@ var to_upper_count = 0
 var utf8_count = 0
 
 class MyString {
-	def MyString {
-		ctor_count ++
+    def MyString {
+        ctor_count ++
     }
-	def to_upper(): MyString? {
-		to_upper_count ++
-		return addr(self)
+    def to_upper() : MyString? {
+        to_upper_count ++
+        return addr(self)
     }
-	def utf8(): MyString? {
-		utf8_count ++
-		return addr(self)
+    def utf8() : MyString? {
+        utf8_count ++
+        return addr(self)
     }
 }
 

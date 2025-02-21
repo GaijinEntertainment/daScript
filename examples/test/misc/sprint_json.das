@@ -25,13 +25,13 @@ struct Foo {
     v_str : string
     @unescape v_unescaped_str : string
     @embed v_embed : string
-    tab : table<string;int>
-    tup : tuple<int;float>
+    tab : table<string; int>
+    tup : tuple<int; float>
     v_var : Moo
     ptr : void?
     @optional empty_str : string
     @optional empty_arr : array<int>
-    @optional empty_tab : table<string;int>
+    @optional empty_tab : table<string; int>
 }
 
 [export]
@@ -39,7 +39,7 @@ def main {
     var a <- Foo(uninitialized
         v_int = 1,
         bar <- Bar(
-            arr_int <- [ 1,2,3]
+            arr_int <- [ 1, 2, 3]
         ),
         v_float = 2.34,
         en1 = AnyThing.any,
@@ -49,10 +49,10 @@ def main {
         v_unescaped_str = "hello\nworld",
         v_embed = "[22,32,43]",
         tab <- { "hello" => 1, "world" => 2 },
-        tup = ( 3,.141592),
-        v_var = Moo(uninitialized f=3.141592),
+        tup = (3, .141592),
+        v_var = Moo(uninitialized f = 3.141592),
         ptr = null
     )
-    let t = sprint_json(a,true)
+    let t = sprint_json(a, true)
     print("t = {t}\n")
 }

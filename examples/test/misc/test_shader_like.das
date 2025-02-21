@@ -6,7 +6,7 @@ options shader_like
 // this fails
 var arr : array<int>    // 40104: global variable arr requires heap
 
-def add(a,b)
+def add(a, b)
     return a + b
 
 struct Foo

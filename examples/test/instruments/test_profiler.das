@@ -4,7 +4,7 @@ require fio
 require daslib/profiler_boost
 
 [sideeffects]
-def fibR(n:int)
+def fibR(n : int)
     if (n < 2)
         return n
     return fibR(n - 1) + fibR(n - 2)

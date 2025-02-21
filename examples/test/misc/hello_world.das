@@ -7,13 +7,13 @@ template struct Foo  {
 
     s : int;
 
-    def static sum ( a,b : int ) : int {
+    def static sum(a, b : int) : int {
         return a + b;
     }
 
 
     def init() {
-        s = sum(1,2);
+        s = sum(1, 2);
     }
 
 }

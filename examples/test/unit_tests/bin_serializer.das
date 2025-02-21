@@ -16,11 +16,11 @@ struct Bar {
 
 [safe_when_uninitialized]
 struct Foo {
-    data_bool:bool=true
-    data_int:int = 1
-    data_float:float = 3.14
-    data_bar:Bar <- Bar()
-    data_uint_3 : uint[3] =  fixed_array<uint>( 1u, 2u, 3u )
+    data_bool : bool = true
+    data_int : int = 1
+    data_float : float = 3.14
+    data_bar : Bar <- Bar()
+    data_uint_3 : uint[3] =  fixed_array<uint>(1u, 2u, 3u)
 }
 
 [export]
@@ -29,13 +29,13 @@ def test {
     var f1 : Foo
     binary_save(f0) <| $(data) {
         binary_load(f1, data)
-        assert(f1.data_bool==true)
-        assert(f1.data_int==1)
-        assert(f1.data_float==3.14)
-        assert(f1.data_bar.t=="blah")
-        assert(f1.data_uint_3[0]==1u && f1.data_uint_3[1]==2u && f1.data_uint_3[2]==3u)
+        assert(f1.data_bool == true)
+        assert(f1.data_int == 1)
+        assert(f1.data_float == 3.14)
+        assert(f1.data_bar.t == "blah")
+        assert(f1.data_uint_3[0] == 1u && f1.data_uint_3[1] == 2u && f1.data_uint_3[2] == 3u)
         for (i in range(10)) {
-            assert(f1.data_bar.ta[i]==float(i))
+            assert(f1.data_bar.ta[i] == float(i))
         }
     }
     return true

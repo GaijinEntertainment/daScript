@@ -8,14 +8,14 @@ def c1 {
     value++
 }
 
-[init,no_aot]
+[init, no_aot]
 def c2 {
-    value+=2
+    value += 2
 }
 
 [export]
 def test {
-    assert(value==3)
+    assert(value == 3)
     return true
 }
 

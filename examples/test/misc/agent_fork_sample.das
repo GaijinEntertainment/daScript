@@ -6,13 +6,13 @@ require jobque
 // debug server
 
 [export]
-def debug_agent ( ctx : Context ) {
+def debug_agent(ctx : Context) {
     print("from debugger\n")
     install_new_debug_agent(new DapiDebugAgent(), "sample") // note - no install = no category
 }
 
 [export, pinvoke]
-def debug_agent_fn ( ctx:Context; fun:function ) {
+def debug_agent_fn(ctx : Context; fun : function) {
     print("debug agent call {fun} from context {ctx}\n")
     unsafe {
         ctx |> invoke_in_context(fun, "now")
@@ -26,7 +26,7 @@ var {
 }
 
 [export, pinvoke]
-def stop_waiting(msg:string#) {
+def stop_waiting(msg : string#) {
     print("we stop waiting {msg}\n")
     wait_for_it = false
 }

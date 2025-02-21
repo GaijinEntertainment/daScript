@@ -24,7 +24,7 @@ struct C
     c : table<string; A>
 
 [export]
-def test:bool
+def test : bool
     let a : Foo
     let b : Node
     let c : Bar
