@@ -6749,7 +6749,7 @@ namespace das {
                     bool checkIt = true;
                     if ( expr->subexpr->rtti_isCall() ) {
                         auto ccall = static_pointer_cast<ExprCall>(expr->subexpr);
-                        if ( ccall->name=="_return_with_lockcheck" || ccall->name.rfind("__::builtin`_return_with_lockcheck`",0)==0 ) checkIt = false;
+                        if ( ccall->name=="_return_with_lockcheck" || starts_with(ccall->name,"__::builtin`_return_with_lockcheck`") ) checkIt = false;
                     }
                     if ( checkIt && !expr->skipLockCheck && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
                         reportAstChanged();
@@ -8373,15 +8373,20 @@ namespace das {
             return true;
         }
 
-        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, bool lookupGenerics = true ) {
+        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, Function * lookupFunction = nullptr ) {
             vector<TypeDeclPtr> types;
             if (!inferArguments(types, expr->arguments)) {
                 return nullptr;
             }
-            auto functions = findMatchingFunctions(expr->name, types, true);
+            MatchingFunctions  functions;
             MatchingFunctions generics;
-            if ( lookupGenerics ) generics = findMatchingGenerics(expr->name, types);
-            applyLSP(types,functions);
+            if ( !lookupFunction ) {
+                functions = findMatchingFunctions(expr->name, types, true);
+                generics = findMatchingGenerics(expr->name, types);
+                applyLSP(types,functions);
+            } else {
+                functions.push_back(lookupFunction);
+            }
             if ( functions.size()==1 ) {
                 auto funcC = functions.back();
                 if ( funcC->firstArgReturnType ) {
@@ -8712,7 +8717,7 @@ namespace das {
 
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
-            expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, !expr->genericFunction).get();
+            expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get();
             if ( expr->func && expr->func->fromGeneric ) expr->genericFunction = true;
             if ( expr->aliasSubstitution  ) {
                 if ( expr->arguments.size()!=1 ) {
