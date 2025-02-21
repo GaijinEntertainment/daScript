@@ -161,6 +161,12 @@ namespace das {
         return req;
     }
 
+    bool starts_with ( const string & name, const char * template_name ) {
+        auto len = strlen(template_name);
+        if ( name.size() < len ) return false;
+        return name.compare(0,len,template_name) == 0;
+    }
+
     string getModuleName ( const string & nameWithDots ) {
         auto idx = nameWithDots.find_last_of("./");
         if ( idx==string::npos ) return nameWithDots;
