@@ -11,8 +11,8 @@ namespace das::format {
             string content;
             string what;
         };
-        optional<string> ok;
-        optional<ErrorInfo> error;
+	std::optional<string> ok;
+	std::optional<ErrorInfo> error;
     };
 
     /**

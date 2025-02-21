@@ -973,15 +973,15 @@ annotation_argument_name
     ;
 
 annotation_argument
-    :   annotation_argument_name[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
-    |   annotation_argument_name[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
-    |   annotation_argument_name[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokAt(scanner,@name)); delete $name; }
-    |   annotation_argument_name[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
-    |   annotation_argument_name[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }
-    |   annotation_argument_name[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false,tokAt(scanner,@name)); delete $name; }
+    :   annotation_argument_name[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value,tokRangeAt(scanner,@name,@value)); delete $value; delete $name; }
+    |   annotation_argument_name[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokRangeAt(scanner,@name,@value)); delete $value; delete $name; }
+    |   annotation_argument_name[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokRangeAt(scanner,@name,@value)); delete $name; }
+    |   annotation_argument_name[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value),tokRangeAt(scanner,@name,@value)); delete $name; }
+    |   annotation_argument_name[name] '=' DAS_TRUE[value]          { $$ = new AnnotationArgument(*$name,true,tokRangeAt(scanner,@name,@value)); delete $name; }
+    |   annotation_argument_name[name] '=' DAS_FALSE[value]         { $$ = new AnnotationArgument(*$name,false,tokRangeAt(scanner,@name,@value)); delete $name; }
     |   annotation_argument_name[name]                              { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }
-    |   annotation_argument_name[name] '=' '(' annotation_argument_value_list[values] ')' {
-        { $$ = new AnnotationArgument(*$name,$values,tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' '(' annotation_argument_value_list[values] ')'[end] {
+        { $$ = new AnnotationArgument(*$name,$values,tokRangeAt(scanner,@name,@end)); delete $name; }
     }
     ;
 
@@ -1750,10 +1750,10 @@ expr_type_info
             delete $trait;
             delete $subtrait;
     }
-    |   DAS_TYPEINFO[loc] '('[par1] name_in_namespace[trait] '<' NAME[subtrait] c_or_s NAME[extratrait] '>' expr[subexpr] ')' {
+    |   DAS_TYPEINFO[loc] '('[par1] name_in_namespace[trait] '<' NAME[subtrait] c_or_s NAME[extratrait] '>'[rang] expr[subexpr] ')' {
             format::replace_with(false,
                                  format::Pos::from(tokAt(scanner,@par1)),
-                                 format::get_substring(tokRangeAt(scanner,@trait,@subexpr)),
+                                 format::get_substring(tokRangeAt(scanner,@trait,@rang)),
                                  format::Pos::from(tokAt(scanner,@subexpr)), " ", "(");
 
             if ( $subexpr->rtti_isTypeDecl() ) {
@@ -1861,7 +1861,7 @@ capture_list
 optional_capture_list
     :   { $$ = nullptr; }
     |   BRABRAB[open] capture_list[cl] ']'[sq_end] ']'[close] {
-        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @open)))) {
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner, @open)))) {
             format::get_writer() << format::substring_between(tokAt(scanner, @open), tokAt(scanner, @cl))
                       << "capture(" << format::get_substring(tokAt(scanner, @cl)) << ")"
                       << format::substring_between(tokAt(scanner, @cl), tokAt(scanner, @sq_end));
@@ -2325,7 +2325,7 @@ expr_mtag
 optional_field_annotation
     :                                                   { $$ = nullptr; }
     |   BRABRAB[open] annotation_argument_list[alist] ']' ']'[close] {
-        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @open)))) {
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner, @open)))) {
             for (const auto &arg: *$alist) {
                 format::get_writer() << "@" << format::get_substring(arg.at);
             }
@@ -3940,7 +3940,11 @@ make_dim_decl
             format::get_writer() << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt));
             if (static_cast<ExprMakeArray*>($mka)->values.size() == 1) {
                 // single element
-                format::get_writer() << internal;
+                if (type_name.value_or("").find('[') != -1) {
+                    format::get_writer() << "[" << internal << "]";
+                } else {
+                    format::get_writer() << internal;
+                }
             } else {
                 format::get_writer() << "fixed_array";
                 if (!$mkt->isAuto()) {

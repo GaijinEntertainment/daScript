@@ -984,7 +984,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const auto npos = -1;
+    const size_t npos = -1;
     if (offset != npos) {
         yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
         yylloc_param->last_column = txt.size() - (offset + 1);
@@ -1004,7 +1004,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const auto npos = -1;
+    const size_t npos = -1;
     if (offset != npos) {
         yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
         yylloc_param->last_column = txt.size() - (offset + 1);
@@ -1025,7 +1025,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const auto npos = -1;
+    const size_t npos = -1;
     if (offset != npos) {
         yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
         yylloc_param->last_column = txt.size() - (offset + 1);
@@ -1043,7 +1043,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     yyextra->das_nested_square_braces -= 2;
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const auto npos = -1;
+    const size_t npos = -1;
     if (offset != npos) {
         yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
         yylloc_param->last_column = txt.size() - (offset + 1);
@@ -1058,8 +1058,16 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         return LEXER_ERROR;
     }
     yyextra->das_nested_square_braces -= 2;
+    const auto txt = string(yytext);
+    auto offset = txt.rfind('\n');
+    const size_t npos = -1;
+    if (offset != npos) {
+        yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
+        yylloc_param->last_column = txt.size() - (offset + 1);
+    }
     return COMMA_SQR_SQR;
 }
+
 <normal>\\([ \t\r])*\n {
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
 }

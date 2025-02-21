@@ -7,7 +7,7 @@
 
 namespace das::format {
 
-    static inline constexpr int npos = -1;
+    static inline constexpr size_t npos = -1;
 
     template <typename T>
     string convert_to_string(const vector<T> &vec, string sep = ",", string prev_sep = ",") {

@@ -105,7 +105,7 @@ namespace das::format {
     string get_line(uint32_t line);
 
     //
-    optional<StructurePtr> try_find_struct(const string &name);
+    std::optional<StructurePtr> try_find_struct(const string &name);
 
     enum class CanInit {
         Can,

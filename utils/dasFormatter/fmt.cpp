@@ -44,6 +44,7 @@ string remove_semicolons(string_view str) {
     size_t line_end = -1;
     int par_balance = 0; // ()
     int sq_braces_balance = 0; // []
+    int braces_balance = 0; // {}
     vector<NoCommentReason> disables;
     do {
         size_t offset = line_end + 1;
@@ -51,14 +52,13 @@ string remove_semicolons(string_view str) {
         bool is_eof = str.size() <= offset;
         bool indent_non_zero = (!is_eof && (str.at(offset) == ' ' || str.at(offset) == '\t'));
         auto last_char_idx = offset + format::find_comma_place(str.substr(offset, line_end - offset));
-        if (!indent_non_zero) {
-            par_balance = 0;
-            sq_braces_balance = 0;
-        }
         auto cur_line = str.substr(offset, last_char_idx - offset + 1);
         for (size_t i = 0; i < cur_line.size(); i++) {
             const auto c = cur_line.at(i);
             optional<NoCommentReason> maybe_reason;
+            if (disables.empty() && c == '/' && cur_line.size() > i + 1 && cur_line.at(i + 1) == '/') {
+                break;
+            }
             if (c == '"') {
                 maybe_reason = NoCommentReason::String;
             } else if (c == '/' && cur_line.size() > i + 1 && cur_line.at(i + 1) == '*') {
@@ -86,10 +86,12 @@ string remove_semicolons(string_view str) {
                 case ')': par_balance -= 1; break;
                 case '[': sq_braces_balance += 1; break;
                 case ']': sq_braces_balance -= 1; break;
+                case '{': braces_balance += 1; break;
+                case '}': braces_balance -= 1; break;
                 default: break;
             }
         }
-        if (par_balance == 0 &&
+        if (par_balance == 0 && braces_balance == 0 &&
             sq_braces_balance == 0 &&
             last_char_idx != offset - 1 &&
             str.at(last_char_idx) == ';') {
@@ -116,6 +118,11 @@ void addNewModules(ModuleGroup &libGroup, ProgramPtr program) {
 
 Result transform_syntax(const string &filename, const string content, format::FormatOptions options) {
     auto src = content;
+    if (src.find("options gen2") == 0) {
+        Result res;
+        res.ok = src;
+        return res;
+    }
     string prev;
     vector<ModuleInfo> req;
     vector<RequireRecord> missing, circular, notAllowed;
@@ -146,7 +153,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
                 for (const auto& err: program->errors) {
                     tp << err.what << " " << err.at.describe() << '\n';
                 }
-                return {};
+                // return {}; // still try to compile
             }
             if (program->thisModule->name.empty()) {
                 program->thisModule->name = mod.moduleName;
@@ -212,10 +219,10 @@ Result transform_syntax(const string &filename, const string content, format::Fo
         format::destroy();
         das_yylex_destroy(scanner);
         if (err != 0) {
+            tp << program->errors.front().at.describe() << '\n';
             if (iter == 0) {
                 return {};
             }
-            tp << program->errors.front().at.describe() << '\n';
             Result res;
             res.error = Result::ErrorInfo{prev, program->errors.front().what};
             return res;
