@@ -422,7 +422,7 @@ namespace das {
         string moduleName, mangledName;
         *this << moduleName << mangledName;
         auto funcModule = moduleLibrary->findModule(moduleName);
-        SERIALIZER_VERIFYF(ignoreEmptyExternal || funcModule, "das: serialize: module '%s' is not found", moduleName.c_str());
+        SERIALIZER_VERIFYF(ignoreEmptyExternal || funcModule, "module '%s' is not found", moduleName.c_str());
         return {funcModule, mangledName};
     }
 
@@ -441,7 +441,7 @@ namespace das {
         }
         if ( func == nullptr ) {
             failed = true;
-            SERIALIZER_VERIFYF(false, "das: serialize: function '%s' not found", mangledName.c_str());
+            SERIALIZER_VERIFYF(false, "function '%s' not found", mangledName.c_str());
         }
     }
 
@@ -1348,7 +1348,7 @@ namespace das {
             }
             ser << mangledName;
             if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
-                LOG(LogLevel::warning) << "Field '" << name << "' not found in '" << annotation->name << "'";
+                LOG(LogLevel::warning) << "das: serialize: Field '" << name << "' not found in '" << annotation->name << "'";
             }
         } else {
             if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
@@ -2205,7 +2205,7 @@ namespace das {
                     ser << *deser;
                 } catch ( std::runtime_error & r ) {
                     delete deser;
-                    LOG(LogLevel::warning) << r.what();
+                    LOG(LogLevel::warning) << "das: serialize: " << r.what();
                     program->failToCompile = true;
                     return;
                 }
@@ -2227,7 +2227,7 @@ namespace das {
             return true;
         } catch ( std::runtime_error & r ) {
             program->failToCompile = true;
-            LOG(LogLevel::warning) << r.what();
+            LOG(LogLevel::warning) << "das: serialize: " << r.what();
             return false;
         }
     }
