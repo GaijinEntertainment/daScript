@@ -767,11 +767,11 @@ def key_exists(Tab : table<auto(keyT); auto(valT)> | #; at : string#) : bool
 def key_exists(Tab : table<auto(keyT); auto(valT)> | #; at : keyT | #) : bool
     return __builtin_table_key_exists(Tab, at)
 
-def binary_save(obj; subexpr : block<(data : array<uint8>) : void>)
+def binary_save(obj; subexpr : block<(data : array<uint8>#) : void>)
     concept_assert(typeinfo(is_ref_type obj), "can only serialize ref types")
     _builtin_binary_save(obj, subexpr)
 
-def binary_load(var obj; data : array<uint8>)
+def binary_load(var obj; data : array<uint8> implicit)
     concept_assert(typeinfo(is_ref_type obj), "can only serialize ref types")
     _builtin_binary_load(obj, data)
 
