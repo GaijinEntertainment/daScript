@@ -68,6 +68,17 @@ namespace das {
     class TextWriter : public StringWriter {
     public:
         TextWriter() {}
+
+        /*
+         * Copy and move constructors are not supported
+         * This helps prevent issues with `largeBuffer` ownership
+         * and keeps the code cleaner and simpler
+         */
+        TextWriter(const TextWriter&) = delete;
+        TextWriter(TextWriter&&) = delete;
+        TextWriter& operator=(const TextWriter&) = delete;
+        TextWriter& operator=(TextWriter&&) = delete;
+
         virtual ~TextWriter();
         virtual string str() const override;
         virtual uint64_t tellp() const override;
