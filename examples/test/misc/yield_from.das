@@ -20,7 +20,7 @@ let tree = new  Tree(
 );
 
 def each_async(tree : Tree?) : iterator<int> {
-    return <- generator<int> () <| $() {
+    return <- generator<int>() <| $() {
         if (tree.left != null) {
             yeild_from <| each_async(tree.left)
         }

@@ -19,27 +19,27 @@ def test_addr
 
 def test_fun_arg
     var inscope foo <- [{VariablePtr
-        new [[Variable() name:="v1", _type<-qmacro_type(type<int>)]];
-        new [[Variable() name:="v2", _type<-qmacro_type(type<float>), init<-qmacro(1.2)]]
+        new [[Variable() name := "v1", _type <- qmacro_type(type<int>)]];
+        new [[Variable() name := "v2", _type <- qmacro_type(type<float>), init <- qmacro(1.2)]]
     }]
-    var inscope fun <- qmacro_function("add") <| $ ( a: int; $a(foo); b : int )
+    var inscope fun <- qmacro_function("add") <| $(a : int; $a(foo); b : int)
         return a + b
     print("\nFUNCTION ARGUMENTS ARE:\n{describe(fun)}\n")
     delete fun
 
 def test_var
     var inscope tt <- typeinfo(ast_typedecl type<float>)
-    var inscope vvar <- qmacro_variable("foo",type<$t(tt)?>)
+    var inscope vvar <- qmacro_variable("foo", type<$t(tt)?>)
     print("\nVARIABLE IS:\n{describe(vvar)}\n")
 
 def test_type
     var inscope argT <- typeinfo(ast_typedecl type<int>)
-    var inscope resT <- qmacro_type(type<$t(argT)???>)
+    var inscope resT <- qmacro_type(type<$t(argT) ???>)
     print("\nTYPE IS:\n{describe(resT)}\n")
 
 def test_fun
-    var inscope argT <- typeinfo(ast_typedecl type<int???>)
-    var inscope fun <- qmacro_function("add") <| $ ( a:$t(argT); b:float )
+    var inscope argT <- typeinfo(ast_typedecl type<int ???>)
+    var inscope fun <- qmacro_function("add") <| $(a : $t(argT); b : float)
         return $i("a") + b
     print("\nFUNCTION REIFICATION IS:\n{describe(fun)}\n")
     delete fun
@@ -69,14 +69,14 @@ def test_regular
     var inscope subtype <- typeinfo(ast_typedecl type<int>)
     var inscope blk <- qmacro <|
         let t = $i(bus)
-        let q = $v([[auto a1,car]])
+        let q = $v([[auto a1, car]])
         let lb = $e(expr)
         print("{q}{t}{lb}\n")
         $b(qqblk)
-        somefunnycall(1,$a(arguments),2)
+        somefunnycall(1, $a(arguments), 2)
         var aaa <- [[auto $a(aargs)]]
         var a : $t(subtype)
-        $c(cll)(1,2,$a(arguments),3)
+        $c(cll)(1, 2, $a(arguments), 3)
         foo.$f(bar) = 13
         foo?.$f("{bar}`bar") = 14
         foo.$f(bar).$f(bar) = 15
@@ -85,7 +85,7 @@ def test_regular
             print("hello!\n")
         let qq = @@$c(cll)
         let $i(bus) = "busbus"
-        invoke <| $ ( $i(bus) : bool )
+        invoke <| $($i(bus) : bool)
             pass
     print(describe(blk))
     delete blk

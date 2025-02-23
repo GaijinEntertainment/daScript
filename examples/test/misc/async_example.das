@@ -17,7 +17,7 @@ struct Data {
     arr : array<int>
 }
 
-[async] def timeout(time : float; var callback : lambda<void>): void {
+[async] def timeout(time : float; var callback : lambda < void >) : void {
     let start_time = get_clock()
     while (get_clock() - start_time < double(time)) {
         await_next_frame()
@@ -44,7 +44,7 @@ struct Data {
     var data : Data
     data.a = a
     data.b = "hello"
-    data.arr <- array<int>( 1)
+    data.arr <- array<int>(1)
     yield <- data
 }
 
@@ -103,7 +103,7 @@ struct Data {
     log("getrealall 2\n")
     await_next_frame()
     log("getrealall 3\n")
-	await <| getall() // ok, async function with void result
+    await <| getall() // ok, async function with void result
 
     log("async_range\n")
     var ints = 0

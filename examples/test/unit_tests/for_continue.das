@@ -10,7 +10,7 @@ def test_while_continue() {
         }
         y += x
     }
-    assert(y==(1+3+5+7+9))
+    assert(y == (1 + 3 + 5 + 7 + 9))
 }
 
 [sideeffects]
@@ -22,21 +22,21 @@ def test_for_continue() {
         }
         y += x
     }
-    assert(y==(1+3+5+7+9))
+    assert(y == (1 + 3 + 5 + 7 + 9))
 }
 
 [sideeffects]
 def test_complex_for_continue() {
     var y = 0
-    let arr = fixed_array<int>( 0,1,2,3,4,5,6,7,8,9)
-    for (x,s in range(10), arr) {
-        assert(x==s)
+    let arr = fixed_array<int>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+    for (x, s in range(10), arr) {
+        assert(x == s)
         if ((x & 1) == 0) {
             continue
         }
         y += x
     }
-    assert(y==(1+3+5+7+9))
+    assert(y == (1 + 3 + 5 + 7 + 9))
 }
 
 [export]

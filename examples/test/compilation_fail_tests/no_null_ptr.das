@@ -2,11 +2,11 @@ expect 30402:7
 
 require UnitTest
 
-def doNotPass ( a : TestObjectNotNullPtr?; b: int )
+def doNotPass(a : TestObjectNotNullPtr?; b : int)
     print("{a} = {b}\n")
 
 [export]
-def doNotReturn : TestObjectNotNullPtr?
+def doNotReturn : TestObjectNotNullPtr ?
     return null                             // 30402: can't return null
 
 [export]
@@ -18,7 +18,7 @@ def main
     unsafe
         delete t                            // 30402: can't delete UnitTest::TestObjectNotNullPtr?& -const, it will create null pointer
 
-    doNotPass(null,1)                       // 30402: can't pass null to function doNotPass argument a
+    doNotPass(null, 1)                      // 30402: can't pass null to function doNotPass argument a
 
 
     print("hello {t} {q}!\n")

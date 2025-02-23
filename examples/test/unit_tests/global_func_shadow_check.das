@@ -3,21 +3,21 @@
 */
 
 struct EquipSlot
-	listSize : int
-	itemTypes : array<string>
-	items : array<string>
-	isPrimary : bool
-	atLeastOne : string
-	ingameWeaponSlot : string
-	uiOrder : int
+    listSize : int
+    itemTypes : array<string>
+    items : array<string>
+    isPrimary : bool
+    atLeastOne : string
+    ingameWeaponSlot : string
+    uiOrder : int
 
 let shared
-	squadScheme <- {{
-		"curVehicle" => [[EquipSlot // вот на этой строке
-			itemTypes := [{ auto[] "vehicle" }]
-		]]
-	}}
+    squadScheme <- {{
+        "curVehicle" => [[EquipSlot // вот на этой строке
+            itemTypes := [{ auto[] "vehicle" }]
+        ]]
+    }}
 
 [export]
 def test
-	return true
+    return true

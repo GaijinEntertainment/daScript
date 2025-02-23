@@ -2,14 +2,14 @@ options gen2
 require debugapi
 
 class LogAgent : DapiDebugAgent {
-    def override onLog ( context : Context?; at : LineInfo const?; level:int; text:string# ) : bool {
+    def override onLog(context : Context?; at : LineInfo const?; level : int; text : string#) : bool {
         print("onLog - {level} - '{text}'\n'{context}' <{at}>\n")
         return true // false for not consuming
     }
 }
 
 [export]
-def logger_agent ( ctx : Context ) {
+def logger_agent(ctx : Context) {
     install_new_debug_agent(new LogAgent(), "log_example")
 }
 

@@ -292,10 +292,19 @@ def parse_token(var ctx : FormatterCtx) {
         let savedSpace = ctx.spaceCounter
         ctx |> next_char()
         ctx |> next_char()
+        var depth = 1
 
         while (!ctx.eof) {
             if (ctx.c == '*' && int(ctx.data[ctx.pos + 1]) == '/') {
-                break
+                depth -= 1
+                if (depth == 0) {
+                    break;
+                }
+                ctx |> next_char()
+            }
+            if (ctx.c == '/' && int(ctx.data[ctx.pos + 1]) == '*') {
+                ctx |> next_char()
+                depth += 1
             }
             ctx |> next_char()
         }

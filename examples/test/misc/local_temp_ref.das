@@ -11,7 +11,7 @@ def getFoo : Foo & {
     }
 }
 
-def getFooT : Foo &# {
+def getFooT : Foo & # {
     unsafe {
         return reinterpret<Foo&#> foo
     }

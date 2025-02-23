@@ -1,14 +1,14 @@
 options gen2
 struct Foo {
-    a,b:int
+    a, b : int
 }
 
 var {
-    ds : das_string?
+    ds : das_string ?
 }
 
-[sideeffects, unused_argument(obj,name)]
-def get_ecs_string(obj,name) : das_string? {
+[sideeffects, unused_argument(obj, name)]
+def get_ecs_string(obj, name) : das_string? {
     return ds
 }
 

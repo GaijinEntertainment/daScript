@@ -7,7 +7,7 @@ def getValue {
 }
 
 [export]
-def getDefaultValue(a:int;b:int=5;c:int) {
+def getDefaultValue(a : int; b : int = 5; c : int) {
     return a + b + c
 }
 

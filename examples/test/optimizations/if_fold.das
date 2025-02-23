@@ -2,7 +2,7 @@ options gen2
 options log = false
 
 def if_to_cond(cond) {// folds to cond ? 1 : 2
-    if ( cond ) {
+    if (cond) {
         return 1
     } else {
         return 2
