@@ -146,11 +146,11 @@ namespace das {
 
     #define HASH_TAG(tag)   tag,hash_tag(tag)
 
-    void AstSerializer::tag ( const char * name, uint64_t hash ) {
+    void AstSerializer::tag ( const char * name, uint32_t hash ) {
         if ( writing ) {
             *this << hash;
         } else  {
-            uint64_t hash2 = 0;
+            uint32_t hash2 = 0;
             *this << hash2;
             if ( hash != hash2 ) {
                 throw_formatted_error("ast serializer tag '%s' mismatch", name);
@@ -2204,7 +2204,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 46;
+        static constexpr uint32_t currentVersion = 47;
         return currentVersion;
     }
 

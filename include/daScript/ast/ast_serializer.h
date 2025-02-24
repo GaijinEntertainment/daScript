@@ -8,17 +8,16 @@
 
 namespace das {
 
-    // copied hash_blockz64 from mics/anyhash.h to avoid binary incompatible changes
-    constexpr uint64_t hash_tag ( const char * block ) {
-        auto FNV_offset_basis = 14695981039346656037ul;
-        auto FNV_prime = 1099511628211ul;
-        if ( !block ) return FNV_offset_basis;
-        auto h = FNV_offset_basis;
-        while ( *block ) {
+    // use FNV32 hash for tags. it's fast and good enough for our purposes
+    constexpr uint32_t hash_tag(const char* block) {
+        constexpr uint32_t FNV_offset_basis = 2166136261u;
+        constexpr uint32_t FNV_prime = 16777619u;
+        uint32_t h = FNV_offset_basis;
+        while (*block) {
             h ^= uint8_t(*block++);
             h *= FNV_prime;
         }
-        return h <= HASH_KILLED64 ? 1099511628211ul : h;
+        return h;
     }
 
     struct SerializationStorage {
@@ -123,7 +122,7 @@ namespace das {
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
-        void tag   ( const char * name, uint64_t hash );
+        void tag   ( const char * name, uint32_t hash );
         template<typename T>
         void read  ( T & data ) { buffer->read(data); }
         void read  ( void * data, size_t size );
