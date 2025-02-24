@@ -7,6 +7,20 @@
 #include <utility>
 
 namespace das {
+
+    // copied hash_blockz64 from mics/anyhash.h to avoid binary incompatible changes
+    constexpr uint64_t hash_tag ( const char * block ) {
+        auto FNV_offset_basis = 14695981039346656037ul;
+        auto FNV_prime = 1099511628211ul;
+        if ( !block ) return FNV_offset_basis;
+        auto h = FNV_offset_basis;
+        while ( *block ) {
+            h ^= uint8_t(*block++);
+            h *= FNV_prime;
+        }
+        return h <= HASH_KILLED64 ? 1099511628211ul : h;
+    }
+
     struct SerializationStorage {
         vector<uint8_t> buffer;
         size_t bufferPos = 0;
@@ -109,7 +123,7 @@ namespace das {
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
-        void tag   ( const char * name );
+        void tag   ( const char * name, uint64_t hash );
         template<typename T>
         void read  ( T & data ) { buffer->read(data); }
         void read  ( void * data, size_t size );
@@ -198,7 +212,7 @@ namespace das {
 
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
-            tag("Vector");
+            tag("Vector",hash_tag("Vector"));
             if ( writing ) {
                 uint64_t size = value.size();
                 serializeAdaptiveSize64(size);
