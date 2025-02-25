@@ -150,7 +150,7 @@ jobs:
     - name: "Clone required repos"
       uses: actions/checkout@master
       with:
-        repository: aleksisch/das-fmt     # Path to repository with das-fmt scripts
+        repository: profelis/das-fmt     # Path to repository with das-fmt scripts
         path: das-fmt
 
     - name: "Build: Daslang"
