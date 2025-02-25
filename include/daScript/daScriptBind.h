@@ -1,0 +1,338 @@
+#pragma once
+
+#include <daScript/daScript.h>
+
+// Contains macros, that will simplify binding most of the stuff,
+// however in more complex cases you can still use addExtern/addField/addProperty
+// and declare everything manually
+//
+// When DAS_AOT_COMPILER is defined, it will bind stubs instead of functions
+//
+// ** FUNCTIONS **
+// Simple function binding:
+//  - sideEffects are from das::SideEffects namespace (only name)
+//  - functionName must be relative to global namespace, but without :: prefix
+// `DAS_ADD_FUNC_BIND("das_func_name", sideEffects, functionName);`
+// If function returns struct by value, use this instead
+// `DAS_ADD_FUNC_BIND_VALUE_RET("das_func_name", sideEffects, functionName);`
+// In case there are several functions overloads, you must specify it explicitly:
+// `DAS_ADD_FUNC_BIND("das_func_name", sideEffects, DAS_OVERLOAD(functionName, ArgType1, ArgType2, ...));`
+//
+// ** CLASS METHODS **
+// Simple class method binding (mostly similar to function binding)
+// - As previously ClassName must be relative to global namespace, but without :: prefix
+// - Resulting binding will take ClassName & as its first argument, before others
+// - DAS_ADD_METHOD_BIND_VALUE_RET must be used for methods, returning structs by value
+// `DAS_ADD_METHOD_BIND("das_func_name", sideEffects, ClassName::methodName)`
+// Overloads work as previously:
+// `DAS_ADD_METHOD_BIND("das_func_name", sideEffects, DAS_OVERLOAD(ClassName::methodName, ArgType1, ArgType2, ...));`
+// In case method have const and non-const overloads, this will resolve and bind both of them:
+// - Note that if there are both const/non-const overloads AND different argument overloads
+//   this will not work (although this is a rare case), see DAS_OVERLOAD_EX later
+// - DAS_ADD_METHOD_BIND_CONST_VALUE_RET - alternative for return-by-value
+// `DAS_ADD_METHOD_BIND_CONST("das_func_name", sideEffects, ClassName::methodName)`
+//
+// ** STRUCT ANNOTATIONS **
+// Declare struct in module header file:
+// - CppTypeName must be relative to global namespace
+// `DAS_TYPE_DECL(DasTypeName, CppTypeName)`
+// Annotate struct in module CPP file:
+// ```
+// DAS_TYPE_ANNOTATION(DasTypeName)
+// {
+//   // ... add fields and properties
+// }
+// ```
+// add annotation in module body
+// `addAnnotation(das::make_smart<DasTypeNameAnnotation>(lib));`
+//
+// ** FIELDS (inside DAS_TYPE_ANNOTATION body) **
+// add field:
+// `DAS_ADD_FIELD_BIND(FieldName)`
+// add field with different name in DAS:
+// `DAS_ADD_FIELD_BIND_EX("DasFieldName", FieldName)`
+//
+// ** PROPERTIES (inside DAS_TYPE_ANNOTATION body) **
+// add property (property must be a method without arguments):
+// DAS_ADD_PROP_BIND("PropertyName", getProperty)
+// add property with const and non-const method
+// overloads (both must be present for this to compile)
+// DAS_ADD_PROP_BIND_CONST("PropertyName", getProperty)
+
+// ** MODULES **
+// Note that this is intended just for simple modules,
+// with no extra stuff, just some bindings. For more
+// complex ones, implement them yourself
+// Declare a module:
+// - Module must be declared in global namespace for this macro
+// - NEED_MODULE(CPPModuleName) must be used to pull it
+// DAS_MODULE_DECL_EX(CPPModuleName, "DasModuleName", "path/to/module/aotInclude.h")
+// {
+//   // all annotations go here
+//   // - addAnnotation/addEnumeration
+//   // - DAS_ADD_FUN_BINDING/DAS_ADD_METHOD_BINDING
+//   // - ...
+// }
+// alternatively if CPPModuleName is 'DasModuleNameModule'
+// DAS_MODULE_DECL_EX(DasModuleName, "path/to/module/aotInclude.h")
+
+
+// Must be defined, when building AOT compiler, to generate stubs and avoid linker errors
+// #define DAS_AOT_COMPILER
+
+
+namespace das::detail
+{
+
+template <typename RetT, typename... ArgsT>
+___noinline RetT the_great_asserting_stub(ArgsT...)
+{
+  DAS_ASSERTF(0, "STUB!");
+  if constexpr (!das::is_same_v<RetT, void>)
+  {
+    static uint64_t the_stubbiest_buffer[8] = {0};
+    void *volatile the_stubbiest_return_val_ptr = &the_stubbiest_buffer;
+    return *(RetT *)the_stubbiest_return_val_ptr;
+  }
+}
+
+template <typename RetT, typename... ArgsT>
+RetT the_great_empty_stub(ArgsT...)
+{
+  if constexpr (!das::is_same_v<RetT, void>)
+    return RetT();
+}
+
+#define DAS_STUB_IMPL(ASSERT, RET)                         \
+  if constexpr (!das::is_same_v<RET, void>)              \
+  {                                                        \
+    if constexpr (ASSERT)                                  \
+      return das::detail::the_great_asserting_stub<RET>(); \
+    else                                                   \
+      return das::detail::the_great_empty_stub<RET>();     \
+  }                                                        \
+  DAS_ASSERTF(!(ASSERT), "STUB!");
+
+template <typename R, typename... Args>
+using FunPtrT = R (*)(Args...);
+template <typename T, typename R, typename... Args>
+using NonConstMethodPtrT = R (T::*)(Args...);
+template <typename T, typename R, typename... Args>
+using ConstMethodPtrT = R (T::*)(Args...) const;
+
+template <typename RetT, typename... ArgsT>
+constexpr FunPtrT<RetT, ArgsT...> get_stub(bool Assert, FunPtrT<RetT, ArgsT...>)
+{
+  if (Assert)
+    return &the_great_asserting_stub<RetT, ArgsT...>;
+  else
+    return &the_great_empty_stub<RetT, ArgsT...>;
+}
+
+template <typename ThisT, typename RetT, typename... ArgsT>
+constexpr FunPtrT<RetT, ThisT &, ArgsT...> get_stub(bool Assert, NonConstMethodPtrT<ThisT, RetT, ArgsT...>)
+{
+  return get_stub(Assert, FunPtrT<RetT, ThisT &, ArgsT...>());
+}
+
+template <typename ThisT, typename RetT, typename... ArgsT>
+constexpr FunPtrT<RetT, const ThisT &, ArgsT...> get_stub(bool Assert, ConstMethodPtrT<ThisT, RetT, ArgsT...>)
+{
+  return get_stub(Assert, FunPtrT<RetT, const ThisT &, ArgsT...>());
+}
+
+template <typename FnT, FnT ptr>
+struct FnPtrWrap
+{
+  constexpr FnPtrWrap() = default;
+  constexpr FnT operator&() const { return ptr; }
+  constexpr operator FnT() const { return ptr; }
+};
+
+template <typename... Args>
+struct ResolveOverload
+{
+  template <typename R>
+  constexpr static auto find_overload(R (*fn)(Args...))
+  {
+    return fn;
+  }
+  template <typename T, typename R>
+  constexpr static auto find_overload(R (T::*fn)(Args...))
+  {
+    return fn;
+  }
+  template <typename T, typename R>
+  constexpr static auto find_overload(R (T::*fn)(Args...) const)
+  {
+    return fn;
+  }
+};
+template <typename R, typename... Args>
+struct ResolveOverload<R(Args...)>
+{
+  constexpr static auto find_overload(R (*fn)(Args...)) { return fn; }
+  template <typename T>
+  constexpr static auto find_overload(R (T::*fn)(Args...))
+  {
+    return fn;
+  }
+  template <typename T>
+  constexpr static auto find_overload(R (T::*fn)(Args...) const)
+  {
+    return fn;
+  }
+};
+
+template <typename T, typename R, typename... Args>
+constexpr NonConstMethodPtrT<T, R, Args...> get_non_const_method(NonConstMethodPtrT<T, R, Args...> ptr)
+{
+  return ptr;
+}
+template <typename T, typename R, typename... Args>
+constexpr ConstMethodPtrT<T, R, Args...> get_const_method(ConstMethodPtrT<T, R, Args...> ptr)
+{
+  return ptr;
+}
+
+
+template <bool Assert, typename ThisT, typename RetT>
+struct CallPropertyStubImpl
+{
+  using RetType = RetT;
+  enum
+  {
+    ref = das::is_reference<RetType>::value,
+    isConst = das::is_const<ThisT>::value,
+  };
+  static RetT static_call(ThisT &) { DAS_STUB_IMPL(Assert, RetT); }
+};
+
+} // namespace das::detail
+
+
+#ifdef DAS_AOT_COMPILER
+
+template <typename RetT, typename ThisT, RetT (*Fn)(ThisT &)>
+struct das::CallProperty<RetT (*)(ThisT &), Fn> : das::detail::CallPropertyStubImpl<true, ThisT, RetT>
+{};
+template <typename RetT, typename ThisT, typename ClassT, RetT (*Fn)(ClassT &)>
+struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn> : das::detail::CallPropertyStubImpl<true, ThisT, RetT>
+{
+  static_assert(das::is_base_of_v<ClassT, ThisT>);
+};
+
+template <typename RetT, typename ThisT, typename... ArgsT, RetT (*Fn)(ThisT &, ArgsT...)>
+struct das::das_call_member<RetT (*)(ThisT &, ArgsT...), Fn>
+{
+  static RetT invoke(ThisT &, ArgsT...) { DAS_STUB_IMPL(true, RetT); }
+};
+
+#define DAS_FUN_DECL(...) decltype(&__VA_ARGS__), das::detail::get_stub(true, &__VA_ARGS__)
+#define DAS_METHOD_DECL(...)                           \
+  decltype(das::detail::get_stub(true, &__VA_ARGS__)), \
+    &das::das_call_member<decltype(das::detail::get_stub(true, &__VA_ARGS__)), das::detail::get_stub(true, &__VA_ARGS__)>::invoke
+#define DAS_PROP_DECL(...) DAS_METHOD_DECL(__VA_ARGS__) // will use CallProperty specialization for non-methods
+
+#else
+
+#define DAS_FUN_DECL(...) decltype(&__VA_ARGS__), (&__VA_ARGS__)
+#define DAS_METHOD_DECL(...)                                                     \
+  decltype(&das::das_call_member<decltype(&__VA_ARGS__), &__VA_ARGS__>::invoke), \
+    &das::das_call_member<decltype(&__VA_ARGS__), &__VA_ARGS__>::invoke
+#define DAS_PROP_DECL(...) decltype(&__VA_ARGS__), (&__VA_ARGS__)
+
+#endif
+
+#undef DAS_STUB_IMPL
+
+
+#define DAS_MACRO_STRINGIFY3(...) #__VA_ARGS__
+#define DAS_MACRO_STRINGIFY2(...) DAS_MACRO_STRINGIFY3(__VA_ARGS__)
+#define DAS_MACRO_STRINGIFY1(...) DAS_MACRO_STRINGIFY2(__VA_ARGS__)
+#define DAS_MACRO_STRINGIFY0(...) DAS_MACRO_STRINGIFY1(__VA_ARGS__)
+#define DAS_MACRO_STRINGIFY(...)  DAS_MACRO_STRINGIFY0(__VA_ARGS__)
+
+#define DAS_OVERLOAD_EX(TYPE, ...) das::detail::FnPtrWrap<TYPE, __VA_ARGS__>()
+#define DAS_OVERLOAD(FUNC, ...)    DAS_OVERLOAD_EX(decltype(das::detail::ResolveOverload<__VA_ARGS__>::find_overload(&::FUNC)), &::FUNC)
+
+#define DAS_METHOD_OVERLOAD_CONST(...)     DAS_OVERLOAD_EX(decltype(das::detail::get_const_method(&__VA_ARGS__)), &__VA_ARGS__)
+#define DAS_METHOD_OVERLOAD_NON_CONST(...) DAS_OVERLOAD_EX(decltype(das::detail::get_non_const_method(&__VA_ARGS__)), &__VA_ARGS__)
+#define DAS_PROP_DECL_CONST(...) \
+  DAS_PROP_DECL(DAS_METHOD_OVERLOAD_NON_CONST(__VA_ARGS__)), DAS_PROP_DECL(DAS_METHOD_OVERLOAD_CONST(__VA_ARGS__))
+
+// fields/props
+#define DAS_ADD_FIELD_BIND_EX(DAS_NAME, NAME) addField<DAS_BIND_MANAGED_FIELD(NAME)>(DAS_NAME, DAS_MACRO_STRINGIFY(NAME))
+#define DAS_ADD_FIELD_BIND(NAME)              DAS_ADD_FIELD_BIND_EX(DAS_MACRO_STRINGIFY(NAME), NAME)
+#define DAS_ADD_PROP_BIND(DAS_NAME, ...) \
+  addProperty<DAS_PROP_DECL(ManagedType::__VA_ARGS__)>(DAS_NAME, DAS_MACRO_STRINGIFY(__VA_ARGS__))
+#define DAS_ADD_PROP_BIND_CONST(DAS_NAME, ...) \
+  addPropertyExtConst<DAS_PROP_DECL_CONST(ManagedType::__VA_ARGS__)>(DAS_NAME, DAS_MACRO_STRINGIFY(__VA_ARGS__))
+
+// functions
+#define DAS_ADD_FUN_BIND(NAME, SIDE_EFFECTS, ...) \
+  das::addExtern<DAS_FUN_DECL(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
+#define DAS_ADD_FUN_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                            \
+  das::addExtern<DAS_FUN_DECL(::__VA_ARGS__), das::SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, NAME, \
+    das::SideEffects::SIDE_EFFECTS, "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
+#define DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS, ...)                                               \
+  das::addExtern<DAS_METHOD_DECL(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+    "::das::das_call_member<decltype(&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) "),&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) ">::invoke")
+#define DAS_ADD_METHOD_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                            \
+  das::addExtern<DAS_METHOD_DECL(::__VA_ARGS__), das::SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, NAME, \
+    das::SideEffects::SIDE_EFFECTS,                                                                       \
+    "::das::das_call_member<decltype(&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) "),&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) ">::invoke")
+#define DAS_ADD_METHOD_BIND_CONST_EX(NAME, SIDE_EFFECTS_CONST, SIDE_EFFECTS_NON_CONST, ...) \
+  DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS_CONST, DAS_METHOD_OVERLOAD_CONST(__VA_ARGS__));    \
+  DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS_NON_CONST, DAS_METHOD_OVERLOAD_NON_CONST(__VA_ARGS__))
+#define DAS_ADD_METHOD_BIND_CONST(NAME, SIDE_EFFECTS, ...) DAS_ADD_METHOD_BIND_CONST_EX(NAME, SIDE_EFFECTS, SIDE_EFFECTS, __VA_ARGS__)
+#define DAS_ADD_METHOD_BIND_CONST_VALUE_RET_EX(NAME, SIDE_EFFECTS_CONST, SIDE_EFFECTS_NON_CONST, ...) \
+  DAS_ADD_METHOD_BIND_VALUE_RET(NAME, SIDE_EFFECTS_CONST, DAS_METHOD_OVERLOAD_CONST(__VA_ARGS__));    \
+  DAS_ADD_METHOD_BIND_VALUE_RET(NAME, SIDE_EFFECTS_NON_CONST, DAS_METHOD_OVERLOAD_NON_CONST(__VA_ARGS__))
+#define DAS_ADD_METHOD_BIND_CONST_VALUE_RET(NAME, SIDE_EFFECTS, ...) \
+  DAS_ADD_METHOD_BIND_CONST_VALUE_RET_EX(NAME, SIDE_EFFECTS, SIDE_EFFECTS, __VA_ARGS__)
+
+// type annotations
+#define DAS_TYPE_DECL_EX_BEGIN(DAS_NAME, ANN_NAME, ...)                          \
+  struct ANN_NAME : das::ManagedStructureAnnotation<::__VA_ARGS__, false>        \
+  {                                                                              \
+    static constexpr const char *CPP_NAME = "::" #__VA_ARGS__;                   \
+    void annotationBody(das::ModuleLibrary &ml);                                 \
+    ANN_NAME(das::ModuleLibrary &ml) : ManagedStructureAnnotation(#DAS_NAME, ml) \
+    {                                                                            \
+      cppName = CPP_NAME;                                                        \
+      annotationBody(ml);                                                        \
+    }
+#define DAS_TYPE_DECL_EX_END }
+#define DAS_TYPE_DECL(DAS_NAME, ...)          \
+  MAKE_TYPE_FACTORY(DAS_NAME, ::__VA_ARGS__); \
+  DAS_TYPE_DECL_EX_BEGIN(DAS_NAME, DAS_NAME##Annotation, __VA_ARGS__) DAS_TYPE_DECL_EX_END
+
+#define DAS_TYPE_ANNOTATION_EX(ANN_NAME) void ANN_NAME::annotationBody([[maybe_unused]] das::ModuleLibrary &ml)
+#define DAS_TYPE_ANNOTATION(DAS_NAME)    DAS_TYPE_ANNOTATION_EX(DAS_NAME##Annotation)
+
+// module decl helper
+
+#define DAS_MODULE_DECL_EX_BEGIN(MODULE_NAME, DAS_NAME, INCLUDE_PATH_WITH_QUOTES) \
+  struct MODULE_NAME final : public das::Module                                   \
+  {                                                                               \
+    das::ModuleAotType aotRequire(das::TextWriter &tw) const override             \
+    {                                                                             \
+      tw << "#include " INCLUDE_PATH_WITH_QUOTES "\n";                            \
+      return das::ModuleAotType::cpp;                                             \
+    }                                                                             \
+    void moduleDeclBody(das::ModuleLibrary &lib);                                 \
+    MODULE_NAME() : das::Module(DAS_NAME)                                         \
+    {                                                                             \
+      das::ModuleLibrary lib(this);                                               \
+      moduleDeclBody(lib);                                                        \
+      verifyAotReady();                                                           \
+    }
+#define DAS_MODULE_DECL_EX_END            }
+#define DAS_MODULE_DECL_BODY(MODULE_NAME) void ::MODULE_NAME::moduleDeclBody([[maybe_unused]] das::ModuleLibrary &lib)
+
+#define DAS_MODULE_DECL_EX(MODULE_NAME, DAS_NAME, INCLUDE_PATH)                                   \
+  DAS_MODULE_DECL_EX_BEGIN(MODULE_NAME, DAS_NAME, "\"" INCLUDE_PATH "\"") DAS_MODULE_DECL_EX_END; \
+  REGISTER_MODULE(MODULE_NAME);                                                                   \
+  DAS_MODULE_DECL_BODY(MODULE_NAME)
+#define DAS_MODULE_DECL(MODULE_NAME, INCLUDE_PATH) DAS_MODULE_DECL_EX(MODULE_NAME##Module, #MODULE_NAME, INCLUDE_PATH)
