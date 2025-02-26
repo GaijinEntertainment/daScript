@@ -11,9 +11,9 @@ require daslib/defer
 require daslib/das_source_formatter
 
 
-def public format_file(file_name: string const)
-    var unformatted: string = ""
-    var formatted: string = ""
+def public format_file(file_name : string const)
+    var unformatted : string = ""
+    var formatted : string = ""
     fopen(file_name, "rb") <| $(fr)
         if fr == null
             to_log(LOG_ERROR, "cannot open '{file_name}'\n")
@@ -31,7 +31,7 @@ def public format_file(file_name: string const)
 
 
 
-def public format_files(file_names: array<string>&)
+def public format_files(file_names : array<string>&)
     for fname in file_names
         format_file(fname)
 
