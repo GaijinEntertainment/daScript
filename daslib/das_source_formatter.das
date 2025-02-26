@@ -6,7 +6,6 @@ options strict_smart_pointers = true
 
 module das_source_formatter shared private
 
-require fio
 require strings
 require math
 require daslib/defer
@@ -1286,94 +1285,3 @@ def public format_source(file_data : array<uint8> const& implicit) : string {
     var inscope ctx : FormatterCtx
     return ctx |> format_source(file_data)
 }
-
-
-def public format_file(var ctx : FormatterCtx; file_name : string const&) {
-    var unformatted : string = ""
-    var formatted : string = ""
-    fopen(file_name, "rb") <| $(fr) {
-        if (fr == null) {
-            to_log(LOG_ERROR, "cannot open '{file_name}'\n")
-        } else {
-            fmap(fr) <| $(data) {
-                unformatted = string(data)
-                formatted = ctx |> format_source(data)
-            }
-        }
-    }
-
-    if (ctx.debugMode) {
-        to_log(LOG_DEBUG, formatted)
-    }
-
-    if (!empty(formatted) && formatted != unformatted && !ctx.debugMode) {
-        fopen(file_name, "wb") <| $(fw) {
-            if (fw == null) {
-                to_log(LOG_ERROR, "cannot open '{file_name} for write'\n")
-            } else {
-                fw |> fprint(formatted)
-            }
-        }
-    }
-}
-
-
-def public format_file(file_name : string const&) {
-    var inscope ctx : FormatterCtx
-    ctx |> format_file(file_name)
-}
-
-
-def public format_files(var ctx : FormatterCtx; file_names : array<string>&) {
-    for (fname in file_names) {
-        ctx |> format_file(fname)
-    }
-}
-
-
-def public format_files(file_names : array<string>&) {
-    var inscope ctx : FormatterCtx
-    ctx |> format_files(file_names)
-}
-
-/*
-[export]
-def main() {
-    var fileNames : array<string>
-    var filesListFn : string = ""
-    var ignore = true
-    for (arg in get_command_line_arguments()) {
-        if (arg == "-args") {
-            ignore = false
-            continue
-        }
-        if (!ignore) {
-            if (arg |> character_at(0) != '-') {
-                fileNames |> push(arg)
-            }
-            if (arg |> starts_with("--files:")) {
-                filesListFn = arg |> slice(8)
-            }
-        }
-    }
-
-    if (!empty(filesListFn)) {
-        fopen(filesListFn, "rb") <| $(f) {
-            if (f == null) {
-                to_log(LOG_ERROR, "cannot open '{filesListFn}'\n")
-            } else {
-                while (!feof(f)) {
-                    var file_name = fgets(f)
-                    if (!empty(file_name)) {
-                        file_name = replace(file_name, "\n", "")
-                        file_name = replace(file_name, "\r", "")
-                        fileNames |> push(file_name)
-                    }
-                }
-            }
-        }
-    }
-
-    format_files(fileNames)
-}
-*/
