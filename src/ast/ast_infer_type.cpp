@@ -8480,7 +8480,6 @@ namespace das {
                     } else if (instancedFunctions.size() == 1) {
                         expr->name = callCloneName(genName);
                         reportAstChanged();
-                        return instancedFunctions.back();
                     } else if (instancedFunctions.size() == 0) {
                         auto clone = oneGeneric->clone();
                         clone->name = genName;

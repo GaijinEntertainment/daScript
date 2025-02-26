@@ -1,17 +1,17 @@
 options gen2;
 
-//	NOTE - this is WIP example of every single feature new syntax has to offer
-//	new syntax no longer supports significant whitespace, oxoford commas, etc
+//  NOTE - this is WIP example of every single feature new syntax has to offer
+//  new syntax no longer supports significant whitespace, oxoford commas, etc
 
 //  NOTE - in every case where type is specified for let or var, it is optional, and can be inferred
-//	its there for the documentation purposes
+//  its there for the documentation purposes
 
 
 /////////////////////
 // module declaration
 
 // note - this works, but commented out for now, becasue of WARNING: program is setup as both module, and endpoint
-// module hello_world;	// module name
+// module hello_world;  // module name
 
 ////////////////////
 // alias declaration

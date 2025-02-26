@@ -922,7 +922,7 @@ namespace das {
                     res->markExecutableSymbolUse();
                 if (res->getDebugger())
                     addRttiRequireVariable(res, fileName);
-                if (!res->failed())
+                if (!res->failed() && !exportAll)
                     res->removeUnusedSymbols();
                 if (!res->failed())
                     res->deriveAliases(logs,true,false);
