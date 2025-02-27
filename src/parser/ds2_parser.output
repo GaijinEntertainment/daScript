@@ -953,25 +953,25 @@ Grammar
   703 $@53: %empty
 
   704 type_declaration_no_options_no_dim: '$' name_in_namespace '<' $@53 type_declaration_no_options_list '>' '(' optional_expr_list ')'
-  705                                   | type_declaration_no_options_no_dim '-' '[' ']'
-  706                                   | type_declaration_no_options_no_dim "explicit"
-  707                                   | type_declaration_no_options_no_dim "const"
-  708                                   | type_declaration_no_options_no_dim '-' "const"
-  709                                   | type_declaration_no_options_no_dim '&'
-  710                                   | type_declaration_no_options_no_dim '-' '&'
-  711                                   | type_declaration_no_options_no_dim '#'
-  712                                   | type_declaration_no_options_no_dim "implicit"
-  713                                   | type_declaration_no_options_no_dim '-' '#'
-  714                                   | type_declaration_no_options_no_dim "==" "const"
-  715                                   | type_declaration_no_options_no_dim "==" '&'
-  716                                   | type_declaration_no_options_no_dim '?'
+  705                                   | type_declaration_no_options '-' '[' ']'
+  706                                   | type_declaration_no_options "explicit"
+  707                                   | type_declaration_no_options "const"
+  708                                   | type_declaration_no_options '-' "const"
+  709                                   | type_declaration_no_options '&'
+  710                                   | type_declaration_no_options '-' '&'
+  711                                   | type_declaration_no_options '#'
+  712                                   | type_declaration_no_options "implicit"
+  713                                   | type_declaration_no_options '-' '#'
+  714                                   | type_declaration_no_options "==" "const"
+  715                                   | type_declaration_no_options "==" '&'
+  716                                   | type_declaration_no_options '?'
 
   717 $@54: %empty
 
   718 $@55: %empty
 
   719 type_declaration_no_options_no_dim: "smart_ptr" '<' $@54 type_declaration '>' $@55
-  720                                   | type_declaration_no_options_no_dim "??"
+  720                                   | type_declaration_no_options "??"
 
   721 $@56: %empty
 
@@ -2057,10 +2057,10 @@ Nonterminals, with rules where they appear
         on right: 690 691 693
     type_declaration_no_options <pTypeDecl> (424)
         on left: 692 693
-        on right: 309 316 319 322 384 463 488 489 490 567 568 570 571 757 758 800 803 806 809 815 819 822 825 829 833 838 839
+        on right: 309 316 319 322 384 463 488 489 490 567 568 570 571 705 706 707 708 709 710 711 712 713 714 715 716 720 757 758 800 803 806 809 815 819 822 825 829 833 838 839
     type_declaration_no_options_no_dim <pTypeDecl> (425)
         on left: 694 695 696 697 700 701 702 704 705 706 707 708 709 710 711 712 713 714 715 716 719 720 723 726 729 730 733 736 737 740 743 744 747 750 753 756
-        on right: 692 693 705 706 707 708 709 710 711 712 713 714 715 716 720
+        on right: 692 693
     $@51 (426)
         on left: 698
         on right: 700
@@ -4941,28 +4941,20 @@ State 274
 
 State 275
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   757 type_declaration: type_declaration_no_options .
-
-    $default  reduce using rule 757 (type_declaration)
-
-
-State 276
-
-  692 type_declaration_no_options: type_declaration_no_options_no_dim .
-  693                            | type_declaration_no_options_no_dim . dim_list
-  705 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim . '-' '[' ']'
-  706                                   | type_declaration_no_options_no_dim . "explicit"
-  707                                   | type_declaration_no_options_no_dim . "const"
-  708                                   | type_declaration_no_options_no_dim . '-' "const"
-  709                                   | type_declaration_no_options_no_dim . '&'
-  710                                   | type_declaration_no_options_no_dim . '-' '&'
-  711                                   | type_declaration_no_options_no_dim . '#'
-  712                                   | type_declaration_no_options_no_dim . "implicit"
-  713                                   | type_declaration_no_options_no_dim . '-' '#'
-  714                                   | type_declaration_no_options_no_dim . "==" "const"
-  715                                   | type_declaration_no_options_no_dim . "==" '&'
-  716                                   | type_declaration_no_options_no_dim . '?'
-  720                                   | type_declaration_no_options_no_dim . "??"
 
     "const"     shift, and go to state 367
     "implicit"  shift, and go to state 368
@@ -4972,8 +4964,17 @@ State 276
     '?'         shift, and go to state 372
     '&'         shift, and go to state 373
     '-'         shift, and go to state 374
-    '['         shift, and go to state 375
-    '#'         shift, and go to state 376
+    '#'         shift, and go to state 375
+
+    $default  reduce using rule 757 (type_declaration)
+
+
+State 276
+
+  692 type_declaration_no_options: type_declaration_no_options_no_dim .
+  693                            | type_declaration_no_options_no_dim . dim_list
+
+    '['  shift, and go to state 376
 
     $default  reduce using rule 692 (type_declaration_no_options)
 
@@ -5937,29 +5938,29 @@ State 366
 
 State 367
 
-  707 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim "const" .
+  707 type_declaration_no_options_no_dim: type_declaration_no_options "const" .
 
     $default  reduce using rule 707 (type_declaration_no_options_no_dim)
 
 
 State 368
 
-  712 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim "implicit" .
+  712 type_declaration_no_options_no_dim: type_declaration_no_options "implicit" .
 
     $default  reduce using rule 712 (type_declaration_no_options_no_dim)
 
 
 State 369
 
-  706 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim "explicit" .
+  706 type_declaration_no_options_no_dim: type_declaration_no_options "explicit" .
 
     $default  reduce using rule 706 (type_declaration_no_options_no_dim)
 
 
 State 370
 
-  714 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim "==" . "const"
-  715                                   | type_declaration_no_options_no_dim "==" . '&'
+  714 type_declaration_no_options_no_dim: type_declaration_no_options "==" . "const"
+  715                                   | type_declaration_no_options "==" . '&'
 
     "const"  shift, and go to state 510
     '&'      shift, and go to state 511
@@ -5967,31 +5968,31 @@ State 370
 
 State 371
 
-  720 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim "??" .
+  720 type_declaration_no_options_no_dim: type_declaration_no_options "??" .
 
     $default  reduce using rule 720 (type_declaration_no_options_no_dim)
 
 
 State 372
 
-  716 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '?' .
+  716 type_declaration_no_options_no_dim: type_declaration_no_options '?' .
 
     $default  reduce using rule 716 (type_declaration_no_options_no_dim)
 
 
 State 373
 
-  709 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '&' .
+  709 type_declaration_no_options_no_dim: type_declaration_no_options '&' .
 
     $default  reduce using rule 709 (type_declaration_no_options_no_dim)
 
 
 State 374
 
-  705 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '-' . '[' ']'
-  708                                   | type_declaration_no_options_no_dim '-' . "const"
-  710                                   | type_declaration_no_options_no_dim '-' . '&'
-  713                                   | type_declaration_no_options_no_dim '-' . '#'
+  705 type_declaration_no_options_no_dim: type_declaration_no_options '-' . '[' ']'
+  708                                   | type_declaration_no_options '-' . "const"
+  710                                   | type_declaration_no_options '-' . '&'
+  713                                   | type_declaration_no_options '-' . '#'
 
     "const"  shift, and go to state 512
     '&'      shift, and go to state 513
@@ -6000,6 +6001,13 @@ State 374
 
 
 State 375
+
+  711 type_declaration_no_options_no_dim: type_declaration_no_options '#' .
+
+    $default  reduce using rule 711 (type_declaration_no_options_no_dim)
+
+
+State 376
 
   688 dim_list: '[' . expr ']'
   689         | '[' . ']'
@@ -6110,13 +6118,6 @@ State 375
     make_dim_decl           go to state 492
     make_table_decl         go to state 493
     array_comprehension     go to state 494
-
-
-State 376
-
-  711 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '#' .
-
-    $default  reduce using rule 711 (type_declaration_no_options_no_dim)
 
 
 State 377
@@ -9170,42 +9171,42 @@ State 509
 
 State 510
 
-  714 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim "==" "const" .
+  714 type_declaration_no_options_no_dim: type_declaration_no_options "==" "const" .
 
     $default  reduce using rule 714 (type_declaration_no_options_no_dim)
 
 
 State 511
 
-  715 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim "==" '&' .
+  715 type_declaration_no_options_no_dim: type_declaration_no_options "==" '&' .
 
     $default  reduce using rule 715 (type_declaration_no_options_no_dim)
 
 
 State 512
 
-  708 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '-' "const" .
+  708 type_declaration_no_options_no_dim: type_declaration_no_options '-' "const" .
 
     $default  reduce using rule 708 (type_declaration_no_options_no_dim)
 
 
 State 513
 
-  710 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '-' '&' .
+  710 type_declaration_no_options_no_dim: type_declaration_no_options '-' '&' .
 
     $default  reduce using rule 710 (type_declaration_no_options_no_dim)
 
 
 State 514
 
-  705 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '-' '[' . ']'
+  705 type_declaration_no_options_no_dim: type_declaration_no_options '-' '[' . ']'
 
     ']'  shift, and go to state 676
 
 
 State 515
 
-  713 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '-' '#' .
+  713 type_declaration_no_options_no_dim: type_declaration_no_options '-' '#' .
 
     $default  reduce using rule 713 (type_declaration_no_options_no_dim)
 
@@ -9442,7 +9443,30 @@ State 519
 
 State 520
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   758 type_declaration: type_declaration '|' type_declaration_no_options .
+
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
     $default  reduce using rule 758 (type_declaration)
 
@@ -9818,12 +9842,34 @@ State 544
 
   570 global_let_variable_declaration: global_let_variable_name_with_pos_list ':' type_declaration_no_options . SEMICOLON
   571                                | global_let_variable_name_with_pos_list ':' type_declaration_no_options . copy_or_move_or_clone expr SEMICOLON
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
+    "const"                shift, and go to state 367
+    "implicit"             shift, and go to state 368
+    "explicit"             shift, and go to state 369
+    "=="                   shift, and go to state 370
     "<-"                   shift, and go to state 545
+    "??"                   shift, and go to state 371
     ":="                   shift, and go to state 546
     "new line, semicolon"  shift, and go to state 13
     '='                    shift, and go to state 547
+    '?'                    shift, and go to state 372
+    '&'                    shift, and go to state 373
+    '-'                    shift, and go to state 374
     ';'                    shift, and go to state 16
+    '#'                    shift, and go to state 375
 
     SEMICOLON              go to state 703
     copy_or_move_or_clone  go to state 704
@@ -16513,7 +16559,7 @@ State 675
 
 State 676
 
-  705 type_declaration_no_options_no_dim: type_declaration_no_options_no_dim '-' '[' ']' .
+  705 type_declaration_no_options_no_dim: type_declaration_no_options '-' '[' ']' .
 
     $default  reduce using rule 705 (type_declaration_no_options_no_dim)
 
@@ -18160,14 +18206,36 @@ State 725
 
 State 726
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   838 make_table_decl: "table" '<' type_declaration_no_options . '>' '(' optional_expr_map_tuple_list ')'
   839                | "table" '<' type_declaration_no_options . c_or_s type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'
 
+    "const"                shift, and go to state 367
+    "implicit"             shift, and go to state 368
+    "explicit"             shift, and go to state 369
+    "=="                   shift, and go to state 370
+    "??"                   shift, and go to state 371
     "new line, comma"      shift, and go to state 709
     "new line, semicolon"  shift, and go to state 13
     ','                    shift, and go to state 710
+    '?'                    shift, and go to state 372
+    '&'                    shift, and go to state 373
     '>'                    shift, and go to state 939
+    '-'                    shift, and go to state 374
     ';'                    shift, and go to state 16
+    '#'                    shift, and go to state 375
 
     COMMA      go to state 711
     SEMICOLON  go to state 712
@@ -18923,8 +18991,30 @@ State 740
   488 expr_generator: "generator" '<' type_declaration_no_options . '>' optional_capture_list '(' ')'
   489               | "generator" '<' type_declaration_no_options . '>' optional_capture_list '(' expr ')'
   490               | "generator" '<' type_declaration_no_options . '>' optional_capture_list optional_emit_semis expression_block
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
-    '>'  shift, and go to state 954
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 954
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 741
@@ -25651,12 +25741,34 @@ State 916
 
   567 let_variable_declaration: let_variable_name_with_pos_list ':' type_declaration_no_options . SEMICOLON
   568                         | let_variable_name_with_pos_list ':' type_declaration_no_options . copy_or_move_or_clone expr SEMICOLON
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
+    "const"                shift, and go to state 367
+    "implicit"             shift, and go to state 368
+    "explicit"             shift, and go to state 369
+    "=="                   shift, and go to state 370
     "<-"                   shift, and go to state 545
+    "??"                   shift, and go to state 371
     ":="                   shift, and go to state 546
     "new line, semicolon"  shift, and go to state 13
     '='                    shift, and go to state 547
+    '?'                    shift, and go to state 372
+    '&'                    shift, and go to state 373
+    '-'                    shift, and go to state 374
     ';'                    shift, and go to state 16
+    '#'                    shift, and go to state 375
 
     SEMICOLON              go to state 1106
     copy_or_move_or_clone  go to state 1107
@@ -25920,16 +26032,60 @@ State 923
 
 State 924
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   800 make_struct_decl: "struct" '<' $@90 type_declaration_no_options . '>' $@91 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    '>'  shift, and go to state 1110
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1110
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 925
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   803 make_struct_decl: "class" '<' $@92 type_declaration_no_options . '>' $@93 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    '>'  shift, and go to state 1111
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1111
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 926
@@ -26281,9 +26437,31 @@ State 936
 
 State 937
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   829 make_dim_decl: "array" '<' $@106 type_declaration_no_options . '>' $@107 '(' optional_expr_list ')'
 
-    '>'  shift, and go to state 1124
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1124
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 938
@@ -26374,15 +26552,59 @@ State 942
 State 943
 
   316 expr_cast: "cast" '<' $@17 type_declaration_no_options . '>' $@18 expr
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
-    '>'  shift, and go to state 1129
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1129
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 944
 
   319 expr_cast: "upcast" '<' $@19 type_declaration_no_options . '>' $@20 expr
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
-    '>'  shift, and go to state 1130
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1130
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 945
@@ -26395,8 +26617,30 @@ State 945
 State 946
 
   322 expr_cast: "reinterpret" '<' $@21 type_declaration_no_options . '>' $@22 expr
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
-    '>'  shift, and go to state 1131
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1131
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 947
@@ -26408,9 +26652,31 @@ State 947
 
 State 948
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   833 make_dim_decl: "fixed_array" '<' $@108 type_declaration_no_options . '>' $@109 '(' expr_list optional_comma ')'
 
-    '>'  shift, and go to state 1132
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1132
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 949
@@ -26422,16 +26688,60 @@ State 949
 
 State 950
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   809 make_struct_decl: "default" '<' $@96 type_declaration_no_options . '>' $@97 use_initializer
 
-    '>'  shift, and go to state 1134
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1134
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 951
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   815 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options . '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    '>'  shift, and go to state 1135
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1135
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 952
@@ -26443,9 +26753,31 @@ State 952
 
 State 953
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   806 make_struct_decl: "variant" '<' $@94 type_declaration_no_options . '>' $@95 '(' make_variant_dim ')'
 
-    '>'  shift, and go to state 1137
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1137
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 954
@@ -32966,23 +33298,89 @@ State 1120
 
 State 1121
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   819 make_dim_decl: "array" "struct" '<' $@100 type_declaration_no_options . '>' $@101 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    '>'  shift, and go to state 1251
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1251
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 1122
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   822 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options . '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    '>'  shift, and go to state 1252
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1252
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 1123
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   825 make_dim_decl: "array" "variant" '<' $@104 type_declaration_no_options . '>' $@105 '(' make_variant_dim ')'
 
-    '>'  shift, and go to state 1253
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1253
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 1124
@@ -33119,9 +33517,31 @@ State 1126
 
 State 1127
 
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
   839 make_table_decl: "table" '<' type_declaration_no_options c_or_s type_declaration_no_options . '>' '(' optional_expr_map_tuple_list ')'
 
-    '>'  shift, and go to state 1256
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1256
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 1128
@@ -34030,8 +34450,30 @@ State 1149
 State 1150
 
   384 func_addr_expr: '@' '@' '<' $@25 type_declaration_no_options . '>' $@26 func_addr_name
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
-    '>'  shift, and go to state 1279
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1279
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 1151
@@ -40450,8 +40892,30 @@ State 1292
 State 1293
 
   463 expr: expr "is" "type" '<' $@31 type_declaration_no_options . '>' $@32
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
-    '>'  shift, and go to state 1368
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "??"        shift, and go to state 371
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '>'         shift, and go to state 1368
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
 
 State 1294
@@ -45902,10 +46366,32 @@ State 1473
 State 1474
 
   309 tuple_expansion_variable_declaration: '(' tuple_expansion ')' ':' type_declaration_no_options . copy_or_move_or_clone expr SEMICOLON
+  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
+  706                                   | type_declaration_no_options . "explicit"
+  707                                   | type_declaration_no_options . "const"
+  708                                   | type_declaration_no_options . '-' "const"
+  709                                   | type_declaration_no_options . '&'
+  710                                   | type_declaration_no_options . '-' '&'
+  711                                   | type_declaration_no_options . '#'
+  712                                   | type_declaration_no_options . "implicit"
+  713                                   | type_declaration_no_options . '-' '#'
+  714                                   | type_declaration_no_options . "==" "const"
+  715                                   | type_declaration_no_options . "==" '&'
+  716                                   | type_declaration_no_options . '?'
+  720                                   | type_declaration_no_options . "??"
 
-    "<-"  shift, and go to state 545
-    ":="  shift, and go to state 546
-    '='   shift, and go to state 547
+    "const"     shift, and go to state 367
+    "implicit"  shift, and go to state 368
+    "explicit"  shift, and go to state 369
+    "=="        shift, and go to state 370
+    "<-"        shift, and go to state 545
+    "??"        shift, and go to state 371
+    ":="        shift, and go to state 546
+    '='         shift, and go to state 547
+    '?'         shift, and go to state 372
+    '&'         shift, and go to state 373
+    '-'         shift, and go to state 374
+    '#'         shift, and go to state 375
 
     copy_or_move_or_clone  go to state 1503
 
