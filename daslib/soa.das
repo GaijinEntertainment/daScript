@@ -102,7 +102,7 @@ class SoaStructMacro : AstStructureAnnotation
                         baseType = Type tArray,
                         firstType <- clone_type(fld._type)
                     ]]
-    def make_index_op(st: StructurePtr; var stype : StructurePtr) : FunctionPtr
+    def make_index_op(st : StructurePtr; var stype : StructurePtr) : FunctionPtr
         var inscope idx_op <- new [[Function() at = st.at, atDecl = st.at, name := "[]"]]
         idx_op.flags |= FunctionFlags generated
         move_new(idx_op.result) <| new [[TypeDecl() baseType=Type autoinfer, at=st.at]]
