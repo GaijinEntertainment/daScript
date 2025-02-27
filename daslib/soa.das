@@ -102,7 +102,7 @@ class SoaStructMacro : AstStructureAnnotation
                         baseType = Type tArray,
                         firstType <- clone_type(fld._type)
                     ]]
-    def make_index_op(st, stype : StructurePtr) : FunctionPtr
+    def make_index_op(st: StructurePtr; var stype : StructurePtr) : FunctionPtr
         var inscope idx_op <- new [[Function() at = st.at, atDecl = st.at, name := "[]"]]
         idx_op.flags |= FunctionFlags generated
         move_new(idx_op.result) <| new [[TypeDecl() baseType=Type autoinfer, at=st.at]]
@@ -122,7 +122,7 @@ class SoaStructMacro : AstStructureAnnotation
             _type <- new [[TypeDecl() baseType=Type tInt, at=st.at, flags=TypeDeclFlags constant]]
         ]]
         return <- idx_op
-    def make_length(st, stype : StructurePtr) : FunctionPtr
+    def make_length(st : StructurePtr; var stype : StructurePtr) : FunctionPtr
         var inscope length_op <- new [[Function() at = st.at, atDecl = st.at, name := "length"]]
         length_op.flags |= FunctionFlags generated
         move_new(length_op.result) <| new [[TypeDecl() baseType=Type tInt, at=st.at]]
@@ -143,7 +143,7 @@ class SoaStructMacro : AstStructureAnnotation
         ]]
         move(length_op.body) <| length_body
         return <- length_op
-    def make_any_named_call(st, stype : StructurePtr; var argT : TypeDeclPtr&; fnName, callName : string; argField : bool) : FunctionPtr
+    def make_any_named_call(st : StructurePtr; var stype : StructurePtr; var argT : TypeDeclPtr&; fnName, callName : string; argField : bool) : FunctionPtr
         var inscope push_op <- new [[Function() at = st.at, atDecl = st.at, name := fnName]]
         push_op.flags |= FunctionFlags generated
         move_new(push_op.result) <| new [[TypeDecl() baseType=Type tVoid, at=st.at]]
@@ -177,10 +177,10 @@ class SoaStructMacro : AstStructureAnnotation
         ]]
         move(push_op.body) <| push_body
         return <- push_op
-    def make_erase(st, stype : StructurePtr)
+    def make_erase(st : StructurePtr; var stype : StructurePtr)
         var inscope argT <- new [[TypeDecl() baseType=Type tInt, at=st.at]]
         return <- make_any_named_call(st, stype, argT, "erase", "erase", false)
-    def make_named_call(st, stype : StructurePtr; fnName, callName : string; isConst : bool = false) : FunctionPtr
+    def make_named_call(var st : StructurePtr; var stype : StructurePtr; fnName, callName : string; isConst : bool = false) : FunctionPtr
         var inscope argT <- new [[TypeDecl() baseType=Type tStructure, at=st.at, structType=get_ptr(st), flags= isConst ? TypeDeclFlags constant : bitfield(0)]]
         return <- make_any_named_call(st, stype, argT, fnName, callName, true)
 
@@ -193,7 +193,7 @@ class CollectAndReplaceIteratorFields : AstVisitor
         if expr.value is ExprVar
             if (expr.value as ExprVar).name == it_prefix
                 let ename = string(expr.name)
-                names[ename] = true
+                names |> insert(ename, true)
                 return <- new [[ExprVar() at=expr.at, name := it_prefix + "`" + ename]]
         return <- expr
 

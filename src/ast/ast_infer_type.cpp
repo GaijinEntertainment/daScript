@@ -5466,6 +5466,7 @@ namespace das {
                 }
                 if ( possibleEnums.size()==1 ) {
                     auto td = make_smart<TypeDecl>(possibleEnums.back());
+                    td->constant = true;
                     auto res = make_smart<ExprConstEnumeration>(expr->at, expr->name, td);
                     bool infE = false;
                     res->value = getEnumerationValue(res.get(), infE);
@@ -9430,6 +9431,7 @@ namespace das {
                     et->ref = false;
                     auto ens = make_smart<ExprConstEnumeration>(expr->at, f0, et);
                     ens->type = make_smart<TypeDecl>(*et);
+                    ens->type->constant = true;
                     return ens;
                 } else {
                     error("[[" + describeType(expr->makeType) + "() ]] enumeration is missing 0 value", "", "",

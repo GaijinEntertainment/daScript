@@ -541,52 +541,54 @@ namespace das {
 
     vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
         AnnotationList * annL, bool isPrivate, bool cnst, Function * func ) {
-        if ( yyextra->g_Program->policies.no_members_functions_in_struct && !yyextra->g_thisStructure->isClass ) {
-            das_yyerror(scanner,"structure can't have a member function",
-                func->at, CompilationError::invalid_member_function);
-        } else if ( func->isGeneric() ) {
-            das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-        } else if ( func->name==yyextra->g_thisStructure->name || func->name=="finalize" ) {
-            das_yyerror(scanner,"initializers and finalizers can't be abstract " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-        } else if ( annL!=nullptr ) {
-            das_yyerror(scanner,"abstract functions can't have annotations " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-            delete annL;
-        } else if ( func->result->baseType==Type::autoinfer ) {
-            das_yyerror(scanner,"abstract functions must specify return type explicitly " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-        } else if ( isOpName(func->name) ) {
-            das_yyerror(scanner,"abstract functions can't be operators " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-        } else {
-            auto varName = func->name;
-            func->name = yyextra->g_thisStructure->name + "`" + func->name;
-            auto vars = new vector<VariableNameAndPosition>();
-            vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
-            TypeDecl * funcType = new TypeDecl(Type::tFunction);
-            funcType->at = func->at;
-            swap ( funcType->firstType, func->result );
-            funcType->argTypes.reserve ( func->arguments.size() );
-            if ( yyextra->g_thisStructure->isClass ) {
-                auto selfType = make_smart<TypeDecl>(yyextra->g_thisStructure);
-                selfType->constant = cnst;
-                funcType->argTypes.push_back(selfType);
-                funcType->argNames.push_back("self");
+        if ( yyextra->g_thisStructure ) {
+            if ( yyextra->g_Program->policies.no_members_functions_in_struct && !yyextra->g_thisStructure->isClass ) {
+                das_yyerror(scanner,"structure can't have a member function",
+                    func->at, CompilationError::invalid_member_function);
+            } else if ( func->isGeneric() ) {
+                das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            } else if ( func->name==yyextra->g_thisStructure->name || func->name=="finalize" ) {
+                das_yyerror(scanner,"initializers and finalizers can't be abstract " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            } else if ( annL!=nullptr ) {
+                das_yyerror(scanner,"abstract functions can't have annotations " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+                delete annL;
+            } else if ( func->result->baseType==Type::autoinfer ) {
+                das_yyerror(scanner,"abstract functions must specify return type explicitly " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            } else if ( isOpName(func->name) ) {
+                das_yyerror(scanner,"abstract functions can't be operators " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            } else {
+                auto varName = func->name;
+                func->name = yyextra->g_thisStructure->name + "`" + func->name;
+                auto vars = new vector<VariableNameAndPosition>();
+                vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
+                TypeDecl * funcType = new TypeDecl(Type::tFunction);
+                funcType->at = func->at;
+                swap ( funcType->firstType, func->result );
+                funcType->argTypes.reserve ( func->arguments.size() );
+                if ( yyextra->g_thisStructure->isClass ) {
+                    auto selfType = make_smart<TypeDecl>(yyextra->g_thisStructure);
+                    selfType->constant = cnst;
+                    funcType->argTypes.push_back(selfType);
+                    funcType->argNames.push_back("self");
+                }
+                for ( auto & arg : func->arguments ) {
+                    funcType->argTypes.push_back(arg->type);
+                    funcType->argNames.push_back(arg->name);
+                }
+                VariableDeclaration * decl = new VariableDeclaration(
+                    vars,
+                    funcType,
+                    nullptr
+                );
+                decl->isPrivate = isPrivate;
+                decl->isClassMethod = true;
+                list->push_back(decl);
             }
-            for ( auto & arg : func->arguments ) {
-                funcType->argTypes.push_back(arg->type);
-                funcType->argNames.push_back(arg->name);
-            }
-            VariableDeclaration * decl = new VariableDeclaration(
-                vars,
-                funcType,
-                nullptr
-            );
-            decl->isPrivate = isPrivate;
-            decl->isClassMethod = true;
-            list->push_back(decl);
         }
         func->delRef();
         return list;

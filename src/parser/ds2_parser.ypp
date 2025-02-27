@@ -2968,56 +2968,56 @@ type_declaration_no_options_no_dim
         $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] '-' '[' ']' {
+    |   type_declaration_no_options[typeDecl] '-' '[' ']' {
         $typeDecl->removeDim = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] DAS_EXPLICIT {
+    |   type_declaration_no_options[typeDecl] DAS_EXPLICIT {
         $typeDecl->isExplicit = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] DAS_CONST {
+    |   type_declaration_no_options[typeDecl] DAS_CONST {
         $typeDecl->constant = true;
         $typeDecl->removeConstant = false;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] '-' DAS_CONST {
+    |   type_declaration_no_options[typeDecl] '-' DAS_CONST {
         $typeDecl->constant = false;
         $typeDecl->removeConstant = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] '&' {
+    |   type_declaration_no_options[typeDecl] '&' {
         $typeDecl->ref = true;
         $typeDecl->removeRef = false;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] '-' '&' {
+    |   type_declaration_no_options[typeDecl] '-' '&' {
         $typeDecl->ref = false;
         $typeDecl->removeRef = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] '#' {
+    |   type_declaration_no_options[typeDecl] '#' {
         $$ = $typeDecl;
         $$->temporary = true;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] DAS_IMPLICIT {
+    |   type_declaration_no_options[typeDecl] DAS_IMPLICIT {
         $$ = $typeDecl;
         $$->implicit = true;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] '-' '#' {
+    |   type_declaration_no_options[typeDecl] '-' '#' {
         $typeDecl->temporary = false;
         $typeDecl->removeTemporary = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] EQUEQU DAS_CONST {
+    |   type_declaration_no_options[typeDecl] EQUEQU DAS_CONST {
         $typeDecl->explicitConst = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] EQUEQU '&' {
+    |   type_declaration_no_options[typeDecl] EQUEQU '&' {
         $typeDecl->explicitRef = true;
         $$ = $typeDecl;
     }
-    |   type_declaration_no_options_no_dim[typeDecl] '?' {
+    |   type_declaration_no_options[typeDecl] '?' {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = TypeDeclPtr($typeDecl);
@@ -3028,7 +3028,7 @@ type_declaration_no_options_no_dim
         $$->smartPtr = true;
         $$->firstType = TypeDeclPtr($typeDecl);
     }
-    |   type_declaration_no_options_no_dim[typeDecl] QQ {
+    |   type_declaration_no_options[typeDecl] QQ {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = make_smart<TypeDecl>(Type::tPointer);

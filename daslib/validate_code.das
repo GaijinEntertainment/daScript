@@ -11,7 +11,7 @@ require daslib/strings
 require daslib/contracts
 
 [macro_function]
-def check_recursive(at : LineInfo; fun : Function?; var call_graph : array<Function?>; var visited : table<Function?>)
+def check_recursive(at : LineInfo; var fun : Function?; var call_graph : array<Function?>; var visited : table<Function?>)
     if fun.flags.builtIn
         return
     if call_graph |> find_index(fun) >= 0
@@ -31,7 +31,7 @@ def check_recursive(at : LineInfo; fun : Function?; var call_graph : array<Funct
     call_graph |> pop()
 
 [macro_function]
-def check_recursive(at : LineInfo; fun : Function?)
+def check_recursive(at : LineInfo; var fun : Function?)
     var call_graph : array<Function?>
     var visited : table<Function?>
     check_recursive(at, fun, call_graph, visited)
@@ -49,7 +49,7 @@ def collect_call_tree(fun : Function?; var visited : table<Function?>)
 [macro]
 class ValidateCompletionVisitor : AstVisitor
     [[do_not_delete]] thisFunc : Function?
-    def override preVisitFunction(fun : FunctionPtr) : void
+    def override preVisitFunction(var fun : FunctionPtr) : void
         thisFunc = get_ptr(fun)
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr
         thisFunc = null
@@ -70,7 +70,7 @@ class ValidateCompletionVisitor : AstVisitor
             macro_error(compiling_program(), expr.at, "we don't know if this `for` loop ever finishes. add explicit range")
     def override preVisitExprWhile(expr : smart_ptr<ExprWhile>) : void
         macro_error(compiling_program(), expr.at, "we can't tell if this `while` loop ever finishes")
-    def override preVisitExprCall(expr : smart_ptr<ExprCall>) : void
+    def override preVisitExprCall(var expr : smart_ptr<ExprCall>) : void
         if expr.func.flags.builtIn
             return
         if expr.func == thisFunc
