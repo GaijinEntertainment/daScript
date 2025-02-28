@@ -5440,21 +5440,24 @@ namespace das {
             }
             return nullptr;
         }
+
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( expr->value->rtti_isVar() && !expr->value->type ) {    // if its a var expression, but it did not infer
                 auto var = static_cast<ExprVar *>(expr->value.get());
                 string moduleName, enumName;
                 splitTypeName(var->name, moduleName, enumName);
-                getSearchModule(moduleName);
+                auto inWhichModule = getSearchModule(moduleName);
                 vector<Enumeration *> possibleEnums;
                 vector<TypeDecl *> possibleBitfields;
                 program->library.foreach([&](Module * mod) -> bool {
-                    if ( auto possibleEnum = mod->findEnum(enumName) ) {
-                        possibleEnums.push_back(possibleEnum.get());
-                    }
-                    if ( auto possibleBitfield = mod->findAlias(enumName) ) {
-                        if ( possibleBitfield->isBitfield() ) {
-                            possibleBitfields.push_back(possibleBitfield.get());
+                    if ( inWhichModule->isVisibleDirectly(mod) ) {
+                        if ( auto possibleEnum = mod->findEnum(enumName) ) {
+                            possibleEnums.push_back(possibleEnum.get());
+                        }
+                        if ( auto possibleBitfield = mod->findAlias(enumName) ) {
+                            if ( possibleBitfield->isBitfield() ) {
+                                possibleBitfields.push_back(possibleBitfield.get());
+                            }
                         }
                     }
                     return true;
@@ -5486,6 +5489,21 @@ namespace das {
                         error("bitfield '" + expr->name + "' not found in " + describeType(alias), "", "",
                             expr->at, CompilationError::cant_get_field);
                         return Visitor::visit(expr);
+                    }
+                } else {
+                    if ( verbose ) {
+                        // note - we only report this error if verbose, i.e. if we are reporting FINAL error
+                        // this is an error only if things failed to compile
+                        TextWriter tw;
+                        tw << "possible candidates:\n";
+                        for ( auto en : possibleEnums ) {
+                            tw << "\tenum " << en->name << " in " << (en->module->name.empty() ? "this module" : en->module->name) << "\n";
+                        }
+                        for ( auto bf : possibleBitfields ) {
+                            tw << "\tbitfield " << bf->alias << " in " << (bf->alias.empty() ? "this module" : bf->alias) << "\n";
+                        }
+                        error("'" + var->name + "' is ambiguous", tw.str(), "",
+                            expr->at, CompilationError::cant_get_field);
                     }
                 }
             }
