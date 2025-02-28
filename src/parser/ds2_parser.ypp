@@ -3552,7 +3552,10 @@ expr_map_tuple_list
     ;
 
 make_table_decl
-    :   '{' [loc] optional_expr_map_tuple_list[arguments] '}' {
+    :   '{' [loc] {
+        yyextra->das_nested_parentheses ++;
+    } optional_emit_semis optional_expr_map_tuple_list[arguments] '}' {
+        yyextra->das_nested_parentheses --;
         if ( $arguments ) {
             auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
             mka->values = sequenceToList($arguments);
