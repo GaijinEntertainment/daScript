@@ -1185,16 +1185,19 @@ namespace das
         restart();
         if ( !failed ) {
             if ( stack.size() > globalInitStackSize ) {
-                failed |= runWithCatch([&]() {
+                failed |= !runWithCatch([&]() {
                     runInitScript();
                 });
             } else {
                 auto ssz = max ( int(stack.size()), 16384 ) + globalInitStackSize;
                 StackAllocator init_stack(ssz);
                 SharedStackGuard init_guard(*this, init_stack);
-                failed |= runWithCatch([&]() {
+                failed |= !runWithCatch([&]() {
                     runInitScript();
                 });
+            }
+            if ( failed ) {
+                to_err(&exceptionAt, last_exception);
             }
         }
         restart();
