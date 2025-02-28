@@ -2551,7 +2551,9 @@ namespace das {
             }
             cexpr->structs.push_back(mfd);
         }
-        cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        if ( makeType ) {
+            cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        }
         cexpr->makeStructFlags = makeStructFlags;
         if ( block ) {
             cexpr->block = block->clone();
