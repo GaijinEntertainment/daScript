@@ -1,3 +1,4 @@
+options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
@@ -11,61 +12,82 @@ require daslib/defer
 require daslib/das_source_formatter
 
 
-def public format_file(file_name : string const)
+def public format_file(file_name : string const) {
     var unformatted : string = ""
     var formatted : string = ""
-    fopen(file_name, "rb") <| $(fr)
-        if fr == null
+    fopen(file_name, "rb") <| $(fr) {
+        if (fr == null) {
             to_log(LOG_ERROR, "cannot open '{file_name}'\n")
-        else
-            fmap(fr) <| $(data)
+        } else {
+            fmap(fr) <| $(data) {
                 unformatted = string(data)
                 formatted = format_source(data)
+            }
+        }
+    }
 
-    if !empty(formatted) && formatted != unformatted
-        fopen(file_name, "wb") <| $(fw)
-            if fw == null
+    if (!empty(formatted) && formatted != unformatted) {
+        fopen(file_name, "wb") <| $(fw) {
+            if (fw == null) {
                 to_log(LOG_ERROR, "cannot open '{file_name} for write'\n")
-            else
+            } else {
                 fw |> fprint(formatted)
+            }
+        }
+    }
+}
 
 
 
-def public format_files(file_names : array<string>&)
-    for fname in file_names
+def public format_files(file_names : array<string>&) {
+    for (fname in file_names) {
         format_file(fname)
+    }
+}
 
 
 /*
 
 [export]
-def main()
+def main() {
     var fileNames: array<string>
     var filesListFn: string = ""
     var ignore = true
-    for arg in get_command_line_arguments()
-        if arg == "--debug"
+    for (arg in get_command_line_arguments()) {
+        if (arg == "--debug") {
             debugMode = true
-        if arg == "-args"
+        }
+        if (arg == "-args") {
             ignore = false
             continue
-        if !ignore
-            if arg |> character_at(0) != '-'
+        }
+        if (!ignore) {
+            if (arg |> character_at(0) != '-') {
                 fileNames |> push(arg)
-            if arg |> starts_with("--files:")
+            }
+            if (arg |> starts_with("--files:")) {
                 filesListFn = arg |> slice(8)
+            }
+        }
+    }
 
-    if !empty(filesListFn)
-        fopen(filesListFn, "rb") <| $(f)
-            if f == null
+    if (!empty(filesListFn)) {
+        fopen(filesListFn, "rb") <| $(f) {
+            if (f == null) {
                 to_log(LOG_ERROR, "cannot open '{filesListFn}'\n")
-            else
-                while !feof(f)
+            } else {
+                while (!feof(f)) {
                     var file_name = fgets(f)
-                    if !empty(file_name)
+                    if (!empty(file_name)) {
                         file_name = replace(file_name, "\n", "")
                         file_name = replace(file_name, "\r", "")
                         fileNames |> push(file_name)
+                    }
+                }
+            }
+        }
+    }
 
     format_files(fileNames)
+}
 */

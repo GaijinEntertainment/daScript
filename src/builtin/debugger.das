@@ -1,3 +1,4 @@
+options gen2
 options indenting = 4
 options remove_unused_symbols = false
 options no_aot = true
@@ -7,7 +8,7 @@ require debugapi
 
 require rtti public
 
-class DapiDebugAgent
+class DapiDebugAgent {
     def abstract onInstall(agent : DebugAgent?) : void
     def abstract onUninstall(agent : DebugAgent?) : void
     def abstract onCreateContext(var ctx : Context) : void
@@ -30,65 +31,78 @@ class DapiDebugAgent
     def abstract onFree(var ctx : Context; data : void?; at : LineInfo) : void
     def abstract onAllocateString(var ctx : Context; data : void?; size : uint64; at : LineInfo) : void
     def abstract onFreeString(var ctx : Context; data : void?; at : LineInfo) : void
-    [[do_not_delete]] thisAgent : DebugAgent ?
+    @do_not_delete thisAgent : DebugAgent ?
+}
 
-def install_new_debug_agent(var agentPtr; category : string)
-    static_if typeinfo(is_class * agentPtr)
+def install_new_debug_agent(var agentPtr; category : string) {
+    static_if (typeinfo is_class(*agentPtr)) {
         let agentInfo = class_info(*agentPtr)
         var inscope agentAdapter <- make_debug_agent(agentPtr, agentInfo)
-        unsafe
+        unsafe {
             agentPtr.thisAgent = reinterpret<DebugAgent?>(agentAdapter)
+        }
         install_debug_agent(agentAdapter, category)
         this_context().name := "debug agent {category}"
-    else
+    } else {
         concept_assert(false, "can't make debug agent of non-class")
+    }
+}
 
-def install_new_thread_local_debug_agent(var agentPtr)
-    static_if typeinfo(is_class * agentPtr)
+def install_new_thread_local_debug_agent(var agentPtr) {
+    static_if (typeinfo is_class(*agentPtr)) {
         let agentInfo = class_info(*agentPtr)
         var inscope agentAdapter <- make_debug_agent(agentPtr, agentInfo)
-        unsafe
+        unsafe {
             agentPtr.thisAgent = reinterpret<DebugAgent?>(agentAdapter)
+        }
         install_debug_agent_thread_local(agentAdapter)
         this_context().name := "thread local debug agent"
-    else
+    } else {
         concept_assert(false, "can't make debug agent of non-class")
+    }
+}
 
 // das::Array. should we bind C++ structure?
-struct DapiArray
+struct DapiArray {
     data : void?
     size : uint
     capacity : uint
     lock : uint
     flags : bitfield<_shared; _hopeless>
+}
 
 // das::Table. should we bind C++ structure?
-struct DapiTable : DapiArray
+struct DapiTable : DapiArray {
     keys : void?
     hashes : uint?
+}
 
 // das::Block
-struct DapiBlock
+struct DapiBlock {
     stackOffset : uint
     argumentsOffset : uint
     body : void?                    // SimNode *
     aotFunction : void?
     functionArguments : float4?
     info : FuncInfo?
+}
 
 // das::Func
-struct DapiFunc
+struct DapiFunc {
     index : int
+}
 
 // das::Lambda
-struct DapiLambda
+struct DapiLambda {
     captured : void?
+}
 
 // das::Sequence
-struct DapiSequence
+struct DapiSequence {
     iter : void?        // Iterator *
+}
 
-class DapiDataWalker
+class DapiDataWalker {
     def abstract canVisitHandle(ps : void?; ti : TypeInfo) : bool
     def abstract canVisitStructure(ps : void?; si : StructInfo) : bool
     def abstract canVisitArray(pa : void?; ti : TypeInfo) : bool
@@ -171,16 +185,19 @@ class DapiDataWalker
     def abstract WalkEnumeration64(var value : int64&; ei : EnumInfo) : void
     def abstract FakeContext(var value : Context) : void
     def abstract InvalidData : void
+}
 
-def make_data_walker(classPtr) : smart_ptr<DataWalker>
-    static_if typeinfo(is_class * classPtr)
+def make_data_walker(classPtr) : smart_ptr<DataWalker> {
+    static_if (typeinfo is_class(*classPtr)) {
         let classInfo = class_info(*classPtr)
         return <- make_data_walker(classPtr, classInfo)
-    else
+    } else {
         concept_assert(false, "can't make data walker of non-class")
-        return <- [[smart_ptr<DataWalker>]]
+        return <- default<smart_ptr<DataWalker>>
+    }
+}
 
-class DapiStackWalker
+class DapiStackWalker {
     def abstract canWalkArguments : bool
     def abstract canWalkVariables : bool
     def abstract canWalkOutOfScopeVariables : bool
@@ -193,11 +210,14 @@ class DapiStackWalker
     def abstract onBeforeVariables : void
     def abstract onVariable(inf : FuncInfo; vinfo : LocalVariableInfo; arg : void?; inScope : bool) : void
     def abstract onAfterCall(pp : Prologue) : bool
+}
 
-def make_stack_walker(classPtr) : smart_ptr<StackWalker>
-    static_if typeinfo(is_class * classPtr)
+def make_stack_walker(classPtr) : smart_ptr<StackWalker> {
+    static_if (typeinfo is_class(*classPtr)) {
         let classInfo = class_info(*classPtr)
         return <- make_stack_walker(classPtr, classInfo)
-    else
+    } else {
         concept_assert(false, "can't make stack walker of non-class")
-        return <- [[smart_ptr<StackWalker>]]
+        return <- default<smart_ptr<StackWalker>>
+    }
+}
