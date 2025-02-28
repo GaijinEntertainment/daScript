@@ -3663,9 +3663,13 @@ make_tuple_call
         mkt->makeType = make_smart<TypeDecl>(Type::autoinfer);
         $$ = mkt;
     }
-    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+        auto mkt = new TypeDecl(Type::tTuple);
+        mkt->at = tokAt(scanner,@loc);
+        varDeclToTypeDecl(scanner, mkt, $list, true);
+        deleteVariableDeclarationList($list);
         $msd->at = tokAt(scanner,@loc);
-        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->makeType = mkt;
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
         ((ExprMakeStruct *)$msd)->forceTuple = true;
         $$ = $msd;
@@ -3726,9 +3730,13 @@ make_dim_decl
         tam->arguments.push_back($msd);
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_TTUPLE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_TTUPLE '<' { yyextra->das_arrow_depth ++; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+        auto mkt = new TypeDecl(Type::tTuple);
+        mkt->at = tokAt(scanner,@loc);
+        varDeclToTypeDecl(scanner, mkt, $list, true);
+        deleteVariableDeclarationList($list);
         $msd->at = tokAt(scanner,@loc);
-        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->makeType = mkt;
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
         ((ExprMakeStruct *)$msd)->forceTuple = true;
         ((ExprMakeStruct *)$msd)->alwaysUseInitializer = true;
@@ -3736,9 +3744,13 @@ make_dim_decl
         tam->arguments.push_back($msd);
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_TVARIANT '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_variant_dim[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_TVARIANT '<' { yyextra->das_arrow_depth ++; } variant_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' make_variant_dim[msd] ')'  {
+        auto mkt = new TypeDecl(Type::tVariant);
+        mkt->at = tokAt(scanner,@loc);
+        varDeclToTypeDecl(scanner, mkt, $list, true);
+        deleteVariableDeclarationList($list);
         $msd->at = tokAt(scanner,@loc);
-        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->makeType = mkt;
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->forceVariant = true;
         ((ExprMakeStruct *)$msd)->alwaysUseInitializer = true;

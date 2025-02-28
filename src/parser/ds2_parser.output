@@ -1141,7 +1141,7 @@ Grammar
 
   815 $@99: %empty
 
-  816 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
+  816 make_tuple_call: "tuple" '<' $@98 tuple_type_list '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
 
   817 make_dim_decl: '[' optional_expr_list ']'
 
@@ -1155,13 +1155,13 @@ Grammar
 
   822 $@103: %empty
 
-  823 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
+  823 make_dim_decl: "array" "tuple" '<' $@102 tuple_type_list '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
 
   824 $@104: %empty
 
   825 $@105: %empty
 
-  826 make_dim_decl: "array" "variant" '<' $@104 type_declaration_no_options '>' $@105 '(' make_variant_dim ')'
+  826 make_dim_decl: "array" "variant" '<' $@104 variant_type_list '>' $@105 '(' make_variant_dim ')'
   827              | "array" '(' expr_list optional_comma ')'
 
   828 $@106: %empty
@@ -1880,7 +1880,7 @@ Nonterminals, with rules where they appear
         on right: 534 535 537 538
     tuple_type_list <pVarDeclList> (364)
         on left: 534 535
-        on right: 535 753
+        on right: 535 753 816 823
     tuple_alias_type_list <pVarDeclList> (365)
         on left: 536 537 538
         on right: 538 764
@@ -1889,7 +1889,7 @@ Nonterminals, with rules where they appear
         on right: 540 541 543 544
     variant_type_list <pVarDeclList> (367)
         on left: 540 541
-        on right: 541 756 807
+        on right: 541 756 807 826
     variant_alias_type_list <pVarDeclList> (368)
         on left: 542 543 544
         on right: 544 769
@@ -2060,7 +2060,7 @@ Nonterminals, with rules where they appear
         on right: 690 691 693
     type_declaration_no_options <pTypeDecl> (424)
         on left: 692 693
-        on right: 309 316 319 322 384 463 488 489 490 567 568 570 571 705 706 707 708 709 710 711 712 713 714 715 716 720 757 758 801 804 810 816 820 823 826 830 834 840 841
+        on right: 309 316 319 322 384 463 488 489 490 567 568 570 571 705 706 707 708 709 710 711 712 713 714 715 716 720 757 758 801 804 810 820 830 834 840 841
     type_declaration_no_options_no_dim <pTypeDecl> (425)
         on left: 694 695 696 697 700 701 702 704 705 706 707 708 709 710 711 712 713 714 715 716 719 720 723 726 729 730 733 736 737 740 743 744 747 750 753 756
         on right: 692 693
@@ -6861,8 +6861,8 @@ State 426
 State 427
 
   820 make_dim_decl: "array" . "struct" '<' $@100 type_declaration_no_options '>' $@101 '(' use_initializer optional_make_struct_dim_decl ')'
-  823              | "array" . "tuple" '<' $@102 type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
-  826              | "array" . "variant" '<' $@104 type_declaration_no_options '>' $@105 '(' make_variant_dim ')'
+  823              | "array" . "tuple" '<' $@102 tuple_type_list '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
+  826              | "array" . "variant" '<' $@104 variant_type_list '>' $@105 '(' make_variant_dim ')'
   827              | "array" . '(' expr_list optional_comma ')'
   830              | "array" . '<' $@106 type_declaration_no_options '>' $@107 '(' optional_expr_list ')'
 
@@ -6958,7 +6958,7 @@ State 438
 State 439
 
   813 make_tuple_call: "tuple" . '(' expr_list optional_comma ')'
-  816                | "tuple" . '<' $@98 type_declaration_no_options '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
+  816                | "tuple" . '<' $@98 tuple_type_list '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '<'  shift, and go to state 577
     '('  shift, and go to state 578
@@ -10036,14 +10036,14 @@ State 561
 
 State 562
 
-  823 make_dim_decl: "array" "tuple" . '<' $@102 type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
+  823 make_dim_decl: "array" "tuple" . '<' $@102 tuple_type_list '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
 
     '<'  shift, and go to state 719
 
 
 State 563
 
-  826 make_dim_decl: "array" "variant" . '<' $@104 type_declaration_no_options '>' $@105 '(' make_variant_dim ')'
+  826 make_dim_decl: "array" "variant" . '<' $@104 variant_type_list '>' $@105 '(' make_variant_dim ')'
 
     '<'  shift, and go to state 720
 
@@ -10832,7 +10832,7 @@ State 576
 
 State 577
 
-  816 make_tuple_call: "tuple" '<' . $@98 type_declaration_no_options '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
+  816 make_tuple_call: "tuple" '<' . $@98 tuple_type_list '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
 
     $default  reduce using rule 814 ($@98)
 
@@ -17899,7 +17899,7 @@ State 718
 
 State 719
 
-  823 make_dim_decl: "array" "tuple" '<' . $@102 type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
+  823 make_dim_decl: "array" "tuple" '<' . $@102 tuple_type_list '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
 
     $default  reduce using rule 821 ($@102)
 
@@ -17908,7 +17908,7 @@ State 719
 
 State 720
 
-  826 make_dim_decl: "array" "variant" '<' . $@104 type_declaration_no_options '>' $@105 '(' make_variant_dim ')'
+  826 make_dim_decl: "array" "variant" '<' . $@104 variant_type_list '>' $@105 '(' make_variant_dim ')'
 
     $default  reduce using rule 824 ($@104)
 
@@ -18755,7 +18755,7 @@ State 735
 
 State 736
 
-  816 make_tuple_call: "tuple" '<' $@98 . type_declaration_no_options '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
+  816 make_tuple_call: "tuple" '<' $@98 . tuple_type_list '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
 
     "type"       shift, and go to state 229
     "array"      shift, and go to state 230
@@ -18798,16 +18798,19 @@ State 736
     "variant"    shift, and go to state 267
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 268
-    "name"       shift, and go to state 59
+    "name"       shift, and go to state 663
     '$'          shift, and go to state 269
 
     name_in_namespace                   go to state 270
+    tuple_type                          go to state 664
+    tuple_type_list                     go to state 949
     basic_type_declaration              go to state 271
     structure_type_declaration          go to state 272
     auto_type_declaration               go to state 273
     bitfield_type_declaration           go to state 274
-    type_declaration_no_options         go to state 949
+    type_declaration_no_options         go to state 275
     type_declaration_no_options_no_dim  go to state 276
+    type_declaration                    go to state 666
 
 
 State 737
@@ -26045,7 +26048,7 @@ State 930
 
 State 931
 
-  823 make_dim_decl: "array" "tuple" '<' $@102 . type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
+  823 make_dim_decl: "array" "tuple" '<' $@102 . tuple_type_list '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
 
     "type"       shift, and go to state 229
     "array"      shift, and go to state 230
@@ -26088,73 +26091,29 @@ State 931
     "variant"    shift, and go to state 267
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 268
-    "name"       shift, and go to state 59
+    "name"       shift, and go to state 663
     '$'          shift, and go to state 269
 
     name_in_namespace                   go to state 270
+    tuple_type                          go to state 664
+    tuple_type_list                     go to state 1120
     basic_type_declaration              go to state 271
     structure_type_declaration          go to state 272
     auto_type_declaration               go to state 273
     bitfield_type_declaration           go to state 274
-    type_declaration_no_options         go to state 1120
+    type_declaration_no_options         go to state 275
     type_declaration_no_options_no_dim  go to state 276
+    type_declaration                    go to state 666
 
 
 State 932
 
-  826 make_dim_decl: "array" "variant" '<' $@104 . type_declaration_no_options '>' $@105 '(' make_variant_dim ')'
+  826 make_dim_decl: "array" "variant" '<' $@104 . variant_type_list '>' $@105 '(' make_variant_dim ')'
 
-    "type"       shift, and go to state 229
-    "array"      shift, and go to state 230
-    "table"      shift, and go to state 231
-    "typedecl"   shift, and go to state 232
-    "iterator"   shift, and go to state 233
-    "smart_ptr"  shift, and go to state 234
-    "bool"       shift, and go to state 235
-    "void"       shift, and go to state 236
-    "string"     shift, and go to state 237
-    "auto"       shift, and go to state 238
-    "int"        shift, and go to state 239
-    "int2"       shift, and go to state 240
-    "int3"       shift, and go to state 241
-    "int4"       shift, and go to state 242
-    "uint"       shift, and go to state 243
-    "bitfield"   shift, and go to state 244
-    "uint2"      shift, and go to state 245
-    "uint3"      shift, and go to state 246
-    "uint4"      shift, and go to state 247
-    "float"      shift, and go to state 248
-    "float2"     shift, and go to state 249
-    "float3"     shift, and go to state 250
-    "float4"     shift, and go to state 251
-    "range"      shift, and go to state 252
-    "urange"     shift, and go to state 253
-    "range64"    shift, and go to state 254
-    "urange64"   shift, and go to state 255
-    "block"      shift, and go to state 256
-    "int64"      shift, and go to state 257
-    "uint64"     shift, and go to state 258
-    "double"     shift, and go to state 259
-    "function"   shift, and go to state 260
-    "lambda"     shift, and go to state 261
-    "int8"       shift, and go to state 262
-    "uint8"      shift, and go to state 263
-    "int16"      shift, and go to state 264
-    "uint16"     shift, and go to state 265
-    "tuple"      shift, and go to state 266
-    "variant"    shift, and go to state 267
-    "::"         shift, and go to state 58
-    "$t"         shift, and go to state 268
-    "name"       shift, and go to state 59
-    '$'          shift, and go to state 269
+    "name"  shift, and go to state 667
 
-    name_in_namespace                   go to state 270
-    basic_type_declaration              go to state 271
-    structure_type_declaration          go to state 272
-    auto_type_declaration               go to state 273
-    bitfield_type_declaration           go to state 274
-    type_declaration_no_options         go to state 1121
-    type_declaration_no_options_no_dim  go to state 276
+    variant_type       go to state 668
+    variant_type_list  go to state 1121
 
 
 State 933
@@ -26665,31 +26624,18 @@ State 948
 
 State 949
 
-  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
-  706                                   | type_declaration_no_options . "explicit"
-  707                                   | type_declaration_no_options . "const"
-  708                                   | type_declaration_no_options . '-' "const"
-  709                                   | type_declaration_no_options . '&'
-  710                                   | type_declaration_no_options . '-' '&'
-  711                                   | type_declaration_no_options . '#'
-  712                                   | type_declaration_no_options . "implicit"
-  713                                   | type_declaration_no_options . '-' '#'
-  714                                   | type_declaration_no_options . "==" "const"
-  715                                   | type_declaration_no_options . "==" '&'
-  716                                   | type_declaration_no_options . '?'
-  720                                   | type_declaration_no_options . "??"
-  816 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options . '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
+  535 tuple_type_list: tuple_type_list . c_or_s tuple_type
+  816 make_tuple_call: "tuple" '<' $@98 tuple_type_list . '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    "const"     shift, and go to state 367
-    "implicit"  shift, and go to state 368
-    "explicit"  shift, and go to state 369
-    "=="        shift, and go to state 370
-    "??"        shift, and go to state 371
-    '?'         shift, and go to state 372
-    '&'         shift, and go to state 373
-    '>'         shift, and go to state 1135
-    '-'         shift, and go to state 374
-    '#'         shift, and go to state 375
+    "new line, comma"      shift, and go to state 706
+    "new line, semicolon"  shift, and go to state 13
+    ','                    shift, and go to state 707
+    '>'                    shift, and go to state 1135
+    ';'                    shift, and go to state 16
+
+    COMMA      go to state 708
+    SEMICOLON  go to state 709
+    c_or_s     go to state 843
 
 
 State 950
@@ -33170,60 +33116,34 @@ State 1119
 
 State 1120
 
-  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
-  706                                   | type_declaration_no_options . "explicit"
-  707                                   | type_declaration_no_options . "const"
-  708                                   | type_declaration_no_options . '-' "const"
-  709                                   | type_declaration_no_options . '&'
-  710                                   | type_declaration_no_options . '-' '&'
-  711                                   | type_declaration_no_options . '#'
-  712                                   | type_declaration_no_options . "implicit"
-  713                                   | type_declaration_no_options . '-' '#'
-  714                                   | type_declaration_no_options . "==" "const"
-  715                                   | type_declaration_no_options . "==" '&'
-  716                                   | type_declaration_no_options . '?'
-  720                                   | type_declaration_no_options . "??"
-  823 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options . '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
+  535 tuple_type_list: tuple_type_list . c_or_s tuple_type
+  823 make_dim_decl: "array" "tuple" '<' $@102 tuple_type_list . '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'
 
-    "const"     shift, and go to state 367
-    "implicit"  shift, and go to state 368
-    "explicit"  shift, and go to state 369
-    "=="        shift, and go to state 370
-    "??"        shift, and go to state 371
-    '?'         shift, and go to state 372
-    '&'         shift, and go to state 373
-    '>'         shift, and go to state 1254
-    '-'         shift, and go to state 374
-    '#'         shift, and go to state 375
+    "new line, comma"      shift, and go to state 706
+    "new line, semicolon"  shift, and go to state 13
+    ','                    shift, and go to state 707
+    '>'                    shift, and go to state 1254
+    ';'                    shift, and go to state 16
+
+    COMMA      go to state 708
+    SEMICOLON  go to state 709
+    c_or_s     go to state 843
 
 
 State 1121
 
-  705 type_declaration_no_options_no_dim: type_declaration_no_options . '-' '[' ']'
-  706                                   | type_declaration_no_options . "explicit"
-  707                                   | type_declaration_no_options . "const"
-  708                                   | type_declaration_no_options . '-' "const"
-  709                                   | type_declaration_no_options . '&'
-  710                                   | type_declaration_no_options . '-' '&'
-  711                                   | type_declaration_no_options . '#'
-  712                                   | type_declaration_no_options . "implicit"
-  713                                   | type_declaration_no_options . '-' '#'
-  714                                   | type_declaration_no_options . "==" "const"
-  715                                   | type_declaration_no_options . "==" '&'
-  716                                   | type_declaration_no_options . '?'
-  720                                   | type_declaration_no_options . "??"
-  826 make_dim_decl: "array" "variant" '<' $@104 type_declaration_no_options . '>' $@105 '(' make_variant_dim ')'
+  541 variant_type_list: variant_type_list . c_or_s variant_type
+  826 make_dim_decl: "array" "variant" '<' $@104 variant_type_list . '>' $@105 '(' make_variant_dim ')'
 
-    "const"     shift, and go to state 367
-    "implicit"  shift, and go to state 368
-    "explicit"  shift, and go to state 369
-    "=="        shift, and go to state 370
-    "??"        shift, and go to state 371
-    '?'         shift, and go to state 372
-    '&'         shift, and go to state 373
-    '>'         shift, and go to state 1255
-    '-'         shift, and go to state 374
-    '#'         shift, and go to state 375
+    "new line, comma"      shift, and go to state 706
+    "new line, semicolon"  shift, and go to state 13
+    ','                    shift, and go to state 707
+    '>'                    shift, and go to state 1255
+    ';'                    shift, and go to state 16
+
+    COMMA      go to state 708
+    SEMICOLON  go to state 709
+    c_or_s     go to state 846
 
 
 State 1122
@@ -33559,7 +33479,7 @@ State 1134
 
 State 1135
 
-  816 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options '>' . $@99 '(' use_initializer optional_make_struct_dim_decl ')'
+  816 make_tuple_call: "tuple" '<' $@98 tuple_type_list '>' . $@99 '(' use_initializer optional_make_struct_dim_decl ')'
 
     $default  reduce using rule 815 ($@99)
 
@@ -39507,7 +39427,7 @@ State 1253
 
 State 1254
 
-  823 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options '>' . $@103 '(' use_initializer optional_make_struct_dim_decl ')'
+  823 make_dim_decl: "array" "tuple" '<' $@102 tuple_type_list '>' . $@103 '(' use_initializer optional_make_struct_dim_decl ')'
 
     $default  reduce using rule 822 ($@103)
 
@@ -39516,7 +39436,7 @@ State 1254
 
 State 1255
 
-  826 make_dim_decl: "array" "variant" '<' $@104 type_declaration_no_options '>' . $@105 '(' make_variant_dim ')'
+  826 make_dim_decl: "array" "variant" '<' $@104 variant_type_list '>' . $@105 '(' make_variant_dim ')'
 
     $default  reduce using rule 825 ($@105)
 
@@ -39897,7 +39817,7 @@ State 1263
 
 State 1264
 
-  816 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options '>' $@99 . '(' use_initializer optional_make_struct_dim_decl ')'
+  816 make_tuple_call: "tuple" '<' $@98 tuple_type_list '>' $@99 . '(' use_initializer optional_make_struct_dim_decl ')'
 
     '('  shift, and go to state 1348
 
@@ -42236,14 +42156,14 @@ State 1336
 
 State 1337
 
-  823 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options '>' $@103 . '(' use_initializer optional_make_struct_dim_decl ')'
+  823 make_dim_decl: "array" "tuple" '<' $@102 tuple_type_list '>' $@103 . '(' use_initializer optional_make_struct_dim_decl ')'
 
     '('  shift, and go to state 1399
 
 
 State 1338
 
-  826 make_dim_decl: "array" "variant" '<' $@104 type_declaration_no_options '>' $@105 . '(' make_variant_dim ')'
+  826 make_dim_decl: "array" "variant" '<' $@104 variant_type_list '>' $@105 . '(' make_variant_dim ')'
 
     '('  shift, and go to state 1400
 
@@ -42884,7 +42804,7 @@ State 1347
 
 State 1348
 
-  816 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options '>' $@99 '(' . use_initializer optional_make_struct_dim_decl ')'
+  816 make_tuple_call: "tuple" '<' $@98 tuple_type_list '>' $@99 '(' . use_initializer optional_make_struct_dim_decl ')'
 
     "uninitialized"  shift, and go to state 1346
 
@@ -43944,7 +43864,7 @@ State 1398
 
 State 1399
 
-  823 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options '>' $@103 '(' . use_initializer optional_make_struct_dim_decl ')'
+  823 make_dim_decl: "array" "tuple" '<' $@102 tuple_type_list '>' $@103 '(' . use_initializer optional_make_struct_dim_decl ')'
 
     "uninitialized"  shift, and go to state 1346
 
@@ -43955,7 +43875,7 @@ State 1399
 
 State 1400
 
-  826 make_dim_decl: "array" "variant" '<' $@104 type_declaration_no_options '>' $@105 '(' . make_variant_dim ')'
+  826 make_dim_decl: "array" "variant" '<' $@104 variant_type_list '>' $@105 '(' . make_variant_dim ')'
 
     "$f"    shift, and go to state 600
     "name"  shift, and go to state 976
@@ -43994,7 +43914,7 @@ State 1403
 
 State 1404
 
-  816 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options '>' $@99 '(' use_initializer . optional_make_struct_dim_decl ')'
+  816 make_tuple_call: "tuple" '<' $@98 tuple_type_list '>' $@99 '(' use_initializer . optional_make_struct_dim_decl ')'
 
     "$f"    shift, and go to state 600
     "name"  shift, and go to state 976
@@ -45396,7 +45316,7 @@ State 1445
 
 State 1446
 
-  823 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options '>' $@103 '(' use_initializer . optional_make_struct_dim_decl ')'
+  823 make_dim_decl: "array" "tuple" '<' $@102 tuple_type_list '>' $@103 '(' use_initializer . optional_make_struct_dim_decl ')'
 
     "$f"    shift, and go to state 600
     "name"  shift, and go to state 976
@@ -45425,7 +45345,7 @@ State 1447
 
 State 1448
 
-  826 make_dim_decl: "array" "variant" '<' $@104 type_declaration_no_options '>' $@105 '(' make_variant_dim . ')'
+  826 make_dim_decl: "array" "variant" '<' $@104 variant_type_list '>' $@105 '(' make_variant_dim . ')'
 
     ')'  shift, and go to state 1489
 
@@ -45453,7 +45373,7 @@ State 1451
 
 State 1452
 
-  816 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options '>' $@99 '(' use_initializer optional_make_struct_dim_decl . ')'
+  816 make_tuple_call: "tuple" '<' $@98 tuple_type_list '>' $@99 '(' use_initializer optional_make_struct_dim_decl . ')'
 
     ')'  shift, and go to state 1491
 
@@ -46596,14 +46516,14 @@ State 1487
 
 State 1488
 
-  823 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl . ')'
+  823 make_dim_decl: "array" "tuple" '<' $@102 tuple_type_list '>' $@103 '(' use_initializer optional_make_struct_dim_decl . ')'
 
     ')'  shift, and go to state 1513
 
 
 State 1489
 
-  826 make_dim_decl: "array" "variant" '<' $@104 type_declaration_no_options '>' $@105 '(' make_variant_dim ')' .
+  826 make_dim_decl: "array" "variant" '<' $@104 variant_type_list '>' $@105 '(' make_variant_dim ')' .
 
     $default  reduce using rule 826 (make_dim_decl)
 
@@ -46617,7 +46537,7 @@ State 1490
 
 State 1491
 
-  816 make_tuple_call: "tuple" '<' $@98 type_declaration_no_options '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')' .
+  816 make_tuple_call: "tuple" '<' $@98 tuple_type_list '>' $@99 '(' use_initializer optional_make_struct_dim_decl ')' .
 
     $default  reduce using rule 816 (make_tuple_call)
 
@@ -47124,7 +47044,7 @@ State 1512
 
 State 1513
 
-  823 make_dim_decl: "array" "tuple" '<' $@102 type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')' .
+  823 make_dim_decl: "array" "tuple" '<' $@102 tuple_type_list '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')' .
 
     $default  reduce using rule 823 (make_dim_decl)
 
