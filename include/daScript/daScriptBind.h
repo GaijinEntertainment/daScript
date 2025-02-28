@@ -247,7 +247,8 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
 #endif
 
 #ifdef DAS_AOT_COMPILER
-#define DAS_FUN_DECL(...) decltype(&__VA_ARGS__), das::detail::get_stub<true>(decltype (&__VA_ARGS__)())
+#define DAS_SHOULD_USE_STUBS 1
+#define DAS_FUN_DECL(...)    decltype(&__VA_ARGS__), das::detail::get_stub<true>(decltype (&__VA_ARGS__)())
 #define DAS_PROP_OR_METHOD_DECL_STUB_IMPL(...) \
   decltype(das::detail::get_stub<true>(__VA_ARGS__)), das::detail::get_stub<true>(decltype(__VA_ARGS__)())
 #define DAS_METHOD_DECL(...) DAS_PROP_OR_METHOD_DECL_STUB_IMPL(&__VA_ARGS__)
@@ -256,7 +257,8 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
   DAS_PROP_OR_METHOD_DECL_STUB_IMPL(das::detail::get_non_const_prop_method(&__VA_ARGS__)), \
     DAS_PROP_OR_METHOD_DECL_STUB_IMPL(das::detail::get_const_prop_method(&__VA_ARGS__))
 #else
-#define DAS_FUN_DECL(...) decltype(&__VA_ARGS__), (&__VA_ARGS__)
+#define DAS_SHOULD_USE_STUBS 0
+#define DAS_FUN_DECL(...)    decltype(&__VA_ARGS__), (&__VA_ARGS__)
 #define DAS_METHOD_DECL(...) \
   decltype(das::detail::get_stub<true>(&__VA_ARGS__)), &das::das_call_member<decltype(&__VA_ARGS__), &__VA_ARGS__>::invoke
 #define DAS_PROP_DECL(...) decltype(das::detail::get_prop_method(&__VA_ARGS__)), &__VA_ARGS__
@@ -308,6 +310,22 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
   DAS_ADD_METHOD_BIND_CONST_VALUE_RET_EX(NAME, SIDE_EFFECTS, SIDE_EFFECTS, __VA_ARGS__)
 
 // type annotations
+#define DAS_TYPE_DECL_STUB(...)                               \
+  template <>                                                 \
+  struct das::is_stub_type<__VA_ARGS__>                       \
+  {                                                           \
+    static constexpr bool value = bool(DAS_SHOULD_USE_STUBS); \
+  };
+#define DAS_TYPE_DECL_NAME(NAME, ...)   \
+  template <>                           \
+  struct das::typeName<__VA_ARGS__>     \
+  {                                     \
+    constexpr static const char *name() \
+    {                                   \
+      return NAME;                      \
+    }                                   \
+  };
+
 #define DAS_TYPE_DECL_BEGIN_EX(DAS_NAME, ANN_NAME, ...)                          \
   struct ANN_NAME : das::ManagedStructureAnnotation<::__VA_ARGS__, false>        \
   {                                                                              \
@@ -318,10 +336,11 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
       cppName = CPP_NAME;                                                        \
       annotationBody(ml);                                                        \
     }
-#define DAS_TYPE_DECL_BEGIN(DAS_NAME, ...) \
+#define DAS_TYPE_DECL_BEGIN(DAS_NAME, ...)    \
   MAKE_TYPE_FACTORY(DAS_NAME, ::__VA_ARGS__); \
+  DAS_TYPE_DECL_STUB(::__VA_ARGS__);          \
   DAS_TYPE_DECL_BEGIN_EX(DAS_NAME, DAS_NAME##Annotation, __VA_ARGS__)
-#define DAS_TYPE_DECL_END }
+#define DAS_TYPE_DECL_END            }
 #define DAS_TYPE_DECL(DAS_NAME, ...) DAS_TYPE_DECL_BEGIN(DAS_NAME, __VA_ARGS__) DAS_TYPE_DECL_END
 
 #define DAS_TYPE_ANNOTATION_EX(ANN_NAME) void ANN_NAME::annotationBody([[maybe_unused]] das::ModuleLibrary &ml)
