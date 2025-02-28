@@ -25,7 +25,7 @@ let dont_need_space_around <- fixed_array("(", ")", "[", "]", "\{", "\}",
 let type_after_keyword <- fixed_array("generator", "cast", "upcast", "smart_ptr", "match_type",
     "type", "reinterpret", "variant", "variant_index", "function", "has_field", "default",
     "array", "fixed_array", "table", "iterator", "tuple", "struct_get_annotation_argument",
-    "struct_has_annotation_argument", "class", "block"
+    "struct_has_annotation_argument", "class", "block", "lambda"
     )
 
 enum TokenType {
