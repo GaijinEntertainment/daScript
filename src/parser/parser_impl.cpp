@@ -1107,12 +1107,14 @@ namespace das {
 
     Expression * ast_makeStructToMakeVariant ( MakeStruct * decl, const LineInfo & locAt ) {
         auto mks = new ExprMakeStruct(locAt);
-        for ( auto & f : *decl ) {
-            auto fld = new MakeStruct();
-            fld->emplace_back(f);
-            mks->structs.push_back(fld);
+        if ( decl ) {
+            for ( auto & f : *decl ) {
+                auto fld = new MakeStruct();
+                fld->emplace_back(f);
+                mks->structs.push_back(fld);
+            }
+            delete decl;
         }
-        delete decl;
         return mks;
     }
 
