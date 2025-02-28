@@ -202,14 +202,14 @@ class private JsonReader : AstReaderMacro {
 }
 
 [expect_any_enum(ent), template(ent)]
-def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = EnumT()) : EnumT {
+def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = default<EnumT>) : EnumT {
     //! Parse a JSON value and return the corresponding native value.
     if (v == null || !((v.value is _string) || (v.value is _number))) {
         return defV
     }
     if (v.value is _string) {
         let name = v.value as _string
-        var res : auto(EnumTT) = EnumT()
+        var res : auto(EnumTT) = default<EnumT>
         var ti = typeinfo rtti_typeinfo(type<EnumT>)
         for (ef in *ti.enumType) {
             if (name == ef.name) {
