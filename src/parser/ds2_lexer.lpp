@@ -33,6 +33,8 @@
         yylloc_param->last_column = yyextra->das_yycolumn + yyleng; \
         /* YYCOLUMN (yyextra->das_yycolumn += yyleng, "YY_USER_ACTION"); */
 
+// #define FLEX_DEBUG
+
 #ifdef FLEX_DEBUG
     void YYCOLUMN ( int lno, const char * comment ) {
         printf("%i %s\n", lno, comment ? comment : "");
