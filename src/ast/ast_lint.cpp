@@ -752,6 +752,13 @@ namespace das {
                 }
             }
         }
+        virtual void preVisit ( ExprMakeStruct * mks ) override {
+            Visitor::preVisit(mks);
+            if ( mks->constructor && mks->constructor->arguments.size() ) {
+                program->error("default arguments of constructors can't be used in make declarations", "its not yet implemented", "",
+                    mks->at, CompilationError::unspecified);
+            }
+        }
     public:
         ProgramPtr program;
         Function * func = nullptr;
