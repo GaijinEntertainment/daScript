@@ -1,4 +1,4 @@
-expect 33101:4, 40104:4, 30103:2
+expect 40104:4, 30103:2
 
 options persistent_heap = true
 options gc
