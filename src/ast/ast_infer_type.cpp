@@ -1627,7 +1627,7 @@ namespace das {
             for ( auto & fn : fnlist ) {
                 if ( fn->arguments.size()==0 ) {
                     return true;
-                } else {
+                } /* else {
                     bool allDefault = true;
                     for ( auto & arg : fn->arguments ) {
                         if ( !arg->init ) {
@@ -1638,7 +1638,7 @@ namespace das {
                     if ( allDefault ) {
                         return true;
                     }
-                }
+                } */
             }
             return false;
         }
