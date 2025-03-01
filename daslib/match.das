@@ -620,7 +620,7 @@ class MatchMacro : AstCallMacro {
         macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting match(what) <| block")
         assume what = expr.arguments[0]
         assume blk = expr.arguments[1]
-        macro_verify(what._type != null && !what._type.isAutoOrAlias, prog, expr.at, "match `what` argument did not resolve")
+        macro_verify(what._type != null && !what._type.isAutoOrAlias, prog, what.at, "match argument {what.describe()} failed to compile")
         macro_verify(blk._type.isGoodBlockType, prog, expr.at, "match `block` argument did not resolve")
         macro_verify(blk is ExprMakeBlock, prog, expr.at, "match `block` argument must be immediate block declaration")
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)

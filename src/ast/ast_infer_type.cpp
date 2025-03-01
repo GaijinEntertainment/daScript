@@ -7624,15 +7624,10 @@ namespace das {
         }
     // ExprCallMacro
         virtual void preVisit ( ExprCallMacro * expr ) override {
-            auto errc = ctx.thisProgram->errors.size();
             auto thisModule = ctx.thisProgram->thisModule.get();
             expr->inFunction = func.get();
             canFoldResult = expr->macro->canFoldReturnResult(expr) && canFoldResult;
-            expr->macro->preVisit(ctx.thisProgram, thisModule, expr);
-            if ( errc==ctx.thisProgram->errors.size() ) {
-                error("unsupported call macro " + expr->macro->name + "", "potentially missing require", "",
-                    expr->at, CompilationError::unsupported_call_macro);
-            }
+            expr->macro->preVisit(ctx.thisProgram, thisModule, expr); // pre-visit is allowed to do nothing and not report errors.
             return Visitor::preVisit(expr);
         }
         virtual ExpressionPtr visit ( ExprCallMacro * expr ) override {
@@ -7643,8 +7638,8 @@ namespace das {
                 reportAstChanged();
                 return substitute;
             }
-            if ( errc==ctx.thisProgram->errors.size() ) {
-                error("unsupported call macro " + expr->macro->name,  "", "",
+            if ( errc==ctx.thisProgram->errors.size() ) {   // this fail safe adds error if macro failed, but did not report any errors
+                error("call macro '" + expr->macro->name + "' failed to compile",  "possibly missing require", "",
                     expr->at, CompilationError::unsupported_call_macro);
             }
             return Visitor::visit(expr);
