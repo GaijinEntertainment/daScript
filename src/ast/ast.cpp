@@ -1069,6 +1069,10 @@ namespace das {
         return cexpr;
     }
 
+    void ExprRef2Value::markNoDiscard() {
+        subexpr->markNoDiscard();
+    }
+
     // ExprRef2Ptr
 
     ExpressionPtr ExprRef2Ptr::visit(Visitor & vis) {
@@ -1082,6 +1086,10 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
+    }
+
+    void ExprRef2Ptr::markNoDiscard() {
+        subexpr->markNoDiscard();
     }
 
     // ExprPtr2Ref
@@ -1136,6 +1144,11 @@ namespace das {
         ExprPtr2Ref::clone(cexpr);
         cexpr->defaultValue = defaultValue->clone();
         return cexpr;
+    }
+
+    void ExprNullCoalescing::markNoDiscard() {
+        subexpr->markNoDiscard();
+        defaultValue->markNoDiscard();
     }
 
     // ConstBitfield
@@ -1549,6 +1562,10 @@ namespace das {
         return cexpr;
     }
 
+    void ExprAt::markNoDiscard() {
+        subexpr->markNoDiscard();
+    }
+
     // ExprSafeAt
 
     ExpressionPtr ExprSafeAt::visit(Visitor & vis) {
@@ -1781,6 +1798,10 @@ namespace das {
         return cexpr;
     }
 
+    void ExprField::markNoDiscard() {
+        value->markNoDiscard();
+    }
+
     // ExprIs
 
     ExpressionPtr ExprIsVariant::visit(Visitor & vis) {
@@ -1955,6 +1976,10 @@ namespace das {
         return stream.str();
     }
 
+    void ExprOp1::markNoDiscard() {
+        subexpr->markNoDiscard();
+    }
+
     // ExprOp2
 
     bool ExprOp2::swap_tail ( Expression * expr, Expression * swapExpr ) {
@@ -1998,6 +2023,11 @@ namespace das {
         }
         stream << " )";
         return stream.str();
+    }
+
+    void ExprOp2::markNoDiscard() {
+        left->markNoDiscard();
+        right->markNoDiscard();
     }
 
     // ExprOp3
@@ -2054,6 +2084,11 @@ namespace das {
         return stream.str();
     }
 
+    void ExprOp3::markNoDiscard() {
+        subexpr->markNoDiscard();
+        left->markNoDiscard();
+        right->markNoDiscard();
+    }
 
     // ExprMove
 
@@ -2486,6 +2521,10 @@ namespace das {
         }
     }
 
+    void ExprCall::markNoDiscard() {
+        notDiscarded = true;
+    }
+
     ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCall>(expr);
         ExprLooksLikeCall::clone(cexpr);
@@ -2592,6 +2631,14 @@ namespace das {
         return vis.visit(this);
     }
 
+    void ExprMakeStruct::markNoDiscard() {
+        for ( auto & fields : structs ) {
+            for ( auto & field : *fields ) {
+                field->value->markNoDiscard();
+            }
+        }
+    }
+
     // make variant
 
     ExpressionPtr ExprMakeVariant::clone( const ExpressionPtr & expr ) const {
@@ -2623,6 +2670,12 @@ namespace das {
             if ( field ) ++it; else it = variants.erase(it);
         }
         return vis.visit(this);
+    }
+
+    void ExprMakeVariant::markNoDiscard() {
+        for ( auto & field : variants ) {
+            field->value->markNoDiscard();
+        }
     }
 
     // make array
@@ -2658,6 +2711,12 @@ namespace das {
             index ++;
         }
         return vis.visit(this);
+    }
+
+    void ExprMakeArray::markNoDiscard() {
+        for ( auto & val : values ) {
+            val->markNoDiscard();
+        }
     }
 
     // make tuple

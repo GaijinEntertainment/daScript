@@ -619,6 +619,7 @@ namespace das
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
         virtual SimNode * simulate (Context & /*context*/ ) const { DAS_ASSERT(0); return nullptr; };
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const;
+        virtual void markNoDiscard() { }
         virtual bool rtti_isAssume() const { return false; }
         virtual bool rtti_isSequence() const { return false; }
         virtual bool rtti_isConstant() const { return false; }
@@ -1179,7 +1180,7 @@ namespace das
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint64_t, uint64_t>                 annotationData;
-        das_map<Module *,bool>                      requireModule;      // visibility modules
+        das_hash_map<Module *,bool>                 requireModule;      // visibility modules
         vector<PassMacroPtr>                        macros;             // infer macros (clean infer, assume no errors)
         vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
         vector<PassMacroPtr>                        optimizationMacros; // optimization macros
