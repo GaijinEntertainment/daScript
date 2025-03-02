@@ -20,6 +20,7 @@ struct SuiteCtx
     uriPaths : bool = false
     testNames : array<string>
     verbose : bool = false
+    compile_only : bool = false
 
 
 def createSuiteCtx() : SuiteCtx
@@ -44,6 +45,7 @@ def SuiteCtx(args : array<string>) : SuiteCtx
     ctx.verbose = args |> has_value("--verbose")
     ctx.uriPaths = args |> has_value("--uri-paths")
     ctx.projectPath = args |> get_str_arg("--test-project", "")
+    ctx.compile_only = args |> has_value("--compile-only")
     collect_tests_names(args, ctx.testNames)
     return <- ctx
 
@@ -167,6 +169,8 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx :
 
 
 def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx : SuiteCtx; file_ctx : FileCtx) : SuiteResult
+    if suite_ctx.compile_only
+        return default<SuiteResult>
     var res : SuiteResult
     var fileCtx := file_ctx
     var modPtr : Module?
