@@ -21,9 +21,6 @@
 #define DAS_THREAD_SAFE_ANNOTATIONS    1
 #endif
 
-#ifndef DAS_FUNCTION_HASH_LOOKUP
-#define DAS_FUNCTION_HASH_LOOKUP        1
-#endif
 
 namespace das
 {
@@ -864,9 +861,7 @@ namespace das
         int32_t             totalGenLabel = 0;
         LineInfo            at, atDecl;
         Module *            module = nullptr;
-#if DAS_FUNCTION_HASH_LOOKUP
         AstFuncLookup       lookup;
-#endif
         das_set<Function *>     useFunctions;
         das_set<Variable *>     useGlobalVariables;
         Structure *         classParent = nullptr;
