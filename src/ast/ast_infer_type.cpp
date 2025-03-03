@@ -679,7 +679,7 @@ namespace das {
             return fn->fromGeneric ? fn->getOrigin()->module : fn->module;
         }
 
-        bool canCallPrivate ( const FunctionPtr & pFn, Module * mod, Module * thisMod ) const {
+        bool canCallPrivate ( Function * pFn, Module * mod, Module * thisMod ) const {
             if ( !pFn->privateFunction ) {
                 return true;
             } else if ( pFn->module==mod || pFn->module==thisMod ) {
@@ -729,9 +729,9 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->isTemplate ) continue;
-                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
+                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                             if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
-                                result.push_back(pFn.get());
+                                result.push_back(pFn);
                             }
                         }
                     }
@@ -877,7 +877,7 @@ namespace das {
             return true;
         }
 
-        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock, bool checkLastArgumentsInit = true ) const {
+        bool isFunctionCompatible ( Function * pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock, bool checkLastArgumentsInit = true ) const {
             if ( pFn->arguments.size() < types.size() ) {
                 return false;
             }
@@ -938,7 +938,7 @@ namespace das {
             return true;
         }
 
-        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock ) const {
+        bool isFunctionCompatible ( Function * pFn, const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock ) const {
             if ( ( pFn->arguments.size() < arguments.size() ) || ( pFn->arguments.size() < nonNamedTypes.size() ) ) {
                 return false;
             }
@@ -1220,11 +1220,11 @@ namespace das {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->isTemplate ) continue;
-                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
+                        if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     if ( isFunctionCompatible(pFn, types, arguments, false, inferBlock) ) {
-                                        result.push_back(pFn.get());
+                                        result.push_back(pFn);
                                     }
                                 }
                             }
@@ -1264,7 +1264,7 @@ namespace das {
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->jitOnly && !program->policies.jit ) continue;
                         if ( pFn->isTemplate ) continue;
-                        if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
+                        if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn) ) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     if ( !argHash ) {
@@ -1273,12 +1273,12 @@ namespace das {
                                     auto itLook = pFn->lookup.find(argHash);    // if found in lookup
                                     if ( itLook != pFn->lookup.end() ) {
                                         if ( itLook->second ) {
-                                            result.push_back(pFn.get());
+                                            result.push_back(pFn);
                                         }
                                         continue;
                                     }
                                     if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
-                                        result.push_back(pFn.get());
+                                        result.push_back(pFn);
                                         pFn->lookup[argHash] = true;
                                     } else {
                                         pFn->lookup[argHash] = false;
@@ -1306,11 +1306,11 @@ namespace das {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->isTemplate ) continue;
-                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
+                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                                 if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                     if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                         if ( isFunctionCompatible(pFn, types, arguments, false, inferBlock) ) {
-                                            resultFunctions.push_back(pFn.get());
+                                            resultFunctions.push_back(pFn);
                                         }
                                     }
                                 }
@@ -1325,10 +1325,10 @@ namespace das {
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->jitOnly && !program->policies.jit ) continue;
                             if ( pFn->isTemplate ) continue;
-                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
+                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     if ( isFunctionCompatible(pFn, types, arguments, true, true) ) {   // infer block here?
-                                        resultGenerics.push_back(pFn.get());
+                                        resultGenerics.push_back(pFn);
                                     }
                                 }
                             }
@@ -1354,18 +1354,18 @@ namespace das {
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->jitOnly && !program->policies.jit ) continue;
                             if ( pFn->isTemplate ) continue;
-                            if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
+                            if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn) ) ) {
                                 if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                     if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                         auto itLook = pFn->lookup.find(argHash);    // if found in lookup
                                         if ( itLook != pFn->lookup.end() ) {
                                             if ( itLook->second ) {
-                                                resultFunctions.push_back(pFn.get());
+                                                resultFunctions.push_back(pFn);
                                             }
                                             continue;
                                         }
                                         if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
-                                            resultFunctions.push_back(pFn.get());
+                                            resultFunctions.push_back(pFn);
                                             pFn->lookup[argHash] = true;
                                         } else {
                                             pFn->lookup[argHash] = false;
@@ -1382,17 +1382,17 @@ namespace das {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->isTemplate ) continue;
-                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
+                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     auto itLook = pFn->lookup.find(argHash);    // if found in lookup
                                     if ( itLook != pFn->lookup.end() ) {
                                         if ( itLook->second ) {
-                                            resultGenerics.push_back(pFn.get());
+                                            resultGenerics.push_back(pFn);
                                         }
                                         continue;
                                     }
                                     if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
-                                        resultGenerics.push_back(pFn.get());
+                                        resultGenerics.push_back(pFn);
                                         pFn->lookup[argHash] = true;
                                     } else {
                                         pFn->lookup[argHash] = false;
@@ -2703,7 +2703,7 @@ namespace das {
                     if ( itFnList != mod->functionsByName.end() ) {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & missFn : goodFunctions ) {
-                            auto visM = getFunctionVisModule(missFn.get());
+                            auto visM = getFunctionVisModule(missFn);
                             bool isVisible = isVisibleFunc(inWhichModule,visM);
                             if ( !reportInvisibleFunctions  && !isVisible ) continue;
                             bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
