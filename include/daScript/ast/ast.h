@@ -1393,11 +1393,11 @@ namespace das
         shared_ptr<DebugInfoAllocator>  debugInfo;
         bool                            rtti = false;
     protected:
-        das_map<string,StructInfo *>        smn2s;
-        das_map<string,TypeInfo *>          tmn2t;
-        das_map<string,VarInfo *>           vmn2v;
-        das_map<string,FuncInfo *>          fmn2f;
-        das_map<string,EnumInfo *>          emn2e;
+        das_hash_map<string,StructInfo *>        smn2s;
+        das_hash_map<string,TypeInfo *>          tmn2t;
+        das_hash_map<string,VarInfo *>           vmn2v;
+        das_hash_map<string,FuncInfo *>          fmn2f;
+        das_hash_map<string,EnumInfo *>          emn2e;
     };
 
     struct CodeOfPolicies {
