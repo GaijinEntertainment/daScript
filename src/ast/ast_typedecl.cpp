@@ -1530,69 +1530,80 @@ namespace das
         if ( dim!=decl.dim ) {
             return false;
         }
-        if ( baseType==Type::tHandle && annotation!=decl.annotation ) {
-            if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
-                if ( annotation->canSubstitute(decl.annotation) ) {
-                    return true;
-                } else if ( decl.annotation->canBeSubstituted(annotation) ) {
-                    return true;
+        switch ( baseType ) {
+        case Type::tHandle:
+            if ( annotation!=decl.annotation ) {
+                if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
+                    if ( annotation->canSubstitute(decl.annotation) ) {
+                        return true;
+                    } else if ( decl.annotation->canBeSubstituted(annotation) ) {
+                        return true;
+                    }
                 }
-            }
-            return false;
-        }
-        if ( baseType==Type::tStructure && structType!=decl.structType ) {
-            if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
-                if ( structType && decl.structType && structType->isCompatibleCast(*(decl.structType)) ){
-                    return true;
-                }
-            }
-            return false;
-        }
-        if ( baseType==Type::tPointer || baseType==Type::tIterator ) {
-            if ( smartPtr != decl.smartPtr ) {
                 return false;
             }
-            bool iAmVoid = !firstType || firstType->isVoid();
-            bool heIsVoid = !decl.firstType || decl.firstType->isVoid();
-            TemporaryMatters tpm = implicit ? TemporaryMatters::no : TemporaryMatters::yes;
-            if ( topLevel ) {
-                ConstMatters pcm = ConstMatters::yes;
-                if ( isPassType && firstType && firstType->constant ) {
-                    pcm = ConstMatters::no;
+            break;
+        case Type::tStructure:
+            if (structType!=decl.structType ) {
+                if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
+                    if ( structType && decl.structType && structType->isCompatibleCast(*(decl.structType)) ){
+                        return true;
+                    }
                 }
-                if ( !iAmVoid && !heIsVoid &&
-                        !firstType->isSameType(*decl.firstType,RefMatters::yes,pcm,
-                            tpm, isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
+                return false;
+            }
+            break;
+        case Type::tPointer:
+        case Type::tIterator:
+            {
+                if ( smartPtr != decl.smartPtr ) {
                     return false;
                 }
-            } else {
-                if ( !iAmVoid && !heIsVoid ) {
-                    if ( !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
+                bool iAmVoid = !firstType || firstType->isVoid();
+                bool heIsVoid = !decl.firstType || decl.firstType->isVoid();
+                TemporaryMatters tpm = implicit ? TemporaryMatters::no : TemporaryMatters::yes;
+                if ( topLevel ) {
+                    ConstMatters pcm = ConstMatters::yes;
+                    if ( isPassType && firstType && firstType->constant ) {
+                        pcm = ConstMatters::no;
+                    }
+                    if ( !iAmVoid && !heIsVoid &&
+                            !firstType->isSameType(*decl.firstType,RefMatters::yes,pcm,
                                 tpm, isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
                         return false;
                     }
                 } else {
-                    if ( iAmVoid != heIsVoid ) {
-                        return false;
+                    if ( !iAmVoid && !heIsVoid ) {
+                        if ( !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
+                                    tpm, isExplicit ? AllowSubstitute::no : allowSubstitute,false) ) {
+                            return false;
+                        }
+                    } else {
+                        if ( iAmVoid != heIsVoid ) {
+                            return false;
+                        }
                     }
                 }
             }
-        }
-        if ( isEnumT() ) {
+            break;
+        case Type::tEnumeration:
+        case Type::tEnumeration8:
+        case Type::tEnumeration16:
+        case Type::tEnumeration64:
             if ( baseType != decl.baseType ) {
                 return false;
             }
             if ( enumType && decl.enumType && enumType!=decl.enumType ) {
                 return false;
             }
-        }
-        if ( baseType==Type::tArray ) {
+            break;
+        case Type::tArray:
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
                     TemporaryMatters::yes,AllowSubstitute::no,false) ) {
                 return false;
             }
-        }
-        if ( baseType==Type::tTable ) {
+            break;
+        case Type::tTable:
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
                     TemporaryMatters::yes,AllowSubstitute::no,false) ) {
                 return false;
@@ -1601,8 +1612,10 @@ namespace das
                     TemporaryMatters::yes,AllowSubstitute::no,false) ) {
                 return false;
             }
-        }
-        if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType==Type::option ) {
+            break;
+        case Type::tTuple:
+        case Type::tVariant:
+        case Type::option:
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
                     TemporaryMatters::yes,AllowSubstitute::no,true) ) {
                 return false;
@@ -1632,8 +1645,10 @@ namespace das
                     }
                 }
             }
-        }
-        if ( baseType==Type::tBlock || baseType==Type::tFunction ||baseType==Type::tLambda  ) {
+            break;
+        case Type::tBlock:
+        case Type::tFunction:
+        case Type::tLambda:
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
                     TemporaryMatters::yes,AllowSubstitute::no,true) ) {
                 return false;
@@ -1652,40 +1667,45 @@ namespace das
                     }
                 }
             }
-        }
-        if ( baseType==Type::tBitfield ) {
-            bool iAmAnyBitfield = argNames.size()==0;
-            bool heIsAnyBitfield = decl.argNames.size()==0;
-            bool compareArgs = false;
-            if ( topLevel ) {
-                if ( !iAmAnyBitfield && !heIsAnyBitfield ) {
-                    compareArgs = true;
-                }
-            } else {
-                if ( !iAmAnyBitfield && !heIsAnyBitfield ) {
-                    compareArgs = true;
-                }
-                if ( iAmAnyBitfield != heIsAnyBitfield ) {
-                    return false;
-                }
-            }
-            if ( compareArgs ) {
-                if (argNames.size() != decl.argNames.size()) {
-                    return false;
-                }
-                for ( size_t i=0, is=argNames.size(); i!=is; ++i ) {
-                    const auto & arg = argNames[i];
-                    const auto & declArg = decl.argNames[i];
-                    if ( arg != declArg ) {
+            break;
+        case Type::tBitfield:
+            {
+                bool iAmAnyBitfield = argNames.size()==0;
+                bool heIsAnyBitfield = decl.argNames.size()==0;
+                bool compareArgs = false;
+                if ( topLevel ) {
+                    if ( !iAmAnyBitfield && !heIsAnyBitfield ) {
+                        compareArgs = true;
+                    }
+                } else {
+                    if ( !iAmAnyBitfield && !heIsAnyBitfield ) {
+                        compareArgs = true;
+                    }
+                    if ( iAmAnyBitfield != heIsAnyBitfield ) {
                         return false;
                     }
                 }
+                if ( compareArgs ) {
+                    if (argNames.size() != decl.argNames.size()) {
+                        return false;
+                    }
+                    for ( size_t i=0, is=argNames.size(); i!=is; ++i ) {
+                        const auto & arg = argNames[i];
+                        const auto & declArg = decl.argNames[i];
+                        if ( arg != declArg ) {
+                            return false;
+                        }
+                    }
+                }
             }
-        }
-        if ( baseType==Type::alias || baseType==Type::autoinfer ) {
+            break;
+        case Type::alias:
+        case Type::autoinfer:
             if ( alias!=decl.alias ) {
                 return false;
             }
+            break;
+        default: ;  // nothing to dos
         }
         return true;
     }
