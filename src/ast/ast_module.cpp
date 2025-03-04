@@ -1049,11 +1049,6 @@ namespace das {
         return true;
     }
 
-    bool Module::isVisibleDirectly ( Module * objModule ) const {
-        if ( objModule==this ) return true;
-        return requireModule.find(objModule) != requireModule.end();
-    }
-
     using ModulesPullers = das::vector<module_pull_t>;
 
     static ModulesPullers & get_pullers() {

@@ -1122,7 +1122,10 @@ namespace das
         ReaderMacroPtr findReaderMacro ( const string & name ) const;
         TypeInfoMacroPtr findTypeInfoMacro ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
-        bool isVisibleDirectly ( Module * objModule ) const;
+        __forceinline bool isVisibleDirectly ( Module * objModule ) const {
+            if ( objModule==this ) return true;
+            return requireModule.find(objModule) != requireModule.end();
+        }
         bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted );
