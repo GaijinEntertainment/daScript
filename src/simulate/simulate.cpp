@@ -1416,7 +1416,7 @@ namespace das
         return runWithCatch([&](){
             for ( int j=0, js=totalFunctions; j!=js && !stopFlags; ++j ) {
                 auto & pf = functions[j];
-                if ( pf.debugInfo->flags & FuncInfo::flag_shutdown ) {
+                if ( pf.debugInfo && pf.debugInfo->flags & FuncInfo::flag_shutdown ) {
                     callOrFastcall(&pf, nullptr, 0);
                 }
             }
