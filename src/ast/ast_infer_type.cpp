@@ -1241,8 +1241,7 @@ namespace das {
             for ( auto & arg : types ) {
                 arg->getLookupHash(argHash);
             }
-            DAS_VERIFY(argHash);
-            return argHash;
+            return argHash ? argHash : UINT64_C(14695981039346656037);
         }
 
         MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr> & types, bool inferBlock = false, bool visCheck = true ) const {
@@ -1680,9 +1679,14 @@ namespace das {
             }
         }
 
+        MatchingFunctions findDefaultConstructor ( const string & sna ) const {
+            vector<TypeDeclPtr> argDummy;
+            return findMatchingFunctions(program->thisModule->name, program->thisModule.get(), sna, argDummy); // "__::sna"
+        }
+
         bool hasDefaultUserConstructor ( const string & sna ) const {
             vector<TypeDeclPtr> argDummy;
-            auto fnlist = findMatchingFunctions(program->thisModule->name, program->thisModule.get(), sna, argDummy); // "__::sna"
+            auto fnlist = findDefaultConstructor(sna);
             for ( auto & fn : fnlist ) {
                 if ( fn->arguments.size()==0 ) {
                     return true;
@@ -8378,7 +8382,7 @@ namespace das {
             return true;
         }
 
-        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, Function * lookupFunction = nullptr ) {
+        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, Function * lookupFunction = nullptr, bool failOnMissingCtor = true ) {
             vector<TypeDeclPtr> types;
             if (!inferArguments(types, expr->arguments)) {
                 return nullptr;
@@ -8618,9 +8622,13 @@ namespace das {
                             if ( expr->arguments.size()==0 ) {
                                 expr->name = aliasT->structType->name;
                                 bool isPrivate = aliasT->structType->privateStructure || aliasT->structType->module != program->thisModule.get();
-                                tryMakeStructureCtor (aliasT->structType, isPrivate, true);
+                                if ( !tryMakeStructureCtor (aliasT->structType, isPrivate, true) ) {
+                                    if ( failOnMissingCtor ) {
+                                        error("default constructor " + aliasT->structType->name + " is not visible directly",
+                                            "try default<" + expr->name + "> instead", "", expr->at, CompilationError::function_not_found);
+                                    }
+                                }
                             } else {
-
                                 error("can only generate default structure constructor without arguments",
                                     "", "", expr->at, CompilationError::invalid_argument_count);
                             }
@@ -9178,12 +9186,13 @@ namespace das {
                 expr->makeType && (expr->makeType->isClass() || (expr->alwaysUseInitializer && expr->makeType->isStructure()));
             if (  isClassCtor ) {
                 auto st = expr->makeType->structType;
+                // auto ctorName = st->module->name  + "::" + st->name;
                 auto ctorName = st->module->name  + "::" + st->name;
                 auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,ctorName);
-                expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric).get();
+                expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric, nullptr, false).get();
                 if ( !expr->constructor ) {
                   tempCall->name = "__::" + st->name;
-                  expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric).get();
+                  expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric, nullptr, false).get();
                 }
                 if ( !expr->constructor ) {
                     error("class constructor can't be inferred " + describeType(expr->makeType),

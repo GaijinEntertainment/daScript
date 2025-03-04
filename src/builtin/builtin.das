@@ -85,11 +85,11 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int) {
         static_if (typeinfo is_workhorse(type<numT>)) {
             Arr[i] = numT()
         } static_elif (typeinfo can_move(type<numT>)) {
-            Arr[i] <- numT()
+            Arr[i] <- default<numT>
         } static_elif (typeinfo can_copy(type<numT>)) {
-            Arr[i] = numT()
+            Arr[i] = default<numT>
         } else {
-            Arr[i] := numT()
+            Arr[i] := default<numT>
         }
     }
 }
