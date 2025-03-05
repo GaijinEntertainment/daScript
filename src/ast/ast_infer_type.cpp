@@ -4784,11 +4784,11 @@ namespace das {
             }
             if ( expr->type && expr->initializer && !expr->name.empty() ) {
                 auto resultType = expr->type;
-                expr->func = inferFunctionCall(expr).get();
+                expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, nullptr, false).get();
                 if ( !expr->func && expr->typeexpr->baseType==Type::tStructure ) {
                     auto saveName = expr->name;
                     expr->name = "_::" + expr->typeexpr->structType->name;
-                    expr->func = inferFunctionCall(expr).get();
+                    expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, nullptr, false).get();
                     if ( !expr->func ) expr->name = saveName;
                 }
                 swap ( resultType, expr->type );
