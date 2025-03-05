@@ -2905,7 +2905,6 @@ namespace das {
     }
 
     TypeDecl * Program::makeTypeDeclaration(const LineInfo &at, const string &name) {
-
         das::vector<das::StructurePtr> structs;
         das::vector<das::AnnotationPtr> handles;
         das::vector<das::EnumerationPtr> enums;
@@ -2989,12 +2988,14 @@ namespace das {
         vector<ExprCallFactory *> ptr;
         string moduleName, funcName;
         splitTypeName(name, moduleName, funcName);
-        library.foreach([&](Module * pm) -> bool {
-            if ( auto pp = pm->findCall(funcName) ) {
-                ptr.push_back(pp);
-            }
-            return true;
-        }, moduleName);
+        if ( moduleName != "_" && moduleName != "__" ) {    // those are never found. in reality we may want to support this one day with "*" and "thisModuleName" accordingly
+            library.foreach([&](Module * pm) -> bool {
+                if ( auto pp = pm->findCall(funcName) ) {
+                    ptr.push_back(pp);
+                }
+                return true;
+            }, moduleName);
+        }
         if ( ptr.size()==1 ) {
             return (*ptr.back())(at);
         } else if ( ptr.size()==0 ) {
