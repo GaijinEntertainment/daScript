@@ -233,6 +233,10 @@ struct CallPropertyStubImpl
 #endif
 
 #undef DAS_STUB_IMPL
+
+template <typename ClassT, typename...>
+using ResolveCtorAot = ClassT;
+
 } // namespace das::detail
 
 
@@ -308,6 +312,16 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
   DAS_ADD_METHOD_BIND_VALUE_RET(NAME, SIDE_EFFECTS_NON_CONST, DAS_METHOD_OVERLOAD_NON_CONST(__VA_ARGS__))
 #define DAS_ADD_METHOD_BIND_CONST_VALUE_RET(NAME, SIDE_EFFECTS, ...) \
   DAS_ADD_METHOD_BIND_CONST_VALUE_RET_EX(NAME, SIDE_EFFECTS, SIDE_EFFECTS, __VA_ARGS__)
+
+// ctor/using
+#define DAS_ADD_USING_BIND(...) das::addUsing<::__VA_ARGS__>(__VA_ARGS__, "::das::detail::ResolveCtorAot<::" #__VA_ARGS__ ">")
+#define DAS_ADD_CTOR_BIND_EX(NAME, ...) \
+  das::addCtor<::__VA_ARGS__>(*this, lib, NAME, "::das::detail::ResolveCtorAot<::" #__VA_ARGS__ ">")
+#define DAS_ADD_CTOR_BIND(...) DAS_ADD_CTOR_BIND_EX((das::typeName<das::detail::ResolveCtorAot<::__VA_ARGS__>>::name()), __VA_ARGS__)
+#define DAS_ADD_CTOR_AND_USING_BIND_EX(NAME, ...) \
+  das::addCtorAndUsing<::__VA_ARGS__>(*this, lib, NAME, "::das::detail::ResolveCtorAot<::" #__VA_ARGS__ ">")
+#define DAS_ADD_CTOR_AND_USING_BIND(...) \
+  DAS_ADD_CTOR_AND_USING_BIND_EX((das::typeName<das::detail::ResolveCtorAot<::__VA_ARGS__>>::name()), __VA_ARGS__)
 
 // type annotations
 #define DAS_TYPE_DECL_STUB(...)                               \

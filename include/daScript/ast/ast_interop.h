@@ -132,6 +132,8 @@ namespace das
         }
         const char * fnName = nullptr;
         static void placementNewFunc ( CType * cmres, Args... args ) {
+            (void)cmres;
+            ((void)args, ...);
             if constexpr (!das::is_stub_type<CType>::value) new (cmres) CType(args...);
             else { DAS_ASSERTF(false, "STUB!"); }
         }
@@ -161,6 +163,10 @@ namespace das
             return context.code->makeNode<SimNode_Using<CType,Args...>>(at);
         }
         static void usingFunc ( Args... args, TBlock<void,TTemporary<TExplicit<CType>>> && block, Context * context, LineInfo * at ) {
+            ((void)args, ...);
+            (void)block;
+            (void)context;
+            (void)at;
             if constexpr (!is_stub_type<CType>::value)
             {
                 CType value(args...);
