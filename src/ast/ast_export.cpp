@@ -47,7 +47,7 @@ namespace das {
             if ( !tw ) return;
             logTab --;
         }
-        void propageteVarUse(const VariablePtr & var) {
+        void propageteVarUse(Variable * var) {
             assert(var);
             if (var->used) return;
             push(var);
@@ -60,7 +60,7 @@ namespace das {
             }
             pop();
         }
-        void propagateFunctionUse(const FunctionPtr & fn) {
+        void propagateFunctionUse(Function * fn) {
             assert(fn);
             if (fn->isTemplate) return;
             if (fn->used) return;
@@ -83,7 +83,7 @@ namespace das {
                 for ( auto & var : pm->globals.each() ) {
                     if ( forceAll || var->used || isVarExported(var) ) {
                         var->used = false;
-                        propageteVarUse(var);
+                        propageteVarUse(var.get());
                     }
                 }
                 return true;
@@ -94,7 +94,7 @@ namespace das {
                 if ( initThis && macroModule && pm!=macroModule ) return true;
                 for ( auto & fn : pm->functions.each() ) {
                     if ( (forceAll && !fn->macroInit) || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
-                        propagateFunctionUse(fn);
+                        propagateFunctionUse(fn.get());
                     }
                 }
                 return true;
@@ -103,7 +103,7 @@ namespace das {
         void markModuleVarsUsed( ModuleLibrary &, Module * inWhichModule ) {
             for ( auto & var : inWhichModule->globals.each() ) {
                 var->used = false;
-                propageteVarUse(var);
+                propageteVarUse(var.get());
             }
         }
         void markModuleUsedFunctions( ModuleLibrary &, Module * inWhichModule ) {
@@ -111,7 +111,7 @@ namespace das {
                 if ( fn->builtIn || fn->macroInit || fn->macroFunction  ) continue;
                 if ( fn->privateFunction && fn->generated && fn->fromGeneric ) continue;    // instances of templates are never roots
                 if ( fn->isClassMethod && fn->classParent->macroInterface ) continue;       // methods of macro interfaces
-                propagateFunctionUse(fn);
+                propagateFunctionUse(fn.get());
             }
         }
         void RemoveUnusedSymbols ( Module & mod ) {
