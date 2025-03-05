@@ -40,6 +40,12 @@ namespace das
         }
     };
 
+    template <typename>
+    struct is_stub_type
+    {
+      static constexpr bool value = false;
+    };
+
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4100)
@@ -197,7 +203,12 @@ namespace das
             using result = typename remove_const<R>::type;
             // note: copy is closer to AOT, but placement new is correct behavior under simulation
             // *((result *)res) = CallStaticFunction<R,Args...>(fn,ctx,args);
-            new (res) result ( CallStaticFunction<R,Args...>(fn,ctx,args) );
+            (void)fn;
+            (void)ctx;
+            (void)res;
+            (void)args;
+            if constexpr (das::is_stub_type<R>::value) { DAS_ASSERTF(false, "STUB!"); }
+            else new (res) result ( CallStaticFunction<R,Args...>(fn,ctx,args) );
         }
     };
 
@@ -291,9 +302,11 @@ namespace das
             : SimNode_ExtFuncCallBase(at,fnName) {}
         template <size_t ...I>
         static __forceinline void CallPlacementNew ( void * cmres, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            (void)ctx;      // to avoid compiler warning when no arguments
-            (void)args;     // to avoid compiler warning when no arguments
-            new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);
+            (void)ctx;
+            (void)args;
+            (void)cmres;
+            if constexpr (das::is_stub_type<CType>::value) { DAS_ASSERTF(false, "STUB!"); }
+            else new (cmres) CType(cast_arg<Args>::to(ctx,args[I])...);
         }
         DAS_EVAL_ABI virtual vec4f eval(Context & context) override {
             auto cmres = cmresEval->evalPtr(context);
@@ -308,11 +321,20 @@ namespace das
             : SimNode_ExtFuncCallBase(at,"using") {}
         template <size_t ...I>
         __forceinline void CallUsing ( const Block & blk, Context & ctx, SimNode ** args, index_sequence<I...> ) {
-            (void)args;     // to avoid compiler warning when no arguments
-            CType value( (cast_arg<Args>::to(ctx,args[I]))...);
-            vec4f bargs[1];
-            bargs[0] = cast<CType *>::from(&value);
-            ctx.invoke(blk,bargs,nullptr,&debugInfo);
+            (void)blk;
+            (void)ctx;
+            (void)args;
+            if constexpr (!das::is_stub_type<CType>::value)
+            {
+              CType value((cast_arg<Args>::to(ctx, args[I]))...);
+              vec4f bargs[1];
+              bargs[0] = cast<CType *>::from(&value);
+              ctx.invoke(blk, bargs, nullptr, &debugInfo);
+            }
+            else
+            {
+              DAS_ASSERTF(false, "STUB!");
+            }
         }
         DAS_EVAL_ABI virtual vec4f eval(Context & context) override {
             DAS_ASSERT(nArguments == (sizeof...(Args) + 1) );

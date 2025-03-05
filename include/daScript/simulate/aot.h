@@ -45,12 +45,6 @@ namespace das {
     void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody);
 #endif
 
-    template <typename>
-    struct is_stub_type
-    {
-      static constexpr bool value = false;
-    };
-
     template <typename TT>
     struct das_auto_cast {
         template <typename QQ>
@@ -2681,6 +2675,7 @@ namespace das {
         if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
+        (void)value;
         if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
         else vec.insert(vec.begin() + at, value);
     }
@@ -2690,6 +2685,7 @@ namespace das {
         if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
+        (void)value;
         if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
         else vec.insert(vec.begin() + at, value);
     }
@@ -2711,12 +2707,14 @@ namespace das {
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_back ( TT & vec, const QQ & value ) {
+        (void)value;
         if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
         else vec.push_back(value);
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_back_value ( TT & vec, QQ value ) {
+        (void)value;
         if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
         else vec.push_back(value);
     }
@@ -2729,6 +2727,7 @@ namespace das {
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_emplace_back ( TT & vec, QQ & value ) {
+        (void)value;
         if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
         else vec.emplace_back(das::move(value));
     }
