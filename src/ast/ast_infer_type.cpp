@@ -2085,7 +2085,7 @@ namespace das {
             if ( decl.parentType && st->parent ) {
                 auto pf = st->parent->findField(decl.name);
                 if ( !pf->type->isAutoOrAlias() ) {
-                    decl.type = make_smart<TypeDecl>(*pf->type);
+                    TypeDecl::clone(decl.type,pf->type);
                     decl.parentType = false;
                     decl.type->sanitize();
                     reportAstChanged();
@@ -2166,7 +2166,7 @@ namespace das {
                         auto castExpr = static_pointer_cast<ExprCast>(decl.init);
                         if ( castExpr->castType->isAuto() ) {
                             reportAstChanged();
-                            castExpr->castType = make_smart<TypeDecl>(*decl.type);
+                            TypeDecl::clone(castExpr->castType,decl.type);
                         }
                     }
                 }
@@ -3479,7 +3479,7 @@ namespace das {
                                                     expr->at, CompilationError::invalid_argument_count);
                                             }
                                         } else {
-                                            auto stf = sttf->type;
+                                            auto stf = sttf->type.get();
                                             if ( stf && stf->dim.size()==0 && (stf->baseType==Type::tBlock || stf->baseType==Type::tFunction || stf->baseType==Type::tLambda) ) {
                                                 reportAstChanged();
                                                 expr->isInvokeMethod = false;      // we replace invoke(foo.GetValue,cast<auto> foo,...) with invoke(foo.GetValue,...)
@@ -3519,7 +3519,7 @@ namespace das {
                             auto argCast = static_pointer_cast<ExprCast>(arg);
                             if ( argCast->castType->isAuto() ) {
                                 reportAstChanged();
-                                argCast->castType = make_smart<TypeDecl>(*argType);
+                                TypeDecl::clone(argCast->castType,argType);
                             }
                         }
                     }
@@ -3785,7 +3785,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             if ( expr->subexpr && expr->subexpr->type ) {
-                expr->typeexpr = make_smart<TypeDecl>(*expr->subexpr->type);
+                TypeDecl::clone(expr->typeexpr,expr->subexpr->type);
                 expr->typeexpr->ref = false;
             }
             // verify
@@ -4724,7 +4724,7 @@ namespace das {
             // infer
             if ( expr->typeexpr->isAlias() ) {
                 if ( auto aT = findAlias(expr->typeexpr->alias) ) {
-                    expr->typeexpr = make_smart<TypeDecl>(*aT);
+                    TypeDecl::clone(expr->typeexpr,aT);
                     expr->typeexpr->ref = false;        // drop a ref
                     expr->typeexpr->constant = false;   // drop a const
                     expr->typeexpr->sanitize();
@@ -6766,7 +6766,7 @@ namespace das {
                     expr->returnInBlock = true;
                 }
                 if ( inferReturnType(block->type, expr) ) {
-                    block->returnType = make_smart<TypeDecl>(*block->type);
+                    TypeDecl::clone(block->returnType,block->type);
                     setBlockCopyMoveFlags(block);
                 }
                 if ( block->moveOnReturn && !expr->moveSemantics ) {
@@ -6789,7 +6789,9 @@ namespace das {
                     error("returning smart pointers without move semantics is unsafe", "use return <- instead", "",
                         expr->at,CompilationError::unsafe);
                 }
-                if ( block->returnType ) expr->returnType = make_smart<TypeDecl>(*block->returnType);
+                if ( block->returnType ) {
+                    TypeDecl::clone(expr->returnType,block->returnType);
+                }
             } else {
                 // infer
                 func->hasReturn = true;
@@ -6824,7 +6826,9 @@ namespace das {
                     error("returning smart pointers without move semantics is unsafe", "use return <- instead", "",
                         expr->at,CompilationError::unsafe);
                 }
-               if ( func->result ) expr->returnType = make_smart<TypeDecl>(*func->result);
+                if ( func->result ) {
+                    TypeDecl::clone(expr->returnType,func->result);
+                }
             }
             if ( expr->moveSemantics && expr->subexpr && expr->subexpr->type && expr->subexpr->type->lockCheck() ) {
                 if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
@@ -7452,7 +7456,7 @@ namespace das {
                     auto castExpr = static_pointer_cast<ExprCast>(var->init);
                     if ( castExpr->castType->isAuto() ) {
                         reportAstChanged();
-                        castExpr->castType = make_smart<TypeDecl>(*var->type);
+                        TypeDecl::clone(castExpr->castType,var->type);
                     }
                 }
                 if ( expr->inScope ) {
@@ -8413,9 +8417,9 @@ namespace das {
                                 auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true, nullptr);
                                 DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
                                 TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
-                                block->returnType = make_smart<TypeDecl>(*retT->firstType);
+                                TypeDecl::clone(block->returnType,retT->firstType);
                                 for ( size_t ba=0, bas=retT->argTypes.size(); ba!=bas; ++ba ) {
-                                    block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
+                                    TypeDecl::clone(block->arguments[ba]->type,retT->argTypes[ba]);
                                 }
                                 setBlockCopyMoveFlags(block.get());
                                 reportAstChanged();
@@ -9613,7 +9617,7 @@ namespace das {
                     error("fixed_array<" + describeType(expr->makeType) + "> array type can't be reference", "", "",
                         expr->at, CompilationError::invalid_type);
                 }
-                expr->recordType = make_smart<TypeDecl>(*expr->makeType);
+                TypeDecl::clone(expr->recordType,expr->makeType);
             } else {
                 if ( expr->makeType->dim.size()>1 ) {
                     error("[[" + describeType(expr->makeType) + "]] array can only initialize single dimension arrays", "", "",
@@ -9626,7 +9630,7 @@ namespace das {
                     error("[[" + describeType(expr->makeType) + "]] array can't be reference", "", "",
                         expr->at, CompilationError::invalid_type);
                 }
-                expr->recordType = make_smart<TypeDecl>(*expr->makeType);
+                TypeDecl::clone(expr->recordType,expr->makeType);
                 expr->recordType->dim.clear();
             }
             expr->initAllFields = true;

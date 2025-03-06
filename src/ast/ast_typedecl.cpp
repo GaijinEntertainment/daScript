@@ -794,11 +794,10 @@ namespace das
             dest = nullptr;
             return;
         }
-        if ( !dest ) {
+        if ( !dest || dest->use_count()!=1 ) {
             dest = make_smart<TypeDecl>(*src);
             return;
         }
-        DAS_ASSERT(dest->use_count()==1);
         dest->baseType = src->baseType;
         dest->structType = src->structType;
         dest->enumType = src->enumType;
