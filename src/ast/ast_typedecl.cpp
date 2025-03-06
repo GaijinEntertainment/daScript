@@ -789,6 +789,41 @@ namespace das
         argNames = decl.argNames;
     }
 
+    void TypeDecl::clone ( TypeDeclPtr & dest, const TypeDeclPtr & src ) {
+        if ( src==nullptr ) {
+            dest = nullptr;
+            return;
+        }
+        if ( !dest || dest->use_count()!=1 ) {
+            dest = make_smart<TypeDecl>(*src);
+            return;
+        }
+        dest->baseType = src->baseType;
+        dest->structType = src->structType;
+        dest->enumType = src->enumType;
+        dest->annotation = src->annotation;
+        dest->dim = src->dim;
+        dest->dimExpr.resize(src->dimExpr.size());
+        for ( size_t i=0; i!=src->dimExpr.size(); ++i ) {
+            if ( src->dimExpr[i] ) {
+                dest->dimExpr[i] = src->dimExpr[i]->clone();
+            } else {
+                dest->dimExpr[i] = nullptr;
+            }
+        }
+        dest->flags = src->flags;
+        dest->alias = src->alias;
+        dest->at = src->at;
+        dest->module = src->module;
+        clone(dest->firstType, src->firstType);
+        clone(dest->secondType, src->secondType);
+        dest->argTypes.resize(src->argTypes.size());
+        for ( size_t i=0; i!=src->argTypes.size(); ++i ) {
+            clone(dest->argTypes[i], src->argTypes[i]);
+        }
+        dest->argNames = src->argNames;
+    }
+
     TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) {
         if (baseType == Type::alias) {
             return nullptr; // if it is another alias, can't find it
