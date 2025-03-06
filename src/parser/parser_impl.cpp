@@ -486,9 +486,17 @@ namespace das {
                             CompilationError::invalid_aka);
                     }
                     pVar->at = name_at.at;
-                    pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                    if ( pDecl->pNameList->size()>1 ) {
+                        pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                    } else {
+                        pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                    }
                     if ( pDecl->pInit ) {
-                        pVar->init = pDecl->pInit->clone();
+                        if ( pDecl->pNameList->size()>1 ) {
+                            pVar->init = pDecl->pInit->clone();
+                        } else {
+                            pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                        }
                         pVar->init_via_move = pDecl->init_via_move;
                         pVar->init_via_clone = pDecl->init_via_clone;
                     }
@@ -521,9 +529,17 @@ namespace das {
                         CompilationError::invalid_aka);
                 }
                 pVar->at = name_at.at;
-                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                if ( pDecl->pNameList->size()>1 ) {
+                    pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                } else {
+                    pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                }
                 if ( pDecl->pInit ) {
-                    pVar->init = pDecl->pInit->clone();
+                    if ( pDecl->pNameList->size()>1 ) {
+                        pVar->init = pDecl->pInit->clone();
+                    } else {
+                        pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                    }
                     pVar->init_via_move = pDecl->init_via_move;
                     pVar->init_via_clone = pDecl->init_via_clone;
                 }
@@ -797,9 +813,17 @@ namespace das {
                             pVar->name = name_at.name;
                             pVar->aka = name_at.aka;
                             pVar->at = name_at.at;
-                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            if ( pDecl->pNameList->size()>1 ) {
+                                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            } else {
+                                pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                            }
                             if ( pDecl->pInit ) {
-                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
+                                if ( pDecl->pNameList->size()>1 ) {
+                                    pVar->init = pDecl->pInit->clone();
+                                } else {
+                                    pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                                }
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
@@ -866,9 +890,17 @@ namespace das {
                     pVar->name = name_at.name;
                     pVar->aka = name_at.aka;
                     pVar->at = name_at.at;
-                    pVar->type = make_smart<TypeDecl>(*decl->pTypeDecl);
+                    if ( decl->pNameList->size()>1 ) {
+                        pVar->type = make_smart<TypeDecl>(*decl->pTypeDecl);
+                    } else {
+                        pVar->type = decl->pTypeDecl; decl->pTypeDecl = nullptr;
+                    }
                     if ( decl->pInit ) {
-                        pVar->init = decl->pInit->clone();
+                        if ( decl->pNameList->size()>1 ) {
+                            pVar->init = decl->pInit->clone();
+                        } else {
+                            pVar->init = decl->pInit; decl->pInit = nullptr;
+                        }
                         pVar->init_via_move = decl->init_via_move;
                         pVar->init_via_clone = decl->init_via_clone;
                     }
@@ -907,9 +939,17 @@ namespace das {
                         pVar->name = name_at.name;
                         pVar->aka = name_at.aka;
                         pVar->at = name_at.at;
-                        pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                        if ( pDecl->pNameList->size()>1 ) {
+                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                        } else {
+                            pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                        }
                         if ( pDecl->pInit ) {
-                            pVar->init = pDecl->pInit->clone();
+                            if ( pDecl->pNameList->size()>1 ) {
+                                pVar->init = pDecl->pInit->clone();
+                            } else {
+                                pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                            }
                             pVar->init_via_move = pDecl->init_via_move;
                             pVar->init_via_clone = pDecl->init_via_clone;
                         }
@@ -945,9 +985,17 @@ namespace das {
                             pVar->name = name_at.name;
                             pVar->aka = name_at.aka;
                             pVar->at = name_at.at;
-                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            if ( pDecl->pNameList->size()>1 ) {
+                                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            } else {
+                                pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                            }
                             if ( pDecl->pInit ) {
-                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
+                                if ( pDecl->pNameList->size()>1 ) {
+                                    pVar->init = pDecl->pInit->clone();
+                                } else {
+                                    pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                                }
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }

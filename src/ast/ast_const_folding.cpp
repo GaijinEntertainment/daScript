@@ -694,7 +694,7 @@ namespace das {
                 for ( uint32_t i=1; i!=numArgs; ++i ) {
                     pCall->arguments.push_back( cloneWithType(expr->arguments[i]) );
                 }
-                pCall->type = make_smart<TypeDecl>(*funcC->result);
+                TypeDecl::clone(pCall->type,funcC->result);
                 reportFolding();
                 return pCall;
             }
