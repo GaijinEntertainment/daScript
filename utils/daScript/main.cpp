@@ -545,7 +545,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 }
                 ptr_ref_count::ref_count_track = id;
                 i += 1;
-                printf("tracking %" PRIx64 "\n", id);
+                printf("tracking %" PRIx64 " aka %" PRIu64 "\n", id, id);
 #else
                 printf("smart ptr id tracking is disabled\n");
                 return -1;

@@ -400,6 +400,7 @@ inline size_t das_aligned_memsize(void * ptr){
 #ifdef DAS_SMART_PTR_DEBUG
     #define DAS_SMART_PTR_TRACKER   1
     #define DAS_SMART_PTR_MAGIC     1
+    #define DAS_SMART_PTR_ID        1
 #endif
 
 #ifndef DAS_SMART_PTR_TRACKER
