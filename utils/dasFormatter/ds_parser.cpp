@@ -8114,20 +8114,20 @@ yyreduce:
 
   case 289: /* expr_new: "new" new_type_declaration  */
                                                        {
-        (yyval.pExpression) = new ExprNew(tokAt(scanner,(yylsp[-1])),TypeDeclPtr((yyvsp[0].pTypeDecl)),false);
+        (yyval.pExpression) = new ExprNew(tokAt(scanner,(yylsp[-1])),(yyvsp[0].pTypeDecl),false);
     }
     break;
 
   case 290: /* expr_new: "new" new_type_declaration '(' use_initializer ')'  */
                                                                                      {
-        (yyval.pExpression) = new ExprNew(tokAt(scanner,(yylsp[-4])),TypeDeclPtr((yyvsp[-3].pTypeDecl)),true);
+        (yyval.pExpression) = new ExprNew(tokAt(scanner,(yylsp[-4])),(yyvsp[-3].pTypeDecl),true);
         ((ExprNew *)(yyval.pExpression))->initializer = (yyvsp[-1].b);
     }
     break;
 
   case 291: /* expr_new: "new" new_type_declaration '(' expr_list ')'  */
                                                                                     {
-        auto pNew = new ExprNew(tokAt(scanner,(yylsp[-4])),TypeDeclPtr((yyvsp[-3].pTypeDecl)),true);
+        auto pNew = new ExprNew(tokAt(scanner,(yylsp[-4])),(yyvsp[-3].pTypeDecl),true);
         (yyval.pExpression) = parseFunctionArguments(pNew,(yyvsp[-1].pExpression));
     }
     break;
@@ -8371,7 +8371,7 @@ yyreduce:
 
   case 326: /* expr_cast: "cast" '<' $@14 type_declaration_no_options '>' $@15 expr  */
                                                                                                                                                 {
-        (yyval.pExpression) = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),TypeDeclPtr((yyvsp[-3].pTypeDecl)));
+        (yyval.pExpression) = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-3].pTypeDecl));
     }
     break;
 
@@ -8385,7 +8385,7 @@ yyreduce:
 
   case 329: /* expr_cast: "upcast" '<' $@16 type_declaration_no_options '>' $@17 expr  */
                                                                                                                                                   {
-        auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),TypeDeclPtr((yyvsp[-3].pTypeDecl)));
+        auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-3].pTypeDecl));
         pCast->upcast = true;
         (yyval.pExpression) = pCast;
     }
@@ -8401,7 +8401,7 @@ yyreduce:
 
   case 332: /* expr_cast: "reinterpret" '<' $@18 type_declaration_no_options '>' $@19 expr  */
                                                                                                                                                        {
-        auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),TypeDeclPtr((yyvsp[-3].pTypeDecl)));
+        auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-3].pTypeDecl));
         pCast->reinterpret = true;
         (yyval.pExpression) = pCast;
     }
@@ -8417,7 +8417,7 @@ yyreduce:
 
   case 335: /* expr_type_decl: "type" '<' $@20 type_declaration '>' $@21  */
                                                                                                                       {
-        (yyval.pExpression) = new ExprTypeDecl(tokAt(scanner,(yylsp[-5])),TypeDeclPtr((yyvsp[-2].pTypeDecl)));
+        (yyval.pExpression) = new ExprTypeDecl(tokAt(scanner,(yylsp[-5])),(yyvsp[-2].pTypeDecl));
     }
     break;
 
@@ -8918,7 +8918,7 @@ yyreduce:
   case 421: /* func_addr_expr: '@' '@' '<' $@23 type_declaration_no_options '>' $@24 func_addr_name  */
                                                                                                                                                        {
         auto expr = (ExprAddr *) ((yyvsp[0].pExpression)->rtti_isAddr() ? (yyvsp[0].pExpression) : (((ExprTag *) (yyvsp[0].pExpression))->value.get()));
-        expr->funcType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
+        expr->funcType = (yyvsp[-3].pTypeDecl);
         (yyval.pExpression) = (yyvsp[0].pExpression);
     }
     break;
@@ -8935,7 +8935,7 @@ yyreduce:
                                                                                                                                                                                      {
         auto expr = (ExprAddr *) ((yyvsp[0].pExpression)->rtti_isAddr() ? (yyvsp[0].pExpression) : (((ExprTag *) (yyvsp[0].pExpression))->value.get()));
         expr->funcType = make_smart<TypeDecl>(Type::tFunction);
-        expr->funcType->firstType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
+        expr->funcType->firstType = (yyvsp[-3].pTypeDecl);
         if ( (yyvsp[-4].pVarDeclList) ) {
             varDeclToTypeDecl(scanner, expr->funcType.get(), (yyvsp[-4].pVarDeclList));
             deleteVariableDeclarationList((yyvsp[-4].pVarDeclList));
@@ -9342,7 +9342,7 @@ yyreduce:
 
   case 500: /* expr: expr "is" "type" '<' $@29 type_declaration_no_options '>' $@30  */
                                                                                                                                                             {
-        (yyval.pExpression) = new ExprIs(tokRangeAt(scanner,(yylsp[-7]), (yylsp[-1])),ExpressionPtr((yyvsp[-7].pExpression)),TypeDeclPtr((yyvsp[-2].pTypeDecl)));
+        (yyval.pExpression) = new ExprIs(tokRangeAt(scanner,(yylsp[-7]), (yylsp[-1])),ExpressionPtr((yyvsp[-7].pExpression)),(yyvsp[-2].pTypeDecl));
     }
     break;
 
@@ -10181,7 +10181,7 @@ yyreduce:
                 CompilationError::invalid_type);
         }
         (yyvsp[0].pTypeDecl)->alias = *(yyvsp[-3].s);
-        if ( !yyextra->g_Program->addAlias(TypeDeclPtr((yyvsp[0].pTypeDecl))) ) {
+        if ( !yyextra->g_Program->addAlias((yyvsp[0].pTypeDecl)) ) {
             das_yyerror(scanner,"type alias is already defined "+*(yyvsp[-3].s),tokAt(scanner,(yylsp[-3])),
                 CompilationError::type_alias_already_declared);
         }
@@ -10914,7 +10914,7 @@ yyreduce:
                                                   {
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-1]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-1].pTypeDecl);
     }
     break;
 
@@ -10931,7 +10931,7 @@ yyreduce:
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         (yyval.pTypeDecl)->smartPtr = true;
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
     }
     break;
 
@@ -10941,7 +10941,7 @@ yyreduce:
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-1]));
         (yyval.pTypeDecl)->firstType = make_smart<TypeDecl>(Type::tPointer);
         (yyval.pTypeDecl)->firstType->at = tokAt(scanner,(yylsp[-1]));
-        (yyval.pTypeDecl)->firstType->firstType = TypeDeclPtr((yyvsp[-1].pTypeDecl));
+        (yyval.pTypeDecl)->firstType->firstType = (yyvsp[-1].pTypeDecl);
     }
     break;
 
@@ -10957,7 +10957,7 @@ yyreduce:
                                                                                                                             {
         (yyval.pTypeDecl) = new TypeDecl(Type::tArray);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
     }
     break;
 
@@ -10973,8 +10973,8 @@ yyreduce:
                                                                                                                       {
         (yyval.pTypeDecl) = new TypeDecl(Type::tTable);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].aTypePair).firstType);
-        (yyval.pTypeDecl)->secondType = TypeDeclPtr((yyvsp[-2].aTypePair).secondType);
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].aTypePair).firstType;
+        (yyval.pTypeDecl)->secondType = (yyvsp[-2].aTypePair).secondType;
     }
     break;
 
@@ -10990,7 +10990,7 @@ yyreduce:
                                                                                                                                   {
         (yyval.pTypeDecl) = new TypeDecl(Type::tIterator);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
     }
     break;
 
@@ -11013,7 +11013,7 @@ yyreduce:
                                                                                                                                {
         (yyval.pTypeDecl) = new TypeDecl(Type::tBlock);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
     }
     break;
 
@@ -11029,7 +11029,7 @@ yyreduce:
                                                                                                                                                                         {
         (yyval.pTypeDecl) = new TypeDecl(Type::tBlock);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-6]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
         if ( (yyvsp[-3].pVarDeclList) ) {
             varDeclToTypeDecl(scanner, (yyval.pTypeDecl), (yyvsp[-3].pVarDeclList));
             deleteVariableDeclarationList((yyvsp[-3].pVarDeclList));
@@ -11056,7 +11056,7 @@ yyreduce:
                                                                                                                                  {
         (yyval.pTypeDecl) = new TypeDecl(Type::tFunction);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
     }
     break;
 
@@ -11072,7 +11072,7 @@ yyreduce:
                                                                                                                                                                           {
         (yyval.pTypeDecl) = new TypeDecl(Type::tFunction);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-6]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
         if ( (yyvsp[-3].pVarDeclList) ) {
             varDeclToTypeDecl(scanner, (yyval.pTypeDecl), (yyvsp[-3].pVarDeclList));
             deleteVariableDeclarationList((yyvsp[-3].pVarDeclList));
@@ -11099,7 +11099,7 @@ yyreduce:
                                                                                                                                {
         (yyval.pTypeDecl) = new TypeDecl(Type::tLambda);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
     }
     break;
 
@@ -11115,7 +11115,7 @@ yyreduce:
                                                                                                                                                                         {
         (yyval.pTypeDecl) = new TypeDecl(Type::tLambda);
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-6]));
-        (yyval.pTypeDecl)->firstType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
         if ( (yyvsp[-3].pVarDeclList) ) {
             varDeclToTypeDecl(scanner, (yyval.pTypeDecl), (yyvsp[-3].pVarDeclList));
             deleteVariableDeclarationList((yyvsp[-3].pVarDeclList));
@@ -11571,7 +11571,7 @@ yyreduce:
             }
             format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
         }
-        ((ExprMakeStruct *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
+        ((ExprMakeStruct *)(yyvsp[-2].pExpression))->makeType = (yyvsp[-3].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-2].pExpression))->block = (yyvsp[-1].pExpression);
         (yyvsp[-2].pExpression)->at = tokAt(scanner,(yylsp[-4]));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
@@ -11614,7 +11614,7 @@ yyreduce:
         }
 
         auto msd = new ExprMakeStruct();
-        msd->makeType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        msd->makeType = (yyvsp[-2].pTypeDecl);
         msd->block = (yyvsp[-1].pExpression);
         msd->at = tokAt(scanner,(yylsp[-3]));
         (yyval.pExpression) = msd;
@@ -11635,7 +11635,7 @@ yyreduce:
             format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
         }
         auto msd = new ExprMakeStruct();
-        msd->makeType = TypeDeclPtr((yyvsp[-4].pTypeDecl));
+        msd->makeType = (yyvsp[-4].pTypeDecl);
         msd->useInitializer = true;
         msd->block = (yyvsp[-1].pExpression);
         msd->at = tokAt(scanner,(yylsp[-5]));
@@ -11658,7 +11658,7 @@ yyreduce:
             format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
         }
 
-        ((ExprMakeStruct *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
+        ((ExprMakeStruct *)(yyvsp[-2].pExpression))->makeType = (yyvsp[-5].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-2].pExpression))->useInitializer = true;
         ((ExprMakeStruct *)(yyvsp[-2].pExpression))->block = (yyvsp[-1].pExpression);
         (yyvsp[-2].pExpression)->at = tokAt(scanner,(yylsp[-6]));
@@ -11680,7 +11680,7 @@ yyreduce:
             format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
         }
 
-        ((ExprMakeStruct *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
+        ((ExprMakeStruct *)(yyvsp[-2].pExpression))->makeType = (yyvsp[-3].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-2].pExpression))->block = (yyvsp[-1].pExpression);
         (yyvsp[-2].pExpression)->at = tokAt(scanner,(yylsp[-4]));
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-4])),"to_array_move");
@@ -11703,7 +11703,7 @@ yyreduce:
             format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
         }
 
-        ((ExprMakeStruct *)(yyvsp[-2].pExpression))->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
+        ((ExprMakeStruct *)(yyvsp[-2].pExpression))->makeType = (yyvsp[-5].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-2].pExpression))->useInitializer = true;
         ((ExprMakeStruct *)(yyvsp[-2].pExpression))->block = (yyvsp[-1].pExpression);
         (yyvsp[-2].pExpression)->at = tokAt(scanner,(yylsp[-6]));
@@ -11724,7 +11724,7 @@ yyreduce:
   case 843: /* make_struct_decl: "struct" '<' $@83 type_declaration_no_options '>' $@84 '(' use_initializer optional_make_struct_dim_decl ')'  */
                                                                                                                                                                                                                                             {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-9]));
-        ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = TypeDeclPtr((yyvsp[-6].pTypeDecl));
+        ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->forceStruct = true;
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->alwaysUseInitializer = true;
@@ -11743,7 +11743,7 @@ yyreduce:
   case 846: /* make_struct_decl: "class" '<' $@85 type_declaration_no_options '>' $@86 '(' use_initializer optional_make_struct_dim_decl ')'  */
                                                                                                                                                                                                                                           {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-9]));
-        ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = TypeDeclPtr((yyvsp[-6].pTypeDecl));
+        ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->forceClass = true;
         (yyval.pExpression) = (yyvsp[-1].pExpression);
@@ -11784,7 +11784,7 @@ yyreduce:
                                                                                                                                                            {
         auto msd = new ExprMakeStruct();
         msd->at = tokAt(scanner,(yylsp[-6]));
-        msd->makeType = TypeDeclPtr((yyvsp[-3].pTypeDecl));
+        msd->makeType = (yyvsp[-3].pTypeDecl);
         msd->useInitializer = (yyvsp[0].b);
         msd->alwaysUseInitializer = true;
         (yyval.pExpression) = msd;
@@ -11917,7 +11917,7 @@ yyreduce:
             }
             format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
         }
-        ((ExprMakeArray *)(yyvsp[-1].pExpression))->makeType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        ((ExprMakeArray *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-2].pTypeDecl);
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-3]));
         (yyval.pExpression) = (yyvsp[-1].pExpression);
     }
@@ -11942,7 +11942,7 @@ yyreduce:
             format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
         }
 
-        ((ExprMakeArray *)(yyvsp[-1].pExpression))->makeType = TypeDeclPtr((yyvsp[-2].pTypeDecl));
+        ((ExprMakeArray *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-2].pTypeDecl);
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-3]));
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-3])),"to_array_move");
         tam->arguments.push_back(ExpressionPtr((yyvsp[-1].pExpression)));
@@ -11961,7 +11961,7 @@ yyreduce:
   case 869: /* make_dim_decl: "array" "struct" '<' $@93 type_declaration_no_options '>' $@94 '(' use_initializer optional_make_struct_dim_decl ')'  */
                                                                                                                                                                                                                 {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-10]));
-        ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = TypeDeclPtr((yyvsp[-6].pTypeDecl));
+        ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->forceStruct = true;
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->alwaysUseInitializer = true;
@@ -12046,7 +12046,7 @@ yyreduce:
         if ( (yyvsp[-1].pExpression) ) {
             auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-8])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
-            mka->makeType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
+            mka->makeType = (yyvsp[-5].pTypeDecl);
             mka->gen2 = true;
             auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-8])),"to_array_move");
             tam->arguments.push_back(mka);
@@ -12055,7 +12055,7 @@ yyreduce:
             auto msd = new ExprMakeStruct();
             msd->at = tokAt(scanner,(yylsp[-8]));
             msd->makeType = make_smart<TypeDecl>(Type::tArray);
-            msd->makeType->firstType = TypeDeclPtr((yyvsp[-5].pTypeDecl));
+            msd->makeType->firstType = (yyvsp[-5].pTypeDecl);
             msd->at = tokAt(scanner,(yylsp[-5]));
             msd->useInitializer = true;
             msd->alwaysUseInitializer = true;
@@ -12086,7 +12086,7 @@ yyreduce:
                                                                                                                                                                                     {
         auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-9])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
-        mka->makeType = TypeDeclPtr((yyvsp[-6].pTypeDecl));
+        mka->makeType = (yyvsp[-6].pTypeDecl);
         mka->gen2 = true;
         (yyval.pExpression) = mka;
     }
@@ -12168,7 +12168,7 @@ yyreduce:
         if ( (yyvsp[-1].pExpression) ) {
             auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-6])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
-            mka->makeType = TypeDeclPtr((yyvsp[-4].pTypeDecl));
+            mka->makeType = (yyvsp[-4].pTypeDecl);
             auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-6])),"to_table_move");
             ttm->arguments.push_back(mka);
             (yyval.pExpression) = ttm;
@@ -12176,7 +12176,7 @@ yyreduce:
             auto msd = new ExprMakeStruct();
             msd->at = tokAt(scanner,(yylsp[-6]));
             msd->makeType = make_smart<TypeDecl>(Type::tTable);
-            msd->makeType->firstType = TypeDeclPtr((yyvsp[-4].pTypeDecl));
+            msd->makeType->firstType = (yyvsp[-4].pTypeDecl);
             msd->makeType->secondType = make_smart<TypeDecl>(Type::tVoid);
             msd->at = tokAt(scanner,(yylsp[-6]));
             msd->useInitializer = true;
@@ -12201,8 +12201,8 @@ yyreduce:
             auto msd = new ExprMakeStruct();
             msd->at = tokAt(scanner,(yylsp[-8]));
             msd->makeType = make_smart<TypeDecl>(Type::tTable);
-            msd->makeType->firstType = TypeDeclPtr((yyvsp[-6].pTypeDecl));
-            msd->makeType->secondType = TypeDeclPtr((yyvsp[-4].pTypeDecl));
+            msd->makeType->firstType = (yyvsp[-6].pTypeDecl);
+            msd->makeType->secondType = (yyvsp[-4].pTypeDecl);
             msd->at = tokAt(scanner,(yylsp[-8]));
             msd->useInitializer = true;
             msd->alwaysUseInitializer = true;

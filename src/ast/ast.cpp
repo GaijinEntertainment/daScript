@@ -231,7 +231,7 @@ namespace das {
         auto cs = make_smart<Structure>(name);
         cs->fields.reserve(fields.size());
         for ( auto & fd : fields ) {
-            cs->fields.emplace_back(fd.name, fd.type, fd.init, fd.annotation, fd.moveSemantics, fd.at);
+            cs->fields.emplace_back(fd.name, make_smart<TypeDecl>(*fd.type), fd.init, fd.annotation, fd.moveSemantics, fd.at);
             cs->fields.back().flags = fd.flags;
         }
         cs->at = at;
@@ -1422,7 +1422,7 @@ namespace das {
     ExpressionPtr ExprTypeDecl::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprTypeDecl>(expr);
         Expression::clone(cexpr);
-        cexpr->typeexpr = typeexpr;
+        cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
         return cexpr;
     }
 
@@ -1452,7 +1452,7 @@ namespace das {
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         if ( typeexpr )
-            cexpr->typeexpr = typeexpr;
+            cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
         return cexpr;
     }
 
@@ -1538,7 +1538,7 @@ namespace das {
     ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
         ExprLooksLikeCall::clone(cexpr);
-        cexpr->typeexpr = typeexpr;
+        cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
         cexpr->initializer = initializer;
         return cexpr;
     }

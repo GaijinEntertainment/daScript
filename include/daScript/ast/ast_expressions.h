@@ -1262,7 +1262,7 @@ namespace das
 
     struct ExprNew : ExprCallFunc {
         ExprNew() { __rtti = "ExprNew"; };
-        ExprNew ( const LineInfo & a, TypeDeclPtr t, bool ini )
+        ExprNew ( const LineInfo & a, const TypeDeclPtr & t, bool ini )
             : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) { __rtti = "ExprNew"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
