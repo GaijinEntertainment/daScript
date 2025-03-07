@@ -39,7 +39,7 @@ namespace das {
                 }
             }
             typeDecl->dim.push_back(dI);
-            typeDecl->dimExpr.push_back(ExpressionPtr(dimExpr));
+            typeDecl->dimExpr.push_back(dimExpr);
         } else {
             typeDecl->dim.push_back(TypeDecl::dimAuto);
             typeDecl->dimExpr.push_back(nullptr);
@@ -61,7 +61,7 @@ namespace das {
             reverse(argList.begin(),argList.end());
             delete arguments;
         } else {
-            argList.push_back(ExpressionPtr(arg));
+            argList.push_back(arg);
         }
         return argList;
     }
@@ -71,7 +71,7 @@ namespace das {
         vector<ExpressionPtr> seq;
         if ( arguments ) seq = sequenceToList(arguments);
         args.reserve(declL->size() + seq.size());
-        for ( auto & decl : *declL ) args.push_back(ExpressionPtr(decl));
+        for ( auto & decl : *declL ) args.push_back(decl);
         for ( auto & arg : seq ) args.push_back(das::move(arg));
         delete declL;
         return args;
@@ -214,9 +214,9 @@ namespace das {
         pAC->generatorSyntax = genSyntax;
         pAC->tableSyntax = tableSyntax;
         pAC->exprFor = pFor;
-        pAC->subexpr = ExpressionPtr(subexpr);
+        pAC->subexpr = subexpr;
         if ( where ) {
-            pAC->exprWhere = ExpressionPtr(where);
+            pAC->exprWhere = where;
         }
         return pAC;
     }
@@ -801,9 +801,9 @@ namespace das {
 
     Expression * ast_makeBlock ( yyscan_t scanner, int bal, AnnotationList * annL, vector<CaptureEntry> * clist,
         vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt ) {
-        auto mkb = new ExprMakeBlock(blockAt,ExpressionPtr(block), bal==1, bal==2);
+        auto mkb = new ExprMakeBlock(blockAt,block, bal==1, bal==2);
         ExprBlock * closure = (ExprBlock *) block;
-        closure->returnType = TypeDeclPtr(result);
+        closure->returnType = result;
         if ( list ) {
             for ( auto pDecl : *list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -917,7 +917,7 @@ namespace das {
             }
         }
         if ( auto pTagExpr = decl->pNameList->front().tag ) {
-            auto pTag = new ExprTag(declAt, pTagExpr, ExpressionPtr(pLet), "i");
+            auto pTag = new ExprTag(declAt, pTagExpr, pLet, "i");
             delete decl;
             return pTag;
         } else {
@@ -975,7 +975,7 @@ namespace das {
         auto pFunction = make_smart<Function>();
         pFunction->at = nameAt;
         pFunction->name = *name;
-        pFunction->result = TypeDeclPtr(result);
+        pFunction->result = result;
         if ( list ) {
             for ( auto pDecl : *list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -1064,7 +1064,7 @@ namespace das {
         }
         delete iters;
         pFor->sources = sequenceToList(srcs);
-        pFor->body = ExpressionPtr(block);
+        pFor->body = block;
         ((ExprBlock *)block)->inTheLoop = true;
         return pFor;
     }
@@ -1087,13 +1087,13 @@ namespace das {
     Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt ) {
         if ( fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) fncall;
-            pCall->arguments.push_back(ExpressionPtr(arg));
+            pCall->arguments.push_back(arg);
             return fncall;
         } else if ( fncall->rtti_isVar() ) {
             auto pVar = (ExprVar *) fncall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
             delete pVar;
-            pCall->arguments.push_back(ExpressionPtr(arg));
+            pCall->arguments.push_back(arg);
             return pCall;
         } else {
             das_yyerror(scanner,"can only lpipe into a function call",locAt,CompilationError::cant_pipe);
@@ -1104,17 +1104,17 @@ namespace das {
     Expression * ast_rpipe ( yyscan_t scanner, Expression * arg, Expression * fncall, const LineInfo & locAt ) {
         if ( fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) fncall;
-            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr(arg));
+            pCall->arguments.insert(pCall->arguments.begin(),arg);
             return fncall;
         } else if ( fncall->rtti_isVar() ) {
             auto pVar = (ExprVar *) fncall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
             delete pVar;
-            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr(arg));
+            pCall->arguments.insert(pCall->arguments.begin(),arg);
             return pCall;
         } else if (fncall->rtti_isNamedCall()) {
             auto pCall = (ExprNamedCall*)fncall;
-            pCall->nonNamedArguments.insert(pCall->nonNamedArguments.begin(), ExpressionPtr(arg));
+            pCall->nonNamedArguments.insert(pCall->nonNamedArguments.begin(), arg);
             return fncall;
         } else if (fncall->rtti_isField() ) {
             auto pField = (ExprField*)fncall;
@@ -1138,7 +1138,7 @@ namespace das {
 
     Expression * ast_makeGenerator ( yyscan_t, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt ) {
         auto gen = new ExprMakeGenerator(locAt, subexpr);
-        gen->iterType = TypeDeclPtr(typeDecl);
+        gen->iterType = typeDecl;
         if ( clist ) {
             swap ( gen->capture, *clist );
             delete clist;
@@ -1149,7 +1149,7 @@ namespace das {
     ExprBlock * ast_wrapInBlock ( Expression * expr ) {
         auto block = new ExprBlock();
         block->at = expr->at;
-        block->list.push_back(ExpressionPtr(expr));
+        block->list.push_back(expr);
         return block;
     }
 
