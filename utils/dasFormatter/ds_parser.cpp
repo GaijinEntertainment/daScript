@@ -1066,91 +1066,91 @@ static const yytype_int16 yyrline[] =
      634,   635,   639,   644,   653,   661,   677,   682,   690,   690,
      731,   761,   765,   766,   767,   771,   774,   778,   784,   793,
      796,   802,   803,   807,   811,   812,   816,   819,   825,   831,
-     834,   840,   841,   845,   846,   847,   861,   862,   866,   867,
-     867,   873,   874,   875,   876,   877,   881,   892,   892,   900,
-     900,   904,   904,   913,   921,   933,   943,   943,   950,   951,
-     952,   953,   954,   955,   959,   964,   972,   973,   974,   978,
-     979,   980,   981,   982,   983,   984,   985,   991,   994,  1000,
-    1003,  1006,  1012,  1013,  1014,  1015,  1019,  1032,  1050,  1053,
-    1061,  1072,  1083,  1094,  1097,  1104,  1108,  1115,  1116,  1120,
-    1121,  1122,  1126,  1129,  1136,  1140,  1141,  1142,  1143,  1144,
-    1145,  1146,  1147,  1148,  1149,  1150,  1151,  1152,  1153,  1154,
-    1155,  1156,  1157,  1158,  1159,  1160,  1161,  1162,  1163,  1164,
-    1165,  1166,  1167,  1168,  1169,  1170,  1171,  1172,  1173,  1174,
-    1175,  1176,  1177,  1178,  1179,  1180,  1181,  1182,  1183,  1184,
-    1185,  1186,  1187,  1188,  1189,  1190,  1191,  1192,  1193,  1194,
-    1195,  1196,  1197,  1198,  1199,  1200,  1201,  1202,  1203,  1204,
-    1205,  1206,  1207,  1208,  1209,  1210,  1211,  1212,  1213,  1214,
-    1215,  1216,  1217,  1218,  1219,  1220,  1221,  1222,  1223,  1228,
-    1246,  1247,  1248,  1252,  1258,  1258,  1275,  1276,  1279,  1280,
-    1283,  1290,  1314,  1323,  1332,  1338,  1339,  1340,  1341,  1342,
-    1343,  1344,  1345,  1346,  1347,  1348,  1349,  1350,  1351,  1352,
-    1353,  1354,  1355,  1356,  1357,  1358,  1359,  1363,  1368,  1374,
-    1380,  1391,  1392,  1396,  1397,  1401,  1402,  1406,  1410,  1417,
-    1417,  1417,  1423,  1423,  1423,  1432,  1466,  1469,  1472,  1475,
-    1481,  1482,  1493,  1497,  1500,  1508,  1508,  1508,  1511,  1517,
-    1520,  1524,  1528,  1535,  1542,  1548,  1552,  1556,  1559,  1562,
-    1570,  1573,  1576,  1584,  1587,  1595,  1598,  1601,  1609,  1621,
-    1622,  1623,  1627,  1628,  1632,  1633,  1637,  1642,  1650,  1661,
-    1667,  1682,  1694,  1697,  1703,  1703,  1703,  1706,  1706,  1706,
-    1711,  1711,  1711,  1719,  1719,  1719,  1725,  1739,  1755,  1773,
-    1783,  1794,  1809,  1812,  1818,  1819,  1826,  1837,  1838,  1839,
-    1843,  1844,  1845,  1846,  1847,  1851,  1856,  1864,  1865,  1875,
-    1879,  1889,  1896,  1903,  1903,  1912,  1913,  1914,  1915,  1916,
-    1917,  1918,  1922,  1923,  1924,  1925,  1926,  1927,  1928,  1929,
-    1930,  1931,  1932,  1933,  1934,  1935,  1936,  1937,  1938,  1939,
-    1940,  1944,  1945,  1946,  1947,  1952,  1953,  1954,  1955,  1956,
-    1957,  1958,  1959,  1960,  1961,  1962,  1963,  1964,  1965,  1966,
-    1967,  1968,  1973,  1980,  1992,  1997,  2007,  2011,  2018,  2021,
-    2021,  2021,  2026,  2026,  2026,  2039,  2043,  2047,  2052,  2059,
-    2068,  2073,  2080,  2080,  2080,  2087,  2091,  2101,  2110,  2119,
-    2123,  2126,  2132,  2133,  2134,  2135,  2136,  2137,  2138,  2139,
-    2140,  2141,  2142,  2143,  2144,  2145,  2146,  2147,  2148,  2149,
-    2150,  2151,  2152,  2153,  2154,  2155,  2156,  2157,  2158,  2159,
-    2160,  2161,  2162,  2163,  2164,  2165,  2166,  2167,  2173,  2174,
-    2175,  2176,  2177,  2191,  2192,  2193,  2194,  2195,  2196,  2197,
-    2198,  2199,  2200,  2201,  2202,  2205,  2208,  2209,  2212,  2212,
-    2212,  2215,  2220,  2224,  2228,  2228,  2228,  2233,  2236,  2240,
-    2240,  2240,  2245,  2248,  2249,  2250,  2251,  2252,  2253,  2254,
-    2255,  2256,  2258,  2262,  2270,  2275,  2279,  2280,  2281,  2282,
-    2283,  2284,  2285,  2289,  2293,  2297,  2301,  2305,  2309,  2313,
-    2317,  2321,  2328,  2329,  2338,  2342,  2343,  2344,  2348,  2349,
-    2353,  2354,  2355,  2359,  2360,  2364,  2375,  2376,  2379,  2382,
-    2382,  2401,  2400,  2416,  2415,  2429,  2438,  2447,  2457,  2458,
-    2462,  2465,  2474,  2475,  2479,  2482,  2485,  2501,  2510,  2511,
-    2515,  2518,  2521,  2535,  2536,  2540,  2546,  2552,  2555,  2559,
-    2565,  2574,  2575,  2576,  2580,  2581,  2585,  2592,  2597,  2606,
-    2612,  2623,  2626,  2631,  2636,  2644,  2655,  2658,  2658,  2678,
-    2679,  2683,  2684,  2685,  2689,  2696,  2696,  2715,  2718,  2733,
-    2752,  2753,  2754,  2759,  2759,  2789,  2792,  2799,  2809,  2809,
-    2813,  2814,  2815,  2819,  2829,  2849,  2872,  2873,  2877,  2878,
-    2882,  2888,  2889,  2890,  2891,  2895,  2896,  2897,  2901,  2904,
-    2915,  2920,  2915,  2940,  2947,  2952,  2961,  2967,  2978,  2979,
-    2980,  2981,  2982,  2983,  2984,  2985,  2986,  2987,  2988,  2989,
-    2990,  2991,  2992,  2993,  2994,  2995,  2996,  2997,  2998,  2999,
-    3000,  3001,  3002,  3003,  3004,  3008,  3009,  3010,  3011,  3012,
-    3013,  3014,  3015,  3019,  3030,  3034,  3041,  3053,  3060,  3070,
-    3071,  3076,  3081,  3084,  3099,  3112,  3112,  3112,  3125,  3126,
-    3130,  3134,  3141,  3145,  3152,  3153,  3154,  3155,  3156,  3171,
-    3177,  3177,  3177,  3181,  3186,  3193,  3193,  3200,  3204,  3208,
-    3213,  3218,  3223,  3228,  3232,  3236,  3241,  3245,  3249,  3254,
-    3254,  3254,  3260,  3267,  3267,  3267,  3272,  3272,  3272,  3278,
-    3278,  3278,  3283,  3287,  3287,  3287,  3292,  3292,  3292,  3301,
-    3305,  3305,  3305,  3310,  3310,  3310,  3319,  3323,  3323,  3323,
-    3328,  3328,  3328,  3337,  3337,  3337,  3343,  3343,  3343,  3352,
-    3355,  3366,  3382,  3382,  3387,  3396,  3382,  3425,  3425,  3430,
-    3440,  3425,  3469,  3469,  3469,  3512,  3513,  3514,  3515,  3516,
-    3520,  3527,  3534,  3540,  3546,  3553,  3560,  3566,  3575,  3578,
-    3584,  3592,  3597,  3604,  3609,  3616,  3621,  3627,  3628,  3632,
-    3633,  3638,  3639,  3643,  3644,  3648,  3649,  3653,  3654,  3655,
-    3659,  3660,  3661,  3665,  3666,  3670,  3699,  3739,  3758,  3778,
-    3798,  3819,  3819,  3819,  3827,  3827,  3827,  3834,  3834,  3834,
-    3845,  3845,  3845,  3856,  3860,  3866,  3882,  3888,  3894,  3900,
-    3900,  3900,  3914,  3919,  3926,  3935,  3959,  3983,  3983,  3983,
-    3993,  3993,  3993,  4007,  4007,  4007,  4021,  4030,  4030,  4030,
-    4050,  4057,  4057,  4057,  4067,  4072,  4079,  4082,  4088,  4096,
-    4115,  4123,  4143,  4168,  4169,  4173,  4174,  4179,  4189,  4192,
-    4195,  4198,  4206,  4215,  4227,  4237
+     834,   840,   841,   845,   846,   847,   860,   861,   865,   866,
+     866,   872,   873,   874,   875,   876,   880,   890,   890,   898,
+     898,   902,   902,   911,   919,   931,   941,   941,   948,   949,
+     950,   951,   952,   953,   957,   962,   970,   971,   972,   976,
+     977,   978,   979,   980,   981,   982,   983,   989,   992,   998,
+    1001,  1004,  1010,  1011,  1012,  1013,  1017,  1030,  1048,  1051,
+    1059,  1070,  1081,  1092,  1095,  1102,  1106,  1113,  1114,  1118,
+    1119,  1120,  1124,  1127,  1134,  1138,  1139,  1140,  1141,  1142,
+    1143,  1144,  1145,  1146,  1147,  1148,  1149,  1150,  1151,  1152,
+    1153,  1154,  1155,  1156,  1157,  1158,  1159,  1160,  1161,  1162,
+    1163,  1164,  1165,  1166,  1167,  1168,  1169,  1170,  1171,  1172,
+    1173,  1174,  1175,  1176,  1177,  1178,  1179,  1180,  1181,  1182,
+    1183,  1184,  1185,  1186,  1187,  1188,  1189,  1190,  1191,  1192,
+    1193,  1194,  1195,  1196,  1197,  1198,  1199,  1200,  1201,  1202,
+    1203,  1204,  1205,  1206,  1207,  1208,  1209,  1210,  1211,  1212,
+    1213,  1214,  1215,  1216,  1217,  1218,  1219,  1220,  1221,  1226,
+    1244,  1245,  1246,  1250,  1256,  1256,  1273,  1274,  1277,  1278,
+    1281,  1288,  1312,  1321,  1330,  1336,  1337,  1338,  1339,  1340,
+    1341,  1342,  1343,  1344,  1345,  1346,  1347,  1348,  1349,  1350,
+    1351,  1352,  1353,  1354,  1355,  1356,  1357,  1361,  1366,  1372,
+    1378,  1389,  1390,  1394,  1395,  1399,  1400,  1404,  1408,  1415,
+    1415,  1415,  1421,  1421,  1421,  1430,  1464,  1467,  1470,  1473,
+    1479,  1480,  1491,  1495,  1498,  1506,  1506,  1506,  1509,  1515,
+    1518,  1522,  1526,  1533,  1540,  1546,  1550,  1554,  1557,  1560,
+    1568,  1571,  1574,  1582,  1585,  1593,  1596,  1599,  1607,  1619,
+    1620,  1621,  1625,  1626,  1630,  1631,  1635,  1640,  1648,  1659,
+    1665,  1680,  1692,  1695,  1701,  1701,  1701,  1704,  1704,  1704,
+    1709,  1709,  1709,  1717,  1717,  1717,  1723,  1737,  1753,  1771,
+    1781,  1792,  1807,  1810,  1816,  1817,  1824,  1835,  1836,  1837,
+    1841,  1842,  1843,  1844,  1845,  1849,  1854,  1862,  1863,  1873,
+    1877,  1887,  1894,  1901,  1901,  1910,  1911,  1912,  1913,  1914,
+    1915,  1916,  1920,  1921,  1922,  1923,  1924,  1925,  1926,  1927,
+    1928,  1929,  1930,  1931,  1932,  1933,  1934,  1935,  1936,  1937,
+    1938,  1942,  1943,  1944,  1945,  1950,  1951,  1952,  1953,  1954,
+    1955,  1956,  1957,  1958,  1959,  1960,  1961,  1962,  1963,  1964,
+    1965,  1966,  1971,  1978,  1990,  1995,  2005,  2009,  2016,  2019,
+    2019,  2019,  2024,  2024,  2024,  2037,  2041,  2045,  2050,  2057,
+    2066,  2071,  2078,  2078,  2078,  2085,  2089,  2099,  2108,  2117,
+    2121,  2124,  2130,  2131,  2132,  2133,  2134,  2135,  2136,  2137,
+    2138,  2139,  2140,  2141,  2142,  2143,  2144,  2145,  2146,  2147,
+    2148,  2149,  2150,  2151,  2152,  2153,  2154,  2155,  2156,  2157,
+    2158,  2159,  2160,  2161,  2162,  2163,  2164,  2165,  2171,  2172,
+    2173,  2174,  2175,  2189,  2190,  2191,  2192,  2193,  2194,  2195,
+    2196,  2197,  2198,  2199,  2200,  2203,  2206,  2207,  2210,  2210,
+    2210,  2213,  2218,  2222,  2226,  2226,  2226,  2231,  2234,  2238,
+    2238,  2238,  2243,  2246,  2247,  2248,  2249,  2250,  2251,  2252,
+    2253,  2254,  2256,  2260,  2268,  2273,  2277,  2278,  2279,  2280,
+    2281,  2282,  2283,  2287,  2291,  2295,  2299,  2303,  2307,  2311,
+    2315,  2319,  2326,  2327,  2336,  2340,  2341,  2342,  2346,  2347,
+    2351,  2352,  2353,  2357,  2358,  2362,  2373,  2374,  2377,  2380,
+    2380,  2399,  2398,  2414,  2413,  2427,  2436,  2445,  2455,  2456,
+    2460,  2463,  2472,  2473,  2477,  2480,  2483,  2499,  2508,  2509,
+    2513,  2516,  2519,  2533,  2534,  2538,  2544,  2550,  2553,  2557,
+    2563,  2572,  2573,  2574,  2578,  2579,  2583,  2590,  2595,  2604,
+    2610,  2621,  2624,  2629,  2634,  2642,  2653,  2656,  2656,  2676,
+    2677,  2681,  2682,  2683,  2687,  2694,  2694,  2713,  2716,  2731,
+    2750,  2751,  2752,  2757,  2757,  2787,  2790,  2797,  2807,  2807,
+    2811,  2812,  2813,  2817,  2827,  2847,  2870,  2871,  2875,  2876,
+    2880,  2886,  2887,  2888,  2889,  2893,  2894,  2895,  2899,  2902,
+    2913,  2918,  2913,  2938,  2945,  2950,  2959,  2965,  2976,  2977,
+    2978,  2979,  2980,  2981,  2982,  2983,  2984,  2985,  2986,  2987,
+    2988,  2989,  2990,  2991,  2992,  2993,  2994,  2995,  2996,  2997,
+    2998,  2999,  3000,  3001,  3002,  3006,  3007,  3008,  3009,  3010,
+    3011,  3012,  3013,  3017,  3028,  3032,  3039,  3051,  3058,  3068,
+    3069,  3074,  3079,  3082,  3097,  3110,  3110,  3110,  3123,  3124,
+    3128,  3132,  3139,  3143,  3150,  3151,  3152,  3153,  3154,  3169,
+    3175,  3175,  3175,  3179,  3184,  3191,  3191,  3198,  3202,  3206,
+    3211,  3216,  3221,  3226,  3230,  3234,  3239,  3243,  3247,  3252,
+    3252,  3252,  3258,  3265,  3265,  3265,  3270,  3270,  3270,  3276,
+    3276,  3276,  3281,  3285,  3285,  3285,  3290,  3290,  3290,  3299,
+    3303,  3303,  3303,  3308,  3308,  3308,  3317,  3321,  3321,  3321,
+    3326,  3326,  3326,  3335,  3335,  3335,  3341,  3341,  3341,  3350,
+    3353,  3364,  3380,  3380,  3385,  3394,  3380,  3423,  3423,  3428,
+    3438,  3423,  3467,  3467,  3467,  3510,  3511,  3512,  3513,  3514,
+    3518,  3525,  3532,  3538,  3544,  3551,  3558,  3564,  3573,  3576,
+    3582,  3590,  3595,  3602,  3607,  3614,  3619,  3625,  3626,  3630,
+    3631,  3636,  3637,  3641,  3642,  3646,  3647,  3651,  3652,  3653,
+    3657,  3658,  3659,  3663,  3664,  3668,  3697,  3737,  3756,  3776,
+    3796,  3817,  3817,  3817,  3825,  3825,  3825,  3832,  3832,  3832,
+    3843,  3843,  3843,  3854,  3858,  3864,  3880,  3886,  3892,  3898,
+    3898,  3898,  3912,  3917,  3924,  3933,  3957,  3981,  3981,  3981,
+    3991,  3991,  3991,  4005,  4005,  4005,  4019,  4028,  4028,  4028,
+    4048,  4055,  4055,  4055,  4065,  4070,  4077,  4080,  4086,  4094,
+    4113,  4121,  4141,  4166,  4167,  4171,  4172,  4177,  4187,  4190,
+    4193,  4196,  4204,  4213,  4225,  4235
 };
 #endif
 
@@ -6665,7 +6665,7 @@ yyreduce:
 
   case 34: /* string_builder_body: string_builder_body "{" expr "}"  */
                                                                                                         {
-        auto se = ExpressionPtr((yyvsp[-1].pExpression));
+        auto se = (yyvsp[-1].pExpression);
         static_cast<ExprStringBuilder *>((yyvsp[-3].pExpression))->elements.push_back(se);
         (yyval.pExpression) = (yyvsp[-3].pExpression);
     }
@@ -6868,7 +6868,7 @@ yyreduce:
 
   case 60: /* expression_goto: "goto" expr  */
                                {
-        (yyval.pExpression) = new ExprGoto(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
+        (yyval.pExpression) = new ExprGoto(tokAt(scanner,(yylsp[-1])),(yyvsp[0].pExpression));
     }
     break;
 
@@ -6895,8 +6895,7 @@ yyreduce:
             format::skip_spaces_or_print(tokAt(scanner,(yylsp[-3])), tokAt(scanner,(yylsp[-1])), tokAt(scanner,(yylsp[0])), yyextra->das_tab_size);
         }
 
-        auto eite = new ExprIfThenElse(tokAt(scanner,(yylsp[-3])),ExpressionPtr((yyvsp[-2].pExpression)),
-            ExpressionPtr((yyvsp[-1].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
+        auto eite = new ExprIfThenElse(tokAt(scanner,(yylsp[-3])),(yyvsp[-2].pExpression),(yyvsp[-1].pExpression),(yyvsp[0].pExpression));
         eite->isStatic = (yyvsp[-3].b);
         (yyval.pExpression) = eite;
     }
@@ -6951,8 +6950,7 @@ yyreduce:
             format::skip_spaces_or_print(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-2])), tokAt(scanner,(yylsp[0])), yyextra->das_tab_size);
         }
 
-        auto eite = new ExprIfThenElse(tokAt(scanner,(yylsp[-4])),ExpressionPtr((yyvsp[-3].pExpression)),
-            ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
+        auto eite = new ExprIfThenElse(tokAt(scanner,(yylsp[-4])),(yyvsp[-3].pExpression),(yyvsp[-2].pExpression),(yyvsp[0].pExpression));
         eite->isStatic = (yyvsp[-4].b);
         (yyval.pExpression) = eite;
     }
@@ -6966,7 +6964,7 @@ yyreduce:
                                                                                                                                                          {
         format::wrap_par_expr(tokAt(scanner,(yylsp[-2])), (yyvsp[-2].pExpression)->at);
 
-        (yyval.pExpression) = new ExprIfThenElse(tokAt(scanner,(yylsp[-4])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr(ast_wrapInBlock((yyvsp[-5].pExpression))),(yyvsp[-1].pExpression) ? ExpressionPtr(ast_wrapInBlock((yyvsp[-1].pExpression))) : nullptr);
+        (yyval.pExpression) = new ExprIfThenElse(tokAt(scanner,(yylsp[-4])),(yyvsp[-2].pExpression),ast_wrapInBlock((yyvsp[-5].pExpression)),(yyvsp[-1].pExpression) ? ast_wrapInBlock((yyvsp[-1].pExpression)) : nullptr);
     }
     break;
 
@@ -6997,7 +6995,7 @@ yyreduce:
   case 83: /* expression_unsafe: "unsafe" expression_block  */
                                                  {
         auto pUnsafe = new ExprUnsafe(tokAt(scanner,(yylsp[-1])));
-        pUnsafe->body = ExpressionPtr((yyvsp[0].pExpression));
+        pUnsafe->body = (yyvsp[0].pExpression);
         (yyval.pExpression) = pUnsafe;
     }
     break;
@@ -7007,8 +7005,8 @@ yyreduce:
         format::wrap_par_expr(tokAt(scanner,(yylsp[-1])), (yyvsp[-1].pExpression)->at);
 
         auto pWhile = new ExprWhile(tokAt(scanner,(yylsp[-2])));
-        pWhile->cond = ExpressionPtr((yyvsp[-1].pExpression));
-        pWhile->body = ExpressionPtr((yyvsp[0].pExpression));
+        pWhile->cond = (yyvsp[-1].pExpression);
+        pWhile->body = (yyvsp[0].pExpression);
         ((ExprBlock *)(yyvsp[0].pExpression))->inTheLoop = true;
         (yyval.pExpression) = pWhile;
     }
@@ -7018,8 +7016,8 @@ yyreduce:
                                                          {
         format::wrap_par_expr(tokAt(scanner,(yylsp[-1])), (yyvsp[-1].pExpression)->at);
         auto pWith = new ExprWith(tokAt(scanner,(yylsp[-2])));
-        pWith->with = ExpressionPtr((yyvsp[-1].pExpression));
-        pWith->body = ExpressionPtr((yyvsp[0].pExpression));
+        pWith->with = (yyvsp[-1].pExpression);
+        pWith->body = (yyvsp[0].pExpression);
         (yyval.pExpression) = pWith;
     }
     break;
@@ -7710,7 +7708,7 @@ yyreduce:
 
   case 225: /* function_declaration: optional_public_or_private_function $@7 function_declaration_header expression_block  */
                                                                 {
-        (yyvsp[-1].pFuncDecl)->body = ExpressionPtr((yyvsp[0].pExpression));
+        (yyvsp[-1].pFuncDecl)->body = (yyvsp[0].pExpression);
         (yyvsp[-1].pFuncDecl)->privateFunction = !(yyvsp[-3].b);
         (yyval.pFuncDecl) = (yyvsp[-1].pFuncDecl);
         if ( !yyextra->g_CommentReaders.empty() ) {
@@ -7773,7 +7771,7 @@ yyreduce:
   case 232: /* expr_call_pipe: expr expr_full_block_assumed_piped  */
                                                       {
         if ( (yyvsp[-1].pExpression)->rtti_isCallLikeExpr() ) {
-            ((ExprLooksLikeCall *)(yyvsp[-1].pExpression))->arguments.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+            ((ExprLooksLikeCall *)(yyvsp[-1].pExpression))->arguments.push_back((yyvsp[0].pExpression));
             (yyval.pExpression) = (yyvsp[-1].pExpression);
         } else {
             (yyval.pExpression) = (yyvsp[-1].pExpression);
@@ -7785,7 +7783,7 @@ yyreduce:
   case 233: /* expr_call_pipe: expression_keyword expr_full_block_assumed_piped  */
                                                                     {
         if ( (yyvsp[-1].pExpression)->rtti_isCallLikeExpr() ) {
-            ((ExprLooksLikeCall *)(yyvsp[-1].pExpression))->arguments.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+            ((ExprLooksLikeCall *)(yyvsp[-1].pExpression))->arguments.push_back((yyvsp[0].pExpression));
             (yyval.pExpression) = (yyvsp[-1].pExpression);
         } else {
             (yyval.pExpression) = (yyvsp[-1].pExpression);
@@ -7900,7 +7898,7 @@ yyreduce:
                                                         {
         (yyval.pExpression) = (yyvsp[-1].pExpression);
         if ( (yyvsp[0].pExpression) ) {
-            static_cast<ExprBlock*>((yyvsp[-1].pExpression))->list.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+            static_cast<ExprBlock*>((yyvsp[-1].pExpression))->list.push_back((yyvsp[0].pExpression));
         }
     }
     break;
@@ -7914,10 +7912,10 @@ yyreduce:
   case 260: /* expr_keyword: "keyword" expr expression_block  */
                                                            {
         auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-2])),*(yyvsp[-2].s));
-        pCall->arguments.push_back(ExpressionPtr((yyvsp[-1].pExpression)));
+        pCall->arguments.push_back((yyvsp[-1].pExpression));
         auto resT = new TypeDecl(Type::autoinfer);
         auto blk = ast_makeBlock(scanner,0,nullptr,nullptr,nullptr,resT,(yyvsp[0].pExpression),tokAt(scanner,(yylsp[0])),tokAt(scanner,(yylsp[0])));
-        pCall->arguments.push_back(ExpressionPtr(blk));
+        pCall->arguments.push_back(blk);
         delete (yyvsp[-2].s);
         (yyval.pExpression) = pCall;
     }
@@ -8000,13 +7998,13 @@ yyreduce:
         Expression * pipeCall = (yyvsp[-2].pExpression)->tail();
         if ( pipeCall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) pipeCall;
-            pCall->arguments.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+            pCall->arguments.push_back((yyvsp[0].pExpression));
             (yyval.pExpression) = (yyvsp[-2].pExpression);
         } else if ( pipeCall->rtti_isVar() ) {
             // a += b <| c
             auto pVar = (ExprVar *) pipeCall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
-            pCall->arguments.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+            pCall->arguments.push_back((yyvsp[0].pExpression));
             if ( !(yyvsp[-2].pExpression)->swap_tail(pVar,pCall) ) {
                 delete pVar;
                 (yyval.pExpression) = pCall;
@@ -8080,13 +8078,13 @@ yyreduce:
 
   case 283: /* expression_delete: "delete" expr  */
                                       {
-        (yyval.pExpression) = new ExprDelete(tokAt(scanner,(yylsp[-1])), ExpressionPtr((yyvsp[0].pExpression)));
+        (yyval.pExpression) = new ExprDelete(tokAt(scanner,(yylsp[-1])), (yyvsp[0].pExpression));
     }
     break;
 
   case 284: /* expression_delete: "delete" "explicit" expr  */
                                                    {
-        auto delExpr = new ExprDelete(tokAt(scanner,(yylsp[-2])), ExpressionPtr((yyvsp[0].pExpression)));
+        auto delExpr = new ExprDelete(tokAt(scanner,(yylsp[-2])), (yyvsp[0].pExpression));
         delExpr->native = true;
         (yyval.pExpression) = delExpr;
     }
@@ -8138,7 +8136,7 @@ yyreduce:
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-3].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = true; // $init;
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->alwaysUseInitializer = true;
-        (yyval.pExpression) = new ExprAscend(tokAt(scanner,(yylsp[-4])),ExpressionPtr((yyvsp[-1].pExpression)));
+        (yyval.pExpression) = new ExprAscend(tokAt(scanner,(yylsp[-4])),(yyvsp[-1].pExpression));
     }
     break;
 
@@ -8148,13 +8146,13 @@ yyreduce:
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-4].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = false; // $init;
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->alwaysUseInitializer = true;
-        (yyval.pExpression) = new ExprAscend(tokAt(scanner,(yylsp[-5])),ExpressionPtr((yyvsp[-1].pExpression)));
+        (yyval.pExpression) = new ExprAscend(tokAt(scanner,(yylsp[-5])),(yyvsp[-1].pExpression));
     }
     break;
 
   case 294: /* expr_new: "new" make_decl  */
                                     {
-        (yyval.pExpression) = new ExprAscend(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
+        (yyval.pExpression) = new ExprAscend(tokAt(scanner,(yylsp[-1])),(yyvsp[0].pExpression));
     }
     break;
 
@@ -8194,13 +8192,13 @@ yyreduce:
 
   case 301: /* expression_return: "return" expr_pipe  */
                                            {
-        (yyval.pExpression) = new ExprReturn(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
+        (yyval.pExpression) = new ExprReturn(tokAt(scanner,(yylsp[-1])),(yyvsp[0].pExpression));
     }
     break;
 
   case 302: /* expression_return: "return" "<-" expr_pipe  */
                                                   {
-        auto pRet = new ExprReturn(tokAt(scanner,(yylsp[-2])),ExpressionPtr((yyvsp[0].pExpression)));
+        auto pRet = new ExprReturn(tokAt(scanner,(yylsp[-2])),(yyvsp[0].pExpression));
         pRet->moveSemantics = true;
         (yyval.pExpression) = pRet;
     }
@@ -8208,13 +8206,13 @@ yyreduce:
 
   case 303: /* expression_yield_no_pipe: "yield" expr  */
                                      {
-        (yyval.pExpression) = new ExprYield(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
+        (yyval.pExpression) = new ExprYield(tokAt(scanner,(yylsp[-1])),(yyvsp[0].pExpression));
     }
     break;
 
   case 304: /* expression_yield_no_pipe: "yield" "<-" expr  */
                                             {
-        auto pRet = new ExprYield(tokAt(scanner,(yylsp[-2])),ExpressionPtr((yyvsp[0].pExpression)));
+        auto pRet = new ExprYield(tokAt(scanner,(yylsp[-2])),(yyvsp[0].pExpression));
         pRet->moveSemantics = true;
         (yyval.pExpression) = pRet;
     }
@@ -8228,13 +8226,13 @@ yyreduce:
 
   case 306: /* expression_yield: "yield" expr_pipe  */
                                           {
-        (yyval.pExpression) = new ExprYield(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression)));
+        (yyval.pExpression) = new ExprYield(tokAt(scanner,(yylsp[-1])),(yyvsp[0].pExpression));
     }
     break;
 
   case 307: /* expression_yield: "yield" "<-" expr_pipe  */
                                                  {
-        auto pRet = new ExprYield(tokAt(scanner,(yylsp[-2])),ExpressionPtr((yyvsp[0].pExpression)));
+        auto pRet = new ExprYield(tokAt(scanner,(yylsp[-2])),(yyvsp[0].pExpression));
         pRet->moveSemantics = true;
         (yyval.pExpression) = pRet;
     }
@@ -8248,7 +8246,7 @@ yyreduce:
             format::skip_spaces_or_print(tokAt(scanner, (yylsp[-3])), tokAt(scanner, (yylsp[-2])), tokAt(scanner, (yylsp[-1])), yyextra->das_tab_size);
         }
 
-        (yyval.pExpression) = new ExprTryCatch(tokAt(scanner,(yylsp[-3])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
+        (yyval.pExpression) = new ExprTryCatch(tokAt(scanner,(yylsp[-3])),(yyvsp[-2].pExpression),(yyvsp[0].pExpression));
     }
     break;
 
@@ -8371,7 +8369,7 @@ yyreduce:
 
   case 326: /* expr_cast: "cast" '<' $@14 type_declaration_no_options '>' $@15 expr  */
                                                                                                                                                 {
-        (yyval.pExpression) = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-3].pTypeDecl));
+        (yyval.pExpression) = new ExprCast(tokAt(scanner,(yylsp[-6])),(yyvsp[0].pExpression),(yyvsp[-3].pTypeDecl));
     }
     break;
 
@@ -8385,7 +8383,7 @@ yyreduce:
 
   case 329: /* expr_cast: "upcast" '<' $@16 type_declaration_no_options '>' $@17 expr  */
                                                                                                                                                   {
-        auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-3].pTypeDecl));
+        auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),(yyvsp[0].pExpression),(yyvsp[-3].pTypeDecl));
         pCast->upcast = true;
         (yyval.pExpression) = pCast;
     }
@@ -8401,7 +8399,7 @@ yyreduce:
 
   case 332: /* expr_cast: "reinterpret" '<' $@18 type_declaration_no_options '>' $@19 expr  */
                                                                                                                                                        {
-        auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-3].pTypeDecl));
+        auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),(yyvsp[0].pExpression),(yyvsp[-3].pTypeDecl));
         pCast->reinterpret = true;
         (yyval.pExpression) = pCast;
     }
@@ -8432,7 +8430,7 @@ yyreduce:
                 (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-4])),*(yyvsp[-2].s),ptd->typeexpr);
                 delete (yyvsp[-1].pExpression);
             } else {
-                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-4])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[-1].pExpression)));
+                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-4])),*(yyvsp[-2].s),(yyvsp[-1].pExpression));
             }
             delete (yyvsp[-2].s);
     }
@@ -8450,7 +8448,7 @@ yyreduce:
                 (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-7])),*(yyvsp[-5].s),ptd->typeexpr,*(yyvsp[-3].s));
                 delete (yyvsp[-1].pExpression);
             } else {
-                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-7])),*(yyvsp[-5].s),ExpressionPtr((yyvsp[-1].pExpression)),*(yyvsp[-3].s));
+                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-7])),*(yyvsp[-5].s),(yyvsp[-1].pExpression),*(yyvsp[-3].s));
             }
             delete (yyvsp[-5].s);
             delete (yyvsp[-3].s);
@@ -8469,7 +8467,7 @@ yyreduce:
                 (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-9])),*(yyvsp[-7].s),ptd->typeexpr,*(yyvsp[-5].s),*(yyvsp[-3].s));
                 delete (yyvsp[-1].pExpression);
             } else {
-                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-9])),*(yyvsp[-7].s),ExpressionPtr((yyvsp[-1].pExpression)),*(yyvsp[-5].s),*(yyvsp[-3].s));
+                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-9])),*(yyvsp[-7].s),(yyvsp[-1].pExpression),*(yyvsp[-5].s),*(yyvsp[-3].s));
             }
             delete (yyvsp[-7].s);
             delete (yyvsp[-5].s);
@@ -8484,7 +8482,7 @@ yyreduce:
                 (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-4])),*(yyvsp[-3].s),ptd->typeexpr);
                 delete (yyvsp[-1].pExpression);
             } else {
-                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-4])),*(yyvsp[-3].s),ExpressionPtr((yyvsp[-1].pExpression)));
+                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-4])),*(yyvsp[-3].s),(yyvsp[-1].pExpression));
             }
             delete (yyvsp[-3].s);
     }
@@ -8497,7 +8495,7 @@ yyreduce:
                 (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-7])),*(yyvsp[-6].s),ptd->typeexpr,*(yyvsp[-4].s));
                 delete (yyvsp[-1].pExpression);
             } else {
-                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-7])),*(yyvsp[-6].s),ExpressionPtr((yyvsp[-1].pExpression)),*(yyvsp[-4].s));
+                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-7])),*(yyvsp[-6].s),(yyvsp[-1].pExpression),*(yyvsp[-4].s));
             }
             delete (yyvsp[-6].s);
             delete (yyvsp[-4].s);
@@ -8511,7 +8509,7 @@ yyreduce:
                 (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-9])),*(yyvsp[-8].s),ptd->typeexpr,*(yyvsp[-6].s),*(yyvsp[-4].s));
                 delete (yyvsp[-1].pExpression);
             } else {
-                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-9])),*(yyvsp[-8].s),ExpressionPtr((yyvsp[-1].pExpression)),*(yyvsp[-6].s),*(yyvsp[-4].s));
+                (yyval.pExpression) = new ExprTypeInfo(tokAt(scanner,(yylsp[-9])),*(yyvsp[-8].s),(yyvsp[-1].pExpression),*(yyvsp[-6].s),*(yyvsp[-4].s));
             }
             delete (yyvsp[-8].s);
             delete (yyvsp[-6].s);
@@ -8527,7 +8525,7 @@ yyreduce:
 
   case 343: /* expr_list: expr_list ',' expr  */
                                             {
-            (yyval.pExpression) = new ExprSequence(tokAt(scanner,(yylsp[-2])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
+            (yyval.pExpression) = new ExprSequence(tokAt(scanner,(yylsp[-2])),(yyvsp[-2].pExpression),(yyvsp[0].pExpression));
     }
     break;
 
@@ -8537,7 +8535,7 @@ yyreduce:
 
   case 345: /* block_or_simple_block: "=>" expr  */
                                         {
-            auto retE = make_smart<ExprReturn>(tokAt(scanner,(yylsp[-1])), ExpressionPtr((yyvsp[0].pExpression)));
+            auto retE = make_smart<ExprReturn>(tokAt(scanner,(yylsp[-1])), (yyvsp[0].pExpression));
             auto blkE = new ExprBlock();
             blkE->at = tokAt(scanner,(yylsp[-1]));
             blkE->list.push_back(retE);
@@ -8547,7 +8545,7 @@ yyreduce:
 
   case 346: /* block_or_simple_block: "=>" "<-" expr  */
                                                {
-            auto retE = make_smart<ExprReturn>(tokAt(scanner,(yylsp[-2])), ExpressionPtr((yyvsp[0].pExpression)));
+            auto retE = make_smart<ExprReturn>(tokAt(scanner,(yylsp[-2])), (yyvsp[0].pExpression));
             retE->moveSemantics = true;
             auto blkE = new ExprBlock();
             blkE->at = tokAt(scanner,(yylsp[-2]));
@@ -8633,7 +8631,7 @@ yyreduce:
         }
 
         ExprBlock * closure = (ExprBlock *) (yyvsp[0].pExpression);
-        (yyval.pExpression) = new ExprMakeBlock(tokAt(scanner,(yylsp[0])),ExpressionPtr((yyvsp[0].pExpression)));
+        (yyval.pExpression) = new ExprMakeBlock(tokAt(scanner,(yylsp[0])),(yyvsp[0].pExpression));
         closure->returnType = make_smart<TypeDecl>(Type::autoinfer);
     }
     break;
@@ -8693,75 +8691,75 @@ yyreduce:
     break;
 
   case 373: /* expr_assign: expr '=' expr  */
-                                             { (yyval.pExpression) = new ExprCopy(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprCopy(tokAt(scanner,(yylsp[-1])),(yyvsp[-2].pExpression),(yyvsp[0].pExpression)); }
     break;
 
   case 374: /* expr_assign: expr "<-" expr  */
-                                             { (yyval.pExpression) = new ExprMove(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprMove(tokAt(scanner,(yylsp[-1])),(yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 375: /* expr_assign: expr ":=" expr  */
-                                             { (yyval.pExpression) = new ExprClone(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprClone(tokAt(scanner,(yylsp[-1])),(yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 376: /* expr_assign: expr "&=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"&=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"&=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 377: /* expr_assign: expr "|=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"|=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"|=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 378: /* expr_assign: expr "^=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"^=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"^=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 379: /* expr_assign: expr "&&=" expr  */
-                                                { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"&&=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"&&=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 380: /* expr_assign: expr "||=" expr  */
-                                                { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"||=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"||=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 381: /* expr_assign: expr "^^=" expr  */
-                                                { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"^^=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"^^=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 382: /* expr_assign: expr "+=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"+=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"+=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 383: /* expr_assign: expr "-=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"-=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"-=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 384: /* expr_assign: expr "*=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"*=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"*=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 385: /* expr_assign: expr "/=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"/=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"/=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 386: /* expr_assign: expr "%=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"%=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"%=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 387: /* expr_assign: expr "<<=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"<<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"<<=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 388: /* expr_assign: expr ">>=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),">>=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),">>=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 389: /* expr_assign: expr "<<<=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"<<<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"<<<=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 390: /* expr_assign: expr ">>>=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),">>>=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),">>>=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 391: /* expr_assign_pipe_right: "@ <|" expr_block  */
@@ -8781,71 +8779,71 @@ yyreduce:
     break;
 
   case 395: /* expr_assign_pipe: expr '=' expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprCopy(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprCopy(tokAt(scanner,(yylsp[-1])),(yyvsp[-2].pExpression),(yyvsp[0].pExpression)); }
     break;
 
   case 396: /* expr_assign_pipe: expr "<-" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprMove(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprMove(tokAt(scanner,(yylsp[-1])),(yyvsp[-2].pExpression),(yyvsp[0].pExpression)); }
     break;
 
   case 397: /* expr_assign_pipe: expr "&=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"&=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"&=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 398: /* expr_assign_pipe: expr "|=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"|=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"|=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 399: /* expr_assign_pipe: expr "^=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"^=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"^=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 400: /* expr_assign_pipe: expr "&&=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"&&=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"&&=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 401: /* expr_assign_pipe: expr "||=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"||=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"||=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 402: /* expr_assign_pipe: expr "^^=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"^^=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"^^=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 403: /* expr_assign_pipe: expr "+=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"+=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"+=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 404: /* expr_assign_pipe: expr "-=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"-=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"-=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 405: /* expr_assign_pipe: expr "*=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"*=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"*=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 406: /* expr_assign_pipe: expr "/=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"/=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"/=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 407: /* expr_assign_pipe: expr "%=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"%=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"%=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 408: /* expr_assign_pipe: expr "<<=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"<<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"<<=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 409: /* expr_assign_pipe: expr ">>=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),">>=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),">>=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 410: /* expr_assign_pipe: expr "<<<=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"<<<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),"<<<=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 411: /* expr_assign_pipe: expr ">>>=" expr_assign_pipe_right  */
-                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),">>>=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                                                  { (yyval.pExpression) = new ExprOp2(tokAt(scanner,(yylsp[-1])),">>>=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 412: /* expr_named_call: name_in_namespace '(' '[' make_struct_fields ']' ')'  */
@@ -8946,14 +8944,14 @@ yyreduce:
 
   case 425: /* expr_field: expr '.' "name"  */
                                               {
-        (yyval.pExpression) = new ExprField(tokAt(scanner,(yylsp[-1])), tokAt(scanner,(yylsp[0])), ExpressionPtr((yyvsp[-2].pExpression)), *(yyvsp[0].s));
+        (yyval.pExpression) = new ExprField(tokAt(scanner,(yylsp[-1])), tokAt(scanner,(yylsp[0])), (yyvsp[-2].pExpression), *(yyvsp[0].s));
         delete (yyvsp[0].s);
     }
     break;
 
   case 426: /* expr_field: expr '.' '.' "name"  */
                                                   {
-        (yyval.pExpression) = new ExprField(tokAt(scanner,(yylsp[-1])), tokAt(scanner,(yylsp[0])), ExpressionPtr((yyvsp[-3].pExpression)), *(yyvsp[0].s), true);
+        (yyval.pExpression) = new ExprField(tokAt(scanner,(yylsp[-1])), tokAt(scanner,(yylsp[0])), (yyvsp[-3].pExpression), *(yyvsp[0].s), true);
         delete (yyvsp[0].s);
     }
     break;
@@ -8981,7 +8979,7 @@ yyreduce:
         auto nc = new ExprNamedCall(tokAt(scanner,(yylsp[-5])),*(yyvsp[-5].s));
         nc->methodCall = true;
         nc->arguments = *(yyvsp[-2].pMakeStruct);
-        nc->nonNamedArguments.push_back(ExpressionPtr((yyvsp[-7].pExpression)));
+        nc->nonNamedArguments.push_back((yyvsp[-7].pExpression));
         delete (yyvsp[-2].pMakeStruct);
         delete (yyvsp[-5].s);
         (yyval.pExpression) = nc;
@@ -9016,7 +9014,7 @@ yyreduce:
 
   case 434: /* expr_field: expr '.' $@27 error $@28  */
                                                                                                                     {
-        (yyval.pExpression) = new ExprField(tokAt(scanner,(yylsp[-3])), tokAt(scanner,(yylsp[-3])), ExpressionPtr((yyvsp[-4].pExpression)), "");
+        (yyval.pExpression) = new ExprField(tokAt(scanner,(yylsp[-3])), tokAt(scanner,(yylsp[-3])), (yyvsp[-4].pExpression), "");
         yyerrok;
     }
     break;
@@ -9125,128 +9123,128 @@ yyreduce:
     break;
 
   case 452: /* expr: '!' expr  */
-                                              { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"!",ExpressionPtr((yyvsp[0].pExpression))); }
+                                              { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"!",(yyvsp[0].pExpression)); }
     break;
 
   case 453: /* expr: '~' expr  */
-                                              { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"~",ExpressionPtr((yyvsp[0].pExpression))); }
+                                              { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"~",(yyvsp[0].pExpression)); }
     break;
 
   case 454: /* expr: '+' expr  */
-                                                  { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"+",ExpressionPtr((yyvsp[0].pExpression))); }
+                                                  { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"+",(yyvsp[0].pExpression)); }
     break;
 
   case 455: /* expr: '-' expr  */
-                                                  { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"-",ExpressionPtr((yyvsp[0].pExpression))); }
+                                                  { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"-",(yyvsp[0].pExpression)); }
     break;
 
   case 456: /* expr: expr "<<" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"<<", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"<<", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 457: /* expr: expr ">>" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),">>", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),">>", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 458: /* expr: expr "<<<" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"<<<", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"<<<", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 459: /* expr: expr ">>>" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),">>>", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),">>>", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 460: /* expr: expr '+' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"+", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"+", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 461: /* expr: expr '-' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"-", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"-", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 462: /* expr: expr '*' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"*", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"*", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 463: /* expr: expr '/' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"/", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"/", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 464: /* expr: expr '%' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"%", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"%", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 465: /* expr: expr '<' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"<", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"<", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 466: /* expr: expr '>' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),">", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),">", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 467: /* expr: expr "==" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"==", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"==", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 468: /* expr: expr "!=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"!=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"!=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 469: /* expr: expr "<=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"<=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"<=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 470: /* expr: expr ">=" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),">=", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),">=", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 471: /* expr: expr '&' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"&", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"&", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 472: /* expr: expr '|' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"|", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"|", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 473: /* expr: expr '^' expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"^", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"^", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 474: /* expr: expr "&&" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"&&", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"&&", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 475: /* expr: expr "||" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"||", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"||", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 476: /* expr: expr "^^" expr  */
-                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"^^", ExpressionPtr((yyvsp[-2].pExpression)), ExpressionPtr((yyvsp[0].pExpression))); }
+                                             { (yyval.pExpression) = new ExprOp2(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),"^^", (yyvsp[-2].pExpression), (yyvsp[0].pExpression)); }
     break;
 
   case 477: /* expr: expr ".." expr  */
                                              {
         auto itv = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-1])),"interval");
-        itv->arguments.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
-        itv->arguments.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+        itv->arguments.push_back((yyvsp[-2].pExpression));
+        itv->arguments.push_back((yyvsp[0].pExpression));
         (yyval.pExpression) = itv;
     }
     break;
 
   case 478: /* expr: "++" expr  */
-                                                 { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"++", ExpressionPtr((yyvsp[0].pExpression))); }
+                                                 { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"++", (yyvsp[0].pExpression)); }
     break;
 
   case 479: /* expr: "--" expr  */
-                                                 { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"--", ExpressionPtr((yyvsp[0].pExpression))); }
+                                                 { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"--", (yyvsp[0].pExpression)); }
     break;
 
   case 480: /* expr: expr "++"  */
-                                                 { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"+++", ExpressionPtr((yyvsp[-1].pExpression))); }
+                                                 { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"+++", (yyvsp[-1].pExpression)); }
     break;
 
   case 481: /* expr: expr "--"  */
-                                                 { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"---", ExpressionPtr((yyvsp[-1].pExpression))); }
+                                                 { (yyval.pExpression) = new ExprOp1(tokRangeAt(scanner,(yylsp[-1]), (yylsp[0])),"---", (yyvsp[-1].pExpression)); }
     break;
 
   case 482: /* expr: '(' expr_list optional_comma ')'  */
@@ -9267,27 +9265,27 @@ yyreduce:
     break;
 
   case 483: /* expr: expr '[' expr ']'  */
-                                                      { (yyval.pExpression) = new ExprAt(tokRangeAt(scanner,(yylsp[-3]), (yylsp[0])), ExpressionPtr((yyvsp[-3].pExpression)), ExpressionPtr((yyvsp[-1].pExpression))); }
+                                                      { (yyval.pExpression) = new ExprAt(tokRangeAt(scanner,(yylsp[-3]), (yylsp[0])), (yyvsp[-3].pExpression), (yyvsp[-1].pExpression)); }
     break;
 
   case 484: /* expr: expr '.' '[' expr ']'  */
-                                                          { (yyval.pExpression) = new ExprAt(tokRangeAt(scanner,(yylsp[-4]), (yylsp[0])), ExpressionPtr((yyvsp[-4].pExpression)), ExpressionPtr((yyvsp[-1].pExpression)), true); }
+                                                          { (yyval.pExpression) = new ExprAt(tokRangeAt(scanner,(yylsp[-4]), (yylsp[0])), (yyvsp[-4].pExpression), (yyvsp[-1].pExpression), true); }
     break;
 
   case 485: /* expr: expr "?[" expr ']'  */
-                                                      { (yyval.pExpression) = new ExprSafeAt(tokRangeAt(scanner,(yylsp[-3]), (yylsp[0])), ExpressionPtr((yyvsp[-3].pExpression)), ExpressionPtr((yyvsp[-1].pExpression))); }
+                                                      { (yyval.pExpression) = new ExprSafeAt(tokRangeAt(scanner,(yylsp[-3]), (yylsp[0])), (yyvsp[-3].pExpression), (yyvsp[-1].pExpression)); }
     break;
 
   case 486: /* expr: expr '.' "?[" expr ']'  */
-                                                          { (yyval.pExpression) = new ExprSafeAt(tokRangeAt(scanner,(yylsp[-4]), (yylsp[0])), ExpressionPtr((yyvsp[-4].pExpression)), ExpressionPtr((yyvsp[-1].pExpression)), true); }
+                                                          { (yyval.pExpression) = new ExprSafeAt(tokRangeAt(scanner,(yylsp[-4]), (yylsp[0])), (yyvsp[-4].pExpression), (yyvsp[-1].pExpression), true); }
     break;
 
   case 487: /* expr: expr "?." "name"  */
-                                                 { (yyval.pExpression) = new ExprSafeField(tokRangeAt(scanner,(yylsp[-2]),(yylsp[0])), tokAt(scanner,(yylsp[0])), ExpressionPtr((yyvsp[-2].pExpression)), *(yyvsp[0].s)); delete (yyvsp[0].s); }
+                                                 { (yyval.pExpression) = new ExprSafeField(tokRangeAt(scanner,(yylsp[-2]),(yylsp[0])), tokAt(scanner,(yylsp[0])), (yyvsp[-2].pExpression), *(yyvsp[0].s)); delete (yyvsp[0].s); }
     break;
 
   case 488: /* expr: expr '.' "?." "name"  */
-                                                     { (yyval.pExpression) = new ExprSafeField(tokRangeAt(scanner,(yylsp[-3]),(yylsp[0])), tokAt(scanner,(yylsp[0])), ExpressionPtr((yyvsp[-3].pExpression)), *(yyvsp[0].s), true); delete (yyvsp[0].s); }
+                                                     { (yyval.pExpression) = new ExprSafeField(tokRangeAt(scanner,(yylsp[-3]),(yylsp[0])), tokAt(scanner,(yylsp[0])), (yyvsp[-3].pExpression), *(yyvsp[0].s), true); delete (yyvsp[0].s); }
     break;
 
   case 489: /* expr: func_addr_expr  */
@@ -9299,15 +9297,15 @@ yyreduce:
     break;
 
   case 491: /* expr: '*' expr  */
-                                                   { (yyval.pExpression) = new ExprPtr2Ref(tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[0].pExpression))); }
+                                                   { (yyval.pExpression) = new ExprPtr2Ref(tokAt(scanner,(yylsp[-1])),(yyvsp[0].pExpression)); }
     break;
 
   case 492: /* expr: "deref" '(' expr ')'  */
-                                                   { (yyval.pExpression) = new ExprPtr2Ref(tokAt(scanner,(yylsp[-3])),ExpressionPtr((yyvsp[-1].pExpression))); }
+                                                   { (yyval.pExpression) = new ExprPtr2Ref(tokAt(scanner,(yylsp[-3])),(yyvsp[-1].pExpression)); }
     break;
 
   case 493: /* expr: "addr" '(' expr ')'  */
-                                                   { (yyval.pExpression) = new ExprRef2Ptr(tokAt(scanner,(yylsp[-3])),ExpressionPtr((yyvsp[-1].pExpression))); }
+                                                   { (yyval.pExpression) = new ExprRef2Ptr(tokAt(scanner,(yylsp[-3])),(yyvsp[-1].pExpression)); }
     break;
 
   case 494: /* expr: "generator" '<' type_declaration_no_options '>' optional_capture_list '(' ')'  */
@@ -9323,12 +9321,12 @@ yyreduce:
     break;
 
   case 496: /* expr: expr "??" expr  */
-                                                   { (yyval.pExpression) = new ExprNullCoalescing(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression))); }
+                                                   { (yyval.pExpression) = new ExprNullCoalescing(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),(yyvsp[-2].pExpression),(yyvsp[0].pExpression)); }
     break;
 
   case 497: /* expr: expr '?' expr ':' expr  */
                                                           {
-            (yyval.pExpression) = new ExprOp3(tokRangeAt(scanner,(yylsp[-4]), (yylsp[0])),"?",ExpressionPtr((yyvsp[-4].pExpression)),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
+            (yyval.pExpression) = new ExprOp3(tokRangeAt(scanner,(yylsp[-4]), (yylsp[0])),"?",(yyvsp[-4].pExpression),(yyvsp[-2].pExpression),(yyvsp[0].pExpression));
         }
     break;
 
@@ -9342,7 +9340,7 @@ yyreduce:
 
   case 500: /* expr: expr "is" "type" '<' $@29 type_declaration_no_options '>' $@30  */
                                                                                                                                                             {
-        (yyval.pExpression) = new ExprIs(tokRangeAt(scanner,(yylsp[-7]), (yylsp[-1])),ExpressionPtr((yyvsp[-7].pExpression)),(yyvsp[-2].pTypeDecl));
+        (yyval.pExpression) = new ExprIs(tokRangeAt(scanner,(yylsp[-7]), (yylsp[-1])),(yyvsp[-7].pExpression),(yyvsp[-2].pTypeDecl));
     }
     break;
 
@@ -9350,20 +9348,20 @@ yyreduce:
                                                                {
         auto vdecl = new TypeDecl((yyvsp[0].type));
         vdecl->at = tokAt(scanner,(yylsp[0]));
-        (yyval.pExpression) = new ExprIs(tokRangeAt(scanner,(yylsp[-2]),(yylsp[0])),ExpressionPtr((yyvsp[-2].pExpression)),vdecl);
+        (yyval.pExpression) = new ExprIs(tokRangeAt(scanner,(yylsp[-2]),(yylsp[0])),(yyvsp[-2].pExpression),vdecl);
     }
     break;
 
   case 502: /* expr: expr "is" "name"  */
                                               {
-        (yyval.pExpression) = new ExprIsVariant(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),ExpressionPtr((yyvsp[-2].pExpression)),*(yyvsp[0].s));
+        (yyval.pExpression) = new ExprIsVariant(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),(yyvsp[-2].pExpression),*(yyvsp[0].s));
         delete (yyvsp[0].s);
     }
     break;
 
   case 503: /* expr: expr "as" "name"  */
                                               {
-        (yyval.pExpression) = new ExprAsVariant(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),ExpressionPtr((yyvsp[-2].pExpression)),*(yyvsp[0].s));
+        (yyval.pExpression) = new ExprAsVariant(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),(yyvsp[-2].pExpression),*(yyvsp[0].s));
         delete (yyvsp[0].s);
     }
     break;
@@ -9379,20 +9377,20 @@ yyreduce:
   case 506: /* expr: expr "as" "type" '<' $@31 type_declaration '>' $@32  */
                                                                                                                                                  {
         auto vname = (yyvsp[-2].pTypeDecl)->describe();
-        (yyval.pExpression) = new ExprAsVariant(tokRangeAt(scanner,(yylsp[-7]), (yylsp[-1])),ExpressionPtr((yyvsp[-7].pExpression)),vname);
+        (yyval.pExpression) = new ExprAsVariant(tokRangeAt(scanner,(yylsp[-7]), (yylsp[-1])),(yyvsp[-7].pExpression),vname);
         delete (yyvsp[-2].pTypeDecl);
     }
     break;
 
   case 507: /* expr: expr "as" basic_type_declaration  */
                                                                {
-        (yyval.pExpression) = new ExprAsVariant(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),ExpressionPtr((yyvsp[-2].pExpression)),das_to_string((yyvsp[0].type)));
+        (yyval.pExpression) = new ExprAsVariant(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),(yyvsp[-2].pExpression),das_to_string((yyvsp[0].type)));
     }
     break;
 
   case 508: /* expr: expr '?' "as" "name"  */
                                                   {
-        (yyval.pExpression) = new ExprSafeAsVariant(tokRangeAt(scanner,(yylsp[-3]), (yylsp[0])),ExpressionPtr((yyvsp[-3].pExpression)),*(yyvsp[0].s));
+        (yyval.pExpression) = new ExprSafeAsVariant(tokRangeAt(scanner,(yylsp[-3]), (yylsp[0])),(yyvsp[-3].pExpression),*(yyvsp[0].s));
         delete (yyvsp[0].s);
     }
     break;
@@ -9408,14 +9406,14 @@ yyreduce:
   case 511: /* expr: expr '?' "as" "type" '<' $@33 type_declaration '>' $@34  */
                                                                                                                                                      {
         auto vname = (yyvsp[-2].pTypeDecl)->describe();
-        (yyval.pExpression) = new ExprSafeAsVariant(tokRangeAt(scanner,(yylsp[-8]), (yylsp[-1])),ExpressionPtr((yyvsp[-8].pExpression)),vname);
+        (yyval.pExpression) = new ExprSafeAsVariant(tokRangeAt(scanner,(yylsp[-8]), (yylsp[-1])),(yyvsp[-8].pExpression),vname);
         delete (yyvsp[-2].pTypeDecl);
     }
     break;
 
   case 512: /* expr: expr '?' "as" basic_type_declaration  */
                                                                    {
-        (yyval.pExpression) = new ExprSafeAsVariant(tokRangeAt(scanner,(yylsp[-3]), (yylsp[0])),ExpressionPtr((yyvsp[-3].pExpression)),das_to_string((yyvsp[0].type)));
+        (yyval.pExpression) = new ExprSafeAsVariant(tokRangeAt(scanner,(yylsp[-3]), (yylsp[0])),(yyvsp[-3].pExpression),das_to_string((yyvsp[0].type)));
     }
     break;
 
@@ -9525,49 +9523,49 @@ yyreduce:
 
   case 534: /* expr_mtag: expr '.' "$f" '(' expr ')'  */
                                                                 {
-        auto cfield = new ExprField(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-1])), ExpressionPtr((yyvsp[-5].pExpression)), "``MACRO``TAG``FIELD``");
+        auto cfield = new ExprField(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-1])), (yyvsp[-5].pExpression), "``MACRO``TAG``FIELD``");
         (yyval.pExpression) = new ExprTag(tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression),cfield,"f");
     }
     break;
 
   case 535: /* expr_mtag: expr "?." "$f" '(' expr ')'  */
                                                                  {
-        auto cfield = new ExprSafeField(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-1])), ExpressionPtr((yyvsp[-5].pExpression)), "``MACRO``TAG``FIELD``");
+        auto cfield = new ExprSafeField(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-1])), (yyvsp[-5].pExpression), "``MACRO``TAG``FIELD``");
         (yyval.pExpression) = new ExprTag(tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression),cfield,"f");
     }
     break;
 
   case 536: /* expr_mtag: expr '.' '.' "$f" '(' expr ')'  */
                                                                     {
-        auto cfield = new ExprField(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-1])), ExpressionPtr((yyvsp[-6].pExpression)), "``MACRO``TAG``FIELD``", true);
+        auto cfield = new ExprField(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-1])), (yyvsp[-6].pExpression), "``MACRO``TAG``FIELD``", true);
         (yyval.pExpression) = new ExprTag(tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression),cfield,"f");
     }
     break;
 
   case 537: /* expr_mtag: expr '.' "?." "$f" '(' expr ')'  */
                                                                      {
-        auto cfield = new ExprSafeField(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-1])), ExpressionPtr((yyvsp[-6].pExpression)), "``MACRO``TAG``FIELD``", true);
+        auto cfield = new ExprSafeField(tokAt(scanner,(yylsp[-4])), tokAt(scanner,(yylsp[-1])), (yyvsp[-6].pExpression), "``MACRO``TAG``FIELD``", true);
         (yyval.pExpression) = new ExprTag(tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression),cfield,"f");
     }
     break;
 
   case 538: /* expr_mtag: expr "as" "$f" '(' expr ')'  */
                                                                    {
-        auto cfield = new ExprAsVariant(tokAt(scanner,(yylsp[-4])),ExpressionPtr((yyvsp[-5].pExpression)),"``MACRO``TAG``FIELD``");
+        auto cfield = new ExprAsVariant(tokAt(scanner,(yylsp[-4])),(yyvsp[-5].pExpression),"``MACRO``TAG``FIELD``");
         (yyval.pExpression) = new ExprTag(tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression),cfield,"f");
     }
     break;
 
   case 539: /* expr_mtag: expr '?' "as" "$f" '(' expr ')'  */
                                                                        {
-        auto cfield = new ExprSafeAsVariant(tokAt(scanner,(yylsp[-4])),ExpressionPtr((yyvsp[-6].pExpression)),"``MACRO``TAG``FIELD``");
+        auto cfield = new ExprSafeAsVariant(tokAt(scanner,(yylsp[-4])),(yyvsp[-6].pExpression),"``MACRO``TAG``FIELD``");
         (yyval.pExpression) = new ExprTag(tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression),cfield,"f");
     }
     break;
 
   case 540: /* expr_mtag: expr "is" "$f" '(' expr ')'  */
                                                                    {
-        auto cfield = new ExprIsVariant(tokAt(scanner,(yylsp[-4])),ExpressionPtr((yyvsp[-5].pExpression)),"``MACRO``TAG``FIELD``");
+        auto cfield = new ExprIsVariant(tokAt(scanner,(yylsp[-4])),(yyvsp[-5].pExpression),"``MACRO``TAG``FIELD``");
         (yyval.pExpression) = new ExprTag(tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression),cfield,"f");
     }
     break;
@@ -9945,7 +9943,7 @@ yyreduce:
   case 597: /* let_variable_name_with_pos_list: "$i" '(' expr ')'  */
                                      {
         auto pSL = new vector<VariableNameAndPosition>();
-        pSL->push_back(VariableNameAndPosition{"``MACRO``TAG``","",tokAt(scanner,(yylsp[-1])),ExpressionPtr((yyvsp[-1].pExpression))});
+        pSL->push_back(VariableNameAndPosition{"``MACRO``TAG``","",tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression)});
         (yyval.pNameWithPosList) = pSL;
     }
     break;
@@ -10136,7 +10134,7 @@ yyreduce:
   case 619: /* enum_list: enum_list "name" '=' expr opt_sem  */
                                                          {
         das_checkName(scanner,*(yyvsp[-3].s),tokAt(scanner,(yylsp[-3])));
-        if ( !(yyvsp[-4].pEnum)->add(*(yyvsp[-3].s),ExpressionPtr((yyvsp[-1].pExpression)),tokAt(scanner,(yylsp[-3]))) ) {
+        if ( !(yyvsp[-4].pEnum)->add(*(yyvsp[-3].s),(yyvsp[-1].pExpression),tokAt(scanner,(yylsp[-3]))) ) {
             das_yyerror(scanner,"enumeration value already declared " + *(yyvsp[-3].s), tokAt(scanner,(yylsp[-3])),
                 CompilationError::enumeration_value_already_declared);
         }
@@ -11384,7 +11382,7 @@ yyreduce:
 
   case 800: /* make_struct_fields: "name" copy_or_move expr  */
                                                {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b),false);
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),(yyvsp[-1].b),false);
         delete (yyvsp[-2].s);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
@@ -11394,7 +11392,7 @@ yyreduce:
 
   case 801: /* make_struct_fields: "name" ":=" expr  */
                                       {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),false,true);
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),false,true);
         delete (yyvsp[-2].s);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
@@ -11404,7 +11402,7 @@ yyreduce:
 
   case 802: /* make_struct_fields: make_struct_fields ',' "name" copy_or_move expr  */
                                                                            {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b),false);
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),(yyvsp[-1].b),false);
         delete (yyvsp[-2].s);
         ((MakeStruct *)(yyvsp[-4].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-4].pMakeStruct);
@@ -11413,7 +11411,7 @@ yyreduce:
 
   case 803: /* make_struct_fields: make_struct_fields ',' "name" ":=" expr  */
                                                                   {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),ExpressionPtr((yyvsp[0].pExpression)),false,true);
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),false,true);
         delete (yyvsp[-2].s);
         ((MakeStruct *)(yyvsp[-4].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-4].pMakeStruct);
@@ -11422,8 +11420,8 @@ yyreduce:
 
   case 804: /* make_struct_fields: "$f" '(' expr ')' copy_or_move expr  */
                                                                            {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b),false);
-        mfd->tag = ExpressionPtr((yyvsp[-3].pExpression));
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),(yyvsp[-1].b),false);
+        mfd->tag = (yyvsp[-3].pExpression);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         (yyval.pMakeStruct) = msd;
@@ -11432,8 +11430,8 @@ yyreduce:
 
   case 805: /* make_struct_fields: "$f" '(' expr ')' ":=" expr  */
                                                                   {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner, (yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",ExpressionPtr((yyvsp[0].pExpression)),false,true);
-        mfd->tag = ExpressionPtr((yyvsp[-3].pExpression));
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner, (yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),false,true);
+        mfd->tag = (yyvsp[-3].pExpression);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         (yyval.pMakeStruct) = msd;
@@ -11442,8 +11440,8 @@ yyreduce:
 
   case 806: /* make_struct_fields: make_struct_fields ',' "$f" '(' expr ')' copy_or_move expr  */
                                                                                                        {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]),(yylsp[0])),"``MACRO``TAG``FIELD``",ExpressionPtr((yyvsp[0].pExpression)),(yyvsp[-1].b),false);
-        mfd->tag = ExpressionPtr((yyvsp[-3].pExpression));
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]),(yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),(yyvsp[-1].b),false);
+        mfd->tag = (yyvsp[-3].pExpression);
         ((MakeStruct *)(yyvsp[-7].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-7].pMakeStruct);
     }
@@ -11451,8 +11449,8 @@ yyreduce:
 
   case 807: /* make_struct_fields: make_struct_fields ',' "$f" '(' expr ')' ":=" expr  */
                                                                                               {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",ExpressionPtr((yyvsp[0].pExpression)),false,true);
-        mfd->tag = ExpressionPtr((yyvsp[-3].pExpression));
+        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),false,true);
+        mfd->tag = (yyvsp[-3].pExpression);
         ((MakeStruct *)(yyvsp[-7].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-7].pMakeStruct);
     }
@@ -11684,7 +11682,7 @@ yyreduce:
         ((ExprMakeStruct *)(yyvsp[-2].pExpression))->block = (yyvsp[-1].pExpression);
         (yyvsp[-2].pExpression)->at = tokAt(scanner,(yylsp[-4]));
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-4])),"to_array_move");
-        tam->arguments.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
+        tam->arguments.push_back((yyvsp[-2].pExpression));
         (yyval.pExpression) = tam;
     }
     break;
@@ -11708,7 +11706,7 @@ yyreduce:
         ((ExprMakeStruct *)(yyvsp[-2].pExpression))->block = (yyvsp[-1].pExpression);
         (yyvsp[-2].pExpression)->at = tokAt(scanner,(yylsp[-6]));
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-6])),"to_array_move");
-        tam->arguments.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
+        tam->arguments.push_back((yyvsp[-2].pExpression));
         (yyval.pExpression) = tam;
     }
     break;
@@ -11801,8 +11799,8 @@ yyreduce:
   case 854: /* make_tuple: expr "=>" expr  */
                                          {
         ExprMakeTuple * mt = new ExprMakeTuple(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])));
-        mt->values.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
-        mt->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+        mt->values.push_back((yyvsp[-2].pExpression));
+        mt->values.push_back((yyvsp[0].pExpression));
         (yyval.pExpression) = mt;
     }
     break;
@@ -11815,9 +11813,9 @@ yyreduce:
             mt = static_cast<ExprMakeTuple *>((yyvsp[-2].pExpression));
         } else {
             mt = new ExprMakeTuple(tokAt(scanner,(yylsp[-2])));
-            mt->values.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
+            mt->values.push_back((yyvsp[-2].pExpression));
         }
-        mt->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+        mt->values.push_back((yyvsp[0].pExpression));
         mt->at = format::concat(mt->at, tokAt(scanner, (yylsp[0])));
         (yyval.pExpression) = mt;
     }
@@ -11826,8 +11824,8 @@ yyreduce:
   case 856: /* make_map_tuple: expr "=>" expr  */
                                          {
         ExprMakeTuple * mt = new ExprMakeTuple(tokRangeAt(scanner,(yylsp[-2]),(yylsp[0])));
-        mt->values.push_back(ExpressionPtr((yyvsp[-2].pExpression)));
-        mt->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+        mt->values.push_back((yyvsp[-2].pExpression));
+        mt->values.push_back((yyvsp[0].pExpression));
         (yyval.pExpression) = mt;
     }
     break;
@@ -11872,14 +11870,14 @@ yyreduce:
   case 862: /* make_dim: make_tuple  */
                         {
         auto mka = new ExprMakeArray();
-        mka->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+        mka->values.push_back((yyvsp[0].pExpression));
         (yyval.pExpression) = mka;
     }
     break;
 
   case 863: /* make_dim: make_dim semicolon make_tuple  */
                                                 {
-        ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+        ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back((yyvsp[0].pExpression));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
     break;
@@ -11945,7 +11943,7 @@ yyreduce:
         ((ExprMakeArray *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-2].pTypeDecl);
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-3]));
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-3])),"to_array_move");
-        tam->arguments.push_back(ExpressionPtr((yyvsp[-1].pExpression)));
+        tam->arguments.push_back((yyvsp[-1].pExpression));
         (yyval.pExpression) = tam;
     }
     break;
@@ -12095,14 +12093,14 @@ yyreduce:
   case 884: /* make_table: make_map_tuple  */
                             {
         auto mka = new ExprMakeArray();
-        mka->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+        mka->values.push_back((yyvsp[0].pExpression));
         (yyval.pExpression) = mka;
     }
     break;
 
   case 885: /* make_table: make_table semicolon make_map_tuple  */
                                                       {
-        ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back(ExpressionPtr((yyvsp[0].pExpression)));
+        ((ExprMakeArray *) (yyvsp[-2].pExpression))->values.push_back((yyvsp[0].pExpression));
         (yyval.pExpression) = (yyvsp[-2].pExpression);
     }
     break;
@@ -12115,7 +12113,7 @@ yyreduce:
 
   case 887: /* expr_map_tuple_list: expr_map_tuple_list ',' make_map_tuple  */
                                                                 {
-            (yyval.pExpression) = new ExprSequence(tokAt(scanner,(yylsp[-2])),ExpressionPtr((yyvsp[-2].pExpression)),ExpressionPtr((yyvsp[0].pExpression)));
+            (yyval.pExpression) = new ExprSequence(tokAt(scanner,(yylsp[-2])),(yyvsp[-2].pExpression),(yyvsp[0].pExpression));
     }
     break;
 
@@ -12147,7 +12145,7 @@ yyreduce:
         ((ExprMakeArray *)(yyvsp[-1].pExpression))->makeType = mkt;
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-2]));
         auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-2])),"to_table_move");
-        ttm->arguments.push_back(ExpressionPtr((yyvsp[-1].pExpression)));
+        ttm->arguments.push_back((yyvsp[-1].pExpression));
         (yyval.pExpression) = ttm;
     }
     break;

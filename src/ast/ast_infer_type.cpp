@@ -4362,7 +4362,7 @@ namespace das {
                         string finalizeName = "_::finalize";
                         auto finalizeFn = make_smart<ExprCall>(expr->at, finalizeName);
                         finalizeFn->arguments.push_back(expr->subexpr->clone());
-                        return ExpressionPtr(finalizeFn);
+                        return finalizeFn;
                     } else {
                         return Visitor::visit(expr);
                     }
@@ -4420,7 +4420,7 @@ namespace das {
                         expr->native = true;
                         auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
-                        return ExpressionPtr(cloneFn);
+                        return cloneFn;
                     } else {
                         reportAstChanged();
                         expr->native = true;
@@ -4432,19 +4432,19 @@ namespace das {
                     reportAstChanged();
                     auto cloneFn = make_smart<ExprCall>(expr->at, "_builtin_iterator_delete");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
-                    return ExpressionPtr(cloneFn);
+                    return cloneFn;
                 } else if ( finalizeType->isGoodArrayType() || finalizeType->isGoodTableType() ) {
                     reportAstChanged();
                     auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
-                    return ExpressionPtr(cloneFn);
+                    return cloneFn;
                 } else if ( finalizeType->isStructure() ) {
                     auto fnDel = generateStructureFinalizer(finalizeType->structType);
                     if ( program->addFunction(fnDel) ) {
                         reportAstChanged();
                         auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
-                        return ExpressionPtr(cloneFn);
+                        return cloneFn;
                     } else {
                         reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                         return Visitor::visit(expr);
@@ -4455,7 +4455,7 @@ namespace das {
                         reportAstChanged();
                         auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
-                        return ExpressionPtr(cloneFn);
+                        return cloneFn;
                     } else {
                         reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                         return Visitor::visit(expr);
@@ -4466,7 +4466,7 @@ namespace das {
                         reportAstChanged();
                         auto cloneFn = make_smart<ExprCall>(expr->at, "_::finalize");
                         cloneFn->arguments.push_back(expr->subexpr->clone());
-                        return ExpressionPtr(cloneFn);
+                        return cloneFn;
                     } else {
                         reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                         return Visitor::visit(expr);
@@ -4475,7 +4475,7 @@ namespace das {
                     reportAstChanged();
                     auto cloneFn = make_smart<ExprCall>(expr->at, "finalize_dim");
                     cloneFn->arguments.push_back(expr->subexpr->clone());
-                    return ExpressionPtr(cloneFn);
+                    return cloneFn;
                 } else {
                     expr->type = make_smart<TypeDecl>();
                     return Visitor::visit(expr);
@@ -6539,7 +6539,7 @@ namespace das {
                     auto cloneFn = make_smart<ExprCall>(expr->at, cloneName);
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
-                    return ExpressionPtr(cloneFn);
+                    return cloneFn;
                 } else {
                     return Visitor::visit(expr);
                 }
@@ -6577,7 +6577,7 @@ namespace das {
                         auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                         cloneFn->arguments.push_back(expr->left->clone());
                         cloneFn->arguments.push_back(expr->right->clone());
-                        return ExpressionPtr(cloneFn);
+                        return cloneFn;
                     } else {
                         reportMissingFinalizer("smart pointer clone mismatch ", expr->at, cloneType);
                         return Visitor::visit(expr);
@@ -6592,7 +6592,7 @@ namespace das {
                     auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
-                    return ExpressionPtr(cloneFn);
+                    return cloneFn;
                 } else if ( cloneType->isStructure() ) {
                     reportAstChanged();
                     auto stt = cloneType->structType;
@@ -6606,7 +6606,7 @@ namespace das {
                         auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                         cloneFn->arguments.push_back(expr->left->clone());
                         cloneFn->arguments.push_back(expr->right->clone());
-                        return ExpressionPtr(cloneFn);
+                        return cloneFn;
                     } else {
                         return Visitor::visit(expr);
                     }
@@ -6622,7 +6622,7 @@ namespace das {
                         auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                         cloneFn->arguments.push_back(expr->left->clone());
                         cloneFn->arguments.push_back(expr->right->clone());
-                        return ExpressionPtr(cloneFn);
+                        return cloneFn;
                     } else {
                         return Visitor::visit(expr);
                     }
@@ -6638,7 +6638,7 @@ namespace das {
                         auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
                         cloneFn->arguments.push_back(expr->left->clone());
                         cloneFn->arguments.push_back(expr->right->clone());
-                        return ExpressionPtr(cloneFn);
+                        return cloneFn;
                     } else {
                         return Visitor::visit(expr);
                     }
@@ -6647,7 +6647,7 @@ namespace das {
                     auto cloneFn = make_smart<ExprCall>(expr->at, "clone_dim");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
-                    return ExpressionPtr(cloneFn);
+                    return cloneFn;
                 } else {
                     reportCantClone("this type can't be cloned " + describeType(cloneType),
                         cloneType, expr->at);
