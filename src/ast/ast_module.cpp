@@ -518,7 +518,7 @@ namespace das {
 
     FunctionPtr Module::findUniqueFunction ( const string & mangledName ) const {
         auto it = functionsByName.find(hash64z(mangledName.c_str()));
-        if ( it==functionsByName.end() ) return nullptr;
+        if ( !it ) return nullptr;
         if ( it->second.size()!=1 ) return nullptr;
         return it->second[0];
     }
