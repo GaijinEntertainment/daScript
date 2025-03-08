@@ -4,6 +4,142 @@
 
 namespace das {
 
+    template <typename ValueType>
+    struct fragile_hash {    // key==hash, no delete, lookup only
+    public:
+        struct KV {
+            uint64_t    hash = 0;
+            ValueType   second;
+            __forceinline bool found() const { return hash!=0; }
+        };
+    public:
+        fragile_hash() {
+            mask = 63;
+        }
+        ~fragile_hash() {
+            if ( objects ) delete [] objects;
+        }
+        void allocate() {
+            objects = new KV[mask+1];
+        }
+        void clear () {
+            if ( objects ) {
+                // i really don't care if we delete or not, as long as we delete at shutdown  of the table
+                for ( uint32_t i=0; i<=mask; ++i ) {
+                    objects[i].hash = 0;
+                }
+                occupancy = 0;
+            }
+        }
+        __forceinline KV * find ( uint64_t key ) const { // its up to user to write both hash and value
+            if ( !objects ) return nullptr;
+            uint64_t index = key & mask;
+            for ( ;; ) {
+                auto hash = objects[index].hash;
+                if ( hash==0 ) {
+                    return nullptr;
+                } else if ( hash==key ) {
+                    return objects + index;
+                }
+                index = (index + 1) & mask;
+            }
+            return nullptr;
+        }
+
+        __forceinline KV *  find_and_reserve ( uint64_t key ) { // its up to user to write both hash and value
+            if ( !objects ) allocate();
+            uint64_t index = key & mask;
+            for ( ;; ) {
+                auto hash = objects[index].hash;
+                if ( hash==0 ) {
+                    occupancy ++;
+                    if ( occupancy*2 > mask ) {
+                        rehash(mask*2 + 1);
+                        index = key & mask;
+                        continue;
+                    }
+                    return objects + index;
+                } else if ( hash==key ) {
+                    return objects + index;
+                }
+                index = (index + 1) & mask;
+            }
+            return nullptr;
+        }
+        __forceinline ValueType & operator [] ( uint64_t key ) {
+            if ( !objects ) allocate();
+            uint64_t index = key & mask;
+            for ( ;; ) {
+                auto hash = objects[index].hash;
+                if ( hash==0 ) {
+                    occupancy ++;
+                    if ( occupancy*2 > mask ) {
+                        rehash(mask*2 + 1);
+                        index = key & mask;
+                        continue;
+                    }
+                    objects[index].hash = key;
+                    return objects[index].second;
+                } else if ( hash==key ) {
+                    return objects[index].second;
+                }
+                index = (index + 1) & mask;
+            }
+            return objects[0].second;   // never happens
+        }
+        template <typename BT>
+        __forceinline void foreach ( BT && block ) {
+            if ( objects ) {
+                for ( uint32_t i=0; i<=mask; ++i ) {
+                    auto & kv = objects[i];
+                    if ( kv.hash ) {
+                        block(kv.hash, kv.second);
+                    }
+                }
+            }
+        }
+        __forceinline void reserve ( uint32_t size ) {
+            DAS_VERIFYF(!(size & (size-1)), "only power of 2 sizes are supported, and not %i", int(size));
+            if ( size > (mask+1) ) {
+                rehash(size-1);
+            }
+        }
+        __forceinline uint32_t size() const {
+            return occupancy;
+        }
+        __forceinline uint32_t capacity() const {
+            return mask + 1;
+        }
+    protected:
+        void rehash ( uint32_t newMask ) {
+            auto old_objects = objects;
+            auto old_mask = mask;
+            mask = newMask;
+            allocate();
+            if ( old_objects ) {
+                for ( uint32_t i=0; i<=old_mask; ++i ) {
+                    auto & kv = old_objects[i];
+                    if ( kv.hash ) {
+                        uint32_t index = kv.hash & mask;
+                        for ( ;; ) {
+                            auto & new_kv = objects[index];
+                            if ( new_kv.hash==0 ) {
+                                new_kv = das::move(kv);
+                                break;
+                            }
+                            index = (index + 1) & mask;
+                        }
+                    }
+                }
+                delete [] old_objects;
+            }
+        }
+    protected:
+        KV *        objects = nullptr;
+        uint32_t    mask = 0;
+        uint32_t    occupancy = 0;
+    };
+
     struct skip_hash {
         uint64_t operator() ( uint64_t key ) const {
             return key;

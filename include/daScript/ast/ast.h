@@ -795,7 +795,7 @@ namespace das
           static_cast<std::underlying_type<SideEffects>::type>(rhs));
     }
 
-    typedef safebox_map<bool> AstFuncLookup;
+    typedef fragile_hash<bool> AstFuncLookup;
 
     struct InferHistory {
         LineInfo    at;
@@ -1177,9 +1177,9 @@ namespace das
         safebox<Enumeration>                        enumerations;
         safebox<Variable>                           globals;
         safebox<Function>                           functions;          // mangled name 2 function name
-        safebox_map<vector<Function*>>              functionsByName;    // all functions of the same name
+        fragile_hash<vector<Function*>>             functionsByName;    // all functions of the same name
         safebox<Function>                           generics;           // mangled name 2 generic name
-        safebox_map<vector<Function*>>              genericsByName;     // all generics of the same name
+        fragile_hash<vector<Function*>>             genericsByName;     // all generics of the same name
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
         das_map<uint64_t, uint64_t>                 annotationData;
