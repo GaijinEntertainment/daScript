@@ -60,6 +60,7 @@ namespace das {
             relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
             relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
             unsafeTableLookup = prog->options.getBoolOption("unsafe_table_lookup", prog->policies.unsafe_table_lookup);
+            thisModule = prog->thisModule.get();
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -102,16 +103,17 @@ namespace das {
         bool                    relaxedAssign = false;
         bool                    relaxedPointerConst = false;
         bool                    unsafeTableLookup = false;
+        Module *                thisModule = nullptr;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
         string generateNewLambdaName(const LineInfo & at) {
-            string mod = ctx.thisProgram->thisModule->name;
+            string mod = thisModule->name;
             if ( mod.empty() ) mod = "thismodule";
             return "_lambda_" + mod + "_" + to_string(at.line) + "_" + to_string(program->newLambdaIndex++);
         }
         string generateNewLocalFunctionName(const LineInfo & at) {
-            string mod = ctx.thisProgram->thisModule->name;
+            string mod = thisModule->name;
             if ( mod.empty() ) mod = "thismodule";
             return "_localfunction_" + mod + "_" + to_string(at.line) + "_" + to_string(program->newLambdaIndex++);
         }
@@ -334,7 +336,7 @@ namespace das {
                 return rT;
             }
             TypeDeclPtr rT;
-            program->thisModule->globals.find_first([&](auto gvar){
+            thisModule->globals.find_first([&](auto gvar){
                 if ( auto vT = gvar->type->findAlias(name,false) ) {
                     rT = vT;
                     return true;
@@ -366,7 +368,7 @@ namespace das {
                 }
             }
             TypeDeclPtr rT;
-            program->thisModule->globals.find_first([&](auto gvar){
+            thisModule->globals.find_first([&](auto gvar){
                 if ( auto vT = gvar->type->findAlias(name) ) {
                     rT = vT;
                     return true;
@@ -560,7 +562,7 @@ namespace das {
                     } else if ( tms.size() > 1 ) {
                         return decl;
                     } else {
-                        auto resType = tms[0]->visit(program,program->thisModule.get(), decl, passType);
+                        auto resType = tms[0]->visit(program,thisModule, decl, passType);
                         if ( !resType ) {
                             return decl;
                         }
@@ -656,10 +658,10 @@ namespace das {
         Module * getSearchModule(string & moduleName) const {
             if ( moduleName=="_" ) {
                 moduleName = "*";
-                return program->thisModule.get();
+                return thisModule;
             } else if ( moduleName=="__" ) {
-                moduleName = program->thisModule->name;
-                return program->thisModule.get();
+                moduleName = thisModule->name;
+                return thisModule;
             } else if ( func ) {
                 if ( func->fromGeneric ) {
                     auto origin = func->getOrigin();
@@ -671,7 +673,7 @@ namespace das {
                     return func->module;
                 }
             } else {
-                return program->thisModule.get();
+                return thisModule;
             }
         }
 
@@ -730,7 +732,7 @@ namespace das {
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->isTemplate ) continue;
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
-                            if ( canCallPrivate(pFn,inWhichModule,program->thisModule.get()) ) {
+                            if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 result.push_back(pFn);
                             }
                         }
@@ -1212,7 +1214,6 @@ namespace das {
 
         MatchingFunctions findMatchingFunctions ( const string & moduleName, Module * inWhichModule, const string & funcName, const vector<TypeDeclPtr>& types, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
             MatchingFunctions result;
-            auto thisModule = program->thisModule.get();
             auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(hFuncName);
@@ -1253,7 +1254,6 @@ namespace das {
 
         MatchingFunctions findMatchingFunctions ( const string & moduleName, Module * inWhichModule, const string & funcName, const vector<TypeDeclPtr> & types, bool inferBlock = false, bool visCheck = true ) const {
             MatchingFunctions result;
-            auto thisModule = program->thisModule.get();
             auto hFuncName = hash64z(funcName.c_str());
             uint64_t argHash = 0;
             program->library.foreach([&](Module * mod) -> bool {
@@ -1296,7 +1296,6 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             auto inWhichModule = getSearchModule(moduleName);
-            auto thisModule = program->thisModule.get();
             auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
                 {   // functions
@@ -1342,7 +1341,6 @@ namespace das {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             auto inWhichModule = getSearchModule(moduleName);
-            auto thisModule = program->thisModule.get();
             auto hFuncName = hash64z(funcName.c_str());
             uint64_t argHash = getLookupHash(types);
             program->library.foreach([&](Module * mod) -> bool {
@@ -1450,7 +1448,7 @@ namespace das {
                     auto visM = getFunctionVisModule(missFn);
                     bool isVisible = isVisibleFunc(inWhichModule,visM);
                     if ( !reportInvisibleFunctions  && !isVisible ) continue;
-                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
+                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,thisModule);
                     if ( !reportPrivateFunctions && isPrivate ) continue;
                     ss << "\t";
                     if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
@@ -1537,7 +1535,7 @@ namespace das {
                     auto visM = getFunctionVisModule(missFn);
                     bool isVisible = isVisibleFunc(inWhichModule,visM);
                     if ( !reportInvisibleFunctions  && !isVisible ) continue;
-                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
+                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,thisModule);
                     if ( !reportPrivateFunctions && isPrivate ) continue;
                     ss << "\t";
                     if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
@@ -1607,7 +1605,7 @@ namespace das {
                     auto visM = getFunctionVisModule(missFn);
                     bool isVisible = isVisibleFunc(inWhichModule,visM);
                     if ( !reportInvisibleFunctions  && !isVisible ) continue;
-                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
+                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,thisModule);
                     if ( !reportPrivateFunctions && isPrivate ) continue;
                     ss << "\t";
                     if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
@@ -1681,7 +1679,7 @@ namespace das {
 
         MatchingFunctions findDefaultConstructor ( const string & sna ) const {
             vector<TypeDeclPtr> argDummy;
-            return findMatchingFunctions(program->thisModule->name, program->thisModule.get(), sna, argDummy); // "__::sna"
+            return findMatchingFunctions(thisModule->name, thisModule, sna, argDummy); // "__::sna"
         }
 
         bool hasDefaultUserConstructor ( const string & sna ) const {
@@ -1744,7 +1742,7 @@ namespace das {
 
         MatchingFunctions getCloneFunc ( const TypeDeclPtr & left, const TypeDeclPtr & right ) const {
             vector<TypeDeclPtr> argDummy = { left, right };
-            auto clones = findMatchingFunctions("*", program->thisModule.get(), "clone", argDummy); // "_::clone"
+            auto clones = findMatchingFunctions("*", thisModule, "clone", argDummy); // "_::clone"
             applyLSP(argDummy, clones);
             return clones;
         }
@@ -1755,7 +1753,7 @@ namespace das {
 
         MatchingFunctions getFinalizeFunc ( const TypeDeclPtr & subexpr ) const {
             vector<TypeDeclPtr> argDummy = { subexpr };
-            auto fins = findMatchingFunctions("*", program->thisModule.get(), "finalize", argDummy); // "_::finalize"
+            auto fins = findMatchingFunctions("*", thisModule, "finalize", argDummy); // "_::finalize"
             applyLSP(argDummy, fins);
             return fins;
         }
@@ -1907,7 +1905,7 @@ namespace das {
                     error("too many typeMacro " + tmn + " found",  "", "",
                         type->at, CompilationError::invalid_type);
                 } else {
-                    auto resType = tms[0]->visit(program,program->thisModule.get(), type, nullptr);
+                    auto resType = tms[0]->visit(program,thisModule, type, nullptr);
                     if ( !resType ) {
                         error("can't deduce typeMacro " + tmn,  "", "",
                             type->at, CompilationError::invalid_type);
@@ -2224,7 +2222,7 @@ namespace das {
                         var->genCtor = true;
                     }
                 } else {
-                    getOrCreateDummy(program->thisModule.get());
+                    getOrCreateDummy(thisModule);
                 }
             }
             auto tt = make_smart<TypeDecl>(Type::tStructure);
@@ -2650,14 +2648,13 @@ namespace das {
     // ExprReader
         virtual ExpressionPtr visit ( ExprReader * expr ) override {
             // implement reader macros
-            auto errc = ctx.thisProgram->errors.size();
-            auto thisModule = ctx.thisProgram->thisModule.get();
-            auto substitute = expr->macro->visit(ctx.thisProgram, thisModule, expr);
+            auto errc = program->errors.size();
+            auto substitute = expr->macro->visit(program, thisModule, expr);
             if ( substitute ) {
                 reportAstChanged();
                 return substitute;
             }
-            if ( errc==ctx.thisProgram->errors.size() ) {
+            if ( errc==program->errors.size() ) {
                 error("unsupported read macro " + expr->macro->name,  "", "",
                     expr->at, CompilationError::unsupported_read_macro);
             }
@@ -2714,7 +2711,7 @@ namespace das {
                             auto visM = getFunctionVisModule(missFn);
                             bool isVisible = isVisibleFunc(inWhichModule,visM);
                             if ( !reportInvisibleFunctions  && !isVisible ) continue;
-                            bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
+                            bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,thisModule);
                             if ( !reportPrivateFunctions && isPrivate ) continue;
                             ss << "\t";
                             if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
@@ -5314,11 +5311,10 @@ namespace das {
             if (!expr->value->type || expr->value->type->isAliasOrExpr()) return Visitor::visit(expr);
             // implement variant macros
             ExpressionPtr substitute;
-            auto thisModule = ctx.thisProgram->thisModule.get();
             auto modMacro = [&](Module * mod) -> bool {
                 if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
                     for ( const auto & pm : mod->variantMacros ) {
-                        if ( (substitute = pm->visitAs(ctx.thisProgram, thisModule, expr)) ) {
+                        if ( (substitute = pm->visitAs(program, thisModule, expr)) ) {
                             return false;
                         }
                     }
@@ -5326,7 +5322,7 @@ namespace das {
                 return true;
             };
             Module::foreach(modMacro);
-            if ( !substitute ) ctx.thisProgram->library.foreach(modMacro, "*");
+            if ( !substitute ) program->library.foreach(modMacro, "*");
             if ( substitute ) {
                 reportAstChanged();
                 return substitute;
@@ -5360,11 +5356,10 @@ namespace das {
             if (!expr->value->type || expr->value->type->isAliasOrExpr()) return Visitor::visit(expr);
             // implement variant macros
             ExpressionPtr substitute;
-            auto thisModule = ctx.thisProgram->thisModule.get();
             auto modMacro = [&](Module * mod) -> bool {
                 if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
                     for ( const auto & pm : mod->variantMacros ) {
-                        if ( (substitute = pm->visitSafeAs(ctx.thisProgram, thisModule, expr)) ) {
+                        if ( (substitute = pm->visitSafeAs(program, thisModule, expr)) ) {
                             return false;
                         }
                     }
@@ -5372,7 +5367,7 @@ namespace das {
                 return true;
             };
             Module::foreach(modMacro);
-            if ( !substitute ) ctx.thisProgram->library.foreach(modMacro, "*");
+            if ( !substitute ) program->library.foreach(modMacro, "*");
             if ( substitute ) {
                 reportAstChanged();
                 return substitute;
@@ -5418,11 +5413,10 @@ namespace das {
             if (!expr->value->type || expr->value->type->isAliasOrExpr()) return Visitor::visit(expr);
             // implement variant macros
             ExpressionPtr substitute;
-            auto thisModule = ctx.thisProgram->thisModule.get();
             auto modMacro = [&](Module * mod) -> bool {
                 if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
                     for ( const auto & pm : mod->variantMacros ) {
-                        if ( (substitute = pm->visitIs(ctx.thisProgram, thisModule, expr)) ) {
+                        if ( (substitute = pm->visitIs(program, thisModule, expr)) ) {
                             return false;
                         }
                     }
@@ -5430,7 +5424,7 @@ namespace das {
                 return true;
             };
             Module::foreach(modMacro);
-            if ( !substitute ) ctx.thisProgram->library.foreach(modMacro, "*");
+            if ( !substitute ) program->library.foreach(modMacro, "*");
             if ( substitute ) {
                 reportAstChanged();
                 return substitute;
@@ -5834,7 +5828,6 @@ namespace das {
             splitTypeName(name, moduleName, varName);
             vector<VariablePtr> result;
             auto inWhichModule = getSearchModule(moduleName);
-            auto thisModule = program->thisModule.get();
             program->library.foreach([&](Module * mod) -> bool {
                 if ( auto var = mod->findVariable(varName) ) {
                     if ( inWhichModule->isVisibleDirectly(var->module) ) {
@@ -7321,11 +7314,10 @@ namespace das {
             }
             // implement for loop macro
             ExpressionPtr substitute;
-            auto thisModule = ctx.thisProgram->thisModule.get();
             auto modMacro = [&](Module * mod) -> bool {
                 if ( thisModule->isVisibleDirectly(mod) && mod!=thisModule ) {
                     for ( const auto & pm : mod->forLoopMacros ) {
-                        if ( (substitute = pm->visit(ctx.thisProgram, thisModule, expr)) ) {
+                        if ( (substitute = pm->visit(program, thisModule, expr)) ) {
                             return false;
                         }
                     }
@@ -7333,7 +7325,7 @@ namespace das {
                 return true;
             };
             Module::foreach(modMacro);
-            if ( !substitute ) ctx.thisProgram->library.foreach(modMacro, "*");
+            if ( !substitute ) program->library.foreach(modMacro, "*");
             if ( substitute ) {
                 reportAstChanged();
                 return substitute;
@@ -7695,21 +7687,19 @@ namespace das {
         }
     // ExprCallMacro
         virtual void preVisit ( ExprCallMacro * expr ) override {
-            auto thisModule = ctx.thisProgram->thisModule.get();
             expr->inFunction = func.get();
             canFoldResult = expr->macro->canFoldReturnResult(expr) && canFoldResult;
-            expr->macro->preVisit(ctx.thisProgram, thisModule, expr); // pre-visit is allowed to do nothing and not report errors.
+            expr->macro->preVisit(program, thisModule, expr); // pre-visit is allowed to do nothing and not report errors.
             return Visitor::preVisit(expr);
         }
         virtual ExpressionPtr visit ( ExprCallMacro * expr ) override {
-            auto errc = ctx.thisProgram->errors.size();
-            auto thisModule = ctx.thisProgram->thisModule.get();
-            auto substitute = expr->macro->visit(ctx.thisProgram, thisModule, expr);
+            auto errc = program->errors.size();
+            auto substitute = expr->macro->visit(program, thisModule, expr);
             if ( substitute ) {
                 reportAstChanged();
                 return substitute;
             }
-            if ( errc==ctx.thisProgram->errors.size() ) {   // this fail safe adds error if macro failed, but did not report any errors
+            if ( errc==program->errors.size() ) {   // this fail safe adds error if macro failed, but did not report any errors
                 error("call macro '" + expr->macro->name + "' failed to compile",  "possibly missing require", "",
                     expr->at, CompilationError::unsupported_call_macro);
             }
@@ -8483,7 +8473,7 @@ namespace das {
                 if ( generics.size()==1 ) {
                     auto oneGeneric = generics.back();
                     auto genName = getGenericInstanceName(oneGeneric);
-                    auto instancedFunctions = findMatchingFunctions(program->thisModule->name, program->thisModule.get(), genName, types, true); // "__::genName"
+                    auto instancedFunctions = findMatchingFunctions(program->thisModule->name, thisModule, genName, types, true); // "__::genName"
                     if ( instancedFunctions.size() > 1 ) {
                         TextWriter ss;
                         for ( auto & instFn : instancedFunctions ) {
@@ -8585,8 +8575,8 @@ namespace das {
                         program->updateAliasMapCallback = nullptr;
                         // now we verify if tail end can indeed be fully inferred
                         if (!program->addFunction(clone)) {
-                            clone->module = program->thisModule.get();
-                            auto exf = program->thisModule->functions.find(clone->getMangledName());
+                            clone->module = thisModule;
+                            auto exf = thisModule->functions.find(clone->getMangledName());
                             clone->module = nullptr;
                             DAS_ASSERTF(exf, "if we can't add, this means there is function with exactly this mangled name");
                             if (exf->fromGeneric != clone->fromGeneric) { // TODO: getOrigin??
@@ -8629,7 +8619,7 @@ namespace das {
                         } else if ( aliasT->isStructure() ) {
                             if ( expr->arguments.size()==0 ) {
                                 expr->name = aliasT->structType->name;
-                                bool isPrivate = aliasT->structType->privateStructure || aliasT->structType->module != program->thisModule.get();
+                                bool isPrivate = aliasT->structType->privateStructure || aliasT->structType->module != thisModule;
                                 if ( !tryMakeStructureCtor (aliasT->structType, isPrivate, true) ) {
                                     if ( failOnMissingCtor ) {
                                         error("default constructor " + aliasT->structType->name + " is not visible directly",
@@ -9945,7 +9935,7 @@ namespace das {
                 auto mnh = fn->getMangledNameHash();
                 if ( hash != mnh ) {
                     refreshFunctions.emplace_back(make_tuple(fn.get(), hash, mnh));
-                    { AstFuncLookup dummy; swap(fn->lookup,dummy); }    // invalidate lookup hash, something changed
+                    fn->lookup.clear();
                 }
             });
             for ( auto rfn : refreshFunctions ) {
