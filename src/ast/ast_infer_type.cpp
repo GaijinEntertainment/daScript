@@ -2524,7 +2524,11 @@ namespace das {
     // any expression
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
-            expr->type.reset();
+            // WARNING - this is potentially dangerous. In theory type should be set to nada, and then re-inferred
+            // the reason not to reset it is that usually once inferred it should not change. but in some cases it can.
+            // even more rare is that it changed, and then no longer can be inferred. all those cases are pathological
+            // and should be avoided. but if you see a bug, this is the first place to look.
+            // expr->type.reset();
         }
     // const
         vec4f getEnumerationValue( ExprConstEnumeration * expr, bool & inferred ) const {
