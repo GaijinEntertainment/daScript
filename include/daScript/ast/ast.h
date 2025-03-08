@@ -795,7 +795,7 @@ namespace das
           static_cast<std::underlying_type<SideEffects>::type>(rhs));
     }
 
-    typedef fragile_hash<bool> AstFuncLookup;
+    typedef fragile_bit_set AstFuncLookup;
 
     struct InferHistory {
         LineInfo    at;

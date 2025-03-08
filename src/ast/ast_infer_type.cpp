@@ -1267,20 +1267,20 @@ namespace das {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     if ( !argHash ) {
-                                        argHash = getLookupHash(types);
+                                        argHash = fragile_bit_set::key(getLookupHash(types));
                                     }
                                     auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
-                                    if ( itLook->found() ) {
-                                        if ( itLook->second ) {
+                                    if ( *itLook ) {
+                                        if ( fragile_bit_set::is_true(*itLook) ) {
                                             result.push_back(pFn);
                                         }
                                         continue;
                                     }
                                     if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                         result.push_back(pFn);
-                                        *itLook = { argHash, true };
+                                        *itLook = fragile_bit_set::set_true(argHash);
                                     } else {
-                                        *itLook = { argHash, false };
+                                        *itLook = fragile_bit_set::set_false(argHash);
                                     }
                                 }
                             }
@@ -1344,7 +1344,7 @@ namespace das {
             auto inWhichModule = getSearchModule(moduleName);
             auto thisModule = program->thisModule.get();
             auto hFuncName = hash64z(funcName.c_str());
-            uint64_t argHash = getLookupHash(types);
+            uint64_t argHash = fragile_bit_set::key(getLookupHash(types));
             program->library.foreach([&](Module * mod) -> bool {
                 { // functions
                     auto itFnList = mod->functionsByName.find(hFuncName);
@@ -1357,17 +1357,17 @@ namespace das {
                                 if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                     if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                         auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
-                                        if ( itLook->found() ) {
-                                            if ( itLook->second ) {
+                                        if ( *itLook ) {
+                                            if ( fragile_bit_set::is_true(*itLook) ) {
                                                 resultFunctions.push_back(pFn);
                                             }
                                             continue;
                                         }
                                         if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                             resultFunctions.push_back(pFn);
-                                            *itLook = { argHash, true };
+                                            *itLook = fragile_bit_set::set_true(argHash);
                                         } else {
-                                            *itLook = { argHash, false };
+                                            *itLook = fragile_bit_set::set_false(argHash);
                                         }
                                     }
                                 }
@@ -1384,17 +1384,17 @@ namespace das {
                             if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
-                                    if ( itLook->found() ) {
-                                        if ( itLook->second ) {
+                                    if ( *itLook ) {
+                                        if ( fragile_bit_set::is_true(*itLook) ) {
                                             resultGenerics.push_back(pFn);
                                         }
                                         continue;
                                     }
                                     if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
                                         resultGenerics.push_back(pFn);
-                                        *itLook = { argHash, true };
+                                        *itLook = fragile_bit_set::set_true(argHash);
                                     } else {
-                                        *itLook = { argHash, false };
+                                        *itLook = fragile_bit_set::set_false(argHash);
                                     }
                                 }
                             }

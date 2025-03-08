@@ -4,6 +4,81 @@
 
 namespace das {
 
+    struct fragile_bit_set {    // key==hash, value = top bit of hash
+    public:
+        static constexpr uint64_t top_bit = 0x8000000000000000ull;
+        static constexpr uint64_t top_bit_mask = 0x7fffffffffffffffull;
+        static __forceinline uint64_t key ( uint64_t hash ) { return hash & top_bit_mask; } // up to user to call 'key'
+        static __forceinline uint64_t set_true ( uint64_t hash ) { return hash | top_bit; }
+        static __forceinline uint64_t set_false ( uint64_t hash ) { return hash & top_bit_mask; }
+        static __forceinline bool is_true ( uint64_t hash ) { return hash & top_bit; }
+    public:
+        fragile_bit_set() {
+            mask = 63;
+        }
+        ~fragile_bit_set() {
+            if ( objects ) delete [] objects;
+        }
+        void clear () {
+            if ( objects ) {
+                memset(objects,0,(mask+1)*sizeof(uint64_t));
+                occupancy = 0;
+            }
+        }
+        __forceinline uint64_t *  find_and_reserve ( uint64_t key ) { // its up to user to write both hash and value
+            if ( !objects ) allocate();
+            uint64_t index = key & mask;
+            for ( ;; ) {
+                auto hash = objects[index];
+                if ( hash==0 ) {
+                    occupancy ++;
+                    if ( occupancy*2 > mask ) {
+                        rehash(mask*2 + 1);
+                        index = key & mask;
+                        continue;
+                    }
+                    return objects + index;
+                } else if ( (hash & top_bit_mask)==key ) {
+                    return objects + index;
+                }
+                index = (index + 1) & mask;
+            }
+            return nullptr;
+        }
+    protected:
+        void allocate() {
+            objects = new uint64_t[mask+1];
+            memset(objects,0,(mask+1)*sizeof(uint64_t));
+        }
+        void rehash ( uint32_t newMask ) {
+            auto old_objects = objects;
+            auto old_mask = mask;
+            mask = newMask;
+            allocate();
+            if ( old_objects ) {
+                for ( uint32_t i=0; i<=old_mask; ++i ) {
+                    if ( auto hash = old_objects[i] ) {
+                        uint32_t index = hash & mask;
+                        for ( ;; ) {
+                            auto & new_kv = objects[index];
+                            if ( new_kv == 0 ) {
+                                new_kv = hash;
+                                break;
+                            }
+                            index = (index + 1) & mask;
+                        }
+                    }
+                }
+                delete [] old_objects;
+            }
+        }
+    protected:
+        uint64_t *  objects = nullptr;
+        uint32_t    mask = 0;
+        uint32_t    occupancy = 0;
+    };
+
+
     template <typename ValueType>
     struct fragile_hash {    // key==hash, no delete, lookup only
     public:
@@ -19,9 +94,6 @@ namespace das {
         ~fragile_hash() {
             if ( objects ) delete [] objects;
         }
-        void allocate() {
-            objects = new KV[mask+1];
-        }
         void clear () {
             if ( objects ) {
                 // i really don't care if we delete or not, as long as we delete at shutdown  of the table
@@ -31,34 +103,13 @@ namespace das {
                 occupancy = 0;
             }
         }
-        __forceinline KV * find ( uint64_t key ) const { // its up to user to write both hash and value
+        __forceinline KV * find ( uint64_t key ) const {
             if ( !objects ) return nullptr;
             uint64_t index = key & mask;
             for ( ;; ) {
                 auto hash = objects[index].hash;
                 if ( hash==0 ) {
                     return nullptr;
-                } else if ( hash==key ) {
-                    return objects + index;
-                }
-                index = (index + 1) & mask;
-            }
-            return nullptr;
-        }
-
-        __forceinline KV *  find_and_reserve ( uint64_t key ) { // its up to user to write both hash and value
-            if ( !objects ) allocate();
-            uint64_t index = key & mask;
-            for ( ;; ) {
-                auto hash = objects[index].hash;
-                if ( hash==0 ) {
-                    occupancy ++;
-                    if ( occupancy*2 > mask ) {
-                        rehash(mask*2 + 1);
-                        index = key & mask;
-                        continue;
-                    }
-                    return objects + index;
                 } else if ( hash==key ) {
                     return objects + index;
                 }
@@ -111,6 +162,9 @@ namespace das {
             return mask + 1;
         }
     protected:
+        void allocate() {
+            objects = new KV[mask+1];
+        }
         void rehash ( uint32_t newMask ) {
             auto old_objects = objects;
             auto old_mask = mask;
