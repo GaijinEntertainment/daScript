@@ -118,6 +118,27 @@ MACRO(DAS_AOT input genList mainTarget dasAotTool)
     DAS_AOT_EXT(${input} ${genList} ${mainTarget} ${dasAotTool} -aot)
 ENDMACRO()
 
+MACRO(DAS_AOT_STANDALONE input genList mainTarget dasAotTool)
+    get_filename_component(input_src ${input} ABSOLUTE)
+    get_filename_component(input_dir ${input_src} DIRECTORY)
+    get_filename_component(input_name ${input} NAME)
+    set(out_dir ${input_dir}/_standalone_ctx_generated)
+    set(out_src ${input_dir}/_standalone_ctx_generated/context.das.cpp)
+    file(MAKE_DIRECTORY ${out_dir})
+    ADD_CUSTOM_COMMAND(
+            DEPENDS ${input_src}
+            DEPENDS ${dasAotTool}
+            OUTPUT  ${out_src}
+            COMMENT "AOT precompiling ${input_src} -> ${out_src}"
+            COMMAND ${dasAotTool} -aot ${input_src} ${out_dir} -standalone-context context -standalone-class Standalone
+    )
+    list(APPEND ${genList} ${out_src})
+    set(custom_name ${mainTarget}_${input_name}_standalone)
+    ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
+    SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
+    ADD_DEPENDENCIES(${mainTarget} ${custom_name})
+ENDMACRO()
+
 MACRO(DAS_AOT_LIB input genList mainTarget dasAotTool)
     DAS_AOT_EXT(${input} ${genList} ${mainTarget} ${dasAotTool} -aotlib)
 ENDMACRO()
@@ -576,6 +597,7 @@ src/simulate/runtime_string.cpp
 src/simulate/runtime_array.cpp
 src/simulate/runtime_table.cpp
 src/simulate/runtime_profile.cpp
+src/simulate/standalone_ctx_utils.cpp
 src/simulate/simulate.cpp
 src/simulate/simulate_exceptions.cpp
 src/simulate/simulate_gc.cpp
