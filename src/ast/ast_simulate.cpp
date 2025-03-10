@@ -13,6 +13,7 @@
 #include "daScript/simulate/simulate_nodes.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
+#include "daScript/simulate/standalone_ctx_utils.h"
 
 das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
