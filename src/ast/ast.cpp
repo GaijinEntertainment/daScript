@@ -544,6 +544,10 @@ namespace das {
 
     uint64_t Variable::getMangledNameHash() const {
         auto mangledName = getMangledName();
+        return Variable::getMangledNameHash(mangledName);
+    }
+
+    uint64_t Variable::getMangledNameHash(const string &mangledName) {
         return hash_blockz64((uint8_t *)mangledName.c_str());
     }
 
