@@ -1958,6 +1958,30 @@ namespace das {
         }
     }
 
+    void serializeFunctionsByName ( AstSerializer & ser, fragile_hash<vector<Function *>> & functionsByName ) {
+        if ( ser.writing ) {
+            uint32_t capacity = functionsByName.capacity();
+            uint32_t size = functionsByName.size();
+            ser << capacity << size;
+            uint32_t count = 0;
+            functionsByName.foreach ([&] ( uint64_t nameHash, vector<Function *> & functions ) {
+                ser << nameHash;
+                ser << functions;
+                count ++;
+            });
+            DAS_VERIFYF(count == size, "expected to serialize all functions");
+        } else {
+            uint32_t capacity = 0; ser << capacity;
+            uint32_t size = 0; ser << size;
+            functionsByName.reserve(capacity);
+            for ( uint32_t i = 0; i < size; i++ ) {
+                uint64_t nameHash; ser << nameHash;
+                vector<Function *> functions; ser << functions;
+                functionsByName[nameHash] = das::move(functions);
+            }
+        }
+    }
+
     void Module::serialize ( AstSerializer & ser, bool already_exists ) {
         ser.tag(HASH_TAG("Module"));
         ser << name           << moduleFlags;
@@ -1971,7 +1995,8 @@ namespace das {
         if ( ser.failed ) return;
         serializeFunctions(ser, generics);
         if ( ser.failed ) return;
-        ser << functionsByName << genericsByName;
+        serializeFunctionsByName(ser, functionsByName);
+        serializeFunctionsByName(ser, genericsByName);
         ser << ownFileInfo;     //<< promotedAccess;
 
         functions.foreach ([&] ( smart_ptr<Function> f ) {
@@ -2204,7 +2229,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 47;
+        static constexpr uint32_t currentVersion = 48;
         return currentVersion;
     }
 

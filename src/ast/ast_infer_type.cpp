@@ -727,7 +727,7 @@ namespace das {
             auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(hFuncName);
-                if ( itFnList != mod->functionsByName.end() ) {
+                if ( itFnList ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->isTemplate ) continue;
@@ -1217,7 +1217,7 @@ namespace das {
             auto hFuncName = hash64z(funcName.c_str());
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(hFuncName);
-                if ( itFnList != mod->functionsByName.end() ) {
+                if ( itFnList ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->isTemplate ) continue;
@@ -1258,7 +1258,7 @@ namespace das {
             uint64_t argHash = 0;
             program->library.foreach([&](Module * mod) -> bool {
                 auto itFnList = mod->functionsByName.find(hFuncName);
-                if ( itFnList != mod->functionsByName.end() ) {
+                if ( itFnList ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
                         if ( pFn->jitOnly && !program->policies.jit ) continue;
@@ -1267,20 +1267,20 @@ namespace das {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     if ( !argHash ) {
-                                        argHash = getLookupHash(types);
+                                        argHash = fragile_bit_set::key(getLookupHash(types));
                                     }
-                                    auto itLook = pFn->lookup.find(argHash);    // if found in lookup
-                                    if ( itLook != pFn->lookup.end() ) {
-                                        if ( itLook->second ) {
+                                    auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
+                                    if ( *itLook ) {
+                                        if ( fragile_bit_set::is_true(*itLook) ) {
                                             result.push_back(pFn);
                                         }
                                         continue;
                                     }
                                     if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                         result.push_back(pFn);
-                                        pFn->lookup[argHash] = true;
+                                        *itLook = fragile_bit_set::set_true(argHash);
                                     } else {
-                                        pFn->lookup[argHash] = false;
+                                        *itLook = fragile_bit_set::set_false(argHash);
                                     }
                                 }
                             }
@@ -1300,7 +1300,7 @@ namespace das {
             program->library.foreach([&](Module * mod) -> bool {
                 {   // functions
                     auto itFnList = mod->functionsByName.find(hFuncName);
-                    if ( itFnList != mod->functionsByName.end() ) {
+                    if ( itFnList ) {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->isTemplate ) continue;
@@ -1318,7 +1318,7 @@ namespace das {
                 }
                 {   // generics
                     auto itFnList = mod->genericsByName.find(hFuncName);
-                    if ( itFnList != mod->genericsByName.end() ) {
+                    if ( itFnList ) {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->jitOnly && !program->policies.jit ) continue;
@@ -1342,11 +1342,11 @@ namespace das {
             splitTypeName(name, moduleName, funcName);
             auto inWhichModule = getSearchModule(moduleName);
             auto hFuncName = hash64z(funcName.c_str());
-            uint64_t argHash = getLookupHash(types);
+            uint64_t argHash = fragile_bit_set::key(getLookupHash(types));
             program->library.foreach([&](Module * mod) -> bool {
                 { // functions
                     auto itFnList = mod->functionsByName.find(hFuncName);
-                    if ( itFnList != mod->functionsByName.end() ) {
+                    if ( itFnList ) {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->jitOnly && !program->policies.jit ) continue;
@@ -1354,18 +1354,18 @@ namespace das {
                             if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn) ) ) {
                                 if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                     if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
-                                        auto itLook = pFn->lookup.find(argHash);    // if found in lookup
-                                        if ( itLook != pFn->lookup.end() ) {
-                                            if ( itLook->second ) {
+                                        auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
+                                        if ( *itLook ) {
+                                            if ( fragile_bit_set::is_true(*itLook) ) {
                                                 resultFunctions.push_back(pFn);
                                             }
                                             continue;
                                         }
                                         if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                             resultFunctions.push_back(pFn);
-                                            pFn->lookup[argHash] = true;
+                                            *itLook = fragile_bit_set::set_true(argHash);
                                         } else {
-                                            pFn->lookup[argHash] = false;
+                                            *itLook = fragile_bit_set::set_false(argHash);
                                         }
                                     }
                                 }
@@ -1375,24 +1375,24 @@ namespace das {
                 }
                 { // generics
                     auto itFnList = mod->genericsByName.find(hFuncName);
-                    if ( itFnList != mod->genericsByName.end() ) {
+                    if ( itFnList ) {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->isTemplate ) continue;
                             if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
-                                    auto itLook = pFn->lookup.find(argHash);    // if found in lookup
-                                    if ( itLook != pFn->lookup.end() ) {
-                                        if ( itLook->second ) {
+                                    auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
+                                    if ( *itLook ) {
+                                        if ( fragile_bit_set::is_true(*itLook) ) {
                                             resultGenerics.push_back(pFn);
                                         }
                                         continue;
                                     }
                                     if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
                                         resultGenerics.push_back(pFn);
-                                        pFn->lookup[argHash] = true;
+                                        *itLook = fragile_bit_set::set_true(argHash);
                                     } else {
-                                        pFn->lookup[argHash] = false;
+                                        *itLook = fragile_bit_set::set_false(argHash);
                                     }
                                 }
                             }
@@ -2705,7 +2705,7 @@ namespace das {
                 auto hFuncName = hash64z(funcName.c_str());
                 program->library.foreach([&](Module * mod) -> bool {
                     auto itFnList = mod->functionsByName.find(hFuncName);
-                    if ( itFnList != mod->functionsByName.end() ) {
+                    if ( itFnList ) {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & missFn : goodFunctions ) {
                             auto visM = getFunctionVisModule(missFn);
