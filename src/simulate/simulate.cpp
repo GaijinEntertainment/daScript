@@ -970,6 +970,31 @@ namespace das
         persistent = ph;
     }
 
+    void Context::setup(size_t totalVars, size_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options) {
+        verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
+        breakOnException |= policies.debugger;
+        persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
+        if ( persistent ) {
+            heap = make_smart<PersistentHeapAllocator>();
+            stringHeap = make_smart<PersistentStringAllocator>();
+        } else {
+            heap = make_smart<LinearHeapAllocator>();
+            stringHeap = make_smart<LinearStringAllocator>();
+        }
+        heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
+        heap->setLimit ( options.getUInt64Option("heap_size_limit", policies.max_heap_allocated) );
+        stringHeap->setInitialSize ( options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) );
+        stringHeap->setLimit ( options.getUInt64Option("string_heap_size_limit", policies.max_string_heap_allocated) );
+        constStringHeap = make_shared<ConstStringAllocator>();
+        totalVariables = totalVars;
+        if ( globalStringHeapSize ) {
+            constStringHeap->setInitialSize(globalStringHeapSize);
+        }
+        globalVariables = (GlobalVariable *) code->allocate( totalVars*sizeof(GlobalVariable) );
+        globalsSize = 0;
+        sharedSize = 0;
+    }
+
     void Context::strip() {
         stringHeap.reset();
         heap.reset();
@@ -1416,7 +1441,8 @@ namespace das
         return runWithCatch([&](){
             for ( int j=0, js=totalFunctions; j!=js && !stopFlags; ++j ) {
                 auto & pf = functions[j];
-                if ( pf.debugInfo && pf.debugInfo->flags & FuncInfo::flag_shutdown ) {
+                DAS_ASSERTF(pf.debugInfo, "Missing debug info for %s", pf.name);
+                if ( pf.debugInfo->flags & FuncInfo::flag_shutdown ) {
                     callOrFastcall(&pf, nullptr, 0);
                 }
             }

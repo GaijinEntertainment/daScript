@@ -321,6 +321,7 @@ namespace das
         VariablePtr clone() const;
         string getMangledName() const;
         uint64_t getMangledNameHash() const;
+        static uint64_t getMangledNameHash(const string &mangledName);
         bool isAccessUnused() const;
         bool isCtorInitialized() const;
         void serialize ( AstSerializer & ser );
