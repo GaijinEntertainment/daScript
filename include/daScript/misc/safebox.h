@@ -31,12 +31,12 @@ namespace das {
             for ( ;; ) {
                 auto hash = objects[index];
                 if ( hash==0 ) {
-                    occupancy ++;
                     if ( occupancy*2 > mask ) {
                         rehash(mask*2 + 1);
                         index = key & mask;
                         continue;
                     }
+                    occupancy ++;
                     return objects + index;
                 } else if ( (hash & top_bit_mask)==key ) {
                     return objects + index;
@@ -123,12 +123,12 @@ namespace das {
             for ( ;; ) {
                 auto hash = objects[index].hash;
                 if ( hash==0 ) {
-                    occupancy ++;
                     if ( occupancy*2 > mask ) {
                         rehash(mask*2 + 1);
                         index = key & mask;
                         continue;
                     }
+                    occupancy ++;
                     objects[index].hash = key;
                     return objects[index].second;
                 } else if ( hash==key ) {
