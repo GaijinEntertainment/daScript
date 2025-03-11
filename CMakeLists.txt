@@ -132,9 +132,12 @@ MACRO(DAS_AOT_STANDALONE input genList mainTarget dasAotTool)
             COMMENT "AOT precompiling ${input_src} -> ${out_src}"
             COMMAND ${dasAotTool} -aot ${input_src} ${out_dir} -standalone-context context -standalone-class Standalone
     )
-    list(APPEND ${genList} ${out_src})
+    file(GLOB GEN_SRC
+            ${out_dir}/*.cpp)
+    list(APPEND ${genList} ${GEN_SRC})
     set(custom_name ${mainTarget}_${input_name}_standalone)
     ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
+    set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
     SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
     ADD_DEPENDENCIES(${mainTarget} ${custom_name})
 ENDMACRO()
@@ -735,6 +738,10 @@ ENDIF()
 SETUP_CPP11(libDaScript)
 #target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
 
+
+add_custom_target(standaloneGenerated)
+
+
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     if(${DAS_TOOLS_DISABLED})
@@ -777,6 +784,13 @@ if (NOT ${DAS_TOOLS_DISABLED})
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
     SET(SRC_LIBRARIES libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+
+    SET(STANDALONE_SRC)
+    DAS_AOT_STANDALONE("src/das/ast/ast_print.das" STANDALONE_SRC standaloneGenerated daslang)
+    add_executable(daslang-boostrapped ${DAS_DASCRIPT_MAIN_SRC} ${STANDALONE_SRC} ${AOT_GENERATED_SRC})
+    #add_dependencies(daslang-bootstrapped standaloneGenerated)
+    TARGET_LINK_LIBRARIES(daslang-boostrapped ${SRC_LIBRARIES})
+
 
     add_executable(daslang ${DAS_DASCRIPT_MAIN_SRC})
     TARGET_LINK_LIBRARIES(daslang ${SRC_LIBRARIES})

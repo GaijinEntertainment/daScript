@@ -39,14 +39,15 @@ namespace das {
         ctx.updateSharedGlobalSize(sizeDiff.sharedSizeDiff, sizeDiff.globalsSizeDiff);
     }
 
-    void FillFunction(Context &ctx, uint64_t semHash, AotLibrary &aotLib, SimFunction *fn) {
-        auto it = aotLib.find(semHash);
-        if ( it != aotLib.end() ) {
-            fn->code = (it->second)(ctx);
-            fn->aot = true;
-            auto fcb = (SimNode_CallBase *) fn->code;
-            fn->aotFunction = fcb->aotFunction;
+    void FillFunction(Context &ctx, AotLibrary &aotLib, std::vector<std::pair<uint64_t, SimFunction*>> functions) {
+        for (auto [semHash, fn]: functions) {
+            auto it = aotLib.find(semHash);
+            if ( it != aotLib.end() ) {
+                fn->code = (it->second)(ctx);
+                fn->aot = true;
+                auto fcb = (SimNode_CallBase *) fn->code;
+                fn->aotFunction = fcb->aotFunction;
+            }
         }
-
     }
 }

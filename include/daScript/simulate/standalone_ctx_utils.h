@@ -68,7 +68,7 @@ namespace das {
     SizeDiff ConvertGlobalVariable(const Context &ctx, GlobalVariable* gvar, GlobalVarInfo info);
     void ConvertGlobalVar(Context &ctx, GlobalVariable* gvar, GlobalVarInfo info);
 
-    void FillFunction(Context &ctx, uint64_t semHash, AotLibrary &aotLib, SimFunction *fn);
+    void FillFunction(Context &ctx, AotLibrary &aotLib, std::vector<std::pair<uint64_t, SimFunction*>> functions);
 }
 
 #endif
