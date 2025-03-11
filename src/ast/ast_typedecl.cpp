@@ -830,35 +830,25 @@ namespace das
             return nullptr; // if it is another alias, can't find it
         } else if (baseType == Type::autoinfer && !allowAuto) {
             return nullptr; // if it has not been inferred yet, can't find it
-        }
-        else if (alias == name) {
+        } else if (alias == name) {
             return this;
         }
-        if ( baseType==Type::tPointer ) {
-            return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
-        } else if ( baseType==Type::tIterator ) {
-            return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
-        } else if ( baseType==Type::tArray ) {
-            return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
-        } else if ( baseType==Type::tTable ) {
-            if ( firstType ) {
-                if ( auto k = firstType->findAlias(name,allowAuto) ) {
-                    return k;
-                }
+        if ( firstType ) {
+            if ( auto k = firstType->findAlias(name,allowAuto) ) {
+                return k;
             }
-            return secondType ? secondType->findAlias(name,allowAuto) : nullptr;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction
-                   || baseType==Type::tLambda || baseType==Type::tTuple
-                   || baseType==Type::tVariant || baseType==Type::option ) {
-            for ( auto & arg : argTypes ) {
-                if ( auto att = arg->findAlias(name,allowAuto) ) {
-                    return att;
-                }
-            }
-            return firstType ? firstType->findAlias(name,allowAuto) : nullptr;
-        } else {
-            return nullptr;
         }
+        if ( secondType ) {
+            if ( auto k = secondType->findAlias(name,allowAuto) ) {
+                return k;
+            }
+        }
+        for ( auto & arg : argTypes ) {
+            if ( auto att = arg->findAlias(name,allowAuto) ) {
+                return att;
+            }
+        }
+        return nullptr;
     }
 
     bool TypeDecl::canDelete() const {
@@ -2067,46 +2057,43 @@ namespace das
     bool TypeDecl::isAuto() const {
         // auto is auto.... or auto....?
         // also dim[] is aito
-        for ( auto di : dim ) {
-            if ( di==TypeDecl::dimAuto ) {
+        for (auto di : dim) {
+            if (di == TypeDecl::dimAuto) {
                 return true;
             }
         }
-        if ( baseType==Type::typeMacro ) {
+        switch ( baseType ) {
+        case Type::typeMacro:
+        case Type::typeDecl:
+        case Type::autoinfer:
+        case Type::option:
             return true;
-        } else if ( baseType==Type::typeDecl ) {
-            return true;
-        } else if ( baseType==Type::autoinfer ) {
-            return true;
-        } else if ( baseType==Type::option ) {
-            return true;
-        } else if ( baseType==Type::tPointer ) {
-            if ( firstType )
-                return firstType->isAuto();
-        } else if ( baseType==Type::tIterator ) {
-            if ( firstType )
-                return firstType->isAuto();
-        } else if ( baseType==Type::tArray ) {
-            if ( firstType )
-                return firstType->isAuto();
-        } else if ( baseType==Type::tTable ) {
-            bool any = false;
-            if ( firstType )
-                any |= firstType->isAuto();
-            if ( secondType )
-                any |= secondType->isAuto();
-            return any;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
-                   baseType==Type::tLambda || baseType==Type::tTuple ||
-                   baseType==Type::tVariant ) {
-            bool any = false;
-            if ( firstType )
-                any |= firstType->isAuto();
-            for ( auto & arg : argTypes )
-                any |= arg->isAuto();
-            return any;
+        case Type::tPointer:
+        case Type::tIterator:
+        case Type::tArray:
+            return firstType ? firstType->isAuto() : false;
+        case Type::tTable:
+            if ( firstType && firstType->isAuto() ) {
+                return true;
+            }
+            return secondType ? secondType->isAuto() : false;
+        case Type::tBlock:
+        case Type::tFunction:
+        case Type::tLambda:
+        case Type::tTuple:
+        case Type::tVariant:
+            if (firstType && firstType->isAuto() ) {
+                return true;
+            }
+            for (auto& arg : argTypes) {
+                if ( arg->isAuto() ) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
         }
-        return false;
     }
 
     bool TypeDecl::isAutoWithoutOptions(bool & hasOptions) const {
@@ -2162,43 +2149,39 @@ namespace das
                 return true;
             }
         }
-        if (baseType == Type::typeMacro) {
+        switch ( baseType ) {
+        case Type::typeMacro:
+        case Type::typeDecl:
+        case Type::autoinfer:
+        case Type::option:
+        case Type::alias:
             return true;
-        } else if (baseType == Type::typeDecl ) {
-            return true;
-        } else if (baseType == Type::autoinfer) {
-            return true;
-        } else if ( baseType==Type::option ) {
-            return true;
-        } if (baseType == Type::alias) {
-            return true;
-        } else if (baseType == Type::tPointer) {
-            if (firstType)
-                return firstType->isAutoOrAlias();
-        } else if (baseType == Type::tIterator) {
-            if (firstType)
-                return firstType->isAutoOrAlias();
-        } else if (baseType == Type::tArray) {
-            if (firstType)
-                return firstType->isAutoOrAlias();
-        } else if (baseType == Type::tTable) {
-            bool any = false;
-            if (firstType)
-                any |= firstType->isAutoOrAlias();
-            if (secondType)
-                any |= secondType->isAutoOrAlias();
-            return any;
-        } else if (baseType == Type::tBlock || baseType == Type::tFunction ||
-            baseType == Type::tLambda || baseType == Type::tTuple ||
-            baseType == Type::tVariant ) {
-            bool any = false;
-            if (firstType)
-                any |= firstType->isAutoOrAlias();
-            for (auto& arg : argTypes)
-                any |= arg->isAutoOrAlias();
-            return any;
+        case Type::tPointer:
+        case Type::tIterator:
+        case Type::tArray:
+            return firstType ? firstType->isAutoOrAlias() : false;
+        case Type::tTable:
+            if ( firstType && firstType->isAutoOrAlias() ) {
+                return true;
+            }
+            return secondType ? secondType->isAutoOrAlias() : false;
+        case Type::tBlock:
+        case Type::tFunction:
+        case Type::tLambda:
+        case Type::tTuple:
+        case Type::tVariant:
+            if (firstType && firstType->isAutoOrAlias() ) {
+                return true;
+            }
+            for (auto& arg : argTypes) {
+                if ( arg->isAutoOrAlias() ) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
         }
-        return false;
     }
 
     bool TypeDecl::isFoldable() const {
