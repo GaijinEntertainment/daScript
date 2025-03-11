@@ -433,7 +433,7 @@ namespace das {
                 while (i < length && isspace(text[i])) {
                     ++i;
                 }
-                if (i + 4 < length && text[i] == 'g' && text[i + 1] == 'e' && text[i + 2] == 'n' && text[i + 3] == '2') {
+                if (i + 5 < length && text[i] == 'g' && text[i + 1] == 'e' && text[i + 2] == 'n' && text[i + 3] == '2' && !isalnum(text[i + 4]) && text[i + 4] != '_') {
                     return true;
                 }
             }
