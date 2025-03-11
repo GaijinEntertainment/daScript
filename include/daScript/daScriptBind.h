@@ -93,9 +93,9 @@ ___noinline RetT the_great_asserting_stub(ArgsT...)
   DAS_ASSERTF(0, "STUB!");
   if constexpr (!das::is_same_v<RetT, void>)
   {
-    static uint64_t the_stubbiest_buffer[8] = {0};
-    void *volatile the_stubbiest_return_val_ptr = &the_stubbiest_buffer;
-    return *(das::remove_cvref_t<RetT> *)the_stubbiest_return_val_ptr;
+    void *volatile the_null = nullptr;
+    // this way we avoid invoking constructor in case of returning by value, and just crash on nullptr call
+    return reinterpret_cast<RetT (*)()>(the_null)();
   }
 }
 
@@ -234,11 +234,48 @@ struct CallPropertyStubImpl
 
 #undef DAS_STUB_IMPL
 
+template <typename T>
+struct GetInvokeResult
+{};
+template <typename R, typename... Args>
+struct GetInvokeResult<R (*)(Args...)>
+{
+  using type = R;
+};
+
+template <typename FunT, FunT fn>
+inline auto addExternAutoSelectSimNode(Module &mod, const ModuleLibrary &lib, const char *name, SideEffects seFlags,
+  const char *cppName)
+{
+  using ResultT = typename GetInvokeResult<FunT>::type;
+  if constexpr (das::is_reference_v<ResultT>)
+    return addExtern<FunT, fn, SimNode_ExtFuncCallRef>(mod, lib, name, seFlags, cppName);
+  else
+    return addExtern<FunT, fn, SimNode_ExtFuncCall>(mod, lib, name, seFlags, cppName);
+}
+
 template <typename ClassT, typename...>
 using ResolveCtorAot = ClassT;
 
-} // namespace das::detail
+template <typename... CharT>
+static inline void write_module_includes(das::TextWriter &tw, const CharT *...paths)
+{
+  (
+    [&] {
+      const char *path = paths;
+      DAS_ASSERTF(path, "null include path");
+      while (*path && *path == ' ')
+        path++;
+      DAS_ASSERTF(*path, "empty include path");
+      if (*path != '<' && *path != '"')
+        tw << "#include \"" << path << "\"\n";
+      else
+        tw << "#include " << path << "\n";
+    }(),
+    ...);
+}
 
+} // namespace das::detail
 
 #ifdef DAS_AOT_COMPILER
 template <typename RetT, typename ThisT, RetT (*Fn)(ThisT &)>
@@ -291,13 +328,14 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
   addPropertyExtConstForManagedType<DAS_PROP_DECL_CONST(ManagedType::__VA_ARGS__)>(DAS_NAME, DAS_MACRO_STRINGIFY(__VA_ARGS__))
 
 // functions
-#define DAS_ADD_FUN_BIND(NAME, SIDE_EFFECTS, ...) \
-  das::addExtern<DAS_FUN_DECL(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
+#define DAS_ADD_FUN_BIND(NAME, SIDE_EFFECTS, ...)                                                                        \
+  das::detail::addExternAutoSelectSimNode<DAS_FUN_DECL(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+    "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
 #define DAS_ADD_FUN_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                            \
   das::addExtern<DAS_FUN_DECL(::__VA_ARGS__), das::SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, NAME, \
     das::SideEffects::SIDE_EFFECTS, "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
-#define DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS, ...)                                               \
-  das::addExtern<DAS_METHOD_DECL(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+#define DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS, ...)                                                                        \
+  das::detail::addExternAutoSelectSimNode<DAS_METHOD_DECL(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
     "::das::das_call_member<decltype(&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) "),&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) ">::invoke")
 #define DAS_ADD_METHOD_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                            \
   das::addExtern<DAS_METHOD_DECL(::__VA_ARGS__), das::SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, NAME, \
@@ -314,7 +352,7 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
   DAS_ADD_METHOD_BIND_CONST_VALUE_RET_EX(NAME, SIDE_EFFECTS, SIDE_EFFECTS, __VA_ARGS__)
 
 // ctor/using
-#define DAS_ADD_USING_BIND(...) das::addUsing<::__VA_ARGS__>(__VA_ARGS__, "::das::detail::ResolveCtorAot<::" #__VA_ARGS__ ">")
+#define DAS_ADD_USING_BIND(...) das::addUsing<::__VA_ARGS__>(*this, lib, "::das::detail::ResolveCtorAot<::" #__VA_ARGS__ ">")
 #define DAS_ADD_CTOR_BIND_EX(NAME, ...) \
   das::addCtor<::__VA_ARGS__>(*this, lib, NAME, "::das::detail::ResolveCtorAot<::" #__VA_ARGS__ ">")
 #define DAS_ADD_CTOR_BIND(...) DAS_ADD_CTOR_BIND_EX((das::typeName<das::detail::ResolveCtorAot<::__VA_ARGS__>>::name()), __VA_ARGS__)
@@ -362,26 +400,26 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
 
 // module decl helper
 
-#define DAS_MODULE_DECL_EX_BEGIN(MODULE_NAME, DAS_NAME, INCLUDE_PATH_WITH_QUOTES) \
-  struct MODULE_NAME final : public das::Module                                   \
-  {                                                                               \
-    das::ModuleAotType aotRequire(das::TextWriter &tw) const override             \
-    {                                                                             \
-      tw << "#include " INCLUDE_PATH_WITH_QUOTES "\n";                            \
-      return das::ModuleAotType::cpp;                                             \
-    }                                                                             \
-    void moduleDeclBody(das::ModuleLibrary &lib);                                 \
-    MODULE_NAME() : das::Module(DAS_NAME)                                         \
-    {                                                                             \
-      das::ModuleLibrary lib(this);                                               \
-      moduleDeclBody(lib);                                                        \
-      verifyAotReady();                                                           \
+#define DAS_MODULE_DECL_EX_BEGIN(MODULE_NAME, DAS_NAME, ...)          \
+  struct MODULE_NAME final : public das::Module                       \
+  {                                                                   \
+    das::ModuleAotType aotRequire(das::TextWriter &tw) const override \
+    {                                                                 \
+      das::detail::write_module_includes(tw, __VA_ARGS__);            \
+      return das::ModuleAotType::cpp;                                 \
+    }                                                                 \
+    void moduleDeclBody(das::ModuleLibrary &lib);                     \
+    MODULE_NAME() : das::Module(DAS_NAME)                             \
+    {                                                                 \
+      das::ModuleLibrary lib(this);                                   \
+      moduleDeclBody(lib);                                            \
+      verifyAotReady();                                               \
     }
 #define DAS_MODULE_DECL_EX_END            }
 #define DAS_MODULE_DECL_BODY(MODULE_NAME) void ::MODULE_NAME::moduleDeclBody([[maybe_unused]] das::ModuleLibrary &lib)
 
-#define DAS_MODULE_DECL_EX(MODULE_NAME, DAS_NAME, INCLUDE_PATH)                                   \
-  DAS_MODULE_DECL_EX_BEGIN(MODULE_NAME, DAS_NAME, "\"" INCLUDE_PATH "\"") DAS_MODULE_DECL_EX_END; \
-  REGISTER_MODULE(MODULE_NAME);                                                                   \
+#define DAS_MODULE_DECL_EX(MODULE_NAME, DAS_NAME, ...)                                 \
+  DAS_MODULE_DECL_EX_BEGIN(MODULE_NAME, DAS_NAME, __VA_ARGS__) DAS_MODULE_DECL_EX_END; \
+  REGISTER_MODULE(MODULE_NAME);                                                        \
   DAS_MODULE_DECL_BODY(MODULE_NAME)
-#define DAS_MODULE_DECL(MODULE_NAME, INCLUDE_PATH) DAS_MODULE_DECL_EX(MODULE_NAME##Module, #MODULE_NAME, INCLUDE_PATH)
+#define DAS_MODULE_DECL(MODULE_NAME, ...) DAS_MODULE_DECL_EX(MODULE_NAME##Module, #MODULE_NAME, __VA_ARGS__)
