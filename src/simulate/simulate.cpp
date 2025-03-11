@@ -1767,6 +1767,7 @@ namespace das
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
                 daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onUninstall(pAgent.get());
+                pAgent->onUninstall(daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent.get());
             }
             for ( auto & ap : g_DebugAgents ) {
                 ap.second.debugAgent->onUninstall(pAgent.get());
@@ -1776,6 +1777,7 @@ namespace das
         {
             std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
             swap(agents, g_DebugAgents);
+            daScriptEnvironment::bound->g_threadLocalDebugAgent = {};
         }
     }
 
