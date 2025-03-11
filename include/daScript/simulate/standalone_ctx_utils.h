@@ -11,17 +11,6 @@ namespace das {
     using MangledNameHash = size_t;
 
     struct FunctionInfo {
-        FunctionInfo(FunctionPtr fPtr)
-            : name(fPtr->name)
-            , mangledName(fPtr->getMangledName())
-            , stackSize(fPtr->totalStackSize)
-            , unsafeOperation(fPtr->unsafeOperation)
-            , fastCall(fPtr->fastCall)
-            , builtin(fPtr->module->builtIn)
-            , promoted(fPtr->module->promoted)
-            , res_ref(fPtr->result->isRefType() && !fPtr->result->ref)
-            , pinvoke(fPtr->pinvoke)
-        {}
         FunctionInfo(string name, string mangledName, size_t stackSize,
                      bool unsafeOperation, bool fastCall, bool builtin,
                      bool promoted, bool isResRef, bool pinvoke)
@@ -57,18 +46,22 @@ namespace das {
         size_t typeSize;
         bool globalShared;
     };
-
-    MangledNameHash ConvertFunction(const Context &ctx, SimFunction* gfun, FunctionInfo info);
-
-
     struct SizeDiff {
         size_t sharedSizeDiff;
         size_t globalsSizeDiff;
     };
-    SizeDiff ConvertGlobalVariable(const Context &ctx, GlobalVariable* gvar, GlobalVarInfo info);
-    void ConvertGlobalVar(Context &ctx, GlobalVariable* gvar, GlobalVarInfo info);
 
-    void FillFunction(Context &ctx, uint64_t semHash, AotLibrary &aotLib, SimFunction *fn);
+    /**
+     * Methods to init aot variables
+     */
+    MangledNameHash InitAotFunction(const Context &ctx, SimFunction* gfun, FunctionInfo info);
+    SizeDiff InitGlobalVariable(const Context &ctx, GlobalVariable* gvar, GlobalVarInfo info);
+    void InitGlobalVar(Context &ctx, GlobalVariable* gvar, GlobalVarInfo info);
+
+    /**
+     * Set code, aot, aotFunction for all function in @ref functions
+     */
+    void FillFunction(Context &ctx, AotLibrary &aotLib, std::vector<std::pair<uint64_t, SimFunction*>> functions);
 }
 
 #endif

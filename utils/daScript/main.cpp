@@ -128,16 +128,16 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     }
 }
 
-bool compileStandalone ( const string & fn, const string & cppFn, const StandaloneContextCfg &cfg ) {
+bool compileStandalone ( const string & inputFile, const string & outDir, const StandaloneContextCfg &cfg ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     struct stat st;
-    if (stat(cppFn.c_str(), &st) == -1) {
+    if (stat(outDir.c_str(), &st) == -1) {
 #if defined(_MSC_VER)
-        _mkdir(cppFn.c_str()) == 0;
+        _mkdir(outDir.c_str()) == 0;
 #elif defined(_EMSCRIPTEN_VER)
-        return mkdir(cppFn.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
+        return mkdir(outDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 #else
-        mkdir(cppFn.c_str(), ACCESSPERMS) == 0;
+        mkdir(outDir.c_str(), ACCESSPERMS) == 0;
 #endif
     }
     ModuleGroup dummyGroup;
@@ -146,7 +146,7 @@ bool compileStandalone ( const string & fn, const string & cppFn, const Standalo
     policies.aot_module = true;
     policies.fail_on_lack_of_aot_export = true;
     policies.version_2_syntax = version2syntax;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
+    if ( auto program = compileDaScript(inputFile,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -154,7 +154,7 @@ bool compileStandalone ( const string & fn, const string & cppFn, const Standalo
             }
             return false;
         } else {
-            runStandaloneVisitor(program, cppFn, cfg);
+            runStandaloneVisitor(program, outDir, cfg);
             return true;
         }
     } else {

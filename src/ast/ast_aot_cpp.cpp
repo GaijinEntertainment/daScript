@@ -547,13 +547,18 @@ namespace das {
             }
             ss << "\n";
             ss << "static void resolveTypeInfoAnnotations()\n{\n";
+            ss << "    vector<TypeInfo> annotations = {";
             for ( auto & ti : tmn2t ) {
                 auto tinfo = ti.second;
                 if ( tinfo->type==Type::tHandle ) {
-                    ss << "\t" << typeInfoName(ti.second) << ".resolveAnnotation();\n";
+                    ss << typeInfoName(ti.second) << ", ";
                 };
             }
-            ss << "}\n\n";
+            ss << "};\n";
+            ss << "    for (auto& ann : annotations) {\n"
+                  "        ann.resolveAnnotation();\n"
+                  "    }\n"
+                  "}\n\n";
             return ss.str();
         }
         string enumInfoName ( EnumInfo * info ) const {
@@ -3581,7 +3586,6 @@ namespace das {
                                       pfun->at, CompilationError::no_init);
                     }
                     auto info = helper.makeFunctionDebugInfo(*pfun);
-                    helper.str();
                     lookupFunctionTable.emplace_back(pfun, info);
                 });
             }
@@ -3604,8 +3608,8 @@ namespace das {
                                    << program.globalStringHeapSize << " /*globalStringHeapSize*/, policies, {});\n";
 
         tw << "     // start totalVariables\n";
-        for (const auto pvar: lookupVariableTable) {
-            tw << "    ConvertGlobalVar(context, &context.globalVariables[" << pvar->index << "/*pvar->index*/], GlobalVarInfo(\""
+        for (const auto& pvar: lookupVariableTable) {
+            tw << "    InitGlobalVar(context, &context.globalVariables[" << pvar->index << "/*pvar->index*/], GlobalVarInfo(\""
                << pvar->name << "\", \""
                << pvar->getMangledName() << "\", "
                << pvar->type->getSizeOf() << ", "
@@ -3623,7 +3627,7 @@ namespace das {
 
         tw << "     // start totalFunctions  "  << "\n";
         for (auto &[pfun, info]: lookupFunctionTable) {
-            tw << "    ConvertFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
+            tw << "    InitAotFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
                << "FunctionInfo(\"" << pfun->name << "\", \""
                << pfun->getMangledName() << "\", "
                << pfun->totalStackSize << ", "
@@ -3665,7 +3669,7 @@ namespace das {
         tw << "    context.tabAdLookup = make_shared<das_hash_map<uint64_t,uint64_t>>();\n";
         for (const auto & pm : program.library.getModules() ) {
             for(auto s2d : pm->annotationData ) {
-                tw << "    (*context.tabAdLookup)["<< s2d.first <<"] = "<< s2d.second <<";\n";
+                tw << "    (*context.tabAdLookup)["<< HEX << s2d.first << DEC <<"] = "<< s2d.second <<";\n";
             }
         }
 
@@ -3678,10 +3682,17 @@ namespace das {
             });
         }
 
+        tw << "    FillFunction(context, getGlobalAotLibrary(), {\n        ";
         for ( int fni=0, fnis=program.totalFunctions; fni!=fnis; ++fni ) {
             const auto & [name, aotHash] = fnn[fni];
-            tw << "    FillFunction(context, 0x" << HEX << aotHash << DEC << ", getGlobalAotLibrary(), &context.functions[" << fni << "/*fni*/]);\n";
+            tw << "std::make_pair(0x" << HEX << aotHash << DEC << ", &context.functions[" << fni << "/*fni*/])";
+            if (fni + 1 != fnis) {
+                tw << ",\n        ";
+            } else {
+                tw << "\n    ";
+            }
         }
+        tw << "});\n";
         // aot init
         if ( program.initSemanticHashWithDep ) {
             tw << "    {\n";
@@ -3836,6 +3847,40 @@ namespace das {
         tw << "AotListBase impl(registerAotFunctions);\n";
     }
 
+    static void dumpDependencies(ProgramPtr program, CppAot& aotVisitor) {
+        UseTypeMarker utm;
+        program->visit(utm);
+        bool remUS = program->options.getBoolOption("remove_unused_symbols",true);
+        for ( auto & pm : program->library.getModules() ) {
+            pm->structures.foreach([&](auto ps){
+                aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << aotStructName(ps.get()) << "; };\n";
+            });
+        }
+        for ( auto & pm : program->library.getModules() ) {
+            if ( pm == program->thisModule.get() ) {
+                continue;
+            }
+            pm->enumerations.foreach([&](auto penum){
+                auto pe = penum.get();
+                if ( !remUS || utm.useEnums.find(pe)!=utm.useEnums.end() ) {
+                    program->visitEnumeration(aotVisitor, pe);
+                } else {
+                    aotVisitor.ss << "// unused enumeration " << pe->name << "\n";
+                }
+            });
+            // aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
+            pm->structures.foreach([&](auto ps){
+                if ( !remUS || utm.useStructs.find(ps.get())!=utm.useStructs.end() ) {
+                    program->visitStructure(aotVisitor, ps.get());
+                } else {
+                    aotVisitor.ss << "// unused structure " << ps->name << "\n";
+                }
+            });
+            // aotVisitor.ss << "\n}; // " << pm->name << "\n";
+        }
+
+    }
+
     void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
         BlockVariableCollector coll;
         StandaloneContextGen gen(program, coll, cppOutputDir, cfg.context_name);
@@ -3862,35 +3907,40 @@ namespace das {
 
         das_map<string, pair<string, string>>     nameToOutput;
 
-        program->library.foreach([&] (Module * mod) {
-            // if ( mod->isProperBuiltin() ) return true;
-            const auto mod_name = (mod->promoted ? "" : mod->name);
-            TextWriter header;
-            header << "// Module " << mod_name << "\n";
-            header << AOT_INCLUDES;
+        CppAot aotVisitor(program,coll);
+        dumpDependencies(program, aotVisitor);
 
-            TextWriter source;
+        auto mod = program->thisModule.get();
+        // if ( mod->isProperBuiltin() ) return true;
+        const auto mod_name = (mod->promoted ? "" : mod->name);
+        TextWriter header;
+        header << "// Module " << mod_name << "\n";
+        header << AOT_INCLUDES;
 
-            source << "// Module " << mod_name << "\n";
+        TextWriter source;
 
-            source << "#include \"" << (mod->name.empty() ? cfg.context_name : mod->name) << ".das.h\"\n";
-            source << "#include \"daScript/simulate/standalone_ctx_utils.h\"\n";
-            writeRequiredModulesFor(source, mod);
-            source << AOT_HEADERS;
+        source << "// Module " << mod_name << "\n";
 
-            {
-                NamespaceGuard guard1(source, "das");
-                NamespaceGuard guard2(header, "das");
-                program->visitModule(gen, mod);
-                source << gen.str();
-                gen.clear();
-                if ( mod->name.empty() ) writeRegistration(header, source, program, cfg, context);
-            }
-            source << AOT_FOOTER;
+        source << "#include \"" << (mod->name.empty() ? cfg.context_name : mod->name) << ".das.h\"\n";
+        source << "#include \"daScript/simulate/standalone_ctx_utils.h\"\n";
+        writeRequiredModulesFor(source, mod);
+        source << AOT_HEADERS;
+        {
+            NamespaceGuard guard1(source, "das");
+            source << aotVisitor.ss.str();
+        }
 
-            nameToOutput[mod->name] = {header.str(), source.str()};
-            return true;
-        }, "*");
+        {
+            NamespaceGuard guard1(source, "das");
+            NamespaceGuard guard2(header, "das");
+            program->visitModule(gen, mod);
+            source << gen.str();
+            gen.clear();
+            if ( mod->name.empty() ) writeRegistration(header, source, program, cfg, context);
+        }
+        source << AOT_FOOTER;
+
+        nameToOutput[mod->name] = {header.str(), source.str()};
 
         // get the name of the current file from program?
 
@@ -3921,39 +3971,9 @@ namespace das {
         // now, for that AOT
         setPrintFlags();
         BlockVariableCollector collector;
-        visit(collector);
         CppAot aotVisitor(this,collector);
-        // pre visit all enumerations and structures for each dependency
-        bool remUS = options.getBoolOption("remove_unused_symbols",true);
-        UseTypeMarker utm;
-        visit(utm);
-        for ( auto & pm : library.modules ) {
-            pm->structures.foreach([&](auto ps){
-                aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << aotStructName(ps.get()) << "; };\n";
-            });
-        }
-        for ( auto & pm : library.modules ) {
-            if ( pm == thisModule.get() ) {
-                continue;
-            }
-            pm->enumerations.foreach([&](auto penum){
-                auto pe = penum.get();
-                if ( !remUS || utm.useEnums.find(pe)!=utm.useEnums.end() ) {
-                    visitEnumeration(aotVisitor, pe);
-                } else {
-                    aotVisitor.ss << "// unused enumeration " << pe->name << "\n";
-                }
-            });
-            // aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
-            pm->structures.foreach([&](auto ps){
-                if ( !remUS || utm.useStructs.find(ps.get())!=utm.useStructs.end() ) {
-                    visitStructure(aotVisitor, ps.get());
-                } else {
-                    aotVisitor.ss << "// unused structure " << ps->name << "\n";
-                }
-            });
-            // aotVisitor.ss << "\n}; // " << pm->name << "\n";
-        }
+        visit(collector);
+        dumpDependencies(this, aotVisitor);
         // now to the main body
         visit(aotVisitor);
         logs << aotVisitor.str();
