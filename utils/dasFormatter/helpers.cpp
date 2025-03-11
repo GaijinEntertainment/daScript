@@ -97,13 +97,11 @@ namespace das::format {
             auto concat = format::get_substring(last, from);
             auto prev_end = concat.find(prev_sep);
             assert(i == 0 || prev_end != npos); // incorrect prev_sep
-            if (i == 0) {
-                concat = prefix + concat;
-            } else if (prev_end != npos) {
-                real_sep.append(prefix);
+            if (i != 0 && prev_end != npos) {
                 concat.replace(prev_end, prev_sep.size(), real_sep);
             }
             result.append(concat)
+                .append(prefix)
                 .append(middle);
             last = to;
         }

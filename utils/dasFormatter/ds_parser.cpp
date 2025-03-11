@@ -1146,11 +1146,11 @@ static const yytype_int16 yyrline[] =
     3657,  3658,  3659,  3663,  3664,  3668,  3697,  3737,  3756,  3776,
     3796,  3817,  3817,  3817,  3825,  3825,  3825,  3832,  3832,  3832,
     3843,  3843,  3843,  3854,  3858,  3864,  3880,  3886,  3892,  3898,
-    3898,  3898,  3912,  3917,  3924,  3933,  3957,  3981,  3981,  3981,
-    3991,  3991,  3991,  4005,  4005,  4005,  4019,  4028,  4028,  4028,
-    4048,  4055,  4055,  4055,  4065,  4070,  4077,  4080,  4086,  4094,
-    4113,  4121,  4141,  4166,  4167,  4171,  4172,  4177,  4187,  4190,
-    4193,  4196,  4204,  4213,  4225,  4235
+    3898,  3898,  3912,  3917,  3924,  3933,  3961,  3985,  3985,  3985,
+    3995,  3995,  3995,  4009,  4009,  4009,  4023,  4032,  4032,  4032,
+    4052,  4059,  4059,  4059,  4069,  4074,  4081,  4084,  4090,  4098,
+    4117,  4125,  4145,  4170,  4171,  4175,  4176,  4181,  4191,  4194,
+    4197,  4200,  4208,  4217,  4229,  4239
 };
 #endif
 
@@ -7086,27 +7086,27 @@ yyreduce:
     break;
 
   case 99: /* annotation_argument: annotation_argument_name '=' string_constant  */
-                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
+                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s),tokRangeAt(scanner,(yylsp[-2]),(yylsp[0]))); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
     break;
 
   case 100: /* annotation_argument: annotation_argument_name '=' "name"  */
-                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
+                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),*(yyvsp[0].s),tokRangeAt(scanner,(yylsp[-2]),(yylsp[0]))); delete (yyvsp[0].s); delete (yyvsp[-2].s); }
     break;
 
   case 101: /* annotation_argument: annotation_argument_name '=' "integer constant"  */
-                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),(yyvsp[0].i),tokAt(scanner,(yylsp[-2]))); delete (yyvsp[-2].s); }
+                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),(yyvsp[0].i),tokRangeAt(scanner,(yylsp[-2]),(yylsp[0]))); delete (yyvsp[-2].s); }
     break;
 
   case 102: /* annotation_argument: annotation_argument_name '=' "floating point constant"  */
-                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),float((yyvsp[0].fd)),tokAt(scanner,(yylsp[-2]))); delete (yyvsp[-2].s); }
+                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),float((yyvsp[0].fd)),tokRangeAt(scanner,(yylsp[-2]),(yylsp[0]))); delete (yyvsp[-2].s); }
     break;
 
   case 103: /* annotation_argument: annotation_argument_name '=' "true"  */
-                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),true,tokAt(scanner,(yylsp[-2]))); delete (yyvsp[-2].s); }
+                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),true,tokRangeAt(scanner,(yylsp[-2]),(yylsp[0]))); delete (yyvsp[-2].s); }
     break;
 
   case 104: /* annotation_argument: annotation_argument_name '=' "false"  */
-                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),false,tokAt(scanner,(yylsp[-2]))); delete (yyvsp[-2].s); }
+                                                                    { (yyval.aa) = new AnnotationArgument(*(yyvsp[-2].s),false,tokRangeAt(scanner,(yylsp[-2]),(yylsp[0]))); delete (yyvsp[-2].s); }
     break;
 
   case 105: /* annotation_argument: annotation_argument_name  */
@@ -7114,8 +7114,8 @@ yyreduce:
     break;
 
   case 106: /* annotation_argument: annotation_argument_name '=' '(' annotation_argument_value_list ')'  */
-                                                                                          {
-        { (yyval.aa) = new AnnotationArgument(*(yyvsp[-4].s),(yyvsp[-1].aaList),tokAt(scanner,(yylsp[-4]))); delete (yyvsp[-4].s); }
+                                                                                               {
+        { (yyval.aa) = new AnnotationArgument(*(yyvsp[-4].s),(yyvsp[-1].aaList),tokRangeAt(scanner,(yylsp[-4]),(yylsp[0]))); delete (yyvsp[-4].s); }
     }
     break;
 
@@ -8456,10 +8456,10 @@ yyreduce:
     break;
 
   case 338: /* expr_type_info: "typeinfo" '(' name_in_namespace '<' "name" c_or_s "name" '>' expr ')'  */
-                                                                                                                              {
+                                                                                                                                    {
             format::replace_with(false,
                                  format::Pos::from(tokAt(scanner,(yylsp[-8]))),
-                                 format::get_substring(tokRangeAt(scanner,(yylsp[-7]),(yylsp[-1]))),
+                                 format::get_substring(tokRangeAt(scanner,(yylsp[-7]),(yylsp[-2]))),
                                  format::Pos::from(tokAt(scanner,(yylsp[-1]))), " ", "(");
 
             if ( (yyvsp[-1].pExpression)->rtti_isTypeDecl() ) {
@@ -8608,7 +8608,7 @@ yyreduce:
 
   case 358: /* optional_capture_list: "[[" capture_list ']' ']'  */
                                                               {
-        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[-3]))))) {
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[-3]))))) {
             format::get_writer() << format::substring_between(tokAt(scanner, (yylsp[-3])), tokAt(scanner, (yylsp[-2])))
                       << "capture(" << format::get_substring(tokAt(scanner, (yylsp[-2]))) << ")"
                       << format::substring_between(tokAt(scanner, (yylsp[-2])), tokAt(scanner, (yylsp[-1])));
@@ -9583,7 +9583,7 @@ yyreduce:
 
   case 543: /* optional_field_annotation: "[[" annotation_argument_list ']' ']'  */
                                                                      {
-        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[-3]))))) {
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[-3]))))) {
             for (const auto &arg: *(yyvsp[-2].aaList)) {
                 format::get_writer() << "@" << format::get_substring(arg.at);
             }
@@ -11905,7 +11905,11 @@ yyreduce:
             format::get_writer() << format::substring_between(tokAt(scanner, (yylsp[-3])), tokAt(scanner, (yylsp[-2])));
             if (static_cast<ExprMakeArray*>((yyvsp[-1].pExpression))->values.size() == 1) {
                 // single element
-                format::get_writer() << internal;
+                if (type_name.value_or("").find('[') != -1) {
+                    format::get_writer() << "[" << internal << "]";
+                } else {
+                    format::get_writer() << internal;
+                }
             } else {
                 format::get_writer() << "fixed_array";
                 if (!(yyvsp[-2].pTypeDecl)->isAuto()) {
