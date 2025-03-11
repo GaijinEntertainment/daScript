@@ -2057,46 +2057,43 @@ namespace das
     bool TypeDecl::isAuto() const {
         // auto is auto.... or auto....?
         // also dim[] is aito
-        for ( auto di : dim ) {
-            if ( di==TypeDecl::dimAuto ) {
+        for (auto di : dim) {
+            if (di == TypeDecl::dimAuto) {
                 return true;
             }
         }
-        if ( baseType==Type::typeMacro ) {
+        switch ( baseType ) {
+        case Type::typeMacro:
+        case Type::typeDecl:
+        case Type::autoinfer:
+        case Type::option:
             return true;
-        } else if ( baseType==Type::typeDecl ) {
-            return true;
-        } else if ( baseType==Type::autoinfer ) {
-            return true;
-        } else if ( baseType==Type::option ) {
-            return true;
-        } else if ( baseType==Type::tPointer ) {
-            if ( firstType )
-                return firstType->isAuto();
-        } else if ( baseType==Type::tIterator ) {
-            if ( firstType )
-                return firstType->isAuto();
-        } else if ( baseType==Type::tArray ) {
-            if ( firstType )
-                return firstType->isAuto();
-        } else if ( baseType==Type::tTable ) {
-            bool any = false;
-            if ( firstType )
-                any |= firstType->isAuto();
-            if ( secondType )
-                any |= secondType->isAuto();
-            return any;
-        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
-                   baseType==Type::tLambda || baseType==Type::tTuple ||
-                   baseType==Type::tVariant ) {
-            bool any = false;
-            if ( firstType )
-                any |= firstType->isAuto();
-            for ( auto & arg : argTypes )
-                any |= arg->isAuto();
-            return any;
+        case Type::tPointer:
+        case Type::tIterator:
+        case Type::tArray:
+            return firstType ? firstType->isAuto() : false;
+        case Type::tTable:
+            if ( firstType && firstType->isAuto() ) {
+                return true;
+            }
+            return secondType ? secondType->isAuto() : false;
+        case Type::tBlock:
+        case Type::tFunction:
+        case Type::tLambda:
+        case Type::tTuple:
+        case Type::tVariant:
+            if (firstType && firstType->isAuto() ) {
+                return true;
+            }
+            for (auto& arg : argTypes) {
+                if ( arg->isAuto() ) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
         }
-        return false;
     }
 
     bool TypeDecl::isAutoWithoutOptions(bool & hasOptions) const {
