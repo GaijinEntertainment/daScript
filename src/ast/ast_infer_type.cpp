@@ -1460,7 +1460,7 @@ namespace das {
                         ss << " at " << missFn->at.describe();
                     }
                     ss << "\n";
-                    if ( missFn->name != name ) {
+                    if ( missFn->name != funcName ) {
                         ss << "\t\tname is similar, typo?\n";
                     }
                     if ( reportDetails ) {
@@ -1547,7 +1547,7 @@ namespace das {
                         ss << " at " << missFn->at.describe();
                     }
                     ss << "\n";
-                    if ( missFn->name != name ) {
+                    if ( missFn->name != funcName ) {
                         ss << "\t\tname is similar, typo?\n";
                     }
                     if ( reportDetails ) {
@@ -8619,8 +8619,11 @@ namespace das {
                         } else if ( aliasT->isStructure() ) {
                             if ( expr->arguments.size()==0 ) {
                                 expr->name = aliasT->structType->name;
-                                bool isPrivate = aliasT->structType->privateStructure || aliasT->structType->module != thisModule;
-                                if ( !tryMakeStructureCtor (aliasT->structType, isPrivate, true) ) {
+                                bool isPrivate = aliasT->structType->privateStructure;
+                                if ( isPrivate && aliasT->structType->module != thisModule ) {
+                                    error("can't access private structure " + aliasT->structType->name, "", "",
+                                        expr->at, CompilationError::function_not_found);
+                                } else if ( !tryMakeStructureCtor (aliasT->structType, isPrivate, true) ) {
                                     if ( failOnMissingCtor ) {
                                         error("default constructor " + aliasT->structType->name + " is not visible directly",
                                             "try default<" + expr->name + "> instead", "", expr->at, CompilationError::function_not_found);
