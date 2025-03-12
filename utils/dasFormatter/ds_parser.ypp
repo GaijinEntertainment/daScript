@@ -1311,6 +1311,15 @@ expression_block
 expr_call_pipe
     : expr[call] expr_full_block_assumed_piped[block] {
         if ( $call->rtti_isCallLikeExpr() ) {
+            auto start = format::Pos::from_last(tokAt(scanner, @call));
+            start.column -= 1; // drop )
+            if (format::is_replace_braces() && format::prepare_rule(start)) {
+                if (!((ExprLooksLikeCall *)$call)->arguments.empty()) {
+                    format::get_writer() << ", ";
+                }
+                format::get_writer() << format::get_substring(tokAt(scanner, @block)) << ");";
+                format::finish_rule(format::Pos::from_last(tokAt(scanner, @block)));
+            }
             ((ExprLooksLikeCall *)$call)->arguments.push_back($block);
             $$ = $call;
         } else {
@@ -1461,13 +1470,26 @@ expr_pipe
             $$ = $fncall;
         }
     }
-    |   LAPIPE expr_block[arg] {
+    |   LAPIPE[pipe] expr_block[arg] {
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+            format::get_writer() << "@";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner, @pipe)));
+        }
+
         $$ = $arg;
     }
-    |   LFPIPE expr_block[arg] {
+    |   LFPIPE[pipe] expr_block[arg] {
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+            format::get_writer() << "@@";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner, @pipe)));
+        }
         $$ = $arg;
     }
-    |   LLPIPE expr_block[arg] {
+    |   LLPIPE[pipe] expr_block[arg] {
+        if (format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+            format::get_writer() << "$";
+            format::finish_rule(format::Pos::from_last(tokAt(scanner, @pipe)));
+        }
         $$ = $arg;
     }
     |   expr_call_pipe[call] {
