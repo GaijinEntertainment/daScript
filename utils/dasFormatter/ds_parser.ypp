@@ -84,6 +84,7 @@
 
     namespace das { class Module; }
     void das_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
+    void das_strfmt ( yyscan_t yyscanner );
 
     #undef yyextra
     #define yyextra (*((das::DasParserState **)(scanner)))
@@ -394,6 +395,8 @@
 %type <s>               annotation_declaration_name
 %type <s>               function_name
 %type <s>               optional_structure_parent
+%type <s>               format_string
+%type <s>               optional_format_string
 %type <s>               require_module_name
 %type <s>               annotation_argument_name
 %type <aa>              annotation_argument
@@ -635,6 +638,16 @@ string_constant
     |   BEGIN_STRING END_STRING                            { $$ = new string(); }
     ;
 
+format_string
+    :   { $$ = new string(); }
+    |   format_string[ss] STRING_CHARACTER[char] { $$ = $ss; $ss->push_back($char); }
+    ;
+
+optional_format_string
+    :   { $$ = new string(""); }
+    |   ':' { das_strfmt(scanner); } format_string[fmt] { $$ = $fmt; }
+    ;
+
 string_builder_body
     :   {
         $$ = new ExprStringBuilder();
@@ -650,10 +663,17 @@ string_builder_body
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
         $$ = $sb;
     }
-    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] END_STRING_EXPR %prec BEGIN_STRING_EXPR {
+    |   string_builder_body[sb] BEGIN_STRING_EXPR expr[subexpr] optional_format_string[sfmt] END_STRING_EXPR %prec BEGIN_STRING_EXPR {
         auto se = $subexpr;
+        if ( !$sfmt->empty() ) {
+            auto call_fmt = new ExprCall(tokAt(scanner,@sfmt), "_::fmt");
+            call_fmt->arguments.push_back(make_smart<ExprConstString>(tokAt(scanner,@sfmt),":" + *$sfmt));
+            call_fmt->arguments.push_back(se);
+            se = call_fmt;
+        }
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(se);
         $$ = $sb;
+        delete $sfmt;
     }
     ;
 
@@ -3943,14 +3963,25 @@ make_dim
     ;
 
 make_dim_decl
-    :   '[' [loc] expr_list[arguments] optional_comma ']' {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
-        mka->values = sequenceToList($arguments);
-        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
-        mka->gen2 = true;
-        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
-        tam->arguments.push_back(mka);
-        $$ = tam;
+    :   '[' [loc] optional_expr_list[arguments] ']' {
+        if ( $arguments ) {
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+            mka->values = sequenceToList($arguments);
+            mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+            mka->gen2 = true;
+            auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
+            tam->arguments.push_back(mka);
+            $$ = tam;
+        } else {
+            auto mks = new ExprMakeStruct();
+            mks->at = tokAt(scanner,@loc);
+            mks->makeType = make_smart<TypeDecl>(Type::tArray);
+            mks->makeType->firstType = make_smart<TypeDecl>(Type::autoinfer);
+            mks->useInitializer = true;
+            mks->alwaysUseInitializer = true;
+            $$ = mks;
+        }
+
     }
     |   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr [end_loc] {
         // std::cout << "case13" << std::endl;
@@ -4109,13 +4140,25 @@ expr_map_tuple_list
     ;
 
 make_table_decl
-    :   open_block [loc] expr_map_tuple_list[arguments] optional_comma close_block {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
-        mka->values = sequenceToList($arguments);
-        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
-        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
-        ttm->arguments.push_back(mka);
-        $$ = ttm;
+    :   open_block [loc]  optional_expr_map_tuple_list[arguments] close_block {
+        if ( $arguments ) {
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+            mka->values = sequenceToList($arguments);
+            mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+            auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+            ttm->arguments.push_back(mka);
+            $$ = ttm;
+        } else {
+            auto mks = new ExprMakeStruct();
+            mks->at = tokAt(scanner,@loc);
+            mks->makeType = make_smart<TypeDecl>(Type::tTable);
+            mks->makeType->firstType = make_smart<TypeDecl>(Type::autoinfer);
+            mks->makeType->secondType = make_smart<TypeDecl>(Type::autoinfer);
+            mks->useInitializer = true;
+            mks->alwaysUseInitializer = true;
+            $$ = mks;
+        }
+
     }
     |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur [end] {
         // std::cout << "case10" << std::endl;
