@@ -363,8 +363,9 @@ def private visit_type ( var typ:TypeDeclPtr&; var adapter:smart_ptr<VisitorAdap
     unsafe {
         // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
         var newType <- typ |> visit(adapter)
-        if typ != newType
+        if ( typ != newType ) {
             typ := null
+        }
         typ <- newType
     }
 }
@@ -383,7 +384,6 @@ def apply_template ( var rules:Template; at:LineInfo; var typ:smart_ptr<TypeDecl
     }
     return <- typ
 }
-
 
 def unquote_block(expr : ExpressionPtr) : smart_ptr<ExprBlock> {
     //! Returns the corresponding block subexpression expression form the ExprMakeBlock.
