@@ -3608,8 +3608,8 @@ namespace das {
                                    << program.globalStringHeapSize << " /*globalStringHeapSize*/, policies, {});\n";
 
         tw << "     // start totalVariables\n";
-        for (const auto pvar: lookupVariableTable) {
-            tw << "    ConvertGlobalVar(context, &context.globalVariables[" << pvar->index << "/*pvar->index*/], GlobalVarInfo(\""
+        for (const auto& pvar: lookupVariableTable) {
+            tw << "    InitGlobalVar(context, &context.globalVariables[" << pvar->index << "/*pvar->index*/], GlobalVarInfo(\""
                << pvar->name << "\", \""
                << pvar->getMangledName() << "\", "
                << pvar->type->getSizeOf() << ", "
@@ -3627,7 +3627,7 @@ namespace das {
 
         tw << "     // start totalFunctions  "  << "\n";
         for (auto &[pfun, info]: lookupFunctionTable) {
-            tw << "    ConvertFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
+            tw << "    InitAotFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
                << "FunctionInfo(\"" << pfun->name << "\", \""
                << pfun->getMangledName() << "\", "
                << pfun->totalStackSize << ", "

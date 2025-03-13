@@ -736,10 +736,36 @@ IF(HAIKU)
     TARGET_LINK_LIBRARIES(libDaScript network uuid)
 ENDIF()
 SETUP_CPP11(libDaScript)
-#target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
-
 
 add_custom_target(standaloneGenerated)
+SET(STANDALONE_SRC)
+DAS_AOT_STANDALONE("src/das/ast/ast_print.das" STANDALONE_SRC standaloneGenerated daslang)
+
+ADD_LIBRARY(libDaScriptStandalone ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
+        ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
+        ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC} ${STANDALONE_SRC})
+ADD_DEPENDENCIES(libDaScriptStandalone need_and_resolve)
+ADD_DEPENDENCIES(libDaScriptStandalone standaloneGenerated)
+ADD_PROJECT_XXD_DEPENDS(libDaScriptStandalone)
+target_include_directories(libDaScriptStandalone PUBLIC
+        ${DAS_SMMALLOC_DIR}
+        ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
+        ${CMAKE_SOURCE_DIR}/include
+)
+target_compile_definitions(libDaScriptStandalone PUBLIC STANDALONE_MODE)
+target_link_libraries(libDaScriptStandalone libUriParser)
+#target_link_libraries(libDaScript fmt::fmt)
+IF(LINUX_UUID)
+    target_link_libraries(libDaScriptStandalone uuid)
+ENDIF()
+IF(UNIX AND NOT APPLE)
+    TARGET_LINK_LIBRARIES(libDaScriptStandalone ${CMAKE_DL_LIBS})
+ENDIF()
+IF(HAIKU)
+    TARGET_LINK_LIBRARIES(libDaScriptStandalone network uuid)
+ENDIF()
+SETUP_CPP11(libDaScriptStandalone)
+#target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
 
 
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
@@ -784,12 +810,10 @@ if (NOT ${DAS_TOOLS_DISABLED})
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
     SET(SRC_LIBRARIES libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+    SET(SRC_LIBRARIES2 libDaScriptStandalone libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
 
-    SET(STANDALONE_SRC)
-    DAS_AOT_STANDALONE("src/das/ast/ast_print.das" STANDALONE_SRC standaloneGenerated daslang)
-    add_executable(daslang-boostrapped ${DAS_DASCRIPT_MAIN_SRC} ${STANDALONE_SRC} ${AOT_GENERATED_SRC})
-    #add_dependencies(daslang-bootstrapped standaloneGenerated)
-    TARGET_LINK_LIBRARIES(daslang-boostrapped ${SRC_LIBRARIES})
+    add_executable(daslang-boostrapped ${DAS_DASCRIPT_MAIN_SRC} ${AOT_GENERATED_SRC})
+    TARGET_LINK_LIBRARIES(daslang-boostrapped ${SRC_LIBRARIES2})
 
 
     add_executable(daslang ${DAS_DASCRIPT_MAIN_SRC})

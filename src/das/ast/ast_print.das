@@ -4,7 +4,6 @@ require daslib/ast_boost
 
 class SetPrinterFlags : AstVisitor {
     def override preVisitExprBlockExpression ( block1: smart_ptr<ExprBlock>; var expr: ExpressionPtr ) {
-        print("ASDASDASDASDASDASDASD")
         expr.printFlags := ExprPrintFlags.argLevel
     }
 
@@ -67,6 +66,6 @@ class SetPrinterFlags : AstVisitor {
 [export]
 def setFlags(var prog: ProgramPtr) {
     var flags = new SetPrinterFlags();
-    flags.preVisitProgram(prog);
-    flags.visitProgram(prog);
+    var inscope adapter <- make_visitor(*flags)
+    visit(prog, adapter)
 }

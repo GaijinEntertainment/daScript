@@ -1,7 +1,7 @@
 #include <daScript/simulate/standalone_ctx_utils.h>
 
 namespace das {
-    MangledNameHash ConvertFunction(const Context &ctx, SimFunction* gfun, FunctionInfo info) {
+    MangledNameHash InitAotFunction(const Context &ctx, SimFunction* gfun, FunctionInfo info) {
         auto MNH = hash_blockz64((uint8_t *)info.mangledName.c_str());
         gfun->name = ctx.code->allocateName(info.name);
         gfun->mangledName = ctx.code->allocateName(info.mangledName);
@@ -17,7 +17,7 @@ namespace das {
         return MNH;
     }
 
-    SizeDiff ConvertGlobalVariable(const Context &ctx, GlobalVariable* gvar, GlobalVarInfo info) {
+    SizeDiff InitGlobalVariable(const Context &ctx, GlobalVariable* gvar, GlobalVarInfo info) {
         gvar->name = ctx.code->allocateName(info.name);
         gvar->size = info.typeSize;
         const auto sizeDiff = (uint64_t(gvar->size) + 0xful) & ~0xfull;
@@ -34,8 +34,8 @@ namespace das {
         }
     }
 
-    void ConvertGlobalVar(Context &ctx, GlobalVariable *gvar, GlobalVarInfo info) {
-        auto sizeDiff = ConvertGlobalVariable(ctx, gvar, std::move(info));
+    void InitGlobalVar(Context &ctx, GlobalVariable *gvar, GlobalVarInfo info) {
+        auto sizeDiff = InitGlobalVariable(ctx, gvar, std::move(info));
         ctx.updateSharedGlobalSize(sizeDiff.sharedSizeDiff, sizeDiff.globalsSizeDiff);
     }
 
