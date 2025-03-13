@@ -1412,6 +1412,7 @@ namespace das
                 bool forceVariant : 1;
                 bool forceTuple : 1;
                 bool alwaysUseInitializer : 1;
+                bool ignoreVisCheck : 1;
             };
             uint32_t makeStructFlags = 0;
         };

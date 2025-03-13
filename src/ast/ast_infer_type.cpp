@@ -1353,7 +1353,7 @@ namespace das {
                             if ( pFn->isTemplate ) continue;
                             if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn) ) ) {
                                 if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
-                                    if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
+                                    if ( !visCheck || canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                         auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
                                         if ( *itLook ) {
                                             if ( fragile_bit_set::is_true(*itLook) ) {
@@ -1379,8 +1379,8 @@ namespace das {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
                             if ( pFn->isTemplate ) continue;
-                            if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
-                                if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
+                            if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
+                                if ( !visCheck || canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                     auto itLook = pFn->lookup.find_and_reserve(argHash);    // if found in lookup
                                     if ( *itLook ) {
                                         if ( fragile_bit_set::is_true(*itLook) ) {
@@ -8380,14 +8380,14 @@ namespace das {
             return true;
         }
 
-        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, Function * lookupFunction = nullptr, bool failOnMissingCtor = true ) {
+        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, Function * lookupFunction = nullptr, bool failOnMissingCtor = true, bool visCheck = true ) {
             vector<TypeDeclPtr> types;
             if (!inferArguments(types, expr->arguments)) {
                 return nullptr;
             }
             MatchingFunctions functions, generics;
             if ( !lookupFunction ) {
-                findMatchingFunctionsAndGenerics(functions, generics, expr->name, types, true);
+                findMatchingFunctionsAndGenerics(functions, generics, expr->name, types, true, visCheck);
                 applyLSP(types,functions);
             } else {
                 functions.push_back(lookupFunction);
@@ -9173,6 +9173,10 @@ namespace das {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return Visitor::visit(expr);
             }
+            if ( expr->ignoreVisCheck && !safeExpression(expr) ) {
+                error("ignoring visibility check on structure initialization requires unsafe", "", "",
+                    expr->at, CompilationError::unsafe);
+            }
             if ( expr->makeType && expr->makeType->isAlias() ) {
                 if ( auto aT = inferAlias(expr->makeType) ) {
                     expr->makeType = aT;
@@ -9190,10 +9194,10 @@ namespace das {
                 // auto ctorName = st->module->name  + "::" + st->name;
                 auto ctorName = st->module->name  + "::" + st->name;
                 auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,ctorName);
-                expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric, nullptr, false).get();
+                expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric, nullptr, false, !expr->ignoreVisCheck).get();
                 if ( !expr->constructor ) {
                   tempCall->name = "__::" + st->name;
-                  expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric, nullptr, false).get();
+                  expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric, nullptr, false, !expr->ignoreVisCheck).get();
                 }
                 if ( !expr->constructor ) {
                     error("class constructor can't be inferred " + describeType(expr->makeType),
