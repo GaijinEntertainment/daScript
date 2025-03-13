@@ -17,18 +17,18 @@ let VALUE = 2
 %spoof_instance~template_basic_value(Foo_6,\V\A\L\U\E + 1)%%;  // escaped literal
 
 [test]
-def test_basic_value ( t:T? )
+def test_basic_value(t : T?)
     let foo1 = Foo_1()
-    t |> equal(1,foo1.value)
+    t |> equal(1, foo1.value)
     let foo2 = Foo_2()
-    t |> equal(VALUE,foo2.value)
+    t |> equal(VALUE, foo2.value)
     let foo3 = Foo_3()
-    t |> equal(3,foo3.value)
+    t |> equal(3, foo3.value)
     let foo4 = Foo_4()
-    t |> equal("hello\n",foo4.value)
+    t |> equal("hello\n", foo4.value)
     let foo5 = Foo_5()
-    t |> equal(VALUE,foo5.value)
+    t |> equal(VALUE, foo5.value)
     let foo6 = Foo_6()
-    t |> equal(VALUE + 1,foo6.value)
+    t |> equal(VALUE + 1, foo6.value)
 
 

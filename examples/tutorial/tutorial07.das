@@ -3,7 +3,7 @@ options log
 require tutorial_07
 
 [export]
-def take_2 ( a : int; b : float )
+def take_2(a : int; b : float)
     print("take_2 a = {a} b = {b}\n")
 
 [export]
@@ -13,7 +13,7 @@ def test
 
     var a : intarray
     for x in range(3)
-        push(a,x)
+        push(a, x)
     print("a = {a}\n")
 
     var fb : FooBar

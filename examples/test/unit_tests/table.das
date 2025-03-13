@@ -1,152 +1,182 @@
-def test_find
-    let const_tab <- {{ "one"=>1; "two"=>2 }}
-    find(const_tab,"one") <| $(num)
-        assert(deref(num)==1)
-    get(const_tab,"one") <| $(num)
-        assert(num==1)
-    find(const_tab,"one") <| $(num)
-        if num != null
-            assert(deref(num)==1)
+options gen2
+def test_find {
+    let const_tab <- { "one" => 1, "two" => 2 }
+    find(const_tab, "one") <| $(num) {
+        assert(deref(num) == 1)
+    }
+    get(const_tab, "one") <| $(num) {
+        assert(num == 1)
+    }
+    find(const_tab, "one") <| $(num) {
+        if (num != null) {
+            assert(deref(num) == 1)
+        }
+    }
     assert(const_tab?["one"] ?? 100500 == 1)
-    var tab <- {{ "one"=>1; "two"=>2 }}
-    find(tab,"one") <| $(num)
-        assert(deref(num)==1)
-    get(tab,"one") <| $(var num)
+    var tab <- { "one" => 1, "two" => 2 }
+    find(tab, "one") <| $(num) {
+        assert(deref(num) == 1)
+    }
+    get(tab, "one") <| $(var num) {
         num = 3
+    }
     assert(tab?["one"] ?? 100500 == 3)
-    get(tab,"one") <| $(var num)
-        assert(num==3)
+    get(tab, "one") <| $(var num) {
+        assert(num == 3)
         num = 4
+    }
     assert(tab?["one"] ?? 100500 == 4)
-    get(tab,"one") <| $(var num)
-        assert(num==4)
+    get(tab, "one") <| $(var num) {
+        assert(num == 4)
         num = 5
+    }
     assert(tab?["one"] ?? 100500 == 5)
-    unsafe
+    unsafe {
         var dummy = 0
         tab?["one"] ?? dummy = 1
-        assert(tab?["one"] ?? 100500==1)
-        assert(dummy==0)
+        assert(tab?["one"] ?? 100500 == 1)
+        assert(dummy == 0)
+    }
     return true
+}
 
 [export]
-def test : bool
+def test : bool {
     test_find()
 
-    var tab:table<string;int>
-    var i,del:int
-    let total:int=32
-    verify(!erase(tab,"0"))
+    var tab : table<string; int>
+    var i, del : int
+    let total : int = 32
+    verify(!erase(tab, "0"))
     i = 0
-    while i!=total
+    while (i != total) {
         // tab[string(i)] = i++
-        tab |> insert(string(i),i)
+        tab |> insert(string(i), i)
         i++
-    assert(length(tab)==total)
+    }
+    assert(length(tab) == total)
     // debug(tab)
     i = 0
-    while i!=total
-        verify(tab |>get_value(string(i))==i)
+    while (i != total) {
+        verify(tab |> get_value(string(i)) == i)
         i++
-    assert(length(tab)==total)
+    }
+    assert(length(tab) == total)
     // debug(tab)
     i = 0
     del = 0
-    while i < total
-        verify(erase(tab,string(i)))
-        verify(!erase(tab,string(i)))
+    while (i < total) {
+        verify(erase(tab, string(i)))
+        verify(!erase(tab, string(i)))
         del ++
         i += 7
-    assert(length(tab)==total-del)
+    }
+    assert(length(tab) == total - del)
     // debug(tab)
     i = 0
-    while i < total
-        find(tab,string(i)) <| $(pValue)
-            if pValue!=null
-                assert(deref(pValue)==i)
-            else
-                assert(i%7==0)
+    while (i < total) {
+        find(tab, string(i)) <| $(pValue) {
+            if (pValue != null) {
+                assert(deref(pValue) == i)
+            } else {
+                assert(i % 7 == 0)
+            }
+        }
         i ++
-    while i < total
+    }
+    while (i < total) {
         let pValue = unsafe(tab?[string(i)])
-        if pValue!=null
-            assert(deref(pValue)==i)
-        else
-            assert(i%7==0)
+        if (pValue != null) {
+            assert(deref(pValue) == i)
+        } else {
+            assert(i % 7 == 0)
+        }
         i ++
-    if true
-        var j,k:int=0
+    }
+    if (true) {
+        var j, k : int = 0
         i = 0
-        while i < total
-            find(tab,string(i)) <| $(pVal)
-                j+= pVal ?? 0
-            if i%7!=0
-                k +=i
-            else
-                assert(i%7==0)
+        while (i < total) {
+            find(tab, string(i)) <| $(pVal) {
+                j += pVal ?? 0
+            }
+            if (i % 7 != 0) {
+                k += i
+            } else {
+                assert(i % 7 == 0)
+            }
             i ++
-        assert(j==k)
-    if true
-        var j,k,zero:int=0
+        }
+        assert(j == k)
+    }
+    if (true) {
+        var j, k, zero : int = 0
         i = 0
-        while i < total
-            find(tab,string(i)) <| $(pVal)
+        while (i < total) {
+            find(tab, string(i)) <| $(pVal) {
                 j += pVal ?? zero
-            if i%7!=0
-                k +=i
+            }
+            if (i % 7 != 0) {
+                k += i
+            }
             i ++
-        assert(j==k)
+        }
+        assert(j == k)
+    }
     // debug(tab)
     i = 0
-    while i < total
-        tab|>insert(string(i),i)
+    while (i < total) {
+        tab |> insert(string(i), i)
         i += 7
-    assert(length(tab)==total)
+    }
+    assert(length(tab) == total)
     // debug(tab)
     i = 0
-    while i!=total
-        verify(tab |> get_value(string(i))==i)
+    while (i != total) {
+        verify(tab |> get_value(string(i)) == i)
         i++
-    assert(length(tab)==total)
+    }
+    assert(length(tab) == total)
     // debug(tab)
     var cnt = 0
-    for k,v in keys(tab),values(tab)
+    for (k, v in keys(tab), values(tab)) {
         // debug(k,"key=")
         // debug(v,"value=")
-        assert(k==string(v))
+        assert(k == string(v))
         cnt ++
-    assert(cnt==total)
-    verify(erase(tab,"1"))
-    verify(!erase(tab,"-1"))
+    }
+    assert(cnt == total)
+    verify(erase(tab, "1"))
+    verify(!erase(tab, "-1"))
 
 
-    var tab_bool:table<bool;int>
+    var tab_bool : table<bool; int>
     assert(!key_exists(tab_bool, false))
     assert(!key_exists(tab_bool, true))
-    tab_bool |> insert(true,0)
+    tab_bool |> insert(true, 0)
     assert(key_exists(tab_bool, true))
-    tab_bool |> insert(false,-1)
+    tab_bool |> insert(false, -1)
     assert(key_exists(tab_bool, false))
 
-    var tab_int:table<int;int>
+    var tab_int : table<int; int>
     assert(!key_exists(tab_int, -1))
-    tab_int |> insert(-1,-1)
+    tab_int |> insert(-1, -1)
     assert(key_exists(tab_int, -1))
     erase(tab_int, -1)
     assert(!key_exists(tab_int, -1))
 
-    var tab_string:table<string;int>
+    var tab_string : table<string; int>
     assert(!key_exists(tab_string, "---"))
-    tab_string |> insert("---",-1)
+    tab_string |> insert("---", -1)
     assert(key_exists(tab_string, "---"))
     erase(tab_string, "---")
     assert(!key_exists(tab_string, "---"))
     assert(!key_exists(tab_string, " "))
-    tab_string |> insert(" ",-1)
+    tab_string |> insert(" ", -1)
     assert(key_exists(tab_string, " "))
     erase(tab_string, " ")
     assert(!key_exists(tab_string, " "))
-    tab_string |> insert("",-2)
+    tab_string |> insert("", -2)
     assert(key_exists(tab_string, ""))
     verify(tab_string |> get_value("") == -2)
     erase(tab_string, "")
@@ -156,63 +186,82 @@ def test : bool
     test_lock_panic()
 
     return true
+}
 
 [sideeffects]
-def test_lock_panic
-    var tab <- {{ "one" => 1; "two" => 2 }}
+def test_lock_panic {
+    var tab <- { "one" => 1, "two" => 2 }
     var failed = false
-    try
-        find(tab,"one") <| $(t)
-            assert(t!=null)
-            tab |> insert("three",3)
-    recover
+    try {
+        find(tab, "one") <| $(t) {
+            assert(t != null)
+            tab |> insert("three", 3)
+        }
+    } recover {
         failed = true
+    }
     assert(failed)
     failed = false
-    try
-        find(tab,"three") <| $(t)
-            assert(t==null)
-            erase(tab,"three")
-    recover
+    try {
+        find(tab, "three") <| $(t) {
+            assert(t == null)
+            erase(tab, "three")
+        }
+    } recover {
         failed = true
+    }
     assert(failed)
     return true
+}
 
-let
+let {
     TOTAL = 100
+}
 
-struct TestStruct
+struct TestStruct {
     test : string
+}
 
-struct TableContainer
+struct TableContainer {
     t : table<string; TestStruct>
+}
 
-def check(var t : TableContainer; deletedEntries : array<int>)
-    for i in range (1, TOTAL)
+def check(var t : TableContainer; deletedEntries : array<int>) {
+    for (i in range(1, TOTAL)) {
         var deleted : bool
-        for x in deletedEntries
-            if x == i
+        for (x in deletedEntries) {
+            if (x == i) {
                 deleted = true
                 break
-        if deleted
+            }
+        }
+        if (deleted) {
             continue
+        }
         let n = "name_{i}"
-        if t.t |> get_value(n).test != n
+        if (t.t |> get_value(n).test != n) {
             return false
+        }
+    }
     return true
+}
 
 [sideeffects]
-def test_erase_collision
+def test_erase_collision {
     var t : TableContainer
     var names : array<string>
-    for i in range(1, TOTAL)
+    for (i in range(1, TOTAL)) {
         push(names, "name_{i}")
-    for n in names
-        t.t |> emplace(n,[[TestStruct test = n ]])
+    }
+    for (n in names) {
+        t.t |> emplace(n, TestStruct(test = n))
+    }
     var deletedEntries : array<int>
     verify(check(t, deletedEntries))
-    for i in range(1, TOTAL)
+    for (i in range(1, TOTAL)) {
         let x = "name_{i}"
         push(deletedEntries, i)
         erase(t.t, x)
         verify(check(t, deletedEntries))
+    }
+}

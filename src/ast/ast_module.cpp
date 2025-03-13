@@ -469,7 +469,7 @@ namespace das {
             }
         }
         if ( functions.insert(mangledName, fn) ) {
-            functionsByName[hash64z(fn->name.c_str())].push_back(fn);
+            functionsByName[hash64z(fn->name.c_str())].push_back(fn.get());
             fn->module = this;
             return true;
         } else {
@@ -485,7 +485,7 @@ namespace das {
         auto mangledName = fn->getMangledName();
         fn->module = nullptr;
         if ( generics.insert(mangledName, fn) ) {
-            genericsByName[hash64z(fn->name.c_str())].push_back(fn);
+            genericsByName[hash64z(fn->name.c_str())].push_back(fn.get());
             fn->module = this;
             return true;
         } else {
@@ -518,7 +518,7 @@ namespace das {
 
     FunctionPtr Module::findUniqueFunction ( const string & mangledName ) const {
         auto it = functionsByName.find(hash64z(mangledName.c_str()));
-        if ( it==functionsByName.end() ) return nullptr;
+        if ( !it ) return nullptr;
         if ( it->second.size()!=1 ) return nullptr;
         return it->second[0];
     }
@@ -791,10 +791,19 @@ namespace das {
     }
 
     void ModuleLibrary::foreach ( const callable<bool (Module * module)> & func, const string & moduleName ) const {
-        bool any = moduleName=="*";
-        for ( auto pm : modules ) {
-            if ( !any && pm->name!=moduleName ) continue;
-            if ( !func(pm) ) break;
+        DAS_ASSERT(moduleName!="_" && moduleName!="__");
+        if (  moduleName=="*" ) {
+            for ( auto pm : modules ) {
+                if ( !func(pm) ) break;
+            }
+
+        } else {
+            for ( auto pm : modules ) {
+                if ( pm->name==moduleName ) {
+                    func(pm);
+                    break;
+                }
+            }
         }
     }
 
@@ -818,12 +827,14 @@ namespace das {
     void ModuleLibrary::findWithCallback ( const string & name, Module * inWhichModule, const callable<void (Module * pm, const string &name, Module * inWhichModule)> & func ) const {
         string moduleName, funcName;
         splitTypeName(name, moduleName, funcName);
-        foreach([&](Module * pm) -> bool {
-            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) ) {
-                func(pm, funcName, inWhichModule);
-            }
-            return true;
-        }, moduleName);
+        if ( moduleName!="_" && moduleName!="__") { // those are never found. in reality we may want to support this one day with "*" and "thisModuleName" accordingly
+            foreach([&](Module * pm) -> bool {
+                if ( inWhichModule->isVisibleDirectly(pm) ) {
+                    func(pm, funcName, inWhichModule);
+                }
+                return true;
+            }, moduleName);
+        }
     }
 
     void ModuleLibrary::findAnnotation ( vector<AnnotationPtr> & ptr, Module * pm, const string & annotationName, Module * ) const {
@@ -1047,11 +1058,6 @@ namespace das {
         }
         userData[data->name] = ModuleGroupUserDataPtr(data);
         return true;
-    }
-
-    bool Module::isVisibleDirectly ( Module * objModule ) const {
-        if ( objModule==this ) return true;
-        return requireModule.find(objModule) != requireModule.end();
     }
 
     using ModulesPullers = das::vector<module_pull_t>;

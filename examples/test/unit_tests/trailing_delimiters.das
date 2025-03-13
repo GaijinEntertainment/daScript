@@ -16,10 +16,10 @@ def test_int_array()
     var i2 <- [[int[3] 1; 2; 1;]]
     print("{i2}\n")
 
-    var i3 <- [{auto 1; 2;}]
+    var i3 <- [{auto 1; 2; }]
     print("{i3}\n")
 
-    var i4 <- [{auto 1;}]
+    var i4 <- [{auto 1; }]
     print("{i4}\n")
 
     var i5 <- [[auto[] 1;]]
@@ -45,15 +45,15 @@ def test_structure_init()
 
 
     var ad <- [{AAA
-      x=1, y=2;
-      x=3, y=4;  /* */ /* // 1234 */
+      x = 1, y = 2;
+      x = 3, y = 4;  /* */ /* // 1234 */
     }]
     print("{ad}\n")
 
 
     var bd <- [{AAA()
-      x=1, y=2;
-      x=3, y=4;
+      x = 1, y = 2;
+      x = 3, y = 4;
     }]
     print("{bd}\n")
 
@@ -72,17 +72,17 @@ def test_structure_init()
     print("{d}\n")
 
 
-    var e <- [[ AAA x=111, y=222; /* */ x=333, y=444;  /* */ ]]  /*
+    var e <- [[AAA x=111, y=222; /* */ x=333, y=444;  /* */]] /*
     */
     print("{e}\n")
     assert(e[1].y == 444)
 
 
-    var f <- [[ AAA x=111, y=222 /*
+    var f <- [[AAA x=111, y=222 /*
       new line
     */; x=333, y=444;  /*
       new line
-    */ ]]  /*
+    */]] /*
     */
     print("{f}\n")
     assert(f[1].y == 444)
@@ -101,17 +101,17 @@ def test_blocks()
     ${}
     ${
     }
-    ${;}
+    ${; }
     ${ ${}; }
     ${ ${} /**/; };
-    ${ ${} ; /**/ }
+    ${ ${}; /**/ }
     ${ ${ ${}; };
     }
-    ${print("1"); print("2\n");}
+    ${print("1"); print("2\n"); }
 
-    if true {print("12\n");}
-    if true {if true {print("12\n");} else {print("34\n"); }; }
-    if true {if true {print("12\n");} else {print("34\n"); } }
+    if true {print("12\n"); }
+    if true {if true {print("12\n"); } else {print("34\n"); }; }
+    if true {if true {print("12\n"); } else {print("34\n"); } }
 
 
 def test_mixed_blocks()

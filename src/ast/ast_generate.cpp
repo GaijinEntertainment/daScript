@@ -721,7 +721,7 @@ namespace das {
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
                                             const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at,
                                             Program * thisProgram ) {
-        auto asc = new ExprAscend();
+        auto asc = make_smart<ExprAscend>();
         asc->at = at;
         asc->needTypeInfo = true;
         auto makeS = make_smart<ExprMakeStruct>();
@@ -780,9 +780,8 @@ namespace das {
         asc->ascType->argTypes.erase(asc->ascType->argTypes.begin());
         asc->ascType->argNames.erase(asc->ascType->argNames.begin());
         asc->ascType->baseType = Type::tLambda;
-        auto res = ExpressionPtr(asc);
-        verifyGenerated(res);
-        return res;
+        verifyGenerated(asc);
+        return asc;
     }
 
     // rename variable to unique name variable

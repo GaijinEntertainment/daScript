@@ -17,28 +17,28 @@ options stack = 1000000000
 
 
 struct Email
-    username: string
-    domain: string
+    username : string
+    domain : string
 
 
-def get_parser_with( email:string; blk: block<( email:Email; err:array<ParsingError> ):void> )
+def get_parser_with(email : string; blk : block<(email : Email; err : array<ParsingError>) : void>)
     parse email
-        var email: Email
+        var email : Email
 
         rule("{alnums}" as username, "@", "{domain}" as domain) <|
             return [[Email username = username, domain = domain]]
 
-        var alnums: void? // Just a pattern to be interpreted later
+        var alnums : void?// Just a pattern to be interpreted later
 
         rule(+set('0'..'9', 'a'..'z', 'A'..'Z', '-', '.', '_')) <|
             return null
 
-        var domain: void?
+        var domain : void?
 
         rule(+subdomain, tld) <|
             return null
 
-        var tld: void?
+        var tld : void?
 
         rule("com") <|
             return null
@@ -47,14 +47,14 @@ def get_parser_with( email:string; blk: block<( email:Email; err:array<ParsingEr
         rule("org") <|
             return null
 
-        var subdomain: void?
+        var subdomain : void?
 
-        rule( +set('0'..'9', 'a'..'z', 'A'..'Z', '-'), "." ) <|
+        rule(+set('0'..'9', 'a'..'z', 'A'..'Z', '-'), ".") <|
             return null
 
 
 [test]
-def test_email_1(t: T?)
+def test_email_1(t : T?)
     var input = "abc@mail.example.com"
 
     get_parser_with(input) <| $(email; err)
@@ -62,7 +62,7 @@ def test_email_1(t: T?)
         t |> equal("mail.example.com", email.domain)
 
 [test]
-def test_email_2(t: T?)
+def test_email_2(t : T?)
     var input = "john.doe@example.com"
 
     get_parser_with(input) <| $(email; err)
@@ -70,7 +70,7 @@ def test_email_2(t: T?)
         t |> equal("example.com", email.domain)
 
 [test]
-def test_email_3(t: T?)
+def test_email_3(t : T?)
     var input = "this_is_a_very_long_username@example.com"
 
     get_parser_with(input) <| $(email; err)
@@ -78,7 +78,7 @@ def test_email_3(t: T?)
         t |> equal("example.com", email.domain)
 
 [test]
-def test_email_4(t: T?)
+def test_email_4(t : T?)
     var input = "12345@example.com"
 
     get_parser_with(input) <| $(email; err)
@@ -86,7 +86,7 @@ def test_email_4(t: T?)
         t |> equal("example.com", email.domain)
 
 [test]
-def test_email_5(t: T?)
+def test_email_5(t : T?)
     var input = "jane-doe@mail-example.com"
 
     get_parser_with(input) <| $(email; err)
@@ -94,7 +94,7 @@ def test_email_5(t: T?)
         t |> equal("mail-example.com", email.domain)
 
 [test]
-def test_email_6(t: T?)
+def test_email_6(t : T?)
     var input = "user_name@example.com"
 
     get_parser_with(input) <| $(email; err)
@@ -102,7 +102,7 @@ def test_email_6(t: T?)
         t |> equal("example.com", email.domain)
 
 [test]
-def test_email_7(t: T?)
+def test_email_7(t : T?)
     var input = "user@subdomain1.subdomain2.example.com"
 
     get_parser_with(input) <| $(email; err)
@@ -112,7 +112,7 @@ def test_email_7(t: T?)
 // Test parsing failures
 
 [test]
-def test_email_error_1(t: T?)
+def test_email_error_1(t : T?)
     var input = "@"
 
     get_parser_with(input) <| $(email; err)
@@ -120,7 +120,7 @@ def test_email_error_1(t: T?)
             t |> failure("Should fail")
 
 [test]
-def test_email_error_2(t: T?)
+def test_email_error_2(t : T?)
     var input = "john.gmail.com"
 
     get_parser_with(input) <| $(email; err)

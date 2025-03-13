@@ -15,18 +15,18 @@ require daslib/random
 require testProfile
 
 struct Node
-    x,y:int
-    left, right: Node?
+    x, y : int
+    left, right : Node?
 
 var
-    seed:int4 = int4(1,1,1,1)
+    seed : int4 = int4(1, 1, 1, 1)
 
-[unsafe_deref,hint(alwaysinline,hot)]
-def merge(var lower, greater: Node?): Node?
+[unsafe_deref, hint(alwaysinline, hot)]
+def merge(var lower, greater : Node?) : Node?
     if lower == null
-    	return greater
+        return greater
     elif greater == null
-    	return lower
+        return lower
     elif lower.y < greater.y
         lower.right = merge(lower.right, greater)
         return lower
@@ -34,48 +34,48 @@ def merge(var lower, greater: Node?): Node?
         greater.left = merge(lower, greater.left)
         return greater
 
-[unsafe_deref,hint(alwaysinline,hot)]
-def split(var orig:Node?; var lower:Node?&; var greaterOrEqual:Node?&; value: int)
+[unsafe_deref, hint(alwaysinline, hot)]
+def split(var orig : Node?; var lower : Node?&; var greaterOrEqual : Node?&; value : int)
     if orig == null
-    	lower = null
-		greaterOrEqual = null
+        lower = null
+        greaterOrEqual = null
     elif orig.x < value
-		lower = orig
-		split(lower.right,lower.right,greaterOrEqual,value)
+        lower = orig
+        split(lower.right, lower.right, greaterOrEqual, value)
     else
-		greaterOrEqual = orig
-		split(greaterOrEqual.left,lower,greaterOrEqual.left,value)
+        greaterOrEqual = orig
+        split(greaterOrEqual.left, lower, greaterOrEqual.left, value)
 
-[hint(alwaysinline,hot)]
-def hasValue(var orig:Node? &; x: int): bool
-	var lower, equal, greater : Node?
-	var equalOrGreater : Node?
+[hint(alwaysinline, hot)]
+def hasValue(var orig : Node?&; x : int) : bool
+    var lower, equal, greater : Node?
+    var equalOrGreater : Node?
     split(orig, lower, equalOrGreater, x)
     split(equalOrGreater, equal, greater, x + 1)
     let res = equal != null
     orig = merge(merge(lower, equal), greater)
     return res
 
-[hint(alwaysinline,hot)]
-def insert(var orig:Node? &; x: int)
+[hint(alwaysinline, hot)]
+def insert(var orig : Node?&; x : int)
     var lower, equal, greater : Node?
-	var equalOrGreater : Node?
+    var equalOrGreater : Node?
     split(orig, lower, equalOrGreater, x)
     split(equalOrGreater, equal, greater, x + 1)
     if equal == null
-    	equal = new [[Node x=x, y=random_big_int(seed)]]
+        equal = new [[Node x=x, y=random_big_int(seed)]]
     orig = merge(merge(lower, equal), greater)
 
-[hint(alwaysinline,hot)]
-def erase_raw(var orig:Node? &; x: int)
+[hint(alwaysinline, hot)]
+def erase_raw(var orig : Node?&; x : int)
     var lower, equal, greater : Node?
-	var equalOrGreater : Node?
+    var equalOrGreater : Node?
     split(orig, lower, equalOrGreater, x)
     split(equalOrGreater, equal, greater, x + 1)
     orig = merge(lower, greater)
 
 def mainTreeNode
-    var tree:Node?
+    var tree : Node?
     var cur = 5
     var res = 0
     for i in range(1, 1000000)
@@ -89,10 +89,10 @@ def mainTreeNode
             if tree |> hasValue(cur)
                 res ++
     unsafe
-	    delete tree
+        delete tree
     return res
 
-[export,no_aot,no_jit]
+[export, no_aot, no_jit]
 def main
     profile(10, "tree")  <|
         mainTreeNode()

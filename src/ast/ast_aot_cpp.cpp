@@ -3959,7 +3959,7 @@ namespace das {
                 writeAotFooter();
 
                 nameToOutput[mod->name] = ss.str();
-                ss = std::move(TextWriter{}); // clear the stream
+                ss.clear(); // clear the stream
                 return true;
             }, "*");
 

@@ -25,16 +25,16 @@ require math
 // To avoid overflow during template expansion
 options stack = 10000000
 
-var times_invoked: uint64 = 0 |> uint64()
+var times_invoked : uint64 = 0 |> uint64()
 
 struct MacroRule
-    [[do_not_delete]] rule: ExprLet? // from let rule: type
-    options_: array<string>
-    alternatives: array<ExprCall?>
+    [[do_not_delete]] rule : ExprLet?// from let rule: type
+    options_ : array<string>
+    alternatives : array<ExprCall?>
 
 
 [macro_function]
-def add_alternative(var rules: array<MacroRule>; var expr: ExprCall?; prog: ProgramPtr)
+def add_alternative(var rules : array<MacroRule>; var expr : ExprCall?; prog : ProgramPtr)
     var call_name = expr.name |> string()
 
     if call_name == "rule"
@@ -45,7 +45,7 @@ def add_alternative(var rules: array<MacroRule>; var expr: ExprCall?; prog: Prog
 
 
 [macro_function]
-def add_name(var rule: Rule; var name: string)
+def add_name(var rule : Rule; var name : string)
     match rule
         if [[Rule repeat = $v(rep)]]
             rep.name <- name
@@ -57,7 +57,7 @@ def add_name(var rule: Rule; var name: string)
             abort("Unreachable")
 
 
-def into_terminal(var expr: ExpressionPtr): tuple<int;int>
+def into_terminal(var expr : ExpressionPtr) : tuple<int; int>
     if expr is ExprConstInt
         // Single character '\n', '1', 'a'
 
@@ -82,18 +82,18 @@ def into_terminal(var expr: ExpressionPtr): tuple<int;int>
     return <- [[auto 0, 0]]
 
 [macro_function]
-def flatten_intervals ( charset : array<tuple<from:int;to:int>>; invert:bool )
+def flatten_intervals(charset : array<tuple<from : int; to : int>>; invert : bool)
     var chars : bool[256]
 
     for r in charset
-        for i in max(r.from,0) .. min(r.to + 1,256)
+        for i in max(r.from, 0) .. min(r.to + 1, 256)
             chars[i] = true
 
     if invert
         for Ch in chars
             Ch = !Ch
 
-    var result : array<tuple<int;int>>
+    var result : array<tuple<int; int>>
 
     var start : int = -1
     for i in 0 .. 256
@@ -102,7 +102,7 @@ def flatten_intervals ( charset : array<tuple<from:int;to:int>>; invert:bool )
                 start = i
         else
             if start != -1
-                result |> push <| [[auto start, i-1]]
+                result |> push <| [[auto start, i - 1]]
                 start = -1
     if start != -1
         result |> push <| [[auto start, 256]]
@@ -110,7 +110,7 @@ def flatten_intervals ( charset : array<tuple<from:int;to:int>>; invert:bool )
     return <- [[auto chars, result]]
 
 [macro_function]
-def into_rule_(var expr: ExpressionPtr): Rule_?
+def into_rule_(var expr : ExpressionPtr) : Rule_?
     if expr is ExprAsVariant && (expr as ExprAsVariant).value is ExprVar
         // Bound terminal
 
@@ -141,7 +141,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
         var subrule = (as_expr.value as ExprPtr2Ref).subexpr |> into_rule_
         subrule.name := as_expr.name
-        return <- new [[Rule_ rule <- [[Rule maybe_repeat <- subrule ]]]]
+        return <- new [[Rule_ rule <- [[Rule maybe_repeat <- subrule]]]]
 
 
     elif expr is ExprAsVariant && ((expr as ExprAsVariant).value is ExprStringBuilder)
@@ -158,7 +158,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
         var as_expr <- expr as ExprAsVariant
 
-        var rule: Rule_? <- into_rule_(as_expr.value)
+        var rule : Rule_? <- into_rule_(as_expr.value)
         rule.name = as_expr.name |> string()
         //print("{rule}\n")
         return <- rule
@@ -195,25 +195,25 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         // Repetition (*) -- zero or more
 
         var subrule = (expr as ExprPtr2Ref).subexpr |> into_rule_
-        return <- new [[Rule_ rule <- [[Rule maybe_repeat <- subrule ]]]]
+        return <- new [[Rule_ rule <- [[Rule maybe_repeat <- subrule]]]]
 
     elif expr is ExprCall && (expr as ExprCall).name == "MB"
         // Optional rule (MB) -- zero or one
 
         var subrule = (expr as ExprCall).arguments[0] |> into_rule_
-        return <- new [[Rule_ rule <- [[Rule option = subrule ]]]]
+        return <- new [[Rule_ rule <- [[Rule option = subrule]]]]
 
     elif expr is ExprCall && (expr as ExprCall).name == "PEEK"
         // Lookahead rule (PEEK) -- match the rule without advancing
 
         var subrule = (expr as ExprCall).arguments[0] |> into_rule_
-        return <- new [[Rule_ rule <- [[Rule and_rule = subrule ]]]]
+        return <- new [[Rule_ rule <- [[Rule and_rule = subrule]]]]
 
     elif expr is ExprOp1 && (expr as ExprOp1).op == "!"
         // Negaitve Lookahead rule (!) -- assert unable to match the rule, without advancing
 
         var subrule = (expr as ExprOp1).subexpr |> into_rule_
-        return <- new [[Rule_ rule <- [[Rule not_rule = subrule ]]]]
+        return <- new [[Rule_ rule <- [[Rule not_rule = subrule]]]]
 
     elif expr is ExprCall && ((expr as ExprCall).name == "set" || (expr as ExprCall).name == "not_set")
         // Matching set syntax set('1'..'9', 'a'..'z', 'A'..'Z', '_')
@@ -221,10 +221,10 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         var set = expr as ExprCall
         let inverting = set.name == "not_set"
 
-        var terms: array<tuple<int;int>>
+        var terms : array<tuple<int; int>>
 
         for arg in set.arguments
-            terms |> push (arg |> into_terminal)
+            terms |> push(arg |> into_terminal)
 
         return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- flatten_intervals(terms, inverting)]] ]] ]]
 
@@ -233,13 +233,13 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
         var log = expr as ExprCall
         var inscope message <- log.arguments[0] |> clone_expression
-        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal log_msg <- message ]] ]] ]]
+        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal log_msg <- message]] ]] ]]
 
     elif expr is ExprOp1 && (expr as ExprOp1).op == "+"
         // Several (+) -- one or more
 
         var subrule = (expr as ExprOp1).subexpr |> into_rule_
-        return <- new [[Rule_ rule <- [[Rule repeat <- subrule ]]]]
+        return <- new [[Rule_ rule <- [[Rule repeat <- subrule]]]]
 
     elif expr is ExprConstInt
         transfrom_error(expr.at, "Your rule contains integers (possibly in the form of '_', please use \"\" for literals)")
@@ -248,14 +248,14 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
     transfrom_error(expr.at, "Unknown rule passed to `rule` as argument {describe(expr)} into rule")
     return <- new [[Rule_]]
 
-def transfrom_error ( at:LineInfo; message:string )
+def transfrom_error(at : LineInfo; message : string)
     macro_error(compiling_program(), at, message)
     failed_to_transform = true
 
 var private failed_to_transform = false
 
 [macro_function]
-def transform(var rule: MacroRule): Definition
+def transform(var rule : MacroRule) : Definition
     unsafe
         failed_to_transform = false
         var name = rule.rule.variables[0].name |> string()
@@ -263,15 +263,15 @@ def transform(var rule: MacroRule): Definition
 
         // Transform array<ExprCall?> into an array of Rules
 
-        var inscope alternatives: array<Alternative>
+        var inscope alternatives : array<Alternative>
 
         for alt in rule.alternatives
             if true // creates scope for inscope
-                var inscope blk: ExpressionPtr <- clone_expression(alt.arguments |> back)
+                var inscope blk : ExpressionPtr <- clone_expression(alt.arguments |> back)
 
-                var sequence: array<Rule_?>
+                var sequence : array<Rule_?>
 
-                for sequence_elem,_ in alt.arguments,range(length(alt.arguments)-1)
+                for sequence_elem, _ in alt.arguments, range(length(alt.arguments) - 1)
                     sequence |> push <| into_rule_(sequence_elem)
 
                 alternatives |> emplace <| [[Alternative
@@ -313,14 +313,14 @@ class ParseMacro : AstCallMacro
     //!     THEREFORE, DO NOT PUT STATEFUL ACTIONS in the parser generator. Thank you for your attention.
 
 
-    def override canVisitArgument ( expr:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
+    def override canVisitArgument(expr : smart_ptr<ExprCallMacro>; argIndex : int) : bool
         // if we are reporting errors, and macro did not fold - no point showing errors inside match - there will be too many, and they are meaningless
         return false
 
-    def override canFoldReturnResult ( expr:smart_ptr<ExprCallMacro> ) : bool
+    def override canFoldReturnResult(expr : smart_ptr<ExprCallMacro>) : bool
         return false
 
-    def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+    def override visit(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprCallMacro>) : ExpressionPtr
         g_failed = false // refresh for new errors
 
         // Verify
@@ -337,7 +337,7 @@ class ParseMacro : AstCallMacro
 
         // Collect
 
-        var rules_: array<MacroRule>
+        var rules_ : array<MacroRule>
 
         for list_expr in expression_block.list
             if list_expr is ExprLet
@@ -349,7 +349,7 @@ class ParseMacro : AstCallMacro
 
         // Transform
 
-        var inscope gram: array<Definition>
+        var inscope gram : array<Definition>
 
         var inscope gen <- [[ParserGenerator id = times_invoked++]]
 
@@ -385,7 +385,7 @@ class ParseMacro : AstCallMacro
             if $v(gen.color_output)
                 parser.color_output = true
 
-            peek_data($i(name)) <| $ ( inp )
+            peek_data($i(name)) <| $(inp)
                 parser.input := inp
 
             var result : $t(unsafe(gen.return_types[gram[0].name]))
@@ -400,7 +400,7 @@ class ParseMacro : AstCallMacro
             var inscope error_reporting_parser : $t(gen.parser_type)
             error_reporting_parser.suppress_errors |> push <| false
 
-            peek_data($i(name)) <| $ ( inp )
+            peek_data($i(name)) <| $(inp)
                 error_reporting_parser.input := inp
 
             error_reporting_parser.error_reporting = true

@@ -432,6 +432,9 @@ list(SORT AST_SRC)
 SOURCE_GROUP_FILES("ast" AST_SRC)
 
 SET(BUILTIN_SRC
+include/daScript/builtin/ast_gen.inc
+include/daScript/builtin/debugapi_gen.inc
+
 src/builtin/module_builtin.h
 src/builtin/module_builtin.cpp
 src/builtin/module_builtin_misc_types.cpp
@@ -459,13 +462,11 @@ src/builtin/module_builtin_ast.h
 src/builtin/module_builtin_uriparser.h
 src/builtin/module_builtin_uriparser.cpp
 src/builtin/module_jit.cpp
-src/builtin/ast_gen.inc
 src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_dasbind.cpp
 src/builtin/module_builtin_network.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
-src/builtin/debugapi_gen.inc
 src/builtin/module_file_access.cpp
 src/builtin/builtin.das.inc
 src/builtin/builtin.das
@@ -634,6 +635,15 @@ src/simulate/fs_file_info.cpp
 ${DAS_MODULES_RESOLVE_INC}
 )
 
+# das formatter
+SET(DASCRIPT_FMT_SRC
+        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/fmt.cpp
+        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/formatter.cpp
+        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/helpers.cpp
+        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp
+        CACHE INTERNAL "DAS_DASCRIPT_FMT_SRC"
+)
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   set_source_files_properties(src/builtin/module_builtin_ast_serialize.cpp PROPERTIES
     COMPILE_FLAGS "-fexceptions"
@@ -681,7 +691,7 @@ include_directories(include)
 include_directories(3rdparty/fmt/include)
 ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
-	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC})
+	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
 ADD_DEPENDENCIES(libDaScript need_and_resolve)
 ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC
@@ -763,16 +773,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
         DESTINATION ${DAS_INSTALL_DASLIBDIR}
     )
 
-# das formatter
-    SET(DAS_DASCRIPT_FMT_SRC
-        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp
-        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/formatter.cpp
-        ${PROJECT_SOURCE_DIR}/utils/dasFormatter/ds_parser.cpp
-        ${DAS_MODULES_NEED_INC}
-        CACHE INTERNAL "DAS_DASCRIPT_FMT_SRC"
-    )
-
-    add_executable(das-fmt ${DAS_DASCRIPT_FMT_SRC})
+    add_executable(das-fmt ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
     TARGET_LINK_LIBRARIES(das-fmt ${SRC_LIBRARIES})
 
     SETUP_CPP11(das-fmt)

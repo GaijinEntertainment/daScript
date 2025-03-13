@@ -14,21 +14,21 @@ struct Foo
 struct register // 30116: invalid name
     foo : int
 
-def do(a:int)   // 30116: invalid name
+def do(a : int) // 30116: invalid name
     return a
 
-def foo(register:int)   // 30116: invalid name
+def foo(register : int) // 30116: invalid name
     return register
 
-def bar(a:int)
+def bar(a : int)
     let register = a        // 30116: invalid name
     return register
 
 def any(x)
-    invoke(x,12)
+    invoke(x, 12)
 
-def lbm(a:int)
-    any() <| $ ( register : int )   // 30116: invalid name
+def lbm(a : int)
+    any() <| $(register : int)      // 30116: invalid name
         return a + register
 
 [export]

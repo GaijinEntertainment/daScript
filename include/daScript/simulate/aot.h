@@ -2675,7 +2675,9 @@ namespace das {
         if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
-        vec.insert(vec.begin() + at, value);
+        (void)value;
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.insert(vec.begin() + at, value);
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
@@ -2683,72 +2685,88 @@ namespace das {
         if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
-        vec.insert(vec.begin() + at, value);
+        (void)value;
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.insert(vec.begin() + at, value);
     }
 
-    template <typename TT>
+    template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_empty ( TT & vec, int32_t at, Context * context ) {
         if ( uint32_t(at)>vec.size() ) {
             context->throw_error_ex("insert index out of range, %i of %u", at, uint32_t(vec.size()));
         }
-        vec.emplace(vec.begin() + at);
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.emplace(vec.begin() + at);
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_emplace ( TT & vec, QQ & value, int32_t at ) {
-        vec.emplace(vec.begin()+at, das::move(value));
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.emplace(vec.begin()+at, das::move(value));
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_back ( TT & vec, const QQ & value ) {
-        vec.push_back(value);
+        (void)value;
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.push_back(value);
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_back_value ( TT & vec, QQ value ) {
-        vec.push_back(value);
+        (void)value;
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.push_back(value);
     }
 
-    template <typename TT>
+    template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_push_back_empty ( TT & vec ) {
-        vec.emplace_back();
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.emplace_back();
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_emplace_back ( TT & vec, QQ & value ) {
-        vec.emplace_back(das::move(value));
+        (void)value;
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.emplace_back(das::move(value));
     }
 
-    template <typename TT>
+    template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_pop ( TT & vec ) {
-        vec.pop_back();
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.pop_back();
     }
 
-    template <typename TT>
+    template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_clear ( TT & vec ) {
-        vec.clear();
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.clear();
     }
 
-    template <typename TT>
+    template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_resize ( TT & vec, int32_t newSize ) {
-        vec.resize(newSize);
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.resize(newSize);
     }
 
-    template <typename TT>
+    template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_erase ( TT & vec, int32_t index, Context * context ) {
         if ( uint32_t(index)>vec.size() ) {
             context->throw_error_ex("erasing vector index out of range %i of %i", index, int32_t(vec.size()));
         }
-        vec.erase(vec.begin() + index);
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.erase(vec.begin() + index);
     }
 
-    template <typename TT>
+    template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_erase_range ( TT & vec, int32_t index, int32_t count, Context * context ) {
         if ( index < 0 || count < 0 || uint32_t(index + count) > uint32_t(vec.size()) ) {
             context->throw_error_ex(
                 "erasing vector range is invalid: index=%i count=%i size=%i", index, count, int32_t(vec.size()));
         }
-        vec.erase(vec.begin() + index, vec.begin() + index + count);
+        if constexpr (das::is_stub_type<QQ>::value) { DAS_ASSERTF(false, "STUB!"); }
+        else vec.erase(vec.begin() + index, vec.begin() + index + count);
     }
 
     template <typename TT>

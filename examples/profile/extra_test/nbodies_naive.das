@@ -6,16 +6,16 @@
 require math
 
 struct body
-    x,y,z:double
-    vx,vy,vz:double
-    mass:double
+    x, y, z : double
+    vx, vy, vz : double
+    mass : double
 
 let PId = 3.141592653589793lf
 let SOLAR_MASS = 4.lf * PId * PId
 let DAYS_PER_YEAR = 365.24lf
 
-def offset_momentum(var bodies:body[5])
-    var px,py,pz:double
+def offset_momentum(var bodies : body[5])
+    var px, py, pz : double
     for b in bodies
         px -= b.vx * b.mass
         py -= b.vy * b.mass
@@ -24,36 +24,36 @@ def offset_momentum(var bodies:body[5])
     bodies[0].vy = py / SOLAR_MASS
     bodies[0].vz = pz / SOLAR_MASS
 
-def advance(dt; var bodies:body[5])
+def advance(dt; var bodies : body[5])
     var i = 0
     for b in bodies
         ++i
         for j in range(i, length(bodies))
-            var b2:body& = unsafe(bodies[j])
+            var b2 : body& = unsafe(bodies[j])
             let dx = b.x - b2.x
             let dy = b.y - b2.y
             let dz = b.z - b2.z
-            let dsq = dx*dx + dy*dy + dz*dz
+            let dsq = dx * dx + dy * dy + dz * dz
             let mag = dt / (dsq * sqrt(dsq))
-            b.vx -= dx * (b2.mass*mag)
-            b.vy -= dy * (b2.mass*mag)
-            b.vz -= dz * (b2.mass*mag)
-            b2.vx += dx * (b.mass*mag)
-            b2.vy += dy * (b.mass*mag)
-            b2.vz += dz * (b.mass*mag)
-        b.x += dt*b.vx
-        b.y += dt*b.vy
-        b.z += dt*b.vz
+            b.vx -= dx * (b2.mass * mag)
+            b.vy -= dy * (b2.mass * mag)
+            b.vz -= dz * (b2.mass * mag)
+            b2.vx += dx * (b.mass * mag)
+            b2.vy += dy * (b.mass * mag)
+            b2.vz += dz * (b.mass * mag)
+        b.x += dt * b.vx
+        b.y += dt * b.vy
+        b.z += dt * b.vz
 
-def energy(var bodies:body[5])
+def energy(var bodies : body[5])
     var e = 0.0lf
     var i = 0
     for b in bodies
-        e += 0.5lf * b.mass * (b.vx*b.vx + b.vy*b.vy + b.vz*b.vz)
+        e += 0.5lf * b.mass * (b.vx * b.vx + b.vy * b.vy + b.vz * b.vz)
         ++i
         for j in range(i, length(bodies))
             let b2 = bodies[j]
-            e -= (b.mass * b2.mass) / sqrt((b.x - b2.x)*(b.x - b2.x) + (b.y - b2.y)*(b.y - b2.y) + (b.z - b2.z)*(b.z - b2.z))
+            e -= (b.mass * b2.mass) / sqrt((b.x - b2.x) * (b.x - b2.x) + (b.y - b2.y) * (b.y - b2.y) + (b.z - b2.z) * (b.z - b2.z))
     return e
 
 

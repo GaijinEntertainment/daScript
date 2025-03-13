@@ -1,17 +1,14 @@
 #include "formatter.h"
 
-#include <vector>
-#include <iostream>
-#include <sstream>
-
 namespace das::format {
 
     struct State {
         FormatOptions options;
         vector<string> content_;
         Pos last;
+        ProgramPtr program;
         bool enabled = false;
-        stringstream *ss;
+        TextWriter *ss;
     };
 
     static State state;
@@ -29,7 +26,7 @@ namespace das::format {
     }
 
 
-    void init(stringstream *ss, string content, FormatOptions options) {
+    void init(TextWriter *ss, string content, FormatOptions options, ProgramPtr program) {
         string line;
         content.push_back('\n'); // easiest way to flush the last line
         for (const auto c: content) {
@@ -42,8 +39,17 @@ namespace das::format {
         }
         state.ss = ss;
         state.enabled = true;
-        state.last = {.line=1, .column=0};
+        state.last = Pos{1, 0};
+        state.program = program;
         state.options = move(options);
+        if ((state.content_.empty() || state.content_.front().substr(0, strlen("options gen2")) != "options gen2") &&
+             state.options.contains(FormatOpt::V2Syntax)) {
+            *state.ss << "options gen2";
+            if (state.options.contains(FormatOpt::SemicolonEOL)) {
+                *state.ss << ";";
+            }
+            *state.ss << "\n";
+        }
     }
 
     void destroy() {
@@ -54,11 +60,12 @@ namespace das::format {
         state.ss = nullptr;
         state.enabled = false;
         state.last = {};
+        state.options = {};
         state.content_ = {};
     }
 
     void set_to(Pos info) {
-        assert(state.last < info);
+        assert(state.last <= info);
         state.last = info;
     }
 
@@ -67,15 +74,16 @@ namespace das::format {
             return "";
         }
 
+        TextPrinter tp;
         string result;
         for (; pos1.line < pos2.line; pos1.line++, pos1.column = 0) {
             if (pos1.line > state.content_.size()) {
-                cerr << "Warning, location line out of range" << endl;
+                tp << "Warning, location line out of range\n";
                 return "";
             } else if (pos1.column > state.content_[pos1.line - 1].length()) {
-                cout << "incorrect location info, extra symbols "
-                          << pos1.column << " "
-                          << state.content_[pos1.line - 1].length() << endl;
+//                tp << "incorrect location info, extra symbols "
+//                          << pos1.column << " "
+//                          << state.content_[pos1.line - 1].length() << '\n';
             } else {
                 result += state.content_[pos1.line - 1].substr(pos1.column);
             }
@@ -88,28 +96,42 @@ namespace das::format {
         }
 
         if (pos1.line > state.content_.size()) {
-            cerr << "Warning, location line out of range" << endl;
+            tp << "Warning, location line out of range\n";
             return "";
         }
         if (pos1.column > state.content_[pos1.line - 1].size()) {
-            cerr << "Warning, location column out of range" << endl;
+            tp << "Warning, location column out of range\n";
             return "";
         }
         result += state.content_[pos1.line - 1].substr(pos1.column, pos2.column - pos1.column);
         return result;
     }
 
+
     string get_substring(LineInfo info) {
         return get_substring(Pos{info.line, info.column},
                              Pos{info.last_line, info.last_column});
     }
 
-    ostream& get_writer() {
+    string substring_between(LineInfo info1, LineInfo info2) {
+        return get_substring(Pos{info1.last_line, info1.last_column},
+                             Pos{info2.line, info2.column});
+    }
+
+    string get_line(uint32_t line) {
+        if (line - 1 >= state.content_.size()) {
+            TextPrinter() << "Warning, requested line is too big\n";
+            return "";
+        }
+        return state.content_.at(line - 1);
+    }
+
+    TextWriter& get_writer() {
         return *state.ss;
     }
 
     bool prepare_rule(Pos pos) {
-        if (state.enabled && state.last < pos) {
+        if (state.enabled && state.last <= pos) {
             try_print_until(pos);
             return true;
         }
@@ -117,23 +139,72 @@ namespace das::format {
     }
 
     void finish_rule(Pos pos) {
-        assert(state.enabled && state.last < pos);
+        assert(state.enabled && state.last <= pos);
         set_to(pos);
     }
 
-    Pos Pos::from_end_prev_line(LineInfo info) {
-        if (!state.enabled) {
-            return {};
+    optional<StructurePtr> try_find_struct(const string &name) {
+        if (state.program != nullptr) {
+            const auto library = state.program->library;
+            auto structs = state.program->findStructure(name);
+            auto aliases = state.program->findAlias(name);
+            if (!structs.empty()) {
+                assert(structs.size() == 1);
+                assert(aliases.empty());
+                return structs.front();
+            } else if (!aliases.empty()) {
+                assert(aliases.size() == 1);
+            }
         }
-        const auto prev_line = info.line - 1;
-        return Pos{prev_line, static_cast<uint32_t>(state.content_.at(prev_line - 1).size())};
+        return std::nullopt;
+    }
+
+    bool can_default_init(const string &name) {
+        auto maybe_struct = try_find_struct(name);
+        if (!maybe_struct) {
+            return false;
+        } else {
+            const auto &fields = maybe_struct->get()->fields;
+            return all_of(fields.begin(), fields.end(), [](auto field) {
+                return field.init;
+            });
+        }
+    }
+
+    CanInit can_init_with(const string &name, uint32_t arg_cnt) {
+        return CanInit::Can;
+        // Possible uninitialized
+        if (arg_cnt == 0) {
+            if (can_default_init(name)) {
+                return CanInit::Can;
+            } else {
+                return CanInit::Cannot;
+            }
+        }
+        auto maybe_struct = try_find_struct(name);
+        if (!maybe_struct) {
+            return CanInit::Unknown;
+        }
+        return (*maybe_struct)->fields.size() == arg_cnt ? CanInit::Can : CanInit::Unknown;
+    }
+
+    bool is_else_newline() {
+        return state.options.contains(FormatOpt::ElseNewLine);
     }
 
     bool is_replace_braces() {
-        return state.options.contains(FormatOpt::AlwaysBraces);
+        return state.options.contains(FormatOpt::V2Syntax);
     }
 
-    bool is_enabled() {
+    bool end_with_semicolon() {
+        return true; // state.options.contains(FormatOpt::SemicolonEOL);
+    }
+
+    bool enum_bitfield_with_comma() {
+        return state.options.contains(FormatOpt::CommaAtEndOfEnumBitfield);
+    }
+
+    bool is_formatter_enabled() {
         return state.enabled;
     }
 

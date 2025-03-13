@@ -9,7 +9,7 @@ struct CommandBuffer
 
 [structure_macro(name=qfn)]
 class QfnFields : AstStructureAnnotation
-    def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
         var sendFn <- qmacro_function("send") <| $(var cb : CommandBuffer&; cmd : $t(st)) : bool
             print("send({cb},{cmd})\n")
             return true

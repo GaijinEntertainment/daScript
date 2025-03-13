@@ -7,7 +7,7 @@ enum FooBar
 
 [export]
 def test()
-    assert(int(FooBar total)==2)    // not a const
+    assert(int(FooBar total) == 2)  // not a const
     return true
 
 [export]

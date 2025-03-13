@@ -2,11 +2,11 @@ expect 30111
 
 require UnitTest
 
-[checkRange,safe_when_uninitialized]
+[checkRange, safe_when_uninitialized]
 struct Foo
-    [[min=0,max=3]] a:int = 1
-    [[min=10,max=20]] b:int = 2
-    [[min=2]] c:int
+    [[min=0, max=3]] a : int = 1
+    [[min=10, max=20]] b : int = 2
+    [[min=2]] c : int
 /*
 30111: can't touch annotation
 b out of annotated range [10..20]

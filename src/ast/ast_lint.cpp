@@ -529,7 +529,7 @@ namespace das {
                         arg->at, CompilationError::cant_be_null);
                 }
             }
-            if ( expr->func->name=="builtin`to_table_move" && expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
+            if ( starts_with(expr->func->name,"builtin`to_table_move`") && expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
                 verifyToTableMove(expr);
             }
         }
@@ -750,6 +750,13 @@ namespace das {
                     program->error("top level no side effect operation " + op2->op, "", "",
                         expr->at, CompilationError::top_level_no_sideeffect_operation);
                 }
+            }
+        }
+        virtual void preVisit ( ExprMakeStruct * mks ) override {
+            Visitor::preVisit(mks);
+            if ( mks->constructor && mks->constructor->arguments.size() ) {
+                program->error("default arguments of constructors can't be used in make declarations", "its not yet implemented", "",
+                    mks->at, CompilationError::unspecified);
             }
         }
     public:

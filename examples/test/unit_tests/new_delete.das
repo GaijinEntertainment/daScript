@@ -10,27 +10,27 @@ struct SomethingSmall
     a, b, c : int
 
 def test_delete_array
-    var a : array<int> [5]
+    var a : array<int>[5]
     let w0 = heap_bytes_allocated()
     for t in range(5)
-        resize(a[t],10)
+        resize(a[t], 10)
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
-    assert(w1>w0 && w0==w2)
+    assert(w1 > w0 && w0 == w2)
     for t in range(5)
-        assert(length(a[t])==0 && capacity(a[t])==0)
+        assert(length(a[t]) == 0 && capacity(a[t]) == 0)
 
 def test_delete_table
-    var a : table<int;int>
+    var a : table<int; int>
     let w0 = heap_bytes_allocated()
-    a |> insert(0,1)
-    a |> insert(1,2)
+    a |> insert(0, 1)
+    a |> insert(1, 2)
     let w1 = heap_bytes_allocated()
     delete a
     let w2 = heap_bytes_allocated()
-    assert(w1>w0 && w0==w2)
-    assert(length(a)==0 && capacity(a)==0)
+    assert(w1 > w0 && w0 == w2)
+    assert(length(a) == 0 && capacity(a) == 0)
 
 def test_delete_struct
     var a : SomethingSmall?
@@ -40,8 +40,8 @@ def test_delete_struct
     unsafe
         delete a
     let w2 = heap_bytes_allocated()
-    assert(w1>w0 && w0==w2)
-    assert(a==null)
+    assert(w1 > w0 && w0 == w2)
+    assert(a == null)
 
 def test_delete_struct_array
     let w0 = heap_bytes_allocated()
@@ -50,23 +50,23 @@ def test_delete_struct_array
     unsafe
         delete a
     let w2 = heap_bytes_allocated()
-    assert(w1>w0 && w0==w2)
+    assert(w1 > w0 && w0 == w2)
     for pA in a
-        assert(pA==null)
+        assert(pA == null)
 
 def test_delete_handle
     var a : TestObjectFoo?
     a = new TestObjectFoo
     unsafe
         delete a
-    assert(a==null)
+    assert(a == null)
 
 def test_delete_handle_array
     var a  = new <TestObjectFoo[10]>
     unsafe
         delete a
     for pA in a
-        assert(pA==null)
+        assert(pA == null)
 
 [sideeffects]
 def da_inscope(x)
@@ -84,7 +84,7 @@ def test_delete_struct_array_in_scope
     let w0 = heap_bytes_allocated()
     da_inscope(2)
     let w1 = heap_bytes_allocated()
-    assert(w0==w1)
+    assert(w0 == w1)
 
 [sideeffects]
 def test_delete_string()
@@ -94,8 +94,8 @@ def test_delete_string()
     unsafe
         delete_string(a)
     let w1 = heap_bytes_allocated()
-    assert(w0==w1)
-    assert(a=="")
+    assert(w0 == w1)
+    assert(a == "")
 
 [sideeffects]
 def test_delete_string_array()
@@ -105,7 +105,7 @@ def test_delete_string_array()
         unsafe
             delete_string(AA)
     let w1 = heap_bytes_allocated()
-    assert(w0==w1)
+    assert(w0 == w1)
 
 [export]
 def test

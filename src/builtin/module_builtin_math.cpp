@@ -270,9 +270,9 @@ namespace das {
                                                           uint32_t(sizeof(float)*ColC), ofs, RowC);
             }
         }
-        virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr &,
+        virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & readType,
                                             const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
-            Type r2vType = (Type) ToBasicType<VecT>::type;
+            auto r2vType = readType->baseType;
             if ( auto tnode = trySimulate(context, rv, idx, make_smart<TypeDecl>(r2vType), ofs) ) {
                 return tnode;
             } else {

@@ -6,20 +6,20 @@ var
     foo : TestObjectFoo
 
 [sideeffects]
-def GetGoo(arg:string)
-    return CheckEid(foo,arg)
+def GetGoo(arg : string)
+    return CheckEid(foo, arg)
 
 [sideeffects]
-def GetGoo2(arg:string)
-    return CheckEid2(foo,arg)
+def GetGoo2(arg : string)
+    return CheckEid2(foo, arg)
 
 [export]
 def test
-    let a = CheckEid(foo,"goo")
+    let a = CheckEid(foo, "goo")
     let b = GetGoo("goo")
-    assert(a==b)
-    let a2 = CheckEid2(foo,"goo")
+    assert(a == b)
+    let a2 = CheckEid2(foo, "goo")
     let b2 = GetGoo2("goo")
-    assert(a2==b2)
+    assert(a2 == b2)
     return true
 

@@ -55,6 +55,7 @@ namespace das
         static SimNode * GetR2V ( Context & context, const LineInfo & a, const TypeDeclPtr & type, SimNode * expr );
         virtual bool rtti_isR2V() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         ExpressionPtr   subexpr;
     };
 
@@ -67,6 +68,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isRef2Ptr() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         ExpressionPtr   subexpr;
     };
 
@@ -107,6 +109,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isNullCoalescing() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         ExpressionPtr   defaultValue;
     };
 
@@ -133,6 +136,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isAt() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         ExpressionPtr   subexpr, index;
         union {
             struct {
@@ -275,6 +279,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         ExpressionPtr   value;
         string          name;
         LineInfo        atField;
@@ -413,6 +418,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         Function *      func = nullptr;
         uint32_t        stackTop = 0;
+        bool            genericFunction = false; // do not clone, do not serialize. used only for infer
     };
 
     struct ExprOp : ExprCallFunc {
@@ -437,6 +443,7 @@ namespace das
         virtual bool rtti_isOp1() const override { return true; }
         virtual string describe() const override;
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         ExpressionPtr   subexpr;
     };
 
@@ -453,6 +460,7 @@ namespace das
         virtual bool rtti_isOp2() const override { return true; }
         virtual string describe() const override;
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         ExpressionPtr   left, right;
     };
 
@@ -527,6 +535,7 @@ namespace das
         virtual bool rtti_isOp3() const override { return true; }
         virtual string describe() const override;
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         ExpressionPtr   subexpr, left, right;
     };
 
@@ -1253,7 +1262,7 @@ namespace das
 
     struct ExprNew : ExprCallFunc {
         ExprNew() { __rtti = "ExprNew"; };
-        ExprNew ( const LineInfo & a, TypeDeclPtr t, bool ini )
+        ExprNew ( const LineInfo & a, const TypeDeclPtr & t, bool ini )
             : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) { __rtti = "ExprNew"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -1274,6 +1283,7 @@ namespace das
         static SimNode_CallBase * simulateCall (const FunctionPtr & func, const ExprLooksLikeCall * expr,
             Context & context, SimNode_CallBase * pCall);
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         bool doesNotNeedSp = false;
         bool cmresAlias = false;
         bool notDiscarded = false;
@@ -1386,6 +1396,7 @@ namespace das
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual bool rtti_isMakeStruct() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         vector<MakeStructPtr>       structs;
         ExpressionPtr               block;
         Function *                  constructor = nullptr;
@@ -1401,6 +1412,7 @@ namespace das
                 bool forceVariant : 1;
                 bool forceTuple : 1;
                 bool alwaysUseInitializer : 1;
+                bool ignoreVisCheck : 1;
             };
             uint32_t makeStructFlags = 0;
         };
@@ -1417,6 +1429,7 @@ namespace das
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual bool rtti_isMakeVariant() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         vector<MakeFieldDeclPtr>    variants;
     };
 
@@ -1431,6 +1444,7 @@ namespace das
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off ) override;
         virtual bool rtti_isMakeArray() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        virtual void markNoDiscard() override;
         TypeDeclPtr                 recordType;
         vector<ExpressionPtr>       values;
         bool                        gen2 = false;

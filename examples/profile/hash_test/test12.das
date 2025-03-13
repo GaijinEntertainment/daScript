@@ -11,7 +11,7 @@ require daslib/hash_map
 %spoof_instance~TFlatHashMap(PathalogicalFlatHashMap_test,int,int,pathalogical)%%;
 
 [sideeffects]
-def test ( hmap : auto(HashMapType); randomNumbers )
+def test(hmap : auto(HashMapType); randomNumbers)
     for i in range(10)
         var hashMap : HashMapType
         static_if !typeinfo(is_table type<HashMapType>)
@@ -23,8 +23,8 @@ def test ( hmap : auto(HashMapType); randomNumbers )
             hashMap[num] = -num
         delete hashMap
 
-def pathalogical ( t : int )
-    return t>=2 ? uint64(t) : 1099511628211ul
+def pathalogical(t : int)
+    return t >= 2 ? uint64(t) : 1099511628211ul
 
 [export]
 def main
@@ -32,7 +32,7 @@ def main
     var randomNumbers <- generate_unique_positive_random_numbers()
     for n in range(32768)
         randomNumbers[n] = n
-    profile_test("table<int;int>", type<table<int;int>>, randomNumbers)
+    profile_test("table<int;int>", type<table<int; int>>, randomNumbers)
     profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int> with hash(t)->t pathalogical", type<PathalogicalFlatHashMap_test>, randomNumbers)

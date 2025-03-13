@@ -231,7 +231,7 @@ namespace das {
         auto cs = make_smart<Structure>(name);
         cs->fields.reserve(fields.size());
         for ( auto & fd : fields ) {
-            cs->fields.emplace_back(fd.name, fd.type, fd.init, fd.annotation, fd.moveSemantics, fd.at);
+            cs->fields.emplace_back(fd.name, make_smart<TypeDecl>(*fd.type), fd.init, fd.annotation, fd.moveSemantics, fd.at);
             cs->fields.back().flags = fd.flags;
         }
         cs->at = at;
@@ -1069,6 +1069,10 @@ namespace das {
         return cexpr;
     }
 
+    void ExprRef2Value::markNoDiscard() {
+        subexpr->markNoDiscard();
+    }
+
     // ExprRef2Ptr
 
     ExpressionPtr ExprRef2Ptr::visit(Visitor & vis) {
@@ -1082,6 +1086,10 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
         return cexpr;
+    }
+
+    void ExprRef2Ptr::markNoDiscard() {
+        subexpr->markNoDiscard();
     }
 
     // ExprPtr2Ref
@@ -1136,6 +1144,11 @@ namespace das {
         ExprPtr2Ref::clone(cexpr);
         cexpr->defaultValue = defaultValue->clone();
         return cexpr;
+    }
+
+    void ExprNullCoalescing::markNoDiscard() {
+        subexpr->markNoDiscard();
+        defaultValue->markNoDiscard();
     }
 
     // ConstBitfield
@@ -1409,7 +1422,7 @@ namespace das {
     ExpressionPtr ExprTypeDecl::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprTypeDecl>(expr);
         Expression::clone(cexpr);
-        cexpr->typeexpr = typeexpr;
+        cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
         return cexpr;
     }
 
@@ -1439,7 +1452,7 @@ namespace das {
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         if ( typeexpr )
-            cexpr->typeexpr = typeexpr;
+            cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
         return cexpr;
     }
 
@@ -1525,7 +1538,7 @@ namespace das {
     ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
         ExprLooksLikeCall::clone(cexpr);
-        cexpr->typeexpr = typeexpr;
+        cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
         cexpr->initializer = initializer;
         return cexpr;
     }
@@ -1547,6 +1560,10 @@ namespace das {
         cexpr->index = index->clone();
         cexpr->no_promotion = no_promotion;
         return cexpr;
+    }
+
+    void ExprAt::markNoDiscard() {
+        subexpr->markNoDiscard();
     }
 
     // ExprSafeAt
@@ -1781,6 +1798,10 @@ namespace das {
         return cexpr;
     }
 
+    void ExprField::markNoDiscard() {
+        value->markNoDiscard();
+    }
+
     // ExprIs
 
     ExpressionPtr ExprIsVariant::visit(Visitor & vis) {
@@ -1955,6 +1976,10 @@ namespace das {
         return stream.str();
     }
 
+    void ExprOp1::markNoDiscard() {
+        subexpr->markNoDiscard();
+    }
+
     // ExprOp2
 
     bool ExprOp2::swap_tail ( Expression * expr, Expression * swapExpr ) {
@@ -1998,6 +2023,11 @@ namespace das {
         }
         stream << " )";
         return stream.str();
+    }
+
+    void ExprOp2::markNoDiscard() {
+        left->markNoDiscard();
+        right->markNoDiscard();
     }
 
     // ExprOp3
@@ -2054,6 +2084,11 @@ namespace das {
         return stream.str();
     }
 
+    void ExprOp3::markNoDiscard() {
+        subexpr->markNoDiscard();
+        left->markNoDiscard();
+        right->markNoDiscard();
+    }
 
     // ExprMove
 
@@ -2486,6 +2521,10 @@ namespace das {
         }
     }
 
+    void ExprCall::markNoDiscard() {
+        notDiscarded = true;
+    }
+
     ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprCall>(expr);
         ExprLooksLikeCall::clone(cexpr);
@@ -2551,7 +2590,9 @@ namespace das {
             }
             cexpr->structs.push_back(mfd);
         }
-        cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        if ( makeType ) {
+            cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        }
         cexpr->makeStructFlags = makeStructFlags;
         if ( block ) {
             cexpr->block = block->clone();
@@ -2590,6 +2631,14 @@ namespace das {
         return vis.visit(this);
     }
 
+    void ExprMakeStruct::markNoDiscard() {
+        for ( auto & fields : structs ) {
+            for ( auto & field : *fields ) {
+                field->value->markNoDiscard();
+            }
+        }
+    }
+
     // make variant
 
     ExpressionPtr ExprMakeVariant::clone( const ExpressionPtr & expr ) const {
@@ -2621,6 +2670,12 @@ namespace das {
             if ( field ) ++it; else it = variants.erase(it);
         }
         return vis.visit(this);
+    }
+
+    void ExprMakeVariant::markNoDiscard() {
+        for ( auto & field : variants ) {
+            field->value->markNoDiscard();
+        }
     }
 
     // make array
@@ -2656,6 +2711,12 @@ namespace das {
             index ++;
         }
         return vis.visit(this);
+    }
+
+    void ExprMakeArray::markNoDiscard() {
+        for ( auto & val : values ) {
+            val->markNoDiscard();
+        }
     }
 
     // make tuple
@@ -2844,7 +2905,6 @@ namespace das {
     }
 
     TypeDecl * Program::makeTypeDeclaration(const LineInfo &at, const string &name) {
-
         das::vector<das::StructurePtr> structs;
         das::vector<das::AnnotationPtr> handles;
         das::vector<das::EnumerationPtr> enums;
@@ -2928,12 +2988,14 @@ namespace das {
         vector<ExprCallFactory *> ptr;
         string moduleName, funcName;
         splitTypeName(name, moduleName, funcName);
-        library.foreach([&](Module * pm) -> bool {
-            if ( auto pp = pm->findCall(funcName) ) {
-                ptr.push_back(pp);
-            }
-            return true;
-        }, moduleName);
+        if ( moduleName != "_" && moduleName != "__" ) {    // those are never found. in reality we may want to support this one day with "*" and "thisModuleName" accordingly
+            library.foreach([&](Module * pm) -> bool {
+                if ( auto pp = pm->findCall(funcName) ) {
+                    ptr.push_back(pp);
+                }
+                return true;
+            }, moduleName);
+        }
         if ( ptr.size()==1 ) {
             return (*ptr.back())(at);
         } else if ( ptr.size()==0 ) {

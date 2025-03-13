@@ -15,18 +15,19 @@ require suite_result public
 
 
 struct SuiteCtx
-    dastestRoot: string
-    projectPath: string
-    uriPaths: bool = false
-    testNames: array<string>
-    verbose: bool = false
+    dastestRoot : string
+    projectPath : string
+    uriPaths : bool = false
+    testNames : array<string>
+    verbose : bool = false
+    compile_only : bool = false
 
 
-def createSuiteCtx(): SuiteCtx
+def createSuiteCtx() : SuiteCtx
     return <- SuiteCtx(get_command_line_arguments())
 
 
-def private collect_tests_names(args: array<string>; var names: array<string>)
+def private collect_tests_names(args : array<string>; var names : array<string>)
     for i in range(length(args) - 1)
         if args[i] == "--test-names"
             names |> push <| args[i + 1]
@@ -37,37 +38,38 @@ def get_str_arg(args : array<string>; name : string; def_val : string) : string
     return idx >= 0 && idx + 1 < length(args) ? args[idx + 1] : def_val
 
 
-def SuiteCtx(args: array<string>): SuiteCtx
+def SuiteCtx(args : array<string>) : SuiteCtx
     var ctx <- SuiteCtx()
     let at = get_line_info()
     ctx.dastestRoot = dir_name(at.fileInfo != null ? string(at.fileInfo.name) : args[1])
     ctx.verbose = args |> has_value("--verbose")
     ctx.uriPaths = args |> has_value("--uri-paths")
     ctx.projectPath = args |> get_str_arg("--test-project", "")
+    ctx.compile_only = args |> has_value("--compile-only")
     collect_tests_names(args, ctx.testNames)
     return <- ctx
 
 struct FileCtx
-    [[do_not_delete]] context: rtti::Context?
-    uriPaths: bool = false
-    indenting: string = ""
-    verbose: bool = false
-    stackOnRecover: bool = true
-    expectFailure: bool = false
+    [[do_not_delete]] context : rtti::Context?
+    uriPaths : bool = false
+    indenting : string = ""
+    verbose : bool = false
+    stackOnRecover : bool = true
+    expectFailure : bool = false
 
 
-def FileCtx(ctx: SuiteCtx): FileCtx
+def FileCtx(ctx : SuiteCtx) : FileCtx
     var res <- internalFileCtx(ctx)
     unsafe
         res.context = addr(this_context())
     return <- res
 
 
-def private internalFileCtx(ctx: SuiteCtx): FileCtx
+def private internalFileCtx(ctx : SuiteCtx) : FileCtx
     return <- [[FileCtx() uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
 
 
-def private match_test_name(name: string; ctx: SuiteCtx)
+def private match_test_name(name : string; ctx : SuiteCtx)
     if length(ctx.testNames) == 0
         return true
     for match in ctx.testNames
@@ -76,19 +78,19 @@ def private match_test_name(name: string; ctx: SuiteCtx)
     return false
 
 
-def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
+def test_file(file_name : string; ctx : SuiteCtx) : SuiteResult
     var fileCtx <- internalFileCtx(ctx)
     var res = test_file(file_name, ctx, fileCtx)
     delete fileCtx
     return res
 
 
-def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
-    var res: SuiteResult
+def test_file(file_name : string; ctx : SuiteCtx; file_ctx : FileCtx) : SuiteResult
+    var res : SuiteResult
     var inscope access <- make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
-    using <| $(var mg:ModuleGroup)
-        using <| $(var cop:CodeOfPolicies)
+    using <| $(var mg : ModuleGroup)
+        using <| $(var cop : CodeOfPolicies)
             cop.aot_module = true
             cop.threadlock_context = true
             cop.jit = jit_enabled()
@@ -96,7 +98,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
             compile_file(file_name, access, unsafe(addr(mg)), cop) <| $(ok, program, output)
                 var expectedErrors : table<CompilationError; int>
                 if program != null
-                    program |> for_each_expected_error <| $ ( err, count )
+                    program |> for_each_expected_error <| $(err, count)
                         expectedErrors |> insert(err, count)
                 var failed = !ok
                 if ok
@@ -138,7 +140,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                     else
                         res.passed += 1
                     return
-                simulate(program) <| $ (sok; context; serrors)
+                simulate(program) <| $(sok; context; serrors)
                     if !sok
                         res.total += 1
                         res.errors += 1
@@ -159,17 +161,19 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
     return res
 
 
-def test_module(var mod: rtti::Module; var context: rtti::Context; suite_ctx: SuiteCtx): SuiteResult
+def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx : SuiteCtx) : SuiteResult
     var fileCtx <- internalFileCtx(suite_ctx)
     var res = test_module(mod, context, suite_ctx, fileCtx)
     delete fileCtx
     return res
 
 
-def test_module(var mod: rtti::Module; var context: rtti::Context; suite_ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
-    var res: SuiteResult
+def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx : SuiteCtx; file_ctx : FileCtx) : SuiteResult
+    if suite_ctx.compile_only
+        return default<SuiteResult>
+    var res : SuiteResult
     var fileCtx := file_ctx
-    var modPtr: Module?
+    var modPtr : Module?
     unsafe
         fileCtx.context = addr(context)
         modPtr = addr(mod)
@@ -193,42 +197,42 @@ def test_module(var mod: rtti::Module; var context: rtti::Context; suite_ctx: Su
     return res
 
 
-def test_func(name: string; var context: FileCtx; func: function<(t: T?): void>): SuiteResult
-    var res: SuiteResult
+def test_func(name : string; var context : FileCtx; func : function<(t : T?) : void>) : SuiteResult
+    var res : SuiteResult
     test_any(name, func, 1, context, res)
     return res
 
 
-def test_func(name: string; var context: FileCtx; func: function<(): void>): SuiteResult
-    var res: SuiteResult
+def test_func(name : string; var context : FileCtx; func : function<() : void>) : SuiteResult
+    var res : SuiteResult
     test_any(name, func, 0, context, res)
     return res
 
 
-def test_func(name: string; var context: FileCtx; func: lambda<(t: T?): void>): SuiteResult
-    var res: SuiteResult
+def test_func(name : string; var context : FileCtx; func : lambda<(t : T?) : void>) : SuiteResult
+    var res : SuiteResult
     test_any(name, func, 1, context, res)
     return res
 
 
-def test_func(name: string; var context: FileCtx; func: lambda<(): void>): SuiteResult
-    var res: SuiteResult
+def test_func(name : string; var context : FileCtx; func : lambda<() : void>) : SuiteResult
+    var res : SuiteResult
     test_any(name, func, 0, context, res)
     return res
 
 
 [export]
-def private test_any_func(name: string; func: function; args_num: int; var context: FileCtx; var res: SuiteResult&)
+def private test_any_func(name : string; func : function; args_num : int; var context : FileCtx; var res : SuiteResult&)
     test_any(name, func, args_num, context, res)
 
 
 [export]
-def private test_any_lambda(name: string; func: lambda; args_num: int; var context: FileCtx; var res: SuiteResult&)
+def private test_any_lambda(name : string; func : lambda; args_num : int; var context : FileCtx; var res : SuiteResult&)
     test_any(name, func, args_num, context, res)
 
 
 [export]
-def private sub_test_any_func(name: string; func: function; args_num: int; var context: FileCtx; var res: SuiteResult&)
+def private sub_test_any_func(name : string; func : function; args_num : int; var context : FileCtx; var res : SuiteResult&)
     var subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
@@ -236,14 +240,14 @@ def private sub_test_any_func(name: string; func: function; args_num: int; var c
 
 
 [export]
-def private sub_test_any_lambda(name: string; func: lambda; args_num: int; var context: FileCtx; var res: SuiteResult&)
+def private sub_test_any_lambda(name : string; func : lambda; args_num : int; var context : FileCtx; var res : SuiteResult&)
     var subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
     delete subContext
 
 
-def private test_any(name: string; func; args_num: int; var context: FileCtx; var res: SuiteResult&)
+def private test_any(name : string; func; args_num : int; var context : FileCtx; var res : SuiteResult&)
     log::info("{context.indenting}=== RUN '{name}'")
     let beforeFailed = res.failed
     let beforeErrors = res.errors
@@ -253,7 +257,7 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
     var failed = false
     var skipped = false
     let t0 = ref_time_ticks()
-    var testing: T?
+    var testing : T?
     defer <| $
         unsafe
             delete testing
@@ -266,17 +270,17 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
             testing = new T(name, t0, context.verbose)
             unsafe
                 var selfCtx & = this_context()
-                testing.onFail <- @ <| [[&testing, &failed, &deliberateRecover]](now: bool)
+                testing.onFail <- @ <| [[& testing, & failed, & deliberateRecover]](now : bool)
                     testing.failed = true
                     failed = true
                     deliberateRecover = now
 
-                testing.onSkipNow <- @ <| [[&testing, &skipped, &deliberateRecover]]()
+                testing.onSkipNow <- @ <| [[& testing, & skipped, & deliberateRecover]]()
                     testing.skipped = true
                     skipped = true
                     deliberateRecover = true
 
-                testing.onRun <- @ <| [[&selfCtx, &context, &res]](test_name: string; f: RunT)
+                testing.onRun <- @ <| [[& selfCtx, & context, & res]](test_name : string; f : RunT)
                     if f is func1
                         unsafe
                             selfCtx |> invoke_in_context("sub_test_any_func", test_name, f as func1, 1, context, res)
@@ -284,7 +288,7 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
                         unsafe
                             selfCtx |> invoke_in_context("sub_test_any_lambda", test_name, f as lmd1, 1, context, res)
 
-                testing.onLog <- @ <| [[&context]](msg: string; at: LineInfo)
+                testing.onLog <- @ <| [[& context]](msg : string; at : LineInfo)
                     log::info("{context.indenting}{file_info_hr(at, context.uriPaths)}: {msg}")
 
                 *context.context |> invoke_in_context(func, testing)
@@ -323,7 +327,7 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
 
 
-def private errorOrBlue(expectFailure: bool; msg: string)
+def private errorOrBlue(expectFailure : bool; msg : string)
     if expectFailure
         log::blue(msg)
     else

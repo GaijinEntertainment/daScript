@@ -39,7 +39,7 @@ namespace das {
                 }
             }
             typeDecl->dim.push_back(dI);
-            typeDecl->dimExpr.push_back(ExpressionPtr(dimExpr));
+            typeDecl->dimExpr.push_back(dimExpr);
         } else {
             typeDecl->dim.push_back(TypeDecl::dimAuto);
             typeDecl->dimExpr.push_back(nullptr);
@@ -61,7 +61,7 @@ namespace das {
             reverse(argList.begin(),argList.end());
             delete arguments;
         } else {
-            argList.push_back(ExpressionPtr(arg));
+            argList.push_back(arg);
         }
         return argList;
     }
@@ -71,7 +71,7 @@ namespace das {
         vector<ExpressionPtr> seq;
         if ( arguments ) seq = sequenceToList(arguments);
         args.reserve(declL->size() + seq.size());
-        for ( auto & decl : *declL ) args.push_back(ExpressionPtr(decl));
+        for ( auto & decl : *declL ) args.push_back(decl);
         for ( auto & arg : seq ) args.push_back(das::move(arg));
         delete declL;
         return args;
@@ -214,9 +214,9 @@ namespace das {
         pAC->generatorSyntax = genSyntax;
         pAC->tableSyntax = tableSyntax;
         pAC->exprFor = pFor;
-        pAC->subexpr = ExpressionPtr(subexpr);
+        pAC->subexpr = subexpr;
         if ( where ) {
-            pAC->exprWhere = ExpressionPtr(where);
+            pAC->exprWhere = where;
         }
         return pAC;
     }
@@ -317,8 +317,16 @@ namespace das {
                             das_yyerror(scanner,"structure field is not overriding anything "+name_at.name,name_at.at,
                                 CompilationError::invalid_override);
                         } else {
-                            auto td = make_smart<TypeDecl>(*pDecl->pTypeDecl);
-                            auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
+                            TypeDeclPtr td;
+                            ExpressionPtr init;
+                            if ( pDecl->pNameList->size()>1 ) {
+                                td = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                                if ( pDecl->pInit ) init = pDecl->pInit->clone();
+
+                            } else {
+                                td = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                                init = pDecl->pInit; pDecl->pInit = nullptr;
+                            }
                             if ( pDecl->isStatic ) {
                                 auto pVar = make_smart<Variable>();
                                 pVar->name = pStruct->name + "`" + name_at.name;
@@ -353,8 +361,13 @@ namespace das {
                                 das_yyerror(scanner,"structure field "+name_at.name+" is sealed",
                                     name_at.at, CompilationError::invalid_override);
                             }
-                            auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
-                            oldFd->init = init;
+                            if ( pDecl->pInit ) {
+                                if ( pDecl->pNameList->size()>1 ) {
+                                    oldFd->init = pDecl->pInit->clone();
+                                } else {
+                                    oldFd->init = pDecl->pInit; pDecl->pInit = nullptr;
+                                }
+                            }
                             oldFd->parentType = oldFd->type->isAuto();
                             oldFd->privateField = pDecl->isPrivate;
                             oldFd->sealed = pDecl->sealed;
@@ -473,9 +486,17 @@ namespace das {
                             CompilationError::invalid_aka);
                     }
                     pVar->at = name_at.at;
-                    pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                    if ( pDecl->pNameList->size()>1 ) {
+                        pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                    } else {
+                        pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                    }
                     if ( pDecl->pInit ) {
-                        pVar->init = pDecl->pInit->clone();
+                        if ( pDecl->pNameList->size()>1 ) {
+                            pVar->init = pDecl->pInit->clone();
+                        } else {
+                            pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                        }
                         pVar->init_via_move = pDecl->init_via_move;
                         pVar->init_via_clone = pDecl->init_via_clone;
                     }
@@ -508,9 +529,17 @@ namespace das {
                         CompilationError::invalid_aka);
                 }
                 pVar->at = name_at.at;
-                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                if ( pDecl->pNameList->size()>1 ) {
+                    pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                } else {
+                    pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                }
                 if ( pDecl->pInit ) {
-                    pVar->init = pDecl->pInit->clone();
+                    if ( pDecl->pNameList->size()>1 ) {
+                        pVar->init = pDecl->pInit->clone();
+                    } else {
+                        pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                    }
                     pVar->init_via_move = pDecl->init_via_move;
                     pVar->init_via_clone = pDecl->init_via_clone;
                 }
@@ -541,52 +570,54 @@ namespace das {
 
     vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
         AnnotationList * annL, bool isPrivate, bool cnst, Function * func ) {
-        if ( yyextra->g_Program->policies.no_members_functions_in_struct && !yyextra->g_thisStructure->isClass ) {
-            das_yyerror(scanner,"structure can't have a member function",
-                func->at, CompilationError::invalid_member_function);
-        } else if ( func->isGeneric() ) {
-            das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-        } else if ( func->name==yyextra->g_thisStructure->name || func->name=="finalize" ) {
-            das_yyerror(scanner,"initializers and finalizers can't be abstract " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-        } else if ( annL!=nullptr ) {
-            das_yyerror(scanner,"abstract functions can't have annotations " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-            delete annL;
-        } else if ( func->result->baseType==Type::autoinfer ) {
-            das_yyerror(scanner,"abstract functions must specify return type explicitly " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-        } else if ( isOpName(func->name) ) {
-            das_yyerror(scanner,"abstract functions can't be operators " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
-        } else {
-            auto varName = func->name;
-            func->name = yyextra->g_thisStructure->name + "`" + func->name;
-            auto vars = new vector<VariableNameAndPosition>();
-            vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
-            TypeDecl * funcType = new TypeDecl(Type::tFunction);
-            funcType->at = func->at;
-            swap ( funcType->firstType, func->result );
-            funcType->argTypes.reserve ( func->arguments.size() );
-            if ( yyextra->g_thisStructure->isClass ) {
-                auto selfType = make_smart<TypeDecl>(yyextra->g_thisStructure);
-                selfType->constant = cnst;
-                funcType->argTypes.push_back(selfType);
-                funcType->argNames.push_back("self");
+        if ( yyextra->g_thisStructure ) {
+            if ( yyextra->g_Program->policies.no_members_functions_in_struct && !yyextra->g_thisStructure->isClass ) {
+                das_yyerror(scanner,"structure can't have a member function",
+                    func->at, CompilationError::invalid_member_function);
+            } else if ( func->isGeneric() ) {
+                das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            } else if ( func->name==yyextra->g_thisStructure->name || func->name=="finalize" ) {
+                das_yyerror(scanner,"initializers and finalizers can't be abstract " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            } else if ( annL!=nullptr ) {
+                das_yyerror(scanner,"abstract functions can't have annotations " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+                delete annL;
+            } else if ( func->result->baseType==Type::autoinfer ) {
+                das_yyerror(scanner,"abstract functions must specify return type explicitly " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            } else if ( isOpName(func->name) ) {
+                das_yyerror(scanner,"abstract functions can't be operators " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            } else {
+                auto varName = func->name;
+                func->name = yyextra->g_thisStructure->name + "`" + func->name;
+                auto vars = new vector<VariableNameAndPosition>();
+                vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
+                TypeDecl * funcType = new TypeDecl(Type::tFunction);
+                funcType->at = func->at;
+                swap ( funcType->firstType, func->result );
+                funcType->argTypes.reserve ( func->arguments.size() );
+                if ( yyextra->g_thisStructure->isClass ) {
+                    auto selfType = make_smart<TypeDecl>(yyextra->g_thisStructure);
+                    selfType->constant = cnst;
+                    funcType->argTypes.push_back(selfType);
+                    funcType->argNames.push_back("self");
+                }
+                for ( auto & arg : func->arguments ) {
+                    funcType->argTypes.push_back(arg->type);
+                    funcType->argNames.push_back(arg->name);
+                }
+                VariableDeclaration * decl = new VariableDeclaration(
+                    vars,
+                    funcType,
+                    nullptr
+                );
+                decl->isPrivate = isPrivate;
+                decl->isClassMethod = true;
+                list->push_back(decl);
             }
-            for ( auto & arg : func->arguments ) {
-                funcType->argTypes.push_back(arg->type);
-                funcType->argNames.push_back(arg->name);
-            }
-            VariableDeclaration * decl = new VariableDeclaration(
-                vars,
-                funcType,
-                nullptr
-            );
-            decl->isPrivate = isPrivate;
-            decl->isClassMethod = true;
-            list->push_back(decl);
         }
         func->delRef();
         return list;
@@ -770,9 +801,9 @@ namespace das {
 
     Expression * ast_makeBlock ( yyscan_t scanner, int bal, AnnotationList * annL, vector<CaptureEntry> * clist,
         vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt ) {
-        auto mkb = new ExprMakeBlock(blockAt,ExpressionPtr(block), bal==1, bal==2);
+        auto mkb = new ExprMakeBlock(blockAt,block, bal==1, bal==2);
         ExprBlock * closure = (ExprBlock *) block;
-        closure->returnType = TypeDeclPtr(result);
+        closure->returnType = result;
         if ( list ) {
             for ( auto pDecl : *list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -782,9 +813,17 @@ namespace das {
                             pVar->name = name_at.name;
                             pVar->aka = name_at.aka;
                             pVar->at = name_at.at;
-                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            if ( pDecl->pNameList->size()>1 ) {
+                                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            } else {
+                                pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                            }
                             if ( pDecl->pInit ) {
-                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
+                                if ( pDecl->pNameList->size()>1 ) {
+                                    pVar->init = pDecl->pInit->clone();
+                                } else {
+                                    pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                                }
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
@@ -851,9 +890,17 @@ namespace das {
                     pVar->name = name_at.name;
                     pVar->aka = name_at.aka;
                     pVar->at = name_at.at;
-                    pVar->type = make_smart<TypeDecl>(*decl->pTypeDecl);
+                    if ( decl->pNameList->size()>1 ) {
+                        pVar->type = make_smart<TypeDecl>(*decl->pTypeDecl);
+                    } else {
+                        pVar->type = decl->pTypeDecl; decl->pTypeDecl = nullptr;
+                    }
                     if ( decl->pInit ) {
-                        pVar->init = decl->pInit->clone();
+                        if ( decl->pNameList->size()>1 ) {
+                            pVar->init = decl->pInit->clone();
+                        } else {
+                            pVar->init = decl->pInit; decl->pInit = nullptr;
+                        }
                         pVar->init_via_move = decl->init_via_move;
                         pVar->init_via_clone = decl->init_via_clone;
                     }
@@ -870,7 +917,7 @@ namespace das {
             }
         }
         if ( auto pTagExpr = decl->pNameList->front().tag ) {
-            auto pTag = new ExprTag(declAt, pTagExpr, ExpressionPtr(pLet), "i");
+            auto pTag = new ExprTag(declAt, pTagExpr, pLet, "i");
             delete decl;
             return pTag;
         } else {
@@ -892,9 +939,17 @@ namespace das {
                         pVar->name = name_at.name;
                         pVar->aka = name_at.aka;
                         pVar->at = name_at.at;
-                        pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                        if ( pDecl->pNameList->size()>1 ) {
+                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                        } else {
+                            pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                        }
                         if ( pDecl->pInit ) {
-                            pVar->init = pDecl->pInit->clone();
+                            if ( pDecl->pNameList->size()>1 ) {
+                                pVar->init = pDecl->pInit->clone();
+                            } else {
+                                pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                            }
                             pVar->init_via_move = pDecl->init_via_move;
                             pVar->init_via_clone = pDecl->init_via_clone;
                         }
@@ -920,7 +975,7 @@ namespace das {
         auto pFunction = make_smart<Function>();
         pFunction->at = nameAt;
         pFunction->name = *name;
-        pFunction->result = TypeDeclPtr(result);
+        pFunction->result = result;
         if ( list ) {
             for ( auto pDecl : *list ) {
                 if ( pDecl->pTypeDecl ) {
@@ -930,9 +985,17 @@ namespace das {
                             pVar->name = name_at.name;
                             pVar->aka = name_at.aka;
                             pVar->at = name_at.at;
-                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            if ( pDecl->pNameList->size()>1 ) {
+                                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            } else {
+                                pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
+                            }
                             if ( pDecl->pInit ) {
-                                pVar->init = ExpressionPtr(pDecl->pInit->clone());
+                                if ( pDecl->pNameList->size()>1 ) {
+                                    pVar->init = pDecl->pInit->clone();
+                                } else {
+                                    pVar->init = pDecl->pInit; pDecl->pInit = nullptr;
+                                }
                                 pVar->init_via_move = pDecl->init_via_move;
                                 pVar->init_via_clone = pDecl->init_via_clone;
                             }
@@ -1001,7 +1064,7 @@ namespace das {
         }
         delete iters;
         pFor->sources = sequenceToList(srcs);
-        pFor->body = ExpressionPtr(block);
+        pFor->body = block;
         ((ExprBlock *)block)->inTheLoop = true;
         return pFor;
     }
@@ -1024,13 +1087,13 @@ namespace das {
     Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt ) {
         if ( fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) fncall;
-            pCall->arguments.push_back(ExpressionPtr(arg));
+            pCall->arguments.push_back(arg);
             return fncall;
         } else if ( fncall->rtti_isVar() ) {
             auto pVar = (ExprVar *) fncall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
             delete pVar;
-            pCall->arguments.push_back(ExpressionPtr(arg));
+            pCall->arguments.push_back(arg);
             return pCall;
         } else {
             das_yyerror(scanner,"can only lpipe into a function call",locAt,CompilationError::cant_pipe);
@@ -1041,17 +1104,17 @@ namespace das {
     Expression * ast_rpipe ( yyscan_t scanner, Expression * arg, Expression * fncall, const LineInfo & locAt ) {
         if ( fncall->rtti_isCallLikeExpr() ) {
             auto pCall = (ExprLooksLikeCall *) fncall;
-            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr(arg));
+            pCall->arguments.insert(pCall->arguments.begin(),arg);
             return fncall;
         } else if ( fncall->rtti_isVar() ) {
             auto pVar = (ExprVar *) fncall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
             delete pVar;
-            pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr(arg));
+            pCall->arguments.insert(pCall->arguments.begin(),arg);
             return pCall;
         } else if (fncall->rtti_isNamedCall()) {
             auto pCall = (ExprNamedCall*)fncall;
-            pCall->nonNamedArguments.insert(pCall->nonNamedArguments.begin(), ExpressionPtr(arg));
+            pCall->nonNamedArguments.insert(pCall->nonNamedArguments.begin(), arg);
             return fncall;
         } else if (fncall->rtti_isField() ) {
             auto pField = (ExprField*)fncall;
@@ -1075,7 +1138,7 @@ namespace das {
 
     Expression * ast_makeGenerator ( yyscan_t, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt ) {
         auto gen = new ExprMakeGenerator(locAt, subexpr);
-        gen->iterType = TypeDeclPtr(typeDecl);
+        gen->iterType = typeDecl;
         if ( clist ) {
             swap ( gen->capture, *clist );
             delete clist;
@@ -1086,7 +1149,7 @@ namespace das {
     ExprBlock * ast_wrapInBlock ( Expression * expr ) {
         auto block = new ExprBlock();
         block->at = expr->at;
-        block->list.push_back(ExpressionPtr(expr));
+        block->list.push_back(expr);
         return block;
     }
 
@@ -1105,12 +1168,14 @@ namespace das {
 
     Expression * ast_makeStructToMakeVariant ( MakeStruct * decl, const LineInfo & locAt ) {
         auto mks = new ExprMakeStruct(locAt);
-        for ( auto & f : *decl ) {
-            auto fld = new MakeStruct();
-            fld->emplace_back(f);
-            mks->structs.push_back(fld);
+        if ( decl ) {
+            for ( auto & f : *decl ) {
+                auto fld = new MakeStruct();
+                fld->emplace_back(f);
+                mks->structs.push_back(fld);
+            }
+            delete decl;
         }
-        delete decl;
         return mks;
     }
 

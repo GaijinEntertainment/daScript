@@ -1,7 +1,7 @@
 expect 30508, 30124
 
 class A
-    private onLog: lambda
+    private onLog : lambda
     private y : int
     def A
         onLog <- @ <|           //  30508: can't move from a constant value, lambda<>& <- lambda<void> const

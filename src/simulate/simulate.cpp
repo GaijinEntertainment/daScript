@@ -1185,16 +1185,19 @@ namespace das
         restart();
         if ( !failed ) {
             if ( stack.size() > globalInitStackSize ) {
-                failed |= runWithCatch([&]() {
+                failed |= !runWithCatch([&]() {
                     runInitScript();
                 });
             } else {
                 auto ssz = max ( int(stack.size()), 16384 ) + globalInitStackSize;
                 StackAllocator init_stack(ssz);
                 SharedStackGuard init_guard(*this, init_stack);
-                failed |= runWithCatch([&]() {
+                failed |= !runWithCatch([&]() {
                     runInitScript();
                 });
+            }
+            if ( failed ) {
+                to_err(&exceptionAt, last_exception);
             }
         }
         restart();
@@ -1764,6 +1767,7 @@ namespace das
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
                 daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onUninstall(pAgent.get());
+                pAgent->onUninstall(daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent.get());
             }
             for ( auto & ap : g_DebugAgents ) {
                 ap.second.debugAgent->onUninstall(pAgent.get());
@@ -1773,6 +1777,7 @@ namespace das
         {
             std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
             swap(agents, g_DebugAgents);
+            daScriptEnvironment::bound->g_threadLocalDebugAgent = {};
         }
     }
 

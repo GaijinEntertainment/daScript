@@ -1,5 +1,5 @@
 class A
-    private onLog: lambda
+    private onLog : lambda
     private y : int
     def A
         pass

@@ -29,7 +29,7 @@ def emplace ( var self : %SlotMap explicit; val : int )
 %spoof_instance~TFlatHashMap(FlatHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap0_uint64_int,uint64,int,hash0)%%;
 
-typedef SlotTable = table<uint64;int>
+typedef SlotTable = table<uint64; int>
 
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_Table,SlotTable)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_CuckooHashMap,CuckooHashMap_uint64_int)%%;
@@ -37,7 +37,7 @@ typedef SlotTable = table<uint64;int>
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_FlatHashMap0,FlatHashMap0_uint64_int)%%;
 
 [sideeffects]
-def test ( hmap : auto(SlotMapType); randomNumbers )
+def test(hmap : auto(SlotMapType); randomNumbers)
     for i in range(25)
         var slotMap <- SlotMapType()
         for num in randomNumbers

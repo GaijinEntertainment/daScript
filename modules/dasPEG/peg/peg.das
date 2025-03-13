@@ -18,15 +18,15 @@ struct public ParsingError
     text : string
     index : int
 
-def public operator != ( a,b : ParsingError ) : bool
+def public operator !=(a, b : ParsingError) : bool
     return a.text != b.text || a.index != b.index
 
-def public operator < ( a,b : ParsingError ) : bool
+def public operator <(a, b : ParsingError) : bool
     if a.index == b.index
         return a.text < b.text
     return a.index < b.index
 
-def public matches(var parser; template_: string; strlen: int): bool
+def public matches(var parser; template_ : string; strlen : int) : bool
     var mark = parser.index
 
     // Not sufficient supply of charachters in the input
@@ -39,7 +39,7 @@ def public matches(var parser; template_: string; strlen: int): bool
 
     return false
 
-def at_around(text: string; position, window: int): string
+def at_around(text : string; position, window : int) : string
     return text |> chop(position - window / 2, window)
 
 def public move(var parser; offset)
@@ -65,10 +65,10 @@ def public log_info(var parser, message)
     parser |> tabulate
     print("[.] {message}\n" |> blue_str <| parser.color_output)
 
-def public reached_EOF(var parser): bool
+def public reached_EOF(var parser) : bool
     return parser.input |> length <= parser.index
 
-def public reached_EOL(var parser): bool
+def public reached_EOL(var parser) : bool
     return parser |> matches("\n", 1) || parser |> matches("\r\n", 2)
 
 def public skip_whitespace(var parser)
@@ -79,7 +79,7 @@ def public skip_taborspace(var parser)
     while parser |> get_current_char |> is_tab_or_space
         parser |> move(1)
 
-def public get_current_char(var parser): int
+def public get_current_char(var parser) : int
     return -1 if parser.input |> length <= parser.index
     return parser.input[parser.index] |> int()
 
@@ -100,12 +100,12 @@ def public get_current_char(var parser): int
 // def public get_current_char(var parser): int
 //     return parser.current
 
-def public match_decimal_literal(var parser): tuple<success:bool; value:int; endpos:int>
+def public match_decimal_literal(var parser) : tuple<success : bool; value : int; endpos : int>
     //! Simple lexing of decimal integers, doesn't check for overflow
 
     if !parser |> get_current_char |> is_number
         // Can't use typedef in this context, sadly
-        return [[tuple<success:bool; value:int; endpos:int>]]
+        return [[tuple<success : bool; value : int; endpos : int>]]
 
     var result = 0
 
@@ -116,11 +116,11 @@ def public match_decimal_literal(var parser): tuple<success:bool; value:int; end
 
     return [[auto true, result, parser.index]]
 
-def public match_string_literal(var parser): tuple<success:bool; string>
+def public match_string_literal(var parser) : tuple<success : bool; string>
     //! Tries to match everything inside ""
 
     // Define buffer to store string literal characters
-    var inscope buffer: array<uint8>
+    var inscope buffer : array<uint8>
 
     var current_char = parser |> get_current_char
 
@@ -142,7 +142,7 @@ def public match_string_literal(var parser): tuple<success:bool; string>
     return [[auto true, buffer |> string()]]
 
 
-def public match_double_literal(var parser): tuple<success:bool; double>
+def public match_double_literal(var parser) : tuple<success : bool; double>
     //! Matches doubles in the form of [-+]? [0-9]* .? [0-9]+ ([eE] [-+]? [0-9]+)?
     //! The number is not checked to be representable as defined in IEEE-754
 
@@ -151,7 +151,7 @@ def public match_double_literal(var parser): tuple<success:bool; double>
     if !current_char |> is_number && current_char != '+' && current_char != '-'
         return <- [[auto false, 0.0 |> double()]]
 
-    var inscope buffer: array<uint8>
+    var inscope buffer : array<uint8>
 
     if current_char == '-' || current_char == '+'
         buffer |> push(current_char |> uint8())

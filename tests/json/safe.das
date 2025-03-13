@@ -1,9 +1,10 @@
+options gen2
 require dastest/testing_boost public
 require daslib/json_boost
 
 [test]
-def safe_operators(t : T?)
-    t |> run("safe object") <| @(t)
+def safe_operators(t : T?) {
+    t |> run("safe object") <| @(t) {
         let data = "\{ \"a\": 1, \"b\": true, \"c\": null, \"d\": \"str\" \}"
         var err = ""
         var js = read_json(data, err)
@@ -16,8 +17,9 @@ def safe_operators(t : T?)
         t |> equal(js?.d ?? "", "str")
         t |> equal(js?.xx is _null, true) // invalid value
         t |> equal(js?.xx?.xy is _null, true) // invalid value
+    }
 
-    t |> run("safe array") <| @(t)
+    t |> run("safe array") <| @(t) {
         let data = "[ 1, true, null, \"str\" ]"
         var err = ""
         var js = read_json(data, err)
@@ -29,11 +31,14 @@ def safe_operators(t : T?)
         t |> equal(js?[3] ?? "", "str")
         t |> equal(js?[42] is _null, true) // invalid value
         t |> equal(js?[42]?[0] is _null, true) // invalid value
+    }
 
-    t |> run("null object") <| @(t)
+    t |> run("null object") <| @(t) {
         var js : JsonValue?
         t |> equal(js?.a ?? -1, -1)
         t |> equal(js?[0] ?? -1, -1)
         js = JVNull()
         t |> equal(js?.a ?? -1, -1)
         t |> equal(js?[0] ?? -1, -1)
+    }
+}

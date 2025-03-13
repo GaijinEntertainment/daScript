@@ -11,7 +11,7 @@ def main
         to_log(LOG_ERROR, "Cannot open database: sqlite3_errmsg(db)\n")
         sqlite3_close(db)
         return
-    var res:sqlite3_stmt?
+    var res : sqlite3_stmt?
     rc = sqlite3_prepare_v2(db, "SELECT Data FROM Images WHERE Id = 1", -1, unsafe(addr(res)), null)
     if rc != SQLITE_OK
         to_log(LOG_ERROR, "Failed to prepare statement: {sqlite3_errmsg(db)}\n")
@@ -23,7 +23,7 @@ def main
         sqlite3_close(db)
         return
     let bytes = sqlite3_column_bytes(res, 0)
-    fopen("test.png","wb") <| $ ( f )
+    fopen("test.png", "wb") <| $(f)
         if f != null
             f |> _builtin_write(sqlite3_column_blob(res, 0), bytes)
         else

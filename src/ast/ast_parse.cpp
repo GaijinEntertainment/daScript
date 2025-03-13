@@ -161,6 +161,12 @@ namespace das {
         return req;
     }
 
+    bool starts_with ( const string & name, const char * template_name ) {
+        auto len = strlen(template_name);
+        if ( name.size() < len ) return false;
+        return name.compare(0,len,template_name) == 0;
+    }
+
     string getModuleName ( const string & nameWithDots ) {
         auto idx = nameWithDots.find_last_of("./");
         if ( idx==string::npos ) return nameWithDots;
@@ -427,7 +433,7 @@ namespace das {
                 while (i < length && isspace(text[i])) {
                     ++i;
                 }
-                if (i + 4 < length && text[i] == 'g' && text[i + 1] == 'e' && text[i + 2] == 'n' && text[i + 3] == '2') {
+                if (i + 5 < length && text[i] == 'g' && text[i + 1] == 'e' && text[i + 2] == 'n' && text[i + 3] == '2' && !isalnum(text[i + 4]) && text[i + 4] != '_') {
                     return true;
                 }
             }
@@ -916,7 +922,7 @@ namespace das {
                     res->markExecutableSymbolUse();
                 if (res->getDebugger())
                     addRttiRequireVariable(res, fileName);
-                if (!res->failed())
+                if (!res->failed() && !exportAll)
                     res->removeUnusedSymbols();
                 if (!res->failed())
                     res->deriveAliases(logs,true,false);

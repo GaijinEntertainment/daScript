@@ -19,7 +19,7 @@ class ClangGen : CppGenBind
             "-DCINDEX_EXPORTS"
         }]
         func_per_chunk = 20
-        init_args(pfn,pfp,args)
+        init_args(pfn, pfp, args)
         setDefaultFiles()
         init_enum_prefix()
         openAllFiles()
@@ -64,9 +64,9 @@ class ClangGen : CppGenBind
             "CXIdxEntityRefKind" => "CXIdxEntityRef";
             "CXIndexOptFlags" => "CXIndexOpt"
         }}
-    def override isArgByValue ( name:string )
+    def override isArgByValue(name : string)
         return true
-    def override skip_file ( fname:string ) : bool
+    def override skip_file(fname : string) : bool
         if fname |> ends_with("CXErrorCode.h")
             return false
         elif fname |> ends_with("CXString.h")
@@ -77,8 +77,8 @@ class ClangGen : CppGenBind
             return false
         elif fname |> ends_with("CXSourceLocation.h")
             return false
-        return ! fname |> ends_with(PARSE_FILE_NAME)
-    def override skip_alias ( var c : CXCursor )
+        return !fname |> ends_with(PARSE_FILE_NAME)
+    def override skip_alias(var c : CXCursor)
         return false
 
 [export]
