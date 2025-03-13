@@ -801,7 +801,7 @@ namespace das {
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);
             if ( scopes.size()==0 ) {   // only top level for loop
-                for ( int i=0; i!=expr->iterators.size(); ++i ) {
+                for ( size_t i=0; i!=expr->iterators.size(); ++i ) {
                     auto & varName = expr->iterators[i];
                     auto & var = expr->iteratorVariables[i];
                     if ( varName[0]!='_' || varName[1]!='_' ) {

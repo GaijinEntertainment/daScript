@@ -76,6 +76,19 @@ TARGET_LINK_LIBRARIES(tutorial02aot libDaScript)
 ADD_DEPENDENCIES(tutorial02aot libDaScript tutorial02_dasAotStub)
 SETUP_CPP11(tutorial02aot)
 
+## Example of standalone context
+SET(TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC)
+DAS_AOT_STANDALONE("examples/tutorial/tutorial02.das" TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC tutorial02_dasAotStub tutorial02_dasAot)
+
+add_executable(tutorial_02_standalone
+        ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial02_standalone_ctx.cpp
+        ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial02.das
+        ${TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC})
+ADD_DEPENDENCIES(tutorial_02_standalone libDaScript tutorial02_dasAotStub)
+target_include_directories(tutorial_02_standalone PUBLIC ${PROJECT_SOURCE_DIR}/examples/tutorial)
+TARGET_LINK_LIBRARIES(tutorial_02_standalone libDaScript)
+SETUP_CPP11(tutorial_02_standalone)
+
 ###########################
 # tutorial 03 - custom type
 ###########################
