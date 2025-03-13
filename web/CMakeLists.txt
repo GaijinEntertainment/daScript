@@ -384,6 +384,10 @@ list(SORT AST_SRC)
 SOURCE_GROUP_FILES("ast" AST_SRC)
 
 SET(BUILTIN_SRC
+../include/daScript/builtin/ast_gen.inc
+../include/daScript/builtin/debugapi_gen.inc
+
+
 ../src/builtin/module_builtin.h
 ../src/builtin/module_builtin.cpp
 ../src/builtin/module_builtin_misc_types.cpp
@@ -411,13 +415,11 @@ SET(BUILTIN_SRC
 ../src/builtin/module_builtin_uriparser.h
 ../src/builtin/module_builtin_uriparser.cpp
 ../src/builtin/module_jit.cpp
-../src/builtin/ast_gen.inc
 ../src/builtin/module_builtin_fio.cpp
 ../src/builtin/module_builtin_dasbind.cpp
 ../src/builtin/module_builtin_network.cpp
 ../src/builtin/module_builtin_debugger.cpp
 ../src/builtin/module_builtin_jobque.cpp
-../src/builtin/debugapi_gen.inc
 ../src/builtin/module_file_access.cpp
 ../src/builtin/builtin.das.inc
 ../src/builtin/builtin.das
