@@ -147,7 +147,7 @@ vector<TestData> test_cases() {
                                                              "}",
         },
         {"def main()//aa\n    /**/let x = 1    // 123",      "def main() {//aa\n    /**/let x = 1;    // 123\n}"},
-        {"bitfield A\n    refCount",                     "bitfield A {\n    refCount,\n}"},
+        {"bitfield A\n    refCount",                     "bitfield A {\n    refCount\n}"},
 
         {"def b(x, y)\n    for x in y\n        x = x + 1",
                                                              "def b(x, y) {\n    for (x in y) {\n        x = x + 1;\n    }\n}"},
@@ -168,9 +168,9 @@ vector<TestData> test_cases() {
          "    two //d\n"
          "    three//e",
                                                              "bitfield/*a*/Test {// b\n"
-                                                             "    one, //c\n"
-                                                             "    two, //d\n"
-                                                             "    three,//e\n"
+                                                             "    one //c\n"
+                                                             "    two //d\n"
+                                                             "    three//e\n"
                                                              "}"},
         {
             "enum/*a*/Test/*b*/:/*c*/int// a\n"
@@ -178,6 +178,30 @@ vector<TestData> test_cases() {
             "enum/*a*/Test/*b*/:/*c*/int {// a\n"
             "    b// d\n"
             "}\n"
+        },
+        {
+            "def foo(x){}\n"
+            "def main() {\n"
+            "    foo() $() {} \n"
+            "}\n",
+            "def foo(x){}\n"
+            "def main() {\n"
+            "    foo($() {}); \n"
+            "}\n"
+        },
+        {
+            "def foo(x, y){}\n"
+            "def main() {\n"
+            "    foo(123) $() {} \n"
+            "}\n",
+            "def foo(x){}\n"
+            "def main() {\n"
+            "    foo(123, $() {}); \n"
+            "}\n"
+        },
+        {
+            "let x = @ <| () {}\n",
+            "let x = @ () {};\n"
         },
         {
             "def test()//a\n"
