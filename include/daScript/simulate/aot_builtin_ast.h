@@ -38,7 +38,361 @@ namespace das {
     Module * compileModule ( Context * context, LineInfoArg * at );
     smart_ptr_raw<Program> compileProgram ( Context * context, LineInfoArg * at );
 
-    class VisitorAdapter;
+    #include "daScript/builtin/ast_gen.inc"
+
+    template <typename TT, typename QQ>
+    inline smart_ptr_raw<TT> return_smart ( smart_ptr<TT> & ptr, const QQ * p ) {
+        if ( ptr.get() == p ) {
+            return ptr.orphan();
+        } else {
+            return ptr;
+        }
+    }
+
+    void runMacroFunction ( Context * context, const string & message, const callable<void()> & subexpr );
+
+    class VisitorAdapter : public Visitor, AstVisitor_Adapter {
+    public:
+        VisitorAdapter ( char * pClass, const StructInfo * info, Context * ctx );
+    public:
+        // what do we visit
+        virtual bool canVisitStructure ( Structure * st ) override;
+        virtual bool canVisitGlobalVariable ( Variable * fun ) override;
+        virtual bool canVisitFunction ( Function * fun ) override;
+        virtual bool canVisitEnumeration ( Enumeration * en ) override;
+        /*
+        // TODO: implement on daScript side
+        virtual bool canVisitStructureFieldInit ( Structure * var ) override {
+            if ( auto fnCanVisit = get_canVisitStructureFieldInit(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canVisitStructureFieldInit", [&]() {
+                    result = invoke_canVisitStructureFieldInit(context,fnCanVisit,classPtr,var);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
+        */
+        /*
+        // TODO: implement
+        virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override {
+            if ( auto fnCanVisit = get_canVisitIfSubexpr(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canVisitIfSubexpr", [&]() {
+                    result = invoke_canVisitIfSubexpr(context,fnCanVisit,classPtr);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
+        */
+        /* TODO: implement
+        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) override {
+            if ( auto fnCanVisit = get_canVisitExpr(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canVisitExpr", [&]() {
+                    result = invoke_canVisitExpr(context,fnCanVisit,classPtr,expr,subexpr);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
+        */
+        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override;
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr ) override;
+        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override;
+        /*
+        TODO: implement
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override {
+            if ( auto fnCanVisit = get_canVisitQuoteSubexpression(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canVisitQuoteSubexpression", [&]() {
+                    result = invoke_canVisitQuoteSubexpression(context,fnCanVisit,classPtr);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
+        */
+        virtual bool canVisitWithAliasSubexpression ( ExprAssume * expr ) override;
+        virtual bool canVisitMakeBlockBody ( ExprMakeBlock * expr ) override;
+        virtual bool canVisitCall ( ExprCall * expr ) override;
+        // WHOLE PROGRAM
+        virtual void preVisitProgram ( Program * prog ) override;
+        virtual void visitProgram ( Program * prog ) override;
+        // EACH MODULE
+        virtual void preVisitModule ( Module * mod ) override;
+        virtual void visitModule ( Module * mod ) override;
+        // TYPE
+        virtual void preVisit ( TypeDecl * td ) override;
+        virtual TypeDeclPtr visit ( TypeDecl * td ) override;
+        // ALIAS
+        virtual void preVisitAlias ( TypeDecl * td, const string & name ) override;
+        virtual TypeDeclPtr visitAlias ( TypeDecl * td, const string & name ) override;
+        // ENUMERATOIN
+        virtual void preVisit ( Enumeration * enu ) override;
+        virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override;
+        virtual ExpressionPtr visitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override;
+        virtual EnumerationPtr visit ( Enumeration * enu ) override;
+        // STRUCTURE
+        virtual void preVisit ( Structure * var ) override;
+        virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override;
+        virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override;
+        virtual StructurePtr visit ( Structure * var ) override;
+        // REAL THINGS (AFTER STRUCTS AND ENUMS)
+        virtual void preVisitProgramBody ( Program * prog, Module * mod ) override;
+        // FUNCTON
+        virtual void preVisit ( Function * that ) override;
+        virtual FunctionPtr visit ( Function * that ) override;
+        virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override;
+        virtual VariablePtr visitArgument ( Function * fn, const VariablePtr & that, bool lastArg ) override;
+        virtual void preVisitArgumentInit ( Function * fn, const VariablePtr & var, Expression * init ) override;
+        virtual ExpressionPtr visitArgumentInit ( Function * fn, const VariablePtr & var, Expression * that ) override;
+        virtual void preVisitFunctionBody ( Function * fn, Expression * that ) override;
+        virtual ExpressionPtr visitFunctionBody ( Function * fn, Expression * that ) override;
+        // ANY
+        virtual void preVisitExpression ( Expression * expr ) override;
+        virtual ExpressionPtr visitExpression ( Expression * expr ) override;
+        // BLOCK
+        virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override;
+        virtual VariablePtr visitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override;
+        virtual void preVisitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override;
+        virtual ExpressionPtr visitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * that ) override;
+        virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override;
+        virtual ExpressionPtr visitBlockExpression (  ExprBlock * block, Expression * expr ) override;
+        virtual void preVisitBlockFinal ( ExprBlock * block ) override;
+        virtual void visitBlockFinal ( ExprBlock * block ) override;
+        virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override;
+        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * block, Expression * expr ) override;
+        // LET
+        virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override;
+        virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override;
+        virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) override;
+        virtual ExpressionPtr visitLetInit ( ExprLet * let, const VariablePtr & var, Expression * that ) override;
+        // GLOBAL LET
+        virtual void preVisitGlobalLetBody ( Program * prog ) override;
+        virtual void visitGlobalLetBody ( Program * prog ) override;
+        virtual void preVisitGlobalLet ( const VariablePtr & var ) override;
+        virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override;
+        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override;
+        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) override;
+        // STRING BUILDER
+        virtual void preVisit ( ExprStringBuilder * expr ) override;
+        virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override;
+        virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override;
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) override;
+        // NEW
+        virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) override;
+        virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) override;
+        // NAMED CALL
+        virtual void preVisitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg, bool last ) override;
+        virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg , bool last ) override;
+        // CALL
+        virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override;
+        virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override;
+        // CALL
+        virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override;
+        virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override;
+        virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) override;
+        // NULL COAELESCING
+        virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * expr, Expression * def ) override;
+        // TAG
+        virtual void preVisitTagValue ( ExprTag * expr, Expression * val ) override;
+        // AT
+        virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override;
+        // SAFE AT
+        virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override;
+        // IS
+        virtual void preVisitType ( ExprIs * expr, TypeDecl * val ) override;
+        // OP2
+        virtual void preVisitRight ( ExprOp2 * expr, Expression * right ) override;
+        // OP3
+        virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) override;
+        virtual void preVisitRight ( ExprOp3 * expr, Expression * right ) override;
+        // COPY
+        virtual bool isRightFirst ( ExprCopy * expr ) override;
+        virtual void preVisitRight ( ExprCopy * expr, Expression * right ) override;
+        // MOVE
+        virtual bool isRightFirst ( ExprMove * expr ) override;
+        virtual void preVisitRight ( ExprMove * expr, Expression * right ) override;
+        // CLONE
+        virtual bool isRightFirst ( ExprClone * expr ) override;
+        virtual void preVisitRight ( ExprClone * expr, Expression * right ) override;
+        // WITH
+        virtual void preVisitWithBody ( ExprWith * expr, Expression * body ) override;
+        // WHILE
+        virtual void preVisitWhileBody ( ExprWhile * expr, Expression * right ) override;
+        // TRY-CATCH
+        virtual void preVisitCatch ( ExprTryCatch * expr, Expression * that ) override;
+        // IF-THEN-ELSE
+        virtual void preVisitIfBlock ( ExprIfThenElse * expr, Expression * that ) override;
+        virtual void preVisitElseBlock ( ExprIfThenElse * expr, Expression * that ) override;
+        // FOR
+        virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override;
+        virtual VariablePtr visitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override;
+        virtual void preVisitForStack ( ExprFor * expr ) override;
+        virtual void preVisitForBody ( ExprFor * expr, Expression * /*that*/ ) override;
+        virtual void preVisitForSource ( ExprFor * expr, Expression * that, bool last ) override;
+        virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override;
+        // MAKE VARIANT
+        virtual void preVisitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField ) override;
+        virtual MakeFieldDeclPtr visitMakeVariantField(ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool lastField) override;
+// MAKE STRUCTURE
+        virtual void preVisitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool lastIndex ) override;
+        virtual void visitMakeStructureIndex ( ExprMakeStruct * expr, int index, bool lastField ) override;
+        virtual void preVisitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool lastField ) override;
+        virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool lastField ) override;
+        virtual void preVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override;
+        virtual ExpressionPtr visitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override;
+        // MAKE ARRAY
+        virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastIndex ) override;
+        virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override;
+        // MAKE TUPLE
+        virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastIndex ) override;
+        virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override;
+        // ARRAY COMPREHENSION
+        virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override;
+        virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) override;
+        // DELETE
+        /*
+        // TODO: implement
+        virtual void preVisitDeleteSizeExpression ( ExprDelete * expr, Expression * that ) override {
+            if ( auto fnPreVisit = get_preVisitExprDeleteSizeExpression(classPtr) ) {
+                runMacroFunction(context, "preVisitDeleteSizeExpression", [&]() {
+                    invoke_preVisitExprDeleteSizeExpression(context,fnPreVisit,classPtr,expr,that);
+                });
+            }
+        }
+        */
+
+#define VISIT_EXPR(ExprType) \
+       virtual void preVisit ( ExprType * that ) override { \
+            preVisitExpression(that); \
+            if ( auto fnPreVisit = get_preVisit##ExprType(classPtr) ) { \
+                runMacroFunction(context, "preVisit", [&]() { \
+                    invoke_preVisit##ExprType(context,fnPreVisit,classPtr,that); \
+                }); \
+            } \
+        } \
+        virtual ExpressionPtr visit ( ExprType * that ) override { \
+            visitExpression(that); \
+            if ( auto fnVisit = get_visit##ExprType(classPtr) ) { \
+                ExpressionPtr result; \
+                runMacroFunction(context, "visit", [&]() { \
+                    result = invoke_visit##ExprType(context,fnVisit,classPtr,that); \
+                }); \
+                return return_smart(result,that); \
+            } else { \
+                return that; \
+            } \
+        }
+        // all visitable expressions
+        VISIT_EXPR(ExprCallMacro)
+        VISIT_EXPR(ExprUnsafe)
+        VISIT_EXPR(ExprReader)
+        VISIT_EXPR(ExprLabel)
+        VISIT_EXPR(ExprGoto)
+        VISIT_EXPR(ExprRef2Value)
+        VISIT_EXPR(ExprRef2Ptr)
+        VISIT_EXPR(ExprPtr2Ref)
+        VISIT_EXPR(ExprAddr)
+        VISIT_EXPR(ExprNullCoalescing)
+        VISIT_EXPR(ExprAssert)
+        VISIT_EXPR(ExprStaticAssert)
+        VISIT_EXPR(ExprQuote)
+        VISIT_EXPR(ExprDebug)
+        VISIT_EXPR(ExprInvoke)
+        VISIT_EXPR(ExprErase)
+        VISIT_EXPR(ExprSetInsert)
+        VISIT_EXPR(ExprFind)
+        VISIT_EXPR(ExprKeyExists)
+        VISIT_EXPR(ExprAscend)
+        VISIT_EXPR(ExprCast)
+        VISIT_EXPR(ExprNew)
+        VISIT_EXPR(ExprDelete)
+        VISIT_EXPR(ExprAt)
+        VISIT_EXPR(ExprSafeAt)
+        VISIT_EXPR(ExprBlock)
+        VISIT_EXPR(ExprVar)
+        VISIT_EXPR(ExprSwizzle)
+        VISIT_EXPR(ExprField)
+        VISIT_EXPR(ExprSafeField)
+        VISIT_EXPR(ExprIsVariant)
+        VISIT_EXPR(ExprAsVariant)
+        VISIT_EXPR(ExprSafeAsVariant)
+        VISIT_EXPR(ExprOp1)
+        VISIT_EXPR(ExprOp2)
+        VISIT_EXPR(ExprOp3)
+        VISIT_EXPR(ExprCopy)
+        VISIT_EXPR(ExprMove)
+        VISIT_EXPR(ExprClone)
+        VISIT_EXPR(ExprTryCatch)
+        VISIT_EXPR(ExprReturn)
+        VISIT_EXPR(ExprYield)
+        VISIT_EXPR(ExprBreak)
+        VISIT_EXPR(ExprContinue)
+        VISIT_EXPR(ExprConst)
+        VISIT_EXPR(ExprFakeContext)
+        VISIT_EXPR(ExprFakeLineInfo)
+        VISIT_EXPR(ExprConstPtr)
+        VISIT_EXPR(ExprConstEnumeration)
+        VISIT_EXPR(ExprConstBitfield)
+        VISIT_EXPR(ExprConstInt8)
+        VISIT_EXPR(ExprConstInt16)
+        VISIT_EXPR(ExprConstInt64)
+        VISIT_EXPR(ExprConstInt)
+        VISIT_EXPR(ExprConstInt2)
+        VISIT_EXPR(ExprConstInt3)
+        VISIT_EXPR(ExprConstInt4)
+        VISIT_EXPR(ExprConstUInt8)
+        VISIT_EXPR(ExprConstUInt16)
+        VISIT_EXPR(ExprConstUInt64)
+        VISIT_EXPR(ExprConstUInt)
+        VISIT_EXPR(ExprConstUInt2)
+        VISIT_EXPR(ExprConstUInt3)
+        VISIT_EXPR(ExprConstUInt4)
+        VISIT_EXPR(ExprConstRange)
+        VISIT_EXPR(ExprConstURange)
+        VISIT_EXPR(ExprConstRange64)
+        VISIT_EXPR(ExprConstURange64)
+        VISIT_EXPR(ExprConstBool)
+        VISIT_EXPR(ExprConstFloat)
+        VISIT_EXPR(ExprConstFloat2)
+        VISIT_EXPR(ExprConstFloat3)
+        VISIT_EXPR(ExprConstFloat4)
+        VISIT_EXPR(ExprConstString)
+        VISIT_EXPR(ExprConstDouble)
+        VISIT_EXPR(ExprLet)
+        VISIT_EXPR(ExprFor)
+        VISIT_EXPR(ExprLooksLikeCall)
+        VISIT_EXPR(ExprMakeBlock)
+        VISIT_EXPR(ExprMakeGenerator)
+        VISIT_EXPR(ExprTypeInfo)
+        VISIT_EXPR(ExprIs)
+        VISIT_EXPR(ExprCall)
+        VISIT_EXPR(ExprNamedCall)
+        VISIT_EXPR(ExprIfThenElse)
+        VISIT_EXPR(ExprWith)
+        VISIT_EXPR(ExprAssume)
+        VISIT_EXPR(ExprWhile)
+        VISIT_EXPR(ExprMakeStruct)
+        VISIT_EXPR(ExprMakeVariant)
+        VISIT_EXPR(ExprMakeArray)
+        VISIT_EXPR(ExprMakeTuple)
+        VISIT_EXPR(ExprArrayComprehension)
+        VISIT_EXPR(ExprMemZero)
+        VISIT_EXPR(ExprTypeDecl)
+        VISIT_EXPR(ExprTag)
+#undef VISIT_EXPR
+
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
 
     DebugAgentPtr makeDebugAgent ( const void * pClass, const StructInfo * info, Context * context );
     Module * thisModule ( Context * context, LineInfoArg * lineinfo );

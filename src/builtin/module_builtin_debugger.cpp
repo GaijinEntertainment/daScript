@@ -44,7 +44,7 @@ namespace debugapi {
     typedef Func DapiFunc;
 }
 
-#include "debugapi_gen.inc"
+#include "daScript/builtin/debugapi_gen.inc"
 
     struct DebugAgentAdapter : DebugAgent, DapiDebugAgent_Adapter {
         DebugAgentAdapter ( char * pClass, const StructInfo * info, Context * ctx )
