@@ -359,18 +359,18 @@ def apply_template(var rules : Template; at : LineInfo; var expr : smart_ptr<Exp
     return <- expr
 }
 
-def private visit_type ( var typ:TypeDeclPtr&; var adapter:smart_ptr<VisitorAdapter> ) {
+def private visit_type(var typ : TypeDeclPtr&; var adapter : smart_ptr<VisitorAdapter>) {
     unsafe {
         // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
         var newType <- typ |> visit(adapter)
-        if ( typ != newType ) {
+        if (typ != newType) {
             typ := null
         }
         typ <- newType
     }
 }
 
-def apply_template ( var rules:Template; at:LineInfo; var typ:smart_ptr<TypeDecl>; forceAt:bool = true ) : TypeDeclPtr {
+def apply_template(var rules : Template; at : LineInfo; var typ : smart_ptr<TypeDecl>; forceAt : bool = true) : TypeDeclPtr {
     //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
     var astVisitor = new TemplateVisitor(unsafe(addr(rules)))
     var inscope astVisitorAdapter <- make_visitor(*astVisitor)

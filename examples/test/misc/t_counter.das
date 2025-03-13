@@ -15,7 +15,7 @@ template struct TemplateCounter
 
 [type_macro(name="counter")]
 class CounterMacro : AstTypeMacro
-    def override visit ( prog:ProgramPtr; mod:Module?; td,passT:TypeDeclPtr ) : TypeDeclPtr
+    def override visit(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr
         if length(td.dimExpr) != 2
             macro_error(compiling_program(), td.at, "expecting 1 argument")
             return <- [[TypeDeclPtr()]]
@@ -33,7 +33,7 @@ class CounterMacro : AstTypeMacro
 
         var existing_struct = prog.find_unique_structure(struct_name)
         if existing_struct != null
-            return <- new TypeDecl(baseType=Type tStructure, structType=existing_struct, at=td.at)
+            return <- new TypeDecl(baseType = Type tStructure, structType = existing_struct, at = td.at)
 
         var inscope structure <- clone_structure(template_type.structType)
         structure.name := struct_name
@@ -49,7 +49,7 @@ class CounterMacro : AstTypeMacro
 
         delete rules
 
-        var inscope return_type <- new TypeDecl(baseType=Type tStructure, structType=get_ptr(structure), at=td.at)
+        var inscope return_type <- new TypeDecl(baseType = Type tStructure, structType = get_ptr(structure), at = td.at)
         mod |> add_structure(structure)
         return <- return_type
 
