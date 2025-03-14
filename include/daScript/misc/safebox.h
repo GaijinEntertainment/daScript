@@ -96,9 +96,11 @@ namespace das {
         }
         void clear () {
             if ( objects ) {
-                // i really don't care if we delete or not, as long as we delete at shutdown  of the table
                 for ( uint32_t i=0; i<=mask; ++i ) {
-                    objects[i].hash = 0;
+                    if ( objects[i].hash != 0 ) {
+                        objects[i].hash = 0;
+                        objects[i].second = ValueType();
+                    }
                 }
                 occupancy = 0;
             }
@@ -187,6 +189,13 @@ namespace das {
                 }
                 delete [] old_objects;
             }
+        }
+        void verify() {
+            uint32_t count = 0;
+            this->foreach([&](uint64_t,const ValueType &){
+                count++;
+            });
+            DAS_VERIFYF(count==occupancy, "count mismatch");
         }
     protected:
         KV *        objects = nullptr;
