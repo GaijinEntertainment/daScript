@@ -817,7 +817,30 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( EnumerationPtr & enum_type ) {
-        serializeSmartPtr(enum_type, smartEnumerationMap);
+        if ( writing ) {
+            bool builtin = enum_type->module->builtIn && !enum_type->module->promoted;
+            *this << builtin;
+            if ( builtin ) {
+                string module = enum_type->module->name;
+                string name = enum_type->name;
+                *this << module << name;
+            } else {
+                serializeSmartPtr(enum_type, smartEnumerationMap);
+            }
+        } else {
+            bool builtin = false;
+            *this << builtin;
+            if ( builtin ) {
+                string module;
+                string name;
+                *this << module << name;
+                enum_type = this->moduleLibrary->findModule(module)->findEnum(name);
+                SERIALIZER_VERIFYF(enum_type, "expected to find enumeration '%s' '%s'", module.c_str(), name.c_str());
+            } else {
+                serializeSmartPtr(enum_type, smartEnumerationMap);
+            }
+        }
+
         return *this;
     }
 
@@ -2229,7 +2252,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 48;
+        static constexpr uint32_t currentVersion = 49;
         return currentVersion;
     }
 
