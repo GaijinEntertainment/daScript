@@ -33,12 +33,12 @@ namespace das {
     public:
         MarkSymbolUse ( bool bid ) : builtInDependencies(bid) {
         }
-        __forceinline void push ( const VariablePtr & pvar ) {
+        __forceinline void push ( Variable* pvar ) {
             if ( !tw ) return;
             *tw << string(logTab,'\t') << pvar->getMangledName() << "\n";
             logTab ++;
         }
-        __forceinline void push ( const FunctionPtr & pfun ) {
+        __forceinline void push ( Function* pfun ) {
             if ( !tw ) return;
             *tw << string(logTab,'\t') << pfun->getMangledName() << "\n";
             logTab ++;
