@@ -397,7 +397,7 @@ namespace das {
         return true;
     }
 
-    bool detectGen2Syntax ( const char * text, uint32_t length ) {
+    bool detectGen2Syntax ( const char * text, uint32_t length, bool& value ) {
         // we search for #gen2#, and return true if its there
         // we skip /* */ and // comments
         bool in_single_line_comment = false;
@@ -434,6 +434,11 @@ namespace das {
                     ++i;
                 }
                 if (i + 5 < length && text[i] == 'g' && text[i + 1] == 'e' && text[i + 2] == 'n' && text[i + 3] == '2' && !isalnum(text[i + 4]) && text[i + 4] != '_') {
+                    i += 4;
+                    while (i < length && (isspace(text[i]) || text[i] == '=') && text[i] != '\n' && text[i] != '\r') {
+                        ++i;
+                    }
+                    value = !(i + 4 < length && text[i] == 'f' && text[i + 1] == 'a' && text[i + 2] == 'l' && text[i + 3] == 's' && text[i + 4] == 'e');
                     return true;
                 }
             }
@@ -486,7 +491,8 @@ namespace das {
             const char * src = nullptr;
             uint32_t len = 0;
             fi->getSourceAndLength(src,len);
-            bool gen2 = policies.version_2_syntax || detectGen2Syntax(src, len);
+            bool gen2 = policies.version_2_syntax;
+            detectGen2Syntax(src, len, gen2);
             program->policies.version_2_syntax = gen2;
             if ( gen2 ) {
                 das2_yylex_init_extra(&parserState, &scanner);
