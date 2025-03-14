@@ -338,9 +338,11 @@ namespace das {
         ref_count_ids.erase(ref_count_id); \
     }
     #define DAS_TRACK_SMART_PTR_ID         if ( ref_count_id==ref_count_track ) os_debug_break();
+    #define DAS_TRACK_SMART_PTR_ID_DTOR    if ( ref_count_id==ref_count_track_destructor ) os_debug_break();
 #else
     #define DAS_NEW_SMART_PTR_ID
     #define DAS_TRACK_SMART_PTR_ID
+    #define DAS_TRACK_SMART_PTR_ID_DTOR
     #define DAS_DELETE_SMART_PTR_ID
 #endif
 
@@ -359,6 +361,7 @@ namespace das {
         uint64_t                    ref_count_id;
         static uint64_t             ref_count_total;
         static uint64_t             ref_count_track;
+        static uint64_t             ref_count_track_destructor;
         static das_set<uint64_t>    ref_count_ids;
         static mutex                ref_count_mutex;
 #endif
@@ -412,6 +415,7 @@ namespace das {
             DAS_ASSERTF(ref_count, "deleting reference on the object with ref_count==0");
 #endif
             if ( --ref_count==0 ) {
+                DAS_TRACK_SMART_PTR_ID_DTOR
                 delete this;
                 return true;
             } else {
