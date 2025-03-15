@@ -6,6 +6,11 @@
 #include <optional>
 #include <utility>
 
+// enable this one if serialization breaks on tag, to get more info
+#ifndef DAS_SERIALIZE_DTAG
+#define DAS_SERIALIZE_DTAG      0
+#endif
+
 namespace das {
 
     // use FNV32 hash for tags. it's fast and good enough for our purposes
@@ -102,13 +107,13 @@ namespace das {
         das_hash_map<DataOffset, FileInfo*>         readingFileInfoMap;
         das_hash_map<uint64_t, FileAccess*>         fileAccessMap;
     // smart pointers
-        das_hash_map<uint64_t, MakeFieldDeclPtr>    smartMakeFieldDeclMap;
-        das_hash_map<uint64_t, EnumerationPtr>      smartEnumerationMap;
-        das_hash_map<uint64_t, StructurePtr>        smartStructureMap;
-        das_hash_map<uint64_t, VariablePtr>         smartVariableMap;
-        das_hash_map<uint64_t, FunctionPtr>         smartFunctionMap;
-        das_hash_map<uint64_t, MakeStructPtr>       smartMakeStructMap;
-        das_hash_map<uint64_t, TypeDeclPtr>         smartTypeDeclMap;
+        das_hash_map<uint64_t, MakeFieldDecl*>      smartMakeFieldDeclMap;
+        das_hash_map<uint64_t, Enumeration*>        smartEnumerationMap;
+        das_hash_map<uint64_t, Structure*>          smartStructureMap;
+        das_hash_map<uint64_t, Variable*>           smartVariableMap;
+        das_hash_map<uint64_t, Function*>           smartFunctionMap;
+        das_hash_map<uint64_t, MakeStruct*>         smartMakeStructMap;
+        das_hash_map<uint64_t, TypeDecl*>           smartTypeDeclMap;
     // refs
         vector<pair<ExprBlock**,uint64_t>>          blockRefs;
         vector<pair<Function **,uint64_t>>          functionRefs;
@@ -123,6 +128,11 @@ namespace das {
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
         void tag   ( const char * name, uint32_t hash );
+#if DAS_SERIALIZE_DTAG
+        __forceinline void dtag ( const char * name, uint32_t hash ) { tag(name,hash); }
+#else
+        __forceinline void dtag ( const char *, uint32_t ) {}
+#endif
         template<typename T>
         void read  ( T & data ) { buffer->read(data); }
         void read  ( void * data, size_t size );
@@ -200,7 +210,7 @@ namespace das {
         bool serializeScript ( ProgramPtr program ) noexcept;
 
         template<typename T>
-        void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap );
+        void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, T*> & objMap );
 
         template <uint64_t n>
         AstSerializer& operator << ( int (&value)[n] ) {
@@ -211,7 +221,7 @@ namespace das {
 
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
-            tag("Vector",hash_tag("Vector"));
+            dtag("Vector",hash_tag("Vector"));
             if ( writing ) {
                 uint64_t size = value.size();
                 serializeAdaptiveSize64(size);
