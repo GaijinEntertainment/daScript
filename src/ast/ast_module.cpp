@@ -76,6 +76,11 @@ namespace das {
         }
     }
 
+    void Module::setModuleName ( const string & n ) {
+        name = n;
+        nameHash = hash64z(n.c_str());
+    }
+
     void Module::addBuiltinDependency ( ModuleLibrary & lib, Module * m, bool pub ) {
         lib.addModule(m);
         requireModule[m] = pub;
@@ -225,7 +230,8 @@ namespace das {
         return optT;
     }
 
-    Module::Module ( const string & n ) : name(n) {
+    Module::Module ( const string & n ) {
+        setModuleName(n);
         if ( !name.empty() ) {
             auto first = daScriptEnvironment::bound->modules;
             while (first != nullptr)
@@ -798,8 +804,11 @@ namespace das {
             }
 
         } else {
+            auto hash = hash64z(moduleName.c_str());
             for ( auto pm : modules ) {
-                if ( pm->name==moduleName ) {
+                if ( pm->name == moduleName ) {
+                    // DAS_ASSERTF(pm->nameHash==hash64z(pm->name.c_str()), "hash mismatch in module %s, %llu vs calculated %llu", pm->name.c_str(), pm->nameHash, hash64z(pm->name.c_str()));
+                    // DAS_ASSERTF(pm->nameHash==hash, "hash mismatch in module %s, %llu vs %llu", pm->name.c_str(), pm->nameHash, hash);
                     func(pm);
                     break;
                 }
@@ -817,11 +826,16 @@ namespace das {
         func(thisM);
     }
 
-    Module * ModuleLibrary::findModule ( const string & mn ) const {
+    Module * ModuleLibrary::findModuleByMangledNameHash ( uint64_t hash ) const {
         auto it = find_if(modules.begin(), modules.end(), [&](Module * mod){
-            return mod->name == mn;
+            return mod->nameHash == hash;
         });
         return it!=modules.end() ? *it : nullptr;
+
+    }
+
+    Module * ModuleLibrary::findModule ( const string & mn ) const {
+        return findModuleByMangledNameHash(hash64z(mn.c_str()));
     }
 
     void ModuleLibrary::findWithCallback ( const string & name, Module * inWhichModule, const callable<void (Module * pm, const string &name, Module * inWhichModule)> & func ) const {

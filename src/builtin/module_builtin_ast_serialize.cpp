@@ -346,24 +346,24 @@ namespace das {
 
     void AstSerializer::writeIdentifications ( Function * & func ) {
         string mangeldName = func->getMangledName();
-        string moduleName = func->module->name;
+        uint64_t moduleName = func->module->nameHash;
         *this << moduleName << mangeldName;
     }
 
     void AstSerializer::writeIdentifications ( Enumeration * & ptr ) {
-        *this << ptr->module->name << ptr->name;
+        *this << ptr->module->nameHash << ptr->name;
     }
 
     void AstSerializer::writeIdentifications ( Structure * & ptr ) {
-        *this << ptr->module->name << ptr->name;
+        *this << ptr->module->nameHash << ptr->name;
     }
 
     void AstSerializer::writeIdentifications ( Variable * & ptr ) {
-        *this << ptr->module->name << ptr->name;
+        *this << ptr->module->nameHash << ptr->name;
     }
 
     void AstSerializer::writeIdentifications ( TypeInfoMacro * & ptr ) {
-        *this << ptr->module->name << ptr->name;
+        *this << ptr->module->nameHash << ptr->name;
     }
 
     void AstSerializer::fillOrPatchLater ( Function * & func, uint64_t id ) {
@@ -407,10 +407,11 @@ namespace das {
     }
 
     auto AstSerializer::readModuleAndName () -> pair<Module *, string> {
-        string moduleName, mangledName;
-        *this << moduleName << mangledName;
-        auto funcModule = moduleLibrary->findModule(moduleName);
-        SERIALIZER_VERIFYF(ignoreEmptyExternal || funcModule, "module '%s' is not found", moduleName.c_str());
+        uint64_t moduleNameHash = 0;
+        string mangledName;
+        *this << moduleNameHash << mangledName;
+        auto funcModule = moduleLibrary->findModuleByMangledNameHash(moduleNameHash);
+        SERIALIZER_VERIFYF(ignoreEmptyExternal || funcModule, "module '%llu' is not found", moduleNameHash);
         return {funcModule, mangledName};
     }
 
@@ -614,7 +615,7 @@ namespace das {
                     ser.serialize_enum(op);
                     anno->serialize(ser);
                 } else {
-                    ser << anno->module->name;
+                    ser << anno->module->nameHash;
                 }
             } else {
                 // If the macro is from current module, do nothing
@@ -627,16 +628,17 @@ namespace das {
             bool inThisModule = false;
             ser << inThisModule;
             if ( !inThisModule ) {
-                string moduleName, name;
+                string name;
                 ser << name;
                 if ( isLogicAnnotation(name) ) {
                     LogicAnnotationOp op; ser.serialize_enum(op);
                     anno = newLogicAnnotation(op);
                     anno->serialize(ser);
                 } else {
-                    ser << moduleName;
-                    auto mod = ser.moduleLibrary->findModule(moduleName);
-                    SERIALIZER_VERIFYF(mod!=nullptr, "module '%s' is not found", moduleName.c_str());
+                    uint64_t moduleNameHash = 0;
+                    ser << moduleNameHash;
+                    auto mod = ser.moduleLibrary->findModuleByMangledNameHash(moduleNameHash);
+                    SERIALIZER_VERIFYF(mod!=nullptr, "module '%llu' is not found", moduleNameHash);
                     anno = mod->findAnnotation(name).get();
                     SERIALIZER_VERIFYF(anno!=nullptr, "annotation '%s' is not found", name.c_str());
                 }
@@ -821,7 +823,7 @@ namespace das {
             bool builtin = enum_type->module->builtIn && !enum_type->module->promoted;
             *this << builtin;
             if ( builtin ) {
-                string module = enum_type->module->name;
+                uint64_t module = enum_type->module->nameHash;
                 string name = enum_type->name;
                 *this << module << name;
             } else {
@@ -831,11 +833,13 @@ namespace das {
             bool builtin = false;
             *this << builtin;
             if ( builtin ) {
-                string module;
+                uint64_t module = 0;
                 string name;
                 *this << module << name;
-                enum_type = this->moduleLibrary->findModule(module)->findEnum(name);
-                SERIALIZER_VERIFYF(enum_type, "expected to find enumeration '%s' '%s'", module.c_str(), name.c_str());
+                auto pModule = this->moduleLibrary->findModuleByMangledNameHash(module);
+                SERIALIZER_VERIFYF(pModule, "expected to find module '%llu'", module);
+                enum_type = pModule->findEnum(name);
+                SERIALIZER_VERIFYF(enum_type, "expected to find enumeration '%llu'::'%s'", module, name.c_str());
             } else {
                 serializeSmartPtr(enum_type, smartEnumerationMap);
             }
@@ -874,13 +878,13 @@ namespace das {
         *this << is_null;
         if ( writing ) {
             if ( !is_null ) {
-                *this << module->name;
+                *this << module->nameHash;
             }
         } else {
             if ( !is_null ) {
-                string name; *this << name;
-                module = moduleLibrary->findModule(name);
-                SERIALIZER_VERIFYF(module, "expected to fetch module from library");
+                uint64_t nameHash; *this << nameHash;
+                module = moduleLibrary->findModuleByMangledNameHash(nameHash);
+                SERIALIZER_VERIFYF(module, "expected to fetch module %llu from library", nameHash);
             } else {
                 module = nullptr;
             }
@@ -898,13 +902,14 @@ namespace das {
         if ( writing ) {
             SERIALIZER_VERIFYF(ptr, "did not expext to see null ReaderMacroPtr");
             SERIALIZER_VERIFYF(!(ptr->module == thisModule), "did not expect to find macro from the current module");
-            *this << ptr->module->name;
+            *this << ptr->module->nameHash;
             *this << ptr->name;
         } else {
-            string moduleName, name;
-            *this << moduleName << name;
-            auto mod = moduleLibrary->findModule(moduleName);
-            SERIALIZER_VERIFYF(mod!=nullptr, "module '%s' not found", moduleName.c_str());
+            uint64_t moduleNameHash = 0;
+            string name;
+            *this << moduleNameHash << name;
+            auto mod = moduleLibrary->findModuleByMangledNameHash(moduleNameHash);
+            SERIALIZER_VERIFYF(mod!=nullptr, "module '%llu' not found", moduleNameHash);
             ptr = mod->findReaderMacro(name);
             SERIALIZER_VERIFYF(ptr, "Reader macro '%s' not found in the module '%s'",
                 name.c_str(), mod->name.c_str()
@@ -1310,7 +1315,7 @@ namespace das {
                 ser << variable; // serialize as smart pointer
             } else {
                 ser << variable->name;
-                ser << variable->module->name;
+                ser << variable->module->nameHash;
             }
         } else {
 
@@ -1318,10 +1323,11 @@ namespace das {
             if ( inThisModule ) {
                 ser << variable;
             } else {
-                string varname, modname;
+                string varname;
+                uint64_t modname = 0;
                 ser << varname << modname;
-                auto mod = ser.moduleLibrary->findModule(modname);
-                SERIALIZER_VERIFYF(mod, "expected to find module '%s'", modname.c_str());
+                auto mod = ser.moduleLibrary->findModuleByMangledNameHash(modname);
+                SERIALIZER_VERIFYF(mod, "expected to find module '%llu'", modname);
                 variable = mod->findVariable(varname);
             }
 
@@ -1677,13 +1683,14 @@ namespace das {
         if ( writing ) {
             SERIALIZER_VERIFYF ( ptr, "did not expect to see a nullptr CallMacro *" );
             SERIALIZER_VERIFYF ( !(ptr->module == thisModule), "did not expect to find macro from the current module" );
-            *this << ptr->module->name;
+            *this << ptr->module->nameHash;
             *this << ptr->name;
         } else {
-            string moduleName, name;
+            uint64_t moduleName = 0;
+            string name;
             *this << moduleName << name;
-            auto mod = moduleLibrary->findModule(moduleName);
-            SERIALIZER_VERIFYF(mod!=nullptr, "module '%s' not found", moduleName.c_str());
+            auto mod = moduleLibrary->findModuleByMangledNameHash(moduleName);
+            SERIALIZER_VERIFYF(mod!=nullptr, "module '%llu' not found", moduleName);
         // perform a litte dance to access the internal macro;
         // for details see: src/builtin/module_builtin_ast_adapters.cpp
         // 1564: void addModuleCallMacro ( .... CallMacroPtr & .... )
@@ -1771,7 +1778,7 @@ namespace das {
                 bool builtin = usedFun->module->builtIn;
                 ser << builtin;
                 if ( builtin ) {
-                    string module = usedFun->module->name;
+                    uint64_t module = usedFun->module->nameHash;
                     uint64_t mnh = usedFun->getMangledNameHash();
                     ser << module << mnh;
                 } else {
@@ -1788,10 +1795,12 @@ namespace das {
                 bool builtin = false;
                 ser << builtin;
                 if ( builtin ) {
-                    string module;
+                    uint64_t module = 0;
                     uint64_t mnh = 0;
                     ser << module << mnh;
-                    auto fun = ser.moduleLibrary->findModule(module)->findFunctionByMangledNameHash(mnh);
+                    auto pModule = ser.moduleLibrary->findModuleByMangledNameHash(module);
+                    SERIALIZER_VERIFYF(pModule, "expected to find module '%llu'", module);
+                    auto fun = pModule->findFunctionByMangledNameHash(mnh);
                     SERIALIZER_VERIFYF(fun, "expected to find function");
                     f->useFunctions.emplace(fun.get());
                 } else {
@@ -1814,7 +1823,7 @@ namespace das {
                 bool builtin = usedFun->module->builtIn;
                 ser << builtin;
                 if ( builtin ) {
-                    string module = usedFun->module->name;
+                    uint64_t module = usedFun->module->nameHash;
                     uint64_t mnh = usedFun->getMangledNameHash();
                     ser << module << mnh;
                 } else {
@@ -1832,10 +1841,12 @@ namespace das {
                 bool builtin = false;
                 ser << builtin;
                 if ( builtin ) {
-                    string module;
+                    uint64_t module = 0;
                     uint64_t mnh = 0;
                     ser << module << mnh;
-                    auto fun = ser.moduleLibrary->findModule(module)->findFunctionByMangledNameHash(mnh);
+                    auto pModule = ser.moduleLibrary->findModuleByMangledNameHash(module);
+                    SERIALIZER_VERIFYF(pModule, "expected to find module '%llu'", module);
+                    auto fun = pModule->findFunctionByMangledNameHash(mnh);
                     SERIALIZER_VERIFYF(fun, "expected to find function");
                     f->useFunctions.emplace(fun.get());
                 } else {
@@ -1858,7 +1869,7 @@ namespace das {
                 bool builtin = use->module->builtIn;
                 ser << builtin;
                 if ( builtin ) {
-                    string module = use->module->name;
+                    uint64_t module = use->module->nameHash;
                     string varname = use->name;
                     ser << module << varname;
                 } else {
@@ -1875,10 +1886,13 @@ namespace das {
                 bool builtin = false;
                 ser << builtin;
                 if ( builtin ) {
-                    string module, varname;
+                    uint64_t module = 0;
+                    string varname;
                     ser << module << varname;
-                    auto var = ser.moduleLibrary->findModule(module)->findVariable(varname);
-                    SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", module.c_str(), varname.c_str());
+                    auto pModule = ser.moduleLibrary->findModuleByMangledNameHash(module);
+                    SERIALIZER_VERIFYF(pModule, "expected to find module '%llu'", module);
+                    auto var = pModule->findVariable(varname);
+                    SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", pModule->name.c_str(), varname.c_str());
                     f->useGlobalVariables.emplace(var.get());
                 } else {
                     void * addr = nullptr; ser << addr;
@@ -1900,7 +1914,7 @@ namespace das {
                 bool builtin = use->module->builtIn;
                 ser << builtin;
                 if ( builtin ) {
-                    string module = use->module->name;
+                    uint64_t module = use->module->nameHash;
                     string varname = use->name;
                     ser << module << varname;
                 } else {
@@ -1917,10 +1931,13 @@ namespace das {
                 bool builtin = false;
                 ser << builtin;
                 if ( builtin ) {
-                    string module, varname;
+                    uint64_t module = 0;
+                    string varname;
                     ser << module << varname;
-                    auto var = ser.moduleLibrary->findModule(module)->findVariable(varname);
-                    SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", module.c_str(), varname.c_str());
+                    auto pModule = ser.moduleLibrary->findModuleByMangledNameHash(module);
+                    SERIALIZER_VERIFYF(pModule, "expected to find module '%llu'", module);
+                    auto var = pModule->findVariable(varname);
+                    SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", pModule->name.c_str(), varname.c_str());
                     f->useGlobalVariables.emplace(var.get());
                 } else {
                     void * addr = nullptr; ser << addr;
@@ -2007,7 +2024,7 @@ namespace das {
 
     void Module::serialize ( AstSerializer & ser, bool already_exists ) {
         ser.tag(HASH_TAG("Module"));
-        ser << name           << moduleFlags;
+        ser << name << nameHash << moduleFlags;
         ser << annotationData << requireModule;
         ser << aliasTypes     << enumerations;
         ser << keywords;

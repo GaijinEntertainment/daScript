@@ -5820,7 +5820,7 @@ yyreduce:
         yyextra->g_Program->thisModule->isPublic = (yyvsp[0].b);
         yyextra->g_Program->thisModule->isModule = true;
         if ( yyextra->g_Program->thisModule->name.empty() ) {
-            yyextra->g_Program->thisModule->name = *(yyvsp[-2].s);
+            yyextra->g_Program->thisModule->setModuleName(*(yyvsp[-2].s));
         } else if ( yyextra->g_Program->thisModule->name != *(yyvsp[-2].s) ){
             das2_yyerror(scanner,"this module already has a name " + yyextra->g_Program->thisModule->name,tokAt(scanner,(yylsp[-2])),
                 CompilationError::module_already_has_a_name);

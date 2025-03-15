@@ -455,7 +455,7 @@ namespace das {
                               bool isDep,
                               CodeOfPolicies policies ) {
         ProgramPtr program = make_smart<Program>();
-        program->thisModule->name = moduleName;
+        program->thisModule->setModuleName(moduleName);
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
 
@@ -883,7 +883,7 @@ namespace das {
                     return program;
                 }
                 if ( program->thisModule->name.empty() ) {
-                    program->thisModule->name = mod.moduleName;
+                    program->thisModule->setModuleName(mod.moduleName);
                     program->thisModule->wasParsedNameless = true;
                 }
                 program->thisModule->fileName = mod.fileName;
