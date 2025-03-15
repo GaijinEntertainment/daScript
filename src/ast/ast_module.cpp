@@ -827,11 +827,12 @@ namespace das {
     }
 
     Module * ModuleLibrary::findModuleByMangledNameHash ( uint64_t hash ) const {
-        auto it = find_if(modules.begin(), modules.end(), [&](Module * mod){
-            return mod->nameHash == hash;
-        });
-        return it!=modules.end() ? *it : nullptr;
-
+        for ( auto a : modules ) {
+            if ( a->nameHash == hash ) {
+                return a;
+            }
+        }
+        return nullptr;
     }
 
     Module * ModuleLibrary::findModule ( const string & mn ) const {
