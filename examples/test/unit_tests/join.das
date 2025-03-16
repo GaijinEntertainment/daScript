@@ -17,6 +17,6 @@ def test
     // string
     verify(join("hello", " ") == "h e l l o")
     // iterator
-    let rit <- each(range(1, 4))
+    var rit <- each(range(1, 4))
     verify(join(rit, "*") == "1*2*3")
     return true

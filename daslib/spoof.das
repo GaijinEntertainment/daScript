@@ -60,7 +60,7 @@ def spoof_args(invocation : string; blk : block<(var res : array<tuple<string; s
 }
 
 [macro_function]
-def next_ident(it : iterator<int>; var Ch : int&; var ident : string&) : bool {
+def next_ident(var it : iterator<int>; var Ch : int&; var ident : string&) : bool {
     var id : array<uint8>
     Ch = -1
     while (next(it, Ch)) {

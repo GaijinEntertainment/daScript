@@ -43,6 +43,25 @@ def join(it; separator : string implicit) {
     }
 }
 
+def join(var it : iterator<auto(TT)>; separator : string implicit) {
+    let st = build_string() <| $(var writer) {
+        var skip_first = true
+        for (elem in it) {
+            if (skip_first) {
+                skip_first = false
+            } else {
+                write(writer, separator)
+            }
+            if (typeinfo is_string(it)) {
+                write_char(writer, elem)
+            } else {
+                write(writer, elem)
+            }
+        }
+    }
+    return st
+}
+
 def private join_implement(iterable; separator : string; blk) : string {
     let st = build_string() <| $(var writer) {
         var skip_first = true
@@ -62,7 +81,7 @@ def join(iterable : array<auto(TT)>; separator : string; blk : block<(var writer
     return join_implement(iterable, separator, blk)
 }
 
-def join(iterable : iterator<auto(TT)>; separator : string; blk : block<(var writer : StringBuilderWriter; elem : TT) : void>) : string {
+def join(var iterable : iterator<auto(TT)>; separator : string; blk : block<(var writer : StringBuilderWriter; elem : TT) : void>) : string {
     return join_implement(iterable, separator, blk)
 }
 
