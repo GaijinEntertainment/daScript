@@ -1144,6 +1144,7 @@ namespace das
         void addDependency ( Module * mod, bool pub );
         void addBuiltinDependency ( ModuleLibrary & lib, Module * mod, bool pub = false );
         void serialize( AstSerializer & ser, bool already_exists );
+        void setModuleName ( const string & n );
         FileInfo * getFileInfo() const;
     public:
         template <typename RecAnn>
@@ -1201,6 +1202,7 @@ namespace das
         das_hash_map<string,Type>                   options;            // options
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string                                      name;
+        uint64_t                                    nameHash = 0;
         string                                      fileName;           // where the module was found, if not built-in
         union {
             struct {
@@ -1267,7 +1269,6 @@ namespace das
         bool addModule ( Module * module );
         void foreach ( const callable<bool (Module * module)> & func, const string & name ) const;
         void foreach_in_order ( const callable<bool (Module * module)> & func, Module * thisM ) const;
-
         void findWithCallback ( const string & name, Module * inWhichModule, const callable<void (Module * pm, const string &name, Module * inWhichModule)> & func ) const;
         void findAlias ( vector<TypeDeclPtr> & ptr, Module * pm, const string & aliasName, Module * inWhichModule ) const;
         vector<TypeDeclPtr> findAlias ( const string & name, Module * inWhichModule ) const;
@@ -1280,6 +1281,7 @@ namespace das
         void findStructure ( vector<StructurePtr> & ptr, Module * pm, const string & funcName, Module * inWhichModule ) const;
         vector<StructurePtr> findStructure ( const string & name, Module * inWhichModule ) const;
         Module * findModule ( const string & name ) const;
+        Module * findModuleByMangledNameHash ( uint64_t hash ) const;
         TypeDeclPtr makeStructureType ( const string & name ) const;
         TypeDeclPtr makeHandleType ( const string & name ) const;
         TypeDeclPtr makeEnumType ( const string & name ) const;

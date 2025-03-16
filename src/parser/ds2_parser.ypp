@@ -605,7 +605,7 @@ module_declaration
         yyextra->g_Program->thisModule->isPublic = $ispub;
         yyextra->g_Program->thisModule->isModule = true;
         if ( yyextra->g_Program->thisModule->name.empty() ) {
-            yyextra->g_Program->thisModule->name = *$name;
+            yyextra->g_Program->thisModule->setModuleName(*$name);
         } else if ( yyextra->g_Program->thisModule->name != *$name ){
             das2_yyerror(scanner,"this module already has a name " + yyextra->g_Program->thisModule->name,tokAt(scanner,@name),
                 CompilationError::module_already_has_a_name);

@@ -3633,7 +3633,7 @@ YY_RULE_SETUP
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const auto npos = -1;
+    const size_t npos = -1;
     if (offset != npos) {
         yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
         yylloc_param->last_column = txt.size() - (offset + 1);
@@ -3657,7 +3657,7 @@ YY_RULE_SETUP
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const auto npos = -1;
+    const size_t npos = -1;
     if (offset != npos) {
         yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
         yylloc_param->last_column = txt.size() - (offset + 1);
@@ -3682,7 +3682,7 @@ YY_RULE_SETUP
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const auto npos = -1;
+    const size_t npos = -1;
     if (offset != npos) {
         yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
         yylloc_param->last_column = txt.size() - (offset + 1);
@@ -3704,7 +3704,7 @@ YY_RULE_SETUP
     yyextra->das_nested_square_braces -= 2;
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const auto npos = -1;
+    const size_t npos = -1;
     if (offset != npos) {
         yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
         yylloc_param->last_column = txt.size() - (offset + 1);
@@ -3723,13 +3723,20 @@ YY_RULE_SETUP
         return LEXER_ERROR;
     }
     yyextra->das_nested_square_braces -= 2;
+    const auto txt = string(yytext);
+    auto offset = txt.rfind('\n');
+    const size_t npos = -1;
+    if (offset != npos) {
+        yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
+        yylloc_param->last_column = txt.size() - (offset + 1);
+    }
     return COMMA_SQR_SQR;
 }
 	YY_BREAK
 case 259:
 /* rule 259 can match eol */
 YY_RULE_SETUP
-#line 1063 "ds_lexer.lpp"
+#line 1071 "ds_lexer.lpp"
 {
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
 }
@@ -3737,7 +3744,7 @@ YY_RULE_SETUP
 case 260:
 /* rule 260 can match eol */
 YY_RULE_SETUP
-#line 1066 "ds_lexer.lpp"
+#line 1074 "ds_lexer.lpp"
 {
     if (yyextra->last_token_end.line != tokAt(yyscanner,*yylloc_param).line) {
         yyextra->last_token_end = tokAt(yyscanner,*yylloc_param);
@@ -3765,7 +3772,7 @@ YY_RULE_SETUP
 }
 	YY_BREAK
 case YY_STATE_EOF(normal):
-#line 1091 "ds_lexer.lpp"
+#line 1099 "ds_lexer.lpp"
 {
     if ( yyextra->g_FileAccessStack.size()==1 ) {
         YYCOLUMN(yyextra->das_yycolumn = 0,"EOF");
@@ -3795,15 +3802,15 @@ case YY_STATE_EOF(normal):
 	YY_BREAK
 case 261:
 YY_RULE_SETUP
-#line 1117 "ds_lexer.lpp"
+#line 1125 "ds_lexer.lpp"
 return *yytext;
 	YY_BREAK
 case 262:
 YY_RULE_SETUP
-#line 1119 "ds_lexer.lpp"
+#line 1127 "ds_lexer.lpp"
 ECHO;
 	YY_BREAK
-#line 3806 "ds_lexer.cpp"
+#line 3813 "ds_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(include):
 	yyterminate();
@@ -4997,7 +5004,7 @@ void yyfree (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 1119 "ds_lexer.lpp"
+#line 1127 "ds_lexer.lpp"
 
 
 void das_strfmt ( yyscan_t yyscanner ) {
