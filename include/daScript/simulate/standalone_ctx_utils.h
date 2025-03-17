@@ -8,7 +8,7 @@
 #include <optional>
 
 namespace das {
-    using MangledNameHash = size_t;
+    using MangledNameHash = uint64_t;
 
     struct FunctionInfo {
         FunctionInfo(string name, string mangledName, size_t stackSize,
@@ -47,8 +47,8 @@ namespace das {
         bool globalShared;
     };
     struct SizeDiff {
-        size_t sharedSizeDiff;
-        size_t globalsSizeDiff;
+        uint64_t sharedSizeDiff;
+        uint64_t globalsSizeDiff;
     };
 
     /**

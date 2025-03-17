@@ -11,7 +11,6 @@
 #include "daScript/simulate/hash.h"
 
 
-#include <iostream>
 namespace das {
 
     Enum<Type> g_cppCTypeTable = {
@@ -3978,13 +3977,13 @@ namespace das {
 
         auto logger = TextPrinter();
         for ( const auto & [nm, out] : nameToOutput ) {
-            const auto &[header, source] = out;
+            const auto &[header_content, source_content] = out;
             auto mod = nm.empty() ? cfg.context_name : nm;
             const auto outputFile = cppOutputDir + '/' + mod + ".das";
             if (nm.empty()) {
-                saveToFile(logger, outputFile + ".h", header);
+                saveToFile(logger, outputFile + ".h", header_content);
             }
-            saveToFile(logger, outputFile + ".cpp", source);
+            saveToFile(logger, outputFile + ".cpp", source_content);
         }
 
         daScriptEnvironment::bound->g_Program.reset();

@@ -132,13 +132,18 @@ bool compileStandalone ( const string & inputFile, const string & outDir, const 
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     struct stat st;
     if (stat(outDir.c_str(), &st) == -1) {
+        bool dir_ok = false;
 #if defined(_MSC_VER)
-        _mkdir(outDir.c_str()) == 0;
+        dir_ok = _mkdir(outDir.c_str()) == 0;
 #elif defined(_EMSCRIPTEN_VER)
-        return mkdir(outDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
+        dir_ok = mkdir(outDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
 #else
-        mkdir(outDir.c_str(), ACCESSPERMS) == 0;
+        dir_ok = mkdir(outDir.c_str(), ACCESSPERMS) == 0;
 #endif
+        if (!dir_ok) {
+            tout << "Couldn't create directory: " << outDir.c_str() << '\n';
+            return false;
+        }
     }
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;

@@ -337,7 +337,7 @@ namespace das
 
         uint64_t getGlobalSize() const { return globalsSize; }
         uint64_t getSharedSize() const { return sharedSize; }
-        void updateSharedGlobalSize(size_t sharedDiff, size_t globalDiff) {
+        void updateSharedGlobalSize(uint64_t sharedDiff, uint64_t globalDiff) {
             sharedSize += sharedDiff;
             globalsSize += globalDiff;
         }

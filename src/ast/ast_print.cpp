@@ -2,7 +2,6 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
-#include <iostream>
 
 #if defined(STANDALONE_MODE)
 #include "../das/ast/_standalone_ctx_generated/context.das.h"
@@ -1381,12 +1380,12 @@ namespace das {
     };
 
     void Program::setPrintFlags() {
-#if not defined(STANDALONE_MODE)
-        SetPrinterFlags pflags;
-        visit(pflags);
-#else
+#if defined(STANDALONE_MODE)
         context::Standalone ctx;
         ctx.setFlags(this);
+#else
+        SetPrinterFlags pflags;
+        visit(pflags);
 #endif
     }
 
