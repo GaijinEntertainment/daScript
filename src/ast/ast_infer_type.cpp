@@ -8634,7 +8634,7 @@ namespace das {
                                 if ( isPrivate && aliasT->structType->module != thisModule ) {
                                     error("can't access private structure " + aliasT->structType->name, "", "",
                                         expr->at, CompilationError::function_not_found);
-                                } else if ( !tryMakeStructureCtor (aliasT->structType, isPrivate, true) ) {
+                                } else if ( !tryMakeStructureCtor (aliasT->structType, true, true) ) {
                                     if ( failOnMissingCtor ) {
                                         error("default constructor " + aliasT->structType->name + " is not visible directly",
                                             "try default<" + expr->name + "> instead", "", expr->at, CompilationError::function_not_found);
