@@ -1289,8 +1289,11 @@ namespace das
         vector<Module *> & getModules() { return modules; }
         Module* getThisModule() const { return thisModule; }
         void reset();
+        void renameModule ( Module * module, const string & newName );
     protected:
         vector<Module *>                modules;
+        das_hash_map<string,Module *>   moduleLookup;
+        safebox_map<Module *>           moduleLookupByHash;
         Module *                        thisModule = nullptr;
     };
 
