@@ -743,8 +743,25 @@ namespace das {
             return result;
         }
 
-        MatchingFunctions findTypedFuncAddr ( const string & name, const vector<TypeDeclPtr> & arguments ) const {
-            return findMatchingFunctions(name, arguments, false, false);
+        MatchingFunctions findTypedFuncAddr ( string & name, const vector<TypeDeclPtr> & arguments ) {
+            MatchingFunctions result = findMatchingFunctions(name, arguments, false, false);
+            if ( result.size()==0 ) {
+                auto fakeCall = make_smart<ExprCall>(LineInfo(),name);
+                for ( auto & arg : arguments ) {
+                    // TODO: support blocks?
+                    auto fakeArg = make_smart<ExprTypeDecl>(LineInfo(),arg);
+                    fakeArg->type = make_smart<TypeDecl>(*arg);
+                    fakeCall->arguments.push_back(fakeArg);
+                }
+                auto fn = inferFunctionCall(fakeCall.get());
+                if ( fakeCall->name!=name ) {
+                    name = fakeCall->name;
+                    result = findMatchingFunctions(fakeCall->name, arguments, false, false);
+                } else if ( fn ) {
+                    result.push_back(fn.get());
+                }
+            }
+            return result;
         }
 
         // MISSING CANDIDATES
@@ -2786,16 +2803,6 @@ namespace das {
                         expr->at, CompilationError::type_not_found);
                 }
                 fns = findTypedFuncAddr(expr->target, expr->funcType->argTypes);
-                if ( fns.size()==0 ) {
-                    string moduleName, funcName;
-                    splitTypeName(expr->target, moduleName, funcName);
-                    fns = findTypedFuncAddr(moduleName + "::`" + funcName, expr->funcType->argTypes);
-                    if ( fns.size()==1 && !fns.back()->fromGeneric ) {
-                        error("function not found " + expr->target,  "", "",
-                            expr->at, CompilationError::function_not_found);
-                        return Visitor::visit(expr);
-                    }
-                }
             } else {
                 fns = findFuncAddr(expr->target);
             }
