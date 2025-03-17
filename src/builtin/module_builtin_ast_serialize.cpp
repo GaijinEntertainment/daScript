@@ -2381,6 +2381,7 @@ namespace das {
                 }
             } else {
                 auto deser = new Module;
+                deser->setModuleName(name);
                 library.addModule(deser);
                 ser << *deser;
             }
