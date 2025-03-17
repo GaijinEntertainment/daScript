@@ -3765,6 +3765,7 @@ namespace das {
 
 
     static void writeRegistration ( TextWriter &header, TextWriter &source, string initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
+        source << "using namespace " << program->thisNamespace << ";\n";
         dumpRegisterAot(source, program, context, true);
         {
             NamespaceGuard guard1(header, cfg.context_name);
@@ -3906,25 +3907,20 @@ namespace das {
             auto mnh = fn->getMangledNameHash();
 
             tw << "    // " << fn->getMangledName() << "\n";
-            tw << "    (*context.tabMnLookup)["<< mnh <<"/*mnh*/] = context.functions + " << fn->index << "/*fn->index*/;\n";
+            tw << "    (*context.tabMnLookup)[0x"<< HEX << mnh << DEC <<"/*mnh*/] = context.functions + " << fn->index << "/*fn->index*/;\n";
         }
 
         return tw.str();
     }
 
     void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
-        BlockVariableCollector coll;
-        StandaloneContextGen gen(program, coll, cppOutputDir, cfg.context_name);
         auto printer = TextPrinter();
         auto pctx = SimulateWithErrReport(program, printer);
         if (!pctx) {
             return;
         }
         Context & context = *pctx;
-        // header
-
         daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
-
 
         // mark prologue
         PrologueMarker pmarker;
@@ -3934,9 +3930,8 @@ namespace das {
 
         // now, for that AOT
         program->setPrintFlags();
+        BlockVariableCollector coll;
         program->visit(coll);
-
-        das_map<string, pair<string, string>>     nameToOutput;
 
         CppAot aotVisitor(program,coll);
         dumpDependencies(program, aotVisitor);
@@ -3958,20 +3953,22 @@ namespace das {
         source << AOT_HEADERS;
         {
             NamespaceGuard guard1(source, "das");
-            source << aotVisitor.ss.str();
-        }
-
-        {
-            NamespaceGuard guard1(source, "das");
             NamespaceGuard guard2(header, "das");
-            program->visitModule(gen, mod);
-            auto initFunctions = addFunctionInfo(*program, gen.GetDebugInfo());
-            source << gen.str();
-            gen.clear();
+            string initFunctions;
+            {
+                NamespaceGuard anon_guard(source, program->thisNamespace); // anonymous
+                source << aotVisitor.ss.str();
+                StandaloneContextGen gen(program, coll, cppOutputDir, cfg.context_name);
+                program->visitModule(gen, mod);
+                initFunctions = addFunctionInfo(*program, gen.GetDebugInfo());
+                source << gen.str();
+                gen.clear();
+            }
             writeRegistration(header, source, move(initFunctions), program, cfg, context);
         }
         source << AOT_FOOTER;
 
+        das_map<string, pair<string, string>>     nameToOutput;
         nameToOutput[mod->name] = {header.str(), source.str()};
 
         // get the name of the current file from program?
@@ -3998,7 +3995,6 @@ namespace das {
         PrologueMarker pmarker;
         visit(pmarker);
         // compute semantic hash for each used function
-        int fni = 0;
         setAotHashes(context, this);
         // now, for that AOT
         setPrintFlags();
