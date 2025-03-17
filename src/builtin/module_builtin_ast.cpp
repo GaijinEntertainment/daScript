@@ -788,10 +788,10 @@ namespace das {
             SideEffects::none, "ast_describe_expression")
                 ->args({"expression","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",
-            SideEffects::none, "describe_function")
+            SideEffects::none, "ast_describe_function")
                 ->args({"function","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "find_bitfield_name",
-            SideEffects::none, "find_bitfield_name")
+            SideEffects::none, "ast_find_bitfield_name")
                 ->args({"bit","value","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_enum_name)>(*this, lib,  "find_enum_name",
             SideEffects::none, "ast_find_enum_name")
@@ -822,7 +822,7 @@ namespace das {
                 ->args({"expr","context","line"});
         // type conversion functions
         addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
-            SideEffects::none, "das_to_string")
+            SideEffects::none, "ast_das_to_string")
                 ->args({"type","context","at"});
         // clone
         addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
@@ -923,7 +923,7 @@ namespace das {
                 ->args({"from_module","which_module"});
         // context
         addExtern<DAS_BIND_FUN(getAstContext)>(*this, lib,  "get_ast_context",
-            SideEffects::modifyExternal, "get_ast_context")
+            SideEffects::modifyExternal, "getAstContext")
                 ->args({"program","expression","block","context","line"});
         // code generation
         addExtern<DAS_BIND_FUN(makeClone)>(*this, lib,  "make_clone_structure",

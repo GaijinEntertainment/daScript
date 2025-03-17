@@ -1547,7 +1547,7 @@ namespace das {
                 SideEffects::none, "rtti_get_das_type_name")
                     ->args({"type","context","at"});
             addExtern<DAS_BIND_FUN(rtti_add_annotation_argument)>(*this, lib,  "add_annotation_argument",
-                SideEffects::none, "add_annotation_argument")
+                SideEffects::none, "rtti_add_annotation_argument")
                     ->args({"annotation","name"});
             // data printer
             addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "sprint_data",
@@ -1561,11 +1561,11 @@ namespace das {
                 SideEffects::none, "builtin_debug_type")
                     ->args({"type","context","at"});
             auto dl = addExtern<DAS_BIND_FUN(builtin_debug_line)>(*this, lib, "describe",
-                SideEffects::none, "builtin_debug_line_info")
+                SideEffects::none, "builtin_debug_line")
                     ->args({"lineinfo","fully","context","at"});
             dl->arguments[1]->init = make_smart<ExprConstBool>(false);
             addExtern<DAS_BIND_FUN(builtin_get_typeinfo_mangled_name)>(*this, lib, "get_mangled_name",
-                SideEffects::none, "getTypeInfoMangledName")
+                SideEffects::none, "builtin_get_typeinfo_mangled_name")
                     ->args({"type","context","at"});
             // function mnh lookup
             addExtern<DAS_BIND_FUN(builtin_get_function_info_by_mnh)>(*this, lib, "get_function_info",

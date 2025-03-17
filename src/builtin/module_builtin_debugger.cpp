@@ -1318,7 +1318,7 @@ namespace debugapi {
                 SideEffects::modifyExternal, "dapiStackWalk")
                     ->args({"walker","context","line"});
             addExtern<DAS_BIND_FUN(dapiStackDepth)>(*this, lib,  "stack_depth",
-                SideEffects::modifyExternal, "dapiStacDepth")
+                SideEffects::modifyExternal, "dapiStackDepth")
                     ->arg("context");
             // global variable
             addInterop<get_global_variable,void *,vec4f,const char *>(*this,lib,"get_context_global_variable",
