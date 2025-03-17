@@ -57,13 +57,13 @@ namespace das {
     }
 
     template <typename TT>
-    void patchRefs ( vector<pair<TT**,uint64_t>> & refs, const das_hash_map<uint64_t,TT *> & objects) {
+    void patchRefs ( vector<pair<TT**,uint64_t>> & refs, const das_hash_map<uint64_t, smart_ptr<TT>> & objects) {
         for ( auto & p : refs ) {
             auto it = objects.find(p.second);
             if ( it == objects.end() ) {
                 throw std::runtime_error{"ast serializer function ref not found"};
             } else {
-                *p.first = it->second;
+                *p.first = it->second.get();
             }
         }
         refs.clear();
@@ -372,7 +372,7 @@ namespace das {
             func = ( Function * ) 1;
             functionRefs.emplace_back(&func, id);
         } else {
-            func = it->second;
+            func = it->second.get();
         }
     }
 
@@ -382,7 +382,7 @@ namespace das {
             ptr = ( Enumeration * ) 1;
             enumerationRefs.emplace_back(&ptr, id);
         } else {
-            ptr = it->second;
+            ptr = it->second.get();
         }
     }
 
@@ -392,7 +392,7 @@ namespace das {
             ptr = ( Structure * ) 1;
             structureRefs.emplace_back(&ptr, id);
         } else {
-            ptr = it->second;
+            ptr = it->second.get();
         }
     }
 
@@ -402,7 +402,7 @@ namespace das {
             ptr = ( Variable * ) 1;
             variableRefs.emplace_back(&ptr, id);
         } else {
-            ptr = it->second;
+            ptr = it->second.get();
         }
     }
 
@@ -555,13 +555,13 @@ namespace das {
         *this << id;
         if ( writing ) {
             if ( smartTypeDeclMap[id] == nullptr ) {
-                smartTypeDeclMap[id] = type.get();
+                smartTypeDeclMap[id] = type;
                 type->serialize(*this);
             }
         } else {
             if ( smartTypeDeclMap[id] == nullptr ) {
                 type = make_smart<TypeDecl>();
-                smartTypeDeclMap[id] = type.get();
+                smartTypeDeclMap[id] = type;
                 type->serialize(*this);
             } else {
                 type = smartTypeDeclMap[id];
@@ -794,7 +794,7 @@ namespace das {
 
     // This method creates concrete (i.e. non-polymorphic types without duplications)
     template<typename T>
-    void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, T*> & objMap) {
+    void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap) {
         uint64_t id = uint64_t(uintptr_t(obj.get()));
         *this << id;
         if ( id == 0 ) {
@@ -803,14 +803,14 @@ namespace das {
         }
         if ( writing ) {
             if ( objMap.find(id) == objMap.end() ) {
-                objMap[id] = obj.get();
+                objMap[id] = obj;
                 obj->serialize(*this);
             }
         } else {
             auto it = objMap.find(id);
             if ( it == objMap.end() ) {
                 obj = make_smart<T>();
-                objMap[id] = obj.get();
+                objMap[id] = obj;
                 obj->serialize(*this);
             } else {
                 obj = it->second;
@@ -1807,7 +1807,7 @@ namespace das {
                     void * addr = nullptr; ser << addr;
                     auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
                     SERIALIZER_VERIFYF(fun, "expected to find function");
-                    f->useFunctions.emplace(fun);
+                    f->useFunctions.emplace(fun.get());
                 }
             }
         }
@@ -1853,7 +1853,7 @@ namespace das {
                     void * addr = nullptr; ser << addr;
                     auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
                     SERIALIZER_VERIFYF(fun, "expected to find function");
-                    f->useFunctions.emplace(fun);
+                    f->useFunctions.emplace(fun.get());
                 }
             }
         }
@@ -1898,7 +1898,7 @@ namespace das {
                     void * addr = nullptr; ser << addr;
                     auto var = ser.smartVariableMap[(uint64_t)(uintptr_t) addr];
                     SERIALIZER_VERIFYF(var, "expected to find variable");
-                    f->useGlobalVariables.emplace(var);
+                    f->useGlobalVariables.emplace(var.get());
                 }
             }
         }
@@ -1943,7 +1943,7 @@ namespace das {
                     void * addr = nullptr; ser << addr;
                     auto var = ser.smartVariableMap[(uint64_t)(uintptr_t) addr];
                     SERIALIZER_VERIFYF(var, "expected to find variable");
-                    f->useGlobalVariables.emplace(var);
+                    f->useGlobalVariables.emplace(var.get());
                 }
             }
         }
@@ -2015,7 +2015,7 @@ namespace das {
             uint32_t size = 0; ser << size;
             functionsByName.reserve(capacity);
             for ( uint32_t i = 0; i < size; i++ ) {
-                uint64_t nameHash; ser << nameHash;
+                uint64_t nameHash = 0; ser << nameHash;
                 vector<Function *> functions; ser << functions;
                 functionsByName[nameHash] = das::move(functions);
             }
@@ -2255,6 +2255,7 @@ namespace das {
                 Module* deser = nullptr;
                 try {
                     deser = new Module();
+                    deser->setModuleName(name);
                     program->library.addModule(deser);
                     ser << *deser;
                 } catch ( const std::runtime_error & r ) {
@@ -2270,7 +2271,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 50;
+        static constexpr uint32_t currentVersion = 51;
         return currentVersion;
     }
 
@@ -2279,7 +2280,7 @@ namespace das {
         try {
             program->serialize(*this);
             return true;
-        } catch ( std::runtime_error & r ) {
+        } catch ( const std::runtime_error & r ) {
             program->failToCompile = true;
             LOG(LogLevel::warning) << "das: serialize: " << r.what();
             return false;
@@ -2365,6 +2366,7 @@ namespace das {
                 if ( isNew ) {
                     Module *prev = Module::require(name);
                     auto deser = new Module;
+                    deser->setModuleName(name);
                     if ( prev ) {
                         library.addModule(prev);
                         ser.serializeModule(*deser, /*already_exists*/true);

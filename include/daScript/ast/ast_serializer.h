@@ -107,13 +107,13 @@ namespace das {
         das_hash_map<DataOffset, FileInfo*>         readingFileInfoMap;
         das_hash_map<uint64_t, FileAccess*>         fileAccessMap;
     // smart pointers
-        das_hash_map<uint64_t, MakeFieldDecl*>      smartMakeFieldDeclMap;
-        das_hash_map<uint64_t, Enumeration*>        smartEnumerationMap;
-        das_hash_map<uint64_t, Structure*>          smartStructureMap;
-        das_hash_map<uint64_t, Variable*>           smartVariableMap;
-        das_hash_map<uint64_t, Function*>           smartFunctionMap;
-        das_hash_map<uint64_t, MakeStruct*>         smartMakeStructMap;
-        das_hash_map<uint64_t, TypeDecl*>           smartTypeDeclMap;
+        das_hash_map<uint64_t, MakeFieldDeclPtr>    smartMakeFieldDeclMap;
+        das_hash_map<uint64_t, EnumerationPtr>      smartEnumerationMap;
+        das_hash_map<uint64_t, StructurePtr>        smartStructureMap;
+        das_hash_map<uint64_t, VariablePtr>         smartVariableMap;
+        das_hash_map<uint64_t, FunctionPtr>         smartFunctionMap;
+        das_hash_map<uint64_t, MakeStructPtr>       smartMakeStructMap;
+        das_hash_map<uint64_t, TypeDeclPtr>         smartTypeDeclMap;
     // refs
         vector<pair<ExprBlock**,uint64_t>>          blockRefs;
         vector<pair<Function **,uint64_t>>          functionRefs;
@@ -210,7 +210,7 @@ namespace das {
         bool serializeScript ( ProgramPtr program ) noexcept;
 
         template<typename T>
-        void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, T*> & objMap );
+        void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap );
 
         template <uint64_t n>
         AstSerializer& operator << ( int (&value)[n] ) {
