@@ -303,6 +303,10 @@ namespace das
 
     typedef shared_ptr<Context> ContextPtr;
 
+    // todo: Move this structs to separate file
+    struct CodeOfPolicies;
+    struct AnnotationArgumentList;
+
     class Context : public ptr_ref_count, public enable_shared_from_this<Context> {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
@@ -325,6 +329,7 @@ namespace das
         Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
         virtual ~Context();
+        void setup(size_t totalVars, size_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options);
         void strip();
         void logMemInfo(TextWriter & tw);
 
@@ -332,6 +337,10 @@ namespace das
 
         uint64_t getGlobalSize() const { return globalsSize; }
         uint64_t getSharedSize() const { return sharedSize; }
+        void updateSharedGlobalSize(uint64_t sharedDiff, uint64_t globalDiff) {
+            sharedSize += sharedDiff;
+            globalsSize += globalDiff;
+        }
         uint64_t getInitSemanticHash();
 
         void onAllocateString ( void * ptr, uint64_t size, const LineInfo & at );

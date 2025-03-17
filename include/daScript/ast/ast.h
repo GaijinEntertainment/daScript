@@ -321,6 +321,7 @@ namespace das
         VariablePtr clone() const;
         string getMangledName() const;
         uint64_t getMangledNameHash() const;
+        static uint64_t getMangledNameHash(const string &mangledName);
         bool isAccessUnused() const;
         bool isCtorInitialized() const;
         void serialize ( AstSerializer & ser );
@@ -1287,6 +1288,7 @@ namespace das
         TypeDeclPtr makeEnumType ( const string & name ) const;
         Module* front() const { return modules.front(); }
         vector<Module *> & getModules() { return modules; }
+        const vector<Module *> & getModules() const { return modules; }
         Module* getThisModule() const { return thisModule; }
         void reset();
         void renameModule ( Module * module, const string & newName );
@@ -1602,8 +1604,6 @@ namespace das
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );
-        void writeStandaloneContext ( TextWriter & logs );
-        void writeStandaloneContextMethods ( TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true, bool allModules = false );
         void validateAotCpp ( TextWriter & logs, Context & context );
         void buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs );

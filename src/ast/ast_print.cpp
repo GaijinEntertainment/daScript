@@ -3,6 +3,11 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 
+#if defined(STANDALONE_MODE)
+#include "../das/ast/_standalone_ctx_generated/context.das.h"
+#endif
+
+
 namespace das {
 
     class SetPrinterFlags : public Visitor {
@@ -1375,8 +1380,13 @@ namespace das {
     };
 
     void Program::setPrintFlags() {
+#if defined(STANDALONE_MODE)
+        context::Standalone ctx;
+        ctx.setFlags(this);
+#else
         SetPrinterFlags pflags;
         visit(pflags);
+#endif
     }
 
     template <typename TT>
