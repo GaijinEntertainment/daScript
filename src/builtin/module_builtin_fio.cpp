@@ -672,7 +672,7 @@ namespace das {
                 SideEffects::modifyExternal, "builtin_sleep")
                     ->arg("msec");
             addExtern<DAS_BIND_FUN(getchar_wrapper)>(*this, lib, "getchar",
-                SideEffects::modifyExternal, "getchar");
+                SideEffects::modifyExternal, "getchar_wrapper");
             addExtern<DAS_BIND_FUN(builtin_exit)>(*this, lib, "exit",
                 SideEffects::modifyExternal, "builtin_exit")
                     ->arg("exitCode")->unsafeOperation = true;

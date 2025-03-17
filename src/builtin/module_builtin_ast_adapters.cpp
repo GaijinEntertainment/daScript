@@ -2440,7 +2440,7 @@ namespace das {
             SideEffects::accessExternal, "astVisit")
                 ->args({"program","adapter","context","line"});
         addExtern<DAS_BIND_FUN(astVisitModulesInOrder)>(*this, lib,  "visit_modules",
-            SideEffects::accessExternal, "astVisitModules")
+            SideEffects::accessExternal, "astVisitModulesInOrder")
                 ->args({"program","adapter","context","line"});
         addExtern<DAS_BIND_FUN(astVisitFunction)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisitFunction")
