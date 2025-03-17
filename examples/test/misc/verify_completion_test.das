@@ -2,7 +2,7 @@ require daslib/validate_code
 
 
 [export, verify_completion]
-def bad_loop(all : iterator<int>; cond_const : bool)
+def bad_loop(var all : iterator<int>; cond_const : bool)
     for t in all                        // 40104: we don't know if this loop ever finishes. add explicit range
         print("t = {t}\n")
     for t, r in all, range(100500)      // this one ok

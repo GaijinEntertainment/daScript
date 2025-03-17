@@ -1221,7 +1221,7 @@ def lock_forever(var Tab : table<auto(keyT); auto(valT)> | #) : table<keyT; valT
 
 // functional
 
-def next(it : iterator<auto(TT)>; var value : TT&) : bool {
+def next(var it : iterator<auto(TT)>; var value : TT&) : bool {
     static_if (!typeinfo can_copy(type<TT>)) {
         concept_assert(false, "requires type which can be copied")
     } static_elif (typeinfo is_ref_value(type<TT>)) {
@@ -1321,7 +1321,7 @@ def nothing(var it : iterator<auto(TT)>) : iterator<TT> {
 }
 
 [skip_lock_check]
-def to_array(it : iterator<auto(TT)>) : array<TT -const -&> {
+def to_array(var it : iterator<auto(TT)>) : array<TT -const -&> {
     var arr : array<TT -const -&>
     for (x in it) {
         push_clone(arr, x)
@@ -1665,7 +1665,7 @@ def find_index(arr : auto(TT)[] | #; key : TT) {
     return -1
 }
 
-def find_index(arr : iterator<auto(TT)>; key : TT -&) {
+def find_index(var arr : iterator<auto(TT)>; key : TT -&) {
     for (o, i in arr, count()) {
         if (o == key) {
             return i
@@ -1692,7 +1692,7 @@ def find_index_if(arr : auto(TT)[] | #; blk : block<(key : TT) : bool>) {
     return -1
 }
 
-def find_index_if(arr : iterator<auto(TT)>; blk : block<(key : TT -&) : bool>) {
+def find_index_if(var arr : iterator<auto(TT)>; blk : block<(key : TT -&) : bool>) {
     for (o, i in arr, count()) {
         if (invoke(blk, o)) {
             return i

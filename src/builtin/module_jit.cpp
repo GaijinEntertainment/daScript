@@ -218,23 +218,23 @@ extern "C" {
         context->to_out(at, ssw.str().c_str());
     }
 
-    bool jit_iterator_iterate ( const das::Sequence &it, void *data, das::Context *context ) {
+    bool jit_iterator_iterate ( das::Sequence &it, void *data, das::Context *context ) {
         return builtin_iterator_iterate(it, data, context);
     }
 
-    void jit_iterator_delete ( const das::Sequence &it, das::Context *context ) {
+    void jit_iterator_delete ( das::Sequence &it, das::Context *context ) {
         return builtin_iterator_delete(it, context);
     }
 
-    void jit_iterator_close ( const das::Sequence &it, void *data, das::Context *context ) {
+    void jit_iterator_close ( das::Sequence &it, void *data, das::Context *context ) {
         return builtin_iterator_close(it, data, context);
     }
 
-    bool jit_iterator_first ( const das::Sequence &it, void *data, das::Context *context, das::LineInfoArg *at ) {
+    bool jit_iterator_first ( das::Sequence &it, void *data, das::Context *context, das::LineInfoArg *at ) {
         return builtin_iterator_first(it, data, context, at);
     }
 
-    bool jit_iterator_next ( const das::Sequence &it, void *data, das::Context *context, das::LineInfoArg *at ) {
+    bool jit_iterator_next ( das::Sequence &it, void *data, das::Context *context, das::LineInfoArg *at ) {
         return builtin_iterator_next(it, data, context, at);
     }
 

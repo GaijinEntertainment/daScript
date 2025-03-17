@@ -26,6 +26,13 @@ def verify_even(arr) {
     }
 }
 
+[sideeffects]
+def verify_even(var iter : iterator<auto(TT)>) {
+    for (x, y in iter, range(50)) {
+        assert(x == y * 2)
+    }
+}
+
 def first(x) {
     return x._0
 }
@@ -46,7 +53,7 @@ def operator !=(a, b : array<int>) {
     return false
 }
 
-def is_same(a, b) {
+def is_same(var a, b) {
     for (x, y in a, b) {
         if (x != y) {
             return false
@@ -55,7 +62,7 @@ def is_same(a, b) {
     return true
 }
 
-def verify_14(t) {
+def verify_14(var t) {
     for (x, y in range(1, 4), t) {
         assert(y[0] == x && y[1] == 2)
     }
@@ -260,6 +267,13 @@ def test {
     |>  is_same([iterator for(x in range(10)); array<int>((x % 3) + 1, 2)])
     |>  verify()
     )
+
+    var iter = [iterator for(x in range(10)); x]
+    var sum = 0
+    for (x in iter) {
+        sum += x
+    }
+    verify(sum == 45)
 
     return true
 }

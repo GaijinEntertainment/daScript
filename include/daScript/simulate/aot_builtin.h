@@ -70,11 +70,11 @@ namespace das {
     bool builtin_set_verify_table_locks ( Table & tab, bool value );
     bool builtin_set_verify_context ( bool slc, Context * context );
 
-    bool builtin_iterator_first ( const Sequence & it, void * data, Context * context, LineInfoArg * at );
-    bool builtin_iterator_next  ( const Sequence & it, void * data, Context * context, LineInfoArg * at );
-    void builtin_iterator_close ( const Sequence & it, void * data, Context * context );
-    bool builtin_iterator_iterate ( const Sequence & it, void * data, Context * context );
-    void builtin_iterator_delete ( const Sequence & it, Context * context );
+    bool builtin_iterator_first ( Sequence & it, void * data, Context * context, LineInfoArg * at );
+    bool builtin_iterator_next  ( Sequence & it, void * data, Context * context, LineInfoArg * at );
+    void builtin_iterator_close ( Sequence & it, void * data, Context * context );
+    bool builtin_iterator_iterate ( Sequence & it, void * data, Context * context );
+    void builtin_iterator_delete ( Sequence & it, Context * context );
     __forceinline bool builtin_iterator_empty ( const Sequence & seq ) { return seq.iter==nullptr; }
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context, LineInfoArg * at );

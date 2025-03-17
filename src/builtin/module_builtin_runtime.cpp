@@ -876,40 +876,40 @@ namespace das
         const_cast<Table&>(arr).hopeless = 0;
     }
 
-    bool builtin_iterator_first ( const Sequence & it, void * data, Context * context, LineInfoArg * at ) {
+    bool builtin_iterator_first ( Sequence & it, void * data, Context * context, LineInfoArg * at ) {
         if ( !it.iter ) context->throw_error_at(at, "calling first on empty iterator");
         else if ( it.iter->isOpen ) context->throw_error_at(at, "calling first on already open iterator");
         it.iter->isOpen = true;
         return it.iter->first(*context, (char *)data);
     }
 
-    bool builtin_iterator_next ( const Sequence & it, void * data, Context * context, LineInfoArg * at ) {
+    bool builtin_iterator_next ( Sequence & it, void * data, Context * context, LineInfoArg * at ) {
         if ( !it.iter ) context->throw_error_at(at, "calling next on empty iterator");
         else if ( !it.iter->isOpen ) context->throw_error_at(at, "calling next on a non-open iterator");
         return it.iter->next(*context, (char *)data);
     }
 
-    void builtin_iterator_close ( const Sequence & it, void * data, Context * context ) {
+    void builtin_iterator_close ( Sequence & it, void * data, Context * context ) {
         if ( it.iter ) {
             it.iter->close(*context, (char *)&data);
-            ((Sequence&)it).iter = nullptr;
+            it.iter = nullptr;
         }
     }
 
-    void builtin_iterator_delete ( const Sequence & it, Context * context ) {
+    void builtin_iterator_delete ( Sequence & it, Context * context ) {
         if ( it.iter ) {
             it.iter->close(*context, nullptr);
-            ((Sequence&)it).iter = nullptr;
+            it.iter = nullptr;
         }
     }
 
-    bool builtin_iterator_iterate ( const Sequence & it, void * value, Context * context ) {
+    bool builtin_iterator_iterate ( Sequence & it, void * value, Context * context ) {
         if ( !it.iter ) {
             return false;
         } else if ( !it.iter->isOpen) {
             if ( !it.iter->first(*context, (char *)value) ) {
                 it.iter->close(*context, (char *)value);
-                ((Sequence&)it).iter = nullptr;
+                it.iter = nullptr;
                 return false;
             } else {
                 it.iter->isOpen = true;
@@ -918,7 +918,7 @@ namespace das
         } else {
             if ( !it.iter->next(*context, (char *)value) ) {
                 it.iter->close(*context, (char *)value);
-                ((Sequence&)it).iter = nullptr;
+                it.iter = nullptr;
                 return false;
             } else {
                 return true;

@@ -7203,6 +7203,10 @@ namespace das {
                         pVar->type->dimExpr.erase(pVar->type->dimExpr.begin());
                     }
                 } else if ( src->type->isGoodIteratorType() ) {
+                    if (src->type->isConst()) {
+                        error("can't iterate over const iterator", "", "",
+                            expr->at, CompilationError::invalid_iteration_source);
+                    }
                     pVar->type = make_smart<TypeDecl>(*src->type->firstType);
                 } else if ( src->type->isGoodArrayType() ) {
                     pVar->type = make_smart<TypeDecl>(*src->type->firstType);
