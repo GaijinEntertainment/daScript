@@ -133,7 +133,7 @@ MACRO(DAS_AOT_STANDALONE input genList mainTarget dasAotTool)
             COMMAND ${dasAotTool} -aot ${input_src} ${out_dir} -standalone-context context -standalone-class Standalone
     )
     file(GLOB GEN_SRC
-            ${out_dir}/*.cpp)
+            ${out_dir}/context.das.cpp)
     list(APPEND ${genList} ${GEN_SRC})
     set(custom_name ${mainTarget}_${input_name}_standalone)
     ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})

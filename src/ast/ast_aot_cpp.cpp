@@ -3553,10 +3553,8 @@ namespace das {
         }
     }
 
-    static void writeStandaloneCtor(const StandaloneContextCfg & cfg, TextWriter &tw, Program &program) {
+    static void writeStandaloneCtor(const StandaloneContextCfg & cfg, string initFunctions, TextWriter &tw, Program &program) {
         auto disableInit = program.options.getBoolOption("no_init", program.policies.no_init);
-        AotDebugInfoHelper helper;
-        helper.rtti = program.options.getBoolOption("rtti",program.policies.rtti);
         vector<VariablePtr> lookupVariableTable;
         if ( program.totalVariables ) {
             for (const auto & pm : program.library.getModules() ) {
@@ -3569,15 +3567,14 @@ namespace das {
                         return;
                     }
                     lookupVariableTable.emplace_back(pvar);
-                    auto info = helper.makeVariableDebugInfo(*pvar);
                 });
             }
         }
 
-        vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
+        vector<FunctionPtr> lookupFunctionTable;
         if ( program.totalFunctions ) {
             for (const auto & pm : program.library.getModules()) {
-                pm->functions.foreach([&program, &lookupFunctionTable, &helper, &disableInit](auto pfun) {
+                pm->functions.foreach([&program, &lookupFunctionTable, &disableInit](auto pfun) {
                     if (pfun->index < 0 || !pfun->used)
                         return;
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
@@ -3585,13 +3582,11 @@ namespace das {
                                       "internal compiler error: [init] function made it all the way to simulate somehow", "",
                                       pfun->at, CompilationError::no_init);
                     }
-                    auto info = helper.makeFunctionDebugInfo(*pfun);
-                    lookupFunctionTable.emplace_back(pfun, info);
+                    lookupFunctionTable.emplace_back(pfun);
                 });
             }
         }
 
-        tw << helper.str();
         tw << cfg.class_name << "::" << cfg.class_name << "() {\n";
         /**
          * Same as in Program::simulate
@@ -3625,25 +3620,6 @@ namespace das {
         tw << "    context.totalFunctions = " << program.totalFunctions << "/*totalFunctions*/;\n";
         tw << "    bool anyPInvoke = false;\n";
 
-        tw << "     // start totalFunctions  "  << "\n";
-        for (auto &[pfun, info]: lookupFunctionTable) {
-            tw << "    InitAotFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
-               << "FunctionInfo(\"" << pfun->name << "\", \""
-               << pfun->getMangledName() << "\", "
-               << pfun->totalStackSize << ", "
-               << pfun->unsafeOperation << ", "
-               << pfun->fastCall << ", "
-               << pfun->module->builtIn << ", "
-               << pfun->module->promoted << ", "
-               << (pfun->result->isRefType() && !pfun->result->ref) << ", "
-               << pfun->pinvoke
-               << ")" << ");\n";
-            tw << "    context.functions[" << pfun->index << "/*pfun->index*/].debugInfo = &" << helper.funcInfoName(info) << ";\n";
-            if (pfun->pinvoke) {
-                tw << "    anyPInvoke = true;\n\n";
-            }
-        }
-        tw << "    // end totalFunctions\n";
         tw << "    if ( anyPInvoke || " << (program.policies.threadlock_context || program.policies.debugger)
              << "/*(policies.threadlock_context || policies.debugger)*/ ) {\n";
         tw << "        context.contextMutex = new recursive_mutex;\n";
@@ -3652,13 +3628,10 @@ namespace das {
         tw << "    context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();\n";
         tw << "    context.tabMnLookup->clear();\n";
 
-        for ( const auto & [fn, info] : lookupFunctionTable ) {
-            auto mnh = fn->getMangledNameHash();
 
-            tw << "    // " << fn->getMangledName() << "\n";
-            tw << "    (*context.tabMnLookup)["<< mnh <<"/*mnh*/] = context.functions + " << fn->index << "/*fn->index*/;\n";
-        }
-        tw << "     // totalFunctions  "  << "\n";
+        tw << "     // start totalFunctions  "  << "\n";
+        tw << move(initFunctions);
+        tw << "    // end totalFunctions\n";
 
         tw << "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n";
         tw << "    context.tabGMnLookup->clear();\n";
@@ -3707,7 +3680,7 @@ namespace das {
         tw << "}\n";
     }
 
-    static void writeStandaloneContext ( ProgramPtr program, TextWriter & header, TextWriter & source, const StandaloneContextCfg & cfg ) {
+    static void writeStandaloneContext ( ProgramPtr program, string initFunctions, TextWriter & header, TextWriter & source, const StandaloneContextCfg & cfg ) {
 
         header << "\n\n";
         {
@@ -3718,7 +3691,7 @@ namespace das {
         }
 
         writeStandaloneContextMethods(program, source, cfg.class_name + "::", false);
-        writeStandaloneCtor(cfg, source, *program);
+        writeStandaloneCtor(cfg, move(initFunctions), source, *program);
 
         source << "#ifdef STANDALONE_CONTEXT_TESTS\n";
         source << "static Context * registerStandaloneTest ( ) {\n";
@@ -3738,6 +3711,11 @@ namespace das {
       }
 
     public:
+
+        AotDebugInfoHelper& GetDebugInfo() {
+            return helper;
+        }
+
         virtual void visitGlobalLetBody ( Program * prog ) override {
             vector<Variable*> globals;
             prog->library.foreach([&]( Module * pm ) {
@@ -3786,12 +3764,12 @@ namespace das {
     };
 
 
-    static void writeRegistration ( TextWriter &header, TextWriter &source, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
+    static void writeRegistration ( TextWriter &header, TextWriter &source, string initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
         dumpRegisterAot(source, program, context, true);
         {
             NamespaceGuard guard1(header, cfg.context_name);
             NamespaceGuard guard2(source, cfg.context_name);
-            writeStandaloneContext(program, header, source, cfg);
+            writeStandaloneContext(program, move(initFunctions), header, source, cfg);
         }
     }
 
@@ -3881,6 +3859,59 @@ namespace das {
 
     }
 
+    /**
+     * Adds debug info to AotDebugInfoHelper
+     * @return String with initialization of all functions
+     */
+    string addFunctionInfo(Program &program, AotDebugInfoHelper& helper) {
+        auto disableInit = program.options.getBoolOption("no_init", program.policies.no_init);
+        helper.rtti = program.options.getBoolOption("rtti",program.policies.rtti);
+        vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
+        if ( program.totalFunctions ) {
+            for (const auto & pm : program.library.getModules()) {
+                pm->functions.foreach([&program, &lookupFunctionTable, &helper, &disableInit](auto pfun) {
+                    if (pfun->index < 0 || !pfun->used)
+                        return;
+                    if ( (pfun->init || pfun->shutdown) && disableInit ) {
+                        program.error("[init] is disabled in the options or CodeOfPolicies",
+                                      "internal compiler error: [init] function made it all the way to simulate somehow", "",
+                                      pfun->at, CompilationError::no_init);
+                    }
+                    auto info = helper.makeFunctionDebugInfo(*pfun);
+                    lookupFunctionTable.emplace_back(pfun, info);
+                });
+            }
+        }
+
+        TextWriter tw;
+        for (auto &[pfun, info]: lookupFunctionTable) {
+            tw << "    InitAotFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
+               << "FunctionInfo(\"" << pfun->name << "\", \""
+               << pfun->getMangledName() << "\", "
+               << pfun->totalStackSize << ", "
+               << pfun->unsafeOperation << ", "
+               << pfun->fastCall << ", "
+               << pfun->module->builtIn << ", "
+               << pfun->module->promoted << ", "
+               << (pfun->result->isRefType() && !pfun->result->ref) << ", "
+               << pfun->pinvoke
+               << ")" << ");\n";
+            tw << "    context.functions[" << pfun->index << "/*pfun->index*/].debugInfo = &" << helper.funcInfoName(info) << ";\n";
+            if (pfun->pinvoke) {
+                tw << "    anyPInvoke = true;\n\n";
+            }
+        }
+
+        for ( const auto &[fn, info] : lookupFunctionTable ) {
+            auto mnh = fn->getMangledNameHash();
+
+            tw << "    // " << fn->getMangledName() << "\n";
+            tw << "    (*context.tabMnLookup)["<< mnh <<"/*mnh*/] = context.functions + " << fn->index << "/*fn->index*/;\n";
+        }
+
+        return tw.str();
+    }
+
     void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
         BlockVariableCollector coll;
         StandaloneContextGen gen(program, coll, cppOutputDir, cfg.context_name);
@@ -3934,9 +3965,10 @@ namespace das {
             NamespaceGuard guard1(source, "das");
             NamespaceGuard guard2(header, "das");
             program->visitModule(gen, mod);
+            auto initFunctions = addFunctionInfo(*program, gen.GetDebugInfo());
             source << gen.str();
             gen.clear();
-            if ( mod->name.empty() ) writeRegistration(header, source, program, cfg, context);
+            writeRegistration(header, source, move(initFunctions), program, cfg, context);
         }
         source << AOT_FOOTER;
 
