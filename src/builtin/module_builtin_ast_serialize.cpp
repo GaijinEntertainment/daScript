@@ -2252,11 +2252,12 @@ namespace das {
                     continue;
                 }
 
-                auto deser = new Module();
-                program->library.addModule(deser);
+                Module* deser = nullptr;
                 try {
+                    deser = new Module();
+                    program->library.addModule(deser);
                     ser << *deser;
-                } catch ( std::runtime_error & r ) {
+                } catch ( const std::runtime_error & r ) {
                     delete deser;
                     LOG(LogLevel::warning) << "das: serialize: " << r.what();
                     program->failToCompile = true;
