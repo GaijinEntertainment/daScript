@@ -98,7 +98,7 @@ def test_safe_at ( t:T? )
         t |> equal(1, v1)
         t |> equal(42, v2)
     t |> run("safe_at ptr to array") <| @ ( t : T? )
-        t |> success ( is_jit_function(@@<(a:array<int>?;b,c:int):int>jit_safe_at) )
+        t |> success ( is_jit_function(@@<(a:array<int> const?;b,c:int):int>jit_safe_at) )
         let i <- [{auto 1;2;3}]
         let pi = unsafe(addr(i))
         let p0 : int[3]?
@@ -118,7 +118,7 @@ def test_safe_at ( t:T? )
         t |> equal(1, v1)
         t |> equal(42, v2)
     t |> run("safe_at ptr to table") <| @ ( t : T? )
-        t |> success ( is_jit_function(@@<(a:table<int;int>?;b,c:int):int>jit_safe_at) )
+        t |> success ( is_jit_function(@@<(a:table<int;int> const?;b,c:int):int>jit_safe_at) )
         let i <- {{0=>1; 1=>2; 2=>3}}
         let pi = unsafe(addr(i))
         let p0 : int[3]?
