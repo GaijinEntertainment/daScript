@@ -770,15 +770,10 @@ namespace das {
     }
 
     void ModuleLibrary::renameModule ( Module * module, const string & newName ) {
-        auto oldLookup = moduleLookup.find(module->name);
-        DAS_VERIFYF(oldLookup!=moduleLookup.end(), "module %s not found", module->name.c_str());
-        moduleLookup.erase(oldLookup);
         auto oldHashLookup = moduleLookupByHash.find(module->nameHash);
         DAS_VERIFYF(oldHashLookup!=moduleLookupByHash.end(), "module %s not found", module->name.c_str());
         moduleLookupByHash.erase(oldHashLookup);
         module->setModuleName(newName);
-        DAS_VERIFYF(moduleLookup.find(module->name)==moduleLookup.end(), "duplicate module %s", module->name.c_str());
-        moduleLookup[module->name] = module;
         DAS_VERIFYF(moduleLookupByHash.find(module->nameHash)==moduleLookupByHash.end(), "duplicate module hash %s", module->name.c_str());
         moduleLookupByHash[module->nameHash] = module;
     }
@@ -794,8 +789,6 @@ namespace das {
                     }
                 }
                 modules.push_back(module);
-                DAS_VERIFYF(moduleLookup.find(module->name)==moduleLookup.end(), "duplicate module %s", module->name.c_str());
-                moduleLookup[module->name] = module;
                 DAS_VERIFYF(moduleLookupByHash.find(module->nameHash)==moduleLookupByHash.end(), "duplicate module hash %s", module->name.c_str());
                 moduleLookupByHash[module->nameHash] = module;
                 module->addPrerequisits(*this);
@@ -834,8 +827,9 @@ namespace das {
     }
 
     Module * ModuleLibrary::findModule ( const string & mn ) const {
-        auto it = moduleLookup.find(mn);
-        return it != moduleLookup.end() ? it->second : nullptr;
+        auto hash = hash64z(mn.c_str());
+        auto it = moduleLookupByHash.find(hash);
+        return it != moduleLookupByHash.end() ? it->second : nullptr;
     }
 
     void ModuleLibrary::findWithCallback ( const string & name, Module * inWhichModule, const callable<void (Module * pm, const string &name, Module * inWhichModule)> & func ) const {
@@ -1045,7 +1039,6 @@ namespace das {
             }
         }
         modules.clear();
-        moduleLookup.clear();
         moduleLookupByHash.clear();
     }
 
