@@ -181,33 +181,37 @@ namespace das {
         }
     };
 
+
+    enum RttiIdx {
+        RttiBool = 0,
+        RttiInt32 = 1,
+        RttiUint32 = 2,
+        RttiInt64 = 3,
+        RttiUint64 = 4,
+        RttiFloat = 5,
+        RttiDouble = 6,
+        RttiString = 7,
+        RttiAny = 8,
+    };
+
     template <>
     struct typeFactory<RttiValue> {
         static TypeDeclPtr make(const ModuleLibrary & library ) {
             auto vtype = make_smart<TypeDecl>(Type::tVariant);
             vtype->alias = "RttiValue";
             vtype->aotAlias = true;
-            vtype->addVariant("tBool",   typeFactory<decltype(RttiValue::bValue  )>::make(library));
-            vtype->addVariant("tInt",    typeFactory<decltype(RttiValue::iValue  )>::make(library));
-            vtype->addVariant("tUInt",   typeFactory<decltype(RttiValue::uValue  )>::make(library));
-            vtype->addVariant("tInt64",  typeFactory<decltype(RttiValue::i64Value)>::make(library));
-            vtype->addVariant("tUInt64", typeFactory<decltype(RttiValue::u64Value)>::make(library));
-            vtype->addVariant("tFloat",  typeFactory<decltype(RttiValue::fValue  )>::make(library));
-            vtype->addVariant("tDouble", typeFactory<decltype(RttiValue::dfValue )>::make(library));
-            vtype->addVariant("tString", typeFactory<decltype(RttiValue::sValue  )>::make(library));
-            vtype->addVariant("nothing", typeFactory<decltype(RttiValue::nothing )>::make(library));
+            vtype->addVariant("tBool",   typeFactory<RttiValue::NthType<RttiBool>>::make(library));
+            vtype->addVariant("tInt",    typeFactory<RttiValue::NthType<RttiInt32>>::make(library));
+            vtype->addVariant("tUInt",   typeFactory<RttiValue::NthType<RttiUint32>>::make(library));
+            vtype->addVariant("tInt64",  typeFactory<RttiValue::NthType<RttiInt64>>::make(library));
+            vtype->addVariant("tUInt64", typeFactory<RttiValue::NthType<RttiUint64>>::make(library));
+            vtype->addVariant("tFloat",  typeFactory<RttiValue::NthType<RttiFloat>>::make(library));
+            vtype->addVariant("tDouble", typeFactory<RttiValue::NthType<RttiDouble>>::make(library));
+            vtype->addVariant("tString", typeFactory<RttiValue::NthType<RttiString>>::make(library));
+            vtype->addVariant("nothing", typeFactory<RttiValue::NthType<RttiAny>>::make(library));
             // optional validation
             DAS_ASSERT(sizeof(RttiValue) == vtype->getSizeOf());
             DAS_ASSERT(alignof(RttiValue) == vtype->getAlignOf());
-            DAS_ASSERT(offsetof(RttiValue, bValue  ) == vtype->getVariantFieldOffset(0));
-            DAS_ASSERT(offsetof(RttiValue, iValue  ) == vtype->getVariantFieldOffset(1));
-            DAS_ASSERT(offsetof(RttiValue, uValue  ) == vtype->getVariantFieldOffset(2));
-            DAS_ASSERT(offsetof(RttiValue, i64Value) == vtype->getVariantFieldOffset(3));
-            DAS_ASSERT(offsetof(RttiValue, u64Value) == vtype->getVariantFieldOffset(4));
-            DAS_ASSERT(offsetof(RttiValue, fValue  ) == vtype->getVariantFieldOffset(5));
-            DAS_ASSERT(offsetof(RttiValue, dfValue ) == vtype->getVariantFieldOffset(6));
-            DAS_ASSERT(offsetof(RttiValue, sValue  ) == vtype->getVariantFieldOffset(7));
-            DAS_ASSERT(offsetof(RttiValue, nothing ) == vtype->getVariantFieldOffset(8));
             return vtype;
         }
     };
@@ -920,58 +924,49 @@ namespace das {
     }
 
     RttiValue rtti_builtin_argument_value(const AnnotationArgument & info, Context * context, LineInfoArg * at ) {
-        RttiValue nada;
-        nada._variant = 8;  // nothing
-        nada.nothing = v_zero();
+        const auto align = sizeof(vec4f) - sizeof(int32_t);
         switch (info.type) {
-        case Type::tBool:
-            nada._variant = 0;
-            nada.bValue = info.bValue;
-            break;
-        case Type::tInt:
-            nada._variant = 1;
-            nada.iValue = info.iValue;
-            break;
-        case Type::tFloat:
-            nada._variant = 5;
-            nada.fValue = info.fValue;
-            break;
-        case Type::tString:
-            nada._variant = 7;
-            nada.sValue = context->allocateString(info.sValue, at);
-            break;
-        default:;
+        case Type::tBool:   return RttiValue::create<bool, RttiBool>(info.bValue, align);
+        case Type::tInt:    return RttiValue::create<int32_t, RttiInt32>(info.iValue, align);
+        case Type::tFloat:  return RttiValue::create<float, RttiFloat>(info.fValue, align);
+        case Type::tString: return RttiValue::create<char*, RttiString>(context->allocateString(info.sValue, at), align);
+        default: DAS_ASSERT(false); // I guess unreachable?
         }
-        return nada;
+        return RttiValue{};
     }
 
 
     RttiValue rtti_builtin_variable_value(const VarInfo & info) {
-        RttiValue nada;
-        nada._variant = 8;  // nothing
-        nada.nothing = v_zero();
+        RttiValue def {};
+        def.index = RttiAny;
         if (info.dimSize == 0 && (info.flags & TypeInfo::flag_hasInitValue)!=0 ) {
+            const auto align = sizeof(vec4f) - sizeof(int32_t);
             switch (info.type) {
-            case Type::tBool:   nada._variant = 0; break;
-            case Type::tInt:    nada._variant = 1; break;
+            case Type::tBool:   def.index = RttiBool; break;
+            case Type::tInt:    def.index = RttiInt32; break;
             case Type::tBitfield:
-            case Type::tUInt:   nada._variant = 2; break;
-            case Type::tInt64:  nada._variant = 3; break;
-            case Type::tUInt64: nada._variant = 4; break;
-            case Type::tFloat:  nada._variant = 5; break;
-            case Type::tDouble: nada._variant = 6; break;
-            case Type::tString: nada._variant = 7; break;
-            default:;
+            case Type::tUInt:   def.index = RttiUint32; break;
+            case Type::tInt64:  def.index = RttiInt64; break;
+            case Type::tUInt64: def.index = RttiUint64; break;
+            case Type::tFloat:  def.index = RttiFloat; break;
+            case Type::tDouble: def.index = RttiDouble; break;
+            case Type::tString: def.index = RttiString; break;
+            default: DAS_ASSERT(false); // I guess unreachable?
             }
-            if (nada._variant != 8) {
-                if (nada._variant != 7) {
-                    nada.nothing = info.value;
+            /*
+             * Due to alignment we can't simply copy value.
+             */
+            if (def.index != RttiAny) {
+                if (def.index == RttiString) {
+                    def.set<char*, RttiString>(info.sValue, align);
                 } else {
-                    nada.sValue = info.sValue;
+                    auto prev = def.index;
+                    def.set<vec4f, RttiAny>(info.value, align);
+                    def.index = prev;
                 }
             }
         }
-        return nada;
+        return def;
     }
 
     void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,const StructInfo> & block, Context * context, LineInfoArg * at ) {

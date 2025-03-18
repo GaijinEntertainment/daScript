@@ -24,26 +24,23 @@ namespace das {
     class Module;
     struct Annotation;
 
-    #pragma pack(16)
-    struct RttiValue {
-        int32_t         _variant;
-        union {
-            bool        bValue;         // 0
-            int32_t     iValue;         // 1
-            uint32_t    uValue;         // 2
-            int64_t     i64Value;       // 3
-            uint64_t    u64Value;       // 4
-            float       fValue;         // 5
-            double      dfValue;        // 6
-            char *      sValue;         // 7
-            vec4f       nothing;        // 8
-        };
-    };
-    #pragma pack()
+    using RttiValue = TVariant<32,16,bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>;
     static_assert(sizeof(RttiValue)==32,"sizeof RttiValue must be 32");
 
-    template <> struct das_alias<RttiValue>
-        : das_alias_ref<RttiValue,TVariant<sizeof(RttiValue),alignof(RttiValue),bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>> {};
+    template <> struct das_alias<RttiValue> {
+        static __forceinline RttiValue & from ( RttiValue & value ) {
+            return value;
+        }
+        static __forceinline const RttiValue & from ( const RttiValue & value ) {
+            return value;
+        }
+        static __forceinline RttiValue & to ( RttiValue & value ) {
+            return value;
+        }
+        static __forceinline const RttiValue & to ( const RttiValue & value ) {
+            return value;
+        }
+    };
 
     template <typename TT, typename PD, typename TTA = const TT>
     struct das_rtti_iterator {
