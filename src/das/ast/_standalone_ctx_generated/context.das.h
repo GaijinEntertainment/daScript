@@ -14,7 +14,7 @@ public:
     Standalone();
     auto allExpr ( int32_t arg ) -> void;
     auto test (  ) -> bool;
-    auto printAst ( smart_ptr_raw<Program> prog ) -> void;
+    auto printAst ( smart_ptr_raw<Program> prog, StringBuilderWriter * writer ) -> void;
     auto setFlags ( smart_ptr_raw<Program> prog ) -> void;
 };
 } // namespace context

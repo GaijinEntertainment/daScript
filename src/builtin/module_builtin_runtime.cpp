@@ -1379,7 +1379,7 @@ namespace das
         return ctx->allocateString(str, at);
     }
 
-    char * pass_string(char * str) {
+    const char * pass_string(const char * str) {
         return str;
     }
 

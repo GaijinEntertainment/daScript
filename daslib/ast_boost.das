@@ -826,8 +826,8 @@ def append_annotation(mod_name, ann_name : string; args : array< tuple<argname :
     var inscope decl <- new AnnotationDeclaration(uninitialized)
     decl.annotation := unsafe(reinterpret<smart_ptr<Annotation>> ann)
     for (argP in args) {
-        let argName & = argP.argname
-        let arg & = argP.argvalue
+        let argName = argP.argname
+        var arg = argP.argvalue
         if (arg is tBool) {
             decl.arguments |> add_annotation_argument(argName, arg as tBool)
         } elif (arg is tInt) {
