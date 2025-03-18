@@ -758,12 +758,15 @@ namespace das {
         }
     }
 
-    vector<Function *> collectUsedFunctions ( vector<Module *> & modules, int totalFunctions ) {
+    static vector<Function *> collectUsedFunctions ( const vector<Module *> & modules, int totalFunctions, bool isAll = false ) {
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         for (auto & pm : modules) {
             pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used)
                     return;
+                if (!isAll) {
+                    if ( pfun->builtIn || pfun->noAot) return;
+                }
                 fnn.push_back(pfun.get());
             });
         }
@@ -3476,10 +3479,10 @@ namespace das {
     }
 
     static void writeStandaloneContextMethods ( ProgramPtr prog, TextWriter & logs, const string &prefix, bool declare_only ) {
-        vector<Function *> fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions);
+        const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions);
         BlockVariableCollector collector;
 
-        for ( auto fn : fnn ) {
+        for ( const auto fn : fnn ) {
             if ( !fn->exports ) continue;
             if ( fn->module != prog->thisModule.get() ) continue;
             logs << "    auto " << prefix + aotFunctionName(fn->getOrigin() ? fn->getOrigin()->name : fn->name) << " ( ";
@@ -3515,29 +3518,26 @@ namespace das {
     }
 
     void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers, bool allModules ) {
-        vector<Function *> fnn = collectUsedFunctions(library.modules, totalFunctions);
+        const auto fnn = collectUsedFunctions(library.modules, totalFunctions);
         if ( headers ) {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
         }
         bool funInit = false;
-        for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
-            if ( !allModules && fnn[i]->module != thisModule.get() )
+        for ( const auto fn : fnn ) {
+            if ( !allModules && fn->module != thisModule.get() )
                 continue;
-            if ( fnn[i]->init ) {
+            if ( fn->init ) {
                 funInit = true;
             }
-            if ( fnn[i]->noAot )
-                continue;
-            // SimFunction * fn = context.getFunction(i);
-            uint64_t semH = fnn[i]->aotHash;
-            logs << "\t// " << aotFuncName(fnn[i]) << "\n";
+            uint64_t semH = fn->aotHash;
+            logs << "\t// " << aotFuncName(fn) << "\n";
             logs << "\taotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n\t\treturn ";
             logs << "ctx.code->makeNode<SimNode_Aot";
-            if ( fnn[i]->copyOnReturn || fnn[i]->moveOnReturn ) {
+            if ( fn->copyOnReturn || fn->moveOnReturn ) {
                 logs << "CMRES";
             }
-            logs << "<" << describeCppFunc(fnn[i],nullptr,false,false) << ",";
-            logs << "&" << aotFuncName(fnn[i]) << ">>();\n\t};\n";
+            logs << "<" << describeCppFunc(fn,nullptr,false,false) << ",";
+            logs << "&" << aotFuncName(fn) << ">>();\n\t};\n";
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
@@ -3567,22 +3567,6 @@ namespace das {
                         return;
                     }
                     lookupVariableTable.emplace_back(pvar);
-                });
-            }
-        }
-
-        vector<FunctionPtr> lookupFunctionTable;
-        if ( program.totalFunctions ) {
-            for (const auto & pm : program.library.getModules()) {
-                pm->functions.foreach([&program, &lookupFunctionTable, &disableInit](auto pfun) {
-                    if (pfun->index < 0 || !pfun->used)
-                        return;
-                    if ( (pfun->init || pfun->shutdown) && disableInit ) {
-                        program.error("[init] is disabled in the options or CodeOfPolicies",
-                                      "internal compiler error: [init] function made it all the way to simulate somehow", "",
-                                      pfun->at, CompilationError::no_init);
-                    }
-                    lookupFunctionTable.emplace_back(pfun);
                 });
             }
         }
@@ -3646,20 +3630,12 @@ namespace das {
             }
         }
 
-        vector<pair<string, uint64_t>> fnn; fnn.reserve(program.totalFunctions);
-        for (auto & pm : program.library.getModules()) {
-            pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used)
-                    return;
-                fnn.emplace_back(pfun->name, getFunctionAotHash(pfun.get()));
-            });
-        }
+        const auto fnn = collectUsedFunctions(program.library.getModules(), program.totalFunctions, true);
 
         tw << "    FillFunction(context, getGlobalAotLibrary(), {\n        ";
-        for ( int fni=0, fnis=program.totalFunctions; fni!=fnis; ++fni ) {
-            const auto & [name, aotHash] = fnn[fni];
-            tw << "make_pair(0x" << HEX << aotHash << DEC << ", &context.functions[" << fni << "/*fni*/])";
-            if (fni + 1 != fnis) {
+        for ( const auto fn: fnn) {
+            tw << "make_pair(0x" << HEX << fn->aotHash << DEC << ", &context.functions[" << fn->index << "/*fni*/])";
+            if (fn != fnn.back()) {
                 tw << ",\n        ";
             } else {
                 tw << "\n    ";
@@ -3711,6 +3687,7 @@ namespace das {
       }
 
     public:
+        das_hash_set<string> used_functions;
 
         AotDebugInfoHelper& GetDebugInfo() {
             return helper;
@@ -3744,17 +3721,14 @@ namespace das {
             // functions
             ss << "\n";
             // print forward declarations
-            vector<Function *> fnn; fnn.reserve(prog->totalFunctions);
-            prog->library.foreach([&](Module * pm) {
-                pm->functions.foreach([&](auto pfun) {
-                    if ( pfun->index < 0 || !pfun->used ) return true;
-                    if ( pfun->builtIn || pfun->noAot) return true;
-                    auto needInline = that == pm;
-                    ss << describeCppFunc(pfun.get(), &collector, true, needInline) << ";\n";
-                    return true;
-                });
-                return true;
-            }, "*");
+            const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions);
+            for (const auto pfun: fnn) {
+                auto needInline = that == pfun->module;
+                if (needInline) {
+                    ss << describeCppFunc(pfun, &collector, true, needInline) << ";\n";
+                    used_functions.emplace(aotFuncName(pfun));
+                }
+            }
             ss << "\n";
         }
     private:
@@ -3847,7 +3821,6 @@ namespace das {
                     aotVisitor.ss << "// unused enumeration " << pe->name << "\n";
                 }
             });
-            // aotVisitor.ss << "namespace " << aotModuleName(pm) << " {\n";
             pm->structures.foreach([&](auto ps){
                 if ( !remUS || utm.useStructs.find(ps.get())!=utm.useStructs.end() ) {
                     program->visitStructure(aotVisitor, ps.get());
@@ -3855,7 +3828,6 @@ namespace das {
                     aotVisitor.ss << "// unused structure " << ps->name << "\n";
                 }
             });
-            // aotVisitor.ss << "\n}; // " << pm->name << "\n";
         }
 
     }
@@ -3864,24 +3836,12 @@ namespace das {
      * Adds debug info to AotDebugInfoHelper
      * @return String with initialization of all functions
      */
-    string addFunctionInfo(Program &program, AotDebugInfoHelper& helper) {
-        auto disableInit = program.options.getBoolOption("no_init", program.policies.no_init);
-        helper.rtti = program.options.getBoolOption("rtti",program.policies.rtti);
+    string addFunctionInfo(bool disableInit, bool rtti, const vector<Function *> &fnn, AotDebugInfoHelper& helper) {
+        helper.rtti = rtti;
         vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
-        if ( program.totalFunctions ) {
-            for (const auto & pm : program.library.getModules()) {
-                pm->functions.foreach([&program, &lookupFunctionTable, &helper, &disableInit](auto pfun) {
-                    if (pfun->index < 0 || !pfun->used)
-                        return;
-                    if ( (pfun->init || pfun->shutdown) && disableInit ) {
-                        program.error("[init] is disabled in the options or CodeOfPolicies",
-                                      "internal compiler error: [init] function made it all the way to simulate somehow", "",
-                                      pfun->at, CompilationError::no_init);
-                    }
-                    auto info = helper.makeFunctionDebugInfo(*pfun);
-                    lookupFunctionTable.emplace_back(pfun, info);
-                });
-            }
+        for (auto& pfun : fnn) {
+            auto info = helper.makeFunctionDebugInfo(*pfun);
+            lookupFunctionTable.emplace_back(pfun, info);
         }
 
         TextWriter tw;
@@ -3956,11 +3916,32 @@ namespace das {
             NamespaceGuard guard2(header, "das");
             string initFunctions;
             {
-                NamespaceGuard anon_guard(source, program->thisNamespace); // anonymous
-                source << aotVisitor.ss.str();
+                const auto functions = collectUsedFunctions(program->library.getModules(), program->totalFunctions);
+                {
+                    NamespaceGuard anon_guard(source, program->thisNamespace); // anonymous
+                    source << aotVisitor.ss.str();
+                }
                 StandaloneContextGen gen(program, coll, cppOutputDir, cfg.context_name);
                 program->visitModule(gen, mod);
-                initFunctions = addFunctionInfo(*program, gen.GetDebugInfo());
+                {
+                    das_set<string> ext_namespaces;
+                    for (const auto pfun: functions) {
+                        auto needInline = program->thisModule.get() == pfun->module;
+                        if (!needInline && gen.used_functions.count(aotFuncName(pfun)) == 0) {
+                            NamespaceGuard anon_guard(source, pfun->module->getNamespace()); // anonymous
+                            source << describeCppFunc(pfun, &coll, true, needInline) << ";\n";
+                            ext_namespaces.emplace(pfun->module->getNamespace());
+                        }
+                    }
+                    for (const auto namesp: ext_namespaces) {
+                        source << "using namespace " << namesp << ";\n";
+                    }
+                }
+                NamespaceGuard anon_guard(source, program->thisNamespace); // anonymous
+                initFunctions = addFunctionInfo(program->options.getBoolOption("no_init", program->policies.no_init),
+                                                program->options.getBoolOption("rtti",program->policies.rtti),
+                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, true),
+                                                gen.GetDebugInfo());
                 source << gen.str();
                 gen.clear();
             }
@@ -4007,4 +3988,3 @@ namespace das {
         logs << aotVisitor.str();
     }
 }
-

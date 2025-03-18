@@ -52,9 +52,13 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
             if (!pctx) {
                 return false;
             }
+            if ( dryRun ) {
+                tout << "dry run success, no changes will be written\n";
+                return true;
+            }
+
             // AOT time
             TextWriter tw;
-            bool noAotOption = program->options.getBoolOption("no_aot",false);
             bool noAotModule = false;
             // header
             tw << AOT_INCLUDES;
@@ -75,11 +79,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 }
                 return true;
             },"*");
-            if ( dryRun ) {
-                tout << "dry run success, no changes will be written\n";
-                return true;
-            }
-            if ( noAotOption ) {
+            if ( program->options.getBoolOption("no_aot",false) ) {
                 TextWriter noTw;
                 if (!noAotModule)
                   noTw << "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n";
