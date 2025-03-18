@@ -1045,12 +1045,29 @@ namespace das {
 
     template <int variantSize, int variantAlign, typename ...TA>
     struct alignas(variantAlign) TVariant : Variant {
+        template<int N> using NthType =
+            typename std::tuple_element<N, std::tuple<TA...>>::type;
+
         struct alignas(1) TData {
             char data[variantSize - sizeof(int32_t)];
         };
         TVariant() {}
         TVariant(const TVariant & arr) { moveT(arr); }
         TVariant(TVariant && arr ) { moveT(arr); }
+
+        template <typename T, size_t idx>
+        void set(T val, size_t align) {
+            static_assert(std::is_same_v<NthType<idx>, T>);
+            index = idx;
+            new(data.data + align) T(val);
+        }
+        template <typename T, size_t idx>
+        static TVariant create(T val, size_t align) {
+            TVariant var;
+            var.set<T, idx>(val, align);
+            return var;
+        }
+
         TVariant & operator = ( const TVariant & arr ) { moveT(arr); return *this; }
         TVariant & operator = ( TVariant && arr ) { moveT(arr); return *this; }
         __forceinline void moveT ( const TVariant & arr ) {
