@@ -100,7 +100,7 @@ string remove_semicolons(string_view str) {
         } else {
             result += string(str.substr(offset, line_end + 1 - offset));
         }
-    } while (line_end != -1);
+    } while (line_end != size_t(-1));
     return result;
 }
 

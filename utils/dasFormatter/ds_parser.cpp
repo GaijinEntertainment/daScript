@@ -7725,25 +7725,25 @@ yyreduce:
     break;
 
   case 231: /* open_block: "begin of code block"  */
-          { (yyval.i) = 0xdeadbeef; }
+          { (yyval.ui) = 0xdeadbeef; }
     break;
 
   case 232: /* open_block: OPEN_BRACE  */
-                        { (yyval.i) = (yyvsp[0].i); }
+                        { (yyval.ui) = (yyvsp[0].i); }
     break;
 
   case 233: /* close_block: "end of code block"  */
-          { (yyval.i) = 0xdeadbeef; }
+          { (yyval.ui) = 0xdeadbeef; }
     break;
 
   case 234: /* close_block: CLOSE_BRACE  */
-                         { (yyval.i) = (yyvsp[0].i); }
+                         { (yyval.ui) = (yyvsp[0].i); }
     break;
 
   case 235: /* expression_block: open_block expressions close_block  */
                                                                   {
         auto prev_loc = format::Pos::from(tokAt(scanner,(yylsp[-2])));
-        handle_brace(prev_loc, (yyvsp[-2].i), format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,(yylsp[-1])))),
+        handle_brace(prev_loc, (yyvsp[-2].ui), format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,(yylsp[-1])))),
                      yyextra->das_tab_size, format::Pos::from_last(tokAt(scanner,(yylsp[-1]))));
         (yyval.pExpression) = (yyvsp[-1].pExpression);
         (yyval.pExpression)->at = tokRangeAt(scanner,(yylsp[-2]),(yylsp[0]));
@@ -7753,14 +7753,14 @@ yyreduce:
   case 236: /* expression_block: open_block expressions close_block "finally" open_block expressions close_block  */
                                                                                                                                   {
         auto prev_loc = format::Pos::from(tokAt(scanner,(yylsp[-6])));
-        if (format::is_replace_braces() && (yyvsp[-6].i) != 0xdeadbeef && format::prepare_rule(prev_loc)) {
-            handle_brace(prev_loc, (yyvsp[-6].i), format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,(yylsp[-5])))),
+        if (format::is_replace_braces() && (yyvsp[-6].ui) != 0xdeadbeef && format::prepare_rule(prev_loc)) {
+            handle_brace(prev_loc, (yyvsp[-6].ui), format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,(yylsp[-5])))),
                          yyextra->das_tab_size, format::Pos::from_last(tokAt(scanner,(yylsp[-5]))));
             auto prev_loc_f = format::Pos::from(tokAt(scanner,(yylsp[-2])));
-            assert((yyvsp[-2].i) != 0xdeadbeef);
+            assert((yyvsp[-2].ui) != 0xdeadbeef);
             {
                 const auto internal_f = format::get_substring(prev_loc_f, format::Pos::from_last(tokAt(scanner,(yylsp[-1]))));
-                format::get_writer() << " finally {" << internal_f << "\n" << string((yyvsp[-2].i) * yyextra->das_tab_size, ' ') + "}";
+                format::get_writer() << " finally {" << internal_f << "\n" << string((yyvsp[-2].ui) * yyextra->das_tab_size, ' ') + "}";
                 format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[-1]))));
             }
         }
@@ -10104,7 +10104,7 @@ yyreduce:
 
   case 619: /* global_let: kwd_let optional_shared optional_public_or_private_variable open_block global_variable_declaration_list close_block  */
                                                                                                                                                                    {
-        handle_brace(format::Pos::from(tokAt(scanner, (yylsp[-2]))), (yyvsp[-2].i),
+        handle_brace(format::Pos::from(tokAt(scanner, (yylsp[-2]))), (yyvsp[-2].ui),
                      format::get_substring(tokRangeAt(scanner, (yylsp[-2]), (yylsp[0]))),
                      yyextra->das_tab_size,
                      format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
@@ -10286,7 +10286,7 @@ yyreduce:
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
         }
         const auto first_loc = format::Pos::from(tokAt(scanner,(yylsp[-2])));
-        handle_brace(first_loc, (yyvsp[-2].i),
+        handle_brace(first_loc, (yyvsp[-2].ui),
                      format::get_substring(first_loc, format::Pos::from_last(tokAt(scanner,(yylsp[-1])))),
                      yyextra->das_tab_size,
                      format::Pos::from_last(tokAt(scanner,(yylsp[-1]))));
@@ -10309,7 +10309,7 @@ yyreduce:
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterEnumerationEntries(tak);
         }
         const auto first_loc = format::Pos::from(tokAt(scanner,(yylsp[-2])));
-        handle_brace(first_loc, (yyvsp[-2].i),
+        handle_brace(first_loc, (yyvsp[-2].ui),
                      format::get_substring(first_loc, format::Pos::from_last(tokAt(scanner,(yylsp[-1])))),
                      yyextra->das_tab_size,
                      format::Pos::from_last(tokAt(scanner,(yylsp[-1]))));
@@ -10380,7 +10380,7 @@ yyreduce:
   case 654: /* optional_struct_variable_declaration_list: open_block struct_variable_declaration_list close_block  */
                                                                                       {
         const auto prev_loc = format::Pos::from(tokAt(scanner,(yylsp[-2])));
-        handle_brace(prev_loc, (yyvsp[-2].i),
+        handle_brace(prev_loc, (yyvsp[-2].ui),
                      format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,(yylsp[-1])))),
                      yyextra->das_tab_size,
                      format::Pos::from_last(tokAt(scanner,(yylsp[-1]))));
@@ -11234,7 +11234,7 @@ yyreduce:
 
   case 789: /* $@76: %empty  */
                       {
-        if (format::is_replace_braces() && (yyvsp[0].i) != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[0]))))) {
+        if (format::is_replace_braces() && (yyvsp[0].ui) != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[0]))))) {
             format::get_writer() << " {";
             format::finish_rule(format::Pos::from(tokAt(scanner,(yylsp[0]))));
         }
@@ -11256,8 +11256,8 @@ yyreduce:
 
   case 791: /* tuple_alias_declaration: "tuple" optional_public_or_private_alias $@74 "name" $@75 open_block $@76 tuple_alias_type_list $@77 close_block  */
                          {
-        if (format::is_replace_braces() && (yyvsp[-4].i) != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[0]))))) {
-            format::get_writer() << "\n" << string((yyvsp[0].i) * yyextra->das_tab_size, ' ') + "}";
+        if (format::is_replace_braces() && (yyvsp[-4].ui) != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[0]))))) {
+            format::get_writer() << "\n" << string((yyvsp[0].ui) * yyextra->das_tab_size, ' ') + "}";
             format::finish_rule(format::Pos::from(tokAt(scanner,(yylsp[0]))));
         }
         auto vtype = make_smart<TypeDecl>(Type::tTuple);
@@ -11293,7 +11293,7 @@ yyreduce:
 
   case 794: /* $@80: %empty  */
                       {
-        if (format::is_replace_braces() && (yyvsp[0].i) != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[0]))))) {
+        if (format::is_replace_braces() && (yyvsp[0].ui) != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[0]))))) {
             format::get_writer() << " {";
             format::finish_rule(format::Pos::from(tokAt(scanner,(yylsp[0]))));
         }
@@ -11316,8 +11316,8 @@ yyreduce:
 
   case 796: /* variant_alias_declaration: "variant" optional_public_or_private_alias $@78 "name" $@79 open_block $@80 variant_alias_type_list $@81 close_block  */
                          {
-        if (format::is_replace_braces() && (yyvsp[0].i) != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[0]))))) {
-            format::get_writer() << "\n" << string((yyvsp[0].i) * yyextra->das_tab_size, ' ') + "}";
+        if (format::is_replace_braces() && (yyvsp[0].ui) != 0xdeadbeef && format::prepare_rule(format::Pos::from(tokAt(scanner, (yylsp[0]))))) {
+            format::get_writer() << "\n" << string((yyvsp[0].ui) * yyextra->das_tab_size, ' ') + "}";
             format::finish_rule(format::Pos::from(tokAt(scanner,(yylsp[0]))));
         }
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
@@ -11354,7 +11354,7 @@ yyreduce:
   case 799: /* bitfield_alias_declaration: "bitfield" optional_public_or_private_alias $@82 "name" $@83 open_block bitfield_alias_bits commas close_block  */
                                                                           {
         const auto prev_loc = format::Pos::from(tokAt(scanner,(yylsp[-3])));
-        handle_brace(prev_loc, (yyvsp[-3].i),
+        handle_brace(prev_loc, (yyvsp[-3].ui),
                      format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,(yylsp[-2])))),
                      yyextra->das_tab_size,
                      format::Pos::from_last(tokAt(scanner,(yylsp[-2]))));
@@ -11944,7 +11944,7 @@ yyreduce:
             format::get_writer() << format::substring_between(tokAt(scanner, (yylsp[-3])), tokAt(scanner, (yylsp[-2])));
             if (static_cast<ExprMakeArray*>((yyvsp[-1].pExpression))->values.size() == 1) {
                 // single element
-                if (type_name.value_or("").find('[') != -1) {
+                if (type_name.value_or("").find('[') != size_t(-1)) {
                     format::get_writer() << "[" << internal << "]";
                 } else {
                     format::get_writer() << internal;
