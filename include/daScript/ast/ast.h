@@ -229,6 +229,7 @@ namespace das
         Type                baseType = Type::tInt;
         AnnotationList      annotations;
         bool                isPrivate = false;
+        uint64_t            nameHash = 0;
 #if DAS_MACRO_SANITIZER
     public:
         void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
@@ -322,6 +323,7 @@ namespace das
         Structure *                     parent = nullptr;
         AnnotationList                  annotations;
         uint64_t                        ownSemanticHash = 0;
+        uint64_t                        nameHash = 0;
         union {
             struct {
                 bool    isClass : 1;

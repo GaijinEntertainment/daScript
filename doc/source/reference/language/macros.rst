@@ -260,7 +260,7 @@ Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost
                 ...
 
 Here, the macro takes advantage of the ExprIsVariant syntax.
-It replaces the ``expr is TYPENAME`` expression with an ``expr.__rtti = "TYPENAME"`` expression.
+It replaces the ``expr is TYPENAME`` expression with an ``expr.__rtti == "TYPENAME"`` expression.
 The ``isExpression`` function ensures that `expr` is from the `ast::Expr*` family, i.e. part of the Daslang syntax tree.
 
 --------------

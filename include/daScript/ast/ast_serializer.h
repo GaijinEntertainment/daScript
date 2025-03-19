@@ -257,6 +257,7 @@ namespace das {
         void fillOrPatchLater ( Variable * & ptr, uint64_t id );
 
         auto readModuleAndName () -> pair<Module *, string>;
+        auto readModuleAndNameHash () -> pair<Module *, uint64_t>;
 
         void findExternal ( Function * & func );
         void findExternal ( Enumeration * & ptr );

@@ -349,11 +349,19 @@ namespace das {
     }
 
     void AstSerializer::writeIdentifications ( Enumeration * & ptr ) {
-        *this << ptr->module->nameHash << ptr->name;
+        *this << ptr->module->nameHash;
+        if ( !ptr->nameHash ) {
+            ptr->nameHash = hash64z(ptr->name.c_str());
+        }
+        *this << ptr->nameHash;
     }
 
     void AstSerializer::writeIdentifications ( Structure * & ptr ) {
-        *this << ptr->module->nameHash << ptr->name;
+        *this << ptr->module->nameHash;
+        if ( !ptr->nameHash ) {
+            ptr->nameHash = hash64z(ptr->name.c_str());
+        }
+        *this << ptr->nameHash;
     }
 
     void AstSerializer::writeIdentifications ( Variable * & ptr ) {
@@ -413,6 +421,15 @@ namespace das {
         return {funcModule, mangledName};
     }
 
+    auto AstSerializer::readModuleAndNameHash () -> pair<Module *, uint64_t> {
+        uint64_t moduleNameHash = 0;
+        uint64_t mangledNameHash = 0;
+        *this << moduleNameHash << mangledNameHash;
+        auto funcModule = moduleLibrary->findModuleByMangledNameHash(moduleNameHash);
+        SERIALIZER_VERIFYF(ignoreEmptyExternal || funcModule, "module '%llu' is not found", moduleNameHash);
+        return {funcModule, mangledNameHash};
+    }
+
     void AstSerializer::findExternal ( Function * & func ) {
         auto [funcModule, mangledName] = readModuleAndName();
         if ( !funcModule ) {
@@ -433,15 +450,15 @@ namespace das {
     }
 
     void AstSerializer::findExternal ( Enumeration * & ptr ) {
-        auto [mod, mangledName] = readModuleAndName();
-        ptr = mod->findEnum(mangledName).get();
-        SERIALIZER_VERIFYF(ptr!=nullptr, "enumeration '%s' is not found", mangledName.c_str());
+        auto [mod, mangledName] = readModuleAndNameHash();
+        ptr = mod->findEnumByMangledNameHash(mangledName).get();
+        SERIALIZER_VERIFYF(ptr!=nullptr, "enumeration '%llu' is not found", mangledName);
     }
 
     void AstSerializer::findExternal ( Structure * & ptr ) {
-        auto [mod, mangledName] = readModuleAndName();
-        ptr = mod->findStructure(mangledName).get();
-        SERIALIZER_VERIFYF(ptr!=nullptr, "structure '%s' is not found", mangledName.c_str());
+        auto [mod, mangledName] = readModuleAndNameHash();
+        ptr = mod->findStructureByMangledNameHash(mangledName).get();
+        SERIALIZER_VERIFYF(ptr!=nullptr, "structure '%llu' is not found", mangledName);
     }
 
     void AstSerializer::findExternal ( Variable * & ptr ) {
@@ -822,8 +839,11 @@ namespace das {
             *this << builtin;
             if ( builtin ) {
                 uint64_t module = enum_type->module->nameHash;
-                string name = enum_type->name;
-                *this << module << name;
+                if ( !enum_type->nameHash ) {
+                    enum_type->nameHash = hash64z(enum_type->name.c_str());
+                }
+                uint64_t nameHash = enum_type->nameHash;
+                *this << module << nameHash;
             } else {
                 serializeSmartPtr(enum_type, smartEnumerationMap);
             }
@@ -832,12 +852,12 @@ namespace das {
             *this << builtin;
             if ( builtin ) {
                 uint64_t module = 0;
-                string name;
-                *this << module << name;
+                uint64_t nameHash;
+                *this << module << nameHash;
                 auto pModule = this->moduleLibrary->findModuleByMangledNameHash(module);
                 SERIALIZER_VERIFYF(pModule, "expected to find module '%llu'", module);
-                enum_type = pModule->findEnum(name);
-                SERIALIZER_VERIFYF(enum_type, "expected to find enumeration '%llu'::'%s'", module, name.c_str());
+                enum_type = pModule->findEnumByMangledNameHash(nameHash);
+                SERIALIZER_VERIFYF(enum_type, "expected to find enumeration '%llu'::'%llu'", module, nameHash);
             } else {
                 serializeSmartPtr(enum_type, smartEnumerationMap);
             }
