@@ -967,7 +967,7 @@ namespace das {
 
     #define DAS_VERIFYF_MULTI(...) do {                     \
         int arr[] = {__VA_ARGS__};                          \
-        for(int i = 0; i < sizeof(arr)/sizeof(int); ++i) {  \
+        for(size_t i = 0; i < sizeof(arr)/sizeof(int); ++i) {  \
             DAS_VERIFYF(arr[i], "not expected to see");     \
         }                                                   \
     } while(0)

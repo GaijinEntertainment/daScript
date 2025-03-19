@@ -2957,7 +2957,7 @@ namespace das {
                     expr->at, CompilationError::cant_dereference);
             } else {
                 TypeDecl::clone(expr->type,seT->firstType);
-                expr->type->constant |= expr->subexpr->type->constant | dvT->constant;
+                expr->type->constant |= expr->subexpr->type->constant || dvT->constant;
                 expr->type->ref = dvT->ref; // only ref if default value is ref
                 propagateTempType(expr->subexpr->type, expr->type); // t?# ?? def = #t
                 propagateAlwaysSafe(expr->subexpr);
@@ -5772,7 +5772,7 @@ namespace das {
             }
             expr->value = Expression::autoDereference(expr->value);
             if ( valT->isGoodVariantType() || valT->firstType->isGoodVariantType() ) {
-                int index = valT->variantFieldIndex(expr->name);
+                size_t index = valT->variantFieldIndex(expr->name);
                 auto argSize = valT->isGoodVariantType() ? valT->argTypes.size() : valT->firstType->argTypes.size();
                 if ( index==-1 || index>=argSize ) {
                     error("can't get variant field '" + expr->name + "'", "", "",
@@ -7882,7 +7882,7 @@ namespace das {
                             TextWriter ss;
                             ss << cls->module->name << "::" << cls->name << " has method " << expr->name << ", did you mean ";
                             ss << *(expr->arguments[0]) << "->" << expr->name << "(";
-                            for ( auto i=1; i<expr->arguments.size(); ++i ) {
+                            for ( size_t i=1; i<expr->arguments.size(); ++i ) {
                                 if ( i>1 ) ss << ", ";
                                 ss << *(expr->arguments[i]);
                             }

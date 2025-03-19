@@ -414,8 +414,8 @@
 
 
 %type <positions>       alias_list
-%type <i>               open_block
-%type <i>               close_block
+%type <ui>               open_block
+%type <ui>               close_block
 %type <i>               class_or_struct
 %type <b>               copy_or_move
 %type <i>               optional_override
@@ -3993,7 +3993,7 @@ make_dim_decl
             format::get_writer() << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt));
             if (static_cast<ExprMakeArray*>($mka)->values.size() == 1) {
                 // single element
-                if (type_name.value_or("").find('[') != -1) {
+                if (type_name.value_or("").find('[') != size_t(-1)) {
                     format::get_writer() << "[" << internal << "]";
                 } else {
                     format::get_writer() << internal;
