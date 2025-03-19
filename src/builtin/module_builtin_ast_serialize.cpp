@@ -12,6 +12,12 @@ namespace das {
 
     AstSerializer::AstSerializer ( SerializationStorage * storage, bool isWriting ) {
         astModule = Module::require("ast");
+        astModule->handleTypes.foreach([&](const AnnotationPtr & annotation) {
+            if ( starts_with(annotation->name,"Expr") ) {
+                uint32_t hash = hash_tag(annotation->name.c_str());
+                rttiHash2Annotation[hash] = annotation.get();
+            }
+        });
         writing = isWriting;
         buffer = storage;
     }
@@ -309,15 +315,16 @@ namespace das {
             return *this;
         }
         if ( writing ) {
-            const char * rtti = expr->__rtti;
+            uint32_t rtti = hash_tag(expr->__rtti);
+            DAS_ASSERT(rtti);
             *this << rtti;
             expr->serialize(*this);
         } else {
-            const char * rtti = nullptr; *this << rtti;
-            auto annotation = astModule->findAnnotation(rtti);
-            SERIALIZER_VERIFYF(annotation != nullptr, "annotation '%s' is not found", rtti);
-            delete [] rtti;
-            expr.reset((Expression *) static_pointer_cast<TypeAnnotation>(annotation)->factory());
+            uint32_t rtti = 0; *this << rtti;
+            auto itA = rttiHash2Annotation.find(rtti);
+            SERIALIZER_VERIFYF(itA != rttiHash2Annotation.end(), "annotation '%u' is not found", rtti);
+            auto annotation = itA->second;
+            expr.reset((Expression *) static_cast<TypeAnnotation*>(annotation)->factory());
             expr->serialize(*this);
         }
         dtag(HASH_TAG("/ExpressionPtr"));
@@ -351,11 +358,15 @@ namespace das {
     }
 
     void AstSerializer::writeIdentifications ( Enumeration * & ptr ) {
-        *this << ptr->module->nameHash << ptr->name;
+        *this << ptr->module->nameHash;
+        uint64_t nameHash = hash64z(ptr->name.c_str());
+        *this << nameHash;
     }
 
     void AstSerializer::writeIdentifications ( Structure * & ptr ) {
-        *this << ptr->module->nameHash << ptr->name;
+        *this << ptr->module->nameHash;
+        uint64_t nameHash = hash64z(ptr->name.c_str());
+        *this << nameHash;
     }
 
     void AstSerializer::writeIdentifications ( Variable * & ptr ) {
@@ -406,6 +417,15 @@ namespace das {
         }
     }
 
+    auto AstSerializer::readModuleAndNameHash () -> pair<Module *, uint64_t> {
+        uint64_t moduleNameHash = 0;
+        uint64_t mangledNameHash = 0;
+        *this << moduleNameHash << mangledNameHash;
+        auto funcModule = moduleLibrary->findModuleByMangledNameHash(moduleNameHash);
+        SERIALIZER_VERIFYF(ignoreEmptyExternal || funcModule, "module '%llu' is not found", moduleNameHash);
+        return {funcModule, mangledNameHash};
+    }
+
     auto AstSerializer::readModuleAndName () -> pair<Module *, string> {
         uint64_t moduleNameHash = 0;
         string mangledName;
@@ -435,15 +455,15 @@ namespace das {
     }
 
     void AstSerializer::findExternal ( Enumeration * & ptr ) {
-        auto [mod, mangledName] = readModuleAndName();
-        ptr = mod->findEnum(mangledName).get();
-        SERIALIZER_VERIFYF(ptr!=nullptr, "enumeration '%s' is not found", mangledName.c_str());
+        auto [mod, mangledNameHash] = readModuleAndNameHash();
+        ptr = mod->findEnumByMangledNameHash(mangledNameHash).get();
+        SERIALIZER_VERIFYF(ptr!=nullptr, "enumeration '%llu' is not found", mangledNameHash);
     }
 
     void AstSerializer::findExternal ( Structure * & ptr ) {
-        auto [mod, mangledName] = readModuleAndName();
-        ptr = mod->findStructure(mangledName).get();
-        SERIALIZER_VERIFYF(ptr!=nullptr, "structure '%s' is not found", mangledName.c_str());
+        auto [mod, mangledNameHash] = readModuleAndNameHash();
+        ptr = mod->findStructureByMangledNameHash(mangledNameHash).get();
+        SERIALIZER_VERIFYF(ptr!=nullptr, "structure '%llu' is not found", mangledNameHash);
     }
 
     void AstSerializer::findExternal ( Variable * & ptr ) {
@@ -2271,7 +2291,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 51;
+        static constexpr uint32_t currentVersion = 52;
         return currentVersion;
     }
 

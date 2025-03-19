@@ -529,6 +529,10 @@ namespace das {
         return it->second[0];
     }
 
+    StructurePtr Module::findStructureByMangledNameHash ( uint64_t hash ) const {
+        return structures.find(hash);
+    }
+
     StructurePtr Module::findStructure ( const string & na ) const {
         return structures.find(na);
     }
@@ -545,6 +549,10 @@ namespace das {
     TypeInfoMacroPtr Module::findTypeInfoMacro ( const string & na ) const {
         auto it = typeInfoMacros.find(na);
         return it != typeInfoMacros.end() ? it->second : nullptr;
+    }
+
+    EnumerationPtr Module::findEnumByMangledNameHash ( uint64_t hash ) const {
+        return enumerations.find(hash);
     }
 
     EnumerationPtr Module::findEnum ( const string & na ) const {

@@ -95,6 +95,8 @@ namespace das {
         size_t              readOffset = 0;
         SerializationStorage * buffer = nullptr;
         bool                seenNewModule = false;
+    // expression lookup
+        das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
         vector<FileInfo*>         deleteUponFinish; // these pointers are for builtins (which we don't serialize) and need to be cleaned manually
         das_hash_set<FileInfo*>   doNotDelete;
@@ -269,6 +271,7 @@ namespace das {
         void fillOrPatchLater ( Variable * & ptr, uint64_t id );
 
         auto readModuleAndName () -> pair<Module *, string>;
+        auto readModuleAndNameHash () -> pair<Module *, uint64_t>;
 
         void findExternal ( Function * & func );
         void findExternal ( Enumeration * & ptr );
