@@ -7,9 +7,9 @@ namespace das
     struct ExprClone;
 
     struct ExprReader : Expression {
-        ExprReader () { setRtti(DAS_HASH_TAG("ExprReader")); }
+        ExprReader () { setRtti("ExprReader"); }
         ExprReader ( const LineInfo & a, const ReaderMacroPtr & rm )
-            : Expression(a), macro(rm) { setRtti(DAS_HASH_TAG("ExprReader")); }
+            : Expression(a), macro(rm) { setRtti("ExprReader"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -19,9 +19,9 @@ namespace das
     };
 
     struct ExprLabel : Expression {
-        ExprLabel () { setRtti(DAS_HASH_TAG("ExprLabel")); };
+        ExprLabel () { setRtti("ExprLabel"); };
         ExprLabel ( const LineInfo & a, int32_t s, const string & cm = string() )
-            : Expression(a), label(s), comment(cm) { setRtti(DAS_HASH_TAG("ExprLabel")); }
+            : Expression(a), label(s), comment(cm) { setRtti("ExprLabel"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -32,11 +32,11 @@ namespace das
     };
 
     struct ExprGoto : Expression {
-        ExprGoto () { setRtti(DAS_HASH_TAG("ExprGoto")); };
+        ExprGoto () { setRtti("ExprGoto"); };
         ExprGoto ( const LineInfo & a, int32_t s )
-            : Expression(a), label(s) { setRtti(DAS_HASH_TAG("ExprGoto")); }
+            : Expression(a), label(s) { setRtti("ExprGoto"); }
         ExprGoto ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) { setRtti(DAS_HASH_TAG("ExprGoto")); }
+            : Expression(a), subexpr(s) { setRtti("ExprGoto"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -48,7 +48,7 @@ namespace das
     };
 
     struct ExprRef2Value : Expression {
-        ExprRef2Value() { setRtti(DAS_HASH_TAG("ExprRef2Value")); }
+        ExprRef2Value() { setRtti("ExprRef2Value"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -60,9 +60,9 @@ namespace das
     };
 
     struct ExprRef2Ptr : Expression {
-        ExprRef2Ptr () { setRtti(DAS_HASH_TAG("ExprRef2Ptr")); };
+        ExprRef2Ptr () { setRtti("ExprRef2Ptr"); };
         ExprRef2Ptr ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) { setRtti(DAS_HASH_TAG("ExprRef2Ptr")); }
+            : Expression(a), subexpr(s) { setRtti("ExprRef2Ptr"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -73,9 +73,9 @@ namespace das
     };
 
     struct ExprPtr2Ref : Expression {
-        ExprPtr2Ref () { setRtti(DAS_HASH_TAG("ExprPtr2Ref")); };
+        ExprPtr2Ref () { setRtti("ExprPtr2Ref"); };
         ExprPtr2Ref ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) { setRtti(DAS_HASH_TAG("ExprPtr2Ref")); }
+            : Expression(a), subexpr(s) { setRtti("ExprPtr2Ref"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -87,9 +87,9 @@ namespace das
     };
 
     struct ExprAddr : Expression {
-        ExprAddr ()  { setRtti(DAS_HASH_TAG("ExprAddr")); };
+        ExprAddr ()  { setRtti("ExprAddr"); };
         ExprAddr ( const LineInfo & a, const string & n )
-            : Expression(a), target(n) { setRtti(DAS_HASH_TAG("ExprAddr")); }
+            : Expression(a), target(n) { setRtti("ExprAddr"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -101,9 +101,9 @@ namespace das
     };
 
     struct ExprNullCoalescing : ExprPtr2Ref {
-        ExprNullCoalescing () { setRtti(DAS_HASH_TAG("ExprNullCoalescing")); };
+        ExprNullCoalescing () { setRtti("ExprNullCoalescing"); };
         ExprNullCoalescing ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & defVal )
-            : ExprPtr2Ref(a,s), defaultValue(defVal) { setRtti(DAS_HASH_TAG("ExprNullCoalescing")); }
+            : ExprPtr2Ref(a,s), defaultValue(defVal) { setRtti("ExprNullCoalescing"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -114,9 +114,9 @@ namespace das
     };
 
     struct ExprDelete : Expression {
-        ExprDelete() { setRtti(DAS_HASH_TAG("ExprDelete")); }
+        ExprDelete() { setRtti("ExprDelete"); }
         ExprDelete ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) { setRtti(DAS_HASH_TAG("ExprDelete")); }
+            : Expression(a), subexpr(s) { setRtti("ExprDelete"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -127,9 +127,9 @@ namespace das
     };
 
     struct ExprAt : Expression {
-        ExprAt() { setRtti(DAS_HASH_TAG("ExprAt")); };
+        ExprAt() { setRtti("ExprAt"); };
         ExprAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i, bool no_promo = false )
-            : Expression(a), subexpr(s), index(i) { setRtti(DAS_HASH_TAG("ExprAt")); no_promotion = no_promo; }
+            : Expression(a), subexpr(s), index(i) { setRtti("ExprAt"); no_promotion = no_promo; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -150,9 +150,9 @@ namespace das
     };
 
     struct ExprSafeAt : ExprAt {
-        ExprSafeAt() { setRtti(DAS_HASH_TAG("ExprSafeAt")); };
+        ExprSafeAt() { setRtti("ExprSafeAt"); };
         ExprSafeAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i, bool no_promo=false )
-            : ExprAt(a,s,i,no_promo) { setRtti(DAS_HASH_TAG("ExprSafeAt")); }
+            : ExprAt(a,s,i,no_promo) { setRtti("ExprSafeAt"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -164,7 +164,7 @@ namespace das
 
 
     struct ExprBlock : Expression {
-        ExprBlock() { setRtti(DAS_HASH_TAG("ExprBlock")); }
+        ExprBlock() { setRtti("ExprBlock"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
@@ -221,9 +221,9 @@ namespace das
     struct ExprOp2;
 
     struct ExprVar : Expression {
-        ExprVar () { setRtti(DAS_HASH_TAG("ExprVar")); };
+        ExprVar () { setRtti("ExprVar"); };
         ExprVar ( const LineInfo & a, const string & n )
-            : Expression(a), name(n) { setRtti(DAS_HASH_TAG("ExprVar")); }
+            : Expression(a), name(n) { setRtti("ExprVar"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
@@ -251,11 +251,11 @@ namespace das
     };
 
     struct ExprTag : Expression {
-        ExprTag () { setRtti(DAS_HASH_TAG("ExprTag")); }
+        ExprTag () { setRtti("ExprTag"); }
         ExprTag ( const LineInfo & a, const ExpressionPtr & se, const string & n )
-            : Expression(a), subexpr(se), name(n) { setRtti(DAS_HASH_TAG("ExprTag")); }
+            : Expression(a), subexpr(se), name(n) { setRtti("ExprTag"); }
         ExprTag ( const LineInfo & a, const ExpressionPtr & se, const ExpressionPtr & va, const string & n )
-            : Expression(a), subexpr(se), value(va), name(n) { setRtti(DAS_HASH_TAG("ExprTag")); }
+            : Expression(a), subexpr(se), value(va), name(n) { setRtti("ExprTag"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -268,11 +268,11 @@ namespace das
     struct ExprClone;
 
     struct ExprField : Expression {
-        ExprField () { setRtti(DAS_HASH_TAG("ExprField")); };
+        ExprField () { setRtti("ExprField"); };
         ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
-            : Expression(a), value(val), name(n), atField(a) { setRtti(DAS_HASH_TAG("ExprField")); no_promotion = no_promo; }
+            : Expression(a), value(val), name(n), atField(a) { setRtti("ExprField"); no_promotion = no_promo; }
         ExprField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n, bool no_promo=false )
-            : Expression(a), value(val), name(n), atField(af) { setRtti(DAS_HASH_TAG("ExprField")); no_promotion = no_promo; }
+            : Expression(a), value(val), name(n), atField(af) { setRtti("ExprField"); no_promotion = no_promo; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
@@ -306,9 +306,9 @@ namespace das
     };
 
     struct ExprIsVariant : ExprField {
-        ExprIsVariant () { setRtti(DAS_HASH_TAG("ExprIsVariant")); };
+        ExprIsVariant () { setRtti("ExprIsVariant"); };
         ExprIsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : ExprField(a,val,n) { setRtti(DAS_HASH_TAG("ExprIsVariant")); }
+            : ExprField(a,val,n) { setRtti("ExprIsVariant"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -317,9 +317,9 @@ namespace das
     };
 
     struct ExprAsVariant : ExprField {
-        ExprAsVariant () { setRtti(DAS_HASH_TAG("ExprAsVariant")); };
+        ExprAsVariant () { setRtti("ExprAsVariant"); };
         ExprAsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : ExprField(a,val,n) { setRtti(DAS_HASH_TAG("ExprAsVariant")); }
+            : ExprField(a,val,n) { setRtti("ExprAsVariant"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -328,9 +328,9 @@ namespace das
     };
 
     struct ExprSafeAsVariant : ExprField {
-        ExprSafeAsVariant () { setRtti(DAS_HASH_TAG("ExprSafeAsVariant")); };
+        ExprSafeAsVariant () { setRtti("ExprSafeAsVariant"); };
         ExprSafeAsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : ExprField(a,val,n) { setRtti(DAS_HASH_TAG("ExprSafeAsVariant")); }
+            : ExprField(a,val,n) { setRtti("ExprSafeAsVariant"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -341,9 +341,9 @@ namespace das
     };
 
     struct ExprSwizzle : Expression {
-        ExprSwizzle () { setRtti(DAS_HASH_TAG("ExprSwizzle")); };
+        ExprSwizzle () { setRtti("ExprSwizzle"); };
         ExprSwizzle ( const LineInfo & a, const ExpressionPtr & val, const string & n )
-            : Expression(a), value(val), mask(n) { setRtti(DAS_HASH_TAG("ExprSwizzle")); }
+            : Expression(a), value(val), mask(n) { setRtti("ExprSwizzle"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
@@ -364,11 +364,11 @@ namespace das
     };
 
     struct ExprSafeField : ExprField {
-        ExprSafeField () { setRtti(DAS_HASH_TAG("ExprSafeField")); };
+        ExprSafeField () { setRtti("ExprSafeField"); };
         ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
-            : ExprField(a,val,n,no_promo) { setRtti(DAS_HASH_TAG("ExprSafeField")); }
+            : ExprField(a,val,n,no_promo) { setRtti("ExprSafeField"); }
         ExprSafeField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n, bool no_promo=false )
-            : ExprField(a,af,val,n,no_promo) { setRtti(DAS_HASH_TAG("ExprSafeField")); }
+            : ExprField(a,af,val,n,no_promo) { setRtti("ExprSafeField"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
@@ -380,9 +380,9 @@ namespace das
     };
 
     struct ExprLooksLikeCall : Expression {
-        ExprLooksLikeCall () { setRtti(DAS_HASH_TAG("ExprLooksLikeCall")); };
+        ExprLooksLikeCall () { setRtti("ExprLooksLikeCall"); };
         ExprLooksLikeCall ( const LineInfo & a, const string & n )
-            : Expression(a), name(n) { setRtti(DAS_HASH_TAG("ExprLooksLikeCall")); }
+            : Expression(a), name(n) { setRtti("ExprLooksLikeCall"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         void autoDereference();
         virtual SimNode * simulate (Context &) const override { return nullptr; }
@@ -399,9 +399,9 @@ namespace das
     };
 
     struct ExprCallMacro : ExprLooksLikeCall {
-        ExprCallMacro () { setRtti(DAS_HASH_TAG("ExprCallMacro")); name="__call_macro__"; };
+        ExprCallMacro () { setRtti("ExprCallMacro"); name="__call_macro__"; };
         ExprCallMacro ( const LineInfo & a, const string & n )
-            : ExprLooksLikeCall(a,n) { setRtti(DAS_HASH_TAG("ExprCallMacro")); }
+            : ExprLooksLikeCall(a,n) { setRtti("ExprCallMacro"); }
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context &) const override { return nullptr; }
@@ -411,9 +411,9 @@ namespace das
     };
 
     struct ExprCallFunc : ExprLooksLikeCall {
-        ExprCallFunc () { setRtti(DAS_HASH_TAG("ExprCallFunc")); };
+        ExprCallFunc () { setRtti("ExprCallFunc"); };
         ExprCallFunc ( const LineInfo & a, const string & n )
-            : ExprLooksLikeCall(a,n) { setRtti(DAS_HASH_TAG("ExprCallFunc")); }
+            : ExprLooksLikeCall(a,n) { setRtti("ExprCallFunc"); }
         virtual bool rtti_isCallFunc() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         Function *      func = nullptr;
@@ -422,9 +422,9 @@ namespace das
     };
 
     struct ExprOp : ExprCallFunc {
-        ExprOp () { setRtti(DAS_HASH_TAG("ExprOp")); };
+        ExprOp () { setRtti("ExprOp"); };
         ExprOp ( const LineInfo & a, const string & o )
-            : ExprCallFunc(a,o), op(o) { setRtti(DAS_HASH_TAG("ExprOp")); }
+            : ExprCallFunc(a,o), op(o) { setRtti("ExprOp"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual void serialize( AstSerializer & ser ) override;
         string  op;
@@ -432,9 +432,9 @@ namespace das
 
     // unary    !subexpr
     struct ExprOp1 : ExprOp {
-        ExprOp1 () { setRtti(DAS_HASH_TAG("ExprOp1")); };
+        ExprOp1 () { setRtti("ExprOp1"); };
         ExprOp1 ( const LineInfo & a, const string & o, const ExpressionPtr & s )
-            : ExprOp(a,o), subexpr(s) { setRtti(DAS_HASH_TAG("ExprOp1")); }
+            : ExprOp(a,o), subexpr(s) { setRtti("ExprOp1"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -449,9 +449,9 @@ namespace das
 
     // binary   left < right
     struct ExprOp2 : ExprOp {
-        ExprOp2 () { setRtti(DAS_HASH_TAG("ExprOp2")); };
+        ExprOp2 () { setRtti("ExprOp2"); };
         ExprOp2 ( const LineInfo & a, const string & o, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp(a,o), left(l), right(r) { setRtti(DAS_HASH_TAG("ExprOp2")); }
+            : ExprOp(a,o), left(l), right(r) { setRtti("ExprOp2"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -466,9 +466,9 @@ namespace das
 
     // this copies one object to the other
     struct ExprCopy : ExprOp2 {
-        ExprCopy () { setRtti(DAS_HASH_TAG("ExprCopy")); };
+        ExprCopy () { setRtti("ExprCopy"); };
         ExprCopy ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, "=", l, r) { setRtti(DAS_HASH_TAG("ExprCopy")); };
+            : ExprOp2(a, "=", l, r) { setRtti("ExprCopy"); };
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -485,9 +485,9 @@ namespace das
 
     // this moves one object to the other
     struct ExprMove : ExprOp2 {
-        ExprMove () { setRtti(DAS_HASH_TAG("ExprMove")); };
+        ExprMove () { setRtti("ExprMove"); };
         ExprMove ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, "<-", l, r) { setRtti(DAS_HASH_TAG("ExprMove")); };
+            : ExprOp2(a, "<-", l, r) { setRtti("ExprMove"); };
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -503,9 +503,9 @@ namespace das
 
     // this clones one object to the other
     struct ExprClone : ExprOp2 {
-        ExprClone () { setRtti(DAS_HASH_TAG("ExprClone")); };
+        ExprClone () { setRtti("ExprClone"); };
         ExprClone ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, ":=", l, r) { setRtti(DAS_HASH_TAG("ExprClone")); };
+            : ExprOp2(a, ":=", l, r) { setRtti("ExprClone"); };
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -517,16 +517,16 @@ namespace das
     // and this is why it does not have CLONE
     struct ExprSequence : ExprOp2 {
         ExprSequence ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp2(a, ",", l, r) { setRtti(DAS_HASH_TAG("ExprSequence")); }
+            : ExprOp2(a, ",", l, r) { setRtti("ExprSequence"); }
         virtual bool rtti_isSequence() const override { return true; }
     };
 
     // trinary  subexpr ? left : right
     struct ExprOp3 : ExprOp {
-        ExprOp3 () { setRtti(DAS_HASH_TAG("ExprOp3")); };
+        ExprOp3 () { setRtti("ExprOp3"); };
         ExprOp3 ( const LineInfo & a, const string & o, const ExpressionPtr & s,
                  const ExpressionPtr & l, const ExpressionPtr & r )
-            : ExprOp(a,o), subexpr(s), left(l), right(r) { setRtti(DAS_HASH_TAG("ExprOp3")); }
+            : ExprOp(a,o), subexpr(s), left(l), right(r) { setRtti("ExprOp3"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual Expression * tail() override { return right->tail(); }
@@ -540,9 +540,9 @@ namespace das
     };
 
     struct ExprTryCatch : Expression {
-        ExprTryCatch() { setRtti(DAS_HASH_TAG("ExprTryCatch")); };
+        ExprTryCatch() { setRtti("ExprTryCatch"); };
         ExprTryCatch ( const LineInfo & a, const ExpressionPtr & t, const ExpressionPtr & c )
-            : Expression(a), try_block(t), catch_block(c) { setRtti(DAS_HASH_TAG("ExprTryCatch")); }
+            : Expression(a), try_block(t), catch_block(c) { setRtti("ExprTryCatch"); }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -552,9 +552,9 @@ namespace das
     };
 
     struct ExprReturn : Expression {
-        ExprReturn() { setRtti(DAS_HASH_TAG("ExprReturn")); };
+        ExprReturn() { setRtti("ExprReturn"); };
         ExprReturn ( const LineInfo & a, const ExpressionPtr & s )
-            : Expression(a), subexpr(s) { setRtti(DAS_HASH_TAG("ExprReturn")); }
+            : Expression(a), subexpr(s) { setRtti("ExprReturn"); }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -588,9 +588,9 @@ namespace das
     };
 
     struct ExprBreak : Expression {
-        ExprBreak() { setRtti(DAS_HASH_TAG("ExprBreak"));} ;
+        ExprBreak() { setRtti("ExprBreak");} ;
         ExprBreak ( const LineInfo & a )
-            : Expression(a) { setRtti(DAS_HASH_TAG("ExprBreak")); }
+            : Expression(a) { setRtti("ExprBreak"); }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -599,9 +599,9 @@ namespace das
     };
 
     struct ExprContinue : Expression {
-        ExprContinue() { setRtti(DAS_HASH_TAG("ExprContinue")); };
+        ExprContinue() { setRtti("ExprContinue"); };
         ExprContinue ( const LineInfo & a )
-            : Expression(a) { setRtti(DAS_HASH_TAG("ExprContinue")); }
+            : Expression(a) { setRtti("ExprContinue"); }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -610,22 +610,22 @@ namespace das
     };
 
     struct ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
-        ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) { setRtti(DAS_HASH_TAG("ExprFakeContext")); }
-        ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) { setRtti(DAS_HASH_TAG("ExprFakeContext")); }
+        ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) { setRtti("ExprFakeContext"); }
+        ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) { setRtti("ExprFakeContext"); }
         virtual bool rtti_isFakeContext() const override { return true; }
     };
 
     struct ExprFakeLineInfo : ExprConstT<void *, ExprFakeLineInfo> {
-        ExprFakeLineInfo(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeLineInfo) { setRtti(DAS_HASH_TAG("ExprFakeLineInfo")); }
-        ExprFakeLineInfo(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeLineInfo) { setRtti(DAS_HASH_TAG("ExprFakeLineInfo")); }
+        ExprFakeLineInfo(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeLineInfo) { setRtti("ExprFakeLineInfo"); }
+        ExprFakeLineInfo(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeLineInfo) { setRtti("ExprFakeLineInfo"); }
         virtual bool rtti_isFakeLineInfo() const override { return true; }
     };
 
     struct ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
         ExprConstPtr(void * ptr = nullptr)
-            : ExprConstT(ptr,Type::tPointer) { setRtti(DAS_HASH_TAG("ExprConstPtr")); }
+            : ExprConstT(ptr,Type::tPointer) { setRtti("ExprConstPtr"); }
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr)
-            : ExprConstT(a,ptr,Type::tPointer) { setRtti(DAS_HASH_TAG("ExprConstPtr")); }
+            : ExprConstT(a,ptr,Type::tPointer) { setRtti("ExprConstPtr"); }
         bool isSmartPtr = false;
         TypeDeclPtr ptrType;
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
@@ -635,26 +635,26 @@ namespace das
 
     struct ExprConstInt : ExprConstT<int32_t,ExprConstInt> {
         ExprConstInt(int32_t i = 0)
-            : ExprConstT(i,Type::tInt) { setRtti(DAS_HASH_TAG("ExprConstInt"));}
+            : ExprConstT(i,Type::tInt) { setRtti("ExprConstInt");}
         ExprConstInt(const LineInfo & a, int32_t i = 0)
-            : ExprConstT(a,i,Type::tInt) { setRtti(DAS_HASH_TAG("ExprConstInt")); }
+            : ExprConstT(a,i,Type::tInt) { setRtti("ExprConstInt"); }
     };
 
     struct ExprConstEnumeration : ExprConst {
         ExprConstEnumeration(int val, const TypeDeclPtr & td)
             : ExprConst(Type::tEnumeration) {
-            setRtti(DAS_HASH_TAG("ExprConstEnumeration"));
+            setRtti("ExprConstEnumeration");
             enumType = td->enumType;
             text = td->enumType->find(int64_t(val),"");
         }
         ExprConstEnumeration(const string & name = string(), const TypeDeclPtr & td = nullptr)
             : ExprConst(Type::tEnumeration), text(name) {
-            setRtti(DAS_HASH_TAG("ExprConstEnumeration"));
+            setRtti("ExprConstEnumeration");
             if ( td ) enumType = td->enumType;
         }
         ExprConstEnumeration(const LineInfo & a, const string & name, const TypeDeclPtr & td)
             : ExprConst(a,Type::tEnumeration), text(name) {
-            setRtti(DAS_HASH_TAG("ExprConstEnumeration"));
+            setRtti("ExprConstEnumeration");
             enumType = td->enumType;
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -667,186 +667,186 @@ namespace das
 
     struct ExprConstInt8 : ExprConstT<int8_t,ExprConstInt8> {
         ExprConstInt8(int8_t i = 0)
-            : ExprConstT(i,Type::tInt8) { setRtti(DAS_HASH_TAG("ExprConstInt8")); }
+            : ExprConstT(i,Type::tInt8) { setRtti("ExprConstInt8"); }
         ExprConstInt8(const LineInfo & a, int8_t i = 0)
-            : ExprConstT(a,i,Type::tInt8) { setRtti(DAS_HASH_TAG("ExprConstInt8")); }
+            : ExprConstT(a,i,Type::tInt8) { setRtti("ExprConstInt8"); }
     };
 
     struct ExprConstInt16 : ExprConstT<int16_t,ExprConstInt16> {
         ExprConstInt16(int16_t i = 0)
-            : ExprConstT(i,Type::tInt16) { setRtti(DAS_HASH_TAG("ExprConstInt16")); }
+            : ExprConstT(i,Type::tInt16) { setRtti("ExprConstInt16"); }
         ExprConstInt16(const LineInfo & a, int16_t i = 0)
-            : ExprConstT(a,i,Type::tInt16) { setRtti(DAS_HASH_TAG("ExprConstInt16")); }
+            : ExprConstT(a,i,Type::tInt16) { setRtti("ExprConstInt16"); }
     };
 
     struct ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
         ExprConstInt64(int64_t i = 0)
-            : ExprConstT(i,Type::tInt64) { setRtti(DAS_HASH_TAG("ExprConstInt64")); }
+            : ExprConstT(i,Type::tInt64) { setRtti("ExprConstInt64"); }
         ExprConstInt64(const LineInfo & a, int64_t i = 0)
-            : ExprConstT(a,i,Type::tInt64) { setRtti(DAS_HASH_TAG("ExprConstInt64")); }
+            : ExprConstT(a,i,Type::tInt64) { setRtti("ExprConstInt64"); }
     };
 
     struct ExprConstBitfield : ExprConstT<uint32_t,ExprConstBitfield> {
         ExprConstBitfield(uint32_t i = 0)
-            : ExprConstT(i,Type::tBitfield) { setRtti(DAS_HASH_TAG("ExprConstBitfield")); }
+            : ExprConstT(i,Type::tBitfield) { setRtti("ExprConstBitfield"); }
         ExprConstBitfield(const LineInfo & a, uint32_t i = 0)
-            : ExprConstT(a,i,Type::tBitfield) { setRtti(DAS_HASH_TAG("ExprConstBitfield")); }
+            : ExprConstT(a,i,Type::tBitfield) { setRtti("ExprConstBitfield"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
         TypeDeclPtr bitfieldType;
     };
 
     struct ExprConstInt2 : ExprConstT<int2,ExprConstInt2> {
         ExprConstInt2(int2 i = int2())
-            : ExprConstT(i,Type::tInt2) { setRtti(DAS_HASH_TAG("ExprConstInt2")); }
+            : ExprConstT(i,Type::tInt2) { setRtti("ExprConstInt2"); }
         ExprConstInt2(const LineInfo & a, int2 i)
-            : ExprConstT(a,i,Type::tInt2) { setRtti(DAS_HASH_TAG("ExprConstInt2")); }
+            : ExprConstT(a,i,Type::tInt2) { setRtti("ExprConstInt2"); }
     };
 
     struct ExprConstRange : ExprConstT<range,ExprConstRange> {
         ExprConstRange(range i = range())
-            : ExprConstT(i,Type::tRange) { setRtti(DAS_HASH_TAG("ExprConstRange")); }
+            : ExprConstT(i,Type::tRange) { setRtti("ExprConstRange"); }
         ExprConstRange(const LineInfo & a, range i)
-            : ExprConstT(a,i,Type::tRange) { setRtti(DAS_HASH_TAG("ExprConstRange")); }
+            : ExprConstT(a,i,Type::tRange) { setRtti("ExprConstRange"); }
     };
 
     struct ExprConstRange64 : ExprConstT<range64,ExprConstRange64> {
         ExprConstRange64(range64 i = range64())
-            : ExprConstT(i,Type::tRange64) { setRtti(DAS_HASH_TAG("ExprConstRange64")); }
+            : ExprConstT(i,Type::tRange64) { setRtti("ExprConstRange64"); }
         ExprConstRange64(const LineInfo & a, range64 i)
-            : ExprConstT(a,i,Type::tRange64) { setRtti(DAS_HASH_TAG("ExprConstRange64")); }
+            : ExprConstT(a,i,Type::tRange64) { setRtti("ExprConstRange64"); }
     };
 
 
     struct ExprConstInt3 : ExprConstT<int3,ExprConstInt3> {
         ExprConstInt3(int3 i = int3())
-            : ExprConstT(i,Type::tInt3) { setRtti(DAS_HASH_TAG("ExprConstInt3")); }
+            : ExprConstT(i,Type::tInt3) { setRtti("ExprConstInt3"); }
         ExprConstInt3(const LineInfo & a, int3 i)
-            : ExprConstT(a,i,Type::tInt3) { setRtti(DAS_HASH_TAG("ExprConstInt3")); }
+            : ExprConstT(a,i,Type::tInt3) { setRtti("ExprConstInt3"); }
     };
 
     struct ExprConstInt4 : ExprConstT<int4,ExprConstInt4> {
         ExprConstInt4(int4 i = int4())
-            : ExprConstT(i,Type::tInt4) { setRtti(DAS_HASH_TAG("ExprConstInt4")); }
+            : ExprConstT(i,Type::tInt4) { setRtti("ExprConstInt4"); }
         ExprConstInt4(const LineInfo & a, int4 i)
-            : ExprConstT(a,i,Type::tInt4) { setRtti(DAS_HASH_TAG("ExprConstInt4")); }
+            : ExprConstT(a,i,Type::tInt4) { setRtti("ExprConstInt4"); }
     };
 
     struct ExprConstUInt8 : ExprConstT<uint8_t,ExprConstUInt8> {
         ExprConstUInt8(uint8_t i = 0)
-            : ExprConstT(i,Type::tUInt8) { setRtti(DAS_HASH_TAG("ExprConstUInt8")); }
+            : ExprConstT(i,Type::tUInt8) { setRtti("ExprConstUInt8"); }
         ExprConstUInt8(const LineInfo & a, uint8_t i = 0)
-            : ExprConstT(a,i,Type::tUInt8) { setRtti(DAS_HASH_TAG("ExprConstUInt8")); }
+            : ExprConstT(a,i,Type::tUInt8) { setRtti("ExprConstUInt8"); }
     };
 
     struct ExprConstUInt16 : ExprConstT<uint16_t,ExprConstUInt16> {
         ExprConstUInt16(uint16_t i = 0)
-            : ExprConstT(i,Type::tUInt16) { setRtti(DAS_HASH_TAG("ExprConstUInt16")); }
+            : ExprConstT(i,Type::tUInt16) { setRtti("ExprConstUInt16"); }
         ExprConstUInt16(const LineInfo & a, uint16_t i = 0)
-            : ExprConstT(a,i,Type::tUInt16) { setRtti(DAS_HASH_TAG("ExprConstUInt16")); }
+            : ExprConstT(a,i,Type::tUInt16) { setRtti("ExprConstUInt16"); }
     };
 
     struct ExprConstUInt64 : ExprConstT<uint64_t,ExprConstUInt64> {
         ExprConstUInt64(uint64_t i = 0)
-            : ExprConstT(i,Type::tUInt64) { setRtti(DAS_HASH_TAG("ExprConstUInt64")); }
+            : ExprConstT(i,Type::tUInt64) { setRtti("ExprConstUInt64"); }
         ExprConstUInt64(const LineInfo & a, uint64_t i = 0)
-            : ExprConstT(a,i,Type::tUInt64) { setRtti(DAS_HASH_TAG("ExprConstUInt64")); }
+            : ExprConstT(a,i,Type::tUInt64) { setRtti("ExprConstUInt64"); }
     };
 
     struct ExprConstUInt : ExprConstT<uint32_t,ExprConstUInt> {
         ExprConstUInt(uint32_t i = 0)
-            : ExprConstT(i,Type::tUInt) { setRtti(DAS_HASH_TAG("ExprConstUInt")); }
+            : ExprConstT(i,Type::tUInt) { setRtti("ExprConstUInt"); }
         ExprConstUInt(const LineInfo & a, uint32_t i = 0)
-            : ExprConstT(a,i,Type::tUInt) { setRtti(DAS_HASH_TAG("ExprConstUInt")); }
+            : ExprConstT(a,i,Type::tUInt) { setRtti("ExprConstUInt"); }
     };
 
     int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr );
 
     struct ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
         ExprConstUInt2(uint2 i = uint2())
-            : ExprConstT(i,Type::tUInt2) { setRtti(DAS_HASH_TAG("ExprConstUInt2")); }
+            : ExprConstT(i,Type::tUInt2) { setRtti("ExprConstUInt2"); }
         ExprConstUInt2(const LineInfo & a, uint2 i)
-            : ExprConstT(a,i,Type::tUInt2) { setRtti(DAS_HASH_TAG("ExprConstUInt2")); }
+            : ExprConstT(a,i,Type::tUInt2) { setRtti("ExprConstUInt2"); }
     };
 
     struct ExprConstURange : ExprConstT<urange,ExprConstURange> {
         ExprConstURange(urange i = urange())
-            : ExprConstT(i,Type::tURange) { setRtti(DAS_HASH_TAG("ExprConstURange")); }
+            : ExprConstT(i,Type::tURange) { setRtti("ExprConstURange"); }
         ExprConstURange(const LineInfo & a, urange i)
-            : ExprConstT(a,i,Type::tURange) { setRtti(DAS_HASH_TAG("ExprConstURange")); }
+            : ExprConstT(a,i,Type::tURange) { setRtti("ExprConstURange"); }
     };
 
     struct ExprConstURange64 : ExprConstT<urange64,ExprConstURange64> {
         ExprConstURange64(urange64 i = urange64())
-            : ExprConstT(i,Type::tURange64) { setRtti(DAS_HASH_TAG("ExprConstURange64")); }
+            : ExprConstT(i,Type::tURange64) { setRtti("ExprConstURange64"); }
         ExprConstURange64(const LineInfo & a, urange64 i)
-            : ExprConstT(a,i,Type::tURange64) { setRtti(DAS_HASH_TAG("ExprConstURange64")); }
+            : ExprConstT(a,i,Type::tURange64) { setRtti("ExprConstURange64"); }
     };
 
     struct ExprConstUInt3 : ExprConstT<uint3,ExprConstUInt3> {
         ExprConstUInt3(uint3 i = uint3())
-            : ExprConstT(i,Type::tUInt3) { setRtti(DAS_HASH_TAG("ExprConstUInt3")); }
+            : ExprConstT(i,Type::tUInt3) { setRtti("ExprConstUInt3"); }
         ExprConstUInt3(const LineInfo & a, uint3 i)
-            : ExprConstT(a,i,Type::tUInt3) { setRtti(DAS_HASH_TAG("ExprConstUInt3")); }
+            : ExprConstT(a,i,Type::tUInt3) { setRtti("ExprConstUInt3"); }
     };
 
     struct ExprConstUInt4 : ExprConstT<uint4,ExprConstUInt4> {
         ExprConstUInt4(uint4 i = uint4())
-            : ExprConstT(i,Type::tUInt4) { setRtti(DAS_HASH_TAG("ExprConstUInt4")); }
+            : ExprConstT(i,Type::tUInt4) { setRtti("ExprConstUInt4"); }
         ExprConstUInt4(const LineInfo & a, uint4 i)
-            : ExprConstT(a,i,Type::tUInt4) { setRtti(DAS_HASH_TAG("ExprConstUInt4")); }
+            : ExprConstT(a,i,Type::tUInt4) { setRtti("ExprConstUInt4"); }
     };
 
     struct ExprConstBool : ExprConstT<bool,ExprConstBool> {
         ExprConstBool(bool i = false)
-            : ExprConstT(i,Type::tBool) { setRtti(DAS_HASH_TAG("ExprConstBool")); }
+            : ExprConstT(i,Type::tBool) { setRtti("ExprConstBool"); }
         ExprConstBool(const LineInfo & a, bool i = false)
-            : ExprConstT(a,i,Type::tBool) { setRtti(DAS_HASH_TAG("ExprConstBool")); }
+            : ExprConstT(a,i,Type::tBool) { setRtti("ExprConstBool"); }
     };
 
     struct ExprConstFloat : ExprConstT<float,ExprConstFloat> {
         ExprConstFloat(float i = 0.0f)
-            : ExprConstT(i,Type::tFloat) { setRtti(DAS_HASH_TAG("ExprConstFloat")); }
+            : ExprConstT(i,Type::tFloat) { setRtti("ExprConstFloat"); }
         ExprConstFloat(int i)
-            : ExprConstT(float(i),Type::tFloat) { setRtti(DAS_HASH_TAG("ExprConstFloat")); }
+            : ExprConstT(float(i),Type::tFloat) { setRtti("ExprConstFloat"); }
         ExprConstFloat(double i)
-            : ExprConstT(float(i),Type::tFloat) { setRtti(DAS_HASH_TAG("ExprConstFloat")); }
+            : ExprConstT(float(i),Type::tFloat) { setRtti("ExprConstFloat"); }
         ExprConstFloat(const LineInfo & a, float i = 0.0f)
-            : ExprConstT(a,i,Type::tFloat) { setRtti(DAS_HASH_TAG("ExprConstFloat")); }
+            : ExprConstT(a,i,Type::tFloat) { setRtti("ExprConstFloat"); }
     };
 
     struct ExprConstDouble : ExprConstT<double,ExprConstDouble> {
         ExprConstDouble(double i = 0.0)
-            : ExprConstT(i,Type::tDouble) { setRtti(DAS_HASH_TAG("ExprConstDouble")); }
+            : ExprConstT(i,Type::tDouble) { setRtti("ExprConstDouble"); }
         ExprConstDouble(const LineInfo & a, double i = 0.0)
-            : ExprConstT(a,i,Type::tDouble) { setRtti(DAS_HASH_TAG("ExprConstDouble")); }
+            : ExprConstT(a,i,Type::tDouble) { setRtti("ExprConstDouble"); }
     };
 
     struct ExprConstFloat2 : ExprConstT<float2,ExprConstFloat2> {
         ExprConstFloat2(float2 i = float2())
-            : ExprConstT(i,Type::tFloat2) { setRtti(DAS_HASH_TAG("ExprConstFloat2")); }
+            : ExprConstT(i,Type::tFloat2) { setRtti("ExprConstFloat2"); }
         ExprConstFloat2(const LineInfo & a, float2 i)
-            : ExprConstT(a,i,Type::tFloat2) { setRtti(DAS_HASH_TAG("ExprConstFloat2")); }
+            : ExprConstT(a,i,Type::tFloat2) { setRtti("ExprConstFloat2"); }
     };
 
     struct ExprConstFloat3 : ExprConstT<float3,ExprConstFloat3> {
         ExprConstFloat3(float3 i = float3())
-            : ExprConstT(i,Type::tFloat3) { setRtti(DAS_HASH_TAG("ExprConstFloat3")); }
+            : ExprConstT(i,Type::tFloat3) { setRtti("ExprConstFloat3"); }
         ExprConstFloat3(const LineInfo & a, float3 i)
-            : ExprConstT(a,i,Type::tFloat3) { setRtti(DAS_HASH_TAG("ExprConstFloat3")); }
+            : ExprConstT(a,i,Type::tFloat3) { setRtti("ExprConstFloat3"); }
     };
 
     struct ExprConstFloat4 : ExprConstT<float4,ExprConstFloat4> {
         ExprConstFloat4(float4 i = float4())
-            : ExprConstT(i,Type::tFloat4) { setRtti(DAS_HASH_TAG("ExprConstFloat4")); }
+            : ExprConstT(i,Type::tFloat4) { setRtti("ExprConstFloat4"); }
         ExprConstFloat4(const LineInfo & a, float4 i)
-            : ExprConstT(a,i,Type::tFloat4) { setRtti(DAS_HASH_TAG("ExprConstFloat4")); }
+            : ExprConstT(a,i,Type::tFloat4) { setRtti("ExprConstFloat4"); }
     };
 
     struct ExprConstString : ExprConst {
         ExprConstString(const string & str = string())
-            : ExprConst(Type::tString), text(str) { setRtti(DAS_HASH_TAG("ExprConstString")); }
+            : ExprConst(Type::tString), text(str) { setRtti("ExprConstString"); }
         ExprConstString(const LineInfo & a, const string & str = string())
-            : ExprConst(a,Type::tString), text(str) { setRtti(DAS_HASH_TAG("ExprConstString")); }
+            : ExprConst(a,Type::tString), text(str) { setRtti("ExprConstString"); }
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -857,9 +857,9 @@ namespace das
     };
 
     struct ExprStringBuilder : Expression {
-        ExprStringBuilder() { setRtti(DAS_HASH_TAG("ExprStringBuilder"));  };
+        ExprStringBuilder() { setRtti("ExprStringBuilder");  };
         ExprStringBuilder(const LineInfo & a)
-            : Expression(a) { setRtti(DAS_HASH_TAG("ExprStringBuilder")); }
+            : Expression(a) { setRtti("ExprStringBuilder"); }
         virtual bool rtti_isStringBuilder() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -875,7 +875,7 @@ namespace das
     };
 
     struct ExprLet : Expression {
-        ExprLet() { setRtti(DAS_HASH_TAG("ExprLet")); }
+        ExprLet() { setRtti("ExprLet"); }
         Variable * find ( const string & name ) const;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -899,9 +899,9 @@ namespace das
 
     // for a,b in foo,bar where a>b ...
     struct ExprFor : Expression {
-        ExprFor () { setRtti(DAS_HASH_TAG("ExprFor")); };
+        ExprFor () { setRtti("ExprFor"); };
         ExprFor ( const LineInfo & a )
-            : Expression(a) { setRtti(DAS_HASH_TAG("ExprFor")); }
+            : Expression(a) { setRtti("ExprFor"); }
         Variable * findIterator ( const string & name ) const;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -922,9 +922,9 @@ namespace das
     };
 
     struct ExprUnsafe : Expression {
-        ExprUnsafe() { setRtti(DAS_HASH_TAG("ExprUnsafe")); };
+        ExprUnsafe() { setRtti("ExprUnsafe"); };
         ExprUnsafe(const LineInfo & a)
-            : Expression(a) { setRtti(DAS_HASH_TAG("ExprUnsafe")); }
+            : Expression(a) { setRtti("ExprUnsafe"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
@@ -935,9 +935,9 @@ namespace das
     };
 
     struct ExprWhile : Expression {
-        ExprWhile() { setRtti(DAS_HASH_TAG("ExprWhile")); };
+        ExprWhile() { setRtti("ExprWhile"); };
         ExprWhile(const LineInfo & a)
-            : Expression(a) { setRtti(DAS_HASH_TAG("ExprWhile")); }
+            : Expression(a) { setRtti("ExprWhile"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
@@ -949,9 +949,9 @@ namespace das
     };
 
     struct ExprWith : Expression {
-        ExprWith() { setRtti(DAS_HASH_TAG("ExprWith")); };
+        ExprWith() { setRtti("ExprWith"); };
         ExprWith(const LineInfo & a)
-            : Expression(a) { setRtti(DAS_HASH_TAG("ExprWith")); }
+            : Expression(a) { setRtti("ExprWith"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -961,9 +961,9 @@ namespace das
     };
 
     struct ExprAssume : Expression {
-        ExprAssume() { setRtti(DAS_HASH_TAG("ExprAssume")); };
+        ExprAssume() { setRtti("ExprAssume"); };
         ExprAssume(const LineInfo & a, const string & al, const ExpressionPtr & se )
-            : Expression(a), alias(al), subexpr(se) { setRtti(DAS_HASH_TAG("ExprAssume")); }
+            : Expression(a), alias(al), subexpr(se) { setRtti("ExprAssume"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -975,9 +975,9 @@ namespace das
 
     template <typename TT>
     struct ExprLikeCall : ExprLooksLikeCall {
-        ExprLikeCall () { setRtti(DAS_HASH_TAG("ExprLikeCall")); };
+        ExprLikeCall () { setRtti("ExprLikeCall"); };
         ExprLikeCall ( const LineInfo & a, const string & n )
-            : ExprLooksLikeCall(a,n) { setRtti(DAS_HASH_TAG("ExprLikeCall")); }
+            : ExprLooksLikeCall(a,n) { setRtti("ExprLikeCall"); }
         virtual ExpressionPtr visit ( Visitor & vis ) override;
     };
 
@@ -997,10 +997,10 @@ namespace das
     };
 
     struct ExprMakeBlock : Expression {
-        ExprMakeBlock () { setRtti(DAS_HASH_TAG("ExprMakeBlock")); };
+        ExprMakeBlock () { setRtti("ExprMakeBlock"); };
         ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b, bool isl = false, bool islf = false )
             : Expression(a), block(b) {
-            setRtti(DAS_HASH_TAG("ExprMakeBlock"));
+            setRtti("ExprMakeBlock");
             b->at = a;
             isLambda = isl;
             isLocalFunction = islf;
@@ -1025,7 +1025,7 @@ namespace das
     };
 
     struct ExprMakeGenerator : ExprLooksLikeCall {
-        ExprMakeGenerator () { setRtti(DAS_HASH_TAG("ExprMakeGenerator")); };
+        ExprMakeGenerator () { setRtti("ExprMakeGenerator"); };
         ExprMakeGenerator ( const LineInfo & a, const ExpressionPtr & b = nullptr );
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1036,7 +1036,7 @@ namespace das
     };
 
     struct ExprYield : Expression {
-        ExprYield () { setRtti(DAS_HASH_TAG("ExprYield")); };
+        ExprYield () { setRtti("ExprYield"); };
         ExprYield ( const LineInfo & a, const ExpressionPtr & val );
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
@@ -1054,9 +1054,9 @@ namespace das
     };
 
     struct ExprInvoke : ExprLikeCall<ExprInvoke> {
-        ExprInvoke () { setRtti(DAS_HASH_TAG("ExprInvoke")); name = "invoke"; };
+        ExprInvoke () { setRtti("ExprInvoke"); name = "invoke"; };
         ExprInvoke ( const LineInfo & a, const string & name )
-            : ExprLikeCall<ExprInvoke>(a,name) { setRtti(DAS_HASH_TAG("ExprInvoke")); }
+            : ExprLikeCall<ExprInvoke>(a,name) { setRtti("ExprInvoke"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isInvoke() const override { return true; }
@@ -1070,9 +1070,9 @@ namespace das
     };
 
     struct ExprAssert : ExprLikeCall<ExprAssert> {
-        ExprAssert ( ) { setRtti(DAS_HASH_TAG("ExprAssert")); name="assert"; };
+        ExprAssert ( ) { setRtti("ExprAssert"); name="assert"; };
         ExprAssert ( const LineInfo & a, const string & name, bool isV )
-            : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; setRtti(DAS_HASH_TAG("ExprAssert")); }
+            : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; setRtti("ExprAssert"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void serialize( AstSerializer & ser ) override;
@@ -1080,9 +1080,9 @@ namespace das
     };
 
     struct ExprQuote : ExprLikeCall<ExprQuote> {
-        ExprQuote ( ) { setRtti(DAS_HASH_TAG("ExprQuote")); name="quote"; };
+        ExprQuote ( ) { setRtti("ExprQuote"); name="quote"; };
         ExprQuote ( const LineInfo & a, const string & name )
-            : ExprLikeCall<ExprQuote>(a,name) { setRtti(DAS_HASH_TAG("ExprQuote")); }
+            : ExprLikeCall<ExprQuote>(a,name) { setRtti("ExprQuote"); }
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -1090,34 +1090,34 @@ namespace das
     };
 
     struct ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {
-        ExprStaticAssert () { setRtti(DAS_HASH_TAG("ExprStaticAssert")); name="static_assert"; };
+        ExprStaticAssert () { setRtti("ExprStaticAssert"); name="static_assert"; };
         ExprStaticAssert ( const LineInfo & a, const string & name )
-            : ExprLikeCall<ExprStaticAssert>(a,name) { setRtti(DAS_HASH_TAG("ExprStaticAssert")); }
+            : ExprLikeCall<ExprStaticAssert>(a,name) { setRtti("ExprStaticAssert"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprDebug : ExprLikeCall<ExprDebug> {
-        ExprDebug () { setRtti(DAS_HASH_TAG("ExprDebug")); name="debug"; };
+        ExprDebug () { setRtti("ExprDebug"); name="debug"; };
         ExprDebug ( const LineInfo & a, const string & name )
-            : ExprLikeCall<ExprDebug>(a, name) { setRtti(DAS_HASH_TAG("ExprDebug")); }
+            : ExprLikeCall<ExprDebug>(a, name) { setRtti("ExprDebug"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprMemZero : ExprLikeCall<ExprMemZero> {
-        ExprMemZero () { setRtti(DAS_HASH_TAG("ExprMemZero")); name="memzero"; };
+        ExprMemZero () { setRtti("ExprMemZero"); name="memzero"; };
         ExprMemZero ( const LineInfo & a, const string & name )
-            : ExprLikeCall<ExprMemZero>(a, name) { setRtti(DAS_HASH_TAG("ExprMemZero")); }
+            : ExprLikeCall<ExprMemZero>(a, name) { setRtti("ExprMemZero"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     template <typename It, typename SimNodeT, bool first>
     struct ExprTableKeysOrValues : ExprLooksLikeCall {
-        ExprTableKeysOrValues() { setRtti(DAS_HASH_TAG("ExprTableKeysOrValues")); };
+        ExprTableKeysOrValues() { setRtti("ExprTableKeysOrValues"); };
         ExprTableKeysOrValues ( const LineInfo & a, const string & name )
-            : ExprLooksLikeCall(a, name) { setRtti(DAS_HASH_TAG("ExprTableKeysOrValues")); }
+            : ExprLooksLikeCall(a, name) { setRtti("ExprTableKeysOrValues"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
             auto cexpr = clonePtr<ExprTableKeysOrValues<It,SimNodeT,first>>(expr);
             ExprLooksLikeCall::clone(cexpr);
@@ -1136,9 +1136,9 @@ namespace das
 
     template <typename It, typename SimNodeT>
     struct ExprArrayCallWithSizeOrIndex : ExprLooksLikeCall {
-        ExprArrayCallWithSizeOrIndex() { setRtti(DAS_HASH_TAG("ExprArrayCallWithSizeOrIndex")); };
+        ExprArrayCallWithSizeOrIndex() { setRtti("ExprArrayCallWithSizeOrIndex"); };
         ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name )
-            : ExprLooksLikeCall(a, name) { setRtti(DAS_HASH_TAG("ExprArrayCallWithSizeOrIndex")); }
+            : ExprLooksLikeCall(a, name) { setRtti("ExprArrayCallWithSizeOrIndex"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
             auto cexpr = clonePtr<ExprArrayCallWithSizeOrIndex<It,SimNodeT>>(expr);
             ExprLooksLikeCall::clone(cexpr);
@@ -1155,45 +1155,45 @@ namespace das
     };
 
     struct ExprErase : ExprLikeCall<ExprErase> {
-        ExprErase() { setRtti(DAS_HASH_TAG("ExprErase")); name="erase"; };
+        ExprErase() { setRtti("ExprErase"); name="erase"; };
         ExprErase ( const LineInfo & a, const string & )
-            : ExprLikeCall<ExprErase>(a, "erase") { setRtti(DAS_HASH_TAG("ExprErase")); }
+            : ExprLikeCall<ExprErase>(a, "erase") { setRtti("ExprErase"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprFind : ExprLikeCall<ExprFind> {
-        ExprFind() { setRtti(DAS_HASH_TAG("ExprFind")); name="find"; };
+        ExprFind() { setRtti("ExprFind"); name="find"; };
         ExprFind ( const LineInfo & a, const string & )
-            : ExprLikeCall<ExprFind>(a, "find") { setRtti(DAS_HASH_TAG("ExprFind")); }
+            : ExprLikeCall<ExprFind>(a, "find") { setRtti("ExprFind"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprKeyExists : ExprLikeCall<ExprKeyExists> {
-        ExprKeyExists() { setRtti(DAS_HASH_TAG("ExprKeyExists")); name="key_exists"; };
+        ExprKeyExists() { setRtti("ExprKeyExists"); name="key_exists"; };
         ExprKeyExists ( const LineInfo & a, const string & )
-            : ExprLikeCall<ExprKeyExists>(a, "key_exists") { setRtti(DAS_HASH_TAG("ExprKeyExists")); }
+            : ExprLikeCall<ExprKeyExists>(a, "key_exists") { setRtti("ExprKeyExists"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprSetInsert : ExprLikeCall<ExprSetInsert> {
-        ExprSetInsert() { setRtti(DAS_HASH_TAG("ExprSetInsert")); name="insert"; };
+        ExprSetInsert() { setRtti("ExprSetInsert"); name="insert"; };
         ExprSetInsert ( const LineInfo & a, const string & )
-            : ExprLikeCall<ExprSetInsert>(a, "insert") { setRtti(DAS_HASH_TAG("ExprSetInsert")); }
+            : ExprLikeCall<ExprSetInsert>(a, "insert") { setRtti("ExprSetInsert"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
     };
 
     struct ExprTypeInfo : Expression {
-        ExprTypeInfo () { setRtti(DAS_HASH_TAG("ExprTypeInfo")); }
+        ExprTypeInfo () { setRtti("ExprTypeInfo"); }
         ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s,
                       const string & stt="", const string & ett="" )
-            : Expression(a), trait(tr), subexpr(s), subtrait(stt), extratrait(ett) { setRtti(DAS_HASH_TAG("ExprTypeInfo")); }
+            : Expression(a), trait(tr), subexpr(s), subtrait(stt), extratrait(ett) { setRtti("ExprTypeInfo"); }
         ExprTypeInfo ( const LineInfo & a, const string & tr, const TypeDeclPtr & d,
                       const string & stt="", const string & ett="" )
-            : Expression(a), trait(tr), typeexpr(d), subtrait(stt), extratrait(ett) { setRtti(DAS_HASH_TAG("ExprTypeInfo")); }
+            : Expression(a), trait(tr), typeexpr(d), subtrait(stt), extratrait(ett) { setRtti("ExprTypeInfo"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
@@ -1207,9 +1207,9 @@ namespace das
     };
 
     struct ExprIs : Expression {
-        ExprIs () { setRtti(DAS_HASH_TAG("ExprIs")); };
+        ExprIs () { setRtti("ExprIs"); };
         ExprIs ( const LineInfo & a, const ExpressionPtr & s, const TypeDeclPtr & t )
-            : Expression(a), subexpr(s), typeexpr(t) { setRtti(DAS_HASH_TAG("ExprIs")); }
+            : Expression(a), subexpr(s), typeexpr(t) { setRtti("ExprIs"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
@@ -1219,9 +1219,9 @@ namespace das
     };
 
     struct ExprAscend : Expression {
-        ExprAscend() { setRtti(DAS_HASH_TAG("ExprAscend"));};
+        ExprAscend() { setRtti("ExprAscend");};
         ExprAscend( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & as = nullptr )
-            : Expression(a), subexpr(se), ascType(as) { setRtti(DAS_HASH_TAG("ExprAscend")); }
+            : Expression(a), subexpr(se), ascType(as) { setRtti("ExprAscend"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1240,9 +1240,9 @@ namespace das
     };
 
     struct ExprCast : Expression {
-        ExprCast() { setRtti(DAS_HASH_TAG("ExprCast")); };
+        ExprCast() { setRtti("ExprCast"); };
         ExprCast( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & ct )
-            : Expression(a), subexpr(se), castType(ct) { setRtti(DAS_HASH_TAG("ExprCast")); }
+            : Expression(a), subexpr(se), castType(ct) { setRtti("ExprCast"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -1261,9 +1261,9 @@ namespace das
     };
 
     struct ExprNew : ExprCallFunc {
-        ExprNew() { setRtti(DAS_HASH_TAG("ExprNew")); };
+        ExprNew() { setRtti("ExprNew"); };
         ExprNew ( const LineInfo & a, const TypeDeclPtr & t, bool ini )
-            : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) { setRtti(DAS_HASH_TAG("ExprNew")); }
+            : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) { setRtti("ExprNew"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1273,9 +1273,9 @@ namespace das
     };
 
     struct ExprCall : ExprCallFunc {
-        ExprCall () { setRtti(DAS_HASH_TAG("ExprCall")); };
+        ExprCall () { setRtti("ExprCall"); };
         ExprCall ( const LineInfo & a, const string & n )
-            : ExprCallFunc(a,n) { setRtti(DAS_HASH_TAG("ExprCall")); }
+            : ExprCallFunc(a,n) { setRtti("ExprCall"); }
         virtual bool rtti_isCall() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -1294,10 +1294,10 @@ namespace das
     };
 
     struct ExprIfThenElse : Expression {
-        ExprIfThenElse () { setRtti(DAS_HASH_TAG("ExprIfThenElse")); };
+        ExprIfThenElse () { setRtti("ExprIfThenElse"); };
         ExprIfThenElse ( const LineInfo & a, const ExpressionPtr & c,
                         const ExpressionPtr & ift, const ExpressionPtr & iff )
-            : Expression(a), cond(c), if_true(ift), if_false(iff) { setRtti(DAS_HASH_TAG("ExprIfThenElse")); }
+            : Expression(a), cond(c), if_true(ift), if_false(iff) { setRtti("ExprIfThenElse"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1346,9 +1346,9 @@ namespace das
     typedef smart_ptr<MakeStruct>      MakeStructPtr;
 
     struct ExprNamedCall : Expression {
-        ExprNamedCall () { setRtti(DAS_HASH_TAG("ExprNamedCall")); };
+        ExprNamedCall () { setRtti("ExprNamedCall"); };
         ExprNamedCall ( const LineInfo & a, const string & n )
-            : Expression(a), name(n) { setRtti(DAS_HASH_TAG("ExprNamedCall"));}
+            : Expression(a), name(n) { setRtti("ExprNamedCall");}
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1362,9 +1362,9 @@ namespace das
     };
 
     struct ExprMakeLocal : Expression {
-        ExprMakeLocal() { setRtti(DAS_HASH_TAG("ExprMakeLocal")); };
+        ExprMakeLocal() { setRtti("ExprMakeLocal"); };
         ExprMakeLocal ( const LineInfo & at )
-            : Expression(at) { setRtti(DAS_HASH_TAG("ExprMakeLocal")); }
+            : Expression(at) { setRtti("ExprMakeLocal"); }
         virtual bool rtti_isMakeLocal() const override { return true; }
         virtual void setRefSp ( bool ref, bool cmres, uint32_t sp, uint32_t off );
         virtual vector<SimNode *> simulateLocal ( Context & /*context*/ ) const;
@@ -1386,9 +1386,9 @@ namespace das
     };
 
     struct ExprMakeStruct : ExprMakeLocal {
-        ExprMakeStruct() { setRtti(DAS_HASH_TAG("ExprMakeStruct")); };
+        ExprMakeStruct() { setRtti("ExprMakeStruct"); };
         ExprMakeStruct ( const LineInfo & at )
-            : ExprMakeLocal(at) { setRtti(DAS_HASH_TAG("ExprMakeStruct")); }
+            : ExprMakeLocal(at) { setRtti("ExprMakeStruct"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
@@ -1419,9 +1419,9 @@ namespace das
     };
 
     struct ExprMakeVariant : ExprMakeLocal {
-        ExprMakeVariant() { setRtti(DAS_HASH_TAG("ExprMakeVariant")); };
+        ExprMakeVariant() { setRtti("ExprMakeVariant"); };
         ExprMakeVariant ( const LineInfo & at )
-            : ExprMakeLocal(at) { setRtti(DAS_HASH_TAG("ExprMakeVariant")); }
+            : ExprMakeLocal(at) { setRtti("ExprMakeVariant"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
@@ -1434,9 +1434,9 @@ namespace das
     };
 
     struct ExprMakeArray : ExprMakeLocal {
-        ExprMakeArray() { setRtti(DAS_HASH_TAG("ExprMakeArray")); };
+        ExprMakeArray() { setRtti("ExprMakeArray"); };
         ExprMakeArray ( const LineInfo & at )
-            : ExprMakeLocal(at) { setRtti(DAS_HASH_TAG("ExprMakeArray")); }
+            : ExprMakeLocal(at) { setRtti("ExprMakeArray"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
@@ -1451,9 +1451,9 @@ namespace das
     };
 
     struct ExprMakeTuple : ExprMakeArray {
-        ExprMakeTuple() { setRtti(DAS_HASH_TAG("ExprMakeTuple")); };
+        ExprMakeTuple() { setRtti("ExprMakeTuple"); };
         ExprMakeTuple ( const LineInfo & at )
-            : ExprMakeArray(at) { setRtti(DAS_HASH_TAG("ExprMakeTuple")); }
+            : ExprMakeArray(at) { setRtti("ExprMakeTuple"); }
         virtual bool rtti_isMakeTuple() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
@@ -1466,9 +1466,9 @@ namespace das
     };
 
     struct ExprArrayComprehension : Expression {
-        ExprArrayComprehension() { setRtti(DAS_HASH_TAG("ExprArrayComprehension")); };
+        ExprArrayComprehension() { setRtti("ExprArrayComprehension"); };
         ExprArrayComprehension ( const LineInfo & at )
-            : Expression(at) { setRtti(DAS_HASH_TAG("ExprArrayComprehension")); }
+            : Expression(at) { setRtti("ExprArrayComprehension"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1481,9 +1481,9 @@ namespace das
     };
 
     struct ExprTypeDecl : Expression {
-        ExprTypeDecl () { setRtti(DAS_HASH_TAG("ExprTypeDecl")); };
+        ExprTypeDecl () { setRtti("ExprTypeDecl"); };
         ExprTypeDecl ( const LineInfo & a, const TypeDeclPtr & d )
-            : Expression(a), typeexpr(d) { setRtti(DAS_HASH_TAG("ExprTypeDecl")); }
+            : Expression(a), typeexpr(d) { setRtti("ExprTypeDecl"); }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;

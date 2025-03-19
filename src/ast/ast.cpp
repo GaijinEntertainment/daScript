@@ -1283,7 +1283,7 @@ namespace das {
 
     ExprMakeGenerator::ExprMakeGenerator ( const LineInfo & a, const ExpressionPtr & b )
     : ExprLooksLikeCall(a, "generator") {
-        setRtti(DAS_HASH_TAG("ExprMakeGenerator"));
+        setRtti("ExprMakeGenerator");
         if ( b ) {
             arguments.push_back(b);
         }
@@ -1313,7 +1313,7 @@ namespace das {
     // ExprYield
 
     ExprYield::ExprYield ( const LineInfo & a, const ExpressionPtr & b ) : Expression(a) {
-        setRtti(DAS_HASH_TAG("ExprYield"));
+        setRtti("ExprYield");
         subexpr = b;
     }
 

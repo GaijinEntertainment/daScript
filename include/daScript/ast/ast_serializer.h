@@ -78,6 +78,8 @@ namespace das {
         ModuleGroup *       thisModuleGroup = nullptr;
         Module *            thisModule = nullptr;
         Module *            astModule = nullptr;
+        das_hash_map<uint32_t,Annotation*> exprHash2annotation;
+        das_hash_map<string,uint32_t>      annotation2exprHash;
         bool                writing = false;
         bool                failed = false;
         size_t              readOffset = 0;
