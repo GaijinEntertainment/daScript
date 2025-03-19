@@ -77,6 +77,43 @@ namespace das
     AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
         const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
 
+    #define DAS_HASH_TAG(tag)     tag,hash_tag64(tag)
+    #define DAS_HASH_TAG32(tag)   tag,hash_tag(tag)
+
+    // use FNV32 hash for tags. it's fast and good enough for our purposes
+    constexpr uint32_t hash_tag(const char* block) {
+        constexpr uint32_t FNV_offset_basis = 2166136261u;
+        constexpr uint32_t FNV_prime = 16777619u;
+        uint32_t h = FNV_offset_basis;
+        while (*block) {
+            h ^= uint8_t(*block++);
+            h *= FNV_prime;
+        }
+        return h;
+    }
+
+    constexpr uint64_t hash_tag64 ( const char * block ) {
+        auto FNV_offset_basis = UINT64_C(14695981039346656037);
+        auto FNV_prime = UINT64_C(1099511628211);
+        if ( !block ) return FNV_offset_basis;
+        auto h = FNV_offset_basis;
+#if DAS_SAFE_HASH
+        while ( *block ) {
+            h ^= uint8_t(*block++);
+            h *= FNV_prime;
+        }
+#else
+        while ( true ) {
+            uint64_t v = *(uint16_t *)block;
+            if ( (v & 0xff)==0 ) break;
+            h ^= v;
+            h *= FNV_prime;
+            if ( v < 0x100 ) break;
+            block += 2;
+        }
+#endif
+        return h <= HASH_KILLED64 ? UINT64_C(1099511628211) : h;
+    }
 
     //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
@@ -679,9 +716,11 @@ namespace das
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }
         virtual void serialize ( AstSerializer & ser );
+        void setRtti ( const char * rtti, uint64_t rttiHash ) { __rtti = rtti; __rttiHash = rttiHash; }
         LineInfo    at;
         TypeDeclPtr type;
         const char * __rtti = nullptr;
+        uint64_t __rttiHash = 0;
         union{
             struct {
                 bool    alwaysSafe : 1;
@@ -731,9 +770,9 @@ namespace das
 #pragma warning(disable:4324)
 #endif
     struct ExprConst : Expression {
-        ExprConst ( ) : baseType(Type::none) { __rtti = "ExprConst"; }
-        ExprConst ( Type t ) : baseType(t) { __rtti = "ExprConst"; }
-        ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) { __rtti = "ExprConst"; }
+        ExprConst ( ) : baseType(Type::none) { setRtti(DAS_HASH_TAG("ExprConst")); }
+        ExprConst ( Type t ) : baseType(t) { setRtti(DAS_HASH_TAG("ExprConst")); }
+        ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) { setRtti(DAS_HASH_TAG("ExprConst")); }
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isConstant() const override { return true; }
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
@@ -750,11 +789,11 @@ namespace das
     template <typename TT, typename ExprConstExt>
     struct ExprConstT : ExprConst {
         ExprConstT ( TT val, Type bt ) : ExprConst(bt) {
-            __rtti = "ExprConstT";
+            setRtti(DAS_HASH_TAG("ExprConstT"));
             value = cast<TT>::from(val);
         }
         ExprConstT ( const LineInfo & a, TT val, Type bt ) : ExprConst(a,bt) {
-            __rtti = "ExprConstT";
+            setRtti(DAS_HASH_TAG("ExprConstT"));
             value = v_zero();
             memcpy(&value, &val, sizeof(TT));
         }
@@ -1116,10 +1155,14 @@ namespace das
         FunctionPtr findFunction ( const string & mangledName ) const;
         FunctionPtr findFunctionByMangledNameHash ( uint64_t hash ) const;
         FunctionPtr findGeneric ( const string & mangledName ) const;
+        FunctionPtr findGenericByMangledNameHash ( uint64_t hash ) const;
         FunctionPtr findUniqueFunction ( const string & name ) const;
         StructurePtr findStructure ( const string & name ) const;
+        StructurePtr findStructureByMangledNameHash ( uint64_t hash ) const;
         AnnotationPtr findAnnotation ( const string & name ) const;
+        AnnotationPtr findAnnotationByMangledNameHash ( uint64_t hash ) const;
         EnumerationPtr findEnum ( const string & name ) const;
+        EnumerationPtr findEnumByMangledNameHash ( uint64_t ) const;
         ReaderMacroPtr findReaderMacro ( const string & name ) const;
         TypeInfoMacroPtr findTypeInfoMacro ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
