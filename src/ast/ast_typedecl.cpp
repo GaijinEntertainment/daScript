@@ -2897,7 +2897,7 @@ namespace das
         return getBaseSizeOf64() * size;
     }
 
-    size_t TypeDecl::findArgumentIndex( const string & name ) const {
+    int TypeDecl::findArgumentIndex( const string & name ) const {
         for (size_t index=0, indexs=argNames.size(); index!=indexs; ++index) {
             if (argNames[index] == name) return index;
         }
@@ -3170,9 +3170,9 @@ namespace das
         }
     }
 
-    size_t TypeDecl::tupleFieldIndex( const string & name ) const {
-        size_t index = 0;
-        if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
+    int TypeDecl::tupleFieldIndex( const string & name ) const {
+        int index = 0;
+        if ( sscanf(name.c_str(),"_%d",&index)==1 ) {
             return index;
         } else {
             auto vT = isPointer() ? firstType.get() : this;
@@ -3188,7 +3188,7 @@ namespace das
         }
     }
 
-    size_t TypeDecl::variantFieldIndex ( const string & name ) const {
+    int TypeDecl::variantFieldIndex ( const string & name ) const {
         auto vT = isPointer() ? firstType.get() : this;
         if (!vT) return -1;
         return vT->findArgumentIndex(name);
