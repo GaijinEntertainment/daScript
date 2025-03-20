@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_aot = true
 options strict_smart_pointers
 
 module ast_boost shared public
@@ -827,8 +826,8 @@ def append_annotation(mod_name, ann_name : string; args : array< tuple<argname :
     var inscope decl <- new AnnotationDeclaration(uninitialized)
     decl.annotation := unsafe(reinterpret<smart_ptr<Annotation>> ann)
     for (argP in args) {
-        let argName & = argP.argname
-        let arg & = argP.argvalue
+        let argName = argP.argname
+        var arg = argP.argvalue
         if (arg is tBool) {
             decl.arguments |> add_annotation_argument(argName, arg as tBool)
         } elif (arg is tInt) {

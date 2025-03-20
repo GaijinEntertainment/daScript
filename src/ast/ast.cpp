@@ -3,6 +3,8 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 
+#include "../das/ast/_standalone_ctx_generated/context.das.h"
+
 namespace das {
 
     // local or global
@@ -3234,9 +3236,13 @@ namespace das {
         bool logPass = options.getBoolOption("log_optimization_passes",false);
         bool log = logOpt || logPass;
         bool any, last;
-        if (log) {
-            logs << *this << "\n";
-        }
+//        if (log) {
+#if defined(STANDALONE_MODE)
+            context::Standalone ctx;
+            auto writer = StringBuilderWriter();
+            ctx.printAst(this, &writer);
+#endif
+//        }
         do {
             if ( log ) logs << "OPTIMIZE:\n"; if ( logPass ) logs << *this;
             any = false;

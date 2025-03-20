@@ -765,6 +765,10 @@ namespace das {
         }
     }
 
+    string Module::getNamespace() const {
+        return "_anon_" + to_string(hash_blockz64((uint8_t *)fileName.c_str()));
+    }
+
     // MODULE LIBRARY
 
     ModuleLibrary::ModuleLibrary( Module * this_module ) {
