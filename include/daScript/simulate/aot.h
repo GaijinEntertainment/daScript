@@ -553,7 +553,7 @@ namespace das {
         }
     };
 
-    template <typename TT>
+    template <typename TT, typename Enable = void>
     struct das_index;
 
     template <typename TT>
@@ -628,11 +628,8 @@ namespace das {
     }
 
     template <typename TT>
-    struct das_index<vector<TT>> : das_default_vector_index<vector<TT>, TT> {};
-
-    template <typename TT>
-    struct das_index<vector<TT> const> : das_default_vector_index<vector<TT>, TT> {};
-
+    struct das_index<TT, std::enable_if_t<std::is_base_of_v<std::vector<typename TT::value_type>, TT>>>
+        : das_default_vector_index<vector<typename TT::value_type>, typename TT::value_type> {};
 
     template <typename TT, typename VecT, uint32_t size>
     struct das_vec_index {
@@ -2814,7 +2811,7 @@ namespace das {
     };
 
     char * to_das_string(const string & str, Context * ctx, LineInfoArg * at);
-    char * pass_string( char * str );
+    const char * pass_string( const char * str );
     char * clone_pass_string( char * str, Context * ctx, LineInfoArg * at);
     void set_das_string(string & str, const char * bs);
     void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at);
