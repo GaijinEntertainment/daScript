@@ -1381,7 +1381,8 @@ namespace das {
                 ss << "das_auto_cast<" << describeCppType(var->type) << ">::cast(";
             }
             if ( expr->type->isString() ) {
-                ss << "(char *)(";
+                auto maybeRef = var->type->ref ? " &" : "";
+                ss << "(char *" << maybeRef << ")(";
             }
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * let , const VariablePtr & var, Expression * expr ) override {
