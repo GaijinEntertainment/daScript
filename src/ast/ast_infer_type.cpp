@@ -5772,9 +5772,9 @@ namespace das {
             }
             expr->value = Expression::autoDereference(expr->value);
             if ( valT->isGoodVariantType() || valT->firstType->isGoodVariantType() ) {
-                size_t index = valT->variantFieldIndex(expr->name);
+                int index = valT->variantFieldIndex(expr->name);
                 auto argSize = valT->isGoodVariantType() ? valT->argTypes.size() : valT->firstType->argTypes.size();
-                if ( index==-1 || index>=argSize ) {
+                if ( index==-1 || index>=static_cast<int>(argSize) ) {
                     error("can't get variant field '" + expr->name + "'", "", "",
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);

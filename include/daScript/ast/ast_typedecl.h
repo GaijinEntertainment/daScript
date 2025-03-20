@@ -217,10 +217,10 @@ namespace das {
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
-        size_t findArgumentIndex(const string & name) const;
-        size_t tupleFieldIndex( const string & name ) const;
-        size_t variantFieldIndex( const string & name ) const;
-        __forceinline size_t bitFieldIndex( const string & name ) const;
+        int findArgumentIndex(const string & name) const;
+        int tupleFieldIndex( const string & name ) const;
+        int variantFieldIndex( const string & name ) const;
+        __forceinline int bitFieldIndex( const string & name ) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
         string findBitfieldName ( uint32_t value ) const;
         void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
@@ -687,7 +687,7 @@ namespace das {
 
 // TypeDecl inlines
 namespace das {
-    __forceinline size_t TypeDecl::bitFieldIndex ( const string & name ) const {
+    __forceinline int TypeDecl::bitFieldIndex ( const string & name ) const {
         return findArgumentIndex(name);
     }
 

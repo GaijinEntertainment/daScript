@@ -137,7 +137,7 @@ namespace das
             return reserveInternal(tab, tab.capacity, at);
         }
 
-        bool reserve(Table & tab, int size, LineInfo * at ) {
+        bool reserve(Table & tab, uint32_t size, LineInfo * at ) {
             if (size <= tab.capacity)
               return true;
 

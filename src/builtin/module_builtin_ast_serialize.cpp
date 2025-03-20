@@ -1384,11 +1384,11 @@ namespace das {
                 ser << value->type->structType->module;
             }
             ser << mangledName;
-            if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
+            if ( annotation != nullptr && annotation->getFieldOffset(name) == static_cast<uint32_t>(-1) ) {
                 LOG(LogLevel::warning) << "das: serialize: Field '" << name << "' not found in '" << annotation->name << "'";
             }
         } else {
-            if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
+            if ( annotation != nullptr && annotation->getFieldOffset(name) == static_cast<uint32_t>(-1) ) {
                 SERIALIZER_VERIFYF("Field '%s' not found in '%s'", name.c_str(), annotation->name.c_str());
             }
             bool has_field = false; ser << has_field;
