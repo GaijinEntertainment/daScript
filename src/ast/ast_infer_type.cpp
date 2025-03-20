@@ -8976,6 +8976,52 @@ namespace das {
             return Visitor::visit(expr);
         }
     // make structure
+        void describeLocalType ( vector<string> & results, TypeDecl * tp, const string & prefix, das_set<Structure *> & dep ) const {
+            if ( tp->baseType==Type::tHandle ) {
+                if ( !tp->annotation->isLocal() ) {
+                    results.push_back(prefix + " : " + tp->describe());
+                }
+            } else  if ( tp->baseType==Type::tStructure ) {
+                if ( tp->structType ) {
+                    if (dep.find(tp->structType) != dep.end()) return;
+                    dep.insert(tp->structType);
+                    for ( auto & field : tp->structType->fields ) {
+                        describeLocalType(results, field.type.get(), prefix + "." + field.name, dep);
+                    }
+                }
+            } else if ( tp->baseType==Type::tTuple || tp->baseType==Type::tVariant || tp->baseType == Type::option ) {
+                int argIndex = 0;
+                for ( const auto & arg : tp->argTypes ) {
+                    if ( tp->argNames.size() ) {
+                        describeLocalType(results, arg.get(), prefix + "." + tp->argNames[argIndex], dep);
+                    } else {
+                        describeLocalType(results, arg.get(), prefix + "." + to_string(argIndex), dep);
+                    }
+                    argIndex ++;
+                }
+            } else if ( tp->baseType==Type::tArray || tp->baseType==Type::tTable ) {
+                if ( tp->firstType ) {
+                    describeLocalType(results, tp->firstType.get(), prefix + "[]", dep);
+                }
+                if ( tp->secondType ) {
+                    describeLocalType(results, tp->secondType.get(), prefix + "[]", dep);
+                }
+            }
+        }
+        string describeLocalType ( TypeDecl * tp ) const {
+            if ( verbose ) {
+                das_set<Structure *> dep;
+                vector<string> results;
+                describeLocalType(results, tp, "type<" + tp->describe() + ">", dep);
+                TextWriter tw;
+                for ( auto & res : results ) {
+                    tw << "\t" << res << " is not a local type\n";
+                }
+                return tw.str();
+            } else {
+                return "";
+            }
+        }
         virtual void preVisit ( ExprMakeStruct * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->makeType && expr->makeType->isExprType() ) {
@@ -9000,8 +9046,16 @@ namespace das {
                 error("[[" + describeType(expr->makeType) + "]] struct can't be reference", "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( !expr->makeType->isLocal() && !expr->isNewHandle ) {
-                error("[[" + describeType(expr->makeType) + "]] struct can`t be allocated locally (on the stack), since Handled type isLocal() returned false. Allocate it on the heap (new [[...]]) or modify your C++ bindings.", "", "",
-                    expr->at, CompilationError::invalid_type);
+                if ( expr->makeType->isClass() ) {
+                    error("Class '" + expr->makeType->structType->name + "' has fields, which can't be allocated locally, which is not allowed. "
+                        "It contains Handled type, where isLocal() returned false.", describeLocalType(expr->makeType.get()), "",
+                        expr->at, CompilationError::invalid_type);
+                } else {
+                    error(describeType(expr->makeType) + "() can`t be allocated locally (on the stack or as part of other data structure), which is not allowed. "
+                        "It contains Handled type, where isLocal() returned false. "
+                        "Allocate it on the heap (new [[...]]) or modify your C++ bindings.", describeLocalType(expr->makeType.get()), "",
+                        expr->at, CompilationError::invalid_type);
+                }
             } else if ( expr->makeType->baseType==Type::tHandle && expr->isNewHandle && !expr->useInitializer ) {
                 error("'new [[" + describeType(expr->makeType) + "]]' struct requires initializer syntax", "",
                         "use 'new [[" + describeType(expr->makeType) + "()]]' instead",
