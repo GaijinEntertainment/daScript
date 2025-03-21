@@ -2692,6 +2692,9 @@ namespace das {
             cexpr->values.push_back(val->clone());
         }
         cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        if (recordType) {
+            cexpr->recordType = make_smart<TypeDecl>(*recordType);
+        }
         cexpr->gen2 = gen2;
         return cexpr;
     }
@@ -2735,6 +2738,9 @@ namespace das {
         cexpr->recordNames = recordNames;
         if ( makeType ) {
             cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        }
+        if (recordType) {
+            cexpr->recordType = make_smart<TypeDecl>(*recordType);
         }
         cexpr->isKeyValue = isKeyValue;
         return cexpr;
