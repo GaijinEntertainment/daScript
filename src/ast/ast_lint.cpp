@@ -408,8 +408,9 @@ namespace das {
             if ( expr->arguments[0]->rtti_isMakeArray() ) {
                 auto ma = static_cast<ExprMakeArray *>(expr->arguments[0].get());
                 if ( ma->values.size()==0 ) return;
-                if ( ma->recordType->isTuple() ) {
-                    if ( ma->recordType->argTypes[0]->isString() ) {
+                auto recType = ma->recordType ? ma->recordType : ma->makeType;
+                if ( recType->isTuple() ) {
+                    if ( recType->argTypes[0]->isString() ) {
                         das_set<const char *,hash_ccs,equalto_ccs> seen;
                         for ( const auto & arg : ma->values ) {
                             if ( arg->rtti_isMakeTuple() ) {
@@ -447,7 +448,7 @@ namespace das {
                         }
                     }
                 } else {
-                    if ( ma->recordType->isString() ) {
+                    if ( recType->isString() ) {
                         das_set<const char *,hash_ccs,equalto_ccs> seen;
                         for ( const auto & arg : ma->values ) {
                             if ( arg->rtti_isStringConstant() ) {
