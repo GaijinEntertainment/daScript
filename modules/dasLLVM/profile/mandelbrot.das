@@ -1,62 +1,72 @@
+options gen2
 require strings
 require fio
 //require brainfuck_mandelbrot
 
-[jit,unsafe_deref,hint(hot,unsafe_alias,noalias=code,nocapture=code,noalias=tape,nocapture=tape)]
-def run(code: uint8?; lengthOfCode:int; var tape: uint8?; var codePos, tapePos: int&; skip: bool): bool
-    unsafe
-        if skip
-            while tapePos >= 0 && codePos < lengthOfCode
+[jit, unsafe_deref, hint(hot, unsafe_alias, noalias=code, nocapture=code, noalias=tape, nocapture=tape)]
+def run(code : uint8?; lengthOfCode : int; var tape : uint8?; var codePos, tapePos : int&; skip : bool) : bool {
+    unsafe {
+        if (skip) {
+            while (tapePos >= 0 && codePos < lengthOfCode) {
                 let sym  = code[codePos]
-                if sym == uint8('[')
-                    ++codePos
-                    let oldPos = codePos
-                    while run(code, lengthOfCode, tape, codePos, tapePos, tape[tapePos] == uint8(0))
-                        codePos = oldPos
-                elif sym == uint8(']')
+                if (sym == uint8('[')) {
+                    ++codePos;
+                    let oldPos = codePos;
+                    while (run(code, lengthOfCode, tape, codePos, tapePos, tape[tapePos] == uint8(0))) {
+                        codePos = oldPos;
+                    }
+                } elif (sym == uint8(']')) {
                     return tape[tapePos] != uint8(0)
+                }
                 ++codePos
-        else
-            while tapePos >= 0 && codePos < lengthOfCode
+            }
+        } else {
+            while (tapePos >= 0 && codePos < lengthOfCode) {
                 let sym  = code[codePos]
-                if sym == uint8('[')
-                    ++codePos
-                    let oldPos = codePos
-                    while run(code, lengthOfCode, tape, codePos, tapePos, tape[tapePos] == uint8(0))
-                        codePos = oldPos
-                    ++codePos
-                elif sym == uint8(']')
+                if (sym == uint8('[')) {
+                    ++codePos;
+                    let oldPos = codePos;
+                    while (run(code, lengthOfCode, tape, codePos, tapePos, tape[tapePos] == uint8(0))) {
+                        codePos = oldPos;
+                    }
+                    ++codePos;
+                } elif (sym == uint8(']')) {
                     return tape[tapePos] != uint8(0)
-                elif sym == uint8('.')
-                    print(int(tape[tapePos]) |> to_char);
+                } elif (sym == uint8('.')) {
+                    print(int(tape[tapePos]) |> to_char)
                     ++codePos
-                else
+                } else {
                     var rep = 1
-                    while code[codePos+rep]==sym
+                    while (code[codePos + rep] == sym) {
                         ++rep
-                    if sym == uint8('+') { tape[tapePos] = uint8(int(tape[tapePos]) + rep); }
-                    elif sym == uint8('-') { tape[tapePos] = uint8(int(tape[tapePos]) - rep); }
-                    elif sym == uint8('>') { tapePos += rep; }
-                    else  { tapePos -= rep; }
+                    }
+                    if (sym == uint8('+')) { tape[tapePos] = uint8(int(tape[tapePos]) + rep); } elif (sym == uint8('-')) { tape[tapePos] = uint8(int(tape[tapePos]) - rep); } elif (sym == uint8('>')) { tapePos += rep; } else  { tapePos -= rep; }
                     // elif sym == '<' { tapePos -= rep; }
                     codePos += rep
+                }
+            }
+        }
         return false
+    }
+}
 
-def interpret(code: string)
+def interpret(code : string) {
     let totalTime = ref_time_ticks()
-	var tape: array<uint8>
-	var codePos, tapePos : int
+    var tape : array<uint8>
+    var codePos, tapePos : int
     tape |> resize(1000000)
-    var filteredCode <- [{for Ch in code; uint8(Ch); where Ch=='[' || Ch==']' || Ch=='<' || Ch=='>' || Ch=='+' || Ch=='-' || Ch=='.' }]
-    unsafe
-	    run(reinterpret<uint8?> addr(filteredCode[0]), length(filteredCode), addr(tape[0]), codePos, tapePos, false)
+    var filteredCode <- [for (Ch in code); uint8(Ch); where Ch == '[' || Ch == ']' || Ch == '<' || Ch == '>' || Ch == '+' || Ch == '-' || Ch == '.' ]
+    unsafe {
+        run(reinterpret<uint8?> addr(filteredCode[0]), length(filteredCode), addr(tape[0]), codePos, tapePos, false)
+    }
     delete filteredCode
-    let totalDt = double(get_time_usec(totalTime)) /1000000.0lf
+    let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
     to_log(LOG_INFO, "total {totalDt} sec\n")
+}
 
 [export]
-def main
-	interpret("+++++++++++++[->++>>>+++++>++>+<<<<<<]>>>>>++++++>--->>>>>>>>>>+++++++++++++++[[
+def main {
+    interpret("+++++++++++++[->++>>>+++++>++>+<<<<<<]>>>>>++++++>--->>>>>>>>>>+++++++++++++++[[
 >>>>>>>>>]+[<<<<<<<<<]>>>>>>>>>-]+[>>>>>>>>[-]>]<<<<<<<<<[<<<<<<<<<]>>>>>>>>[-]+
 <<<<<<<+++++[-[->>>>>>>>>+<<<<<<<<<]>>>>>>>>>]>>>>>>>+>>>>>>>>>>>>>>>>>>>>>>>>>>
 >+<<<<<<<<<<<<<<<<<[<<<<<<<<<]>>>[-]+[>>>>>>[>>>>>>>[-]>>]<<<<<<<<<[<<<<<<<<<]>>
@@ -200,3 +210,4 @@ def main
 >>>]>[-]+<]]+>[-<[>>>>>>>>>]<<<<<<<<]>>>>>>>>]<<<<<<<<<[<<<<<<<<<]>>>>[-]<<<++++
 +[-[->>>>>>>>>+<<<<<<<<<]>>>>>>>>>]>>>>>->>>>>>>>>>>>>>>>>>>>>>>>>>>-<<<<<<[<<<<
 <<<<<]]>>>]")
+}
