@@ -744,7 +744,7 @@ Grammar
   561 structure_variable_declaration: optional_field_annotation optional_static_member_variable optional_override optional_public_or_private_member_variable variable_declaration
 
   562 struct_variable_declaration_list: %empty
-  563                                 | struct_variable_declaration_list "end of expression"
+  563                                 | struct_variable_declaration_list semicolon
 
   564 $@35: %empty
 
@@ -1293,7 +1293,7 @@ Terminals, with rules where they appear
     '.' (46) 49 182 184 185 430 431 432 433 434 435 436 439 490 492 494 540 542 543
     '/' (47) 50 156 468
     ':' (58) 33 59 60 135 319 320 321 322 503 576 582 592 593 606 607 608 645 647
-    "end of expression" (59) 69 346 563 821 872 894 903 906 907 908 909 910 911
+    "end of expression" (59) 69 346 821 872 894 903 906 907 908 909 910 911
     '<' (60) 158 236 272 275 288 331 334 337 340 342 343 345 346 426 429 470 500 501 506 512 517 714 729 733 748 752 755 758 762 765 769 772 776 779 782 785 852 855 858 861 870 878 881 884 888 892 900 901
     '=' (61) 89 101 102 103 104 105 106 108 356 378 400 588 596 625 630
     '>' (62) 159 236 272 275 288 331 334 337 340 342 343 345 346 426 429 471 500 501 506 512 517 714 729 733 748 752 755 758 762 765 769 772 776 779 782 785 852 855 858 861 870 878 881 884 888 892 900 901
@@ -1591,7 +1591,7 @@ Nonterminals, with rules where they appear
         on right: 67 80
     semicolon (251)
         on left: 68 69
-        on right: 15 16 82 113 237 241 242 249 250 255 256 257 301 306 319 321 323 325 565 567 570 574 606 607 609 623 624 625 631 632 635 708 710 711 716
+        on right: 15 16 82 113 237 241 242 249 250 255 256 257 301 306 319 321 323 325 563 565 567 570 574 606 607 609 623 624 625 631 632 635 708 710 711 716
     if_or_static_if <b> (252)
         on left: 70 71
         on right: 80
@@ -10899,7 +10899,7 @@ State 572
 
 State 573
 
-  563 struct_variable_declaration_list: struct_variable_declaration_list . "end of expression"
+  563 struct_variable_declaration_list: struct_variable_declaration_list . semicolon
   565                                 | struct_variable_declaration_list . $@35 structure_variable_declaration semicolon
   567                                 | struct_variable_declaration_list . optional_annotation_list "def" optional_public_or_private_member_variable "abstract" optional_constant $@36 function_declaration_header semicolon
   569                                 | struct_variable_declaration_list . optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@37 function_declaration_header expression_block
@@ -10907,13 +10907,15 @@ State 573
   659 optional_struct_variable_declaration_list: open_block struct_variable_declaration_list . close_block
 
     "close scope"        shift, and go to state 146
+    "end of line"        shift, and go to state 13
     "end of code block"  shift, and go to state 147
-    "end of expression"  shift, and go to state 811
-    '['                  shift, and go to state 812
+    "end of expression"  shift, and go to state 14
+    '['                  shift, and go to state 811
 
     "def"     reduce using rule 129 (optional_annotation_list)
     $default  reduce using rule 564 ($@35)
 
+    semicolon                 go to state 812
     optional_annotation_list  go to state 813
     close_block               go to state 814
     $@35                      go to state 815
@@ -23399,13 +23401,6 @@ State 810
 
 State 811
 
-  563 struct_variable_declaration_list: struct_variable_declaration_list "end of expression" .
-
-    $default  reduce using rule 563 (struct_variable_declaration_list)
-
-
-State 812
-
   130 optional_annotation_list: '[' . annotation_list ']'
   570 struct_variable_declaration_list: struct_variable_declaration_list '[' . annotation_list ']' semicolon
 
@@ -23423,6 +23418,13 @@ State 812
     annotation_declaration        go to state 73
     annotation_list               go to state 1088
     name_in_namespace             go to state 75
+
+
+State 812
+
+  563 struct_variable_declaration_list: struct_variable_declaration_list semicolon .
+
+    $default  reduce using rule 563 (struct_variable_declaration_list)
 
 
 State 813
