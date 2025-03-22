@@ -2320,7 +2320,7 @@ struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
-    |   struct_variable_declaration_list[list] ';' {
+    |   struct_variable_declaration_list[list] semicolon {
         $$ = $list;
     }
     |   struct_variable_declaration_list[list] {
