@@ -117,6 +117,14 @@ namespace das
         return cast<char *>::to(eval(context));
     }
 
+    SimNode * SimNode_WithErrorMessage::copyNode ( Context & context, NodeAllocator * code ) {
+        SimNode_WithErrorMessage * that = (SimNode_WithErrorMessage *) SimNode::copyNode(context, code);
+        if ( errorMessage ) {
+            that->errorMessage = code->allocateName(errorMessage);
+        }
+        return that;
+    }
+
     vec4f SimNode_Jit::eval ( Context & context ) {
         auto result = func(&context, context.abiArg, context.abiCMRES);
         context.result = result;

@@ -193,6 +193,14 @@ namespace das {
         }
     };
 
+    struct SimNode_WithErrorMessage : SimNode {
+        SimNode_WithErrorMessage ( const LineInfo & at, const char * em )
+            : SimNode(at), errorMessage(em) {}
+        virtual bool rtti_node_isErrorMessage() const override { return true; }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code );
+        const char * errorMessage = nullptr;
+    };
+
     template <int argCount>
     struct SimNode_BlockNFT : SimNode_BlockNF {
         SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
@@ -799,10 +807,10 @@ namespace das {
 
 
     // PTR FIELD .
-    struct SimNode_PtrFieldDeref : SimNode {
+    struct SimNode_PtrFieldDeref : SimNode_WithErrorMessage {
         DAS_PTR_NODE;
-        SimNode_PtrFieldDeref(const LineInfo & at, SimNode * rv, uint32_t of)
-            : SimNode(at),subexpr(rv),offset(of) {
+        SimNode_PtrFieldDeref(const LineInfo & at, SimNode * rv, uint32_t of, const char * er)
+            : SimNode_WithErrorMessage(at,er),subexpr(rv),offset(of) {
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute(Context & context) {
@@ -811,7 +819,7 @@ namespace das {
             if ( prv ) {
                 return prv + offset;
             } else {
-                context.throw_error_at(debugInfo,"dereferencing null pointer");
+                context.throw_error_at(debugInfo,"%s", errorMessage ? errorMessage : "dereferencing null pointer");
                 return nullptr;
             }
         }
@@ -821,8 +829,8 @@ namespace das {
 
     template <typename TT>
     struct SimNode_PtrFieldDerefR2V : SimNode_PtrFieldDeref {
-        SimNode_PtrFieldDerefR2V(const LineInfo & at, SimNode * rv, uint32_t of)
-            : SimNode_PtrFieldDeref(at, rv, of) {}
+        SimNode_PtrFieldDerefR2V(const LineInfo & at, SimNode * rv, uint32_t of, const char * er)
+            : SimNode_PtrFieldDeref(at, rv, of, er) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval(Context & context) override {
             TT * pR = (TT *)compute(context);

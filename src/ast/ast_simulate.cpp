@@ -2063,11 +2063,13 @@ namespace das
                 }
             } else {
                 auto simV = value->simulate(context);
+                TextWriter tw;
+                tw << "dereferencing null pointer, " << *value << " is null";
+                auto errorMessage = context.code->allocateName(tw.str());
                 if ( r2vType->baseType!=Type::none ) {
-                    return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType->baseType, at, simV, fieldOffset + extraOffset);
-                }
-                else {
-                    return context.code->makeNode<SimNode_PtrFieldDeref>(at, simV, fieldOffset + extraOffset);
+                    return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType->baseType, at, simV, fieldOffset + extraOffset, errorMessage);
+                } else {
+                    return context.code->makeNode<SimNode_PtrFieldDeref>(at, simV, fieldOffset + extraOffset, errorMessage);
                 }
             }
         } else {

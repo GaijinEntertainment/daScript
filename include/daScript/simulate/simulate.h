@@ -125,6 +125,7 @@ namespace das
         virtual bool rtti_node_isJit() const { return false; }
         virtual bool rtti_node_isKeepAlive() const { return false; }
         virtual bool rtti_node_isCallBase() const { return false; }
+        virtual bool rtti_node_isErrorMessage() const { return false; }
     protected:
         virtual ~SimNode() {}
     };
