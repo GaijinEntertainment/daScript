@@ -35,8 +35,8 @@ namespace das {
 
     const char * getSimSourceName(SimSourceType st);
 
-    struct SimNode_Op1Fusion : SimNode {
-        SimNode_Op1Fusion() : SimNode(LineInfo()) {}
+    struct SimNode_Op1Fusion : SimNode_WithErrorMessage {
+        SimNode_Op1Fusion(const char * msg = nullptr) : SimNode_WithErrorMessage(LineInfo(),msg) {}
         void set(const char * opn, Type bt, const LineInfo & at) {
             op = opn;
             baseType = bt;
@@ -48,8 +48,8 @@ namespace das {
         SimSource       subexpr;
     };
 
-    struct SimNode_Op2Fusion : SimNode {
-        SimNode_Op2Fusion() : SimNode(LineInfo()) {}
+    struct SimNode_Op2Fusion : SimNode_WithErrorMessage {
+        SimNode_Op2Fusion(const char * msg = nullptr) : SimNode_WithErrorMessage(LineInfo(),msg) {}
         void set(const char * opn, Type bt, const LineInfo & at) {
             op = opn;
             baseType = bt;

@@ -64,6 +64,11 @@ namespace das {
         if (result) {
             set(result, node);
             result->subexpr = static_cast<SimNode_SourceBase *>(node_x)->subexpr;
+            if ( node->rtti_node_isErrorMessage() ) {
+                result->errorMessage = static_cast<SimNode_WithErrorMessage *>(node)->errorMessage;
+            } else if ( node_x->rtti_node_isErrorMessage() ) {
+                result->errorMessage = static_cast<SimNode_WithErrorMessage *>(node_x)->errorMessage;
+            }
             return result;
         } else {
             return node;
@@ -84,6 +89,11 @@ namespace das {
                 result->r = static_cast<SimNode_SourceBase *>(node_r)->subexpr;
             } else {
                 result->r.setSimNode(node_r);
+            }
+            if ( node_l && node_l->rtti_node_isErrorMessage() ) {
+                result->errorMessage = static_cast<SimNode_WithErrorMessage *>(node_l)->errorMessage;
+            } else if ( node_r && node_r->rtti_node_isErrorMessage() ) {
+                result->errorMessage = static_cast<SimNode_WithErrorMessage *>(node_r)->errorMessage;
             }
             return result;
         } else {
