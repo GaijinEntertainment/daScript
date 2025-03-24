@@ -1,3 +1,4 @@
+options gen2
 require daslib/safe_addr
 require daslib/math_bits
 
@@ -5,12 +6,12 @@ require llvm/llvm_boost
 require jit
 
 [export]
-def main
+def main {
     LLVMContextSetOpaquePointers(LLVMGetGlobalContext(), 0)
     var mod = LLVMModuleCreateWithName("my_module")
     // NOTE: we are making this example compatible with upcomming JIT, i.e. function signature is that of a JIT function
     // Context * context, vec4f * args, void * CMRES
-    var ret_type = LLVMFunctionType(LLVMFloat4Type(), [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u) ]])
+    var ret_type = LLVMFunctionType(LLVMFloat4Type(), fixed_array<LLVMTypeRef>(LLVMPointerType(LLVMVoidType(), 0u), LLVMPointerType(LLVMFloat4Type(), 0u), LLVMPointerType(LLVMVoidType(), 0u)))
     var sum = LLVMAddFunction(mod, "sum", ret_type)
     var entry = LLVMAppendBasicBlock(sum, "entry")
     var builder = LLVMCreateBuilder()
@@ -25,7 +26,7 @@ def main
     var vres = LLVMGetUndef(LLVMFloat4Type())
     var tb = LLVMBuildInsertElement(builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "tb")
     LLVMBuildRet(builder, tb)
-    LLVMVerifyModule(mod, LLVMVerifierFailureAction LLVMAbortProcessAction)
+    LLVMVerifyModule(mod, LLVMVerifierFailureAction.LLVMAbortProcessAction)
     var engine : LLVMExecutionEngineRef
     LLVMLinkInMCJIT()
     LLVMInitializeNativeTarget()
@@ -33,14 +34,16 @@ def main
     LLVMInitializeNativeAsmParser()
     LLVMCreateJITCompilerForModule(engine, mod)
     var pfun = LLVMGetFunctionAddress(engine, "sum")
-    var values <- [[int4
-        int4(11,0,0,0);
-        int4(12,0,0,0)
-    ]]
+    var values <- fixed_array<int4>(
+        int4(11, 0, 0, 0),
+        int4(12, 0, 0, 0)
+    )
     var res : float4
-    unsafe
-        res = invoke_code ( reinterpret<void?> pfun, safe_addr(values[0]), null)
+    unsafe {
+        res = invoke_code(reinterpret<void?> pfun, safe_addr(values[0]), null)
+    }
     print("result = {float_bits_to_int(res)}\n")
     LLVMDumpModule(mod)
     LLVMDisposeBuilder(builder)
     LLVMDisposeExecutionEngine(engine)
+}

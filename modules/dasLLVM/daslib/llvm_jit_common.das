@@ -144,18 +144,18 @@ enum public JIT_BLOCK
 enum public JIT_SEQUENCE
     ITERATOR
 
-def public FN_JIT_TABLE_AT(t:Type)
+def public FN_JIT_TABLE_AT(t : Type)
     return "`jit`table_at`{t}`"
 
-def public FN_JIT_TABLE_ERASE(t:Type)
+def public FN_JIT_TABLE_ERASE(t : Type)
     return "`jit`table_erase`{t}`"
 
-def public FN_JIT_TABLE_FIND(t:Type)
+def public FN_JIT_TABLE_FIND(t : Type)
     return "`jit`table_find`{t}`"
 
 var public g_fn_types : table<string; LLVMTypeRef>
 
-def public LLVMAddFunctionWithType( mod : LLVMModuleRef; name : string; typ : LLVMTypeRef )
+def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef)
     var rv = LLVMAddFunction(mod, name, typ)
     g_fn_types[name] = typ
     return rv
@@ -190,118 +190,118 @@ def public init_jit
     // add default functions
     var jit_exception = LLVMAddFunctionWithType(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *,lineinfo *)
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef get_type_string(); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef get_type_string(); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_exception, get_jit_exception())
     LLVMAddAttributeToFunction(jit_exception, noreturn)
-    LLVMAddAttributeToFunctionArgumentRange(jit_exception, urange(0,2), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_exception, urange(0, 2), nocapture)
     // jit_call_or_fastcall(func,args *,context *)
     var jit_call_or_fastcall = LLVMAddFunctionWithType(g_mod, FN_JIT_CALL_OR_FASTCALL,
         LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMFloat4Type(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_call_or_fastcall, get_jit_call_or_fastcall())
-    LLVMAddAttributeToFunctionArgumentRange(jit_call_or_fastcall, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_call_or_fastcall, urange(0, 3), nocapture)
     LLVMAddAttributesToFunction(jit_call_or_fastcall, [[auto nounwind; willreturn]])
     // jit_call_with_cmres(func,args *,cmres *,context *)
     var jit_call_with_cmres = LLVMAddFunctionWithType(g_mod, FN_JIT_CALL_WITH_CMRES,
         LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMFloat4Type(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_call_with_cmres, get_jit_call_with_cmres())
-    LLVMAddAttributeToFunctionArgumentRange(jit_call_with_cmres, urange(0,4), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_call_with_cmres, urange(0, 4), nocapture)
     LLVMAddAttributesToFunction(jit_call_with_cmres, [[auto nounwind; willreturn]])
     // vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context )
     var jit_invoke_block = LLVMAddFunctionWithType(g_mod, FN_JIT_INVOKE_BLOCK,
         LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_block, 0u); LLVMPointerType(LLVMFloat4Type(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_invoke_block, get_jit_invoke_block())
-    LLVMAddAttributeToFunctionArgumentRange(jit_invoke_block, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_invoke_block, urange(0, 3), nocapture)
     LLVMAddAttributesToFunction(jit_invoke_block, [[auto nounwind; willreturn]])
     // vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context )
     var jit_invoke_block_with_cmres = LLVMAddFunctionWithType(g_mod, FN_JIT_INVOKE_BLOCK_WITH_CMRES,
         LLVMFunctionType(LLVMFloat4Type(),
-            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMPointerType(LLVMFloat4Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_block, 0u); LLVMPointerType(LLVMFloat4Type(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_invoke_block_with_cmres, get_jit_invoke_block_with_cmres())
-    LLVMAddAttributeToFunctionArgumentRange(jit_invoke_block_with_cmres, urange(0,4), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_invoke_block_with_cmres, urange(0, 4), nocapture)
     LLVMAddAttributesToFunction(jit_invoke_block_with_cmres, [[auto nounwind; willreturn]])
     // jit_string_builder ( context *, node *, args * )
     var jit_string_builder = LLVMAddFunctionWithType(g_mod, FN_JIT_STRING_BUILDER,
         LLVMFunctionType(get_type_string(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMFloat4Type(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_string_builder, get_jit_string_builder())
     LLVMAddAttributesToFunction(jit_string_builder, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_string_builder, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_string_builder, urange(0, 3), nocapture)
     // jit_string_builder_temp ( context *, node *, args * )
     var jit_string_builder_temp = LLVMAddFunctionWithType(g_mod, FN_JIT_STRING_BUILDER_TEMP,
         LLVMFunctionType(get_type_string(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMFloat4Type(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_string_builder_temp, get_jit_string_builder_temp())
     LLVMAddAttributesToFunction(jit_string_builder_temp, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_string_builder_temp, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_string_builder_temp, urange(0, 3), nocapture)
     // void * jit_get_global_mnh ( uint64_t mnh, context * )
     var jit_get_global_mnh = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_GLOBAL_MNH,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_get_global_mnh, get_jit_get_global_mnh())
     LLVMAddAttributesToFunction(jit_get_global_mnh, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgument(jit_get_global_mnh, 1u, nocapture)
     // void * jit_get_shared_mnh ( uint64_t mnh, context * )
     var jit_get_shared_mnh = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_SHARED_MNH,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_get_shared_mnh, get_jit_get_shared_mnh())
     LLVMAddAttributesToFunction(jit_get_shared_mnh, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgument(jit_get_shared_mnh, 1u, nocapture)
     // jit_alloc_heap ( uint64_t mnh, context * )
     var jit_alloc_heap = LLVMAddFunctionWithType(g_mod, FN_JIT_ALLOC_HEAP,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_alloc_heap, get_jit_alloc_heap())
     LLVMAddAttributesToFunction(jit_alloc_heap, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgument(jit_alloc_heap, 1u, nocapture)
     // jit_alloc_persistent ( uint64_t mnh, context * )
     var jit_alloc_persistent = LLVMAddFunctionWithType(g_mod, FN_JIT_ALLOC_PERSISTENT,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_alloc_persistent, get_jit_alloc_persistent())
     LLVMAddAttributesToFunction(jit_alloc_persistent, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgument(jit_alloc_persistent, 1u, nocapture)
     // void jit_free_heap ( void * bytes, uint32_t size, Context * context )
     var jit_free_heap = LLVMAddFunctionWithType(g_mod, FN_JIT_FREE_HEAP,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_free_heap, get_jit_free_heap())
     LLVMAddAttributesToFunction(jit_free_heap, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgument(jit_free_heap, 0u, nocapture)
     LLVMAddAttributeToFunctionArgument(jit_free_heap, 2u, nocapture)
     // void jit_free_persistent ( void * bytes, Context * context )
     var jit_free_persistent = LLVMAddFunctionWithType(g_mod, FN_JIT_FREE_PERSISTENT,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_free_persistent, get_jit_free_persistent())
     LLVMAddAttributesToFunction(jit_free_persistent, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_free_persistent, urange(0,2), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_free_persistent, urange(0, 2), nocapture)
     // void jit_array_lock ( Array & array, Context * context )
     var jit_array_lock = LLVMAddFunctionWithType(g_mod, FN_JIT_ARRAY_LOCK,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_array_lock, get_jit_array_lock())
     LLVMAddAttributesToFunction(jit_array_lock, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_array_lock, urange(0,2), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_array_lock, urange(0, 2), nocapture)
     // void jit_array_unlock ( Array & array, Context * context )
     var jit_array_unlock = LLVMAddFunctionWithType(g_mod, FN_JIT_ARRAY_UNLOCK,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_array_unlock, get_jit_array_unlock())
     LLVMAddAttributesToFunction(jit_array_unlock, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_array_unlock, urange(0,2), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_array_unlock, urange(0, 2), nocapture)
     // table functions
     for t in get_workhorse_types()
         // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
         var jit_table_at = LLVMAddFunctionWithType(g_mod, FN_JIT_TABLE_AT(t),
             LLVMFunctionType(LLVMInt32Type(),   // int32_t result
-                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // table ptr
+                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u);  // table ptr
                 base_type_to_llvm_type(t);                          // key
                 LLVMInt32Type();                                    // valueTypeSize
-                LLVMPointerType(LLVMVoidType(),0u)                  // context
+                LLVMPointerType(LLVMVoidType(), 0u)                 // context
                 ]]))
         LLVMAddGlobalMapping(g_engine, jit_table_at, get_jit_table_at(unsafe(reinterpret<int> t)))
         LLVMAddAttributesToFunction(jit_table_at, [[auto nounwind; willreturn]])
@@ -310,10 +310,10 @@ def public init_jit
         // int32_t jit_table_find ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
         var jit_table_find = LLVMAddFunctionWithType(g_mod, FN_JIT_TABLE_FIND(t),
             LLVMFunctionType(LLVMInt32Type(),   // int32_t result
-                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // table ptr
+                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u);  // table ptr
                 base_type_to_llvm_type(t);                          // key
                 LLVMInt32Type();                                    // valueTypeSize
-                LLVMPointerType(LLVMVoidType(),0u)                  // context
+                LLVMPointerType(LLVMVoidType(), 0u)                 // context
                 ]]))
         LLVMAddGlobalMapping(g_engine, jit_table_find, get_jit_table_find(unsafe(reinterpret<int> t)))
         LLVMAddAttributesToFunction(jit_table_find, [[auto nounwind; willreturn]])
@@ -322,10 +322,10 @@ def public init_jit
         // bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
         var jit_table_erase = LLVMAddFunctionWithType(g_mod, FN_JIT_TABLE_ERASE(t),
             LLVMFunctionType(LLVMInt1Type(),                        // bool result
-                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u);   // table ptr
+                [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u);  // table ptr
                 base_type_to_llvm_type(t);                          // key
                 LLVMInt32Type();                                    // valueTypeSize
-                LLVMPointerType(LLVMVoidType(),0u)                  // context
+                LLVMPointerType(LLVMVoidType(), 0u)                 // context
                 ]]))
         LLVMAddGlobalMapping(g_engine, jit_table_erase, get_jit_table_erase(unsafe(reinterpret<int> t)))
         LLVMAddAttributesToFunction(jit_table_erase, [[auto nounwind; willreturn]])
@@ -334,134 +334,134 @@ def public init_jit
     // int jit_str_cmp ( char * a, char * b )
     var jit_str_cmp = LLVMAddFunctionWithType(g_mod, FN_JIT_STR_CMP,
         LLVMFunctionType(LLVMInt32Type(),
-            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMInt8Type(),0u) ]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(), 0u); LLVMPointerType(LLVMInt8Type(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_str_cmp, get_jit_str_cmp())
     LLVMAddAttributesToFunction(jit_str_cmp, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_str_cmp, urange(0,2), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_str_cmp, urange(0, 2), nocapture)
     // char * jit_str_cat ( char * a, char * b, Copntext * context )
     var jit_str_cat = LLVMAddFunctionWithType(g_mod, FN_JIT_STR_CAT,
-        LLVMFunctionType(LLVMPointerType(LLVMInt8Type(),0u),
-            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+        LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(), 0u); LLVMPointerType(LLVMInt8Type(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_str_cat, get_jit_str_cat())
     LLVMAddAttributesToFunction(jit_str_cat, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_str_cat, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_str_cat, urange(0, 3), nocapture)
     // void jit_prologue ( void * line_info, int32_t stackSize, JitStackState * stackState, Context * context )
     var jit_prologue = LLVMAddFunctionWithType(g_mod, FN_JIT_PROLOGUE,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMInt32Type(); LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(), 0u); LLVMInt32Type(); LLVMPointerType(g_t_stack_state, 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_prologue, get_jit_prologue())
     LLVMAddAttributesToFunction(jit_prologue, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_prologue, urange(2,4), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_prologue, urange(2, 4), nocapture)
     // void jit_epilogue ( JitStackState * stackState, Context * context )
     var jit_epilogue = LLVMAddFunctionWithType(g_mod, FN_JIT_EPILOGUE,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_stack_state, 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_epilogue, get_jit_epilogue())
     LLVMAddAttributesToFunction(jit_epilogue, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_epilogue, urange(0,2), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_epilogue, urange(0, 2), nocapture)
     // void jit_make_block ( Block * blk, int32_t argStackTop, uint64_t annotationData, void * bodyNode, void * jitImpl, void * funcInfo, Context * context )
     var jit_make_block = LLVMAddFunctionWithType(g_mod, FN_JIT_MAKE_BLOCK,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMInt32Type(); LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u);
-                LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_block, 0u); LLVMInt32Type(); LLVMInt64Type(); LLVMPointerType(LLVMVoidType(), 0u);
+                LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_make_block, get_jit_make_block())
     LLVMAddAttributesToFunction(jit_make_block, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgument(jit_make_block, 0u, nocapture)
-    LLVMAddAttributeToFunctionArgumentRange(jit_make_block, urange(3,7), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_make_block, urange(3, 7), nocapture)
     // void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * context, LineInfoArg * at )
     var jit_debug = LLVMAddFunctionWithType(g_mod, FN_JIT_DEBUG,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMFloat4Type(); LLVMPointerType(LLVMVoidType(),0u); get_type_string(); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMFloat4Type(); LLVMPointerType(LLVMVoidType(), 0u); get_type_string(); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_debug, get_jit_debug())
     LLVMAddAttributesToFunction(jit_debug, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_debug, urange(1,5), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_debug, urange(1, 5), nocapture)
     // bool builtin_iterator_iterate ( const Sequence & it, void * data, Context * context ) {
     var jit_iterator_iterate = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_ITERATE,
         LLVMFunctionType(LLVMInt1Type(),
-            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence, 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_iterator_iterate, get_jit_iterator_iterate())
     LLVMAddAttributesToFunction(jit_iterator_iterate, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_iterate, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_iterate, urange(0, 3), nocapture)
     // void builtin_iterator_delete ( const Sequence & it, Context * context ) {
     var jit_iterator_delete = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_DELETE,
         LLVMFunctionType(LLVMInt1Type(),
-            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence, 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_iterator_delete, get_jit_iterator_delete())
     LLVMAddAttributesToFunction(jit_iterator_delete, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_delete, urange(0,2), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_delete, urange(0, 2), nocapture)
     // bool builtin_iterator_first ( const Sequence & it, void * data, Context * context, LineInfoArg * at ) {
     var jit_iterator_first = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_FIRST,
         LLVMFunctionType(LLVMInt1Type(),
-            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence, 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_iterator_first, get_jit_iterator_first())
     LLVMAddAttributesToFunction(jit_iterator_first, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_first, urange(0,4), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_first, urange(0, 4), nocapture)
     // bool builtin_iterator_next ( const Sequence & it, void * data, Context * context, LineInfoArg * at ) {
     var jit_iterator_next = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_NEXT,
         LLVMFunctionType(LLVMInt1Type(),
-            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence, 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_iterator_next, get_jit_iterator_next())
     LLVMAddAttributesToFunction(jit_iterator_next, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_next, urange(0,4), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_next, urange(0, 4), nocapture)
     // void builtin_iterator_close ( const Sequence & it, void * data, Context * context ) {
     var jit_iterator_close = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_CLOSE,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence, 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_iterator_close, get_jit_iterator_close())
     LLVMAddAttributesToFunction(jit_iterator_close, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_close, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_close, urange(0, 3), nocapture)
     // void das_jit_debug_enter ( char * message, Context * context, LineInfoArg * at ) {
     var jit_debug_enter = LLVMAddFunctionWithType(g_mod, FN_JIT_DEBUG_ENTER,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_debug_enter, get_jit_debug_enter())
     LLVMAddAttributesToFunction(jit_debug_enter, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_debug_enter, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_debug_enter, urange(0, 3), nocapture)
     // void das_jit_debug_exit ( char * message, Context * context, LineInfoArg * at ) {
     var jit_debug_exit = LLVMAddFunctionWithType(g_mod, FN_JIT_DEBUG_EXIT,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_debug_exit, get_jit_debug_exit())
     LLVMAddAttributesToFunction(jit_debug_exit, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_debug_exit, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_debug_exit, urange(0, 3), nocapture)
     // void das_jit_debug_line ( char * message, Context * context, LineInfoArg * at ) {
     var jit_debug_line = LLVMAddFunctionWithType(g_mod, FN_JIT_DEBUG_LINE,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(), 0u); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_debug_line, get_jit_debug_line())
     LLVMAddAttributesToFunction(jit_debug_line, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_debug_line, urange(0,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_debug_line, urange(0, 3), nocapture)
     // void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at )
     var jit_ast_typedecl = LLVMAddFunctionWithType(g_mod, FN_JIT_AST_TYPEDECL,
-        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
-            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
+            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(), 0u); LLVMPointerType(LLVMVoidType(), 0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_ast_typedecl, get_jit_ast_typedecl())
     LLVMAddAttributesToFunction(jit_ast_typedecl, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_ast_typedecl, urange(1,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_ast_typedecl, urange(1, 3), nocapture)
 
 
 def private build_jit_types
     // simfunction type
     var simfunction_fields <- [[auto
-        LLVMPointerType(LLVMInt8Type(),0u); // char * name
-        LLVMPointerType(LLVMInt8Type(),0u); // char * mangledName
-        LLVMPointerType(LLVMVoidType(),0u); // SimNode * code               // note void *
-        LLVMPointerType(LLVMVoidType(),0u); // FuncInfo *  debugInfo        // note void *
+        LLVMPointerType(LLVMInt8Type(), 0u);// char * name
+        LLVMPointerType(LLVMInt8Type(), 0u);// char * mangledName
+        LLVMPointerType(LLVMVoidType(), 0u);// SimNode * code               // note void *
+        LLVMPointerType(LLVMVoidType(), 0u);// FuncInfo *  debugInfo        // note void *
         LLVMInt64Type();                    // uint64_t    mangledNameHash
-        LLVMPointerType(LLVMVoidType(),0u); // void *      aotFunction
+        LLVMPointerType(LLVMVoidType(), 0u);// void *      aotFunction
         LLVMInt32Type();                    // uint32_t    stackSize
         LLVMInt32Type()                     // uint32_t    flags
     ]]
     g_t_simFunction = LLVMStructType(simfunction_fields)
     // function type
     var function_fields <- [[auto[]
-        LLVMPointerType(g_t_simFunction,0u) // SimFunction * func
+        LLVMPointerType(g_t_simFunction, 0u)// SimFunction * func
     ]]
     g_t_function = LLVMStructType(function_fields)
     // lambda type
     var lambda_fields <- [[auto[]
-        LLVMPointerType(g_t_simFunction,0u);    // SimFunction * __lambda
-        LLVMPointerType(g_t_simFunction,0u)     // SimFunction * __finalize
+        LLVMPointerType(g_t_simFunction, 0u);   // SimFunction * __lambda
+        LLVMPointerType(g_t_simFunction, 0u)    // SimFunction * __finalize
     ]]
     g_t_lambda = LLVMStructType(lambda_fields)
     // block type
@@ -469,19 +469,19 @@ def private build_jit_types
     g_t_block = LLVMStructType(block_fields)
     // prologue\epilogue storage for the stack
     var stack_state_fields <- [[auto[]
-        LLVMPointerType(LLVMInt8Type(),0u);    // char * EP
-        LLVMPointerType(LLVMInt8Type(),0u)     // char * SP
+        LLVMPointerType(LLVMInt8Type(), 0u);   // char * EP
+        LLVMPointerType(LLVMInt8Type(), 0u)    // char * SP
     ]]
     g_t_stack_state = LLVMStructType(stack_state_fields)
     // iterator
     var iterator_fields <- [[auto[]
-        LLVMPointerType(LLVMVoidType(),0u);    // __vtable
+        LLVMPointerType(LLVMVoidType(), 0u);   // __vtable
         LLVMInt1Type()                         // bool isOpen
     ]]
     g_t_iterator = LLVMStructType(iterator_fields)
     // sequence
     var sequence_fields <- [[auto[]
-        LLVMPointerType(g_t_iterator,0u)        // iterator * iter
+        LLVMPointerType(g_t_iterator, 0u)       // iterator * iter
     ]]
     g_t_sequence = LLVMStructType(sequence_fields)
 
@@ -489,15 +489,15 @@ def public build_block_type
     return <- [{auto[]
         LLVMInt32Type();                        // uint32_t    stackOffset;
         LLVMInt32Type();                        // uint32_t    argumentsOffset;
-        LLVMPointerType(LLVMVoidType(),0u);     // SimNode *   body;
-        LLVMPointerType(LLVMVoidType(),0u);     // void *      aotFunction;
-        LLVMPointerType(LLVMVoidType(),0u);     // void *      jitFunction;
-        LLVMPointerType(LLVMFloat4Type(),0u);   // vec4f *     functionArguments;
-        LLVMPointerType(LLVMVoidType(),0u)      // FuncInfo *  info;
+        LLVMPointerType(LLVMVoidType(), 0u);    // SimNode *   body;
+        LLVMPointerType(LLVMVoidType(), 0u);    // void *      aotFunction;
+        LLVMPointerType(LLVMVoidType(), 0u);    // void *      jitFunction;
+        LLVMPointerType(LLVMFloat4Type(), 0u);  // vec4f *     functionArguments;
+        LLVMPointerType(LLVMVoidType(), 0u)     // FuncInfo *  info;
     }]
 
 [macro_function]
-def public with_default_target_machine ( blk : block<(LLVMTargetMachineRef):void> )
+def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void>)
     LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
     LLVMInitializeAllTargetMCs()
@@ -536,14 +536,14 @@ def public finalize_jit
         LLVMDumpModule(g_mod)
         fflush(fstderr())
     if LLVM_OUTPUT_OJBECT_FILE
-        with_default_target_machine <| $ ( targetMachine : LLVMTargetMachineRef )
+        with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef)
             let error : string?
             let file = LLVM_OUTPUT_OJBECT_FILE_NAME
             let filetype = LLVMCodeGenFileType LLVMObjectFile
             LLVMTargetMachineEmitToFile(targetMachine, g_mod, file, filetype, error)
             create_shared_library(file, JIT_DLL_OUTPUT, DASCRIPT_LIBRARY)
     g_engine |> LLVMRunStaticConstructors()
-    g_all_engines |> push([[ JitEngine
+    g_all_engines |> push([[JitEngine
         mod <- g_mod,
         engine <- g_engine
     ]])
@@ -566,11 +566,11 @@ def private finalize_all_jit
     unsafe
         delete g_all_engines
 
-def public build_string_constant ( message:string )
+def public build_string_constant(message : string)
     if g_str2v |> key_exists(message)
         return g_str2v[message]
     let msg_size = uint(length(message))
-    var strType = LLVMArrayType( LLVMInt8Type(), msg_size+1u )
+    var strType = LLVMArrayType(LLVMInt8Type(), msg_size + 1u)
     var str = LLVMAddGlobal(g_mod, strType, "")
     LLVMSetInitializer(str, LLVMConstString(message, msg_size, 0))
     LLVMSetGlobalConstant(str, 1)
@@ -580,66 +580,66 @@ def public build_string_constant ( message:string )
     g_str2v[message] = str
     return str
 
-def public get_basetype_pointer ( t:Type ) : LLVMOpaqueType?
-    return LLVMPointerType(base_type_to_llvm_type(t),0u)
+def public get_basetype_pointer(t : Type) : LLVMOpaqueType?
+    return LLVMPointerType(base_type_to_llvm_type(t), 0u)
 
-def public get_type_pointer ( t:TypeDeclPtr ) : LLVMOpaqueType?
-    if t==null
-        return LLVMPointerType(LLVMVoidType(),0u)
+def public get_type_pointer(t : TypeDeclPtr) : LLVMOpaqueType?
+    if t == null
+        return LLVMPointerType(LLVMVoidType(), 0u)
     else
-        return LLVMPointerType(type_to_llvm_type(t),0u)
+        return LLVMPointerType(type_to_llvm_type(t), 0u)
 
-def public get_type_string : LLVMOpaqueType?
+def public get_type_string : LLVMOpaqueType ?
     return LLVMPointerType(LLVMInt8Type(), 0u)
 
-def public get_string_constant_ptr ( builder:LLVMOpaqueBuilder?; message:string )
+def public get_string_constant_ptr(builder : LLVMOpaqueBuilder?; message : string)
     if message |> length == 0
         return LLVMConstPointerNull(get_type_string())
     var str = build_string_constant(message)
     return LLVMBuildPointerCast(builder, str, get_type_string(), "string_constant {message}")
 
-def public failed ( msg:string )
+def public failed(msg : string)
     static_if LLVM_DEBUG_EVERYTHING
         print("FAILED: {msg}\n")
     g_errors |> push("{msg}")
 
-def public failed_E ( e:ExpressionPtr; msg:string )
-    failed ( "{msg}. expr = {e.__rtti} at {describe(e.at)}")
+def public failed_E(e : ExpressionPtr; msg : string)
+    failed("{msg}. expr = {e.__rtti} at {describe(e.at)}")
 
-def public failed_E ( e:Expression?; msg:string )
-    failed ( "{msg}. expr = {e.__rtti} at {describe(e.at)}")
+def public failed_E(e : Expression?; msg : string)
+    failed("{msg}. expr = {e.__rtti} at {describe(e.at)}")
 
-def public failed_V ( v:VariablePtr; msg:string )
-    failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
+def public failed_V(v : VariablePtr; msg : string)
+    failed("{msg}. var = {describe(v)} at {describe(v.at)}")
 
-def public failed_V ( v:Variable?; msg:string )
-    failed ( "{msg}. var = {v.name} at {describe(v.at)}")
+def public failed_V(v : Variable?; msg : string)
+    failed("{msg}. var = {v.name} at {describe(v.at)}")
 
-def public failed_T ( v:TypeDeclPtr; msg:string )
-    failed ( "{msg}. var = {describe(v)} at {describe(v.at)}")
+def public failed_T(v : TypeDeclPtr; msg : string)
+    failed("{msg}. var = {describe(v)} at {describe(v.at)}")
 
-def public base_type_to_llvm_type ( t:Type )
-    return LLVMInt32Type()      if t == Type tInt || t == Type tUInt || t == Type tBitfield || t == Type tEnumeration
-    return LLVMInt64Type()      if t == Type tInt64 || t == Type tUInt64 || t == Type tEnumeration64
-    return LLVMInt16Type()      if t == Type tInt16 || t == Type tUInt16 || t == Type tEnumeration16
-    return LLVMInt8Type()       if t == Type tInt8 || t == Type tUInt8 || t == Type tEnumeration8
-    return LLVMFloatType()      if t == Type tFloat
-    return LLVMDoubleType()     if t == Type tDouble
-    return LLVMInt1Type()       if t == Type tBool
-    return LLVMInt2Type()       if t == Type tInt2 || t == Type tUInt2 || t == Type tRange || t == Type tURange
-    return LLVMInt3Type()       if t == Type tInt3 || t == Type tUInt3
-    return LLVMInt4Type()       if t == Type tInt4 || t == Type tUInt4
-    return LLVMRange64Type()    if t == Type tRange64 || t == Type tURange64
-    return LLVMFloat2Type()     if t == Type tFloat2
-    return LLVMFloat3Type()     if t == Type tFloat3
-    return LLVMFloat4Type()     if t == Type tFloat4
-    return get_type_string()    if t == Type tString
-    return LLVMPointerType(LLVMVoidType(),0u) if t == Type tPointer
+def public base_type_to_llvm_type(t : Type)
+    return LLVMInt32Type() if t == Type tInt || t == Type tUInt || t == Type tBitfield || t == Type tEnumeration
+    return LLVMInt64Type() if t == Type tInt64 || t == Type tUInt64 || t == Type tEnumeration64
+    return LLVMInt16Type() if t == Type tInt16 || t == Type tUInt16 || t == Type tEnumeration16
+    return LLVMInt8Type() if t == Type tInt8 || t == Type tUInt8 || t == Type tEnumeration8
+    return LLVMFloatType() if t == Type tFloat
+    return LLVMDoubleType() if t == Type tDouble
+    return LLVMInt1Type() if t == Type tBool
+    return LLVMInt2Type() if t == Type tInt2 || t == Type tUInt2 || t == Type tRange || t == Type tURange
+    return LLVMInt3Type() if t == Type tInt3 || t == Type tUInt3
+    return LLVMInt4Type() if t == Type tInt4 || t == Type tUInt4
+    return LLVMRange64Type() if t == Type tRange64 || t == Type tURange64
+    return LLVMFloat2Type() if t == Type tFloat2
+    return LLVMFloat3Type() if t == Type tFloat3
+    return LLVMFloat4Type() if t == Type tFloat4
+    return get_type_string() if t == Type tString
+    return LLVMPointerType(LLVMVoidType(), 0u) if t == Type tPointer
     failed("base_type_to_llvm_type: unsupported type {t}")
     return LLVMInt32Type()
 
-def public type_to_llvm_abi_type ( t:TypeDeclPtr )
-    if t.baseType==Type tBlock
+def public type_to_llvm_abi_type(t : TypeDeclPtr)
+    if t.baseType == Type tBlock
         return LLVMPointerType(g_t_block, 0u)
     elif t.isRef
         return LLVMPointerType(type_to_llvm_type(t), 0u)
@@ -647,32 +647,32 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
         return get_type_pointer(t.firstType)
     elif t.isWorkhorseType
         return base_type_to_llvm_type(t.baseType)
-    elif t.baseType==Type tFunction || t.baseType==Type tLambda
+    elif t.baseType == Type tFunction || t.baseType == Type tLambda
         return type_to_llvm_type(t)
     elif t.isVoid
         return LLVMVoidType()
-    elif t.baseType==Type fakeContext || t.baseType==Type fakeLineInfo
-        return LLVMPointerType(LLVMVoidType(),0u)
-    elif t.baseType==Type tHandle
+    elif t.baseType == Type fakeContext || t.baseType == Type fakeLineInfo
+        return LLVMPointerType(LLVMVoidType(), 0u)
+    elif t.baseType == Type tHandle
         if t.isRefType
             failed("type_to_llvm_abi_type: internal error. unsupported type {describe(t)} at {describe(t.at)}")
-            return LLVMPointerType(LLVMVoidType(),0u)
+            return LLVMPointerType(LLVMVoidType(), 0u)
         else
             var inscope tp <- get_underlying_value_type(t)
-            if tp==null
+            if tp == null
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
                 return LLVMInt32Type()
             elif !tp.isWorkhorseType
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(t)} at {describe(t.at)}")
                 return LLVMInt32Type()
             return type_to_llvm_abi_type(tp)
-    elif t.baseType==Type anyArgument
+    elif t.baseType == Type anyArgument
         return LLVMFloat4Type()
     else
         failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {describe(t.at)}")
         return LLVMInt32Type()
 
-def public type_to_llvm_type ( t:TypeDeclPtr )
+def public type_to_llvm_type(t : TypeDeclPtr)
     var res : LLVMOpaqueType?
     if t.dim |> length != 0
         var inscope ndt <- clone_type(t)
@@ -693,39 +693,39 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
     elif t.baseType == Type tFunction
         res = g_t_function
     elif t.baseType == Type tLambda
-        res = LLVMPointerType(LLVMVoidType(),0u)
+        res = LLVMPointerType(LLVMVoidType(), 0u)
     elif t.baseType == Type tIterator
         res = g_t_sequence
     elif t.baseType == Type tBlock
-        res = LLVMPointerType(g_t_block,0u)
+        res = LLVMPointerType(g_t_block, 0u)
     elif t.baseType == Type tArray
         // array type
         var array_fields <- [[auto
-            LLVMPointerType(LLVMVoidType(),0u); // char * data
+            LLVMPointerType(LLVMVoidType(), 0u);// char * data
             LLVMInt32Type();                    // uint32_t size
             LLVMInt32Type();                    // uint32_t capacity
             LLVMInt32Type();                    // uint32_t lock
             LLVMInt32Type()                     // uint32_t flags
         ]]
-        if t.firstType!=null
-            array_fields[int(JIT_ARRAY DATA)] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
+        if t.firstType != null
+            array_fields[int(JIT_ARRAY DATA)] = LLVMPointerType(type_to_llvm_type(t.firstType), 0u)
         res = LLVMStructType(array_fields)
     elif t.baseType == Type tTable
         // table type
         var table_fields <- [[auto
-            LLVMPointerType(LLVMVoidType(),0u); // char * data
+            LLVMPointerType(LLVMVoidType(), 0u);// char * data
             LLVMInt32Type();                    // uint32_t size
             LLVMInt32Type();                    // uint32_t capacity
             LLVMInt32Type();                    // uint32_t lock
             LLVMInt32Type();                    // uint32_t flags
-            LLVMPointerType(LLVMVoidType(),0u); // char * keys
-            LLVMPointerType(LLVMVoidType(),0u); // char * hashes
+            LLVMPointerType(LLVMVoidType(), 0u);// char * keys
+            LLVMPointerType(LLVMVoidType(), 0u);// char * hashes
             LLVMInt32Type();                    // uint32_t tombstones
         ]]
-        if t.firstType!=null
-            table_fields[int(JIT_TABLE KEYS)] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
-        if t.secondType!=null
-            table_fields[int(JIT_ARRAY DATA)] = LLVMPointerType(type_to_llvm_type(t.secondType),0u)
+        if t.firstType != null
+            table_fields[int(JIT_TABLE KEYS)] = LLVMPointerType(type_to_llvm_type(t.firstType), 0u)
+        if t.secondType != null
+            table_fields[int(JIT_ARRAY DATA)] = LLVMPointerType(type_to_llvm_type(t.secondType), 0u)
         res = LLVMStructType(table_fields)
     elif t.isVoid
         res = LLVMVoidType()
@@ -734,7 +734,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
             res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
         else
             var inscope tp <- get_underlying_value_type(t)
-            if tp==null
+            if tp == null
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
                 return LLVMInt32Type()
             elif !tp.isWorkhorseType
@@ -746,7 +746,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = LLVMInt32Type()
     return res
 
-def public dim_element_type_to_llvm_type ( typ:TypeDeclPtr )
+def public dim_element_type_to_llvm_type(typ : TypeDeclPtr)
     if typ.dim |> length == 0
         return type_to_llvm_type(typ)
     else
@@ -754,7 +754,7 @@ def public dim_element_type_to_llvm_type ( typ:TypeDeclPtr )
         ndt.dim |> clear()
         return type_to_llvm_type(ndt)
 
-def public build_broadcast_vector ( builder:LLVMOpaqueBuilder?; opType:TypeDeclPtr; right:LLVMOpaqueValue? )
+def public build_broadcast_vector(builder : LLVMOpaqueBuilder?; opType : TypeDeclPtr; right : LLVMOpaqueValue?)
     if opType.isVectorType
         var vres = LLVMGetUndef(type_to_llvm_type(opType))
         for i in range(opType.vectorDim)
@@ -763,13 +763,13 @@ def public build_broadcast_vector ( builder:LLVMOpaqueBuilder?; opType:TypeDeclP
     else
         return right
 
-def public LLVMBuildLoadData2Aligned ( builder:LLVMOpaqueBuilder?; var typ:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
-    if LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment!=16u && LLVMIsVector3(typ)
+def public LLVMBuildLoadData2Aligned(builder : LLVMOpaqueBuilder?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; alignment : uint; name : string)
+    if LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment != 16u && LLVMIsVector3(typ)
         return LLVMBuildLoadVector3(builder, typ, ptr, name)
     else
         return LLVMBuildLoad2Aligned(builder, typ, ptr, alignment, name)
 
-def public expand_scalar ( builder:LLVMOpaqueBuilder?; scalar:LLVMOpaqueValue?; vecType:TypeDeclPtr )
+def public expand_scalar(builder : LLVMOpaqueBuilder?; scalar : LLVMOpaqueValue?; vecType : TypeDeclPtr)
     var vec = LLVMGetUndef(type_to_llvm_type(vecType))
     for d in range(vecType.vectorDim)
         var idx = LLVMConstInt(LLVMInt32Type(), uint64(d), 0)
