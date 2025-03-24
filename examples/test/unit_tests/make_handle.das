@@ -1,3 +1,4 @@
+options gen2 = false
 require UnitTest
 
 def cmresTest(a : int)

@@ -1,3 +1,4 @@
+options gen2
 options persistent_heap
 options gc
 
@@ -86,10 +87,11 @@ def test_add_and_sub ( t:T? )
 
 %%
 
-def generate_test(func, description : string) : string
-    var prompt = build_string <| $(writer)
+def generate_test(func, description : string) : string {
+    var prompt = build_string <| $(writer) {
         writer |> write(unit_test_prompt) |> write(func) |> write("\n[test] // ") |> write(description) |> write("\ndef test_")
-    var ccr <- openai_create_completion([[Completion()
+    }
+    var ccr <- openai_create_completion(Completion(
         model = unit_test_model,
         prompt = prompt,
         max_tokens = 200,
@@ -98,15 +100,18 @@ def generate_test(func, description : string) : string
         frequency_penalty = 0.52,
         presence_penalty = 0.5,
         best_of = 1,
-        stop <- [{string "// --"; "\}"}]
-    ]])
-    if ccr |> is_valid
+        stop <- array<string>("// --", "\}")
+    ))
+    if (ccr |> is_valid) {
         var choice = ccr.choices[0].text |> replace("\\r", "") |> safe_unescape
-        return build_string <| $(writer)
+        return build_string <| $(writer) {
             writer |> write("[test] // ") |> write(description) |> write("\ndef test_") |> write(choice)
-    else
+        }
+    } else {
         to_log(LOG_ERROR, "error: {openai_get_last_error()}\n")
+    }
     return ""
+}
 
 // -----------------------------------
 
@@ -118,16 +123,19 @@ def strcat(a,b)
 let example_description = "use any_string and any_file_name for strcat"
 
 [export]
-def main
-    if !openai_key_is_set()
+def main {
+    if (!openai_key_is_set()) {
         print("OpenAI key is not set. Please set OPENAI_API_KEY environment variable.\n")
         return
+    }
     // test retrive
     var model <- openai_retrive_model(unit_test_model)
-    if !model |> is_valid
+    if (!model |> is_valid) {
         print("{unit_test_model} model not found\n")
         print("error: {openai_get_last_error()}\n")
         return
+    }
     let test = generate_test(example_function, example_description)
     print("{test}\n")
+}
 

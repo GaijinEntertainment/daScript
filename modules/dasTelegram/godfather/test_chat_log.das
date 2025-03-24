@@ -1,3 +1,4 @@
+options gen2
 require fio
 
 require daslib/algorithm
@@ -16,11 +17,13 @@ let chat_id = -1001849665593l // in bots we trust
 // let chat_id = -1001666598976l; // remote work
 
 [export]
-def main
-    if !openai_key_is_set()
+def main {
+    if (!openai_key_is_set()) {
         panic("openai key is not set")
-    if !create_chat_log("d:/Work/telegramm/GG19781978_bot/chat_log.db")
+    }
+    if (!create_chat_log("d:/Work/telegramm/GG19781978_bot/chat_log.db")) {
         panic("failed to create chat log")
+    }
     /*
     var res = generate_chat_reply(chat_id)
     debug(res,"res = ")
@@ -33,4 +36,5 @@ def main
 
     var latest = get_first_summary(chat_id, LONG_MAX)
     print("{latest}\n")
+}
 

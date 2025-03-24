@@ -1,8 +1,9 @@
+options gen2
 /*
     this was crashing due to shadowing check on a block outside of function
 */
 
-struct EquipSlot
+struct EquipSlot {
     listSize : int
     itemTypes : array<string>
     items : array<string>
@@ -10,14 +11,17 @@ struct EquipSlot
     atLeastOne : string
     ingameWeaponSlot : string
     uiOrder : int
+}
 
-let shared
-    squadScheme <- {{
-        "curVehicle" => [[EquipSlot // вот на этой строке
-            itemTypes := [{ auto[] "vehicle" }]
-        ]]
-    }}
+let shared {
+    squadScheme <- {
+        "curVehicle" => EquipSlot( // вот на этой строке
+            itemTypes :=  [ "vehicle" ]
+        )
+    }
+}
 
 [export]
-def test
+def test {
     return true
+}
