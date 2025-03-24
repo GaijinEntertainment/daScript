@@ -613,6 +613,7 @@ namespace das
     struct Expression : ptr_ref_count {
         Expression() = default;
         Expression(const LineInfo & a) : at(a) {}
+        string describe() const;
         virtual ~Expression() {}
         friend StringWriter& operator<< (StringWriter& stream, const Expression & func);
         virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };

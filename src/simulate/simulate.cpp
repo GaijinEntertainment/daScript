@@ -120,7 +120,7 @@ namespace das
     SimNode * SimNode_WithErrorMessage::copyNode ( Context & context, NodeAllocator * code ) {
         SimNode_WithErrorMessage * that = (SimNode_WithErrorMessage *) SimNode::copyNode(context, code);
         if ( errorMessage ) {
-            that->errorMessage = code->allocateName(errorMessage);
+            that->errorMessage = errorMessage[0]==0 ? "" : code->allocateName(errorMessage);
         }
         return that;
     }

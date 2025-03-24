@@ -2064,8 +2064,7 @@ namespace das
             } else {
                 auto simV = value->simulate(context);
                 TextWriter tw;
-                tw << "dereferencing null pointer, " << *value << " is null";
-                auto errorMessage = context.code->allocateName(tw.str());
+                auto errorMessage = context.code->allocateName(", "+value->describe()+" is null");
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType->baseType, at, simV, fieldOffset + extraOffset, errorMessage);
                 } else {

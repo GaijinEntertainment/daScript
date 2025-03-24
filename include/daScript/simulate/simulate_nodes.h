@@ -198,7 +198,7 @@ namespace das {
             : SimNode(at), errorMessage(em) {}
         virtual bool rtti_node_isErrorMessage() const override { return true; }
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code );
-        const char * errorMessage = nullptr;
+        const char * errorMessage = "";
     };
 
     template <int argCount>
@@ -819,7 +819,7 @@ namespace das {
             if ( prv ) {
                 return prv + offset;
             } else {
-                context.throw_error_at(debugInfo,"%s", errorMessage ? errorMessage : "dereferencing null pointer");
+                context.throw_error_at(debugInfo,"dereferencing null pointer%s", errorMessage);
                 return nullptr;
             }
         }
