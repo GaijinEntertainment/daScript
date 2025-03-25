@@ -1,4 +1,4 @@
-// Module 
+// Module
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/simulate.h"
@@ -10,7 +10,7 @@ namespace context {
 
 
 class Standalone : public Context {
-public: 
+public:
     Standalone();
     auto setFlags ( smart_ptr_raw<Program> prog ) -> void;
 };

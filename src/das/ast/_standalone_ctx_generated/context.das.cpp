@@ -1,4 +1,4 @@
-// Module 
+// Module
 #include "context.das.h"
 #include "daScript/simulate/standalone_ctx_utils.h"
  // require builtin
@@ -112,309 +112,309 @@ namespace ast_boost { struct BetterRttiVisitor; };
 namespace ast {
 
 struct AstVisitor {
-	void * __rtti;
-	Func DAS_COMMENT((void,ast::AstVisitor)) __finalize;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) preVisitProgram;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) visitProgram;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const ,Module * const )) preVisitProgramBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,Module * const )) preVisitModule;
-	Func DAS_COMMENT((void,ast::AstVisitor,Module * const )) visitModule;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeDecl> const )) preVisitExprTypeDecl;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTypeDecl> const )) visitExprTypeDecl;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<TypeDecl> const )) preVisitTypeDecl;
-	Func DAS_COMMENT((smart_ptr_raw<TypeDecl>,ast::AstVisitor,smart_ptr_raw<TypeDecl> const )) visitTypeDecl;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<TypeDecl> const ,das::string const )) preVisitAlias;
-	Func DAS_COMMENT((smart_ptr_raw<TypeDecl>,ast::AstVisitor,smart_ptr_raw<TypeDecl> const ,das::string const )) visitAlias;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Enumeration * const )) canVisitEnumeration;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Enumeration> const )) preVisitEnumeration;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Enumeration> const ,das::string const ,smart_ptr_raw<Expression> const ,bool)) preVisitEnumerationValue;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Enumeration> const ,das::string const ,smart_ptr_raw<Expression> const ,bool)) visitEnumerationValue;
-	Func DAS_COMMENT((smart_ptr_raw<Enumeration>,ast::AstVisitor,smart_ptr_raw<Enumeration> const )) visitEnumeration;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Structure * const )) canVisitStructure;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const )) preVisitStructure;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const ,Structure::FieldDeclaration const ,bool)) preVisitStructureField;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const ,Structure::FieldDeclaration const ,bool)) visitStructureField;
-	Func DAS_COMMENT((smart_ptr_raw<Structure>,ast::AstVisitor,smart_ptr_raw<Structure> const )) visitStructure;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Function * const )) canVisitFunction;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Function * const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) canVisitFunctionArgumentInit;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const )) preVisitFunction;
-	Func DAS_COMMENT((smart_ptr_raw<Function>,ast::AstVisitor,smart_ptr_raw<Function> const )) visitFunction;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,bool)) preVisitFunctionArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,bool)) visitFunctionArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitFunctionArgumentInit;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitFunctionArgumentInit;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Expression> const )) preVisitFunctionBody;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Expression> const )) visitFunctionBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Expression> const )) preVisitExpression;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Expression> const )) visitExpression;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) preVisitExprBlock;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) visitExprBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprBlockArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,bool)) visitExprBlockArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockArgumentInit;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitExprBlockArgumentInit;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockExpression;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) visitExprBlockExpression;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) preVisitExprBlockFinal;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) visitExprBlockFinal;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockFinalExpression;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) visitExprBlockFinalExpression;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const )) preVisitExprLet;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLet> const )) visitExprLet;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprLetVariable;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,bool)) visitExprLetVariable;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitExprLetVariableInit;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitExprLetVariableInit;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Variable * const )) canVisitGlobalVariable;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) preVisitGlobalLet;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) visitGlobalLet;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Variable> const ,bool)) preVisitGlobalLetVariable;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<Variable> const ,bool)) visitGlobalLetVariable;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitGlobalLetVariableInit;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitGlobalLetVariableInit;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const )) preVisitExprStringBuilder;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const )) visitExprStringBuilder;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprStringBuilderElement;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const ,smart_ptr_raw<Expression> const ,bool)) visitExprStringBuilderElement;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const )) preVisitExprNew;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNew> const )) visitExprNew;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprNewArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool)) visitExprNewArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const )) preVisitExprNamedCall;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const )) visitExprNamedCall;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const ,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprNamedCallArgument;
-	Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const ,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprNamedCallArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const )) preVisitExprLooksLikeCall;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const )) visitExprLooksLikeCall;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) canVisitLooksLikeCallArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprLooksLikeCallArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) visitExprLooksLikeCallArgument;
-	Func DAS_COMMENT((bool,ast::AstVisitor,ExprCall * const )) canVisitCall;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const )) preVisitExprCall;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCall> const )) visitExprCall;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprCallArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool)) visitExprCallArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const )) preVisitExprNullCoalescing;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const )) visitExprNullCoalescing;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const ,smart_ptr_raw<Expression> const )) preVisitExprNullCoalescingDefault;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const )) preVisitExprAt;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAt> const )) visitExprAt;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const ,smart_ptr_raw<Expression> const )) preVisitExprAtIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeAt> const )) preVisitExprSafeAt;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeAt> const )) visitExprSafeAt;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const ,smart_ptr_raw<Expression> const )) preVisitExprSafeAtIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIs> const )) preVisitExprIs;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIs> const )) visitExprIs;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIs> const ,smart_ptr_raw<TypeDecl> const )) preVisitExprIsType;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp2> const )) preVisitExprOp2;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp2> const )) visitExprOp2;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp2> const ,smart_ptr_raw<Expression> const )) preVisitExprOp2Right;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const )) preVisitExprOp3;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp3> const )) visitExprOp3;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const ,smart_ptr_raw<Expression> const )) preVisitExprOp3Left;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const ,smart_ptr_raw<Expression> const )) preVisitExprOp3Right;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) isRightFirstExprCopy;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) preVisitExprCopy;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) visitExprCopy;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const ,smart_ptr_raw<Expression> const )) preVisitExprCopyRight;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) isRightFirstExprMove;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) preVisitExprMove;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) visitExprMove;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMove> const ,smart_ptr_raw<Expression> const )) preVisitExprMoveRight;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) isRightFirstExprClone;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) preVisitExprClone;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) visitExprClone;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const ,smart_ptr_raw<Expression> const )) preVisitExprCloneRight;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) canVisitWithAliasSubexpression;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) preVisitExprAssume;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) visitExprAssume;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWith> const )) preVisitExprWith;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprWith> const )) visitExprWith;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWith> const ,smart_ptr_raw<Expression> const )) preVisitExprWithBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const )) preVisitExprWhile;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprWhile> const )) visitExprWhile;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const ,smart_ptr_raw<Expression> const )) preVisitExprWhileBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const )) preVisitExprTryCatch;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const )) visitExprTryCatch;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const ,smart_ptr_raw<Expression> const )) preVisitExprTryCatchCatch;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const )) preVisitExprIfThenElse;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const )) visitExprIfThenElse;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ,smart_ptr_raw<Expression> const )) preVisitExprIfThenElseIfBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ,smart_ptr_raw<Expression> const )) preVisitExprIfThenElseElseBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprFor;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) visitExprFor;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprForVariable;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Variable> const ,bool)) visitExprForVariable;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprForSource;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Expression> const ,bool)) visitExprForSource;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprForStack;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprForBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const )) preVisitExprMakeVariant;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const )) visitExprMakeVariant;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprMakeVariantField;
-	Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprMakeVariantField;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) canVisitMakeStructBody;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) canVisitMakeStructBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) preVisitExprMakeStruct;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) visitExprMakeStruct;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,bool)) preVisitExprMakeStructIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,bool)) visitExprMakeStructIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprMakeStructField;
-	Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprMakeStructField;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) preVisitMakeStructureBlock;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) visitMakeStructureBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const )) preVisitExprMakeArray;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const )) visitExprMakeArray;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) preVisitExprMakeArrayIndex;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) visitExprMakeArrayIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const )) preVisitExprMakeTuple;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const )) visitExprMakeTuple;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) preVisitExprMakeTupleIndex;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) visitExprMakeTupleIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const )) preVisitExprArrayComprehension;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const )) visitExprArrayComprehension;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ,smart_ptr_raw<Expression> const )) preVisitExprArrayComprehensionSubexpr;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ,smart_ptr_raw<Expression> const )) preVisitExprArrayComprehensionWhere;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const )) preVisitExprTypeInfo;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const )) visitExprTypeInfo;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprPtr2Ref> const )) preVisitExprPtr2Ref;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprPtr2Ref> const )) visitExprPtr2Ref;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLabel> const )) preVisitExprLabel;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLabel> const )) visitExprLabel;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprGoto> const )) preVisitExprGoto;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprGoto> const )) visitExprGoto;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprRef2Value> const )) preVisitExprRef2Value;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprRef2Value> const )) visitExprRef2Value;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprRef2Ptr> const )) preVisitExprRef2Ptr;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprRef2Ptr> const )) visitExprRef2Ptr;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAddr> const )) preVisitExprAddr;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAddr> const )) visitExprAddr;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAssert> const )) preVisitExprAssert;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAssert> const )) visitExprAssert;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStaticAssert> const )) preVisitExprStaticAssert;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStaticAssert> const )) visitExprStaticAssert;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprQuote> const )) preVisitExprQuote;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprQuote> const )) visitExprQuote;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprDebug> const )) preVisitExprDebug;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprDebug> const )) visitExprDebug;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprInvoke> const )) preVisitExprInvoke;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprInvoke> const )) visitExprInvoke;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprErase> const )) preVisitExprErase;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprErase> const )) visitExprErase;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSetInsert> const )) preVisitExprSetInsert;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSetInsert> const )) visitExprSetInsert;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFind> const )) preVisitExprFind;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFind> const )) visitExprFind;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprKeyExists> const )) preVisitExprKeyExists;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprKeyExists> const )) visitExprKeyExists;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAscend> const )) preVisitExprAscend;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAscend> const )) visitExprAscend;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCast> const )) preVisitExprCast;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCast> const )) visitExprCast;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprDelete> const )) preVisitExprDelete;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprDelete> const )) visitExprDelete;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprVar> const )) preVisitExprVar;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprVar> const )) visitExprVar;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTag> const )) preVisitExprTag;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTag> const ,smart_ptr_raw<Expression> const )) preVisitExprTagValue;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTag> const )) visitExprTag;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprField> const )) preVisitExprField;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprField> const )) visitExprField;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeField> const )) preVisitExprSafeField;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeField> const )) visitExprSafeField;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSwizzle> const )) preVisitExprSwizzle;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSwizzle> const )) visitExprSwizzle;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIsVariant> const )) preVisitExprIsVariant;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIsVariant> const )) visitExprIsVariant;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAsVariant> const )) preVisitExprAsVariant;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAsVariant> const )) visitExprAsVariant;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeAsVariant> const )) preVisitExprSafeAsVariant;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeAsVariant> const )) visitExprSafeAsVariant;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp1> const )) preVisitExprOp1;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp1> const )) visitExprOp1;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReturn> const )) preVisitExprReturn;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprReturn> const )) visitExprReturn;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprYield> const )) preVisitExprYield;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprYield> const )) visitExprYield;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBreak> const )) preVisitExprBreak;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBreak> const )) visitExprBreak;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprContinue> const )) preVisitExprContinue;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprContinue> const )) visitExprContinue;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) canVisitMakeBlockBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) preVisitExprMakeBlock;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) visitExprMakeBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeGenerator> const )) preVisitExprMakeGenerator;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeGenerator> const )) visitExprMakeGenerator;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMemZero> const )) preVisitExprMemZero;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMemZero> const )) visitExprMemZero;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConst> const )) preVisitExprConst;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConst> const )) visitExprConst;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstPtr> const )) preVisitExprConstPtr;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstPtr> const )) visitExprConstPtr;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstEnumeration> const )) preVisitExprConstEnumeration;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstEnumeration> const )) visitExprConstEnumeration;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstBitfield> const )) preVisitExprConstBitfield;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstBitfield> const )) visitExprConstBitfield;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt8> const )) preVisitExprConstInt8;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt8> const )) visitExprConstInt8;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt16> const )) preVisitExprConstInt16;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt16> const )) visitExprConstInt16;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt64> const )) preVisitExprConstInt64;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt64> const )) visitExprConstInt64;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt> const )) preVisitExprConstInt;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt> const )) visitExprConstInt;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt2> const )) preVisitExprConstInt2;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt2> const )) visitExprConstInt2;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt3> const )) preVisitExprConstInt3;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt3> const )) visitExprConstInt3;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt4> const )) preVisitExprConstInt4;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt4> const )) visitExprConstInt4;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt8> const )) preVisitExprConstUInt8;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt8> const )) visitExprConstUInt8;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt16> const )) preVisitExprConstUInt16;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt16> const )) visitExprConstUInt16;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt64> const )) preVisitExprConstUInt64;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt64> const )) visitExprConstUInt64;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt> const )) preVisitExprConstUInt;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt> const )) visitExprConstUInt;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt2> const )) preVisitExprConstUInt2;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt2> const )) visitExprConstUInt2;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt3> const )) preVisitExprConstUInt3;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt3> const )) visitExprConstUInt3;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt4> const )) preVisitExprConstUInt4;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt4> const )) visitExprConstUInt4;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstRange> const )) preVisitExprConstRange;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstRange> const )) visitExprConstRange;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstURange> const )) preVisitExprConstURange;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstURange> const )) visitExprConstURange;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstRange64> const )) preVisitExprConstRange64;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstRange64> const )) visitExprConstRange64;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstURange64> const )) preVisitExprConstURange64;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstURange64> const )) visitExprConstURange64;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstBool> const )) preVisitExprConstBool;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstBool> const )) visitExprConstBool;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat> const )) preVisitExprConstFloat;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat> const )) visitExprConstFloat;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat2> const )) preVisitExprConstFloat2;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat2> const )) visitExprConstFloat2;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat3> const )) preVisitExprConstFloat3;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat3> const )) visitExprConstFloat3;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat4> const )) preVisitExprConstFloat4;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat4> const )) visitExprConstFloat4;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstString> const )) preVisitExprConstString;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstString> const )) visitExprConstString;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstDouble> const )) preVisitExprConstDouble;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstDouble> const )) visitExprConstDouble;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFakeContext> const )) preVisitExprFakeContext;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFakeContext> const )) visitExprFakeContext;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFakeLineInfo> const )) preVisitExprFakeLineInfo;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFakeLineInfo> const )) visitExprFakeLineInfo;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReader> const )) preVisitExprReader;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprReader> const )) visitExprReader;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprUnsafe> const )) preVisitExprUnsafe;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprUnsafe> const )) visitExprUnsafe;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCallMacro> const )) preVisitExprCallMacro;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCallMacro> const )) visitExprCallMacro;
+    void * __rtti;
+    Func DAS_COMMENT((void,ast::AstVisitor)) __finalize;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) preVisitProgram;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) visitProgram;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const ,Module * const )) preVisitProgramBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,Module * const )) preVisitModule;
+    Func DAS_COMMENT((void,ast::AstVisitor,Module * const )) visitModule;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeDecl> const )) preVisitExprTypeDecl;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTypeDecl> const )) visitExprTypeDecl;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<TypeDecl> const )) preVisitTypeDecl;
+    Func DAS_COMMENT((smart_ptr_raw<TypeDecl>,ast::AstVisitor,smart_ptr_raw<TypeDecl> const )) visitTypeDecl;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<TypeDecl> const ,das::string const )) preVisitAlias;
+    Func DAS_COMMENT((smart_ptr_raw<TypeDecl>,ast::AstVisitor,smart_ptr_raw<TypeDecl> const ,das::string const )) visitAlias;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Enumeration * const )) canVisitEnumeration;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Enumeration> const )) preVisitEnumeration;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Enumeration> const ,das::string const ,smart_ptr_raw<Expression> const ,bool)) preVisitEnumerationValue;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Enumeration> const ,das::string const ,smart_ptr_raw<Expression> const ,bool)) visitEnumerationValue;
+    Func DAS_COMMENT((smart_ptr_raw<Enumeration>,ast::AstVisitor,smart_ptr_raw<Enumeration> const )) visitEnumeration;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Structure * const )) canVisitStructure;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const )) preVisitStructure;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const ,Structure::FieldDeclaration const ,bool)) preVisitStructureField;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const ,Structure::FieldDeclaration const ,bool)) visitStructureField;
+    Func DAS_COMMENT((smart_ptr_raw<Structure>,ast::AstVisitor,smart_ptr_raw<Structure> const )) visitStructure;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Function * const )) canVisitFunction;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Function * const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) canVisitFunctionArgumentInit;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const )) preVisitFunction;
+    Func DAS_COMMENT((smart_ptr_raw<Function>,ast::AstVisitor,smart_ptr_raw<Function> const )) visitFunction;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,bool)) preVisitFunctionArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,bool)) visitFunctionArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitFunctionArgumentInit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitFunctionArgumentInit;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Expression> const )) preVisitFunctionBody;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Expression> const )) visitFunctionBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Expression> const )) preVisitExpression;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Expression> const )) visitExpression;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) preVisitExprBlock;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) visitExprBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprBlockArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,bool)) visitExprBlockArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockArgumentInit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitExprBlockArgumentInit;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockExpression;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) visitExprBlockExpression;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) preVisitExprBlockFinal;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) visitExprBlockFinal;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockFinalExpression;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) visitExprBlockFinalExpression;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const )) preVisitExprLet;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLet> const )) visitExprLet;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprLetVariable;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,bool)) visitExprLetVariable;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitExprLetVariableInit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitExprLetVariableInit;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Variable * const )) canVisitGlobalVariable;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) preVisitGlobalLet;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) visitGlobalLet;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Variable> const ,bool)) preVisitGlobalLetVariable;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<Variable> const ,bool)) visitGlobalLetVariable;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitGlobalLetVariableInit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitGlobalLetVariableInit;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const )) preVisitExprStringBuilder;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const )) visitExprStringBuilder;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprStringBuilderElement;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const ,smart_ptr_raw<Expression> const ,bool)) visitExprStringBuilderElement;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const )) preVisitExprNew;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNew> const )) visitExprNew;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprNewArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool)) visitExprNewArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const )) preVisitExprNamedCall;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const )) visitExprNamedCall;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const ,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprNamedCallArgument;
+    Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const ,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprNamedCallArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const )) preVisitExprLooksLikeCall;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const )) visitExprLooksLikeCall;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) canVisitLooksLikeCallArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprLooksLikeCallArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) visitExprLooksLikeCallArgument;
+    Func DAS_COMMENT((bool,ast::AstVisitor,ExprCall * const )) canVisitCall;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const )) preVisitExprCall;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCall> const )) visitExprCall;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprCallArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool)) visitExprCallArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const )) preVisitExprNullCoalescing;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const )) visitExprNullCoalescing;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const ,smart_ptr_raw<Expression> const )) preVisitExprNullCoalescingDefault;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const )) preVisitExprAt;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAt> const )) visitExprAt;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const ,smart_ptr_raw<Expression> const )) preVisitExprAtIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeAt> const )) preVisitExprSafeAt;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeAt> const )) visitExprSafeAt;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const ,smart_ptr_raw<Expression> const )) preVisitExprSafeAtIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIs> const )) preVisitExprIs;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIs> const )) visitExprIs;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIs> const ,smart_ptr_raw<TypeDecl> const )) preVisitExprIsType;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp2> const )) preVisitExprOp2;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp2> const )) visitExprOp2;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp2> const ,smart_ptr_raw<Expression> const )) preVisitExprOp2Right;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const )) preVisitExprOp3;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp3> const )) visitExprOp3;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const ,smart_ptr_raw<Expression> const )) preVisitExprOp3Left;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const ,smart_ptr_raw<Expression> const )) preVisitExprOp3Right;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) isRightFirstExprCopy;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) preVisitExprCopy;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) visitExprCopy;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const ,smart_ptr_raw<Expression> const )) preVisitExprCopyRight;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) isRightFirstExprMove;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) preVisitExprMove;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) visitExprMove;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMove> const ,smart_ptr_raw<Expression> const )) preVisitExprMoveRight;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) isRightFirstExprClone;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) preVisitExprClone;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) visitExprClone;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const ,smart_ptr_raw<Expression> const )) preVisitExprCloneRight;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) canVisitWithAliasSubexpression;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) preVisitExprAssume;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) visitExprAssume;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWith> const )) preVisitExprWith;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprWith> const )) visitExprWith;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWith> const ,smart_ptr_raw<Expression> const )) preVisitExprWithBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const )) preVisitExprWhile;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprWhile> const )) visitExprWhile;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const ,smart_ptr_raw<Expression> const )) preVisitExprWhileBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const )) preVisitExprTryCatch;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const )) visitExprTryCatch;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const ,smart_ptr_raw<Expression> const )) preVisitExprTryCatchCatch;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const )) preVisitExprIfThenElse;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const )) visitExprIfThenElse;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ,smart_ptr_raw<Expression> const )) preVisitExprIfThenElseIfBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ,smart_ptr_raw<Expression> const )) preVisitExprIfThenElseElseBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprFor;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) visitExprFor;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprForVariable;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Variable> const ,bool)) visitExprForVariable;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprForSource;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Expression> const ,bool)) visitExprForSource;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprForStack;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprForBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const )) preVisitExprMakeVariant;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const )) visitExprMakeVariant;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprMakeVariantField;
+    Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprMakeVariantField;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) canVisitMakeStructBody;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) canVisitMakeStructBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) preVisitExprMakeStruct;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) visitExprMakeStruct;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,bool)) preVisitExprMakeStructIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,bool)) visitExprMakeStructIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprMakeStructField;
+    Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprMakeStructField;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) preVisitMakeStructureBlock;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) visitMakeStructureBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const )) preVisitExprMakeArray;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const )) visitExprMakeArray;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) preVisitExprMakeArrayIndex;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) visitExprMakeArrayIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const )) preVisitExprMakeTuple;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const )) visitExprMakeTuple;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) preVisitExprMakeTupleIndex;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) visitExprMakeTupleIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const )) preVisitExprArrayComprehension;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const )) visitExprArrayComprehension;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ,smart_ptr_raw<Expression> const )) preVisitExprArrayComprehensionSubexpr;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ,smart_ptr_raw<Expression> const )) preVisitExprArrayComprehensionWhere;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const )) preVisitExprTypeInfo;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const )) visitExprTypeInfo;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprPtr2Ref> const )) preVisitExprPtr2Ref;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprPtr2Ref> const )) visitExprPtr2Ref;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLabel> const )) preVisitExprLabel;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLabel> const )) visitExprLabel;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprGoto> const )) preVisitExprGoto;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprGoto> const )) visitExprGoto;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprRef2Value> const )) preVisitExprRef2Value;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprRef2Value> const )) visitExprRef2Value;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprRef2Ptr> const )) preVisitExprRef2Ptr;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprRef2Ptr> const )) visitExprRef2Ptr;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAddr> const )) preVisitExprAddr;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAddr> const )) visitExprAddr;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAssert> const )) preVisitExprAssert;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAssert> const )) visitExprAssert;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStaticAssert> const )) preVisitExprStaticAssert;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStaticAssert> const )) visitExprStaticAssert;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprQuote> const )) preVisitExprQuote;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprQuote> const )) visitExprQuote;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprDebug> const )) preVisitExprDebug;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprDebug> const )) visitExprDebug;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprInvoke> const )) preVisitExprInvoke;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprInvoke> const )) visitExprInvoke;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprErase> const )) preVisitExprErase;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprErase> const )) visitExprErase;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSetInsert> const )) preVisitExprSetInsert;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSetInsert> const )) visitExprSetInsert;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFind> const )) preVisitExprFind;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFind> const )) visitExprFind;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprKeyExists> const )) preVisitExprKeyExists;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprKeyExists> const )) visitExprKeyExists;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAscend> const )) preVisitExprAscend;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAscend> const )) visitExprAscend;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCast> const )) preVisitExprCast;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCast> const )) visitExprCast;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprDelete> const )) preVisitExprDelete;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprDelete> const )) visitExprDelete;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprVar> const )) preVisitExprVar;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprVar> const )) visitExprVar;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTag> const )) preVisitExprTag;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTag> const ,smart_ptr_raw<Expression> const )) preVisitExprTagValue;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTag> const )) visitExprTag;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprField> const )) preVisitExprField;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprField> const )) visitExprField;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeField> const )) preVisitExprSafeField;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeField> const )) visitExprSafeField;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSwizzle> const )) preVisitExprSwizzle;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSwizzle> const )) visitExprSwizzle;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIsVariant> const )) preVisitExprIsVariant;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIsVariant> const )) visitExprIsVariant;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAsVariant> const )) preVisitExprAsVariant;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAsVariant> const )) visitExprAsVariant;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeAsVariant> const )) preVisitExprSafeAsVariant;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeAsVariant> const )) visitExprSafeAsVariant;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp1> const )) preVisitExprOp1;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp1> const )) visitExprOp1;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReturn> const )) preVisitExprReturn;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprReturn> const )) visitExprReturn;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprYield> const )) preVisitExprYield;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprYield> const )) visitExprYield;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBreak> const )) preVisitExprBreak;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBreak> const )) visitExprBreak;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprContinue> const )) preVisitExprContinue;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprContinue> const )) visitExprContinue;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) canVisitMakeBlockBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) preVisitExprMakeBlock;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) visitExprMakeBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeGenerator> const )) preVisitExprMakeGenerator;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeGenerator> const )) visitExprMakeGenerator;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMemZero> const )) preVisitExprMemZero;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMemZero> const )) visitExprMemZero;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConst> const )) preVisitExprConst;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConst> const )) visitExprConst;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstPtr> const )) preVisitExprConstPtr;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstPtr> const )) visitExprConstPtr;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstEnumeration> const )) preVisitExprConstEnumeration;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstEnumeration> const )) visitExprConstEnumeration;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstBitfield> const )) preVisitExprConstBitfield;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstBitfield> const )) visitExprConstBitfield;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt8> const )) preVisitExprConstInt8;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt8> const )) visitExprConstInt8;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt16> const )) preVisitExprConstInt16;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt16> const )) visitExprConstInt16;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt64> const )) preVisitExprConstInt64;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt64> const )) visitExprConstInt64;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt> const )) preVisitExprConstInt;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt> const )) visitExprConstInt;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt2> const )) preVisitExprConstInt2;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt2> const )) visitExprConstInt2;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt3> const )) preVisitExprConstInt3;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt3> const )) visitExprConstInt3;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt4> const )) preVisitExprConstInt4;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt4> const )) visitExprConstInt4;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt8> const )) preVisitExprConstUInt8;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt8> const )) visitExprConstUInt8;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt16> const )) preVisitExprConstUInt16;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt16> const )) visitExprConstUInt16;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt64> const )) preVisitExprConstUInt64;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt64> const )) visitExprConstUInt64;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt> const )) preVisitExprConstUInt;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt> const )) visitExprConstUInt;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt2> const )) preVisitExprConstUInt2;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt2> const )) visitExprConstUInt2;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt3> const )) preVisitExprConstUInt3;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt3> const )) visitExprConstUInt3;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt4> const )) preVisitExprConstUInt4;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt4> const )) visitExprConstUInt4;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstRange> const )) preVisitExprConstRange;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstRange> const )) visitExprConstRange;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstURange> const )) preVisitExprConstURange;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstURange> const )) visitExprConstURange;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstRange64> const )) preVisitExprConstRange64;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstRange64> const )) visitExprConstRange64;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstURange64> const )) preVisitExprConstURange64;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstURange64> const )) visitExprConstURange64;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstBool> const )) preVisitExprConstBool;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstBool> const )) visitExprConstBool;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat> const )) preVisitExprConstFloat;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat> const )) visitExprConstFloat;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat2> const )) preVisitExprConstFloat2;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat2> const )) visitExprConstFloat2;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat3> const )) preVisitExprConstFloat3;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat3> const )) visitExprConstFloat3;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat4> const )) preVisitExprConstFloat4;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat4> const )) visitExprConstFloat4;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstString> const )) preVisitExprConstString;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstString> const )) visitExprConstString;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstDouble> const )) preVisitExprConstDouble;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstDouble> const )) visitExprConstDouble;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFakeContext> const )) preVisitExprFakeContext;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFakeContext> const )) visitExprFakeContext;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFakeLineInfo> const )) preVisitExprFakeLineInfo;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFakeLineInfo> const )) visitExprFakeLineInfo;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReader> const )) preVisitExprReader;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprReader> const )) visitExprReader;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprUnsafe> const )) preVisitExprUnsafe;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprUnsafe> const )) visitExprUnsafe;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCallMacro> const )) preVisitExprCallMacro;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCallMacro> const )) visitExprCallMacro;
 };
 static_assert(sizeof(AstVisitor)==2424,"structure size mismatch with DAS");
 static_assert(offsetof(AstVisitor,__rtti)==0,"structure field offset mismatch with DAS");
@@ -2540,7 +2540,7 @@ VarInfo __struct_info__3a4670ec1a9ece51_field_301 =  { Type::tFunction, nullptr,
 TypeInfo * __type_info__964693f360f430dd_arg_types_var_4199167861930774097[2] = { &__type_info__21586ce84f433a21, &__type_info__636dc1714c171367 };
 const char * __type_info__964693f360f430dd_arg_names_var_4199167861930774097[2] = { "self", "expr" };
 VarInfo __struct_info__3a4670ec1a9ece51_field_302 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__6636442e03391ebf, nullptr, (TypeInfo **)__type_info__964693f360f430dd_arg_types_var_4199167861930774097, __type_info__964693f360f430dd_arg_names_var_4199167861930774097, 2, 0, nullptr, 12, 8, UINT64_C(0x964693f360f430dd), "visitExprCallMacro", 2416, 0 };
-VarInfo * __struct_info__3a4670ec1a9ece51_fields[303] =  { &__struct_info__3a4670ec1a9ece51_field_0, &__struct_info__3a4670ec1a9ece51_field_1, &__struct_info__3a4670ec1a9ece51_field_2, &__struct_info__3a4670ec1a9ece51_field_3, &__struct_info__3a4670ec1a9ece51_field_4, &__struct_info__3a4670ec1a9ece51_field_5, &__struct_info__3a4670ec1a9ece51_field_6, &__struct_info__3a4670ec1a9ece51_field_7, &__struct_info__3a4670ec1a9ece51_field_8, &__struct_info__3a4670ec1a9ece51_field_9, &__struct_info__3a4670ec1a9ece51_field_10, &__struct_info__3a4670ec1a9ece51_field_11, &__struct_info__3a4670ec1a9ece51_field_12, &__struct_info__3a4670ec1a9ece51_field_13, &__struct_info__3a4670ec1a9ece51_field_14, &__struct_info__3a4670ec1a9ece51_field_15, &__struct_info__3a4670ec1a9ece51_field_16, &__struct_info__3a4670ec1a9ece51_field_17, &__struct_info__3a4670ec1a9ece51_field_18, &__struct_info__3a4670ec1a9ece51_field_19, &__struct_info__3a4670ec1a9ece51_field_20, &__struct_info__3a4670ec1a9ece51_field_21, &__struct_info__3a4670ec1a9ece51_field_22, &__struct_info__3a4670ec1a9ece51_field_23, &__struct_info__3a4670ec1a9ece51_field_24, &__struct_info__3a4670ec1a9ece51_field_25, &__struct_info__3a4670ec1a9ece51_field_26, &__struct_info__3a4670ec1a9ece51_field_27, &__struct_info__3a4670ec1a9ece51_field_28, &__struct_info__3a4670ec1a9ece51_field_29, &__struct_info__3a4670ec1a9ece51_field_30, &__struct_info__3a4670ec1a9ece51_field_31, &__struct_info__3a4670ec1a9ece51_field_32, &__struct_info__3a4670ec1a9ece51_field_33, &__struct_info__3a4670ec1a9ece51_field_34, &__struct_info__3a4670ec1a9ece51_field_35, &__struct_info__3a4670ec1a9ece51_field_36, &__struct_info__3a4670ec1a9ece51_field_37, &__struct_info__3a4670ec1a9ece51_field_38, &__struct_info__3a4670ec1a9ece51_field_39, &__struct_info__3a4670ec1a9ece51_field_40, &__struct_info__3a4670ec1a9ece51_field_41, &__struct_info__3a4670ec1a9ece51_field_42, &__struct_info__3a4670ec1a9ece51_field_43, &__struct_info__3a4670ec1a9ece51_field_44, &__struct_info__3a4670ec1a9ece51_field_45, &__struct_info__3a4670ec1a9ece51_field_46, &__struct_info__3a4670ec1a9ece51_field_47, &__struct_info__3a4670ec1a9ece51_field_48, &__struct_info__3a4670ec1a9ece51_field_49, &__struct_info__3a4670ec1a9ece51_field_50, &__struct_info__3a4670ec1a9ece51_field_51, &__struct_info__3a4670ec1a9ece51_field_52, &__struct_info__3a4670ec1a9ece51_field_53, &__struct_info__3a4670ec1a9ece51_field_54, &__struct_info__3a4670ec1a9ece51_field_55, &__struct_info__3a4670ec1a9ece51_field_56, &__struct_info__3a4670ec1a9ece51_field_57, &__struct_info__3a4670ec1a9ece51_field_58, &__struct_info__3a4670ec1a9ece51_field_59, &__struct_info__3a4670ec1a9ece51_field_60, &__struct_info__3a4670ec1a9ece51_field_61, &__struct_info__3a4670ec1a9ece51_field_62, &__struct_info__3a4670ec1a9ece51_field_63, &__struct_info__3a4670ec1a9ece51_field_64, &__struct_info__3a4670ec1a9ece51_field_65, &__struct_info__3a4670ec1a9ece51_field_66, &__struct_info__3a4670ec1a9ece51_field_67, &__struct_info__3a4670ec1a9ece51_field_68, &__struct_info__3a4670ec1a9ece51_field_69, &__struct_info__3a4670ec1a9ece51_field_70, &__struct_info__3a4670ec1a9ece51_field_71, &__struct_info__3a4670ec1a9ece51_field_72, &__struct_info__3a4670ec1a9ece51_field_73, &__struct_info__3a4670ec1a9ece51_field_74, &__struct_info__3a4670ec1a9ece51_field_75, &__struct_info__3a4670ec1a9ece51_field_76, &__struct_info__3a4670ec1a9ece51_field_77, &__struct_info__3a4670ec1a9ece51_field_78, &__struct_info__3a4670ec1a9ece51_field_79, &__struct_info__3a4670ec1a9ece51_field_80, &__struct_info__3a4670ec1a9ece51_field_81, &__struct_info__3a4670ec1a9ece51_field_82, &__struct_info__3a4670ec1a9ece51_field_83, &__struct_info__3a4670ec1a9ece51_field_84, &__struct_info__3a4670ec1a9ece51_field_85, &__struct_info__3a4670ec1a9ece51_field_86, &__struct_info__3a4670ec1a9ece51_field_87, &__struct_info__3a4670ec1a9ece51_field_88, &__struct_info__3a4670ec1a9ece51_field_89, &__struct_info__3a4670ec1a9ece51_field_90, &__struct_info__3a4670ec1a9ece51_field_91, &__struct_info__3a4670ec1a9ece51_field_92, &__struct_info__3a4670ec1a9ece51_field_93, &__struct_info__3a4670ec1a9ece51_field_94, &__struct_info__3a4670ec1a9ece51_field_95, &__struct_info__3a4670ec1a9ece51_field_96, &__struct_info__3a4670ec1a9ece51_field_97, &__struct_info__3a4670ec1a9ece51_field_98, &__struct_info__3a4670ec1a9ece51_field_99, &__struct_info__3a4670ec1a9ece51_field_100, &__struct_info__3a4670ec1a9ece51_field_101, &__struct_info__3a4670ec1a9ece51_field_102, &__struct_info__3a4670ec1a9ece51_field_103, &__struct_info__3a4670ec1a9ece51_field_104, &__struct_info__3a4670ec1a9ece51_field_105, &__struct_info__3a4670ec1a9ece51_field_106, &__struct_info__3a4670ec1a9ece51_field_107, &__struct_info__3a4670ec1a9ece51_field_108, &__struct_info__3a4670ec1a9ece51_field_109, &__struct_info__3a4670ec1a9ece51_field_110, &__struct_info__3a4670ec1a9ece51_field_111, &__struct_info__3a4670ec1a9ece51_field_112, &__struct_info__3a4670ec1a9ece51_field_113, &__struct_info__3a4670ec1a9ece51_field_114, &__struct_info__3a4670ec1a9ece51_field_115, &__struct_info__3a4670ec1a9ece51_field_116, &__struct_info__3a4670ec1a9ece51_field_117, &__struct_info__3a4670ec1a9ece51_field_118, &__struct_info__3a4670ec1a9ece51_field_119, &__struct_info__3a4670ec1a9ece51_field_120, &__struct_info__3a4670ec1a9ece51_field_121, &__struct_info__3a4670ec1a9ece51_field_122, &__struct_info__3a4670ec1a9ece51_field_123, &__struct_info__3a4670ec1a9ece51_field_124, &__struct_info__3a4670ec1a9ece51_field_125, &__struct_info__3a4670ec1a9ece51_field_126, &__struct_info__3a4670ec1a9ece51_field_127, &__struct_info__3a4670ec1a9ece51_field_128, &__struct_info__3a4670ec1a9ece51_field_129, &__struct_info__3a4670ec1a9ece51_field_130, &__struct_info__3a4670ec1a9ece51_field_131, &__struct_info__3a4670ec1a9ece51_field_132, &__struct_info__3a4670ec1a9ece51_field_133, &__struct_info__3a4670ec1a9ece51_field_134, &__struct_info__3a4670ec1a9ece51_field_135, &__struct_info__3a4670ec1a9ece51_field_136, &__struct_info__3a4670ec1a9ece51_field_137, &__struct_info__3a4670ec1a9ece51_field_138, &__struct_info__3a4670ec1a9ece51_field_139, &__struct_info__3a4670ec1a9ece51_field_140, &__struct_info__3a4670ec1a9ece51_field_141, &__struct_info__3a4670ec1a9ece51_field_142, &__struct_info__3a4670ec1a9ece51_field_143, &__struct_info__3a4670ec1a9ece51_field_144, &__struct_info__3a4670ec1a9ece51_field_145, &__struct_info__3a4670ec1a9ece51_field_146, &__struct_info__3a4670ec1a9ece51_field_147, &__struct_info__3a4670ec1a9ece51_field_148, &__struct_info__3a4670ec1a9ece51_field_149, &__struct_info__3a4670ec1a9ece51_field_150, &__struct_info__3a4670ec1a9ece51_field_151, &__struct_info__3a4670ec1a9ece51_field_152, &__struct_info__3a4670ec1a9ece51_field_153, &__struct_info__3a4670ec1a9ece51_field_154, &__struct_info__3a4670ec1a9ece51_field_155, &__struct_info__3a4670ec1a9ece51_field_156, &__struct_info__3a4670ec1a9ece51_field_157, &__struct_info__3a4670ec1a9ece51_field_158, &__struct_info__3a4670ec1a9ece51_field_159, &__struct_info__3a4670ec1a9ece51_field_160, &__struct_info__3a4670ec1a9ece51_field_161, &__struct_info__3a4670ec1a9ece51_field_162, &__struct_info__3a4670ec1a9ece51_field_163, &__struct_info__3a4670ec1a9ece51_field_164, &__struct_info__3a4670ec1a9ece51_field_165, &__struct_info__3a4670ec1a9ece51_field_166, &__struct_info__3a4670ec1a9ece51_field_167, &__struct_info__3a4670ec1a9ece51_field_168, &__struct_info__3a4670ec1a9ece51_field_169, &__struct_info__3a4670ec1a9ece51_field_170, &__struct_info__3a4670ec1a9ece51_field_171, &__struct_info__3a4670ec1a9ece51_field_172, &__struct_info__3a4670ec1a9ece51_field_173, &__struct_info__3a4670ec1a9ece51_field_174, &__struct_info__3a4670ec1a9ece51_field_175, &__struct_info__3a4670ec1a9ece51_field_176, &__struct_info__3a4670ec1a9ece51_field_177, &__struct_info__3a4670ec1a9ece51_field_178, &__struct_info__3a4670ec1a9ece51_field_179, &__struct_info__3a4670ec1a9ece51_field_180, &__struct_info__3a4670ec1a9ece51_field_181, &__struct_info__3a4670ec1a9ece51_field_182, &__struct_info__3a4670ec1a9ece51_field_183, &__struct_info__3a4670ec1a9ece51_field_184, &__struct_info__3a4670ec1a9ece51_field_185, &__struct_info__3a4670ec1a9ece51_field_186, &__struct_info__3a4670ec1a9ece51_field_187, &__struct_info__3a4670ec1a9ece51_field_188, &__struct_info__3a4670ec1a9ece51_field_189, &__struct_info__3a4670ec1a9ece51_field_190, &__struct_info__3a4670ec1a9ece51_field_191, &__struct_info__3a4670ec1a9ece51_field_192, &__struct_info__3a4670ec1a9ece51_field_193, &__struct_info__3a4670ec1a9ece51_field_194, &__struct_info__3a4670ec1a9ece51_field_195, &__struct_info__3a4670ec1a9ece51_field_196, &__struct_info__3a4670ec1a9ece51_field_197, &__struct_info__3a4670ec1a9ece51_field_198, &__struct_info__3a4670ec1a9ece51_field_199, &__struct_info__3a4670ec1a9ece51_field_200, &__struct_info__3a4670ec1a9ece51_field_201, &__struct_info__3a4670ec1a9ece51_field_202, &__struct_info__3a4670ec1a9ece51_field_203, &__struct_info__3a4670ec1a9ece51_field_204, &__struct_info__3a4670ec1a9ece51_field_205, &__struct_info__3a4670ec1a9ece51_field_206, &__struct_info__3a4670ec1a9ece51_field_207, &__struct_info__3a4670ec1a9ece51_field_208, &__struct_info__3a4670ec1a9ece51_field_209, &__struct_info__3a4670ec1a9ece51_field_210, &__struct_info__3a4670ec1a9ece51_field_211, &__struct_info__3a4670ec1a9ece51_field_212, &__struct_info__3a4670ec1a9ece51_field_213, &__struct_info__3a4670ec1a9ece51_field_214, &__struct_info__3a4670ec1a9ece51_field_215, &__struct_info__3a4670ec1a9ece51_field_216, &__struct_info__3a4670ec1a9ece51_field_217, &__struct_info__3a4670ec1a9ece51_field_218, &__struct_info__3a4670ec1a9ece51_field_219, &__struct_info__3a4670ec1a9ece51_field_220, &__struct_info__3a4670ec1a9ece51_field_221, &__struct_info__3a4670ec1a9ece51_field_222, &__struct_info__3a4670ec1a9ece51_field_223, &__struct_info__3a4670ec1a9ece51_field_224, &__struct_info__3a4670ec1a9ece51_field_225, &__struct_info__3a4670ec1a9ece51_field_226, &__struct_info__3a4670ec1a9ece51_field_227, &__struct_info__3a4670ec1a9ece51_field_228, &__struct_info__3a4670ec1a9ece51_field_229, &__struct_info__3a4670ec1a9ece51_field_230, &__struct_info__3a4670ec1a9ece51_field_231, &__struct_info__3a4670ec1a9ece51_field_232, &__struct_info__3a4670ec1a9ece51_field_233, &__struct_info__3a4670ec1a9ece51_field_234, &__struct_info__3a4670ec1a9ece51_field_235, &__struct_info__3a4670ec1a9ece51_field_236, &__struct_info__3a4670ec1a9ece51_field_237, &__struct_info__3a4670ec1a9ece51_field_238, &__struct_info__3a4670ec1a9ece51_field_239, &__struct_info__3a4670ec1a9ece51_field_240, &__struct_info__3a4670ec1a9ece51_field_241, &__struct_info__3a4670ec1a9ece51_field_242, &__struct_info__3a4670ec1a9ece51_field_243, &__struct_info__3a4670ec1a9ece51_field_244, &__struct_info__3a4670ec1a9ece51_field_245, &__struct_info__3a4670ec1a9ece51_field_246, &__struct_info__3a4670ec1a9ece51_field_247, &__struct_info__3a4670ec1a9ece51_field_248, &__struct_info__3a4670ec1a9ece51_field_249, &__struct_info__3a4670ec1a9ece51_field_250, &__struct_info__3a4670ec1a9ece51_field_251, &__struct_info__3a4670ec1a9ece51_field_252, &__struct_info__3a4670ec1a9ece51_field_253, &__struct_info__3a4670ec1a9ece51_field_254, &__struct_info__3a4670ec1a9ece51_field_255, &__struct_info__3a4670ec1a9ece51_field_256, &__struct_info__3a4670ec1a9ece51_field_257, &__struct_info__3a4670ec1a9ece51_field_258, &__struct_info__3a4670ec1a9ece51_field_259, &__struct_info__3a4670ec1a9ece51_field_260, &__struct_info__3a4670ec1a9ece51_field_261, &__struct_info__3a4670ec1a9ece51_field_262, &__struct_info__3a4670ec1a9ece51_field_263, &__struct_info__3a4670ec1a9ece51_field_264, &__struct_info__3a4670ec1a9ece51_field_265, &__struct_info__3a4670ec1a9ece51_field_266, &__struct_info__3a4670ec1a9ece51_field_267, &__struct_info__3a4670ec1a9ece51_field_268, &__struct_info__3a4670ec1a9ece51_field_269, &__struct_info__3a4670ec1a9ece51_field_270, &__struct_info__3a4670ec1a9ece51_field_271, &__struct_info__3a4670ec1a9ece51_field_272, &__struct_info__3a4670ec1a9ece51_field_273, &__struct_info__3a4670ec1a9ece51_field_274, &__struct_info__3a4670ec1a9ece51_field_275, &__struct_info__3a4670ec1a9ece51_field_276, &__struct_info__3a4670ec1a9ece51_field_277, &__struct_info__3a4670ec1a9ece51_field_278, &__struct_info__3a4670ec1a9ece51_field_279, &__struct_info__3a4670ec1a9ece51_field_280, &__struct_info__3a4670ec1a9ece51_field_281, &__struct_info__3a4670ec1a9ece51_field_282, &__struct_info__3a4670ec1a9ece51_field_283, &__struct_info__3a4670ec1a9ece51_field_284, &__struct_info__3a4670ec1a9ece51_field_285, &__struct_info__3a4670ec1a9ece51_field_286, &__struct_info__3a4670ec1a9ece51_field_287, &__struct_info__3a4670ec1a9ece51_field_288, &__struct_info__3a4670ec1a9ece51_field_289, &__struct_info__3a4670ec1a9ece51_field_290, &__struct_info__3a4670ec1a9ece51_field_291, &__struct_info__3a4670ec1a9ece51_field_292, &__struct_info__3a4670ec1a9ece51_field_293, &__struct_info__3a4670ec1a9ece51_field_294, &__struct_info__3a4670ec1a9ece51_field_295, &__struct_info__3a4670ec1a9ece51_field_296, &__struct_info__3a4670ec1a9ece51_field_297, &__struct_info__3a4670ec1a9ece51_field_298, &__struct_info__3a4670ec1a9ece51_field_299, &__struct_info__3a4670ec1a9ece51_field_300, &__struct_info__3a4670ec1a9ece51_field_301, &__struct_info__3a4670ec1a9ece51_field_302 };
+VarInfo * __struct_info__3a4670ec1a9ece51_fields[303] =  { &__struct_info__3a4670ec1a9ece51_field_0, &__struct_info__3a4670ec1a9ece51_field_1, &__struct_info__3a4670ec1a9ece51_field_2, &__struct_info__3a4670ec1a9ece51_field_3, &__struct_info__3a4670ec1a9ece51_field_4, &__struct_info__3a4670ec1a9ece51_field_5, &__struct_info__3a4670ec1a9ece51_field_6, &__struct_info__3a4670ec1a9ece51_field_7, &__struct_info__3a4670ec1a9ece51_field_8, &__struct_info__3a4670ec1a9ece51_field_9, &__struct_info__3a4670ec1a9ece51_field_10, &__struct_info__3a4670ec1a9ece51_field_11, &__struct_info__3a4670ec1a9ece51_field_12, &__struct_info__3a4670ec1a9ece51_field_13, &__struct_info__3a4670ec1a9ece51_field_14, &__struct_info__3a4670ec1a9ece51_field_15, &__struct_info__3a4670ec1a9ece51_field_16, &__struct_info__3a4670ec1a9ece51_field_17, &__struct_info__3a4670ec1a9ece51_field_18, &__struct_info__3a4670ec1a9ece51_field_19, &__struct_info__3a4670ec1a9ece51_field_20, &__struct_info__3a4670ec1a9ece51_field_21, &__struct_info__3a4670ec1a9ece51_field_22, &__struct_info__3a4670ec1a9ece51_field_23, &__struct_info__3a4670ec1a9ece51_field_24, &__struct_info__3a4670ec1a9ece51_field_25, &__struct_info__3a4670ec1a9ece51_field_26, &__struct_info__3a4670ec1a9ece51_field_27, &__struct_info__3a4670ec1a9ece51_field_28, &__struct_info__3a4670ec1a9ece51_field_29, &__struct_info__3a4670ec1a9ece51_field_30, &__struct_info__3a4670ec1a9ece51_field_31, &__struct_info__3a4670ec1a9ece51_field_32, &__struct_info__3a4670ec1a9ece51_field_33, &__struct_info__3a4670ec1a9ece51_field_34, &__struct_info__3a4670ec1a9ece51_field_35, &__struct_info__3a4670ec1a9ece51_field_36, &__struct_info__3a4670ec1a9ece51_field_37, &__struct_info__3a4670ec1a9ece51_field_38, &__struct_info__3a4670ec1a9ece51_field_39, &__struct_info__3a4670ec1a9ece51_field_40, &__struct_info__3a4670ec1a9ece51_field_41, &__struct_info__3a4670ec1a9ece51_field_42, &__struct_info__3a4670ec1a9ece51_field_43, &__struct_info__3a4670ec1a9ece51_field_44, &__struct_info__3a4670ec1a9ece51_field_45, &__struct_info__3a4670ec1a9ece51_field_46, &__struct_info__3a4670ec1a9ece51_field_47, &__struct_info__3a4670ec1a9ece51_field_48, &__struct_info__3a4670ec1a9ece51_field_49, &__struct_info__3a4670ec1a9ece51_field_50, &__struct_info__3a4670ec1a9ece51_field_51, &__struct_info__3a4670ec1a9ece51_field_52, &__struct_info__3a4670ec1a9ece51_field_53, &__struct_info__3a4670ec1a9ece51_field_54, &__struct_info__3a4670ec1a9ece51_field_55, &__struct_info__3a4670ec1a9ece51_field_56, &__struct_info__3a4670ec1a9ece51_field_57, &__struct_info__3a4670ec1a9ece51_field_58, &__struct_info__3a4670ec1a9ece51_field_59, &__struct_info__3a4670ec1a9ece51_field_60, &__struct_info__3a4670ec1a9ece51_field_61, &__struct_info__3a4670ec1a9ece51_field_62, &__struct_info__3a4670ec1a9ece51_field_63, &__struct_info__3a4670ec1a9ece51_field_64, &__struct_info__3a4670ec1a9ece51_field_65, &__struct_info__3a4670ec1a9ece51_field_66, &__struct_info__3a4670ec1a9ece51_field_67, &__struct_info__3a4670ec1a9ece51_field_68, &__struct_info__3a4670ec1a9ece51_field_69, &__struct_info__3a4670ec1a9ece51_field_70, &__struct_info__3a4670ec1a9ece51_field_71, &__struct_info__3a4670ec1a9ece51_field_72, &__struct_info__3a4670ec1a9ece51_field_73, &__struct_info__3a4670ec1a9ece51_field_74, &__struct_info__3a4670ec1a9ece51_field_75, &__struct_info__3a4670ec1a9ece51_field_76, &__struct_info__3a4670ec1a9ece51_field_77, &__struct_info__3a4670ec1a9ece51_field_78, &__struct_info__3a4670ec1a9ece51_field_79, &__struct_info__3a4670ec1a9ece51_field_80, &__struct_info__3a4670ec1a9ece51_field_81, &__struct_info__3a4670ec1a9ece51_field_82, &__struct_info__3a4670ec1a9ece51_field_83, &__struct_info__3a4670ec1a9ece51_field_84, &__struct_info__3a4670ec1a9ece51_field_85, &__struct_info__3a4670ec1a9ece51_field_86, &__struct_info__3a4670ec1a9ece51_field_87, &__struct_info__3a4670ec1a9ece51_field_88, &__struct_info__3a4670ec1a9ece51_field_89, &__struct_info__3a4670ec1a9ece51_field_90, &__struct_info__3a4670ec1a9ece51_field_91, &__struct_info__3a4670ec1a9ece51_field_92, &__struct_info__3a4670ec1a9ece51_field_93, &__struct_info__3a4670ec1a9ece51_field_94, &__struct_info__3a4670ec1a9ece51_field_95, &__struct_info__3a4670ec1a9ece51_field_96, &__struct_info__3a4670ec1a9ece51_field_97, &__struct_info__3a4670ec1a9ece51_field_98, &__struct_info__3a4670ec1a9ece51_field_99, &__struct_info__3a4670ec1a9ece51_field_100, &__struct_info__3a4670ec1a9ece51_field_101, &__struct_info__3a4670ec1a9ece51_field_102, &__struct_info__3a4670ec1a9ece51_field_103, &__struct_info__3a4670ec1a9ece51_field_104, &__struct_info__3a4670ec1a9ece51_field_105, &__struct_info__3a4670ec1a9ece51_field_106, &__struct_info__3a4670ec1a9ece51_field_107, &__struct_info__3a4670ec1a9ece51_field_108, &__struct_info__3a4670ec1a9ece51_field_109, &__struct_info__3a4670ec1a9ece51_field_110, &__struct_info__3a4670ec1a9ece51_field_111, &__struct_info__3a4670ec1a9ece51_field_112, &__struct_info__3a4670ec1a9ece51_field_113, &__struct_info__3a4670ec1a9ece51_field_114, &__struct_info__3a4670ec1a9ece51_field_115, &__struct_info__3a4670ec1a9ece51_field_116, &__struct_info__3a4670ec1a9ece51_field_117, &__struct_info__3a4670ec1a9ece51_field_118, &__struct_info__3a4670ec1a9ece51_field_119, &__struct_info__3a4670ec1a9ece51_field_120, &__struct_info__3a4670ec1a9ece51_field_121, &__struct_info__3a4670ec1a9ece51_field_122, &__struct_info__3a4670ec1a9ece51_field_123, &__struct_info__3a4670ec1a9ece51_field_124, &__struct_info__3a4670ec1a9ece51_field_125, &__struct_info__3a4670ec1a9ece51_field_126, &__struct_info__3a4670ec1a9ece51_field_127, &__struct_info__3a4670ec1a9ece51_field_128, &__struct_info__3a4670ec1a9ece51_field_129, &__struct_info__3a4670ec1a9ece51_field_130, &__struct_info__3a4670ec1a9ece51_field_131, &__struct_info__3a4670ec1a9ece51_field_132, &__struct_info__3a4670ec1a9ece51_field_133, &__struct_info__3a4670ec1a9ece51_field_134, &__struct_info__3a4670ec1a9ece51_field_135, &__struct_info__3a4670ec1a9ece51_field_136, &__struct_info__3a4670ec1a9ece51_field_137, &__struct_info__3a4670ec1a9ece51_field_138, &__struct_info__3a4670ec1a9ece51_field_139, &__struct_info__3a4670ec1a9ece51_field_140, &__struct_info__3a4670ec1a9ece51_field_141, &__struct_info__3a4670ec1a9ece51_field_142, &__struct_info__3a4670ec1a9ece51_field_143, &__struct_info__3a4670ec1a9ece51_field_144, &__struct_info__3a4670ec1a9ece51_field_145, &__struct_info__3a4670ec1a9ece51_field_146, &__struct_info__3a4670ec1a9ece51_field_147, &__struct_info__3a4670ec1a9ece51_field_148, &__struct_info__3a4670ec1a9ece51_field_149, &__struct_info__3a4670ec1a9ece51_field_150, &__struct_info__3a4670ec1a9ece51_field_151, &__struct_info__3a4670ec1a9ece51_field_152, &__struct_info__3a4670ec1a9ece51_field_153, &__struct_info__3a4670ec1a9ece51_field_154, &__struct_info__3a4670ec1a9ece51_field_155, &__struct_info__3a4670ec1a9ece51_field_156, &__struct_info__3a4670ec1a9ece51_field_157, &__struct_info__3a4670ec1a9ece51_field_158, &__struct_info__3a4670ec1a9ece51_field_159, &__struct_info__3a4670ec1a9ece51_field_160, &__struct_info__3a4670ec1a9ece51_field_161, &__struct_info__3a4670ec1a9ece51_field_162, &__struct_info__3a4670ec1a9ece51_field_163, &__struct_info__3a4670ec1a9ece51_field_164, &__struct_info__3a4670ec1a9ece51_field_165, &__struct_info__3a4670ec1a9ece51_field_166, &__struct_info__3a4670ec1a9ece51_field_167, &__struct_info__3a4670ec1a9ece51_field_168, &__struct_info__3a4670ec1a9ece51_field_169, &__struct_info__3a4670ec1a9ece51_field_170, &__struct_info__3a4670ec1a9ece51_field_171, &__struct_info__3a4670ec1a9ece51_field_172, &__struct_info__3a4670ec1a9ece51_field_173, &__struct_info__3a4670ec1a9ece51_field_174, &__struct_info__3a4670ec1a9ece51_field_175, &__struct_info__3a4670ec1a9ece51_field_176, &__struct_info__3a4670ec1a9ece51_field_177, &__struct_info__3a4670ec1a9ece51_field_178, &__struct_info__3a4670ec1a9ece51_field_179, &__struct_info__3a4670ec1a9ece51_field_180, &__struct_info__3a4670ec1a9ece51_field_181, &__struct_info__3a4670ec1a9ece51_field_182, &__struct_info__3a4670ec1a9ece51_field_183, &__struct_info__3a4670ec1a9ece51_field_184, &__struct_info__3a4670ec1a9ece51_field_185, &__struct_info__3a4670ec1a9ece51_field_186, &__struct_info__3a4670ec1a9ece51_field_187, &__struct_info__3a4670ec1a9ece51_field_188, &__struct_info__3a4670ec1a9ece51_field_189, &__struct_info__3a4670ec1a9ece51_field_190, &__struct_info__3a4670ec1a9ece51_field_191, &__struct_info__3a4670ec1a9ece51_field_192, &__struct_info__3a4670ec1a9ece51_field_193, &__struct_info__3a4670ec1a9ece51_field_194, &__struct_info__3a4670ec1a9ece51_field_195, &__struct_info__3a4670ec1a9ece51_field_196, &__struct_info__3a4670ec1a9ece51_field_197, &__struct_info__3a4670ec1a9ece51_field_198, &__struct_info__3a4670ec1a9ece51_field_199, &__struct_info__3a4670ec1a9ece51_field_200, &__struct_info__3a4670ec1a9ece51_field_201, &__struct_info__3a4670ec1a9ece51_field_202, &__struct_info__3a4670ec1a9ece51_field_203, &__struct_info__3a4670ec1a9ece51_field_204, &__struct_info__3a4670ec1a9ece51_field_205, &__struct_info__3a4670ec1a9ece51_field_206, &__struct_info__3a4670ec1a9ece51_field_207, &__struct_info__3a4670ec1a9ece51_field_208, &__struct_info__3a4670ec1a9ece51_field_209, &__struct_info__3a4670ec1a9ece51_field_210, &__struct_info__3a4670ec1a9ece51_field_211, &__struct_info__3a4670ec1a9ece51_field_212, &__struct_info__3a4670ec1a9ece51_field_213, &__struct_info__3a4670ec1a9ece51_field_214, &__struct_info__3a4670ec1a9ece51_field_215, &__struct_info__3a4670ec1a9ece51_field_216, &__struct_info__3a4670ec1a9ece51_field_217, &__struct_info__3a4670ec1a9ece51_field_218, &__struct_info__3a4670ec1a9ece51_field_219, &__struct_info__3a4670ec1a9ece51_field_220, &__struct_info__3a4670ec1a9ece51_field_221, &__struct_info__3a4670ec1a9ece51_field_222, &__struct_info__3a4670ec1a9ece51_field_223, &__struct_info__3a4670ec1a9ece51_field_224, &__struct_info__3a4670ec1a9ece51_field_225, &__struct_info__3a4670ec1a9ece51_field_226, &__struct_info__3a4670ec1a9ece51_field_227, &__struct_info__3a4670ec1a9ece51_field_228, &__struct_info__3a4670ec1a9ece51_field_229, &__struct_info__3a4670ec1a9ece51_field_230, &__struct_info__3a4670ec1a9ece51_field_231, &__struct_info__3a4670ec1a9ece51_field_232, &__struct_info__3a4670ec1a9ece51_field_233, &__struct_info__3a4670ec1a9ece51_field_234, &__struct_info__3a4670ec1a9ece51_field_235, &__struct_info__3a4670ec1a9ece51_field_236, &__struct_info__3a4670ec1a9ece51_field_237, &__struct_info__3a4670ec1a9ece51_field_238, &__struct_info__3a4670ec1a9ece51_field_239, &__struct_info__3a4670ec1a9ece51_field_240, &__struct_info__3a4670ec1a9ece51_field_241, &__struct_info__3a4670ec1a9ece51_field_242, &__struct_info__3a4670ec1a9ece51_field_243, &__struct_info__3a4670ec1a9ece51_field_244, &__struct_info__3a4670ec1a9ece51_field_245, &__struct_info__3a4670ec1a9ece51_field_246, &__struct_info__3a4670ec1a9ece51_field_247, &__struct_info__3a4670ec1a9ece51_field_248, &__struct_info__3a4670ec1a9ece51_field_249, &__struct_info__3a4670ec1a9ece51_field_250, &__struct_info__3a4670ec1a9ece51_field_251, &__struct_info__3a4670ec1a9ece51_field_252, &__struct_info__3a4670ec1a9ece51_field_253, &__struct_info__3a4670ec1a9ece51_field_254, &__struct_info__3a4670ec1a9ece51_field_255, &__struct_info__3a4670ec1a9ece51_field_256, &__struct_info__3a4670ec1a9ece51_field_257, &__struct_info__3a4670ec1a9ece51_field_258, &__struct_info__3a4670ec1a9ece51_field_259, &__struct_info__3a4670ec1a9ece51_field_260, &__struct_info__3a4670ec1a9ece51_field_261, &__struct_info__3a4670ec1a9ece51_field_262, &__struct_info__3a4670ec1a9ece51_field_263, &__struct_info__3a4670ec1a9ece51_field_264, &__struct_info__3a4670ec1a9ece51_field_265, &__struct_info__3a4670ec1a9ece51_field_266, &__struct_info__3a4670ec1a9ece51_field_267, &__struct_info__3a4670ec1a9ece51_field_268, &__struct_info__3a4670ec1a9ece51_field_269, &__struct_info__3a4670ec1a9ece51_field_270, &__struct_info__3a4670ec1a9ece51_field_271, &__struct_info__3a4670ec1a9ece51_field_272, &__struct_info__3a4670ec1a9ece51_field_273, &__struct_info__3a4670ec1a9ece51_field_274, &__struct_info__3a4670ec1a9ece51_field_275, &__struct_info__3a4670ec1a9ece51_field_276, &__struct_info__3a4670ec1a9ece51_field_277, &__struct_info__3a4670ec1a9ece51_field_278, &__struct_info__3a4670ec1a9ece51_field_279, &__struct_info__3a4670ec1a9ece51_field_280, &__struct_info__3a4670ec1a9ece51_field_281, &__struct_info__3a4670ec1a9ece51_field_282, &__struct_info__3a4670ec1a9ece51_field_283, &__struct_info__3a4670ec1a9ece51_field_284, &__struct_info__3a4670ec1a9ece51_field_285, &__struct_info__3a4670ec1a9ece51_field_286, &__struct_info__3a4670ec1a9ece51_field_287, &__struct_info__3a4670ec1a9ece51_field_288, &__struct_info__3a4670ec1a9ece51_field_289, &__struct_info__3a4670ec1a9ece51_field_290, &__struct_info__3a4670ec1a9ece51_field_291, &__struct_info__3a4670ec1a9ece51_field_292, &__struct_info__3a4670ec1a9ece51_field_293, &__struct_info__3a4670ec1a9ece51_field_294, &__struct_info__3a4670ec1a9ece51_field_295, &__struct_info__3a4670ec1a9ece51_field_296, &__struct_info__3a4670ec1a9ece51_field_297, &__struct_info__3a4670ec1a9ece51_field_298, &__struct_info__3a4670ec1a9ece51_field_299, &__struct_info__3a4670ec1a9ece51_field_300, &__struct_info__3a4670ec1a9ece51_field_301, &__struct_info__3a4670ec1a9ece51_field_302 };670ec1a9ece51_field_228, &__struct_info__3a4670ec1a9ece51_field_229, &__struct_info__3a4670ec1a9ece51_field_230, &__struct_info__3a4670ec1a9ece51_field_231, &__struct_info__3a4670ec1a9ece51_field_232, &__struct_info__3a4670ec1a9ece51_field_233, &__struct_info__3a4670ec1a9ece51_field_234, &__struct_info__3a4670ec1a9ece51_field_235, &__struct_info__3a4670ec1a9ece51_field_236, &__struct_info__3a4670ec1a9ece51_field_237, &__struct_info__3a4670ec1a9ece51_field_238, &__struct_info__3a4670ec1a9ece51_field_239, &__struct_info__3a4670ec1a9ece51_field_240, &__struct_info__3a4670ec1a9ece51_field_241, &__struct_info__3a4670ec1a9ece51_field_242, &__struct_info__3a4670ec1a9ece51_field_243, &__struct_info__3a4670ec1a9ece51_field_244, &__struct_info__3a4670ec1a9ece51_field_245, &__struct_info__3a4670ec1a9ece51_field_246, &__struct_info__3a4670ec1a9ece51_field_247, &__struct_info__3a4670ec1a9ece51_field_248, &__struct_info__3a4670ec1a9ece51_field_249, &__struct_info__3a4670ec1a9ece51_field_250, &__struct_info__3a4670ec1a9ece51_field_251, &__struct_info__3a4670ec1a9ece51_field_252, &__struct_info__3a4670ec1a9ece51_field_253, &__struct_info__3a4670ec1a9ece51_field_254, &__struct_info__3a4670ec1a9ece51_field_255, &__struct_info__3a4670ec1a9ece51_field_256, &__struct_info__3a4670ec1a9ece51_field_257, &__struct_info__3a4670ec1a9ece51_field_258, &__struct_info__3a4670ec1a9ece51_field_259, &__struct_info__3a4670ec1a9ece51_field_260, &__struct_info__3a4670ec1a9ece51_field_261, &__struct_info__3a4670ec1a9ece51_field_262, &__struct_info__3a4670ec1a9ece51_field_263, &__struct_info__3a4670ec1a9ece51_field_264, &__struct_info__3a4670ec1a9ece51_field_265, &__struct_info__3a4670ec1a9ece51_field_266, &__struct_info__3a4670ec1a9ece51_field_267, &__struct_info__3a4670ec1a9ece51_field_268, &__struct_info__3a4670ec1a9ece51_field_269, &__struct_info__3a4670ec1a9ece51_field_270, &__struct_info__3a4670ec1a9ece51_field_271, &__struct_info__3a4670ec1a9ece51_field_272, &__struct_info__3a4670ec1a9ece51_field_273, &__struct_info__3a4670ec1a9ece51_field_274, &__struct_info__3a4670ec1a9ece51_field_275, &__struct_info__3a4670ec1a9ece51_field_276, &__struct_info__3a4670ec1a9ece51_field_277, &__struct_info__3a4670ec1a9ece51_field_278, &__struct_info__3a4670ec1a9ece51_field_279, &__struct_info__3a4670ec1a9ece51_field_280, &__struct_info__3a4670ec1a9ece51_field_281, &__struct_info__3a4670ec1a9ece51_field_282, &__struct_info__3a4670ec1a9ece51_field_283, &__struct_info__3a4670ec1a9ece51_field_284, &__struct_info__3a4670ec1a9ece51_field_285, &__struct_info__3a4670ec1a9ece51_field_286, &__struct_info__3a4670ec1a9ece51_field_287, &__struct_info__3a4670ec1a9ece51_field_288, &__struct_info__3a4670ec1a9ece51_field_289, &__struct_info__3a4670ec1a9ece51_field_290, &__struct_info__3a4670ec1a9ece51_field_291, &__struct_info__3a4670ec1a9ece51_field_292, &__struct_info__3a4670ec1a9ece51_field_293, &__struct_info__3a4670ec1a9ece51_field_294, &__struct_info__3a4670ec1a9ece51_field_295, &__struct_info__3a4670ec1a9ece51_field_296, &__struct_info__3a4670ec1a9ece51_field_297, &__struct_info__3a4670ec1a9ece51_field_298, &__struct_info__3a4670ec1a9ece51_field_299, &__struct_info__3a4670ec1a9ece51_field_300, &__struct_info__3a4670ec1a9ece51_field_301, &__struct_info__3a4670ec1a9ece51_field_302 };
 StructInfo __struct_info__3a4670ec1a9ece51 = {"SetPrinterFlags", "", 13, __struct_info__3a4670ec1a9ece51_fields, 303, 2424, UINT64_C(0x16d3a723dce0fbd9), nullptr, UINT64_C(0x3a4670ec1a9ece51), 0 };
 VarInfo __struct_info__1e8db4ddc1444e12_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0xfb898b509e28d9c8), "__rtti", 0, 303 };
 TypeInfo * __type_info__404fbd8651779228_arg_types_var_2201614657377291794[1] = { &__type_info__21586ce84f433a21 };
@@ -3449,7 +3449,7 @@ VarInfo __struct_info__1e8db4ddc1444e12_field_301 =  { Type::tFunction, nullptr,
 TypeInfo * __type_info__8517df657f4530a_arg_types_var_2201614657377291794[2] = { &__type_info__21586ce84f433a21, &__type_info__636dc1714c171367 };
 const char * __type_info__8517df657f4530a_arg_names_var_2201614657377291794[2] = { "self", "expr" };
 VarInfo __struct_info__1e8db4ddc1444e12_field_302 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__6636442e03391ebf, nullptr, (TypeInfo **)__type_info__8517df657f4530a_arg_types_var_2201614657377291794, __type_info__8517df657f4530a_arg_names_var_2201614657377291794, 2, 0, nullptr, 12, 8, UINT64_C(0x8517df657f4530a), "visitExprCallMacro", 2416, 0 };
-VarInfo * __struct_info__1e8db4ddc1444e12_fields[303] =  { &__struct_info__1e8db4ddc1444e12_field_0, &__struct_info__1e8db4ddc1444e12_field_1, &__struct_info__1e8db4ddc1444e12_field_2, &__struct_info__1e8db4ddc1444e12_field_3, &__struct_info__1e8db4ddc1444e12_field_4, &__struct_info__1e8db4ddc1444e12_field_5, &__struct_info__1e8db4ddc1444e12_field_6, &__struct_info__1e8db4ddc1444e12_field_7, &__struct_info__1e8db4ddc1444e12_field_8, &__struct_info__1e8db4ddc1444e12_field_9, &__struct_info__1e8db4ddc1444e12_field_10, &__struct_info__1e8db4ddc1444e12_field_11, &__struct_info__1e8db4ddc1444e12_field_12, &__struct_info__1e8db4ddc1444e12_field_13, &__struct_info__1e8db4ddc1444e12_field_14, &__struct_info__1e8db4ddc1444e12_field_15, &__struct_info__1e8db4ddc1444e12_field_16, &__struct_info__1e8db4ddc1444e12_field_17, &__struct_info__1e8db4ddc1444e12_field_18, &__struct_info__1e8db4ddc1444e12_field_19, &__struct_info__1e8db4ddc1444e12_field_20, &__struct_info__1e8db4ddc1444e12_field_21, &__struct_info__1e8db4ddc1444e12_field_22, &__struct_info__1e8db4ddc1444e12_field_23, &__struct_info__1e8db4ddc1444e12_field_24, &__struct_info__1e8db4ddc1444e12_field_25, &__struct_info__1e8db4ddc1444e12_field_26, &__struct_info__1e8db4ddc1444e12_field_27, &__struct_info__1e8db4ddc1444e12_field_28, &__struct_info__1e8db4ddc1444e12_field_29, &__struct_info__1e8db4ddc1444e12_field_30, &__struct_info__1e8db4ddc1444e12_field_31, &__struct_info__1e8db4ddc1444e12_field_32, &__struct_info__1e8db4ddc1444e12_field_33, &__struct_info__1e8db4ddc1444e12_field_34, &__struct_info__1e8db4ddc1444e12_field_35, &__struct_info__1e8db4ddc1444e12_field_36, &__struct_info__1e8db4ddc1444e12_field_37, &__struct_info__1e8db4ddc1444e12_field_38, &__struct_info__1e8db4ddc1444e12_field_39, &__struct_info__1e8db4ddc1444e12_field_40, &__struct_info__1e8db4ddc1444e12_field_41, &__struct_info__1e8db4ddc1444e12_field_42, &__struct_info__1e8db4ddc1444e12_field_43, &__struct_info__1e8db4ddc1444e12_field_44, &__struct_info__1e8db4ddc1444e12_field_45, &__struct_info__1e8db4ddc1444e12_field_46, &__struct_info__1e8db4ddc1444e12_field_47, &__struct_info__1e8db4ddc1444e12_field_48, &__struct_info__1e8db4ddc1444e12_field_49, &__struct_info__1e8db4ddc1444e12_field_50, &__struct_info__1e8db4ddc1444e12_field_51, &__struct_info__1e8db4ddc1444e12_field_52, &__struct_info__1e8db4ddc1444e12_field_53, &__struct_info__1e8db4ddc1444e12_field_54, &__struct_info__1e8db4ddc1444e12_field_55, &__struct_info__1e8db4ddc1444e12_field_56, &__struct_info__1e8db4ddc1444e12_field_57, &__struct_info__1e8db4ddc1444e12_field_58, &__struct_info__1e8db4ddc1444e12_field_59, &__struct_info__1e8db4ddc1444e12_field_60, &__struct_info__1e8db4ddc1444e12_field_61, &__struct_info__1e8db4ddc1444e12_field_62, &__struct_info__1e8db4ddc1444e12_field_63, &__struct_info__1e8db4ddc1444e12_field_64, &__struct_info__1e8db4ddc1444e12_field_65, &__struct_info__1e8db4ddc1444e12_field_66, &__struct_info__1e8db4ddc1444e12_field_67, &__struct_info__1e8db4ddc1444e12_field_68, &__struct_info__1e8db4ddc1444e12_field_69, &__struct_info__1e8db4ddc1444e12_field_70, &__struct_info__1e8db4ddc1444e12_field_71, &__struct_info__1e8db4ddc1444e12_field_72, &__struct_info__1e8db4ddc1444e12_field_73, &__struct_info__1e8db4ddc1444e12_field_74, &__struct_info__1e8db4ddc1444e12_field_75, &__struct_info__1e8db4ddc1444e12_field_76, &__struct_info__1e8db4ddc1444e12_field_77, &__struct_info__1e8db4ddc1444e12_field_78, &__struct_info__1e8db4ddc1444e12_field_79, &__struct_info__1e8db4ddc1444e12_field_80, &__struct_info__1e8db4ddc1444e12_field_81, &__struct_info__1e8db4ddc1444e12_field_82, &__struct_info__1e8db4ddc1444e12_field_83, &__struct_info__1e8db4ddc1444e12_field_84, &__struct_info__1e8db4ddc1444e12_field_85, &__struct_info__1e8db4ddc1444e12_field_86, &__struct_info__1e8db4ddc1444e12_field_87, &__struct_info__1e8db4ddc1444e12_field_88, &__struct_info__1e8db4ddc1444e12_field_89, &__struct_info__1e8db4ddc1444e12_field_90, &__struct_info__1e8db4ddc1444e12_field_91, &__struct_info__1e8db4ddc1444e12_field_92, &__struct_info__1e8db4ddc1444e12_field_93, &__struct_info__1e8db4ddc1444e12_field_94, &__struct_info__1e8db4ddc1444e12_field_95, &__struct_info__1e8db4ddc1444e12_field_96, &__struct_info__1e8db4ddc1444e12_field_97, &__struct_info__1e8db4ddc1444e12_field_98, &__struct_info__1e8db4ddc1444e12_field_99, &__struct_info__1e8db4ddc1444e12_field_100, &__struct_info__1e8db4ddc1444e12_field_101, &__struct_info__1e8db4ddc1444e12_field_102, &__struct_info__1e8db4ddc1444e12_field_103, &__struct_info__1e8db4ddc1444e12_field_104, &__struct_info__1e8db4ddc1444e12_field_105, &__struct_info__1e8db4ddc1444e12_field_106, &__struct_info__1e8db4ddc1444e12_field_107, &__struct_info__1e8db4ddc1444e12_field_108, &__struct_info__1e8db4ddc1444e12_field_109, &__struct_info__1e8db4ddc1444e12_field_110, &__struct_info__1e8db4ddc1444e12_field_111, &__struct_info__1e8db4ddc1444e12_field_112, &__struct_info__1e8db4ddc1444e12_field_113, &__struct_info__1e8db4ddc1444e12_field_114, &__struct_info__1e8db4ddc1444e12_field_115, &__struct_info__1e8db4ddc1444e12_field_116, &__struct_info__1e8db4ddc1444e12_field_117, &__struct_info__1e8db4ddc1444e12_field_118, &__struct_info__1e8db4ddc1444e12_field_119, &__struct_info__1e8db4ddc1444e12_field_120, &__struct_info__1e8db4ddc1444e12_field_121, &__struct_info__1e8db4ddc1444e12_field_122, &__struct_info__1e8db4ddc1444e12_field_123, &__struct_info__1e8db4ddc1444e12_field_124, &__struct_info__1e8db4ddc1444e12_field_125, &__struct_info__1e8db4ddc1444e12_field_126, &__struct_info__1e8db4ddc1444e12_field_127, &__struct_info__1e8db4ddc1444e12_field_128, &__struct_info__1e8db4ddc1444e12_field_129, &__struct_info__1e8db4ddc1444e12_field_130, &__struct_info__1e8db4ddc1444e12_field_131, &__struct_info__1e8db4ddc1444e12_field_132, &__struct_info__1e8db4ddc1444e12_field_133, &__struct_info__1e8db4ddc1444e12_field_134, &__struct_info__1e8db4ddc1444e12_field_135, &__struct_info__1e8db4ddc1444e12_field_136, &__struct_info__1e8db4ddc1444e12_field_137, &__struct_info__1e8db4ddc1444e12_field_138, &__struct_info__1e8db4ddc1444e12_field_139, &__struct_info__1e8db4ddc1444e12_field_140, &__struct_info__1e8db4ddc1444e12_field_141, &__struct_info__1e8db4ddc1444e12_field_142, &__struct_info__1e8db4ddc1444e12_field_143, &__struct_info__1e8db4ddc1444e12_field_144, &__struct_info__1e8db4ddc1444e12_field_145, &__struct_info__1e8db4ddc1444e12_field_146, &__struct_info__1e8db4ddc1444e12_field_147, &__struct_info__1e8db4ddc1444e12_field_148, &__struct_info__1e8db4ddc1444e12_field_149, &__struct_info__1e8db4ddc1444e12_field_150, &__struct_info__1e8db4ddc1444e12_field_151, &__struct_info__1e8db4ddc1444e12_field_152, &__struct_info__1e8db4ddc1444e12_field_153, &__struct_info__1e8db4ddc1444e12_field_154, &__struct_info__1e8db4ddc1444e12_field_155, &__struct_info__1e8db4ddc1444e12_field_156, &__struct_info__1e8db4ddc1444e12_field_157, &__struct_info__1e8db4ddc1444e12_field_158, &__struct_info__1e8db4ddc1444e12_field_159, &__struct_info__1e8db4ddc1444e12_field_160, &__struct_info__1e8db4ddc1444e12_field_161, &__struct_info__1e8db4ddc1444e12_field_162, &__struct_info__1e8db4ddc1444e12_field_163, &__struct_info__1e8db4ddc1444e12_field_164, &__struct_info__1e8db4ddc1444e12_field_165, &__struct_info__1e8db4ddc1444e12_field_166, &__struct_info__1e8db4ddc1444e12_field_167, &__struct_info__1e8db4ddc1444e12_field_168, &__struct_info__1e8db4ddc1444e12_field_169, &__struct_info__1e8db4ddc1444e12_field_170, &__struct_info__1e8db4ddc1444e12_field_171, &__struct_info__1e8db4ddc1444e12_field_172, &__struct_info__1e8db4ddc1444e12_field_173, &__struct_info__1e8db4ddc1444e12_field_174, &__struct_info__1e8db4ddc1444e12_field_175, &__struct_info__1e8db4ddc1444e12_field_176, &__struct_info__1e8db4ddc1444e12_field_177, &__struct_info__1e8db4ddc1444e12_field_178, &__struct_info__1e8db4ddc1444e12_field_179, &__struct_info__1e8db4ddc1444e12_field_180, &__struct_info__1e8db4ddc1444e12_field_181, &__struct_info__1e8db4ddc1444e12_field_182, &__struct_info__1e8db4ddc1444e12_field_183, &__struct_info__1e8db4ddc1444e12_field_184, &__struct_info__1e8db4ddc1444e12_field_185, &__struct_info__1e8db4ddc1444e12_field_186, &__struct_info__1e8db4ddc1444e12_field_187, &__struct_info__1e8db4ddc1444e12_field_188, &__struct_info__1e8db4ddc1444e12_field_189, &__struct_info__1e8db4ddc1444e12_field_190, &__struct_info__1e8db4ddc1444e12_field_191, &__struct_info__1e8db4ddc1444e12_field_192, &__struct_info__1e8db4ddc1444e12_field_193, &__struct_info__1e8db4ddc1444e12_field_194, &__struct_info__1e8db4ddc1444e12_field_195, &__struct_info__1e8db4ddc1444e12_field_196, &__struct_info__1e8db4ddc1444e12_field_197, &__struct_info__1e8db4ddc1444e12_field_198, &__struct_info__1e8db4ddc1444e12_field_199, &__struct_info__1e8db4ddc1444e12_field_200, &__struct_info__1e8db4ddc1444e12_field_201, &__struct_info__1e8db4ddc1444e12_field_202, &__struct_info__1e8db4ddc1444e12_field_203, &__struct_info__1e8db4ddc1444e12_field_204, &__struct_info__1e8db4ddc1444e12_field_205, &__struct_info__1e8db4ddc1444e12_field_206, &__struct_info__1e8db4ddc1444e12_field_207, &__struct_info__1e8db4ddc1444e12_field_208, &__struct_info__1e8db4ddc1444e12_field_209, &__struct_info__1e8db4ddc1444e12_field_210, &__struct_info__1e8db4ddc1444e12_field_211, &__struct_info__1e8db4ddc1444e12_field_212, &__struct_info__1e8db4ddc1444e12_field_213, &__struct_info__1e8db4ddc1444e12_field_214, &__struct_info__1e8db4ddc1444e12_field_215, &__struct_info__1e8db4ddc1444e12_field_216, &__struct_info__1e8db4ddc1444e12_field_217, &__struct_info__1e8db4ddc1444e12_field_218, &__struct_info__1e8db4ddc1444e12_field_219, &__struct_info__1e8db4ddc1444e12_field_220, &__struct_info__1e8db4ddc1444e12_field_221, &__struct_info__1e8db4ddc1444e12_field_222, &__struct_info__1e8db4ddc1444e12_field_223, &__struct_info__1e8db4ddc1444e12_field_224, &__struct_info__1e8db4ddc1444e12_field_225, &__struct_info__1e8db4ddc1444e12_field_226, &__struct_info__1e8db4ddc1444e12_field_227, &__struct_info__1e8db4ddc1444e12_field_228, &__struct_info__1e8db4ddc1444e12_field_229, &__struct_info__1e8db4ddc1444e12_field_230, &__struct_info__1e8db4ddc1444e12_field_231, &__struct_info__1e8db4ddc1444e12_field_232, &__struct_info__1e8db4ddc1444e12_field_233, &__struct_info__1e8db4ddc1444e12_field_234, &__struct_info__1e8db4ddc1444e12_field_235, &__struct_info__1e8db4ddc1444e12_field_236, &__struct_info__1e8db4ddc1444e12_field_237, &__struct_info__1e8db4ddc1444e12_field_238, &__struct_info__1e8db4ddc1444e12_field_239, &__struct_info__1e8db4ddc1444e12_field_240, &__struct_info__1e8db4ddc1444e12_field_241, &__struct_info__1e8db4ddc1444e12_field_242, &__struct_info__1e8db4ddc1444e12_field_243, &__struct_info__1e8db4ddc1444e12_field_244, &__struct_info__1e8db4ddc1444e12_field_245, &__struct_info__1e8db4ddc1444e12_field_246, &__struct_info__1e8db4ddc1444e12_field_247, &__struct_info__1e8db4ddc1444e12_field_248, &__struct_info__1e8db4ddc1444e12_field_249, &__struct_info__1e8db4ddc1444e12_field_250, &__struct_info__1e8db4ddc1444e12_field_251, &__struct_info__1e8db4ddc1444e12_field_252, &__struct_info__1e8db4ddc1444e12_field_253, &__struct_info__1e8db4ddc1444e12_field_254, &__struct_info__1e8db4ddc1444e12_field_255, &__struct_info__1e8db4ddc1444e12_field_256, &__struct_info__1e8db4ddc1444e12_field_257, &__struct_info__1e8db4ddc1444e12_field_258, &__struct_info__1e8db4ddc1444e12_field_259, &__struct_info__1e8db4ddc1444e12_field_260, &__struct_info__1e8db4ddc1444e12_field_261, &__struct_info__1e8db4ddc1444e12_field_262, &__struct_info__1e8db4ddc1444e12_field_263, &__struct_info__1e8db4ddc1444e12_field_264, &__struct_info__1e8db4ddc1444e12_field_265, &__struct_info__1e8db4ddc1444e12_field_266, &__struct_info__1e8db4ddc1444e12_field_267, &__struct_info__1e8db4ddc1444e12_field_268, &__struct_info__1e8db4ddc1444e12_field_269, &__struct_info__1e8db4ddc1444e12_field_270, &__struct_info__1e8db4ddc1444e12_field_271, &__struct_info__1e8db4ddc1444e12_field_272, &__struct_info__1e8db4ddc1444e12_field_273, &__struct_info__1e8db4ddc1444e12_field_274, &__struct_info__1e8db4ddc1444e12_field_275, &__struct_info__1e8db4ddc1444e12_field_276, &__struct_info__1e8db4ddc1444e12_field_277, &__struct_info__1e8db4ddc1444e12_field_278, &__struct_info__1e8db4ddc1444e12_field_279, &__struct_info__1e8db4ddc1444e12_field_280, &__struct_info__1e8db4ddc1444e12_field_281, &__struct_info__1e8db4ddc1444e12_field_282, &__struct_info__1e8db4ddc1444e12_field_283, &__struct_info__1e8db4ddc1444e12_field_284, &__struct_info__1e8db4ddc1444e12_field_285, &__struct_info__1e8db4ddc1444e12_field_286, &__struct_info__1e8db4ddc1444e12_field_287, &__struct_info__1e8db4ddc1444e12_field_288, &__struct_info__1e8db4ddc1444e12_field_289, &__struct_info__1e8db4ddc1444e12_field_290, &__struct_info__1e8db4ddc1444e12_field_291, &__struct_info__1e8db4ddc1444e12_field_292, &__struct_info__1e8db4ddc1444e12_field_293, &__struct_info__1e8db4ddc1444e12_field_294, &__struct_info__1e8db4ddc1444e12_field_295, &__struct_info__1e8db4ddc1444e12_field_296, &__struct_info__1e8db4ddc1444e12_field_297, &__struct_info__1e8db4ddc1444e12_field_298, &__struct_info__1e8db4ddc1444e12_field_299, &__struct_info__1e8db4ddc1444e12_field_300, &__struct_info__1e8db4ddc1444e12_field_301, &__struct_info__1e8db4ddc1444e12_field_302 };
+VarInfo * __struct_info__1e8db4ddc1444e12_fields[303] =  { &__struct_info__1e8db4ddc1444e12_field_0, &__struct_info__1e8db4ddc1444e12_field_1, &__struct_info__1e8db4ddc1444e12_field_2, &__struct_info__1e8db4ddc1444e12_field_3, &__struct_info__1e8db4ddc1444e12_field_4, &__struct_info__1e8db4ddc1444e12_field_5, &__struct_info__1e8db4ddc1444e12_field_6, &__struct_info__1e8db4ddc1444e12_field_7, &__struct_info__1e8db4ddc1444e12_field_8, &__struct_info__1e8db4ddc1444e12_field_9, &__struct_info__1e8db4ddc1444e12_field_10, &__struct_info__1e8db4ddc1444e12_field_11, &__struct_info__1e8db4ddc1444e12_field_12, &__struct_info__1e8db4ddc1444e12_field_13, &__struct_info__1e8db4ddc1444e12_field_14, &__struct_info__1e8db4ddc1444e12_field_15, &__struct_info__1e8db4ddc1444e12_field_16, &__struct_info__1e8db4ddc1444e12_field_17, &__struct_info__1e8db4ddc1444e12_field_18, &__struct_info__1e8db4ddc1444e12_field_19, &__struct_info__1e8db4ddc1444e12_field_20, &__struct_info__1e8db4ddc1444e12_field_21, &__struct_info__1e8db4ddc1444e12_field_22, &__struct_info__1e8db4ddc1444e12_field_23, &__struct_info__1e8db4ddc1444e12_field_24, &__struct_info__1e8db4ddc1444e12_field_25, &__struct_info__1e8db4ddc1444e12_field_26, &__struct_info__1e8db4ddc1444e12_field_27, &__struct_info__1e8db4ddc1444e12_field_28, &__struct_info__1e8db4ddc1444e12_field_29, &__struct_info__1e8db4ddc1444e12_field_30, &__struct_info__1e8db4ddc1444e12_field_31, &__struct_info__1e8db4ddc1444e12_field_32, &__struct_info__1e8db4ddc1444e12_field_33, &__struct_info__1e8db4ddc1444e12_field_34, &__struct_info__1e8db4ddc1444e12_field_35, &__struct_info__1e8db4ddc1444e12_field_36, &__struct_info__1e8db4ddc1444e12_field_37, &__struct_info__1e8db4ddc1444e12_field_38, &__struct_info__1e8db4ddc1444e12_field_39, &__struct_info__1e8db4ddc1444e12_field_40, &__struct_info__1e8db4ddc1444e12_field_41, &__struct_info__1e8db4ddc1444e12_field_42, &__struct_info__1e8db4ddc1444e12_field_43, &__struct_info__1e8db4ddc1444e12_field_44, &__struct_info__1e8db4ddc1444e12_field_45, &__struct_info__1e8db4ddc1444e12_field_46, &__struct_info__1e8db4ddc1444e12_field_47, &__struct_info__1e8db4ddc1444e12_field_48, &__struct_info__1e8db4ddc1444e12_field_49, &__struct_info__1e8db4ddc1444e12_field_50, &__struct_info__1e8db4ddc1444e12_field_51, &__struct_info__1e8db4ddc1444e12_field_52, &__struct_info__1e8db4ddc1444e12_field_53, &__struct_info__1e8db4ddc1444e12_field_54, &__struct_info__1e8db4ddc1444e12_field_55, &__struct_info__1e8db4ddc1444e12_field_56, &__struct_info__1e8db4ddc1444e12_field_57, &__struct_info__1e8db4ddc1444e12_field_58, &__struct_info__1e8db4ddc1444e12_field_59, &__struct_info__1e8db4ddc1444e12_field_60, &__struct_info__1e8db4ddc1444e12_field_61, &__struct_info__1e8db4ddc1444e12_field_62, &__struct_info__1e8db4ddc1444e12_field_63, &__struct_info__1e8db4ddc1444e12_field_64, &__struct_info__1e8db4ddc1444e12_field_65, &__struct_info__1e8db4ddc1444e12_field_66, &__struct_info__1e8db4ddc1444e12_field_67, &__struct_info__1e8db4ddc1444e12_field_68, &__struct_info__1e8db4ddc1444e12_field_69, &__struct_info__1e8db4ddc1444e12_field_70, &__struct_info__1e8db4ddc1444e12_field_71, &__struct_info__1e8db4ddc1444e12_field_72, &__struct_info__1e8db4ddc1444e12_field_73, &__struct_info__1e8db4ddc1444e12_field_74, &__struct_info__1e8db4ddc1444e12_field_75, &__struct_info__1e8db4ddc1444e12_field_76, &__struct_info__1e8db4ddc1444e12_field_77, &__struct_info__1e8db4ddc1444e12_field_78, &__struct_info__1e8db4ddc1444e12_field_79, &__struct_info__1e8db4ddc1444e12_field_80, &__struct_info__1e8db4ddc1444e12_field_81, &__struct_info__1e8db4ddc1444e12_field_82, &__struct_info__1e8db4ddc1444e12_field_83, &__struct_info__1e8db4ddc1444e12_field_84, &__struct_info__1e8db4ddc1444e12_field_85, &__struct_info__1e8db4ddc1444e12_field_86, &__struct_info__1e8db4ddc1444e12_field_87, &__struct_info__1e8db4ddc1444e12_field_88, &__struct_info__1e8db4ddc1444e12_field_89, &__struct_info__1e8db4ddc1444e12_field_90, &__struct_info__1e8db4ddc1444e12_field_91, &__struct_info__1e8db4ddc1444e12_field_92, &__struct_info__1e8db4ddc1444e12_field_93, &__struct_info__1e8db4ddc1444e12_field_94, &__struct_info__1e8db4ddc1444e12_field_95, &__struct_info__1e8db4ddc1444e12_field_96, &__struct_info__1e8db4ddc1444e12_field_97, &__struct_info__1e8db4ddc1444e12_field_98, &__struct_info__1e8db4ddc1444e12_field_99, &__struct_info__1e8db4ddc1444e12_field_100, &__struct_info__1e8db4ddc1444e12_field_101, &__struct_info__1e8db4ddc1444e12_field_102, &__struct_info__1e8db4ddc1444e12_field_103, &__struct_info__1e8db4ddc1444e12_field_104, &__struct_info__1e8db4ddc1444e12_field_105, &__struct_info__1e8db4ddc1444e12_field_106, &__struct_info__1e8db4ddc1444e12_field_107, &__struct_info__1e8db4ddc1444e12_field_108, &__struct_info__1e8db4ddc1444e12_field_109, &__struct_info__1e8db4ddc1444e12_field_110, &__struct_info__1e8db4ddc1444e12_field_111, &__struct_info__1e8db4ddc1444e12_field_112, &__struct_info__1e8db4ddc1444e12_field_113, &__struct_info__1e8db4ddc1444e12_field_114, &__struct_info__1e8db4ddc1444e12_field_115, &__struct_info__1e8db4ddc1444e12_field_116, &__struct_info__1e8db4ddc1444e12_field_117, &__struct_info__1e8db4ddc1444e12_field_118, &__struct_info__1e8db4ddc1444e12_field_119, &__struct_info__1e8db4ddc1444e12_field_120, &__struct_info__1e8db4ddc1444e12_field_121, &__struct_info__1e8db4ddc1444e12_field_122, &__struct_info__1e8db4ddc1444e12_field_123, &__struct_info__1e8db4ddc1444e12_field_124, &__struct_info__1e8db4ddc1444e12_field_125, &__struct_info__1e8db4ddc1444e12_field_126, &__struct_info__1e8db4ddc1444e12_field_127, &__struct_info__1e8db4ddc1444e12_field_128, &__struct_info__1e8db4ddc1444e12_field_129, &__struct_info__1e8db4ddc1444e12_field_130, &__struct_info__1e8db4ddc1444e12_field_131, &__struct_info__1e8db4ddc1444e12_field_132, &__struct_info__1e8db4ddc1444e12_field_133, &__struct_info__1e8db4ddc1444e12_field_134, &__struct_info__1e8db4ddc1444e12_field_135, &__struct_info__1e8db4ddc1444e12_field_136, &__struct_info__1e8db4ddc1444e12_field_137, &__struct_info__1e8db4ddc1444e12_field_138, &__struct_info__1e8db4ddc1444e12_field_139, &__struct_info__1e8db4ddc1444e12_field_140, &__struct_info__1e8db4ddc1444e12_field_141, &__struct_info__1e8db4ddc1444e12_field_142, &__struct_info__1e8db4ddc1444e12_field_143, &__struct_info__1e8db4ddc1444e12_field_144, &__struct_info__1e8db4ddc1444e12_field_145, &__struct_info__1e8db4ddc1444e12_field_146, &__struct_info__1e8db4ddc1444e12_field_147, &__struct_info__1e8db4ddc1444e12_field_148, &__struct_info__1e8db4ddc1444e12_field_149, &__struct_info__1e8db4ddc1444e12_field_150, &__struct_info__1e8db4ddc1444e12_field_151, &__struct_info__1e8db4ddc1444e12_field_152, &__struct_info__1e8db4ddc1444e12_field_153, &__struct_info__1e8db4ddc1444e12_field_154, &__struct_info__1e8db4ddc1444e12_field_155, &__struct_info__1e8db4ddc1444e12_field_156, &__struct_info__1e8db4ddc1444e12_field_157, &__struct_info__1e8db4ddc1444e12_field_158, &__struct_info__1e8db4ddc1444e12_field_159, &__struct_info__1e8db4ddc1444e12_field_160, &__struct_info__1e8db4ddc1444e12_field_161, &__struct_info__1e8db4ddc1444e12_field_162, &__struct_info__1e8db4ddc1444e12_field_163, &__struct_info__1e8db4ddc1444e12_field_164, &__struct_info__1e8db4ddc1444e12_field_165, &__struct_info__1e8db4ddc1444e12_field_166, &__struct_info__1e8db4ddc1444e12_field_167, &__struct_info__1e8db4ddc1444e12_field_168, &__struct_info__1e8db4ddc1444e12_field_169, &__struct_info__1e8db4ddc1444e12_field_170, &__struct_info__1e8db4ddc1444e12_field_171, &__struct_info__1e8db4ddc1444e12_field_172, &__struct_info__1e8db4ddc1444e12_field_173, &__struct_info__1e8db4ddc1444e12_field_174, &__struct_info__1e8db4ddc1444e12_field_175, &__struct_info__1e8db4ddc1444e12_field_176, &__struct_info__1e8db4ddc1444e12_field_177, &__struct_info__1e8db4ddc1444e12_field_178, &__struct_info__1e8db4ddc1444e12_field_179, &__struct_info__1e8db4ddc1444e12_field_180, &__struct_info__1e8db4ddc1444e12_field_181, &__struct_info__1e8db4ddc1444e12_field_182, &__struct_info__1e8db4ddc1444e12_field_183, &__struct_info__1e8db4ddc1444e12_field_184, &__struct_info__1e8db4ddc1444e12_field_185, &__struct_info__1e8db4ddc1444e12_field_186, &__struct_info__1e8db4ddc1444e12_field_187, &__struct_info__1e8db4ddc1444e12_field_188, &__struct_info__1e8db4ddc1444e12_field_189, &__struct_info__1e8db4ddc1444e12_field_190, &__struct_info__1e8db4ddc1444e12_field_191, &__struct_info__1e8db4ddc1444e12_field_192, &__struct_info__1e8db4ddc1444e12_field_193, &__struct_info__1e8db4ddc1444e12_field_194, &__struct_info__1e8db4ddc1444e12_field_195, &__struct_info__1e8db4ddc1444e12_field_196, &__struct_info__1e8db4ddc1444e12_field_197, &__struct_info__1e8db4ddc1444e12_field_198, &__struct_info__1e8db4ddc1444e12_field_199, &__struct_info__1e8db4ddc1444e12_field_200, &__struct_info__1e8db4ddc1444e12_field_201, &__struct_info__1e8db4ddc1444e12_field_202, &__struct_info__1e8db4ddc1444e12_field_203, &__struct_info__1e8db4ddc1444e12_field_204, &__struct_info__1e8db4ddc1444e12_field_205, &__struct_info__1e8db4ddc1444e12_field_206, &__struct_info__1e8db4ddc1444e12_field_207, &__struct_info__1e8db4ddc1444e12_field_208, &__struct_info__1e8db4ddc1444e12_field_209, &__struct_info__1e8db4ddc1444e12_field_210, &__struct_info__1e8db4ddc1444e12_field_211, &__struct_info__1e8db4ddc1444e12_field_212, &__struct_info__1e8db4ddc1444e12_field_213, &__struct_info__1e8db4ddc1444e12_field_214, &__struct_info__1e8db4ddc1444e12_field_215, &__struct_info__1e8db4ddc1444e12_field_216, &__struct_info__1e8db4ddc1444e12_field_217, &__struct_info__1e8db4ddc1444e12_field_218, &__struct_info__1e8db4ddc1444e12_field_219, &__struct_info__1e8db4ddc1444e12_field_220, &__struct_info__1e8db4ddc1444e12_field_221, &__struct_info__1e8db4ddc1444e12_field_222, &__struct_info__1e8db4ddc1444e12_field_223, &__struct_info__1e8db4ddc1444e12_field_224, &__struct_info__1e8db4ddc1444e12_field_225, &__struct_info__1e8db4ddc1444e12_field_226, &__struct_info__1e8db4ddc1444e12_field_227, &__struct_info__1e8db4ddc1444e12_field_228, &__struct_info__1e8db4ddc1444e12_field_229, &__struct_info__1e8db4ddc1444e12_field_230, &__struct_info__1e8db4ddc1444e12_field_231, &__struct_info__1e8db4ddc1444e12_field_232, &__struct_info__1e8db4ddc1444e12_field_233, &__struct_info__1e8db4ddc1444e12_field_234, &__struct_info__1e8db4ddc1444e12_field_235, &__struct_info__1e8db4ddc1444e12_field_236, &__struct_info__1e8db4ddc1444e12_field_237, &__struct_info__1e8db4ddc1444e12_field_238, &__struct_info__1e8db4ddc1444e12_field_239, &__struct_info__1e8db4ddc1444e12_field_240, &__struct_info__1e8db4ddc1444e12_field_241, &__struct_info__1e8db4ddc1444e12_field_242, &__struct_info__1e8db4ddc1444e12_field_243, &__struct_info__1e8db4ddc1444e12_field_244, &__struct_info__1e8db4ddc1444e12_field_245, &__struct_info__1e8db4ddc1444e12_field_246, &__struct_info__1e8db4ddc1444e12_field_247, &__struct_info__1e8db4ddc1444e12_field_248, &__struct_info__1e8db4ddc1444e12_field_249, &__struct_info__1e8db4ddc1444e12_field_250, &__struct_info__1e8db4ddc1444e12_field_251, &__struct_info__1e8db4ddc1444e12_field_252, &__struct_info__1e8db4ddc1444e12_field_253, &__struct_info__1e8db4ddc1444e12_field_254, &__struct_info__1e8db4ddc1444e12_field_255, &__struct_info__1e8db4ddc1444e12_field_256, &__struct_info__1e8db4ddc1444e12_field_257, &__struct_info__1e8db4ddc1444e12_field_258, &__struct_info__1e8db4ddc1444e12_field_259, &__struct_info__1e8db4ddc1444e12_field_260, &__struct_info__1e8db4ddc1444e12_field_261, &__struct_info__1e8db4ddc1444e12_field_262, &__struct_info__1e8db4ddc1444e12_field_263, &__struct_info__1e8db4ddc1444e12_field_264, &__struct_info__1e8db4ddc1444e12_field_265, &__struct_info__1e8db4ddc1444e12_field_266, &__struct_info__1e8db4ddc1444e12_field_267, &__struct_info__1e8db4ddc1444e12_field_268, &__struct_info__1e8db4ddc1444e12_field_269, &__struct_info__1e8db4ddc1444e12_field_270, &__struct_info__1e8db4ddc1444e12_field_271, &__struct_info__1e8db4ddc1444e12_field_272, &__struct_info__1e8db4ddc1444e12_field_273, &__struct_info__1e8db4ddc1444e12_field_274, &__struct_info__1e8db4ddc1444e12_field_275, &__struct_info__1e8db4ddc1444e12_field_276, &__struct_info__1e8db4ddc1444e12_field_277, &__struct_info__1e8db4ddc1444e12_field_278, &__struct_info__1e8db4ddc1444e12_field_279, &__struct_info__1e8db4ddc1444e12_field_280, &__struct_info__1e8db4ddc1444e12_field_281, &__struct_info__1e8db4ddc1444e12_field_282, &__struct_info__1e8db4ddc1444e12_field_283, &__struct_info__1e8db4ddc1444e12_field_284, &__struct_info__1e8db4ddc1444e12_field_285, &__struct_info__1e8db4ddc1444e12_field_286, &__struct_info__1e8db4ddc1444e12_field_287, &__struct_info__1e8db4ddc1444e12_field_288, &__struct_info__1e8db4ddc1444e12_field_289, &__struct_info__1e8db4ddc1444e12_field_290, &__struct_info__1e8db4ddc1444e12_field_291, &__struct_info__1e8db4ddc1444e12_field_292, &__struct_info__1e8db4ddc1444e12_field_293, &__struct_info__1e8db4ddc1444e12_field_294, &__struct_info__1e8db4ddc1444e12_field_295, &__struct_info__1e8db4ddc1444e12_field_296, &__struct_info__1e8db4ddc1444e12_field_297, &__struct_info__1e8db4ddc1444e12_field_298, &__struct_info__1e8db4ddc1444e12_field_299, &__struct_info__1e8db4ddc1444e12_field_300, &__struct_info__1e8db4ddc1444e12_field_301, &__struct_info__1e8db4ddc1444e12_field_302 };db4ddc1444e12_field_228, &__struct_info__1e8db4ddc1444e12_field_229, &__struct_info__1e8db4ddc1444e12_field_230, &__struct_info__1e8db4ddc1444e12_field_231, &__struct_info__1e8db4ddc1444e12_field_232, &__struct_info__1e8db4ddc1444e12_field_233, &__struct_info__1e8db4ddc1444e12_field_234, &__struct_info__1e8db4ddc1444e12_field_235, &__struct_info__1e8db4ddc1444e12_field_236, &__struct_info__1e8db4ddc1444e12_field_237, &__struct_info__1e8db4ddc1444e12_field_238, &__struct_info__1e8db4ddc1444e12_field_239, &__struct_info__1e8db4ddc1444e12_field_240, &__struct_info__1e8db4ddc1444e12_field_241, &__struct_info__1e8db4ddc1444e12_field_242, &__struct_info__1e8db4ddc1444e12_field_243, &__struct_info__1e8db4ddc1444e12_field_244, &__struct_info__1e8db4ddc1444e12_field_245, &__struct_info__1e8db4ddc1444e12_field_246, &__struct_info__1e8db4ddc1444e12_field_247, &__struct_info__1e8db4ddc1444e12_field_248, &__struct_info__1e8db4ddc1444e12_field_249, &__struct_info__1e8db4ddc1444e12_field_250, &__struct_info__1e8db4ddc1444e12_field_251, &__struct_info__1e8db4ddc1444e12_field_252, &__struct_info__1e8db4ddc1444e12_field_253, &__struct_info__1e8db4ddc1444e12_field_254, &__struct_info__1e8db4ddc1444e12_field_255, &__struct_info__1e8db4ddc1444e12_field_256, &__struct_info__1e8db4ddc1444e12_field_257, &__struct_info__1e8db4ddc1444e12_field_258, &__struct_info__1e8db4ddc1444e12_field_259, &__struct_info__1e8db4ddc1444e12_field_260, &__struct_info__1e8db4ddc1444e12_field_261, &__struct_info__1e8db4ddc1444e12_field_262, &__struct_info__1e8db4ddc1444e12_field_263, &__struct_info__1e8db4ddc1444e12_field_264, &__struct_info__1e8db4ddc1444e12_field_265, &__struct_info__1e8db4ddc1444e12_field_266, &__struct_info__1e8db4ddc1444e12_field_267, &__struct_info__1e8db4ddc1444e12_field_268, &__struct_info__1e8db4ddc1444e12_field_269, &__struct_info__1e8db4ddc1444e12_field_270, &__struct_info__1e8db4ddc1444e12_field_271, &__struct_info__1e8db4ddc1444e12_field_272, &__struct_info__1e8db4ddc1444e12_field_273, &__struct_info__1e8db4ddc1444e12_field_274, &__struct_info__1e8db4ddc1444e12_field_275, &__struct_info__1e8db4ddc1444e12_field_276, &__struct_info__1e8db4ddc1444e12_field_277, &__struct_info__1e8db4ddc1444e12_field_278, &__struct_info__1e8db4ddc1444e12_field_279, &__struct_info__1e8db4ddc1444e12_field_280, &__struct_info__1e8db4ddc1444e12_field_281, &__struct_info__1e8db4ddc1444e12_field_282, &__struct_info__1e8db4ddc1444e12_field_283, &__struct_info__1e8db4ddc1444e12_field_284, &__struct_info__1e8db4ddc1444e12_field_285, &__struct_info__1e8db4ddc1444e12_field_286, &__struct_info__1e8db4ddc1444e12_field_287, &__struct_info__1e8db4ddc1444e12_field_288, &__struct_info__1e8db4ddc1444e12_field_289, &__struct_info__1e8db4ddc1444e12_field_290, &__struct_info__1e8db4ddc1444e12_field_291, &__struct_info__1e8db4ddc1444e12_field_292, &__struct_info__1e8db4ddc1444e12_field_293, &__struct_info__1e8db4ddc1444e12_field_294, &__struct_info__1e8db4ddc1444e12_field_295, &__struct_info__1e8db4ddc1444e12_field_296, &__struct_info__1e8db4ddc1444e12_field_297, &__struct_info__1e8db4ddc1444e12_field_298, &__struct_info__1e8db4ddc1444e12_field_299, &__struct_info__1e8db4ddc1444e12_field_300, &__struct_info__1e8db4ddc1444e12_field_301, &__struct_info__1e8db4ddc1444e12_field_302 };
 StructInfo __struct_info__1e8db4ddc1444e12 = {"AstVisitor", "ast", 13, __struct_info__1e8db4ddc1444e12_fields, 303, 2424, UINT64_C(0x0), nullptr, UINT64_C(0x1e8db4ddc1444e12), 0 };
 VarInfo __func_info__3a65de30d05d7e33_field_0 =  { Type::tStructure, &__struct_info__3a4670ec1a9ece51, nullptr, nullptr, &__type_info__21586ce84f433a21, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, 2424, UINT64_C(0x8fdd2f83e5264241), "self", 0, 0 };
 VarInfo __func_info__3a65de30d05d7e33_field_1 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__54fceee561bff5eb, nullptr, nullptr, nullptr, 0, 0, nullptr, 25632, 8, UINT64_C(0xe631c55522e0079e), "casll", 0, 0 };
@@ -3771,309 +3771,309 @@ static void resolveTypeInfoAnnotations()
 namespace  {
 
 struct SetPrinterFlags {
-	void * __rtti;
-	Func DAS_COMMENT((void,ast::AstVisitor)) __finalize;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) preVisitProgram;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) visitProgram;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const ,Module * const )) preVisitProgramBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,Module * const )) preVisitModule;
-	Func DAS_COMMENT((void,ast::AstVisitor,Module * const )) visitModule;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeDecl> const )) preVisitExprTypeDecl;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTypeDecl> const )) visitExprTypeDecl;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<TypeDecl> const )) preVisitTypeDecl;
-	Func DAS_COMMENT((smart_ptr_raw<TypeDecl>,ast::AstVisitor,smart_ptr_raw<TypeDecl> const )) visitTypeDecl;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<TypeDecl> const ,das::string const )) preVisitAlias;
-	Func DAS_COMMENT((smart_ptr_raw<TypeDecl>,ast::AstVisitor,smart_ptr_raw<TypeDecl> const ,das::string const )) visitAlias;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Enumeration * const )) canVisitEnumeration;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Enumeration> const )) preVisitEnumeration;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Enumeration> const ,das::string const ,smart_ptr_raw<Expression> const ,bool)) preVisitEnumerationValue;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Enumeration> const ,das::string const ,smart_ptr_raw<Expression> const ,bool)) visitEnumerationValue;
-	Func DAS_COMMENT((smart_ptr_raw<Enumeration>,ast::AstVisitor,smart_ptr_raw<Enumeration> const )) visitEnumeration;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Structure * const )) canVisitStructure;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const )) preVisitStructure;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const ,Structure::FieldDeclaration const ,bool)) preVisitStructureField;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const ,Structure::FieldDeclaration const ,bool)) visitStructureField;
-	Func DAS_COMMENT((smart_ptr_raw<Structure>,ast::AstVisitor,smart_ptr_raw<Structure> const )) visitStructure;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Function * const )) canVisitFunction;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Function * const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) canVisitFunctionArgumentInit;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const )) preVisitFunction;
-	Func DAS_COMMENT((smart_ptr_raw<Function>,ast::AstVisitor,smart_ptr_raw<Function> const )) visitFunction;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,bool)) preVisitFunctionArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,bool)) visitFunctionArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitFunctionArgumentInit;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitFunctionArgumentInit;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Expression> const )) preVisitFunctionBody;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Expression> const )) visitFunctionBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Expression> const )) preVisitExpression;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Expression> const )) visitExpression;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) preVisitExprBlock;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) visitExprBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprBlockArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,bool)) visitExprBlockArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockArgumentInit;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitExprBlockArgumentInit;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockExpression;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) visitExprBlockExpression;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) preVisitExprBlockFinal;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) visitExprBlockFinal;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockFinalExpression;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) visitExprBlockFinalExpression;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const )) preVisitExprLet;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLet> const )) visitExprLet;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprLetVariable;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,bool)) visitExprLetVariable;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitExprLetVariableInit;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitExprLetVariableInit;
-	Func DAS_COMMENT((bool,ast::AstVisitor,Variable * const )) canVisitGlobalVariable;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) preVisitGlobalLet;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) visitGlobalLet;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Variable> const ,bool)) preVisitGlobalLetVariable;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<Variable> const ,bool)) visitGlobalLetVariable;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitGlobalLetVariableInit;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitGlobalLetVariableInit;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const )) preVisitExprStringBuilder;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const )) visitExprStringBuilder;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprStringBuilderElement;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const ,smart_ptr_raw<Expression> const ,bool)) visitExprStringBuilderElement;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const )) preVisitExprNew;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNew> const )) visitExprNew;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprNewArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool)) visitExprNewArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const )) preVisitExprNamedCall;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const )) visitExprNamedCall;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const ,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprNamedCallArgument;
-	Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const ,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprNamedCallArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const )) preVisitExprLooksLikeCall;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const )) visitExprLooksLikeCall;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) canVisitLooksLikeCallArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprLooksLikeCallArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) visitExprLooksLikeCallArgument;
-	Func DAS_COMMENT((bool,ast::AstVisitor,ExprCall * const )) canVisitCall;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const )) preVisitExprCall;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCall> const )) visitExprCall;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprCallArgument;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool)) visitExprCallArgument;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const )) preVisitExprNullCoalescing;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const )) visitExprNullCoalescing;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const ,smart_ptr_raw<Expression> const )) preVisitExprNullCoalescingDefault;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const )) preVisitExprAt;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAt> const )) visitExprAt;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const ,smart_ptr_raw<Expression> const )) preVisitExprAtIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeAt> const )) preVisitExprSafeAt;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeAt> const )) visitExprSafeAt;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const ,smart_ptr_raw<Expression> const )) preVisitExprSafeAtIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIs> const )) preVisitExprIs;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIs> const )) visitExprIs;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIs> const ,smart_ptr_raw<TypeDecl> const )) preVisitExprIsType;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp2> const )) preVisitExprOp2;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp2> const )) visitExprOp2;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp2> const ,smart_ptr_raw<Expression> const )) preVisitExprOp2Right;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const )) preVisitExprOp3;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp3> const )) visitExprOp3;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const ,smart_ptr_raw<Expression> const )) preVisitExprOp3Left;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const ,smart_ptr_raw<Expression> const )) preVisitExprOp3Right;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) isRightFirstExprCopy;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) preVisitExprCopy;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) visitExprCopy;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const ,smart_ptr_raw<Expression> const )) preVisitExprCopyRight;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) isRightFirstExprMove;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) preVisitExprMove;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) visitExprMove;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMove> const ,smart_ptr_raw<Expression> const )) preVisitExprMoveRight;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) isRightFirstExprClone;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) preVisitExprClone;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) visitExprClone;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const ,smart_ptr_raw<Expression> const )) preVisitExprCloneRight;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) canVisitWithAliasSubexpression;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) preVisitExprAssume;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) visitExprAssume;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWith> const )) preVisitExprWith;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprWith> const )) visitExprWith;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWith> const ,smart_ptr_raw<Expression> const )) preVisitExprWithBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const )) preVisitExprWhile;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprWhile> const )) visitExprWhile;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const ,smart_ptr_raw<Expression> const )) preVisitExprWhileBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const )) preVisitExprTryCatch;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const )) visitExprTryCatch;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const ,smart_ptr_raw<Expression> const )) preVisitExprTryCatchCatch;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const )) preVisitExprIfThenElse;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const )) visitExprIfThenElse;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ,smart_ptr_raw<Expression> const )) preVisitExprIfThenElseIfBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ,smart_ptr_raw<Expression> const )) preVisitExprIfThenElseElseBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprFor;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) visitExprFor;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprForVariable;
-	Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Variable> const ,bool)) visitExprForVariable;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprForSource;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Expression> const ,bool)) visitExprForSource;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprForStack;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprForBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const )) preVisitExprMakeVariant;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const )) visitExprMakeVariant;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprMakeVariantField;
-	Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprMakeVariantField;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) canVisitMakeStructBody;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) canVisitMakeStructBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) preVisitExprMakeStruct;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) visitExprMakeStruct;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,bool)) preVisitExprMakeStructIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,bool)) visitExprMakeStructIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprMakeStructField;
-	Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprMakeStructField;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) preVisitMakeStructureBlock;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) visitMakeStructureBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const )) preVisitExprMakeArray;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const )) visitExprMakeArray;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) preVisitExprMakeArrayIndex;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) visitExprMakeArrayIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const )) preVisitExprMakeTuple;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const )) visitExprMakeTuple;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) preVisitExprMakeTupleIndex;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) visitExprMakeTupleIndex;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const )) preVisitExprArrayComprehension;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const )) visitExprArrayComprehension;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ,smart_ptr_raw<Expression> const )) preVisitExprArrayComprehensionSubexpr;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ,smart_ptr_raw<Expression> const )) preVisitExprArrayComprehensionWhere;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const )) preVisitExprTypeInfo;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const )) visitExprTypeInfo;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprPtr2Ref> const )) preVisitExprPtr2Ref;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprPtr2Ref> const )) visitExprPtr2Ref;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLabel> const )) preVisitExprLabel;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLabel> const )) visitExprLabel;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprGoto> const )) preVisitExprGoto;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprGoto> const )) visitExprGoto;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprRef2Value> const )) preVisitExprRef2Value;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprRef2Value> const )) visitExprRef2Value;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprRef2Ptr> const )) preVisitExprRef2Ptr;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprRef2Ptr> const )) visitExprRef2Ptr;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAddr> const )) preVisitExprAddr;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAddr> const )) visitExprAddr;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAssert> const )) preVisitExprAssert;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAssert> const )) visitExprAssert;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStaticAssert> const )) preVisitExprStaticAssert;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStaticAssert> const )) visitExprStaticAssert;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprQuote> const )) preVisitExprQuote;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprQuote> const )) visitExprQuote;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprDebug> const )) preVisitExprDebug;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprDebug> const )) visitExprDebug;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprInvoke> const )) preVisitExprInvoke;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprInvoke> const )) visitExprInvoke;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprErase> const )) preVisitExprErase;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprErase> const )) visitExprErase;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSetInsert> const )) preVisitExprSetInsert;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSetInsert> const )) visitExprSetInsert;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFind> const )) preVisitExprFind;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFind> const )) visitExprFind;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprKeyExists> const )) preVisitExprKeyExists;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprKeyExists> const )) visitExprKeyExists;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAscend> const )) preVisitExprAscend;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAscend> const )) visitExprAscend;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCast> const )) preVisitExprCast;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCast> const )) visitExprCast;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprDelete> const )) preVisitExprDelete;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprDelete> const )) visitExprDelete;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprVar> const )) preVisitExprVar;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprVar> const )) visitExprVar;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTag> const )) preVisitExprTag;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTag> const ,smart_ptr_raw<Expression> const )) preVisitExprTagValue;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTag> const )) visitExprTag;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprField> const )) preVisitExprField;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprField> const )) visitExprField;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeField> const )) preVisitExprSafeField;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeField> const )) visitExprSafeField;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSwizzle> const )) preVisitExprSwizzle;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSwizzle> const )) visitExprSwizzle;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIsVariant> const )) preVisitExprIsVariant;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIsVariant> const )) visitExprIsVariant;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAsVariant> const )) preVisitExprAsVariant;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAsVariant> const )) visitExprAsVariant;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeAsVariant> const )) preVisitExprSafeAsVariant;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeAsVariant> const )) visitExprSafeAsVariant;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp1> const )) preVisitExprOp1;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp1> const )) visitExprOp1;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReturn> const )) preVisitExprReturn;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprReturn> const )) visitExprReturn;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprYield> const )) preVisitExprYield;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprYield> const )) visitExprYield;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBreak> const )) preVisitExprBreak;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBreak> const )) visitExprBreak;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprContinue> const )) preVisitExprContinue;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprContinue> const )) visitExprContinue;
-	Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) canVisitMakeBlockBody;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) preVisitExprMakeBlock;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) visitExprMakeBlock;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeGenerator> const )) preVisitExprMakeGenerator;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeGenerator> const )) visitExprMakeGenerator;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMemZero> const )) preVisitExprMemZero;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMemZero> const )) visitExprMemZero;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConst> const )) preVisitExprConst;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConst> const )) visitExprConst;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstPtr> const )) preVisitExprConstPtr;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstPtr> const )) visitExprConstPtr;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstEnumeration> const )) preVisitExprConstEnumeration;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstEnumeration> const )) visitExprConstEnumeration;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstBitfield> const )) preVisitExprConstBitfield;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstBitfield> const )) visitExprConstBitfield;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt8> const )) preVisitExprConstInt8;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt8> const )) visitExprConstInt8;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt16> const )) preVisitExprConstInt16;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt16> const )) visitExprConstInt16;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt64> const )) preVisitExprConstInt64;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt64> const )) visitExprConstInt64;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt> const )) preVisitExprConstInt;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt> const )) visitExprConstInt;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt2> const )) preVisitExprConstInt2;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt2> const )) visitExprConstInt2;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt3> const )) preVisitExprConstInt3;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt3> const )) visitExprConstInt3;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt4> const )) preVisitExprConstInt4;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt4> const )) visitExprConstInt4;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt8> const )) preVisitExprConstUInt8;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt8> const )) visitExprConstUInt8;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt16> const )) preVisitExprConstUInt16;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt16> const )) visitExprConstUInt16;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt64> const )) preVisitExprConstUInt64;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt64> const )) visitExprConstUInt64;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt> const )) preVisitExprConstUInt;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt> const )) visitExprConstUInt;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt2> const )) preVisitExprConstUInt2;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt2> const )) visitExprConstUInt2;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt3> const )) preVisitExprConstUInt3;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt3> const )) visitExprConstUInt3;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt4> const )) preVisitExprConstUInt4;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt4> const )) visitExprConstUInt4;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstRange> const )) preVisitExprConstRange;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstRange> const )) visitExprConstRange;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstURange> const )) preVisitExprConstURange;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstURange> const )) visitExprConstURange;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstRange64> const )) preVisitExprConstRange64;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstRange64> const )) visitExprConstRange64;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstURange64> const )) preVisitExprConstURange64;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstURange64> const )) visitExprConstURange64;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstBool> const )) preVisitExprConstBool;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstBool> const )) visitExprConstBool;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat> const )) preVisitExprConstFloat;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat> const )) visitExprConstFloat;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat2> const )) preVisitExprConstFloat2;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat2> const )) visitExprConstFloat2;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat3> const )) preVisitExprConstFloat3;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat3> const )) visitExprConstFloat3;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat4> const )) preVisitExprConstFloat4;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat4> const )) visitExprConstFloat4;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstString> const )) preVisitExprConstString;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstString> const )) visitExprConstString;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstDouble> const )) preVisitExprConstDouble;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstDouble> const )) visitExprConstDouble;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFakeContext> const )) preVisitExprFakeContext;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFakeContext> const )) visitExprFakeContext;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFakeLineInfo> const )) preVisitExprFakeLineInfo;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFakeLineInfo> const )) visitExprFakeLineInfo;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReader> const )) preVisitExprReader;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprReader> const )) visitExprReader;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprUnsafe> const )) preVisitExprUnsafe;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprUnsafe> const )) visitExprUnsafe;
-	Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCallMacro> const )) preVisitExprCallMacro;
-	Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCallMacro> const )) visitExprCallMacro;
+    void * __rtti;
+    Func DAS_COMMENT((void,ast::AstVisitor)) __finalize;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) preVisitProgram;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) visitProgram;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const ,Module * const )) preVisitProgramBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,Module * const )) preVisitModule;
+    Func DAS_COMMENT((void,ast::AstVisitor,Module * const )) visitModule;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeDecl> const )) preVisitExprTypeDecl;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTypeDecl> const )) visitExprTypeDecl;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<TypeDecl> const )) preVisitTypeDecl;
+    Func DAS_COMMENT((smart_ptr_raw<TypeDecl>,ast::AstVisitor,smart_ptr_raw<TypeDecl> const )) visitTypeDecl;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<TypeDecl> const ,das::string const )) preVisitAlias;
+    Func DAS_COMMENT((smart_ptr_raw<TypeDecl>,ast::AstVisitor,smart_ptr_raw<TypeDecl> const ,das::string const )) visitAlias;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Enumeration * const )) canVisitEnumeration;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Enumeration> const )) preVisitEnumeration;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Enumeration> const ,das::string const ,smart_ptr_raw<Expression> const ,bool)) preVisitEnumerationValue;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Enumeration> const ,das::string const ,smart_ptr_raw<Expression> const ,bool)) visitEnumerationValue;
+    Func DAS_COMMENT((smart_ptr_raw<Enumeration>,ast::AstVisitor,smart_ptr_raw<Enumeration> const )) visitEnumeration;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Structure * const )) canVisitStructure;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const )) preVisitStructure;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const ,Structure::FieldDeclaration const ,bool)) preVisitStructureField;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Structure> const ,Structure::FieldDeclaration const ,bool)) visitStructureField;
+    Func DAS_COMMENT((smart_ptr_raw<Structure>,ast::AstVisitor,smart_ptr_raw<Structure> const )) visitStructure;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Function * const )) canVisitFunction;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Function * const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) canVisitFunctionArgumentInit;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const )) preVisitFunction;
+    Func DAS_COMMENT((smart_ptr_raw<Function>,ast::AstVisitor,smart_ptr_raw<Function> const )) visitFunction;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,bool)) preVisitFunctionArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,bool)) visitFunctionArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitFunctionArgumentInit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitFunctionArgumentInit;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Expression> const )) preVisitFunctionBody;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Function> const ,smart_ptr_raw<Expression> const )) visitFunctionBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Expression> const )) preVisitExpression;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Expression> const )) visitExpression;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) preVisitExprBlock;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) visitExprBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprBlockArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,bool)) visitExprBlockArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockArgumentInit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitExprBlockArgumentInit;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockExpression;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) visitExprBlockExpression;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) preVisitExprBlockFinal;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const )) visitExprBlockFinal;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) preVisitExprBlockFinalExpression;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const )) visitExprBlockFinalExpression;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const )) preVisitExprLet;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLet> const )) visitExprLet;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprLetVariable;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,bool)) visitExprLetVariable;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitExprLetVariableInit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLet> const ,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitExprLetVariableInit;
+    Func DAS_COMMENT((bool,ast::AstVisitor,Variable * const )) canVisitGlobalVariable;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) preVisitGlobalLet;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Program> const )) visitGlobalLet;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Variable> const ,bool)) preVisitGlobalLetVariable;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<Variable> const ,bool)) visitGlobalLetVariable;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) preVisitGlobalLetVariableInit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<Variable> const ,smart_ptr_raw<Expression> const )) visitGlobalLetVariableInit;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const )) preVisitExprStringBuilder;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const )) visitExprStringBuilder;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprStringBuilderElement;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStringBuilder> const ,smart_ptr_raw<Expression> const ,bool)) visitExprStringBuilderElement;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const )) preVisitExprNew;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNew> const )) visitExprNew;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprNewArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool)) visitExprNewArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const )) preVisitExprNamedCall;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const )) visitExprNamedCall;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const ,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprNamedCallArgument;
+    Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprNamedCall> const ,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprNamedCallArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const )) preVisitExprLooksLikeCall;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const )) visitExprLooksLikeCall;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) canVisitLooksLikeCallArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprLooksLikeCallArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool)) visitExprLooksLikeCallArgument;
+    Func DAS_COMMENT((bool,ast::AstVisitor,ExprCall * const )) canVisitCall;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const )) preVisitExprCall;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCall> const )) visitExprCall;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprCallArgument;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool)) visitExprCallArgument;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const )) preVisitExprNullCoalescing;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const )) visitExprNullCoalescing;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNullCoalescing> const ,smart_ptr_raw<Expression> const )) preVisitExprNullCoalescingDefault;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const )) preVisitExprAt;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAt> const )) visitExprAt;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const ,smart_ptr_raw<Expression> const )) preVisitExprAtIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeAt> const )) preVisitExprSafeAt;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeAt> const )) visitExprSafeAt;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAt> const ,smart_ptr_raw<Expression> const )) preVisitExprSafeAtIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIs> const )) preVisitExprIs;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIs> const )) visitExprIs;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIs> const ,smart_ptr_raw<TypeDecl> const )) preVisitExprIsType;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp2> const )) preVisitExprOp2;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp2> const )) visitExprOp2;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp2> const ,smart_ptr_raw<Expression> const )) preVisitExprOp2Right;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const )) preVisitExprOp3;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp3> const )) visitExprOp3;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const ,smart_ptr_raw<Expression> const )) preVisitExprOp3Left;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp3> const ,smart_ptr_raw<Expression> const )) preVisitExprOp3Right;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) isRightFirstExprCopy;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) preVisitExprCopy;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCopy> const )) visitExprCopy;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const ,smart_ptr_raw<Expression> const )) preVisitExprCopyRight;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) isRightFirstExprMove;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) preVisitExprMove;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMove> const )) visitExprMove;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMove> const ,smart_ptr_raw<Expression> const )) preVisitExprMoveRight;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) isRightFirstExprClone;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) preVisitExprClone;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprClone> const )) visitExprClone;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const ,smart_ptr_raw<Expression> const )) preVisitExprCloneRight;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) canVisitWithAliasSubexpression;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) preVisitExprAssume;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAssume> const )) visitExprAssume;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWith> const )) preVisitExprWith;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprWith> const )) visitExprWith;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWith> const ,smart_ptr_raw<Expression> const )) preVisitExprWithBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const )) preVisitExprWhile;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprWhile> const )) visitExprWhile;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const ,smart_ptr_raw<Expression> const )) preVisitExprWhileBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const )) preVisitExprTryCatch;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const )) visitExprTryCatch;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTryCatch> const ,smart_ptr_raw<Expression> const )) preVisitExprTryCatchCatch;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const )) preVisitExprIfThenElse;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const )) visitExprIfThenElse;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ,smart_ptr_raw<Expression> const )) preVisitExprIfThenElseIfBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ,smart_ptr_raw<Expression> const )) preVisitExprIfThenElseElseBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprFor;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) visitExprFor;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Variable> const ,bool)) preVisitExprForVariable;
+    Func DAS_COMMENT((smart_ptr_raw<Variable>,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Variable> const ,bool)) visitExprForVariable;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Expression> const ,bool)) preVisitExprForSource;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFor> const ,smart_ptr_raw<Expression> const ,bool)) visitExprForSource;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprForStack;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFor> const )) preVisitExprForBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const )) preVisitExprMakeVariant;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const )) visitExprMakeVariant;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprMakeVariantField;
+    Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprMakeVariant> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprMakeVariantField;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) canVisitMakeStructBody;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) canVisitMakeStructBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) preVisitExprMakeStruct;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const )) visitExprMakeStruct;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,bool)) preVisitExprMakeStructIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,bool)) visitExprMakeStructIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) preVisitExprMakeStructField;
+    Func DAS_COMMENT((smart_ptr_raw<MakeFieldDecl>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,int32_t,smart_ptr_raw<MakeFieldDecl> const ,bool)) visitExprMakeStructField;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) preVisitMakeStructureBlock;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeStruct> const ,smart_ptr_raw<Expression> const )) visitMakeStructureBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const )) preVisitExprMakeArray;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const )) visitExprMakeArray;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) preVisitExprMakeArrayIndex;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeArray> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) visitExprMakeArrayIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const )) preVisitExprMakeTuple;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const )) visitExprMakeTuple;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) preVisitExprMakeTupleIndex;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeTuple> const ,int32_t,smart_ptr_raw<Expression> const ,bool)) visitExprMakeTupleIndex;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const )) preVisitExprArrayComprehension;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const )) visitExprArrayComprehension;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ,smart_ptr_raw<Expression> const )) preVisitExprArrayComprehensionSubexpr;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ,smart_ptr_raw<Expression> const )) preVisitExprArrayComprehensionWhere;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const )) preVisitExprTypeInfo;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const )) visitExprTypeInfo;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprPtr2Ref> const )) preVisitExprPtr2Ref;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprPtr2Ref> const )) visitExprPtr2Ref;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLabel> const )) preVisitExprLabel;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprLabel> const )) visitExprLabel;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprGoto> const )) preVisitExprGoto;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprGoto> const )) visitExprGoto;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprRef2Value> const )) preVisitExprRef2Value;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprRef2Value> const )) visitExprRef2Value;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprRef2Ptr> const )) preVisitExprRef2Ptr;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprRef2Ptr> const )) visitExprRef2Ptr;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAddr> const )) preVisitExprAddr;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAddr> const )) visitExprAddr;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAssert> const )) preVisitExprAssert;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAssert> const )) visitExprAssert;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprStaticAssert> const )) preVisitExprStaticAssert;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprStaticAssert> const )) visitExprStaticAssert;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprQuote> const )) preVisitExprQuote;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprQuote> const )) visitExprQuote;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprDebug> const )) preVisitExprDebug;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprDebug> const )) visitExprDebug;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprInvoke> const )) preVisitExprInvoke;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprInvoke> const )) visitExprInvoke;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprErase> const )) preVisitExprErase;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprErase> const )) visitExprErase;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSetInsert> const )) preVisitExprSetInsert;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSetInsert> const )) visitExprSetInsert;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFind> const )) preVisitExprFind;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFind> const )) visitExprFind;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprKeyExists> const )) preVisitExprKeyExists;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprKeyExists> const )) visitExprKeyExists;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAscend> const )) preVisitExprAscend;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAscend> const )) visitExprAscend;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCast> const )) preVisitExprCast;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCast> const )) visitExprCast;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprDelete> const )) preVisitExprDelete;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprDelete> const )) visitExprDelete;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprVar> const )) preVisitExprVar;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprVar> const )) visitExprVar;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTag> const )) preVisitExprTag;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTag> const ,smart_ptr_raw<Expression> const )) preVisitExprTagValue;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprTag> const )) visitExprTag;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprField> const )) preVisitExprField;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprField> const )) visitExprField;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeField> const )) preVisitExprSafeField;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeField> const )) visitExprSafeField;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSwizzle> const )) preVisitExprSwizzle;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSwizzle> const )) visitExprSwizzle;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIsVariant> const )) preVisitExprIsVariant;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprIsVariant> const )) visitExprIsVariant;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprAsVariant> const )) preVisitExprAsVariant;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprAsVariant> const )) visitExprAsVariant;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprSafeAsVariant> const )) preVisitExprSafeAsVariant;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprSafeAsVariant> const )) visitExprSafeAsVariant;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprOp1> const )) preVisitExprOp1;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprOp1> const )) visitExprOp1;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReturn> const )) preVisitExprReturn;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprReturn> const )) visitExprReturn;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprYield> const )) preVisitExprYield;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprYield> const )) visitExprYield;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBreak> const )) preVisitExprBreak;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprBreak> const )) visitExprBreak;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprContinue> const )) preVisitExprContinue;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprContinue> const )) visitExprContinue;
+    Func DAS_COMMENT((bool,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) canVisitMakeBlockBody;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) preVisitExprMakeBlock;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeBlock> const )) visitExprMakeBlock;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMakeGenerator> const )) preVisitExprMakeGenerator;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMakeGenerator> const )) visitExprMakeGenerator;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprMemZero> const )) preVisitExprMemZero;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprMemZero> const )) visitExprMemZero;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConst> const )) preVisitExprConst;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConst> const )) visitExprConst;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstPtr> const )) preVisitExprConstPtr;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstPtr> const )) visitExprConstPtr;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstEnumeration> const )) preVisitExprConstEnumeration;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstEnumeration> const )) visitExprConstEnumeration;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstBitfield> const )) preVisitExprConstBitfield;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstBitfield> const )) visitExprConstBitfield;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt8> const )) preVisitExprConstInt8;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt8> const )) visitExprConstInt8;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt16> const )) preVisitExprConstInt16;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt16> const )) visitExprConstInt16;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt64> const )) preVisitExprConstInt64;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt64> const )) visitExprConstInt64;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt> const )) preVisitExprConstInt;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt> const )) visitExprConstInt;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt2> const )) preVisitExprConstInt2;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt2> const )) visitExprConstInt2;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt3> const )) preVisitExprConstInt3;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt3> const )) visitExprConstInt3;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstInt4> const )) preVisitExprConstInt4;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstInt4> const )) visitExprConstInt4;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt8> const )) preVisitExprConstUInt8;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt8> const )) visitExprConstUInt8;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt16> const )) preVisitExprConstUInt16;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt16> const )) visitExprConstUInt16;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt64> const )) preVisitExprConstUInt64;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt64> const )) visitExprConstUInt64;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt> const )) preVisitExprConstUInt;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt> const )) visitExprConstUInt;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt2> const )) preVisitExprConstUInt2;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt2> const )) visitExprConstUInt2;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt3> const )) preVisitExprConstUInt3;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt3> const )) visitExprConstUInt3;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstUInt4> const )) preVisitExprConstUInt4;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstUInt4> const )) visitExprConstUInt4;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstRange> const )) preVisitExprConstRange;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstRange> const )) visitExprConstRange;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstURange> const )) preVisitExprConstURange;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstURange> const )) visitExprConstURange;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstRange64> const )) preVisitExprConstRange64;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstRange64> const )) visitExprConstRange64;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstURange64> const )) preVisitExprConstURange64;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstURange64> const )) visitExprConstURange64;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstBool> const )) preVisitExprConstBool;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstBool> const )) visitExprConstBool;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat> const )) preVisitExprConstFloat;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat> const )) visitExprConstFloat;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat2> const )) preVisitExprConstFloat2;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat2> const )) visitExprConstFloat2;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat3> const )) preVisitExprConstFloat3;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat3> const )) visitExprConstFloat3;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstFloat4> const )) preVisitExprConstFloat4;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstFloat4> const )) visitExprConstFloat4;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstString> const )) preVisitExprConstString;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstString> const )) visitExprConstString;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprConstDouble> const )) preVisitExprConstDouble;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprConstDouble> const )) visitExprConstDouble;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFakeContext> const )) preVisitExprFakeContext;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFakeContext> const )) visitExprFakeContext;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprFakeLineInfo> const )) preVisitExprFakeLineInfo;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprFakeLineInfo> const )) visitExprFakeLineInfo;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReader> const )) preVisitExprReader;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprReader> const )) visitExprReader;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprUnsafe> const )) preVisitExprUnsafe;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprUnsafe> const )) visitExprUnsafe;
+    Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCallMacro> const )) preVisitExprCallMacro;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprCallMacro> const )) visitExprCallMacro;
 };
 static_assert(sizeof(SetPrinterFlags)==2424,"structure size mismatch with DAS");
 static_assert(offsetof(SetPrinterFlags,__rtti)==0,"structure field offset mismatch with DAS");
@@ -4406,217 +4406,217 @@ void __init_script ( Context * __context__, bool __init_shared )
 
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_add3789c681026a9 ( Context * __context__, SetPrinterFlags const  &  __cl_rename_at_116_0 )
 {
-	return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_0.__rtti))).getStructType())));
+    return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_0.__rtti))).getStructType())));
 }
 
 inline void finalize_5d9a9127383cfeb9 ( Context * __context__, SetPrinterFlags &  ____this_rename_at_5_1 )
 {
-	memset(&(____this_rename_at_5_1), 0, 2424);
+    memset(&(____this_rename_at_5_1), 0, 2424);
 }
 
 inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_fd072f87dbbcc39e ( Context * __context__, SetPrinterFlags const  &  __someClass_rename_at_675_2 )
 {
-	SetPrinterFlags const  * __classPtr_rename_at_678_3 = ((SetPrinterFlags const  *)das_ref(__context__,__someClass_rename_at_675_2));
-	StructInfo const  * __classInfo_rename_at_679_4 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_add3789c681026a9(__context__,__someClass_rename_at_675_2));
-	return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_678_3),__classInfo_rename_at_679_4,__context__));
+    SetPrinterFlags const  * __classPtr_rename_at_678_3 = ((SetPrinterFlags const  *)das_ref(__context__,__someClass_rename_at_675_2));
+    StructInfo const  * __classInfo_rename_at_679_4 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_add3789c681026a9(__context__,__someClass_rename_at_675_2));
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_678_3),__classInfo_rename_at_679_4,__context__));
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprBlockExpression_f561e084efc4a6e1 ( Context * __context__, SetPrinterFlags &  __self_rename_at_6_5, smart_ptr_raw<ExprBlock> const  __block1_rename_at_6_6, smart_ptr_raw<Expression> __expr_rename_at_6_7 )
 {
-	das_copy(__expr_rename_at_6_7->printFlags /*printFlags*/,0x2u);
+    das_copy(__expr_rename_at_6_7->printFlags /*printFlags*/,0x2u);
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprNewArgument_b9b784a1191d9a6b ( Context * __context__, SetPrinterFlags &  __self_rename_at_10_8, smart_ptr_raw<ExprNew> const  __call_rename_at_10_9, smart_ptr_raw<Expression> __expr_rename_at_10_10, bool __last_rename_at_10_11 )
 {
-	das_copy(__expr_rename_at_10_10->printFlags /*printFlags*/,0x2u);
+    das_copy(__expr_rename_at_10_10->printFlags /*printFlags*/,0x2u);
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprCallArgument_850dbc0dcb95d358 ( Context * __context__, SetPrinterFlags &  __self_rename_at_14_12, smart_ptr_raw<ExprCall> const  __casll_rename_at_14_13, smart_ptr_raw<Expression> __expr_rename_at_14_14, bool __last_rename_at_14_15 )
 {
-	das_copy(__expr_rename_at_14_14->printFlags /*printFlags*/,0x2u);
+    das_copy(__expr_rename_at_14_14->printFlags /*printFlags*/,0x2u);
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprLooksLikeCallArgument_7c790cd6c891396c ( Context * __context__, SetPrinterFlags &  __self_rename_at_18_16, smart_ptr_raw<ExprLooksLikeCall> const  __call_rename_at_18_17, smart_ptr_raw<Expression> __expr_rename_at_18_18, bool __last_rename_at_18_19 )
 {
-	das_copy(__expr_rename_at_18_18->printFlags /*printFlags*/,0x2u);
+    das_copy(__expr_rename_at_18_18->printFlags /*printFlags*/,0x2u);
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprIfThenElse_83e89617b87a7c66 ( Context * __context__, SetPrinterFlags &  __self_rename_at_22_20, smart_ptr_raw<ExprIfThenElse> __expr_rename_at_22_21 )
 {
-	das_copy(__expr_rename_at_22_21->cond /*cond*/->printFlags /*printFlags*/,0x2u);
+    das_copy(__expr_rename_at_22_21->cond /*cond*/->printFlags /*printFlags*/,0x2u);
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprWhile_e93ba89f6b3eb884 ( Context * __context__, SetPrinterFlags &  __self_rename_at_26_22, smart_ptr_raw<ExprWhile> __expr_rename_at_26_23 )
 {
-	das_copy(__expr_rename_at_26_23->cond /*cond*/->printFlags /*printFlags*/,0x2u);
+    das_copy(__expr_rename_at_26_23->cond /*cond*/->printFlags /*printFlags*/,0x2u);
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprReturn_17883fe2d9bd1789 ( Context * __context__, SetPrinterFlags &  __self_rename_at_30_24, smart_ptr_raw<ExprReturn> __expr_rename_at_30_25 )
 {
-	if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_30_25->subexpr /*subexpr*/),das_auto_cast<void * const >::cast(nullptr)) )
-	{
-		das_copy(__expr_rename_at_30_25->subexpr /*subexpr*/->printFlags /*printFlags*/,0x2u);
-	};
+    if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_30_25->subexpr /*subexpr*/),das_auto_cast<void * const >::cast(nullptr)) )
+    {
+        das_copy(__expr_rename_at_30_25->subexpr /*subexpr*/->printFlags /*printFlags*/,0x2u);
+    };
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprCopy_d79c51d472bd348b ( Context * __context__, SetPrinterFlags &  __self_rename_at_36_26, smart_ptr_raw<ExprCopy> __expr_rename_at_36_27 )
 {
-	if ( das_get_bitfield(__expr_rename_at_36_27->printFlags /*printFlags*/,1u << 0) || das_get_bitfield(__expr_rename_at_36_27->printFlags /*printFlags*/,1u << 1) )
-	{
-		das_copy(__expr_rename_at_36_27->right /*right*/->printFlags /*printFlags*/,0x2u);
-	};
+    if ( das_get_bitfield(__expr_rename_at_36_27->printFlags /*printFlags*/,1u << 0) || das_get_bitfield(__expr_rename_at_36_27->printFlags /*printFlags*/,1u << 1) )
+    {
+        das_copy(__expr_rename_at_36_27->right /*right*/->printFlags /*printFlags*/,0x2u);
+    };
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprClone_7d2dea0907771b08 ( Context * __context__, SetPrinterFlags &  __self_rename_at_42_28, smart_ptr_raw<ExprClone> __expr_rename_at_42_29 )
 {
-	if ( das_get_bitfield(__expr_rename_at_42_29->printFlags /*printFlags*/,1u << 0) || das_get_bitfield(__expr_rename_at_42_29->printFlags /*printFlags*/,1u << 1) )
-	{
-		das_copy(__expr_rename_at_42_29->right /*right*/->printFlags /*printFlags*/,0x2u);
-	};
+    if ( das_get_bitfield(__expr_rename_at_42_29->printFlags /*printFlags*/,1u << 0) || das_get_bitfield(__expr_rename_at_42_29->printFlags /*printFlags*/,1u << 1) )
+    {
+        das_copy(__expr_rename_at_42_29->right /*right*/->printFlags /*printFlags*/,0x2u);
+    };
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprVar_e58a5cbb91febdc9 ( Context * __context__, SetPrinterFlags &  __self_rename_at_48_30, smart_ptr_raw<ExprVar> __expr_rename_at_48_31 )
 {
-	das_copy(__expr_rename_at_48_31->printFlags /*printFlags*/,0x4u);
+    das_copy(__expr_rename_at_48_31->printFlags /*printFlags*/,0x4u);
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprTypeInfo_1f37bd3515e086c1 ( Context * __context__, SetPrinterFlags &  __self_rename_at_52_32, smart_ptr_raw<ExprTypeInfo> __expr_rename_at_52_33 )
 {
-	if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_52_33->subexpr /*subexpr*/),das_auto_cast<void * const >::cast(nullptr)) )
-	{
-		das_copy(__expr_rename_at_52_33->subexpr /*subexpr*/->printFlags /*printFlags*/,0x2u);
-	};
+    if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_52_33->subexpr /*subexpr*/),das_auto_cast<void * const >::cast(nullptr)) )
+    {
+        das_copy(__expr_rename_at_52_33->subexpr /*subexpr*/->printFlags /*printFlags*/,0x2u);
+    };
 }
 
 inline void _FuncSetPrinterFlagsTickpreVisitExprArrayComprehension_a13705e5d10b1ec4 ( Context * __context__, SetPrinterFlags &  __self_rename_at_58_34, smart_ptr_raw<ExprArrayComprehension> __expr_rename_at_58_35 )
 {
-	das_copy(__expr_rename_at_58_35->subexpr /*subexpr*/->printFlags /*printFlags*/,0x2u);
-	if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_58_35->exprWhere /*exprWhere*/),das_auto_cast<void * const >::cast(nullptr)) )
-	{
-		das_copy(__expr_rename_at_58_35->exprWhere /*exprWhere*/->printFlags /*printFlags*/,0x2u);
-	};
+    das_copy(__expr_rename_at_58_35->subexpr /*subexpr*/->printFlags /*printFlags*/,0x2u);
+    if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_58_35->exprWhere /*exprWhere*/),das_auto_cast<void * const >::cast(nullptr)) )
+    {
+        das_copy(__expr_rename_at_58_35->exprWhere /*exprWhere*/->printFlags /*printFlags*/,0x2u);
+    };
 }
 
 inline void _FuncSetPrinterFlags_0x27___finalize_d088eb11dfba4911 ( Context * __context__, SetPrinterFlags &  __self_rename_at_5_36 )
 {
-	finalize_5d9a9127383cfeb9(__context__,das_arg<SetPrinterFlags>::pass(__self_rename_at_5_36));
+    finalize_5d9a9127383cfeb9(__context__,das_arg<SetPrinterFlags>::pass(__self_rename_at_5_36));
 }
 
 inline void setFlags_3ab45719fcf25abd ( Context * __context__, smart_ptr_raw<Program> __prog_rename_at_67_37 )
 {
-	SetPrinterFlags * __flags_rename_at_68_38; memset(&__flags_rename_at_68_38,0,sizeof(__flags_rename_at_68_38));
-	smart_ptr_raw<VisitorAdapter> __adapter_rename_at_69_39; memset(&__adapter_rename_at_69_39,0,sizeof(__adapter_rename_at_69_39));
+    SetPrinterFlags * __flags_rename_at_68_38; memset(&__flags_rename_at_68_38,0,sizeof(__flags_rename_at_68_38));
+    smart_ptr_raw<VisitorAdapter> __adapter_rename_at_69_39; memset(&__adapter_rename_at_69_39,0,sizeof(__adapter_rename_at_69_39));
 /* finally */ auto __finally_67= das_finally([&](){
-	das_delete_handle<smart_ptr_raw<VisitorAdapter>>::clear(__context__,__adapter_rename_at_69_39);
+    das_delete_handle<smart_ptr_raw<VisitorAdapter>>::clear(__context__,__adapter_rename_at_69_39);
 /* end finally */ });
-	__flags_rename_at_68_38 = das_new<SetPrinterFlags>::make_and_init(__context__,[&]() { return SetPrinterFlags_b41b64874a3608f6(__context__); });
-	__adapter_rename_at_69_39; das_zero(__adapter_rename_at_69_39); das_move(__adapter_rename_at_69_39, _FuncastTickmake_visitorTick897644165917210720_fd072f87dbbcc39e(__context__,das_arg<SetPrinterFlags>::pass(das_deref(__context__,__flags_rename_at_68_38))));
-	astVisit(__prog_rename_at_67_37,__adapter_rename_at_69_39,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    __flags_rename_at_68_38 = das_new<SetPrinterFlags>::make_and_init(__context__,[&]() { return SetPrinterFlags_b41b64874a3608f6(__context__); });
+    __adapter_rename_at_69_39; das_zero(__adapter_rename_at_69_39); das_move(__adapter_rename_at_69_39, _FuncastTickmake_visitorTick897644165917210720_fd072f87dbbcc39e(__context__,das_arg<SetPrinterFlags>::pass(das_deref(__context__,__flags_rename_at_68_38))));
+    astVisit(__prog_rename_at_67_37,__adapter_rename_at_69_39,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline SetPrinterFlags SetPrinterFlags_b41b64874a3608f6 ( Context * __context__ )
 {
-	return /* <- */ das_auto_cast_move<SetPrinterFlags>::cast((([&]() -> SetPrinterFlags {
-		SetPrinterFlags __mks_5;
-		das_zero(__mks_5);
-		das_copy((__mks_5.__rtti),(((void *)(&__type_info__7b0d0f807a29c5ca))));
-		das_copy((__mks_5.__finalize),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags'__finalize S<SetPrinterFlags>*/ 3192440444843402287u)))));
-		das_copy((__mks_5.preVisitExprBlockExpression),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprBlockExpression S<SetPrinterFlags> C1<H<ast::ExprBlock>>?M Y<ExpressionPtr>1<H<ast::Expression>>?M*/ 3310704773759727200u)))));
-		das_copy((__mks_5.preVisitExprNewArgument),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprNewArgument S<SetPrinterFlags> C1<H<ast::ExprNew>>?M 1<H<ast::Expression>>?M Cb*/ 1630513105318480665u)))));
-		das_copy((__mks_5.preVisitExprLooksLikeCallArgument),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprLooksLikeCallArgument S<SetPrinterFlags> C1<H<ast::ExprLooksLikeCall>>?M 1<H<ast::Expression>>?M Cb*/ 5209298699389071284u)))));
-		das_copy((__mks_5.preVisitExprCallArgument),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprCallArgument S<SetPrinterFlags> C1<H<ast::ExprCall>>?M 1<H<ast::Expression>>?M Cb*/ 4208013728083181107u)))));
-		das_copy((__mks_5.preVisitExprCopy),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprCopy S<SetPrinterFlags> 1<H<ast::ExprCopy>>?M*/ 17174875059586676418u)))));
-		das_copy((__mks_5.preVisitExprClone),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprClone S<SetPrinterFlags> 1<H<ast::ExprClone>>?M*/ 16798673157460496367u)))));
-		das_copy((__mks_5.preVisitExprWhile),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprWhile S<SetPrinterFlags> 1<H<ast::ExprWhile>>?M*/ 204586912482733259u)))));
-		das_copy((__mks_5.preVisitExprIfThenElse),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprIfThenElse S<SetPrinterFlags> 1<H<ast::ExprIfThenElse>>?M*/ 16581906633740137058u)))));
-		das_copy((__mks_5.preVisitExprArrayComprehension),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprArrayComprehension S<SetPrinterFlags> 1<H<ast::ExprArrayComprehension>>?M*/ 13997156903899102608u)))));
-		das_copy((__mks_5.preVisitExprTypeInfo),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprTypeInfo S<SetPrinterFlags> 1<H<ast::ExprTypeInfo>>?M*/ 7813179232649054083u)))));
-		das_copy((__mks_5.preVisitExprVar),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprVar> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprVar S<SetPrinterFlags> 1<H<ast::ExprVar>>?M*/ 17052370614610712727u)))));
-		das_copy((__mks_5.preVisitExprReturn),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReturn> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprReturn S<SetPrinterFlags> 1<H<ast::ExprReturn>>?M*/ 6883155252281405u)))));
-		return __mks_5;
-	})()));
+    return /* <- */ das_auto_cast_move<SetPrinterFlags>::cast((([&]() -> SetPrinterFlags {
+        SetPrinterFlags __mks_5;
+        das_zero(__mks_5);
+        das_copy((__mks_5.__rtti),(((void *)(&__type_info__7b0d0f807a29c5ca))));
+        das_copy((__mks_5.__finalize),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags'__finalize S<SetPrinterFlags>*/ 3192440444843402287u)))));
+        das_copy((__mks_5.preVisitExprBlockExpression),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprBlock> const ,smart_ptr_raw<Expression> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprBlockExpression S<SetPrinterFlags> C1<H<ast::ExprBlock>>?M Y<ExpressionPtr>1<H<ast::Expression>>?M*/ 3310704773759727200u)))));
+        das_copy((__mks_5.preVisitExprNewArgument),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprNew> const ,smart_ptr_raw<Expression> const ,bool))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprNewArgument S<SetPrinterFlags> C1<H<ast::ExprNew>>?M 1<H<ast::Expression>>?M Cb*/ 1630513105318480665u)))));
+        das_copy((__mks_5.preVisitExprLooksLikeCallArgument),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprLooksLikeCall> const ,smart_ptr_raw<Expression> const ,bool))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprLooksLikeCallArgument S<SetPrinterFlags> C1<H<ast::ExprLooksLikeCall>>?M 1<H<ast::Expression>>?M Cb*/ 5209298699389071284u)))));
+        das_copy((__mks_5.preVisitExprCallArgument),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCall> const ,smart_ptr_raw<Expression> const ,bool))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprCallArgument S<SetPrinterFlags> C1<H<ast::ExprCall>>?M 1<H<ast::Expression>>?M Cb*/ 4208013728083181107u)))));
+        das_copy((__mks_5.preVisitExprCopy),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprCopy> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprCopy S<SetPrinterFlags> 1<H<ast::ExprCopy>>?M*/ 17174875059586676418u)))));
+        das_copy((__mks_5.preVisitExprClone),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprClone> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprClone S<SetPrinterFlags> 1<H<ast::ExprClone>>?M*/ 16798673157460496367u)))));
+        das_copy((__mks_5.preVisitExprWhile),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprWhile> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprWhile S<SetPrinterFlags> 1<H<ast::ExprWhile>>?M*/ 204586912482733259u)))));
+        das_copy((__mks_5.preVisitExprIfThenElse),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprIfThenElse> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprIfThenElse S<SetPrinterFlags> 1<H<ast::ExprIfThenElse>>?M*/ 16581906633740137058u)))));
+        das_copy((__mks_5.preVisitExprArrayComprehension),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprArrayComprehension> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprArrayComprehension S<SetPrinterFlags> 1<H<ast::ExprArrayComprehension>>?M*/ 13997156903899102608u)))));
+        das_copy((__mks_5.preVisitExprTypeInfo),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprTypeInfo> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprTypeInfo S<SetPrinterFlags> 1<H<ast::ExprTypeInfo>>?M*/ 7813179232649054083u)))));
+        das_copy((__mks_5.preVisitExprVar),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprVar> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprVar S<SetPrinterFlags> 1<H<ast::ExprVar>>?M*/ 17052370614610712727u)))));
+        das_copy((__mks_5.preVisitExprReturn),(das_cast<Func DAS_COMMENT((void,ast::AstVisitor,smart_ptr_raw<ExprReturn> const ))>::cast(Func(__context__->fnByMangledName(/*SetPrinterFlags`preVisitExprReturn S<SetPrinterFlags> 1<H<ast::ExprReturn>>?M*/ 6883155252281405u)))));
+        return __mks_5;
+    })()));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-	// _FuncrttiTickclass_infoTick15801393167907430156_add3789c681026a9
-	aotLib[0xda151cb0934f878b] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<StructInfo const  * (*) ( Context * __context__, SetPrinterFlags const  &  ),&_FuncrttiTickclass_infoTick15801393167907430156_add3789c681026a9>>();
-	};
-	// finalize_5d9a9127383cfeb9
-	aotLib[0x49854832ca46248d] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags &  ),&finalize_5d9a9127383cfeb9>>();
-	};
-	// _FuncastTickmake_visitorTick897644165917210720_fd072f87dbbcc39e
-	aotLib[0x162ba084f2043375] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<smart_ptr_raw<VisitorAdapter> (*) ( Context * __context__, SetPrinterFlags const  &  ),&_FuncastTickmake_visitorTick897644165917210720_fd072f87dbbcc39e>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprBlockExpression_f561e084efc4a6e1
-	aotLib[0x87698f50ed497b26] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprBlock> const  , smart_ptr_raw<Expression>  ),&_FuncSetPrinterFlagsTickpreVisitExprBlockExpression_f561e084efc4a6e1>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprNewArgument_b9b784a1191d9a6b
-	aotLib[0x7333d7de85e5d4d] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprNew> const  , smart_ptr_raw<Expression> , bool  ),&_FuncSetPrinterFlagsTickpreVisitExprNewArgument_b9b784a1191d9a6b>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprCallArgument_850dbc0dcb95d358
-	aotLib[0x34f47f48547a429e] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprCall> const  , smart_ptr_raw<Expression> , bool  ),&_FuncSetPrinterFlagsTickpreVisitExprCallArgument_850dbc0dcb95d358>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprLooksLikeCallArgument_7c790cd6c891396c
-	aotLib[0x9bd01747ba18a910] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprLooksLikeCall> const  , smart_ptr_raw<Expression> , bool  ),&_FuncSetPrinterFlagsTickpreVisitExprLooksLikeCallArgument_7c790cd6c891396c>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprIfThenElse_83e89617b87a7c66
-	aotLib[0xbff1b45757711368] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprIfThenElse>  ),&_FuncSetPrinterFlagsTickpreVisitExprIfThenElse_83e89617b87a7c66>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprWhile_e93ba89f6b3eb884
-	aotLib[0x8c0aa8a22bf707f6] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprWhile>  ),&_FuncSetPrinterFlagsTickpreVisitExprWhile_e93ba89f6b3eb884>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprReturn_17883fe2d9bd1789
-	aotLib[0xf8353d162eb76bb5] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprReturn>  ),&_FuncSetPrinterFlagsTickpreVisitExprReturn_17883fe2d9bd1789>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprCopy_d79c51d472bd348b
-	aotLib[0x86dff6f0e24831ab] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprCopy>  ),&_FuncSetPrinterFlagsTickpreVisitExprCopy_d79c51d472bd348b>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprClone_7d2dea0907771b08
-	aotLib[0x618e734b7fea1bd9] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprClone>  ),&_FuncSetPrinterFlagsTickpreVisitExprClone_7d2dea0907771b08>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprVar_e58a5cbb91febdc9
-	aotLib[0x90ef08ad622fdd00] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprVar>  ),&_FuncSetPrinterFlagsTickpreVisitExprVar_e58a5cbb91febdc9>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprTypeInfo_1f37bd3515e086c1
-	aotLib[0x9462fd4d5c4d49aa] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprTypeInfo>  ),&_FuncSetPrinterFlagsTickpreVisitExprTypeInfo_1f37bd3515e086c1>>();
-	};
-	// _FuncSetPrinterFlagsTickpreVisitExprArrayComprehension_a13705e5d10b1ec4
-	aotLib[0xbfebd1aa9c712d7e] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprArrayComprehension>  ),&_FuncSetPrinterFlagsTickpreVisitExprArrayComprehension_a13705e5d10b1ec4>>();
-	};
-	// _FuncSetPrinterFlags_0x27___finalize_d088eb11dfba4911
-	aotLib[0x758fe784a96d0572] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags &  ),&_FuncSetPrinterFlags_0x27___finalize_d088eb11dfba4911>>();
-	};
-	// setFlags_3ab45719fcf25abd
-	aotLib[0x4e58a569115b720c] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, smart_ptr_raw<Program>  ),&setFlags_3ab45719fcf25abd>>();
-	};
-	// SetPrinterFlags_b41b64874a3608f6
-	aotLib[0x271f917a674e1bef] = +[](Context & ctx) -> SimNode* {
-		return ctx.code->makeNode<SimNode_AotCMRES<SetPrinterFlags (*) ( Context * __context__ ),&SetPrinterFlags_b41b64874a3608f6>>();
-	};
-	resolveTypeInfoAnnotations();
+    // _FuncrttiTickclass_infoTick15801393167907430156_add3789c681026a9
+    aotLib[0xda151cb0934f878b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<StructInfo const  * (*) ( Context * __context__, SetPrinterFlags const  &  ),&_FuncrttiTickclass_infoTick15801393167907430156_add3789c681026a9>>();
+    };
+    // finalize_5d9a9127383cfeb9
+    aotLib[0x49854832ca46248d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags &  ),&finalize_5d9a9127383cfeb9>>();
+    };
+    // _FuncastTickmake_visitorTick897644165917210720_fd072f87dbbcc39e
+    aotLib[0x162ba084f2043375] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<smart_ptr_raw<VisitorAdapter> (*) ( Context * __context__, SetPrinterFlags const  &  ),&_FuncastTickmake_visitorTick897644165917210720_fd072f87dbbcc39e>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprBlockExpression_f561e084efc4a6e1
+    aotLib[0x87698f50ed497b26] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprBlock> const  , smart_ptr_raw<Expression>  ),&_FuncSetPrinterFlagsTickpreVisitExprBlockExpression_f561e084efc4a6e1>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprNewArgument_b9b784a1191d9a6b
+    aotLib[0x7333d7de85e5d4d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprNew> const  , smart_ptr_raw<Expression> , bool  ),&_FuncSetPrinterFlagsTickpreVisitExprNewArgument_b9b784a1191d9a6b>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprCallArgument_850dbc0dcb95d358
+    aotLib[0x34f47f48547a429e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprCall> const  , smart_ptr_raw<Expression> , bool  ),&_FuncSetPrinterFlagsTickpreVisitExprCallArgument_850dbc0dcb95d358>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprLooksLikeCallArgument_7c790cd6c891396c
+    aotLib[0x9bd01747ba18a910] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprLooksLikeCall> const  , smart_ptr_raw<Expression> , bool  ),&_FuncSetPrinterFlagsTickpreVisitExprLooksLikeCallArgument_7c790cd6c891396c>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprIfThenElse_83e89617b87a7c66
+    aotLib[0xbff1b45757711368] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprIfThenElse>  ),&_FuncSetPrinterFlagsTickpreVisitExprIfThenElse_83e89617b87a7c66>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprWhile_e93ba89f6b3eb884
+    aotLib[0x8c0aa8a22bf707f6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprWhile>  ),&_FuncSetPrinterFlagsTickpreVisitExprWhile_e93ba89f6b3eb884>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprReturn_17883fe2d9bd1789
+    aotLib[0xf8353d162eb76bb5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprReturn>  ),&_FuncSetPrinterFlagsTickpreVisitExprReturn_17883fe2d9bd1789>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprCopy_d79c51d472bd348b
+    aotLib[0x86dff6f0e24831ab] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprCopy>  ),&_FuncSetPrinterFlagsTickpreVisitExprCopy_d79c51d472bd348b>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprClone_7d2dea0907771b08
+    aotLib[0x618e734b7fea1bd9] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprClone>  ),&_FuncSetPrinterFlagsTickpreVisitExprClone_7d2dea0907771b08>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprVar_e58a5cbb91febdc9
+    aotLib[0x90ef08ad622fdd00] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprVar>  ),&_FuncSetPrinterFlagsTickpreVisitExprVar_e58a5cbb91febdc9>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprTypeInfo_1f37bd3515e086c1
+    aotLib[0x9462fd4d5c4d49aa] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprTypeInfo>  ),&_FuncSetPrinterFlagsTickpreVisitExprTypeInfo_1f37bd3515e086c1>>();
+    };
+    // _FuncSetPrinterFlagsTickpreVisitExprArrayComprehension_a13705e5d10b1ec4
+    aotLib[0xbfebd1aa9c712d7e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags & , smart_ptr_raw<ExprArrayComprehension>  ),&_FuncSetPrinterFlagsTickpreVisitExprArrayComprehension_a13705e5d10b1ec4>>();
+    };
+    // _FuncSetPrinterFlags_0x27___finalize_d088eb11dfba4911
+    aotLib[0x758fe784a96d0572] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, SetPrinterFlags &  ),&_FuncSetPrinterFlags_0x27___finalize_d088eb11dfba4911>>();
+    };
+    // setFlags_3ab45719fcf25abd
+    aotLib[0x4e58a569115b720c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, smart_ptr_raw<Program>  ),&setFlags_3ab45719fcf25abd>>();
+    };
+    // SetPrinterFlags_b41b64874a3608f6
+    aotLib[0x271f917a674e1bef] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<SimNode_AotCMRES<SetPrinterFlags (*) ( Context * __context__ ),&SetPrinterFlags_b41b64874a3608f6>>();
+    };
+    resolveTypeInfoAnnotations();
 };
 
 AotListBase impl(registerAotFunctions);
 namespace context {
     auto Standalone::setFlags ( smart_ptr_raw<Program> prog ) -> void {
-        return setFlags_3ab45719fcf25abd(this, prog); 
+        return setFlags_3ab45719fcf25abd(this, prog);
     }
 
 Standalone::Standalone() {
@@ -4641,7 +4641,7 @@ Standalone::Standalone() {
     }
     context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();
     context.tabMnLookup->clear();
-     // start totalFunctions  
+     // start totalFunctions
     InitAotFunction(context, &context.functions[0/*pfun->index*/], FunctionInfo("rtti`class_info`15801393167907430156", "rtti`class_info`15801393167907430156 CXS<SetPrinterFlags>", 32, false, true, false, false, false, false));
     context.functions[0/*pfun->index*/].debugInfo = &__func_info__79520edf22adf515;
     InitAotFunction(context, &context.functions[1/*pfun->index*/], FunctionInfo("finalize", "finalize XS<SetPrinterFlags>", 32, false, true, false, false, false, false));
