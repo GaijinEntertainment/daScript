@@ -136,7 +136,7 @@ namespace das
                     uint32_t oldSize = pTable->capacity*(vts_add_kts + sizeof(TableHashKey));
                     context.free(pTable->data, oldSize, &debugInfo);
                 } else {
-                    context.throw_error_at(debugInfo, "deleting locked table");
+                    context.throw_error_at(debugInfo, "deleting locked table%s", errorMessage);
                     return v_zero();
                 }
             }

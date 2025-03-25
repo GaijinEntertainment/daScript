@@ -1028,6 +1028,15 @@ __forceinline void profileNode ( SimNode * node ) {
 
 #endif
 
+    // ERROR MESSAGE
+    struct SimNode_WithErrorMessage : SimNode {
+        SimNode_WithErrorMessage ( const LineInfo & at, const char * em )
+            : SimNode(at), errorMessage(em) {}
+        virtual bool rtti_node_isErrorMessage() const override { return true; }
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
+        const char * errorMessage = "";
+    };
+
     // FUNCTION CALL
     struct SimNode_CallBase : SimNode {
         SimNode_CallBase ( const LineInfo & at ) : SimNode(at) {}
@@ -1147,9 +1156,9 @@ __forceinline void profileNode ( SimNode * node ) {
         uint32_t    totalSources;
     };
 
-    struct SimNode_Delete : SimNode {
-        SimNode_Delete ( const LineInfo & a, SimNode * s, uint32_t t )
-            : SimNode(a), subexpr(s), total(t) {}
+    struct SimNode_Delete : SimNode_WithErrorMessage {
+        SimNode_Delete ( const LineInfo & a, SimNode * s, uint32_t t, const char * em )
+            : SimNode_WithErrorMessage(a,em), subexpr(s), total(t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         SimNode *   subexpr;
         uint32_t    total;
