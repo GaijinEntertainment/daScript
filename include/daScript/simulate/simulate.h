@@ -1033,7 +1033,7 @@ __forceinline void profileNode ( SimNode * node ) {
         SimNode_WithErrorMessage ( const LineInfo & at, const char * em )
             : SimNode(at), errorMessage(em) {}
         virtual bool rtti_node_isErrorMessage() const override { return true; }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code );
+        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         const char * errorMessage = "";
     };
 
