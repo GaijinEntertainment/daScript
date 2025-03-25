@@ -108,6 +108,19 @@ namespace das {
         }
     }
 
+    template <typename K, typename V>
+    static vector<pair<K, V>> ordered(const das_hash_map<K, V> &unsorted_map) {
+        vector<pair<K, V>> sorted_vector(unsorted_map.begin(), unsorted_map.end());
+
+        // Sort the vector by key
+        std::sort(sorted_vector.begin(), sorted_vector.end(),
+                  [](const auto& a, const auto& b) {
+                      return a.first < b.first;
+                  });
+        return sorted_vector;
+    }
+
+
     string aotFunctionName ( string str ) {
         string result;
         for (char c : str) {
@@ -498,45 +511,45 @@ namespace das {
                 ss << " };\n";
             }
         }
+
         string str() const {
             TextWriter ss;
             // extern declarations
-            for ( auto & ti : smn2s ) {
+            for ( const auto & ti : ordered(smn2s) ) {
                 ss << "extern StructInfo " << structInfoName(ti.second) << ";\n";
             }
-            for ( auto & ti : tmn2t ) {
+            for ( const auto & ti : ordered(tmn2t) ) {
                 ss << "extern TypeInfo " << typeInfoName(ti.second) << ";\n";
             }
-            for ( auto & ti : vmn2v ) {
+            for ( const auto & ti : ordered(vmn2v) ) {
                 ss << "extern VarInfo " << varInfoName(ti.second) << ";\n";
             }
-            for ( auto & ti : fmn2f ) {
+            for ( const auto & ti : ordered(fmn2f) ) {
                 ss << "extern FuncInfo " << funcInfoName(ti.second) << ";\n";
             }
-            for ( auto & ti : emn2e ) {
+            for ( const auto & ti : ordered(emn2e) ) {
                 ss << "extern EnumInfo " << enumInfoName(ti.second) << ";\n";
             }
             ss << "\n";
-            for ( auto & ti : emn2e ) {
-                describeCppEnumInfoValues(ss, ti.second);
-                ss << "EnumInfo " << enumInfoName(ti.second) << " = { ";
-                describeCppEnumInfo(ss, ti.second);
+            for ( const auto & [_, tinfo] : ordered(emn2e) ) {
+                describeCppEnumInfoValues(ss, tinfo);
+                ss << "EnumInfo " << enumInfoName(tinfo) << " = { ";
+                describeCppEnumInfo(ss, tinfo);
                 ss << " };\n";
             }
-            for ( auto & ti : smn2s ) {
-                describeCppStructInfoFields(ss, ti.second);
-                ss << "StructInfo " << structInfoName(ti.second) << " = {";
-                describeCppStructInfo(ss, ti.second);
+            for ( const auto & [_, tinfo] : ordered(smn2s))  {
+                describeCppStructInfoFields(ss, tinfo);
+                ss << "StructInfo " << structInfoName(tinfo) << " = {";
+                describeCppStructInfo(ss, tinfo);
                 ss << " };\n";
             }
-            for ( auto & ti : this->fmn2f ) {
-                describeCppFuncInfoFields(ss, ti.second);
-                ss << "FuncInfo " << funcInfoName(ti.second) << " = {";
-                describeCppFuncInfo(ss, ti.second);
+            for ( const auto & [_, tinfo] : ordered(fmn2f)) {
+                describeCppFuncInfoFields(ss, tinfo);
+                ss << "FuncInfo " << funcInfoName(tinfo) << " = {";
+                describeCppFuncInfo(ss, tinfo);
                 ss << " };\n";
             }
-            for ( auto & ti : tmn2t ) {
-                auto tinfo = ti.second;
+            for ( const auto & [_, tinfo] : ordered(tmn2t) ) {
                 writeDim(ss, tinfo);
                 writeArgTypes(ss, tinfo);
                 writeArgNames(ss, tinfo);
@@ -547,10 +560,9 @@ namespace das {
             ss << "\n";
             ss << "static void resolveTypeInfoAnnotations()\n{\n";
             ss << "    vector<TypeInfo> annotations = {";
-            for ( auto & ti : tmn2t ) {
-                auto tinfo = ti.second;
+            for ( const auto & [_, tinfo] : ordered(tmn2t) ) {
                 if ( tinfo->type==Type::tHandle ) {
-                    ss << typeInfoName(ti.second) << ", ";
+                    ss << typeInfoName(tinfo) << ", ";
                 };
             }
             ss << "};\n";
@@ -3750,7 +3762,7 @@ namespace das {
 
     static void writeRequiredModulesFor ( TextWriter &ss, Module * mod ) {
         // lets comment on required modules
-        for ( auto [req, pub] : mod->requireModule ) {
+        for ( auto [req, pub] : ordered(mod->requireModule) ) {
             if ( req->name.empty() ) {
                 // nothing, its main program module. i.e ::
             } else {
