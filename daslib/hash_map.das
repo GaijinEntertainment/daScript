@@ -380,9 +380,9 @@ def public hash0(s : string) : uint64 {
 let public TCuckooHashMap = %spoof_template~(CuckooHashMap,KeyType,ValueType,FirstHashFunction=hash0,SecondHashFunction=hash)
 
 struct KHV_%CuckooHashMap {
-    key : %KeyType
-    hash : uint64
-    value : %ValueType
+    key : %KeyType;
+    hash : uint64;
+    value : %ValueType;
 }
 
 [skip_field_lock_check]
