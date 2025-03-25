@@ -52,7 +52,7 @@ namespace das {
         INLINE char * compute(Context & context) { \
             DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
-            if ( !prv || !*prv ) context.throw_error_at(debugInfo,"%s",errorMessage ? errorMessage : "dereferencing null pointer"); \
+            if ( !prv || !*prv ) context.throw_error_at(debugInfo,"dereferencing null pointer%s",errorMessage); \
             return (*prv) + offset; \
         } \
         DAS_PTR_NODE; \
@@ -95,7 +95,7 @@ namespace das {
         INLINE auto compute(Context & context) { \
             DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
-            if ( !prv || !*prv ) context.throw_error_at(debugInfo,"%s",errorMessage ? errorMessage : "dereferencing null pointer"); \
+            if ( !prv || !*prv ) context.throw_error_at(debugInfo,"dereferencing null pointer%s",errorMessage); \
             return *((RCTYPE *)((*prv) + offset)); \
         } \
         DAS_NODE(TYPE,RCTYPE); \
@@ -132,7 +132,7 @@ namespace das {
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
             DAS_PROFILE_NODE \
             auto prv = (char **) subexpr.compute##COMPUTE(context); \
-            if ( !prv || !*prv ) context.throw_error_at(debugInfo,"%s",errorMessage ? errorMessage : "dereferencing null pointer"); \
+            if ( !prv || !*prv ) context.throw_error_at(debugInfo,"dereferencing null pointer%s",errorMessage); \
             return v_ldu((const float *) ((*prv)+offset)); \
         } \
     };

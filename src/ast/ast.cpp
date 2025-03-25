@@ -981,6 +981,12 @@ namespace das {
 
     // expression
 
+    string Expression::describe() const {
+        TextWriter ss;
+        ss << *this;
+        return ss.str();
+    }
+
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
             DAS_ASSERTF(0,

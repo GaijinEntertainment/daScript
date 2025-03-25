@@ -2624,7 +2624,7 @@ optional_emit_commas
     ;
 
 enum_declaration
-    :   optional_annotation_list[annL] DAS_ENUM[loc] {
+    :   optional_annotation_list_with_emit_semis[annL] DAS_ENUM[loc] {
         yyextra->push_nesteds(DAS_EMIT_COMMA);
     } optional_public_or_private_enum[pubE] enum_name[edecl] optional_enum_basic_type_declaration[ebt] optional_emit_commas '{' {
         if ( !yyextra->g_CommentReaders.empty() ) {
