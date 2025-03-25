@@ -1153,7 +1153,8 @@ namespace das
         if ( unsafeDeref ) {
             return subexpr->simulate(context);
         } else {
-            return context.code->makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context));
+            auto errorMessage = context.code->allocateName(", "+subexpr->describe()+" is null");
+            return context.code->makeNode<SimNode_Ptr2Ref>(at,subexpr->simulate(context),errorMessage);
         }
     }
 
@@ -1483,11 +1484,13 @@ namespace das
         auto sube = subexpr->simulate(context);
         if ( subexpr->type->baseType==Type::tArray ) {
             auto stride = subexpr->type->firstType->getSizeOf();
-            return context.code->makeNode<SimNode_DeleteArray>(at, sube, total, stride);
+            auto errorMessage = context.code->allocateName(", "+describe());
+            return context.code->makeNode<SimNode_DeleteArray>(at, sube, total, stride, errorMessage);
         } else if ( subexpr->type->baseType==Type::tTable ) {
             auto vts_add_kts = subexpr->type->firstType->getSizeOf() +
                 subexpr->type->secondType->getSizeOf();
-            return context.code->makeNode<SimNode_DeleteTable>(at, sube, total, vts_add_kts);
+                auto errorMessage = context.code->allocateName(", "+describe());
+            return context.code->makeNode<SimNode_DeleteTable>(at, sube, total, vts_add_kts, errorMessage);
         } else if ( subexpr->type->baseType==Type::tPointer ) {
             if ( subexpr->type->firstType->baseType==Type::tStructure ) {
                 bool persistent = subexpr->type->firstType->structType->persistent;
@@ -1531,7 +1534,8 @@ namespace das
             }
             return resN;
         } else if ( subexpr->type->baseType==Type::tLambda ) {
-            return context.code->makeNode<SimNode_DeleteLambda>(at, sube, total);
+            auto errorMessage = context.code->allocateName(", "+describe());
+            return context.code->makeNode<SimNode_DeleteLambda>(at, sube, total, errorMessage);
         } else {
             DAS_ASSERTF(0, "we should not be here. this is delete for unsupported type. infer types should have failed.");
             context.thisProgram->error("internal compiler error: generating node for unsupported ExprDelete", "", "", at);
@@ -2063,7 +2067,6 @@ namespace das
                 }
             } else {
                 auto simV = value->simulate(context);
-                TextWriter tw;
                 auto errorMessage = context.code->allocateName(", "+value->describe()+" is null");
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType->baseType, at, simV, fieldOffset + extraOffset, errorMessage);
@@ -2726,9 +2729,11 @@ namespace das
             result->allocateFor(context.code.get(), total);
             for ( int t=0; t!=total; ++t ) {
                 if ( sources[t]->type->isGoodIteratorType() ) {
+                    auto errorMessage = context.code->allocateName(", "+sources[t]->describe());
                     result->source_iterators[t] = context.code->makeNode<SimNode_Seq2Iter>(
                         sources[t]->at,
-                        sources[t]->simulate(context));
+                        sources[t]->simulate(context),
+                        errorMessage);
                 } else if ( sources[t]->type->isGoodArrayType() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_GoodArrayIterator>(
                         sources[t]->at,

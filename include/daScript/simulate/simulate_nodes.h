@@ -193,14 +193,6 @@ namespace das {
         }
     };
 
-    struct SimNode_WithErrorMessage : SimNode {
-        SimNode_WithErrorMessage ( const LineInfo & at, const char * em )
-            : SimNode(at), errorMessage(em) {}
-        virtual bool rtti_node_isErrorMessage() const override { return true; }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code );
-        const char * errorMessage = "";
-    };
-
     template <int argCount>
     struct SimNode_BlockNFT : SimNode_BlockNF {
         SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
@@ -538,7 +530,7 @@ namespace das {
     // Delete structures
     struct SimNode_DeleteStructPtr : SimNode_Delete {
         SimNode_DeleteStructPtr ( const LineInfo & a, SimNode * s, uint32_t t, uint32_t ss, bool ps, bool isL )
-            : SimNode_Delete(a,s,t), structSize(ss), persistent(ps), isLambda(isL) {}
+            : SimNode_Delete(a,s,t,""), structSize(ss), persistent(ps), isLambda(isL) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
         uint32_t    structSize;
@@ -548,7 +540,7 @@ namespace das {
 
     struct SimNode_DeleteClassPtr : SimNode_Delete {
         SimNode_DeleteClassPtr ( const LineInfo & a, SimNode * s, uint32_t t, SimNode * se, bool ps )
-            : SimNode_Delete(a,s,t), sizeexpr(se), persistent(ps) {}
+            : SimNode_Delete(a,s,t,""), sizeexpr(se), persistent(ps) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
         SimNode * sizeexpr;
@@ -557,8 +549,8 @@ namespace das {
 
     // Delete lambda
     struct SimNode_DeleteLambda : SimNode_Delete {
-        SimNode_DeleteLambda ( const LineInfo & a, SimNode * s, uint32_t t )
-            : SimNode_Delete(a,s,t) {}
+        SimNode_DeleteLambda ( const LineInfo & a, SimNode * s, uint32_t t, const char * em )
+            : SimNode_Delete(a,s,t,em) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
@@ -613,8 +605,8 @@ namespace das {
 
     template <typename TT>
     struct SimNode_DeleteHandlePtr<TT,false> : SimNode_Delete {
-        SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
-            : SimNode_Delete(a,s,t) {}
+        SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t, const char * em )
+            : SimNode_Delete(a,s,t,em) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -631,15 +623,15 @@ namespace das {
 
     template <typename TT>
     struct SimNode_DeleteHandlePtr<TT,true> : SimNode_Delete {
-        SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t )
-            : SimNode_Delete(a,s,t) {}
+        SimNode_DeleteHandlePtr ( const LineInfo & a, SimNode * s, uint32_t t, const char * em )
+            : SimNode_Delete(a,s,t,em) { }
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto pH = (TT **) subexpr->evalPtr(context);
             for ( uint32_t i=0, is=total; i!=is; ++i, pH++ ) {
                 if ( *pH ) {
-                    if ( !(*pH)->is_valid() ) context.throw_error_at(debugInfo, "invalid smart pointer %p", (void*)*pH);
+                    if ( !(*pH)->is_valid() ) context.throw_error_at(debugInfo, "invalid smart pointer %s=%p%s", (void*)*pH, errorMessage);
                     (*pH)->delRef();
                     *pH = nullptr;
                 }
@@ -2531,16 +2523,16 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // POINTER TO REFERENCE (CAST)
-    struct SimNode_Ptr2Ref : SimNode {      // ptr -> &value
+    struct SimNode_Ptr2Ref : SimNode_WithErrorMessage {      // ptr -> &value
         DAS_PTR_NODE;
-        SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s )
-            : SimNode(at), subexpr(s) {}
+        SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s, const char * em )
+            : SimNode_WithErrorMessage(at,em), subexpr(s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             auto ptr = subexpr->evalPtr(context);
             if ( !ptr ) {
-                context.throw_error_at(debugInfo,"dereferencing null pointer");
+                context.throw_error_at(debugInfo,"dereferencing null pointer%s", errorMessage);
             }
             return ptr;
         }
@@ -2548,21 +2540,21 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // Sequence -> Iterator
-    struct SimNode_Seq2Iter : SimNode {      // ptr -> &value
+    struct SimNode_Seq2Iter : SimNode_WithErrorMessage {      // ptr -> &value
         DAS_PTR_NODE;
-        SimNode_Seq2Iter ( const LineInfo & at, SimNode * s )
-            : SimNode(at), subexpr(s) {}
+        SimNode_Seq2Iter ( const LineInfo & at, SimNode * s, const char * em )
+            : SimNode_WithErrorMessage(at,em), subexpr(s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             Sequence * ptr = (Sequence *) subexpr->evalPtr(context);
             char * res = nullptr;
             if ( !ptr ) {
-                context.throw_error_at(debugInfo,"dereferencing null sequence");
+                context.throw_error_at(debugInfo,"dereferencing null sequence%s", errorMessage);
             } else {
                 res = (char *) ptr->iter;
                 if ( !res ) {
-                    context.throw_error_at(debugInfo,"iterator is empty or already consumed");
+                    context.throw_error_at(debugInfo,"iterator is empty or already consumed%s", errorMessage);
                 } else {
                     ptr->iter = nullptr;
                 }
@@ -2576,7 +2568,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     template <typename TT>
     struct SimNode_NullCoalescing : SimNode_Ptr2Ref {
         SimNode_NullCoalescing ( const LineInfo & at, SimNode * s, SimNode * dv )
-            : SimNode_Ptr2Ref(at,s), value(dv) {}
+            : SimNode_Ptr2Ref(at,s,""), value(dv) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
@@ -2598,7 +2590,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     struct SimNode_NullCoalescingRef : SimNode_Ptr2Ref {
         DAS_PTR_NODE;
         SimNode_NullCoalescingRef ( const LineInfo & at, SimNode * s, SimNode * dv )
-            : SimNode_Ptr2Ref(at,s), value(dv) {}
+            : SimNode_Ptr2Ref(at,s,""), value(dv) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE

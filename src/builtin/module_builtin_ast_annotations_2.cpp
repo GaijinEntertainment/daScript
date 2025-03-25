@@ -47,7 +47,8 @@ namespace das {
             return context.code->makeNode<SimNode_NewHandle<MakeStruct,true>>(at);
         }
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
-            return context.code->makeNode<SimNode_DeleteHandlePtr<MakeStruct,true>>(at,sube,count);
+            return context.code->makeNode<SimNode_DeleteHandlePtr<MakeStruct,true>>(at,sube,count,
+                context.code->allocateName("type<"+name+">"));
         }
         static void * jit_new ( Context * ) {
             auto res = new MakeStruct();

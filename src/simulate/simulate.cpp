@@ -185,7 +185,7 @@ namespace das
             if ( pLambda->capture ) {
                 SimFunction ** fnMnh = (SimFunction **) pLambda->capture;
                 SimFunction * simFunc = fnMnh[1];
-                if (!simFunc) context.throw_error_at(debugInfo, "lambda finalizer is a null function");
+                if (!simFunc) context.throw_error_at(debugInfo, "lambda finalizer is a null function%s", errorMessage);
                 vec4f argValues[1] = {
                     cast<void *>::from(pLambda->capture)
                 };
