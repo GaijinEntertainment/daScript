@@ -36,7 +36,7 @@ namespace das {
 
     struct GlobalVarInfo {
         GlobalVarInfo(string name, const string &mangledName, size_t typeSize, bool globalShared)
-            : name(std::move(name))
+            : name(move(name))
             , mangledNameHash(Variable::getMangledNameHash(mangledName))
             , typeSize(typeSize)
             , globalShared(globalShared) {}
@@ -61,7 +61,7 @@ namespace das {
     /**
      * Set code, aot, aotFunction for all function in @ref functions
      */
-    void FillFunction(Context &ctx, AotLibrary &aotLib, std::vector<std::pair<uint64_t, SimFunction*>> functions);
+    void FillFunction(Context &ctx, AotLibrary &aotLib, vector<pair<uint64_t, SimFunction*>> functions);
 }
 
 #endif

@@ -631,7 +631,7 @@ namespace das {
             auto pH = (TT **) subexpr->evalPtr(context);
             for ( uint32_t i=0, is=total; i!=is; ++i, pH++ ) {
                 if ( *pH ) {
-                    if ( !(*pH)->is_valid() ) context.throw_error_at(debugInfo, "invalid smart pointer %s=%p%s", (void*)*pH, errorMessage);
+                    if ( !(*pH)->is_valid() ) context.throw_error_at(debugInfo, "invalid smart pointer %p%s", (void*)*pH, errorMessage);
                     (*pH)->delRef();
                     *pH = nullptr;
                 }

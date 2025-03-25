@@ -264,7 +264,7 @@ namespace das {
             *this << hash << obj;
             deser.insert(hash, obj);
         }
-        box = std::move(deser);
+        box = move(deser);
         return *this;
     }
 
@@ -283,9 +283,9 @@ namespace das {
         deser.reserve(size);
         for ( uint64_t i = 0; i < size; i++ ) {
             K k; V v; *this << k << v;
-            deser.emplace(std::move(k), std::move(v));
+            deser.emplace(move(k), move(v));
         }
-        value = std::move(deser);
+        value = move(deser);
     }
 
     template <typename K, typename V>
@@ -1165,7 +1165,7 @@ namespace das {
             for ( uint64_t i = 0; i < size; i++ ) {
                 ser << result[i];
             }
-            list = std::move(result);
+            list = move(result);
         }
     }
 
@@ -1982,7 +1982,7 @@ namespace das {
                 VariablePtr g; ser << g;
                 result.insert(g->name, g);
             }
-            globals = std::move(result);
+            globals = move(result);
         }
     }
 
@@ -2109,14 +2109,14 @@ namespace das {
 
         vector<Module*> getDependecyOrdered(Module * m) {
             visit(m);
-            return std::move(sorted);
+            return move(sorted);
         }
 
         vector<Module*> getDependecyOrdered() {
             for ( auto mod : input ) {
                 visit(mod);
             }
-            return std::move(sorted);
+            return move(sorted);
         }
 
         void visit( Module * mod ) {
