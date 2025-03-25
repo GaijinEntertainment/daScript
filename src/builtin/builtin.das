@@ -1715,6 +1715,15 @@ def has_value(a; key) {
     }
 }
 
+def has_value(var a : iterator<auto>; key) {
+    for (t in a) {
+        if (t == key) {
+            return true
+        }
+    }
+    return false
+}
+
 def get_ptr(src : smart_ptr<auto(TT)> ==const) : TT? const {
     unsafe {
         return reinterpret<TT?> src
