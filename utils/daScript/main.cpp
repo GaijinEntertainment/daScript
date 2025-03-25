@@ -30,7 +30,7 @@ static bool quiet = false;
 static bool paranoid_validation = false;
 static bool jitEnabled = false;
 static bool isAotLib = false;
-static bool version2syntax = false;
+static bool version2syntax = true;
 
 bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
