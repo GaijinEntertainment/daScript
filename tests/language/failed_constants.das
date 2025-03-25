@@ -1,7 +1,8 @@
+options gen2
 expect 10006:12, 10010:4
 
 [export]
-def main
+def main {
     // ALL THE POSSIBLE NUMBER TYPES AND THEIR LITERALS, OUT OF RANGE VALUES
     // uint64
     var ui64 = 10000000000000000000000000000000000000ul
@@ -57,6 +58,7 @@ def main
     // scientific notation double without fractional part
     var d3 = 1e1000lf
     print("d3 = {d3}\n")
+}
 
 
 

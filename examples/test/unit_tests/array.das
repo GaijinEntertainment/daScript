@@ -1,3 +1,4 @@
+options gen2
 // options plot=true,plotFile="../../test.dot"
 // options log=true, optimize=false
 // options no_aot=true
@@ -6,32 +7,40 @@
 require UnitTest
 
 [sideeffects]
-def make_test_array(var a : array<int>; extra : int = 0)
+def make_test_array(var a : array<int>; extra : int = 0) {
     var i = 0
     resize(a, 10)
-    for x in a
+    for (x in a) {
         x = i++ + extra
+    }
+}
 
 [sideeffects]
-def verify_test_array(a : array<int>; extra : int = 0)
+def verify_test_array(a : array<int>; extra : int = 0) {
     assert(length(a) == 10)
     var i = 0
-    for x in a
+    for (x in a) {
         verify(x == (extra + i++))
+    }
+}
 
 [sideeffects]
-def pass_array(var arr : array<int>)
+def pass_array(var arr : array<int>) {
     push(arr, 4)
+}
 
 [sideeffects]
-def verifyIntArray(a : array<int>; var s : int; c, tail : int)
-    for t in range(c)
+def verifyIntArray(a : array<int>; var s : int; c, tail : int) {
+    for (t in range(c)) {
         verify(a[t] == s++)
-    for t in range(c, c + tail)
+    }
+    for (t in range(c, c + tail)) {
         assert(a[t] == 0)
+    }
+}
 
 [sideeffects]
-def testIntArray
+def testIntArray {
     var arr, arr2 : array<int>
     let val2 = 2
     assert(length(arr) == 0, "array starts at 0 length")
@@ -60,8 +69,9 @@ def testIntArray
     assert(length(arr) == 0)
     assert(length(arr2) == 4)
     var index = 0
-    while index < 4
+    while (index < 4) {
         arr2[index++]++
+    }
     verifyIntArray(arr2, 2, 4, 0)
     arr <- arr2
     verifyIntArray(arr, 2, 4, 0)
@@ -81,16 +91,19 @@ def testIntArray
     erase(arr, 0)
     erase(arr, 3)
     verifyIntArray(arr, 2, 3, 0)
+}
 
-def testInterop
-    let res = temp_array_example([{ string[] "one" }]) <| $(arr)
+def testInterop {
+    let res = temp_array_example([ "one" ]) <| $(arr) {
         assert(length(arr) == 1)
         assert(arr[0] == "one")
+    }
     assert(res)
+}
 
 [export]
-def test : bool
-    if true
+def test : bool {
+    if (true) {
         var a : array<int>
         make_test_array(a)
         verify_test_array(a)
@@ -98,71 +111,89 @@ def test : bool
         verify_test_array(a, 13)
         make_test_array(a)
         verify_test_array(a)
-        if true
+        if (true) {
             var b : array<int> <- a
             assert(length(a) == 0)
             verify_test_array(b)
             a <- b
+        }
         verify_test_array(a)
-    if true
+    }
+    if (true) {
         var a, b : array<int>
         var i = 0
         resize(a, 10)
         resize(b, 10)
-        for l, r in a, b
+        for (l, r in a, b) {
             l = i
             r = i * 2 - 5
             i++
+        }
         verify_test_array(a)
         i = 0
-        for l, r in a, b
+        for (l, r in a, b) {
             assert(l == i)
             assert(r == i * 2 - 5)
             i++
+        }
         i = 0
-        for l, r in a, b
-            if l > r
+        for (l, r in a, b) {
+            if (l > r) {
                 assert(l > r)
                 i++
+            }
+        }
         assert(i == 5)
-    if true
+    }
+    if (true) {
         var a : array<int>[10]
         var i = 0
-        for b in a
+        for (b in a) {
             make_test_array(b, i++)
+        }
         i = 0
-        for b in a
+        for (b in a) {
             verify_test_array(b, i++)
+        }
+    }
     testIntArray()
     testConstInArray()
     testInterop()
     testMultiPush()
     return true
+}
 
 // this test bellow is only here to make sure AOT compiles and runs for array<blah const>
 
-struct Foo
+struct Foo {
     bar : int
+}
 
 [sideeffects]
-def testAccept(t : array<Foo const>; e : Foo const[10])
-    for i in t
-        if i.bar == 13
+def testAccept(t : array<Foo const>; e : Foo const[10]) {
+    for (i in t) {
+        if (i.bar == 13) {
             return true
-    for j in e
-        if j.bar == 13
+        }
+    }
+    for (j in e) {
+        if (j.bar == 13) {
             return false
+        }
+    }
     return false
+}
 
 [sideeffects]
-def testConstInArray
+def testConstInArray {
     var a : array<Foo const>
     resize(a, 20)
     var b : Foo const[10]
     testAccept(a, b)
+}
 
 [sideeffects]
-def testMultiPush()
+def testMultiPush() {
     var a : array<Foo>
     var b : array<Foo>
     push(b, a)
@@ -187,3 +218,4 @@ def testMultiPush()
     push_clone(b, c)
     verify(length(b) == 4)
     verify(b[3].bar == 3)
+}

@@ -1,3 +1,4 @@
+options gen2
 require glfw/glfw_boost
 require opengl/opengl_boost
 require opengl/opengl_gen
@@ -12,68 +13,78 @@ require sdf_soft
 require debug_draw
 require points_draw
 
-var [[in , location=0]] v_position : float2
-var [[in , location=1]] v_texcoord : float2
-var [[inout]] f_texcoord : float2
-var [[out]] f_FragColor : float4
-var [[uniform]] f_w2l : float4x4
-var [[uniform]] f_l2w : float4x4
-var [[uniform]] f_w2sdf : float4x4
-var [[uniform]] f_camera_position : float3
-var [[uniform, stage=0]] t_sdf : sampler3D
+var @in @location = 0 v_position : float2
+var @in @location = 1 v_texcoord : float2
+var @inout f_texcoord : float2
+var @out f_FragColor : float4
+var @uniform f_w2l : float4x4
+var @uniform f_l2w : float4x4
+var @uniform f_w2sdf : float4x4
+var @uniform f_camera_position : float3
+var @uniform@stage = 0 t_sdf : sampler3D
 
 [vertex_program]
-def vs_effect
+def vs_effect {
     f_texcoord = v_texcoord
     gl_Position = float4(v_position, 0.0, 1.0)
+}
 
-def cast_ray(ro, rd : float3; to, tmax : float)
+def cast_ray(ro, rd : float3; to, tmax : float) {
     var t = to
-    for i in 0..512
+    for (i in 0..512) {
         let pos = ro + t * rd
         let tpos = (f_w2sdf * float4(pos, 1.0)).xyz
         let h = texture(t_sdf, tpos).x
-        if abs(h) < (0.005 * t) || t > tmax
+        if (abs(h) < (0.005 * t) || t > tmax) {
             return 1. // break
+        }
         t += h * 0.99
+    }
     return 0. // t
+}
 
 [fragment_program]
-def fs_effect
+def fs_effect {
     let vuv = f_texcoord * 2.0 - float2(1.0)
     let p = float3(vuv, 0.0)
     let wp = f_l2w * float4(p, 1.0)
     let dir = normalize(wp.xyz - f_camera_position)
     let t = cast_ray(f_camera_position, dir, 0.001, 5.)
     f_FragColor = float4(t, 0., 0., 1.0)
+}
 
 var font : Font
 
-def preview(scene : CsgScene; v_rot, v_view, v_projection : float4x4)
-    for node in scene.nodes
-        if node.nodeType == CsgNodeType cube
+def preview(scene : CsgScene; v_rot, v_view, v_projection : float4x4) {
+    for (node in scene.nodes) {
+        if (node.nodeType == CsgNodeType.cube) {
             debug_draw_cube(v_rot * node.local2world, v_view, v_projection, node.color.xyz)
-        elif node.nodeType == CsgNodeType sphere
+        } elif (node.nodeType == CsgNodeType.sphere) {
             debug_draw_sphere(v_rot * node.local2world, v_view, v_projection, node.color.xyz)
-        else
+        } else {
             assert(false, "invalid node type")
+        }
+    }
+}
 
-struct SdfNodePreview
+struct SdfNodePreview {
     quads : array<FontVertex>
     model : float4x4
     bbox  : float4x4
+}
 
-struct SdfPrewiew
+struct SdfPrewiew {
     nodes : array<SdfNodePreview>
+}
 
-def build_sdf_preview(field : SdfField)
+def build_sdf_preview(field : SdfField) {
     var result : SdfPrewiew
     result.nodes |> reserve(field.dim.x * field.dim.y * field.dim.z)
     let xyzd = float3(field.dim)
     let xyzs = float3(1.0) / xyzd
-    for z in 0..field.dim.z
-        for y in 0..field.dim.y
-            for x in 0..field.dim.x
+    for (z in 0..field.dim.z) {
+        for (y in 0..field.dim.y) {
+            for (x in 0..field.dim.x) {
                 let d = field.data[x + y * field.dim.x + z * field.dim.x * field.dim.y]
                 var node : SdfNodePreview
 
@@ -92,40 +103,48 @@ def build_sdf_preview(field : SdfField)
                 node.model = qm * qv
 
                 result.nodes |> emplace(node)
+            }
+        }
+    }
     return <- result
+}
 
 
-def preview(sdfp : SdfPrewiew; v_rot, v_view, v_projection : float4x4)
+def preview(sdfp : SdfPrewiew; v_rot, v_view, v_projection : float4x4) {
     glDisable(GL_DEPTH_TEST)
     glDepthMask(false)
     glDisable(GL_CULL_FACE)
-    for node in sdfp.nodes
+    for (node in sdfp.nodes) {
         let mvp = v_projection * v_view * (v_rot * node.model)
         font |> draw_quads(node.quads, mvp)
-    for node in sdfp.nodes
+    }
+    for (node in sdfp.nodes) {
         debug_draw_bbox(
             v_rot * node.bbox,
             v_view, v_projection, float3(0.5, 0.5, 0.1)
         )
+    }
     glEnable(GL_DEPTH_TEST)
     glDepthMask(true)
     glEnable(GL_CULL_FACE)
+}
 
 [vertex_buffer]
-struct EffectVertex
+struct EffectVertex {
     xy : float2
     uv : float2
+}
 
-let effect_vertices = [[EffectVertex
-    xy=float2(-1.0, 1.0), uv=float2(0.0, 0.0);
-    xy=float2(1.0, 1.0), uv=float2(1.0, 0.0);
-    xy=float2(1.0, -1.0), uv=float2(1.0, 1.0);
+let effect_vertices = [EffectVertex(
+    xy=float2(-1.0, 1.0), uv=float2(0.0, 0.0)), EffectVertex(
+    xy=float2(1.0, 1.0), uv=float2(1.0, 0.0)), EffectVertex(
+    xy=float2(1.0, -1.0), uv=float2(1.0, 1.0)), EffectVertex(
     xy=float2(-1.0, -1.0), uv=float2(0.0, 1.0)
-]]
+)]
 
-let effect_indices = [[int 0; 1; 2; 2; 3; 0]]
+let effect_indices = fixed_array<int>(0, 1, 2, 2, 3, 0)
 
-def map3d(field : SdfField; txyz : float3)
+def map3d(field : SdfField; txyz : float3) {
     let fxyz = txyz - floor(txyz)
     let xyz = int3(txyz)
     let t000 = field |> at(xyz + int3(0, 0, 0))
@@ -143,38 +162,45 @@ def map3d(field : SdfField; txyz : float3)
     let t0 = lerp(t00, t01, fxyz.y)
     let t1 = lerp(t10, t11, fxyz.y)
     return lerp(t0, t1, fxyz.x)
+}
 
 
-def normal3d(field : SdfField; p : float3)
+def normal3d(field : SdfField; p : float3) {
     let eps = 0.01
     let h = float2(eps, 0.)
     return normalize(float3(map3d(field, p + h.xyy) - map3d(field, p - h.xyy),
                              map3d(field, p + h.yxy) - map3d(field, p - h.yxy),
                              map3d(field, p + h.yyx) - map3d(field, p - h.yyx)))
+}
 
-def gen_point_cloud(field : SdfField; step : int; wst : float)
+def gen_point_cloud(field : SdfField; step : int; wst : float) {
     var cloud : GeometryFragment
-    cloud.prim = GeometryFragmentType points
+    cloud.prim = GeometryFragmentType.points
     let xyzd = float3(field.dim)
-    for z in range(field.dim.z * step)
-        for y in range(field.dim.y * step)
-            for x in range(field.dim.x * step)
+    for (z in range(field.dim.z * step)) {
+        for (y in range(field.dim.y * step)) {
+            for (x in range(field.dim.x * step)) {
                 let xyz = float3(x, y, z)
                 let txyz = xyz / float3(step)
                 let d = map3d(field, txyz)
-                if abs(d) < wst
+                if (abs(d) < wst) {
                     let n = normal3d(field, txyz)
-                    var vtx = [[GeometryPreviewVertex
+                    var vtx = GeometryPreviewVertex(
                         xyz = (field.local2world * float4(txyz / xyzd, 1.)).xyz,
                         normal = normalize((field.local2world * float4(n, 0.)).xyz)
-                    ]]
+                    )
                     cloud.vertices |> push(vtx)
+                }
+            }
+        }
+    }
     gen_bbox(cloud)
     print("total {cloud.vertices |> length} points\n")
     return <- cloud
+}
 
 [export]
-def main
+def main {
     // make a CSG scene
     var scene : CsgScene
     scene |> addCube(
@@ -192,16 +218,20 @@ def main
     var sdf <- SdfField(scene.dmin, scene.dmax, 1.)
     sdf |> seal(scene)
 
-    if glfwInit() == 0
+    if (glfwInit() == 0) {
         panic("can't init glfw")
-    defer <|
+    }
+    defer <| $() {
         glfwTerminate()
+    }
     glfwInitOpenGL(3, 3)
     var window = glfwCreateWindow(1280, 720, "SDF preview", null, null)
-    if window == null
+    if (window == null) {
         panic("can't create window")
-    defer <|
+    }
+    defer <| $() {
         glfwDestroyWindow(window)
+    }
     glfwMakeContextCurrent(window)
 
     create_ttf_objects()
@@ -224,7 +254,7 @@ def main
 
     var vao, vbo, ebo : uint
     glGenVertexArrays(1, safe_addr(vao))
-    glBindVertexArray(vao);
+    glBindVertexArray(vao)
     glGenBuffers(1, safe_addr(vbo))
     glBindBuffer(GL_ARRAY_BUFFER, vbo)
     glBufferData(GL_ARRAY_BUFFER, effect_vertices, GL_STATIC_DRAW)
@@ -244,14 +274,16 @@ def main
     var camera_position_y : float
     var cursor_position_xy = glfwGetCursorPos(window)
     var cursor_enabled = false
-    unsafe
-        glfwSetScrollCallback(window) <| @ [[& camera_distance]] (w, x, y)
-            if y > 0.0lf
+    unsafe {
+        glfwSetScrollCallback(window) <| @ capture(& camera_distance) (w, x, y) {
+            if (y > 0.0lf) {
                 camera_distance *= 1.1
-            else
+            } else {
                 camera_distance /= 1.1
-        glfwSetCursorPosCallback(window) <| @ [[& cursor_position_xy, & cursor_enabled, & camera_position_y, & camera_rotation, & camera_distance]] (w, x, y)
-            if cursor_enabled
+            }
+        }
+        glfwSetCursorPosCallback(window) <| @ capture(& cursor_position_xy, & cursor_enabled, & camera_position_y, & camera_rotation, & camera_distance) (w, x, y) {
+            if (cursor_enabled) {
                 let cxy = glfwGetCursorPos(window)
                 let dxy = cxy - cursor_position_xy
                 var display_w, display_h : int
@@ -260,22 +292,28 @@ def main
                 camera_rotation += dxy.x * 720. / float(display_w)
                 cursor_position_xy = float2(display_w / 2, display_h / 2)
                 glfwSetCursorPos(window, double(cursor_position_xy.x), double(cursor_position_xy.y))
-        glfwSetMouseButtonCallback(window) <| @ [[& cursor_enabled, & cursor_position_xy]] (w, b, a, m)
-            if b == int(GLFW_MOUSE_BUTTON_1)
+            }
+        }
+        glfwSetMouseButtonCallback(window) <| @ capture(& cursor_enabled, & cursor_position_xy) (w, b, a, m) {
+            if (b == int(GLFW_MOUSE_BUTTON_1)) {
                 cursor_enabled = a == int(GLFW_PRESS)
-                if cursor_enabled
+                if (cursor_enabled) {
                     glfwSetInputMode(window, int(GLFW_CURSOR), int(GLFW_CURSOR_HIDDEN))
                     glfwSetInputMode(window, int(GLFW_RAW_MOUSE_MOTION), int(GLFW_TRUE))
                     var display_w, display_h : int
                     glfwGetFramebufferSize(window, display_w, display_h)
                     cursor_position_xy = float2(display_w / 2, display_h / 2)
                     glfwSetCursorPos(window, double(cursor_position_xy.x), double(cursor_position_xy.y))
-                else
+                } else {
                     glfwSetInputMode(window, int(GLFW_CURSOR), int(GLFW_CURSOR_NORMAL))
                     glfwSetInputMode(window, int(GLFW_RAW_MOUSE_MOTION), int(GLFW_FALSE))
+                }
+            }
+        }
+    }
 
 
-    while glfwWindowShouldClose(window) == 0
+    while (glfwWindowShouldClose(window) == 0) {
         glfwPollEvents()
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
@@ -338,3 +376,5 @@ def main
 */
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
+    }
+}

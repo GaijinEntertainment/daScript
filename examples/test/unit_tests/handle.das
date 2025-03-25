@@ -1,21 +1,25 @@
+options gen2
 // options log_nodes=true
 
 require UnitTest
 
 [checkRange]
-struct Foo
-    [[min=0, max=3]] a : int = 1
-    [[min=10, max=20]] b : int = 15
+struct Foo {
+    @min = 0@max = 3 a : int = 1
+    @min = 10@max = 20 b : int = 15
+}
 
-struct TestObjectFooNative
+struct TestObjectFooNative {
     fooData : int
+}
 
-struct TestObjectBarNative
+struct TestObjectBarNative {
     fooPtr : TestObjectFooNative?
     barData : float
+}
 
 [sideeffects]
-def test_native
+def test_native {
     var a : TestObjectFooNative?
     var b : TestObjectBarNative?
     var idummy : int
@@ -35,9 +39,10 @@ def test_native
     b.fooPtr = a
     b?.fooPtr?.fooData ?? idummy = 4
     assert(b.fooPtr.fooData == 4 && idummy == 3)
+}
 
 [sideeffects]
-def test_handled
+def test_handled {
     var a : TestObjectFoo?
     var b : TestObjectBar?
     var idummy : int
@@ -66,38 +71,47 @@ def test_handled
     // call member
     hit_me(*a, 1, 2)
     assert(a.fooData == 3)
-    unsafe
+    unsafe {
         delete a
         delete b
+    }
+}
 
 [export]
-def test_fancy_container(var a : array<FancyClass>)
+def test_fancy_container(var a : array<FancyClass>) {
     print("a = {a}\n")
+}
 
-def test_fancy
+def test_fancy {
     var fc0 = FancyClass()
     assert(fc0.value == 13)
     var fc = FancyClass(1, 2)
     assert(fc.value == 3)
-    using() <| $(var f : FancyClass)
+    using() <| $(var f : FancyClass) {
         assert(f.value == 13)
-    using(1, 3) <| $(var f : FancyClass)
+    }
+    using(1, 3) <| $(var f : FancyClass) {
         assert(f.value == 4)
+    }
     // otherwise we leak hidden std::string inside fancy class
     deleteFancyClass(fc0)
     deleteFancyClass(fc)
+}
 
-def test_nc_alias
+def test_nc_alias {
     var lookingAt = new TestObjectFoo
     var lookPos = lookingAt.lookAt ?? float3()
     assert(lookPos == float3())
-    unsafe
+    unsafe {
         delete lookingAt
+    }
+}
 
 [export]
-def test : bool
+def test : bool {
     test_native()
     test_handled()
     test_fancy()
     test_nc_alias()
     return true
+}
