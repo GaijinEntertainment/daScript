@@ -216,7 +216,7 @@ namespace das
 
 namespace std {
     template <> struct hash<das::Bitfield> {
-        std::size_t operator() ( das::Bitfield b ) const {
+        size_t operator() ( das::Bitfield b ) const {
             return hash<uint32_t>()(b.value);
         }
     };

@@ -35,11 +35,11 @@ namespace das {
     }
 
     void InitGlobalVar(Context &ctx, GlobalVariable *gvar, GlobalVarInfo info) {
-        auto sizeDiff = InitGlobalVariable(ctx, gvar, std::move(info));
+        auto sizeDiff = InitGlobalVariable(ctx, gvar, move(info));
         ctx.updateSharedGlobalSize(sizeDiff.sharedSizeDiff, sizeDiff.globalsSizeDiff);
     }
 
-    void FillFunction(Context &ctx, AotLibrary &aotLib, std::vector<std::pair<uint64_t, SimFunction*>> functions) {
+    void FillFunction(Context &ctx, AotLibrary &aotLib, vector<pair<uint64_t, SimFunction*>> functions) {
         for (auto [semHash, fn]: functions) {
             auto it = aotLib.find(semHash);
             if ( it != aotLib.end() ) {

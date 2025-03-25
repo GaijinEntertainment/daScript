@@ -3658,7 +3658,7 @@ namespace das {
         tw << "    FillFunction(context, getGlobalAotLibrary(), {\n        ";
         for ( int fni=0, fnis=program.totalFunctions; fni!=fnis; ++fni ) {
             const auto & [name, aotHash] = fnn[fni];
-            tw << "std::make_pair(0x" << HEX << aotHash << DEC << ", &context.functions[" << fni << "/*fni*/])";
+            tw << "make_pair(0x" << HEX << aotHash << DEC << ", &context.functions[" << fni << "/*fni*/])";
             if (fni + 1 != fnis) {
                 tw << ",\n        ";
             } else {

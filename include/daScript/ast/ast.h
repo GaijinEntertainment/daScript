@@ -793,8 +793,8 @@ namespace das
     inline SideEffects operator |(SideEffects lhs, SideEffects rhs)
     {
       return static_cast<SideEffects>(
-          static_cast<std::underlying_type<SideEffects>::type>(lhs) |
-          static_cast<std::underlying_type<SideEffects>::type>(rhs));
+          static_cast<das::underlying_type<SideEffects>::type>(lhs) |
+          static_cast<das::underlying_type<SideEffects>::type>(rhs));
     }
 
     typedef fragile_bit_set AstFuncLookup;
