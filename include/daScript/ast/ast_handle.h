@@ -347,7 +347,7 @@ namespace das
         virtual bool canDeletePtr() const override { return true; }
         virtual SimNode* simulateDeletePtr(Context& context, const LineInfo& at, SimNode* sube, uint32_t count) const override {
             return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType, is_smart>>(at, sube, count,
-                context.code->allocateName("type<" + name + ">"));
+                context.code->allocateName("type<"+describe()+">"));
         }
         virtual void * jitGetDelete() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_delete; }
     };
@@ -365,7 +365,7 @@ namespace das
         }
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
             return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType,is_smart>>(at,sube,count,
-                context.code->allocateName("type<"+name+">"));
+                context.code->allocateName("type<"+describe()+">"));
         }
         virtual void * jitGetNew() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_new; }
         virtual void * jitGetDelete() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_delete; }
