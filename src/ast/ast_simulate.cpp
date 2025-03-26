@@ -1680,7 +1680,7 @@ namespace das
                 auto idxCE = static_pointer_cast<ExprConst>(index);
                 uint32_t idxC = cast<uint32_t>::to(idxCE->value);
                 if ( idxC >= range ) {
-                    context.thisProgram->error("index out of range", "", "",
+                    context.thisProgram->error("index out of range " + to_string(idxC) + " of " + to_string(range) + ", " + describe(), "", "",
                         at, CompilationError::index_out_of_range);
                     return nullptr;
                 }
@@ -1692,10 +1692,11 @@ namespace das
             // regular scenario
             auto prv = subexpr->simulate(context);
             auto pidx = index->simulate(context);
+            auto errorMessage = context.code->allocateName(", "+describe());
             if ( r2vType->baseType!=Type::none ) {
-                return context.code->makeValueNode<SimNode_AtR2V>(r2vType->baseType, at, prv, pidx, stride, extraOffset, range);
+                return context.code->makeValueNode<SimNode_AtR2V>(r2vType->baseType, at, prv, pidx, stride, extraOffset, range, errorMessage);
             } else {
-                return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range);
+                return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range, errorMessage);
             }
         }
     }
@@ -1706,8 +1707,9 @@ namespace das
             auto pidx = index->simulate(context);
             uint32_t range = subexpr->type->getVectorDim();
             uint32_t stride = type->getSizeOf();
+            auto errorMessage = context.code->allocateName(", "+describe());
             if ( subexpr->type->ref ) {
-                auto res = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range);
+                auto res = context.code->makeNode<SimNode_At>(at, prv, pidx, stride, 0, range, errorMessage);
                 if ( r2v ) {
                     return ExprRef2Value::GetR2V(context, at, type, res);
                 } else {
@@ -1715,11 +1717,11 @@ namespace das
                 }
             } else {
                 switch ( type->baseType ) {
-                    case tInt:      return context.code->makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range);
+                    case tInt:      return context.code->makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range, errorMessage);
                     case tUInt:
                     case tBitfield:
-                                    return context.code->makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range);
-                    case tFloat:    return context.code->makeNode<SimNode_AtVector<float>>(at, prv, pidx, range);
+                                    return context.code->makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range, errorMessage);
+                    case tFloat:    return context.code->makeNode<SimNode_AtVector<float>>(at, prv, pidx, range, errorMessage);
                     default:
                         DAS_ASSERTF(0, "we should not even be here. infer type should have failed on unsupported_vector[blah]");
                         context.thisProgram->error("internal compilation error, generating vector at for unsupported vector type.", "", "", at);
@@ -2095,10 +2097,11 @@ namespace das
     SimNode * ExprAsVariant::simulate (Context & context) const {
         int fieldOffset = value->type->getVariantFieldOffset(fieldIndex);
         auto simV = value->simulate(context);
+        auto errorMessage = context.code->allocateName(", "+value->describe()+" is not '"+name+"'");
         if ( r2v ) {
-            return context.code->makeValueNode<SimNode_VariantFieldDerefR2V>(type->baseType, at, simV, fieldOffset, fieldIndex);
+            return context.code->makeValueNode<SimNode_VariantFieldDerefR2V>(type->baseType, at, simV, fieldOffset, fieldIndex, errorMessage);
         } else {
-            return context.code->makeNode<SimNode_VariantFieldDeref>(at, simV, fieldOffset, fieldIndex);
+            return context.code->makeNode<SimNode_VariantFieldDeref>(at, simV, fieldOffset, fieldIndex, errorMessage);
         }
     }
 

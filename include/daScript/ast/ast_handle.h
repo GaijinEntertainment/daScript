@@ -378,7 +378,7 @@ namespace das
             using TT = OT;
             DAS_PTR_NODE;
             SimNode_AtStdVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
-                : SimNode_At(at, rv, idx, 0, ofs, 0) {}
+                : SimNode_At(at, rv, idx, 0, ofs, 0, "") {}
             virtual SimNode * visit ( SimVisitor & vis ) override {
                 V_BEGIN();
                 V_OP_TT(AtStdVector);

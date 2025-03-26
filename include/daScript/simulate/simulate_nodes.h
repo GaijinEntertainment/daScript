@@ -726,16 +726,16 @@ namespace das {
     };
 
     // VARIANT FIELD .
-    struct SimNode_VariantFieldDeref : SimNode {
+    struct SimNode_VariantFieldDeref : SimNode_WithErrorMessage {
         DAS_PTR_NODE;
-        SimNode_VariantFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
-            : SimNode(at), value(rv), offset(of), variant(v) {}
+        SimNode_VariantFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v, const char * msg )
+            : SimNode_WithErrorMessage(at,msg), value(rv), offset(of), variant(v) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
             int32_t cv = *(int *)prv;
-            if ( cv!=variant) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i", variant, cv);
+            if ( cv!=variant ) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i%s", variant, cv, errorMessage);
             return prv + offset;
         }
         SimNode *   value;
@@ -747,7 +747,7 @@ namespace das {
     struct SimNode_SafeVariantFieldDeref : SimNode_VariantFieldDeref {
         DAS_PTR_NODE;
         SimNode_SafeVariantFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
-            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+            : SimNode_VariantFieldDeref(at,rv,of,v,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
@@ -762,7 +762,7 @@ namespace das {
     struct SimNode_SafeVariantFieldDerefPtr : SimNode_VariantFieldDeref {
         DAS_PTR_NODE;
         SimNode_SafeVariantFieldDerefPtr ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
-            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+            : SimNode_VariantFieldDeref(at,rv,of,v,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
@@ -775,14 +775,14 @@ namespace das {
 
     template <typename TT>
     struct SimNode_VariantFieldDerefR2V : SimNode_VariantFieldDeref {
-        SimNode_VariantFieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
-            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+        SimNode_VariantFieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v, const char * msg )
+            : SimNode_VariantFieldDeref(at,rv,of,v,msg) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
             int32_t cv = *(int *)prv;
-            if ( cv!=variant) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i", variant, cv);
+            if ( cv!=variant) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i%s", variant, cv, errorMessage);
             TT * pR = (TT *)( prv + offset );
             return cast<TT>::from(*pR);
 
@@ -864,16 +864,16 @@ namespace das {
     };
 
     // AT (INDEX)
-    struct SimNode_At : SimNode {
+    struct SimNode_At : SimNode_WithErrorMessage {
         DAS_PTR_NODE;
-        SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
-            : SimNode(at), value(rv), index(idx), stride(strd), offset(o), range(rng) {}
+        SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng, const char * msg )
+            : SimNode_WithErrorMessage(at,msg), value(rv), index(idx), stride(strd), offset(o), range(rng) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
             DAS_PROFILE_NODE
             auto pValue = value->evalPtr(context);
             uint32_t idx = uint32_t(index->evalInt(context));
-            if (idx >= range) context.throw_error_at(debugInfo,"index out of range, %u of %u", idx, range);
+            if (idx >= range) context.throw_error_at(debugInfo,"index out of range, %u of %u%s", idx, range, errorMessage);
             return pValue + idx*stride + offset;
         }
         SimNode * value, * index;
@@ -884,7 +884,7 @@ namespace das {
     struct SimNode_SafeAt : SimNode_At {
         DAS_PTR_NODE;
         SimNode_SafeAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
-            : SimNode_At(at,rv,idx,strd,o,rng) {}
+            : SimNode_At(at,rv,idx,strd,o,rng,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
             DAS_PROFILE_NODE
@@ -898,8 +898,8 @@ namespace das {
 
     template <typename TT>
     struct SimNode_AtR2V : SimNode_At {
-        SimNode_AtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
-            : SimNode_At(at,rv,idx,strd,o,rng) {}
+        SimNode_AtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng, const char * msg )
+            : SimNode_At(at,rv,idx,strd,o,rng,msg) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *) compute(context);
@@ -958,9 +958,9 @@ namespace das {
 
 #define SIM_NODE_AT_VECTOR(TYPE,CTYPE)                                                          \
     template <>                                                                                 \
-    struct SimNode_AtVector<CTYPE> : SimNode {                                                  \
-        SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t rng )     \
-            : SimNode(at), value(rv), index(idx), range(rng) {}                                 \
+    struct SimNode_AtVector<CTYPE> : SimNode_WithErrorMessage {                                 \
+        SimNode_AtVector ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t rng, const char * msg ) \
+            : SimNode_WithErrorMessage(at,msg), value(rv), index(idx), range(rng) {}            \
         virtual SimNode * visit ( SimVisitor & vis ) override {                                 \
             V_BEGIN();                                                                          \
             V_OP(AtVector "_" #TYPE);                                                           \
@@ -974,7 +974,7 @@ namespace das {
             auto vec = value->eval(context);                                                    \
             uint32_t idx = uint32_t(index->evalInt(context));                                   \
             if (idx >= range) {                                                                 \
-                context.throw_error_at(debugInfo,"vector index out of range, %u of %u", idx, range);    \
+                context.throw_error_at(debugInfo,"vector index out of range, %u of %u%s", idx, range, errorMessage); \
                 return (CTYPE) 0;                                                               \
             } else {                                                                            \
                 CTYPE * pv = (CTYPE *) &vec;                                                    \

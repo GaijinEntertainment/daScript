@@ -460,7 +460,7 @@ namespace das {
         using TT = ST;
         DAS_PTR_NODE;
         SimNode_DebugInfoAtField ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t ofs )
-            : SimNode_At(at, rv, idx, 0, ofs, 0) {}
+            : SimNode_At(at, rv, idx, 0, ofs, 0, "type<DebugInfo>.field[index]") {}
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             auto pValue = (ST *) value->evalPtr(context);
