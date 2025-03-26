@@ -47,6 +47,9 @@ namespace das {
                 fn->aot = true;
                 auto fcb = (SimNode_CallBase *) fn->code;
                 fn->aotFunction = fcb->aotFunction;
+            } else {
+                // Can't fill noAot functions.
+                assert(false);
             }
         }
     }
