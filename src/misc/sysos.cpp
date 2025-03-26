@@ -572,6 +572,8 @@ namespace das {
                     g_dasRoot = DAS_INSTALL_DATADIR;
                 }
                 #endif
+                // make paths consistent on UNIX and Windows
+                replace(g_dasRoot.begin(), g_dasRoot.end(), '\\', '/');
             } else {
                 g_dasRoot = ".";
             }
