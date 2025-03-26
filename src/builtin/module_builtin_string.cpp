@@ -237,7 +237,7 @@ namespace das
             str += 2;
         }
         auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert '%s' to number", str);
+        if (res.ec != errc()) context->throw_error_at(at, "failed to convert '%s' to number", str);
         return result;
     }
 
@@ -279,7 +279,7 @@ namespace das
         TT result = 0;
         while ( is_white_space(*str) ) str++;
         auto res = fast_float::from_chars(str, str+strlen(str), result);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert '%s' to number", str);
+        if (res.ec != errc()) context->throw_error_at(at, "failed to convert '%s' to number", str);
         return result;
     }
 
@@ -297,7 +297,7 @@ namespace das
         TT result = 0;
         while ( is_white_space(*str) ) str++;
         auto res = fast_float::from_chars(str, str+strlen(str), result);
-        return (res.ec == std::errc()) ? result : 0;
+        return (res.ec == errc()) ? result : 0;
     }
 
     float fast_to_float ( const char *str ) {
@@ -315,7 +315,7 @@ namespace das
         while ( is_white_space(*str) ) str++;
         if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
         auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
-        return (res.ec == std::errc()) ? result : 0;
+        return (res.ec == errc()) ? result : 0;
     }
 
     int8_t fast_to_int8 ( const char *str, bool hex ) {
@@ -735,7 +735,7 @@ namespace das
         TT value = 0;
         while ( is_white_space(str[offset]) ) offset++;
         auto res = fast_float::from_chars(str+offset, str+strlen(str), value);
-        if (res.ec != std::errc()) {
+        if (res.ec != errc()) {
             result = ConversionResult(res.ec);
             return TT();
         }
@@ -754,7 +754,7 @@ namespace das
         while ( is_white_space(str[offset]) ) offset++;
         if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
         auto res = fast_float::from_chars(str+offset, str+strlen(str), value, hex ? 16 : 10);
-        if (res.ec != std::errc()) {
+        if (res.ec != errc()) {
             result = ConversionResult(res.ec);
             return TT();
         }

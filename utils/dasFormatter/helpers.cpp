@@ -49,7 +49,7 @@ namespace das::format {
             } else if (prev_end != npos) {
                 concat.replace(prev_end, prev_sep.size(), sep + cur_prefix);
             } else {
-                std::abort();
+                abort();
             }
             auto new_line = convert_to_string(*el.get());
             result

@@ -117,7 +117,7 @@ int main( int, char * [] ) {
         for ( auto it : ptr_ref_count::ref_count_ids ) {
             ids.push_back(it);
         }
-        std::sort(ids.begin(), ids.end());
+        sort(ids.begin(), ids.end());
         for ( auto it : ids ) {
             tp << " " << HEX << it << DEC;
         }

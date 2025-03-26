@@ -1688,7 +1688,7 @@ tuple_expansion
 
 tuple_expansion_variable_declaration
     :   BRABRAB[loc] tuple_expansion[list] ']'[sq_start] ']' [end_expansion] ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] semicolon[end] {
-        // std::cout << "case11" << std::endl;
+        // cout << "case11" << endl;
         format::replace_with(false,
                              format::Pos::from(tokAt(scanner,@loc)),
                              format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @sq_start)),
@@ -1705,7 +1705,7 @@ tuple_expansion_variable_declaration
         $$->isTupleExpansion = true;
     }
     |   BRABRAB [loc] tuple_expansion[list] ']'[sq_start] ']' [end_expansion] optional_ref[ref] copy_or_move_or_clone[com] expr[init] semicolon {
-        // std::cout << "case12" << std::endl;
+        // cout << "case12" << endl;
         format::replace_with(false,
                               format::Pos::from(tokAt(scanner,@loc)),
                               format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @sq_start)),
@@ -3736,7 +3736,7 @@ use_initializer
 
 make_struct_decl
     :   BRABRAB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr[end] {
-        // std::cout << "case1" << std::endl;
+        // cout << "case1" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
             const bool is_initialized = false;
@@ -3765,7 +3765,7 @@ make_struct_decl
         $$ = $msd;
     }
     |   BRABRAB [loc] type_declaration_no_options[mkt] optional_block[blk] optional_trailing_delim_sqr_sqr[end] {
-        // // std::cout << "case2" << std::endl;
+        // // cout << "case2" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type = format::type_to_string($mkt, tokAt(scanner,@mkt));
             das_hash_set<string> always_init = {
@@ -3805,7 +3805,7 @@ make_struct_decl
         $$ = msd;
     }
     |   BRABRAB [loc] type_declaration_no_options[mkt] '('[l_par] ')' [r_par] optional_block[blk] optional_trailing_delim_sqr_sqr [end_loc] {
-        // std::cout << "case3" << std::endl;
+        // cout << "case3" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             const auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt));
             auto maybe_init = (format::can_default_init(type_name.value_or(""))) ? "" : ""; // Possible uninitialized
@@ -3824,7 +3824,7 @@ make_struct_decl
         $$ = msd;
     }
     |   BRABRAB [loc] type_declaration_no_options[mkt] '('[l_par] ')'[r_par] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr [end_loc] {
-        // std::cout << "case4" << std::endl;
+        // cout << "case4" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
             const auto internal = format::handle_msd(tokAt(scanner, @r_par),
@@ -3844,7 +3844,7 @@ make_struct_decl
         $$ = $msd;
     }
     |   BRACBRB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr [end_loc] {
-        // std::cout << "case6" << std::endl;
+        // cout << "case6" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
             format::get_writer() << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt)) << "["
@@ -3864,7 +3864,7 @@ make_struct_decl
         $$ = tam;
     }
     |   BRACBRB [loc] type_declaration_no_options[mkt] '(' ')'[st_msd] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr [end_loc] {
-        // std::cout << "case7" << std::endl;
+        // cout << "case7" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
             format::get_writer() << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt)) << "["
@@ -4012,7 +4012,7 @@ make_dim_decl
 
     }
     |   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr [end_loc] {
-        // std::cout << "case13" << std::endl;
+        // cout << "case13" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt));
             auto internal = format::handle_mka(tokAt(scanner, @mkt),
@@ -4040,7 +4040,7 @@ make_dim_decl
         $$ = $mka;
     }
     |   BRACBRB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_cur_sqr [end_loc] {
-        // std::cout << "case8" << std::endl;
+        // cout << "case8" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             string prefix = "[";
             string suffix = "]";
@@ -4189,7 +4189,7 @@ make_table_decl
 
     }
     |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur [end] {
-        // std::cout << "case10" << std::endl;
+        // cout << "case10" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             format::get_writer() << "{"
                                  << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mka))
@@ -4299,7 +4299,7 @@ array_comprehension
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
     |   BRABRAB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
-        // std::cout << "case5" << std::endl;
+        // cout << "case5" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
             auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));
             format::get_writer() << "[iterator " << internal << "]";
@@ -4308,7 +4308,7 @@ array_comprehension
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
     |   BRACBRB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}'[sq_end] ']' [forend] {
-        // std::cout << "case9" << std::endl;
+        // cout << "case9" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
             auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));
             format::get_writer() << "[" << format::substring_between(tokAt(scanner, @loc_start), tokAt(scanner, @loc))
@@ -4330,7 +4330,7 @@ array_comprehension
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
     }
     | CBRCBRB[loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] close_block[sq_end] close_block [forend] {
-        // std::cout << "case12" << std::endl;
+        // cout << "case12" << endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
             auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));
             format::get_writer() << "[" << format::substring_between(tokAt(scanner, @loc_start), tokAt(scanner, @loc))

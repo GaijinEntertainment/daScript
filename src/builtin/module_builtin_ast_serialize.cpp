@@ -67,7 +67,7 @@ namespace das {
         for ( auto & p : refs ) {
             auto it = objects.find(p.second);
             if ( it == objects.end() ) {
-                throw std::runtime_error{"ast serializer function ref not found"};
+                throw runtime_error{"ast serializer function ref not found"};
             } else {
                 *p.first = it->second.get();
             }
@@ -84,7 +84,7 @@ namespace das {
 
         va_end(args);
 
-        throw std::runtime_error{err};
+        throw runtime_error{err};
     }
 
     #define SERIALIZER_VERIFYF(cond, ...) {                 \
@@ -144,7 +144,7 @@ namespace das {
         try {
             cb(*this);
             return true;
-        } catch ( const std::runtime_error & e ) {
+        } catch ( const runtime_error & e ) {
             failed = true;
             return false;
         }
@@ -1396,7 +1396,7 @@ namespace das {
             Module * module = nullptr; ser << module;
             string mangledName; ser << mangledName;
             field = ( Structure::FieldDeclaration * ) 1;
-            ser.fieldRefs.emplace_back(&field, module, std::move(mangledName), name);
+            ser.fieldRefs.emplace_back(&field, module, move(mangledName), name);
         }
     }
 
@@ -2278,7 +2278,7 @@ namespace das {
                     deser->setModuleName(name);
                     program->library.addModule(deser);
                     ser << *deser;
-                } catch ( const std::runtime_error & r ) {
+                } catch ( const runtime_error & r ) {
                     delete deser;
                     LOG(LogLevel::warning) << "das: serialize: " << r.what();
                     program->failToCompile = true;
@@ -2300,7 +2300,7 @@ namespace das {
         try {
             program->serialize(*this);
             return true;
-        } catch ( const std::runtime_error & r ) {
+        } catch ( const runtime_error & r ) {
             program->failToCompile = true;
             LOG(LogLevel::warning) << "das: serialize: " << r.what();
             return false;

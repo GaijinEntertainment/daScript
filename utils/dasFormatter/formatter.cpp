@@ -156,7 +156,7 @@ namespace das::format {
                 assert(aliases.size() == 1);
             }
         }
-        return std::nullopt;
+        return nullopt;
     }
 
     bool can_default_init(const string &name) {

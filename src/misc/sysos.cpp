@@ -76,13 +76,13 @@
                 AddVectoredExceptionHandler(1, VEH_handler);
             }
             CONTEXT cxt;
-	        HANDLE thisThread = GetCurrentThread();
-        	cxt.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+            HANDLE thisThread = GetCurrentThread();
+            cxt.ContextFlags = CONTEXT_DEBUG_REGISTERS;
             if ( !GetThreadContext(thisThread, &cxt) ) return -1;
             int bp_index = 0;
             for ( bp_index=0; bp_index!=4; ++bp_index ) {
                 uint32_t mask = uint32_t(1) << (bp_index*2);
-        		if ( (uint32_t(cxt.Dr7) & mask) == 0u ) {
+                if ( (uint32_t(cxt.Dr7) & mask) == 0u ) {
                     break;
                 }
             }
@@ -93,10 +93,10 @@
             case 3:     cxt.Dr3 = intptr_t(address); break;
             default:    return -1;
             }
-	        setBits(cxt.Dr7, 16 + (bp_index*4), 2, when);
-	        setBits(cxt.Dr7, 18 + (bp_index*4), 2, len);
-	        setBits(cxt.Dr7, bp_index*2,        1, 1);
-        	if ( !SetThreadContext(thisThread, &cxt) ) return -1;
+            setBits(cxt.Dr7, 16 + (bp_index*4), 2, when);
+            setBits(cxt.Dr7, 18 + (bp_index*4), 2, len);
+            setBits(cxt.Dr7, bp_index*2,        1, 1);
+            if ( !SetThreadContext(thisThread, &cxt) ) return -1;
             return bp_index;
         }
 
@@ -212,19 +212,19 @@
             __forceinline int ffs(int x)   {
                 return __builtin_ffs(x);
             }
-            uint64_t get_distance_from_watchpoint (uint64_t addr, uint64_t val,	int len ) {
-	            uint64_t wp_low, wp_high;
-	            uint32_t lens, lene;
-	            lens = ffs(len);
-	            lene = fls(len);
-	            wp_low = val + lens;
-	            wp_high = val + lene;
-	            if (addr < wp_low)
-		            return wp_low - addr;
-	            else if (addr > wp_high)
-		            return addr - wp_high;
-	            else
-		            return 0;
+            uint64_t get_distance_from_watchpoint (uint64_t addr, uint64_t val,    int len ) {
+                uint64_t wp_low, wp_high;
+                uint32_t lens, lene;
+                lens = ffs(len);
+                lene = fls(len);
+                wp_low = val + lens;
+                wp_high = val + lene;
+                if (addr < wp_low)
+                    return wp_low - addr;
+                else if (addr > wp_high)
+                    return addr - wp_high;
+                else
+                    return 0;
             }
 
             uint64_t encode_ctrl_reg ( HwBpSize len, HwBpType type, bool enabled ) {
@@ -352,7 +352,7 @@
             int bp_index = 0;
             for ( bp_index=0; bp_index!=4; ++bp_index ) {
                 uint32_t mask = uint32_t(1) << (bp_index*2);
-        		if ( (uint32_t(dr.uds.ds64.__dr7) & mask) == 0u ) {
+                if ( (uint32_t(dr.uds.ds64.__dr7) & mask) == 0u ) {
                     break;
                 }
             }
@@ -363,9 +363,9 @@
             case 3:     dr.uds.ds64.__dr3 = intptr_t(address); break;
             default:    return -1;
             }
-	        setBits(dr.uds.ds64.__dr7, 16 + (bp_index*4), 2, when);
-	        setBits(dr.uds.ds64.__dr7, 18 + (bp_index*4), 2, len);
-	        setBits(dr.uds.ds64.__dr7, bp_index*2,        1, 1);
+            setBits(dr.uds.ds64.__dr7, 16 + (bp_index*4), 2, when);
+            setBits(dr.uds.ds64.__dr7, 18 + (bp_index*4), 2, len);
+            setBits(dr.uds.ds64.__dr7, bp_index*2,        1, 1);
             dr_count = x86_DEBUG_STATE_COUNT;
             thread_set_state(mythread, x86_DEBUG_STATE, (thread_state_t) &dr, dr_count);
             return bp_index;
