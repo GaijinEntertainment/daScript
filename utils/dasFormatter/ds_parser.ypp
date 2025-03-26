@@ -1491,7 +1491,7 @@ expr_pipe
         }
     }
     |   LAPIPE[pipe] expr_block[arg] {
-        if (format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
             format::get_writer() << "@";
             format::finish_rule(format::Pos::from_last(tokAt(scanner, @pipe)));
         }
@@ -1499,14 +1499,14 @@ expr_pipe
         $$ = $arg;
     }
     |   LFPIPE[pipe] expr_block[arg] {
-        if (format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
             format::get_writer() << "@@";
             format::finish_rule(format::Pos::from_last(tokAt(scanner, @pipe)));
         }
         $$ = $arg;
     }
     |   LLPIPE[pipe] expr_block[arg] {
-        if (format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+        if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
             format::get_writer() << "$";
             format::finish_rule(format::Pos::from_last(tokAt(scanner, @pipe)));
         }
@@ -1981,9 +1981,34 @@ expr_assign
     ;
 
 expr_assign_pipe_right
-    :   LAPIPE expr_block[right]   { $$ = $right; }
-    |   LFPIPE expr_block[right]   { $$ = $right; }
-    |   LLPIPE expr_block[right]   { $$ = $right; }
+    :   LAPIPE[pipe] expr_block[right]   {
+            if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+                auto tok = tokAt(scanner, @right);
+                tok.column += 1;
+                format::get_writer() << "@" << format::get_substring(tok) << ";";
+                format::finish_rule(format::Pos::from_last(tok));
+            }
+
+            $$ = $right;
+        }
+    |   LFPIPE[pipe] expr_block[right]   {
+            if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+                auto tok = tokAt(scanner, @right);
+                tok.column += 1;
+                format::get_writer() << "@@" << format::get_substring(tok) << ";";
+                format::finish_rule(format::Pos::from_last(tok));
+            }
+            $$ = $right;
+        }
+    |   LLPIPE[pipe] expr_block[right]   {
+            if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner, @pipe)))) {
+                auto tok = tokAt(scanner, @right);
+                tok.column += 1;
+                format::get_writer() << "$" << format::get_substring(tok) << ";";
+                format::finish_rule(format::Pos::from_last(tok));
+            }
+            $$ = $right;
+        }
     |   expr_call_pipe[right]      { $$ = $right; }
     ;
 
@@ -2418,6 +2443,9 @@ opt_sem
 struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
+    }
+    |   struct_variable_declaration_list[list] semicolon {
+        $$ = $list;
     }
     |   struct_variable_declaration_list[list] {
         if ( !yyextra->g_CommentReaders.empty() ) {

@@ -6,7 +6,6 @@
 
 #include "daScript/ast/ast.h"
 
-//extern int das_yydebug;
 typedef void * yyscan_t;
 union YYSTYPE;
 
@@ -39,7 +38,7 @@ enum class NoCommentReason {
  * @param str
  * @return formatted string
  */
-string remove_semicolons(string_view str) {
+string remove_semicolons(string_view str, bool is_gen2) {
     string result;
     size_t line_end = -1;
     int par_balance = 0; // ()
@@ -55,6 +54,10 @@ string remove_semicolons(string_view str) {
         auto cur_line = str.substr(offset, last_char_idx - offset + 1);
         for (size_t i = 0; i < cur_line.size(); i++) {
             const auto c = cur_line.at(i);
+            if (c == '\\') {
+                i++;
+                continue;
+            }
             optional<NoCommentReason> maybe_reason;
             if (disables.empty() && c == '/' && cur_line.size() > i + 1 && cur_line.at(i + 1) == '/') {
                 break;
@@ -91,7 +94,7 @@ string remove_semicolons(string_view str) {
                 default: break;
             }
         }
-        if (par_balance == 0 && braces_balance == 0 &&
+        if (par_balance == 0 && (braces_balance == 0 || is_gen2) &&
             sq_braces_balance == 0 &&
             last_char_idx != offset - 1 &&
             str.at(last_char_idx) == ';') {
@@ -165,7 +168,6 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     }
 
     int iter = 0;
-//     das_yydebug = 1;
     policies.version_2_syntax = false;
     const auto tmp_name1 = "/tmp/tmp1.das";
     {
@@ -232,7 +234,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
         iter++;
     }
     if (!options.contains(FormatOpt::SemicolonEOL)) {
-        src = remove_semicolons(src);
+        src = remove_semicolons(src, options.contains(FormatOpt::V2Syntax));
     }
     const auto tmp_name = "/tmp/tmp.das";
     {
