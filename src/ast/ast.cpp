@@ -3,8 +3,6 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 
-#include "../das/ast/_standalone_ctx_generated/context.das.h"
-
 namespace das {
 
     // local or global

@@ -122,17 +122,18 @@ MACRO(DAS_AOT_STANDALONE input genList mainTarget dasAotTool)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
+    get_filename_component(ctx_name ${input} NAME_WE)
     set(out_dir ${input_dir}/_standalone_ctx_generated)
-    set(out_src ${out_dir}/context.das.cpp)
+    set(out_src ${out_dir}/${input_name}.cpp)
     file(MAKE_DIRECTORY ${out_dir})
     ADD_CUSTOM_COMMAND(
             DEPENDS ${input_src}
             DEPENDS ${dasAotTool}
             OUTPUT  ${out_src}
             COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-            COMMAND ${dasAotTool} -aot ${input_src} ${out_dir} -standalone-context context -standalone-class Standalone
+            COMMAND ${dasAotTool} -aot ${input_src} ${out_dir} -standalone-context ${ctx_name} -standalone-class Standalone
     )
-    list(APPEND ${genList} ${out_dir}/context.das.cpp)
+    list(APPEND ${genList} ${out_src})
     set(custom_name ${mainTarget}_${input_name}_standalone)
     ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
     set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)

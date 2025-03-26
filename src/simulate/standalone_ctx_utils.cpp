@@ -48,9 +48,8 @@ namespace das {
                 auto fcb = (SimNode_CallBase *) fn->code;
                 fn->aotFunction = fcb->aotFunction;
             } else {
-                // // Can't fill noAot functions. So, we'll fail in runtime in that case with fn->code == nullptr
-                // assert(false);
-                // std::abort();
+                // Can't fill noAot functions.
+                assert(false);
             }
         }
     }
