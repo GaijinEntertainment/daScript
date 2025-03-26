@@ -153,6 +153,17 @@ jobs:
         repository: profelis/das-fmt     # Path to repository with das-fmt scripts
         path: das-fmt
 
+    - name: "Run simple checks"
+      run: |
+        set -euo pipefail
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+           windows*)
+             ;;
+           *)
+            bash ci/simple_checks.sh
+            ;;
+        esac
+
     - name: "Build: Daslang"
       run: |
         set -eux
