@@ -726,16 +726,16 @@ namespace das {
     };
 
     // VARIANT FIELD .
-    struct SimNode_VariantFieldDeref : SimNode {
+    struct SimNode_VariantFieldDeref : SimNode_WithErrorMessage {
         DAS_PTR_NODE;
-        SimNode_VariantFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
-            : SimNode(at), value(rv), offset(of), variant(v) {}
+        SimNode_VariantFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v, const char * msg )
+            : SimNode_WithErrorMessage(at,msg), value(rv), offset(of), variant(v) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
             int32_t cv = *(int *)prv;
-            if ( cv!=variant) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i", variant, cv);
+            if ( cv!=variant ) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i%s", variant, cv, errorMessage);
             return prv + offset;
         }
         SimNode *   value;
@@ -747,7 +747,7 @@ namespace das {
     struct SimNode_SafeVariantFieldDeref : SimNode_VariantFieldDeref {
         DAS_PTR_NODE;
         SimNode_SafeVariantFieldDeref ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
-            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+            : SimNode_VariantFieldDeref(at,rv,of,v,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
@@ -762,7 +762,7 @@ namespace das {
     struct SimNode_SafeVariantFieldDerefPtr : SimNode_VariantFieldDeref {
         DAS_PTR_NODE;
         SimNode_SafeVariantFieldDerefPtr ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
-            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+            : SimNode_VariantFieldDeref(at,rv,of,v,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
@@ -775,14 +775,14 @@ namespace das {
 
     template <typename TT>
     struct SimNode_VariantFieldDerefR2V : SimNode_VariantFieldDeref {
-        SimNode_VariantFieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v )
-            : SimNode_VariantFieldDeref(at,rv,of,v) {}
+        SimNode_VariantFieldDerefR2V ( const LineInfo & at, SimNode * rv, uint32_t of, int32_t v, const char * msg )
+            : SimNode_VariantFieldDeref(at,rv,of,v,msg) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto prv = value->evalPtr(context);
             int32_t cv = *(int *)prv;
-            if ( cv!=variant) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i", variant, cv);
+            if ( cv!=variant) context.throw_error_at(debugInfo, "variant mismatch %i, expecting %i%s", variant, cv, errorMessage);
             TT * pR = (TT *)( prv + offset );
             return cast<TT>::from(*pR);
 

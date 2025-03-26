@@ -2095,10 +2095,11 @@ namespace das
     SimNode * ExprAsVariant::simulate (Context & context) const {
         int fieldOffset = value->type->getVariantFieldOffset(fieldIndex);
         auto simV = value->simulate(context);
+        auto errorMessage = context.code->allocateName(", "+value->describe()+" is not '"+name+"'");
         if ( r2v ) {
-            return context.code->makeValueNode<SimNode_VariantFieldDerefR2V>(type->baseType, at, simV, fieldOffset, fieldIndex);
+            return context.code->makeValueNode<SimNode_VariantFieldDerefR2V>(type->baseType, at, simV, fieldOffset, fieldIndex, errorMessage);
         } else {
-            return context.code->makeNode<SimNode_VariantFieldDeref>(at, simV, fieldOffset, fieldIndex);
+            return context.code->makeNode<SimNode_VariantFieldDeref>(at, simV, fieldOffset, fieldIndex, errorMessage);
         }
     }
 
