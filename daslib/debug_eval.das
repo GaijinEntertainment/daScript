@@ -3,7 +3,6 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers
 options indenting = 4
-options no_aot = true
 
 module debug_eval shared private
 
