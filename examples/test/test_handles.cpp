@@ -304,15 +304,15 @@ void builtin_printw(char * utf8string) {
 #endif
 
 void builtin_printw(char * utf8string) {
-    std::wstring_convert<std::codecvt_utf8<wchar_t>> utf8_conv;
+    wstring_convert<codecvt_utf8<wchar_t>> utf8_conv;
     auto outs = utf8_conv.from_bytes(utf8string);
 #if defined(_MSC_VER)
     _setmode(_fileno(stdout), _O_U8TEXT);
 #else
-    std::wcout.sync_with_stdio(false);
-    std::wcout.imbue(std::locale("en_US.utf8"));
+    wcout.sync_with_stdio(false);
+    wcout.imbue(locale("en_US.utf8"));
 #endif
-    std::wcout << outs;
+    wcout << outs;
 #if defined(_MSC_VER)
     _setmode(_fileno(stdout), _O_TEXT);
 #endif

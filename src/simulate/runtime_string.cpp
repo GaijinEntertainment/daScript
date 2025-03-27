@@ -55,7 +55,7 @@ namespace das
             auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
             *result = 0;
             writer.writeStr(buf, result - buf);
-        } catch ( const std::exception & e ) {
+        } catch ( const exception & e ) {
             context->throw_error_at(at, "fmt error: %s", e.what());
         }
 #else
@@ -116,7 +116,7 @@ namespace das
             auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
             *result= 0;
             return context->allocateString(buf, uint32_t(result-buf), at);
-        } catch (const std::exception & e) {
+        } catch (const exception & e) {
             context->throw_error_at(at, "fmt error: %s", e.what());
             return nullptr;
         }

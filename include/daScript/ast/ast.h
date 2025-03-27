@@ -1000,7 +1000,7 @@ namespace das
             arguments[0]->name = argName;
             return this;
         }
-        FunctionPtr args ( std::initializer_list<const char *> argList ) {
+        FunctionPtr args ( initializer_list<const char *> argList ) {
             if ( argList.size()==0 ) return this;
             DAS_VERIFYF(argList.size() == arguments.size(), "during a processing of the '%s' function\n", cppName.c_str());
             int argIndex = 0;

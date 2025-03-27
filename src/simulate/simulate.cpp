@@ -916,14 +916,14 @@ namespace das
     }
 
     // Context
-    std::recursive_mutex g_DebugAgentMutex;
+    recursive_mutex g_DebugAgentMutex;
     das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
     static DAS_THREAD_LOCAL bool g_isInDebugAgentCreation = false;
     extern atomic<int> g_envTotal;
 
     template <typename TT>
     void on_debug_agent_mutex ( const TT & lmbd ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         lmbd ();
     }
 
@@ -932,7 +932,7 @@ namespace das
         if ( g_envTotal > 0 && daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
             lmbd ( daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent );
         }
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
             lmbd ( it.second.debugAgent );
         }
@@ -1606,7 +1606,7 @@ namespace das
     }
 
     void tickSpecificDebugAgent ( const char * name ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(name);
         if ( it != g_DebugAgents.end() ) {
             it->second.debugAgent->onTick();
@@ -1645,7 +1645,7 @@ namespace das
 
     template <typename TT>
     void onCppDebugAgent ( const char * category, TT && lmb ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         CppOnlyDebugAgent * agent = nullptr;
         if ( it != g_DebugAgents.end() ) {
@@ -1681,7 +1681,7 @@ namespace das
     }
 
     void uninstallCppDebugAgent ( const char * category ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
             g_DebugAgents.erase(it);
@@ -1721,7 +1721,7 @@ namespace das
         if ( daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
             context->throw_error_at(at, "thread local debug agent already installed");
         }
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         daScriptEnvironment::bound->g_threadLocalDebugAgent = {
             newAgent,
             context->shared_from_this()
@@ -1734,7 +1734,7 @@ namespace das
 
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(at, "need to specify category");
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
             DebugAgent * oldAgentPtr = it->second.debugAgent.get();
@@ -1754,7 +1754,7 @@ namespace das
 
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(at, "need to specify category");
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it == g_DebugAgents.end() ) context->throw_error_at(at, "can't get debug agent '%s'", category);
         if ( !it->second.debugAgentContext ) context->throw_error_at(at, "debug agent '%s' is a CPP-only agent", category);
@@ -1763,13 +1763,13 @@ namespace das
 
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(at, "need to specify category");
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         return it != g_DebugAgents.end();
     }
 
     void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
         context->invoke(blk, nullptr, nullptr, line);
     }
 }
@@ -1809,7 +1809,7 @@ namespace das
         });
         das_safe_map<string,DebugAgentInstance> agents;
         {
-            std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+            lock_guard<recursive_mutex> guard(g_DebugAgentMutex);
             swap(agents, g_DebugAgents);
             daScriptEnvironment::bound->g_threadLocalDebugAgent = {};
         }

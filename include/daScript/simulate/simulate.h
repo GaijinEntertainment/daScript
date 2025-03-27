@@ -205,7 +205,7 @@ namespace das
     } }
 
 #if DAS_ENABLE_EXCEPTIONS
-    class dasException final : public std::exception {
+    class dasException final : public exception {
     public:
         dasException ( const char * why, const LineInfo & at )
             : exceptionAt(at), exceptionWhat(why ? why : "") {}

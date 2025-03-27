@@ -5,9 +5,6 @@
 #include "daScript/daScript.h"
 #include "daScript/das_config.h"
 
-using std::optional;
-using std::nullopt;
-
 namespace das::format {
 
     // formatter config
@@ -105,7 +102,7 @@ namespace das::format {
     string get_line(uint32_t line);
 
     //
-    std::optional<StructurePtr> try_find_struct(const string &name);
+    optional<StructurePtr> try_find_struct(const string &name);
 
     enum class CanInit {
         Can,

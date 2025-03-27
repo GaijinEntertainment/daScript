@@ -171,7 +171,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     policies.version_2_syntax = false;
     const auto tmp_name1 = "/tmp/tmp1.das";
     {
-        std::ofstream ostream(tmp_name1);
+        ofstream ostream(tmp_name1);
         ostream << src.c_str();
     }
     auto src_program = parseDaScript(tmp_name1, "", access, tout, libGroup, true, true, policies);
@@ -238,7 +238,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     }
     const auto tmp_name = "/tmp/tmp.das";
     {
-        std::ofstream ostream(tmp_name);
+        ofstream ostream(tmp_name);
         ostream << src.c_str();
         ostream.flush();
     }
@@ -262,15 +262,15 @@ int run(FormatOptions opts, const vector<string> &files) {
     }
     for (const auto &file: files) {
         tp << "input file=" << file << '\n';
-        std::ifstream t(file.c_str());
+        ifstream t(file.c_str());
 
-        string str(std::string((std::istreambuf_iterator<char>(t)),
-                   std::istreambuf_iterator<char>()).c_str());
+        string str(string((istreambuf_iterator<char>(t)),
+                   istreambuf_iterator<char>()).c_str());
 
         auto res = transform_syntax(file, str, opts);
         if (res.ok) {
             if (opts.contains(FormatOpt::Inplace)) {
-                std::ofstream out(file.c_str());
+                ofstream out(file.c_str());
                 out << res.ok.value().c_str();
             } else {
                 tp << res.ok.value().c_str();

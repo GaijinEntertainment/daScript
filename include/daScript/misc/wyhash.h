@@ -129,7 +129,8 @@ static constexpr uint64_t _wyp[4] = {UINT64_C(0xa0761d6478bd642f), UINT64_C(0xe7
 
 //wyhash main function
 static inline uint64_t wyhash(const void *key, size_t len, uint64_t seed, const uint64_t *secret=_wyp){
-  const uint8_t *p=(const uint8_t *)key; seed^=_wymix(seed^secret[0],secret[1]);	uint64_t	a,	b;
+  const uint8_t *p=(const uint8_t *)key; seed^=_wymix(seed^secret[0],secret[1]);
+  uint64_t a, b;
   if(_likely_(len<=16)){
     if(_likely_(len>=4)){ a=(_wyr4(p)<<32)|_wyr4(p+((len>>3)<<2)); b=(_wyr4(p+len-4)<<32)|_wyr4(p+len-4-((len>>3)<<2)); }
     else if(_likely_(len>0)){ a=_wyr3(p,len); b=0;}
@@ -166,15 +167,16 @@ static inline constexpr double wy2u01(uint64_t r){ const double _wynorm=1.0/(UIN
 //convert any 64 bit pseudo random numbers to APPROXIMATE Gaussian distribution. It can be combined with wyrand, wyhash64 or wyhash.
 static inline constexpr double wy2gau(uint64_t r){ const double _wynorm=1.0/(UINT64_C(1)<<20); return ((r&0x1fffff)+((r>>21)&0x1fffff)+((r>>42)&0x1fffff))*_wynorm-3.0;}
 
-#ifdef	WYTRNG
+#ifdef WYTRNG
 #include <sys/time.h>
 //The wytrand true random number generator, passed BigCrush.
 static inline uint64_t wytrand(uint64_t *seed){
-	struct	timeval	t;	gettimeofday(&t,0);
-	uint64_t	teed=(((uint64_t)t.tv_sec)<<32)|t.tv_usec;
-	teed=_wymix(teed^_wyp[0],*seed^_wyp[1]);
-	*seed=_wymix(teed^_wyp[0],_wyp[2]);
-	return _wymix(*seed,*seed^_wyp[3]);
+    struct    timeval    t;
+    gettimeofday(&t,0);
+    uint64_t    teed=(((uint64_t)t.tv_sec)<<32)|t.tv_usec;
+    teed=_wymix(teed^_wyp[0],*seed^_wyp[1]);
+    *seed=_wymix(teed^_wyp[0],_wyp[2]);
+    return _wymix(*seed,*seed^_wyp[3]);
 }
 #endif
 
@@ -221,7 +223,8 @@ static inline constexpr uint64_t _wyr4_const(const uint8_t *p) { return ((uint64
 //wyhash main function
 static inline constexpr uint64_t wyhash_const(const uint8_t *p, size_t len, uint64_t seed, const uint64_t *secret=_wyp){
 
-  seed^=_wymix_const(seed^secret[0],secret[1]);	uint64_t	a=0,	b=0;
+  seed^=_wymix_const(seed^secret[0],secret[1]);
+  uint64_t a=0, b=0;
   if(_likely_(len<=16)){
     if(_likely_(len>=4)){ a=(_wyr4_const(p)<<32)|_wyr4_const(p+((len>>3)<<2)); b=(_wyr4_const(p+len-4)<<32)|_wyr4_const(p+len-4-((len>>3)<<2)); }
     else if(_likely_(len>0)){ a=_wyr3(p,len); b=0;}
@@ -256,7 +259,8 @@ static inline constexpr uint64_t wyhash_const(const char *p, uint64_t seed, cons
   size_t len = 0;
   for (;p[len]; ++len){}
 
-  seed^=_wymix_const(seed^secret[0],secret[1]);	uint64_t	a=0,	b=0;
+  seed^=_wymix_const(seed^secret[0],secret[1]);
+  uint64_t a=0, b=0;
   if(_likely_(len<=16)){
     if(_likely_(len>=4)){ a=(_wyr4_const(p)<<32)|_wyr4_const(p+((len>>3)<<2)); b=(_wyr4_const(p+len-4)<<32)|_wyr4_const(p+len-4-((len>>3)<<2)); }
     else if(_likely_(len>0)){ a=_wyr3(p,len); b=0;}

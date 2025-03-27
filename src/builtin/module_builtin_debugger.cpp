@@ -1015,7 +1015,7 @@ namespace debugapi {
 
     // invoke_debug_agent_method("category","function",....)
 
-    extern std::recursive_mutex g_DebugAgentMutex;
+    extern recursive_mutex g_DebugAgentMutex;
     extern das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
 
 #define MAX_DEBUG_AGENT_ARGS 16

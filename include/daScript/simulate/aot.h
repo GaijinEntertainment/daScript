@@ -441,7 +441,7 @@ namespace das {
         static __forceinline TT get ( const TT * ptr, TT value ) {
             return ptr ? *((TT *)ptr) : value;
         }
-		template <typename LPTRX>
+        template <typename LPTRX>
         static __forceinline TT get ( LPTRX ** ptr, nullptr_t pqq ) {
             return ptr ? *((TT *)ptr) : ((TT)pqq);
         }
@@ -628,7 +628,7 @@ namespace das {
     }
 
     template <typename TT>
-    struct das_index<TT, std::enable_if_t<std::is_base_of_v<std::vector<typename TT::value_type>, TT>>>
+    struct das_index<TT, enable_if_t<is_base_of_v<vector<typename TT::value_type>, TT>>>
         : das_default_vector_index<vector<typename TT::value_type>, typename TT::value_type> {};
 
     template <typename TT, typename VecT, uint32_t size>
@@ -1043,7 +1043,7 @@ namespace das {
     template <int variantSize, int variantAlign, typename ...TA>
     struct alignas(variantAlign) TVariant : Variant {
         template<int N> using NthType =
-            typename std::tuple_element<N, std::tuple<TA...>>::type;
+            typename tuple_element<N, tuple<TA...>>::type;
 
         struct alignas(1) TData {
             char data[variantSize - sizeof(int32_t)];
@@ -1054,7 +1054,7 @@ namespace das {
 
         template <typename T, size_t idx>
         void set(T val, size_t align) {
-            static_assert(std::is_same_v<NthType<idx>, T>);
+            static_assert(is_same_v<NthType<idx>, T>);
             index = idx;
             new(data.data + align) T(val);
         }

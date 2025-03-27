@@ -113,7 +113,7 @@ namespace das {
         vector<pair<K, V>> sorted_vector(unsorted_map.begin(), unsorted_map.end());
 
         // Sort the vector by key
-        std::sort(sorted_vector.begin(), sorted_vector.end(),
+        sort(sorted_vector.begin(), sorted_vector.end(),
                   [](const auto& a, const auto& b) {
                       return a.first < b.first;
                   });
