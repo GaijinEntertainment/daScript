@@ -1208,7 +1208,7 @@ namespace das
     struct SimNode_AstGetExpression : SimNode_CallBase {
         DAS_PTR_NODE;
         SimNode_AstGetExpression ( const LineInfo & at, const ExpressionPtr & e, char * d )
-            : SimNode_CallBase(at) {
+            : SimNode_CallBase(at,"") {
             expr = e.get();
             descr = d;
         }
@@ -1319,30 +1319,37 @@ namespace das
                 auto getSp = context.code->makeNode<SimNode_GetLocal>(at,stackTop);
                 if ( blockT->baseType==Type::tBlock ) {
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeAndCopyOrMove>(
-                                                        int(arguments.size()), at, getSp);
+                                                        int(arguments.size()), at, getSp /*, errorMessage*/);
                 } else if ( blockT->baseType==Type::tFunction && isInvokeMethod ) {
+                    auto errorMessage = context.code->allocateName(", "+arguments[0]->describe());
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeAndCopyOrMoveMethod>(
-                                                        int(arguments.size()-1), at, getSp);
+                                                        int(arguments.size()-1), at, getSp, errorMessage);
                     ((SimNode_InvokeAndCopyOrMoveMethodAny *) pInvoke)->methodOffset = methodOffset;
                 } else if ( blockT->baseType==Type::tFunction ) {
+                    auto errorMessage = context.code->allocateName(", "+arguments[0]->describe());
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeAndCopyOrMoveFn>(
-                                                        int(arguments.size()), at, getSp);
+                                                        int(arguments.size()), at, getSp, errorMessage);
                 } else {
+                    auto errorMessage = context.code->allocateName(", "+arguments[0]->describe());
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeAndCopyOrMoveLambda>(
-                                                        int(arguments.size()), at, getSp);
+                                                        int(arguments.size()), at, getSp, errorMessage);
                 }
             } else {
                 if ( blockT->baseType==Type::tString ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeFnByName>(int(arguments.size()),at);
+                    auto errorMessage = context.code->allocateName(", "+arguments[0]->describe());
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeFnByName>(int(arguments.size()),at, errorMessage);
                 } else if ( blockT->baseType==Type::tBlock ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_Invoke>(int(arguments.size()),at);
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_Invoke>(int(arguments.size()),at /*, errorMessage*/);
                 } else if ( blockT->baseType==Type::tFunction && isInvokeMethod ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeMethod>(int(arguments.size()-1),at);
+                    auto errorMessage = context.code->allocateName(", "+arguments[0]->describe());
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeMethod>(int(arguments.size()-1),at, errorMessage);
                     ((SimNode_InvokeMethodAny *) pInvoke)->methodOffset = methodOffset;
                 } else if ( blockT->baseType==Type::tFunction ) {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeFn>(int(arguments.size()),at);
+                    auto errorMessage = context.code->allocateName(", "+arguments[0]->describe());
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeFn>(int(arguments.size()),at, errorMessage);
                 } else {
-                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeLambda>(int(arguments.size()),at);
+                    auto errorMessage = context.code->allocateName(", "+arguments[0]->describe());
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeLambda>(int(arguments.size()),at, errorMessage);
                 }
             }
         }

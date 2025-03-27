@@ -21,7 +21,7 @@ namespace das
 
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,1> : SimNode_CallBase {
-        SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(VecCtor_1);
@@ -38,7 +38,7 @@ namespace das
 
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,2> : SimNode_CallBase {
-        SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(VecCtor_2);
@@ -59,7 +59,7 @@ namespace das
 
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,3> : SimNode_CallBase {
-        SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(VecCtor_3);
@@ -83,7 +83,7 @@ namespace das
 
     template <typename TT, typename Policy>
     struct SimNode_VecCtor<TT,Policy,4> : SimNode_CallBase {
-        SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_VecCtor(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(VecCtor_4);
@@ -108,7 +108,7 @@ namespace das
 
     template <typename TT, typename Policy>
     struct SimNode_Range1Ctor: SimNode_CallBase {
-        SimNode_Range1Ctor(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_Range1Ctor(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(Range1Ctor);
@@ -127,7 +127,7 @@ namespace das
     };
 
     struct SimNode_VecPassThrough: SimNode_CallBase {
-        SimNode_VecPassThrough(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_VecPassThrough(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(VecPassThrough);
@@ -189,7 +189,7 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,4>,
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,const VTYPE,uint32_t,uint32_t,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) );
 
     struct SimNode_Int4ToFloat4 : SimNode_CallBase {
-        SimNode_Int4ToFloat4(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_Int4ToFloat4(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(Int4ToFloat4);
@@ -204,7 +204,7 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
     };
 
     struct SimNode_UInt4ToFloat4 : SimNode_CallBase {
-        SimNode_UInt4ToFloat4(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_UInt4ToFloat4(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(UInt4ToFloat4);
@@ -219,7 +219,7 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
     };
 
     struct SimNode_Float4ToInt4 : SimNode_CallBase {
-        SimNode_Float4ToInt4(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_Float4ToInt4(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(Float4ToInt4);
@@ -234,7 +234,7 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
     };
 
     struct SimNode_Float4ToUInt4 : SimNode_CallBase {
-        SimNode_Float4ToUInt4(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_Float4ToUInt4(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(Float4ToUInt4);
@@ -249,7 +249,7 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
     };
 
     struct SimNode_AnyIntToAnyInt : SimNode_CallBase {
-        SimNode_AnyIntToAnyInt(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_AnyIntToAnyInt(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(AnyIntToAnyInt);

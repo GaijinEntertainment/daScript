@@ -221,7 +221,7 @@ namespace das
     struct SimNode_ExtFuncCallBase : SimNode_CallBase {
         const char* extFnName = nullptr;
         SimNode_ExtFuncCallBase(const LineInfo& at, const char* fnName)
-            : SimNode_CallBase(at) {
+            : SimNode_CallBase(at,"") {
             extFnName = fnName;
         }
         virtual SimNode* copyNode(Context& context, NodeAllocator* code) override {

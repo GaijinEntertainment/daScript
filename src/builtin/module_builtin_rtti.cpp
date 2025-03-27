@@ -1146,7 +1146,7 @@ namespace das {
     struct SimNode_RttiGetTypeDecl : SimNode_CallBase {
         DAS_PTR_NODE;
         SimNode_RttiGetTypeDecl ( const LineInfo & at, const ExpressionPtr & d )
-            : SimNode_CallBase(at) {
+            : SimNode_CallBase(at,"") {
             typeExpr = d->type.get();
         }
         virtual SimNode * visit ( SimVisitor & vis ) override {
