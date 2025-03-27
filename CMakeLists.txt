@@ -776,16 +776,26 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     add_custom_target(dasAotStub)
     SET(AOT_GENERATED_SRC)
-    DAS_AOT_LIB("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/json.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/ast_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/random.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daslang)
+
+    MACRO(DAS_AOT_LIB_FILES aotStdlibFiles genList mainTarget dasAotTool)
+        FOREACH(inF IN LISTS ${aotStdlibFiles})
+            DAS_AOT_LIB("${inF}" AOT_GENERATED_SRC dasAotStub daslang)
+        ENDFOREACH()
+    ENDMACRO()
+    set(AotDaslibList
+            daslib/functional.das
+            daslib/json.das
+            daslib/json_boost.das
+            daslib/regex.das
+            daslib/ast_boost.das
+            daslib/regex_boost.das
+            daslib/strings_boost.das
+            daslib/random.das
+            daslib/math_boost.das
+            daslib/utf8_utils.das
+    )
+
+    DAS_AOT_LIB_FILES(AotDaslibList AOT_GENERATED_SRC dasAotStub daslang)
     SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 

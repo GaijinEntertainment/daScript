@@ -8,7 +8,6 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_handle.h"
-#include "daScript/simulate/aot_builtin_time.h"
 
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
@@ -111,44 +110,6 @@ namespace das {
 
 
 #if !DAS_NO_FILEIO
-
-#include <sys/stat.h>
-
-#if defined(_MSC_VER)
-
-#include <io.h>
-#include <direct.h>
-
-#else
-#include <libgen.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#endif
-
-namespace das {
-    struct FStat {
-        struct stat stats;
-        bool        is_valid;
-        uint64_t size() const   { return stats.st_size; }
-#if defined(_MSC_VER)
-        Time     atime() const  { return { stats.st_atime }; }
-        Time     ctime() const  { return { stats.st_ctime }; }
-        Time     mtime() const  { return { stats.st_mtime }; }
-        bool     is_reg() const { return stats.st_mode & _S_IFREG; }
-        bool     is_dir() const { return stats.st_mode & _S_IFDIR; }
-
-#else
-        Time     atime() const  { return { stats.st_atime }; }
-        Time     ctime() const  { return { stats.st_ctime }; }
-        Time     mtime() const  { return { stats.st_mtime }; }
-        bool     is_reg() const { return S_ISREG(stats.st_mode); }
-        bool     is_dir() const { return S_ISDIR(stats.st_mode); }
-
-#endif
-    };
-}
-
 
 MAKE_TYPE_FACTORY(FStat, das::FStat)
 MAKE_TYPE_FACTORY(FILE,FILE)

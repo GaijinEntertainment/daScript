@@ -998,6 +998,7 @@ namespace das {
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {
         tw << "#include \"daScript/ast/ast.h\"\n";
         tw << "#include \"daScript/simulate/aot_builtin_ast.h\"\n";
+        tw << "#include \"daScript/ast/ast_generate.h\"\n";
         return ModuleAotType::cpp;
     }
 }

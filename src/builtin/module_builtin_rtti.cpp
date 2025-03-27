@@ -1181,7 +1181,7 @@ namespace das {
         return lineInfo ? *lineInfo : LineInfo();
     }
 
-    char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at ) {
+    char * builtin_print_data ( const void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at ) {
         TextWriter ssw;
         ssw << debug_value(data, (TypeInfo *)typeInfo, PrintFlags(uint32_t(flags)));
         return context->allocateString(ssw.str(), at);

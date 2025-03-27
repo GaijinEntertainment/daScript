@@ -423,8 +423,9 @@ namespace das
                 default:
                     if ( ch <= 0x1f ) {
                         result.append("\\u00");
-                        result.append(1,(ch>>4)+'0');
-                        result.append(1,(ch&15)+'0');
+                        const char tohex[] = "0123456789abcdef";
+                        result.append(1,tohex[ch>>4]);
+                        result.append(1,tohex[ch&15]);
                     } else {
                         result.append(1, ch);
                     }

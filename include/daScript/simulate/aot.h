@@ -1152,7 +1152,7 @@ namespace das {
     TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context, LineInfoArg * at );
     TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context, LineInfoArg * at );
 
-    template <typename TT>
+    template <typename TT, typename Enable = void>
     struct das_iterator;
 
     template <typename TT>
