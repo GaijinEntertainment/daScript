@@ -1,11 +1,52 @@
 #pragma once
 
+#include <daScript/simulate/aot_builtin_time.h>
+
+#if !DAS_NO_FILEIO
+
+#include <sys/stat.h>
+
+#if defined(_MSC_VER)
+
+#include <io.h>
+#include <direct.h>
+
+#else
+#include <libgen.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#endif
+#endif
+
 namespace das {
-    struct FStat;
     class Context;
     struct Block;
     struct SimNode_CallBase;
     struct LineInfoArg;
+
+#if !DAS_NO_FILEIO
+
+    struct FStat {
+        struct stat stats;
+        bool        is_valid;
+        uint64_t size() const   { return stats.st_size; }
+#if defined(_MSC_VER)
+        Time     atime() const  { return { stats.st_atime }; }
+        Time     ctime() const  { return { stats.st_ctime }; }
+        Time     mtime() const  { return { stats.st_mtime }; }
+        bool     is_reg() const { return stats.st_mode & _S_IFREG; }
+        bool     is_dir() const { return stats.st_mode & _S_IFDIR; }
+#else
+        Time     atime() const  { return { stats.st_atime }; }
+        Time     ctime() const  { return { stats.st_ctime }; }
+        Time     mtime() const  { return { stats.st_mtime }; }
+        bool     is_reg() const { return S_ISREG(stats.st_mode); }
+        bool     is_dir() const { return S_ISDIR(stats.st_mode); }
+
+#endif
+    };
+#endif
 
     const FILE * builtin_fopen  ( const char * name, const char * mode );
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at );
