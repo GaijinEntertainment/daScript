@@ -1038,8 +1038,8 @@ __forceinline void profileNode ( SimNode * node ) {
     };
 
     // FUNCTION CALL
-    struct SimNode_CallBase : SimNode {
-        SimNode_CallBase ( const LineInfo & at ) : SimNode(at) {}
+    struct SimNode_CallBase : SimNode_WithErrorMessage {
+        SimNode_CallBase ( const LineInfo & at, const char * msg ) : SimNode_WithErrorMessage(at,msg) {}
         virtual bool rtti_node_isCallBase() const override { return true; }
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitCall ( SimVisitor & vis );

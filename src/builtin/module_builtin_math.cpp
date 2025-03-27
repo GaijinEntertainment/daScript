@@ -297,7 +297,7 @@ namespace das {
 
     template <typename MatT>
     struct SimNode_MatrixCtor : SimNode_CallBase {
-        SimNode_MatrixCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_MatrixCtor(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(MatrixCtor);

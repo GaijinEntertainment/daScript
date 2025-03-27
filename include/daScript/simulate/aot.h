@@ -1768,7 +1768,7 @@ namespace das {
 
     template <typename FuncT, FuncT fn>
     struct SimNode_Aot : SimNode_CallBase {
-        __forceinline SimNode_Aot ( ) : SimNode_CallBase(LineInfo()) {
+        __forceinline SimNode_Aot ( ) : SimNode_CallBase(LineInfo(),"") {
             aotFunction = (void*) fn;
         }
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
@@ -1785,7 +1785,7 @@ namespace das {
 
     template <typename FuncT, FuncT fn>
     struct SimNode_AotCMRES : SimNode_CallBase {
-        __forceinline SimNode_AotCMRES ( ) : SimNode_CallBase(LineInfo()) {}
+        __forceinline SimNode_AotCMRES ( ) : SimNode_CallBase(LineInfo(),"") {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f * aa = context.abiArg;
@@ -1806,7 +1806,7 @@ namespace das {
 #endif
 
     struct SimNode_AotInteropBase : SimNode_CallBase {
-        __forceinline SimNode_AotInteropBase() : SimNode_CallBase(LineInfo()) {}
+        __forceinline SimNode_AotInteropBase() : SimNode_CallBase(LineInfo(),"") {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return v_zero();

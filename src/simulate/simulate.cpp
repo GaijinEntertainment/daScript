@@ -500,7 +500,7 @@ namespace das
     // SimNode_CallBase
 
     SimNode * SimNode_CallBase::copyNode ( Context & context, NodeAllocator * code ) {
-        SimNode_CallBase * that = (SimNode_CallBase *) SimNode::copyNode(context, code);
+        SimNode_CallBase * that = (SimNode_CallBase *) SimNode_WithErrorMessage::copyNode(context, code);
         if ( nArguments ) {
             SimNode ** newArguments = (SimNode **) code->allocate(nArguments * sizeof(SimNode *));
             memcpy ( newArguments, that->arguments, nArguments * sizeof(SimNode *));

@@ -204,7 +204,7 @@ namespace das {
     struct SimNode_AstGetTypeDecl : SimNode_CallBase {
         DAS_PTR_NODE;
         SimNode_AstGetTypeDecl ( const LineInfo & at, const TypeDeclPtr & d, char * dE )
-            : SimNode_CallBase(at) {
+            : SimNode_CallBase(at,"") {
             typeExpr = d.get();
             descr = dE;
         }
@@ -262,7 +262,7 @@ namespace das {
     struct SimNode_AstGetFunction : SimNode_CallBase {
         DAS_PTR_NODE;
         SimNode_AstGetFunction ( const LineInfo & at, Function * f, char * dE )
-            : SimNode_CallBase(at) {
+            : SimNode_CallBase(at,"") {
             func = f;
             descr = dE;
         }
