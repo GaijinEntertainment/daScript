@@ -2095,7 +2095,11 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt64 * c ) override {
-            ss << "INT64_C(" << c->getValue() << ")";
+            if (c->getValue() == INT64_MIN) {
+                ss << "INT64_MIN"; // silence overflow warning
+            } else {
+                ss << "INT64_C(" << c->getValue() << ")";
+            }
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt8 * c ) override {
@@ -2967,7 +2971,7 @@ namespace das {
                 ss << "__builtin_table_keys(__context__,";
             } else if (call->name == "values") {
                 ss << "__builtin_table_values(__context__,";
-            } else if ( call->name=="invoke" ) {
+            } else if ( call->name=="invoke" || call->rtti_isInvoke() ) {
                 auto bt = call->arguments[0]->type->baseType;
                 int methodOffset = -1;
                 string methodName;
