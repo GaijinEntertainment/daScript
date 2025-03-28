@@ -1,6 +1,9 @@
 #pragma once
 
 #include "daScript/ast/ast_typefactory.h"
+#include "daScript/misc/arraytype.h"
+#include "daScript/simulate/aot.h"
+#include "daScript/simulate/simulate.h"
 
 namespace das {
 
@@ -139,11 +142,22 @@ namespace das {
         }
     }
 
+    // All builtin modules are able to take Block as input, so we should do the same here.
+    inline char * builtin_build_string_T ( const Block &block, Context * context, LineInfoArg * at ) {
+        auto blk_wrap = [&](StringBuilderWriter &writer) { return das_invoke<void>::invoke<StringBuilderWriter &>(context, at, block, writer); };
+        return builtin_build_string_T(blk_wrap, context, at);
+    }
+
     template <typename TT>
     uint64_t builtin_build_hash_T ( TT && block, Context * context, LineInfoArg * at ) {
         StringBuilderWriter writer;
         block(writer);
         return hash_block64((const uint8_t *)writer.c_str(),writer.tellp());
+    }
+
+    inline uint64_t builtin_build_hash_T ( const Block &block, Context * context, LineInfoArg * at ) {
+        auto blk_wrap = [&](StringBuilderWriter &writer) { return das_invoke<void>::invoke<StringBuilderWriter &>(context, at, block, writer); };
+        return builtin_build_hash_T(blk_wrap, context, at);
     }
 
     __forceinline int32_t get_character_uat ( const char * str, int32_t index ) { return ((uint8_t *)str)[index]; }
