@@ -100,6 +100,14 @@ class PrintVisitor : AstVisitor {
     def newLine() {
         write(*writer, "\n");
     }
+    def ident(tabs : int = -1) {
+        if (tabs == -1) {
+            return repeat("    ", tab)
+        } else {
+            return repeat("    ", tabs)
+        }
+    }
+
 // program
     def override preVisitProgram(prog : ProgramPtr) {
         write(*writer, "// program\n");
@@ -126,21 +134,21 @@ class PrintVisitor : AstVisitor {
     }
 // alias
     def override preVisitAlias(typ : TypeDeclPtr; name : das_string) {
-        write(*writer, "typedef\n\t{name} = {describe([decl=typ,extra=extraTypeInfo])}\n\n");
+        write(*writer, "typedef {name} = {describe([decl=typ,extra=extraTypeInfo])}\n\n");
     }
 // enumeration
     def override preVisitEnumeration(enu : EnumerationPtr) {
-        write(*writer, "enum {enu.name} : {get_das_type_name(enu.baseType)}\n");
+        write(*writer, "enum {enu.name} : {get_das_type_name(enu.baseType)} \{\n");
     }
     def override preVisitEnumerationValue(enu : EnumerationPtr; name : das_string; value : ExpressionPtr; last : bool) {
-        write(*writer, "\t{name} =");
+        write(*writer, "{ident(1)}{name} = ");
     }
     def override visitEnumerationValue(enu : EnumerationPtr; name : das_string; value : ExpressionPtr; last : bool) {
         write(*writer, "\n");
         return value;
     }
     def override visitEnumeration(enu : EnumerationPtr) {
-        write(*writer, "\n");
+        write(*writer, "\}\n\n");
         return enu;
     }
 // structure
@@ -148,10 +156,10 @@ class PrintVisitor : AstVisitor {
         if (str.annotations |> length != 0) {
             write(*writer, "[{describe(str.annotations)}]\n");
         }
-        write(*writer, "{str.flags.isClass ? "class" : "struct"} {str.name}\n");
+        write(*writer, "{str.flags.isClass ? "class" : "struct"} {str.name} \{\n");
     }
     def override preVisitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) {
-        write(*writer, "\t");
+        write(*writer, "{ident(1)}");
         if (decl.annotation |> length != 0) {
             write(*writer, "[{describe(decl.annotation)}] ");
         }
@@ -167,7 +175,7 @@ class PrintVisitor : AstVisitor {
         write(*writer, "\n");
     }
     def override visitStructure(var str : StructurePtr) : StructurePtr {
-        write(*writer, "\n");
+        write(*writer, "\}\n\n");
         return <- str;
     }
 // function
@@ -198,10 +206,10 @@ class PrintVisitor : AstVisitor {
         if (fun.result != null && !fun.result.isVoid) {
             write(*writer, " : {describe([decl=fun.result,extra=extraTypeInfo])}");
         }
-        write(*writer, "\n");
+        write(*writer, " ");
     }
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
-        write(*writer, "\n");
+        write(*writer, "\n\n");
         return <- fun;
     }
     def override preVisitFunctionArgument(fun : FunctionPtr; arg : VariablePtr; last : bool) {
@@ -246,45 +254,39 @@ class PrintVisitor : AstVisitor {
                 if (blk.returnType != null) {
                     write(*writer, ":{describe([decl=blk.returnType,extra=extraTypeInfo])}");
                 }
-                write(*writer, "\n");
+                write(*writer, " ");
             }
         }
         if (printCStyle || blk.blockFlags.isClosure) {
-            write(*writer, "{repeat("\t",tab)}\{\n");
+            write(*writer, "\{\n");
         }
         tab ++;
     }
     def override visitExprBlock(var blk : smart_ptr<ExprBlock>) : ExpressionPtr {
         tab --;
         if (printCStyle || blk.blockFlags.isClosure) {
-            write(*writer, "{repeat("\t",tab)}\}\n");
+            write(*writer, "{ident()}\}");
         }
         return <- blk;
     }
     def override preVisitExprBlockExpression(blk : smart_ptr<ExprBlock>; expr : ExpressionPtr) {
-        write(*writer, "{repeat("\t",tab)}");
+        write(*writer, "{ident()}");
     }
     def override visitExprBlockExpression(blk : smart_ptr<ExprBlock>; expr : ExpressionPtr) {
-        if (printCStyle || blk.blockFlags.isClosure) {
-            write(*writer, ";");
-        }
         self->newLine();
         return expr;
     }
-    def override visitExprBlockFinal(blk : smart_ptr<ExprBlock>) {
+    def override preVisitExprBlockFinal(blk : smart_ptr<ExprBlock>) {
         if (printCStyle || blk.blockFlags.isClosure) {
-            write(*writer, "{repeat("\t",tab-1)}\} finally \{\n");
+            write(*writer, "{ident(tab-1)}\} finally \{\n");
         } else {
-            write(*writer, "{repeat("\t",tab-1)}finally\n");
+            write(*writer, "{ident(tab-1)}finally\n");
         }
     }
     def override preVisitExprBlockFinalExpression(blk : smart_ptr<ExprBlock>; expr : ExpressionPtr) {
-        write(*writer, "{repeat("\t",tab)}");
+        write(*writer, "{ident()}");
     }
     def override visitExprBlockFinalExpression(blk : smart_ptr<ExprBlock>; expr : ExpressionPtr) {
-        if (printCStyle || blk.blockFlags.isClosure) {
-            write(*writer, ";");
-        }
         self->newLine();
         return expr;
     }
@@ -322,7 +324,7 @@ class PrintVisitor : AstVisitor {
     }
 // global let
     def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {
-        write(*writer, "{arg._type.flags.constant ? "let" : "var"}{arg.flags.global_shared ? " shared" : ""}\n\t");
+        write(*writer, "{arg._type.flags.constant ? "let" : "var"}{arg.flags.global_shared ? " shared" : ""}\n{ident(1)}");
         if (arg.isAccessUnused) {
             write(*writer, " /*unused*/ ");
         }
@@ -493,40 +495,39 @@ class PrintVisitor : AstVisitor {
         write(*writer, "with ");
     }
     def override preVisitExprWithBody(expr : smart_ptr<ExprWith>; right : ExpressionPtr) {
-        write(*writer, "\n");
+        write(*writer, " ");
     }
 // while
     def override preVisitExprWhile(expr : smart_ptr<ExprWhile>) {
         write(*writer, "while ");
     }
     def override preVisitExprWhileBody(expr : smart_ptr<ExprWhile>; right : ExpressionPtr) {
-        write(*writer, "\n");
+        write(*writer, " ");
     }
 // try-catch
     def override preVisitExprTryCatch(expr : smart_ptr<ExprTryCatch>) {
-        write(*writer, "try\n");
+        write(*writer, "try ");
     }
     def override preVisitExprTryCatchCatch(expr : smart_ptr<ExprTryCatch>; right : ExpressionPtr) {
-        write(*writer, "{repeat("\t",tab)}recover\n");
+        write(*writer, " recover ");
     }
 // if-then-else
     def override preVisitExprIfThenElse(expr : smart_ptr<ExprIfThenElse>) {
-        write(*writer, "if ");
+        write(*writer, "if (");
     }
     def override preVisitExprIfThenElseIfBlock(expr : smart_ptr<ExprIfThenElse>; ifBlock : ExpressionPtr) {
-        write(*writer, "\n");
+        write(*writer, ") ");
     }
     def override preVisitExprIfThenElseElseBlock(expr : smart_ptr<ExprIfThenElse>; elseBlock : ExpressionPtr) {
-        write(*writer, "{repeat("\t",tab)}");
         if (elseBlock.__rtti == "ExprIfThenElse") {
-            write(*writer, "else ");
+            write(*writer, " else ");
         } else {
-            write(*writer, "else\n");
+            write(*writer, " else ");
         }
     }
 // for
     def override preVisitExprFor(expr : smart_ptr<ExprFor>) {
-        write(*writer, "for ");
+        write(*writer, "for (");
     }
     def override preVisitExprForVariable(expr : smart_ptr<ExprFor>; svar : VariablePtr; last : bool) {
         write(*writer, "{svar.name}{last ? " in " : ","}");
@@ -538,17 +539,17 @@ class PrintVisitor : AstVisitor {
         return <- source;
     }
     def override preVisitExprForBody(expr : smart_ptr<ExprFor>) {
-        write(*writer, "\n");
+        write(*writer, ") ");
     }
 // make variant
     def override preVisitExprMakeVariant(expr : smart_ptr<ExprMakeVariant>) {
-        write(*writer, "[[");
         if (expr._type != null) {
-            write(*writer, "{describe(expr._type)} ");
+            write(*writer, "{describe(expr._type)}");
         }
+        write(*writer, "(");
     }
     def override visitExprMakeVariant(var expr : smart_ptr<ExprMakeVariant>) : ExpressionPtr {
-        write(*writer, "]]");
+        write(*writer, ")");
         return <- expr;
     }
     def override preVisitExprMakeVariantField(expr : smart_ptr<ExprMakeVariant>; index : int; decl : MakeFieldDeclPtr; last : bool) {
@@ -562,13 +563,14 @@ class PrintVisitor : AstVisitor {
     }
 // make structure
     def override preVisitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) {
-        write(*writer, "[[");
         if (expr._type != null) {
-            write(*writer, "{describe(expr._type)}{expr.makeStructFlags.useInitializer ? "()" : ""} ");
+            write(*writer, "{describe(expr._type)}({expr.makeStructFlags.useInitializer ? "" : "uninitialized"} ");
+        } else {
+            write(*writer, "(")
         }
     }
     def override visitExprMakeStruct(var expr : smart_ptr<ExprMakeStruct>) : ExpressionPtr {
-        write(*writer, "]]");
+        write(*writer, ")");
         return <- expr;
     }
     def override visitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) {
@@ -587,30 +589,31 @@ class PrintVisitor : AstVisitor {
     }
 // make array
     def override preVisitExprMakeArray(expr : smart_ptr<ExprMakeArray>) {
-        write(*writer, "[[");
-        if (expr._type != null) {
-            write(*writer, "{describe(expr._type)} ");
+        write(*writer, "fixed_array");
+        if (expr.recordType != null) {
+            write(*writer, "<{describe(expr.recordType)}>");
         }
+        write(*writer, "(");
     }
     def override visitExprMakeArray(var expr : smart_ptr<ExprMakeArray>) : ExpressionPtr {
-        write(*writer, "]]");
+        write(*writer, ")");
         return <- expr;
     }
     def override visitExprMakeArrayIndex(expr : smart_ptr<ExprMakeArray>; index : int; var init : ExpressionPtr; last : bool) : ExpressionPtr {
         if (!last) {
-            write(*writer, "; ");
+            write(*writer, ", ");
         }
         return <- init;
     }
 // make tuple
     def override preVisitExprMakeTuple(expr : smart_ptr<ExprMakeTuple>) {
-        write(*writer, "[[");
         if (expr._type != null) {
             write(*writer, "{describe(expr._type)} ");
         }
+        write(*writer, "(");
     }
     def override visitExprMakeTuple(var expr : smart_ptr<ExprMakeTuple>) : ExpressionPtr {
-        write(*writer, "]]");
+        write(*writer, ")");
         return <- expr;
     }
     def override visitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; var init : ExpressionPtr; last : bool) : ExpressionPtr {
@@ -621,10 +624,18 @@ class PrintVisitor : AstVisitor {
     }
 // array comprehension
     def override preVisitExprArrayComprehension(expr : smart_ptr<ExprArrayComprehension>) {
-        write(*writer, "{expr.generatorSyntax ? "[[" : "[\{"}");
+        if (expr.tableSyntax) {
+            write(*writer, "\{");
+        } else {
+            write(*writer, "[");
+        }
     }
     def override visitExprArrayComprehension(var expr : smart_ptr<ExprArrayComprehension>) : ExpressionPtr {
-        write(*writer, "{expr.generatorSyntax ? "]]" : "\}]"}");
+        if (expr.tableSyntax) {
+            write(*writer, "\}");
+        } else {
+            write(*writer, "]");
+        }
         return <- expr;
     }
     def override preVisitExprArrayComprehensionSubexpr(expr : smart_ptr<ExprArrayComprehension>; subexrp : ExpressionPtr) {
@@ -927,7 +938,7 @@ class PrintVisitor : AstVisitor {
         if (enumModule != null && !empty(enumModule.name)) {
             write(*writer, "{enumModule.name}::");
         }
-        write(*writer, "{expr.enumType.name} {expr.value}");
+        write(*writer, "{expr.enumType.name}.{expr.value}");
     }
 // const bitfield
     def override preVisitExprConstBitfield(expr : smart_ptr<ExprConstBitfield>) : void {
@@ -936,7 +947,7 @@ class PrintVisitor : AstVisitor {
             name = find_bitfield_name(expr.bitfieldType, expr.value);
         }
         if (!empty(name)) {
-            write(*writer, "{expr.bitfieldType.alias} {name}");
+            write(*writer, "{expr.bitfieldType.alias}.{name}");
         } else {
             write(*writer, "bitfield({expr.value})");
         }
@@ -1158,6 +1169,20 @@ def printAst(var prog : ProgramPtr; var writer : StringBuilderWriter?) {
     var flags = new PrintVisitor(writer = writer);
     var inscope adapter <- make_visitor(*flags)
     visit(prog, adapter)
+}
+
+[export]
+def printExpr(var expr : ExpressionPtr; var writer : StringBuilderWriter?) {
+    var flags = new PrintVisitor(writer = writer);
+    var inscope adapter <- make_visitor(*flags)
+    visit(expr, adapter)
+}
+
+[export]
+def printFunc(var func : FunctionPtr; var writer : StringBuilderWriter?) {
+    var flags = new PrintVisitor(writer = writer);
+    var inscope adapter <- make_visitor(*flags)
+    visit(func, adapter)
 }
 
 [export]
