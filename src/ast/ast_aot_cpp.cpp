@@ -3936,9 +3936,9 @@ namespace das {
             source << "// Module " << mod_name << "\n";
         }
 
-        source << "#include \"" << (mod->name.empty() ? cfg.context_name : mod->name) << ".das.h\"\n";
         source << "#include \"daScript/simulate/standalone_ctx_utils.h\"\n";
         writeRequiredModulesFor(source, mod);
+        source << "#include \"" << (mod->name.empty() ? cfg.context_name : mod->name) << ".das.h\"\n";
         source << AOT_HEADERS;
         {
             NamespaceGuard guard1(source, "das");
