@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/simulate/bind_enum.h"
+#include "daScript/simulate/aot.h"
 #include "daScript/misc/arraytype.h"
 
 DAS_BIND_ENUM_CAST(RefMatters);

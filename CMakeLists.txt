@@ -856,7 +856,7 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
         daslib/stub.das
         daslib/templates_boost.das
         daslib/templates.das
-        # daslib/temp_strings.das # outer blocks do not work yet
+        daslib/temp_strings.das
         daslib/typemacro_boost.das
         daslib/type_traits.das
         daslib/unroll.das
