@@ -135,8 +135,12 @@ namespace das {
         StringBuilderWriter writer;
         block(writer);
         auto length = writer.tellp();
+        if ( length > INT32_MAX ) {
+            context->throw_error_at(at, "string too long", "builtin_build_string_T", 0);
+            return nullptr;
+        }
         if ( length ) {
-            return context->allocateString(writer.c_str(), length, at);
+            return context->allocateString(writer.c_str(), int32_t(length), at);
         } else {
             return nullptr;
         }
@@ -149,7 +153,7 @@ namespace das {
     }
 
     template <typename TT>
-    uint64_t builtin_build_hash_T ( TT && block, Context * context, LineInfoArg * at ) {
+    uint64_t builtin_build_hash_T ( TT && block, Context * /*context*/, LineInfoArg * /*at*/ ) {
         StringBuilderWriter writer;
         block(writer);
         return hash_block64((const uint8_t *)writer.c_str(),writer.tellp());
