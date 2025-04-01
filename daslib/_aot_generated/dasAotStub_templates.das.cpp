@@ -1,0 +1,464 @@
+#include "daScript/misc/platform.h"
+
+#include "daScript/simulate/simulate.h"
+#include "daScript/simulate/aot.h"
+#include "daScript/simulate/aot_library.h"
+
+ // require builtin
+ // require templates
+ // require rtti
+#include "daScript/simulate/aot_builtin_rtti.h"
+#include "daScript/ast/ast.h"
+#include "daScript/ast/ast_handle.h"
+ // require strings
+#include "daScript/simulate/aot_builtin_string.h"
+ // require ast
+#include "daScript/ast/ast.h"
+#include "daScript/simulate/aot_builtin_ast.h"
+#include "daScript/ast/ast_generate.h"
+ // require math
+#include "daScript/simulate/aot_builtin_math.h"
+ // require strings_boost
+ // require ast_boost
+
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4100)   // unreferenced formal parameter
+#pragma warning(disable:4189)   // local variable is initialized but not referenced
+#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data
+#pragma warning(disable:4114)   // same qualifier more than once
+#pragma warning(disable:4623)   // default constructor was implicitly defined as deleted
+#pragma warning(disable:4946)   // reinterpret_cast used between related classes
+#pragma warning(disable:4269)   // 'const' automatic data initialized with compiler generated default constructor produces unreliable results
+#pragma warning(disable:4555)   // result of expression not used
+#endif
+#if defined(__EDG__)
+#pragma diag_suppress 826
+#elif defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wwrite-strings"
+#pragma GCC diagnostic ignored "-Wreturn-local-addr"
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wwritable-strings"
+#pragma clang diagnostic ignored "-Wunused-variable"
+#pragma clang diagnostic ignored "-Wunused-but-set-variable"
+#pragma clang diagnostic ignored "-Wunsequenced"
+#pragma clang diagnostic ignored "-Wunused-function"
+#endif
+
+namespace das {
+namespace _anon_15898915789844662280 {
+
+
+
+static void resolveTypeInfoAnnotations()
+{
+    vector<TypeInfo> annotations = {};
+    for (auto& ann : annotations) {
+        ann.resolveAnnotation();
+    }
+}
+
+namespace templates { struct DecltypeMacro; };
+namespace templates { struct DecltypeNoRefMacro; };
+namespace templates { struct TemplateMacro; };
+namespace ast { struct AstFunctionAnnotation; };
+namespace ast { struct AstBlockAnnotation; };
+namespace ast { struct AstStructureAnnotation; };
+namespace ast { struct AstPassMacro; };
+namespace ast { struct AstVariantMacro; };
+namespace ast { struct AstForLoopMacro; };
+namespace ast { struct AstCaptureMacro; };
+namespace ast { struct AstTypeMacro; };
+namespace ast { struct AstSimulateMacro; };
+namespace ast { struct AstReaderMacro; };
+namespace ast { struct AstCommentReader; };
+namespace ast { struct AstCallMacro; };
+namespace ast { struct AstTypeInfoMacro; };
+namespace ast { struct AstEnumerationAnnotation; };
+namespace ast { struct AstVisitor; };
+namespace ast_boost { struct MacroMacro; };
+namespace ast_boost { struct TagFunctionAnnotation; };
+namespace ast_boost { struct TagStructureAnnotation; };
+namespace ast_boost { struct SetupAnyAnnotation; };
+namespace ast_boost { struct SetupFunctionAnnotation; };
+namespace ast_boost { struct SetupBlockAnnotation; };
+namespace ast_boost { struct SetupStructureAnnotation; };
+namespace ast_boost { struct SetupEnumerationAnnotation; };
+namespace ast_boost { struct SetupContractAnnotation; };
+namespace ast_boost { struct SetupReaderMacro; };
+namespace ast_boost { struct SetupCommentReader; };
+namespace ast_boost { struct SetupVariantMacro; };
+namespace ast_boost { struct SetupForLoopMacro; };
+namespace ast_boost { struct SetupCaptureMacro; };
+namespace ast_boost { struct SetupTypeMacro; };
+namespace ast_boost { struct SetupSimulateMacro; };
+namespace ast_boost { struct SetupCallMacro; };
+namespace ast_boost { struct SetupTypeInfoMacro; };
+namespace ast_boost { struct SetupInferMacro; };
+namespace ast_boost { struct SetupDirtyInferMacro; };
+namespace ast_boost { struct SetupLintMacro; };
+namespace ast_boost { struct SetupGlobalLintMacro; };
+namespace ast_boost { struct SetupOptimizationMacro; };
+namespace ast_boost { struct TagFunctionMacro; };
+namespace ast_boost { struct BetterRttiVisitor; };
+// unused enumeration CompilationError
+// unused enumeration Type
+// unused enumeration RefMatters
+// unused enumeration ConstMatters
+// unused enumeration TemporaryMatters
+// unused enumeration ConversionResult
+// unused enumeration SideEffects
+// unused enumeration CaptureMode
+namespace ast {
+
+struct AstFunctionAnnotation {
+    void * __rtti;
+    Func DAS_COMMENT((void,ast::AstFunctionAnnotation)) __finalize;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstFunctionAnnotation,smart_ptr_raw<ExprCallFunc>,das::string)) transform;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<ExprCallFunc>,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string)) verifyCall;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,das::string)) apply;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,das::string)) generic_apply;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string)) finish;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string,bool &)) patch;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string)) fixup;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string)) lint;
+    Func DAS_COMMENT((void,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,smart_ptr_raw<Context>)) complete;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,das::vector<smart_ptr<TypeDecl>>,AnnotationDeclaration const ,das::string)) isCompatible;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation)) isSpecialized;
+    Func DAS_COMMENT((void,ast::AstFunctionAnnotation,smart_ptr_raw<Function> const ,AnnotationDeclaration const ,das::string)) appendToMangledName;
+};
+static_assert(sizeof(AstFunctionAnnotation)==112,"structure size mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,__rtti)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,__finalize)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,transform)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,verifyCall)==24,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,apply)==32,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,generic_apply)==40,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,finish)==48,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,patch)==56,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,fixup)==64,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,lint)==72,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,complete)==80,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,isCompatible)==88,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,isSpecialized)==96,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstFunctionAnnotation,appendToMangledName)==104,"structure field offset mismatch with DAS");
+}
+// unused structure AstBlockAnnotation
+// unused structure AstStructureAnnotation
+// unused structure AstPassMacro
+// unused structure AstVariantMacro
+// unused structure AstForLoopMacro
+// unused structure AstCaptureMacro
+// unused structure AstTypeMacro
+// unused structure AstSimulateMacro
+// unused structure AstReaderMacro
+// unused structure AstCommentReader
+namespace ast {
+
+struct AstCallMacro {
+    void * __rtti;
+    Func DAS_COMMENT((void,ast::AstCallMacro)) __finalize;
+    Func DAS_COMMENT((void,ast::AstCallMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const )) preVisit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstCallMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const )) visit;
+    Func DAS_COMMENT((bool,ast::AstCallMacro,smart_ptr_raw<ExprCallMacro> const ,int32_t)) canVisitArgument;
+    Func DAS_COMMENT((bool,ast::AstCallMacro,smart_ptr_raw<ExprCallMacro> const )) canFoldReturnResult;
+};
+static_assert(sizeof(AstCallMacro)==48,"structure size mismatch with DAS");
+static_assert(offsetof(AstCallMacro,__rtti)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstCallMacro,__finalize)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstCallMacro,preVisit)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstCallMacro,visit)==24,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstCallMacro,canVisitArgument)==32,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstCallMacro,canFoldReturnResult)==40,"structure field offset mismatch with DAS");
+}
+// unused structure AstTypeInfoMacro
+// unused structure AstEnumerationAnnotation
+// unused structure AstVisitor
+// unused structure MacroMacro
+// unused structure TagFunctionAnnotation
+// unused structure TagStructureAnnotation
+// unused structure SetupAnyAnnotation
+// unused structure SetupFunctionAnnotation
+// unused structure SetupBlockAnnotation
+// unused structure SetupStructureAnnotation
+// unused structure SetupEnumerationAnnotation
+// unused structure SetupContractAnnotation
+// unused structure SetupReaderMacro
+// unused structure SetupCommentReader
+// unused structure SetupVariantMacro
+// unused structure SetupForLoopMacro
+// unused structure SetupCaptureMacro
+// unused structure SetupTypeMacro
+// unused structure SetupSimulateMacro
+// unused structure SetupCallMacro
+// unused structure SetupTypeInfoMacro
+// unused structure SetupInferMacro
+// unused structure SetupDirtyInferMacro
+// unused structure SetupLintMacro
+// unused structure SetupGlobalLintMacro
+// unused structure SetupOptimizationMacro
+// unused structure TagFunctionMacro
+// unused structure BetterRttiVisitor
+namespace templates {
+
+struct DecltypeMacro {
+    void * __rtti;
+    Func DAS_COMMENT((void,ast::AstCallMacro)) __finalize;
+    Func DAS_COMMENT((void,ast::AstCallMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const )) preVisit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstCallMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const )) visit;
+    Func DAS_COMMENT((bool,ast::AstCallMacro,smart_ptr_raw<ExprCallMacro> const ,int32_t)) canVisitArgument;
+    Func DAS_COMMENT((bool,ast::AstCallMacro,smart_ptr_raw<ExprCallMacro> const )) canFoldReturnResult;
+    bool remove_ref;
+};
+static_assert(sizeof(DecltypeMacro)==56,"structure size mismatch with DAS");
+static_assert(offsetof(DecltypeMacro,__rtti)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeMacro,__finalize)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeMacro,preVisit)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeMacro,visit)==24,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeMacro,canVisitArgument)==32,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeMacro,canFoldReturnResult)==40,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeMacro,remove_ref)==48,"structure field offset mismatch with DAS");
+}
+namespace templates {
+
+struct DecltypeNoRefMacro {
+    void * __rtti;
+    Func DAS_COMMENT((void,ast::AstCallMacro)) __finalize;
+    Func DAS_COMMENT((void,ast::AstCallMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const )) preVisit;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstCallMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprCallMacro> const )) visit;
+    Func DAS_COMMENT((bool,ast::AstCallMacro,smart_ptr_raw<ExprCallMacro> const ,int32_t)) canVisitArgument;
+    Func DAS_COMMENT((bool,ast::AstCallMacro,smart_ptr_raw<ExprCallMacro> const )) canFoldReturnResult;
+    bool remove_ref;
+};
+static_assert(sizeof(DecltypeNoRefMacro)==56,"structure size mismatch with DAS");
+static_assert(offsetof(DecltypeNoRefMacro,__rtti)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeNoRefMacro,__finalize)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeNoRefMacro,preVisit)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeNoRefMacro,visit)==24,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeNoRefMacro,canVisitArgument)==32,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeNoRefMacro,canFoldReturnResult)==40,"structure field offset mismatch with DAS");
+static_assert(offsetof(DecltypeNoRefMacro,remove_ref)==48,"structure field offset mismatch with DAS");
+}
+namespace templates {
+
+struct TemplateMacro {
+    void * __rtti;
+    Func DAS_COMMENT((void,ast::AstFunctionAnnotation)) __finalize;
+    Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstFunctionAnnotation,smart_ptr_raw<ExprCallFunc>,das::string)) transform;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<ExprCallFunc>,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string)) verifyCall;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,das::string)) apply;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,das::string)) generic_apply;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string)) finish;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string,bool &)) patch;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string)) fixup;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,ModuleGroup,AnnotationArgumentList const ,AnnotationArgumentList const ,das::string)) lint;
+    Func DAS_COMMENT((void,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,smart_ptr_raw<Context>)) complete;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation,smart_ptr_raw<Function>,das::vector<smart_ptr<TypeDecl>>,AnnotationDeclaration const ,das::string)) isCompatible;
+    Func DAS_COMMENT((bool,ast::AstFunctionAnnotation)) isSpecialized;
+    Func DAS_COMMENT((void,ast::AstFunctionAnnotation,smart_ptr_raw<Function> const ,AnnotationDeclaration const ,das::string)) appendToMangledName;
+};
+static_assert(sizeof(TemplateMacro)==112,"structure size mismatch with DAS");
+static_assert(offsetof(TemplateMacro,__rtti)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,__finalize)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,transform)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,verifyCall)==24,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,apply)==32,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,generic_apply)==40,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,finish)==48,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,patch)==56,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,fixup)==64,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,lint)==72,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,complete)==80,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,isCompatible)==88,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,isSpecialized)==96,"structure field offset mismatch with DAS");
+static_assert(offsetof(TemplateMacro,appendToMangledName)==104,"structure field offset mismatch with DAS");
+}
+
+inline void _FuncbuiltinTickpushTick10769833213962245646_3771763ef4e38f67 ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b7e2d9e32f892df6 ( Context * __context__, templates::DecltypeMacro const  & __cl_rename_at_116_2 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d7a90532bf35a185 ( Context * __context__, templates::DecltypeNoRefMacro const  & __cl_rename_at_116_3 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_17d5a7b0b5dc7d2a ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_4, ast::AstFunctionAnnotation * __value_rename_at_181_5 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d10691a65acf9cf3 ( Context * __context__, templates::TemplateMacro const  & __cl_rename_at_116_6 );
+inline void clone_1eed983bd4841917 ( Context * __context__, smart_ptr_raw<Function> & __dest_rename_at_1060_7, smart_ptr_raw<Function> const  __src_rename_at_1060_8 );
+inline smart_ptr<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_7a593ef35695477e ( Context * __context__, smart_ptr<Expression> const  __clone_src_rename_at_1057_9 );
+inline smart_ptr_raw<Function> _FuncbuiltinTickclone_to_moveTick2007252383599261567_2d559201c7991b3d ( Context * __context__, smart_ptr_raw<Function> const  __clone_src_rename_at_1057_11 );
+inline void clone_a842a9854f1fbc85 ( Context * __context__, smart_ptr<Expression> & __dest_rename_at_92_13, smart_ptr<Expression> const  __src_rename_at_92_14 );
+inline char * _FuncastTickdescribeTick842554968825501494_452cfc8955963a18 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_47_15 );
+inline int32_t _FuncbuiltinTickfind_index_ifTick4436313710217261332_6d4d92e49ed1dae3 ( Context * __context__, Sequence DAS_COMMENT((smart_ptr<AnnotationDeclaration> &)) & __arr_rename_at_1695_16, Block DAS_COMMENT((bool,smart_ptr<AnnotationDeclaration> const )) const  & __blk_rename_at_1695_17 );
+inline int32_t _FuncbuiltinTickfind_index_ifTick4436313710217261332_4b8aca0798d52ea ( Context * __context__, Sequence DAS_COMMENT((smart_ptr<Variable> &)) & __arr_rename_at_1695_22, Block DAS_COMMENT((bool,smart_ptr<Variable> const )) const  & __blk_rename_at_1695_23 );
+
+void __init_script ( Context * __context__, bool __init_shared )
+{
+}
+
+inline void _FuncbuiltinTickpushTick10769833213962245646_3771763ef4e38f67 ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 )
+{
+    das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstCallMacro *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
+}
+
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b7e2d9e32f892df6 ( Context * __context__, templates::DecltypeMacro const  &  __cl_rename_at_116_2 )
+{
+    return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
+}
+
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d7a90532bf35a185 ( Context * __context__, templates::DecltypeNoRefMacro const  &  __cl_rename_at_116_3 )
+{
+    return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_3.__rtti))).getStructType())));
+}
+
+inline void _FuncbuiltinTickpushTick10769833213962245646_17d5a7b0b5dc7d2a ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_4, ast::AstFunctionAnnotation * __value_rename_at_181_5 )
+{
+    das_copy(__Arr_rename_at_181_4(builtin_array_push_back(das_arg<TArray<ast::AstFunctionAnnotation *>>::pass(__Arr_rename_at_181_4),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_5);
+}
+
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d10691a65acf9cf3 ( Context * __context__, templates::TemplateMacro const  &  __cl_rename_at_116_6 )
+{
+    return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_6.__rtti))).getStructType())));
+}
+
+inline void clone_1eed983bd4841917 ( Context * __context__, smart_ptr_raw<Function> & __dest_rename_at_1060_7, smart_ptr_raw<Function> const  __src_rename_at_1060_8 )
+{
+    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1060_7),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1060_8),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+}
+
+inline smart_ptr<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_7a593ef35695477e ( Context * __context__, smart_ptr<Expression> const  __clone_src_rename_at_1057_9 )
+{
+    smart_ptr<Expression> __clone_dest_rename_at_1059_10; das_zero(__clone_dest_rename_at_1059_10);
+    clone_a842a9854f1fbc85(__context__,__clone_dest_rename_at_1059_10,__clone_src_rename_at_1057_9);
+    return /* <- */ das_auto_cast_move<smart_ptr<Expression>>::cast(__clone_dest_rename_at_1059_10);
+}
+
+inline smart_ptr_raw<Function> _FuncbuiltinTickclone_to_moveTick2007252383599261567_2d559201c7991b3d ( Context * __context__, smart_ptr_raw<Function> const  __clone_src_rename_at_1057_11 )
+{
+    smart_ptr_raw<Function> __clone_dest_rename_at_1059_12; das_zero(__clone_dest_rename_at_1059_12);
+    clone_1eed983bd4841917(__context__,__clone_dest_rename_at_1059_12,__clone_src_rename_at_1057_11);
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Function>>::cast(__clone_dest_rename_at_1059_12);
+}
+
+inline void clone_a842a9854f1fbc85 ( Context * __context__, smart_ptr<Expression> & __dest_rename_at_92_13, smart_ptr<Expression> const  __src_rename_at_92_14 )
+{
+    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_92_13),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_92_14),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+}
+
+inline char * _FuncastTickdescribeTick842554968825501494_452cfc8955963a18 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_47_15 )
+{
+    return das_auto_cast<char *>::cast(((char * const )(ast_describe_expression(__expr_rename_at_47_15,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
+}
+
+inline int32_t _FuncbuiltinTickfind_index_ifTick4436313710217261332_6d4d92e49ed1dae3 ( Context * __context__, Sequence DAS_COMMENT((smart_ptr<AnnotationDeclaration> &)) &  __arr_rename_at_1695_16, Block DAS_COMMENT((bool,smart_ptr<AnnotationDeclaration> const )) const  &  __blk_rename_at_1695_17 )
+{
+    Sequence DAS_COMMENT((int32_t)) _temp_make_local_1696_22_32; _temp_make_local_1696_22_32;
+    {
+        bool __need_loop_1696 = true;
+        // o: smart_ptr<rtti::AnnotationDeclaration> aka TT&
+        das_iterator<Sequence DAS_COMMENT((smart_ptr<AnnotationDeclaration>))> __o_iterator(__arr_rename_at_1695_16);
+        smart_ptr<AnnotationDeclaration> * __o_rename_at_1696_20;
+        __need_loop_1696 = __o_iterator.first(__context__,(__o_rename_at_1696_20)) && __need_loop_1696;
+        // i: int
+        das_iterator_count DAS_COMMENT((_temp_make_local_1696_22_32 = (builtin_count(0,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))) __i_iterator(0,1);
+        int32_t __i_rename_at_1696_21;
+        __need_loop_1696 = __i_iterator.first(__context__,(__i_rename_at_1696_21)) && __need_loop_1696;
+        for ( ; __need_loop_1696 ; __need_loop_1696 = __o_iterator.next(__context__,(__o_rename_at_1696_20)) && __i_iterator.next(__context__,(__i_rename_at_1696_21)) )
+        {
+            if ( das_invoke<bool>::invoke<smart_ptr<AnnotationDeclaration>>(__context__,nullptr,__blk_rename_at_1695_17,(*__o_rename_at_1696_20)) )
+            {
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1696_21);
+            };
+        }
+        __o_iterator.close(__context__,(__o_rename_at_1696_20));
+        __i_iterator.close(__context__,(__i_rename_at_1696_21));
+    };
+    return das_auto_cast<int32_t>::cast(-1);
+}
+
+inline int32_t _FuncbuiltinTickfind_index_ifTick4436313710217261332_4b8aca0798d52ea ( Context * __context__, Sequence DAS_COMMENT((smart_ptr<Variable> &)) &  __arr_rename_at_1695_22, Block DAS_COMMENT((bool,smart_ptr<Variable> const )) const  &  __blk_rename_at_1695_23 )
+{
+    Sequence DAS_COMMENT((int32_t)) _temp_make_local_1696_22_32; _temp_make_local_1696_22_32;
+    {
+        bool __need_loop_1696 = true;
+        // o: smart_ptr<ast::Variable> aka TT&
+        das_iterator<Sequence DAS_COMMENT((smart_ptr<Variable>))> __o_iterator(__arr_rename_at_1695_22);
+        smart_ptr<Variable> * __o_rename_at_1696_26;
+        __need_loop_1696 = __o_iterator.first(__context__,(__o_rename_at_1696_26)) && __need_loop_1696;
+        // i: int
+        das_iterator_count DAS_COMMENT((_temp_make_local_1696_22_32 = (builtin_count(0,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))) __i_iterator(0,1);
+        int32_t __i_rename_at_1696_27;
+        __need_loop_1696 = __i_iterator.first(__context__,(__i_rename_at_1696_27)) && __need_loop_1696;
+        for ( ; __need_loop_1696 ; __need_loop_1696 = __o_iterator.next(__context__,(__o_rename_at_1696_26)) && __i_iterator.next(__context__,(__i_rename_at_1696_27)) )
+        {
+            if ( das_invoke<bool>::invoke<smart_ptr<Variable>>(__context__,nullptr,__blk_rename_at_1695_23,(*__o_rename_at_1696_26)) )
+            {
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1696_27);
+            };
+        }
+        __o_iterator.close(__context__,(__o_rename_at_1696_26));
+        __i_iterator.close(__context__,(__i_rename_at_1696_27));
+    };
+    return das_auto_cast<int32_t>::cast(-1);
+}
+
+static void registerAotFunctions ( AotLibrary & aotLib ) {
+    aotLib[0xfca27d59ea83e1a5] = +[](Context & ctx) -> SimNode* { // _FuncbuiltinTickpushTick10769833213962245646_3771763ef4e38f67
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, TArray<ast::AstCallMacro *> & , ast::AstCallMacro *  ),&_FuncbuiltinTickpushTick10769833213962245646_3771763ef4e38f67>>();
+    };
+    aotLib[0xed29f3ef4a945437] = +[](Context & ctx) -> SimNode* { // _FuncrttiTickclass_infoTick15801393167907430156_b7e2d9e32f892df6
+        return ctx.code->makeNode<SimNode_Aot<StructInfo const  * (*) ( Context * __context__, templates::DecltypeMacro const  &  ),&_FuncrttiTickclass_infoTick15801393167907430156_b7e2d9e32f892df6>>();
+    };
+    aotLib[0x21b5194a68d024d] = +[](Context & ctx) -> SimNode* { // _FuncrttiTickclass_infoTick15801393167907430156_d7a90532bf35a185
+        return ctx.code->makeNode<SimNode_Aot<StructInfo const  * (*) ( Context * __context__, templates::DecltypeNoRefMacro const  &  ),&_FuncrttiTickclass_infoTick15801393167907430156_d7a90532bf35a185>>();
+    };
+    aotLib[0x17cd053e5d46f3ad] = +[](Context & ctx) -> SimNode* { // _FuncbuiltinTickpushTick10769833213962245646_17d5a7b0b5dc7d2a
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & , ast::AstFunctionAnnotation *  ),&_FuncbuiltinTickpushTick10769833213962245646_17d5a7b0b5dc7d2a>>();
+    };
+    aotLib[0xc89aff749c0401f2] = +[](Context & ctx) -> SimNode* { // _FuncrttiTickclass_infoTick15801393167907430156_d10691a65acf9cf3
+        return ctx.code->makeNode<SimNode_Aot<StructInfo const  * (*) ( Context * __context__, templates::TemplateMacro const  &  ),&_FuncrttiTickclass_infoTick15801393167907430156_d10691a65acf9cf3>>();
+    };
+    aotLib[0x4cfffbead2f23e62] = +[](Context & ctx) -> SimNode* { // clone_1eed983bd4841917
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, smart_ptr_raw<Function> & , smart_ptr_raw<Function> const   ),&clone_1eed983bd4841917>>();
+    };
+    aotLib[0x6adada27a198f519] = +[](Context & ctx) -> SimNode* { // _FuncbuiltinTickclone_to_moveTick2007252383599261567_7a593ef35695477e
+        return ctx.code->makeNode<SimNode_Aot<smart_ptr<Expression> (*) ( Context * __context__, smart_ptr<Expression> const   ),&_FuncbuiltinTickclone_to_moveTick2007252383599261567_7a593ef35695477e>>();
+    };
+    aotLib[0xaf21198ba11ce18b] = +[](Context & ctx) -> SimNode* { // _FuncbuiltinTickclone_to_moveTick2007252383599261567_2d559201c7991b3d
+        return ctx.code->makeNode<SimNode_Aot<smart_ptr_raw<Function> (*) ( Context * __context__, smart_ptr_raw<Function> const   ),&_FuncbuiltinTickclone_to_moveTick2007252383599261567_2d559201c7991b3d>>();
+    };
+    aotLib[0xc105bc1c43b6486b] = +[](Context & ctx) -> SimNode* { // clone_a842a9854f1fbc85
+        return ctx.code->makeNode<SimNode_Aot<void (*) ( Context * __context__, smart_ptr<Expression> & , smart_ptr<Expression> const   ),&clone_a842a9854f1fbc85>>();
+    };
+    aotLib[0xfbfe800d5700e08f] = +[](Context & ctx) -> SimNode* { // _FuncastTickdescribeTick842554968825501494_452cfc8955963a18
+        return ctx.code->makeNode<SimNode_Aot<char * (*) ( Context * __context__, smart_ptr_raw<Expression> const   ),&_FuncastTickdescribeTick842554968825501494_452cfc8955963a18>>();
+    };
+    aotLib[0x1d9ea3885ecf850] = +[](Context & ctx) -> SimNode* { // _FuncbuiltinTickfind_index_ifTick4436313710217261332_6d4d92e49ed1dae3
+        return ctx.code->makeNode<SimNode_Aot<int32_t (*) ( Context * __context__, Sequence DAS_COMMENT((smart_ptr<AnnotationDeclaration> &)) & , Block DAS_COMMENT((bool,smart_ptr<AnnotationDeclaration> const )) const  &  ),&_FuncbuiltinTickfind_index_ifTick4436313710217261332_6d4d92e49ed1dae3>>();
+    };
+    aotLib[0x606ceac33cc83caf] = +[](Context & ctx) -> SimNode* { // _FuncbuiltinTickfind_index_ifTick4436313710217261332_4b8aca0798d52ea
+        return ctx.code->makeNode<SimNode_Aot<int32_t (*) ( Context * __context__, Sequence DAS_COMMENT((smart_ptr<Variable> &)) & , Block DAS_COMMENT((bool,smart_ptr<Variable> const )) const  &  ),&_FuncbuiltinTickfind_index_ifTick4436313710217261332_4b8aca0798d52ea>>();
+    };
+	resolveTypeInfoAnnotations();
+}
+
+} // namespace _anon_15898915789844662280
+AotListBase impl_aot_templates(_anon_15898915789844662280::registerAotFunctions);
+} // namespace das
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+#if defined(__EDG__)
+#pragma diag_default 826
+#elif defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif

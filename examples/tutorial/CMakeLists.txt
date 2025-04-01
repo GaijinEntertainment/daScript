@@ -79,7 +79,6 @@ SETUP_CPP11(tutorial02aot)
 ## Example of standalone context
 SET(TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC)
 DAS_AOT_STANDALONE("examples/tutorial/tutorial02.das" TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC tutorial02_dasAotStub tutorial02_dasAot)
-
 add_executable(tutorial_02_standalone
         ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial02_standalone_ctx.cpp
         ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial02.das
