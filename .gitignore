@@ -6,7 +6,6 @@ tmtags
 
 *.output
 *.temp
-**/_aot_generated
 
 build/
 bin/
