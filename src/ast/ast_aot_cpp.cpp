@@ -3898,10 +3898,10 @@ namespace das {
 
     static void writeRegistration ( TextWriter &header, TextWriter &source, string initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
         source << "using namespace " << program->thisNamespace << ";\n";
-        dumpRegisterAot(source, program, context, true);
         {
             NamespaceGuard guard1(header, cfg.context_name);
             NamespaceGuard guard2(source, cfg.context_name);
+            dumpRegisterAot(source, program, context, true);
             writeStandaloneContext(program, das::move(initFunctions), header, source, cfg);
         }
     }
