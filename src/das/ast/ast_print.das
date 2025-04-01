@@ -644,6 +644,11 @@ class PrintVisitor : AstVisitor {
     def override preVisitExprArrayComprehensionWhere(expr : smart_ptr<ExprArrayComprehension>; filter : ExpressionPtr) {
         write(*writer, "; where ");
     }
+
+    def override preVisitExprTypeDecl(var expr : smart_ptr<ExprTypeDecl>) {
+        write(*writer, "type<{describe(expr.typeexpr)}>")
+    }
+
 // type info
     def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) {
         write(*writer, "typeinfo({expr.trait}");
@@ -820,7 +825,11 @@ class PrintVisitor : AstVisitor {
     }
 // const ptr
     def override preVisitExprConstPtr(expr : smart_ptr<ExprConstPtr>) : void {
-        write(*writer, "{expr.value}");
+        if (expr.value != null) {
+            write(*writer, "{expr.value}");
+        } else {
+            write(*writer, "null");
+        }
     }
 // const int 8
     def override preVisitExprConstInt8(expr : smart_ptr<ExprConstInt8>) : void {
