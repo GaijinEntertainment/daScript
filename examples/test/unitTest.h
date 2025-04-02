@@ -5,6 +5,8 @@
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/jit_abi.h"
 
+#include "bytecode.h"
+
 enum class SomeEnum {
     zero
 ,   one
@@ -42,6 +44,8 @@ enum SomeEnum_16 : int16_t {
 ,   SomeEnum_16_two  = 2
 };
 DAS_BIND_ENUM_CAST_98(SomeEnum_16);
+
+DAS_BIND_ENUM_CAST_98(OpCode);
 
 Goo::GooEnum efn_flip ( Goo::GooEnum goo );
 SomeEnum efn_takeOne_giveTwo ( SomeEnum one );
