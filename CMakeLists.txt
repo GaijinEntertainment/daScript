@@ -950,6 +950,8 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_IN
 # Test module
 
 SET(TEST_MAIN_LIB_SRC
+examples/test/bytecode.cpp
+examples/test/bytecode.h
 examples/test/test_handles.cpp
 examples/test/test_enum.cpp
 examples/test/module_unitTest.h
