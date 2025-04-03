@@ -628,7 +628,7 @@ namespace das {
     }
 
     template <typename TT>
-    struct das_index<TT, std::enable_if_t<std::is_base_of_v<std::vector<typename TT::value_type>, TT>>>
+    struct das_index<TT, enable_if_t<is_base_of_v<vector<typename TT::value_type>, TT>>>
         : das_default_vector_index<vector<typename TT::value_type>, typename TT::value_type> {};
 
     template <typename TT, typename VecT, uint32_t size>
