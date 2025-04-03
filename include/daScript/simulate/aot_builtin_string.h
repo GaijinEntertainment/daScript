@@ -136,7 +136,7 @@ namespace das {
         block(writer);
         auto length = writer.tellp();
         if ( length > INT32_MAX ) {
-            context->throw_error_at(at, "string too long", "builtin_build_string_T", 0);
+            context->throw_error_at(at, "string is too long (%llu characters)", length);
             return nullptr;
         }
         if ( length ) {
