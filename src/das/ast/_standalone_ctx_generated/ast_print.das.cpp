@@ -1,5 +1,4 @@
 #include "daScript/simulate/standalone_ctx_utils.h"
-#include "ast_print.das.h"
  // require builtin
  // require strings
 #include "daScript/simulate/aot_builtin_string.h"
@@ -13,6 +12,7 @@
 #include "daScript/ast/ast_generate.h"
  // require ast_boost
  // require strings_boost
+#include "ast_print.das.h"
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -10353,6 +10353,7 @@ inline Foo Foo_46f8336e7cdf367e ( Context * __context__ )
 }
 } // namespace _anon_17708654806632471084
 using namespace _anon_17708654806632471084;
+namespace ast_print {
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x610287470c2694f5] = +[](Context & ctx) -> SimNode* { // _FuncbuiltinTickresizeTick4811697762258667383_b41891d6947bf290
@@ -11009,7 +11010,6 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 };
 
 AotListBase impl(registerAotFunctions);
-namespace ast_print {
 auto Standalone::allExpr ( int32_t arg ) -> void {
     return allExpr_8a7b6e4c88b9587e(this, arg);
 }
