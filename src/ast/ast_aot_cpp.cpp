@@ -108,8 +108,8 @@ namespace das {
         }
     }
 
-    template <typename K, typename V>
-    static vector<pair<K, V>> ordered(const das_hash_map<K, V> &unsorted_map) {
+    template <typename K, typename V, typename Comparator = std::less<K>>
+    static vector<pair<K, V>> ordered(const das_hash_map<K, V> &unsorted_map, Comparator cmp = {}) {
         vector<pair<K, V>> sorted_vector(unsorted_map.begin(), unsorted_map.end());
 
         // Sort the vector by key
@@ -3775,7 +3775,10 @@ namespace das {
 
     static void writeRequiredModulesFor ( TextWriter &ss, Module * mod ) {
         // lets comment on required modules
-        for ( auto [req, pub] : ordered(mod->requireModule) ) {
+        auto ptr_cmp = [](const Module* lhs, const Module* rhs) {
+            return lhs->name < rhs->name;
+        };
+        for ( auto [req, pub] : ordered(mod->requireModule, ptr_cmp) ) {
             if ( req->name.empty() ) {
                 // nothing, its main program module. i.e ::
             } else {
@@ -3838,14 +3841,18 @@ namespace das {
             if ( pm == program->thisModule.get() ) {
                 continue;
             }
+            das_hash_map<string, EnumerationPtr> enums;
             pm->enumerations.foreach([&](auto penum){
+                enums.emplace(penum->name, penum);
+            });
+            for (const auto &[name, penum]: ordered(enums)) {
                 auto pe = penum.get();
                 if ( !remUS || utm.useEnums.find(pe)!=utm.useEnums.end() ) {
                     program->visitEnumeration(aotVisitor, pe);
                 } else {
-                    aotVisitor.ss << "// unused enumeration " << pe->name << "\n";
+                    aotVisitor.ss << "// unused enumeration " << name << "\n";
                 }
-            });
+            }
             pm->structures.foreach([&](auto ps){
                 if ( !remUS || utm.useStructs.find(ps.get())!=utm.useStructs.end() ) {
                     program->visitStructure(aotVisitor, ps.get());
