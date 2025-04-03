@@ -7,6 +7,7 @@ namespace das {
 enum class OpCode : uint8_t {   // only used op-codes for now
     op_nop,
     op_mov_a_arg,
+    op_mov_arg_b,
     op_dec_a,
     op_cmple_a_low_zx,
     op_cjmp,
