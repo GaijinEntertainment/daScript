@@ -28,7 +28,7 @@ namespace das {
 
 DAS_BASE_BIND_ENUM_98(SomeEnum_16, SomeEnum_16, SomeEnum_16_zero, SomeEnum_16_one, SomeEnum_16_two)
 
-DAS_BASE_BIND_ENUM_98(OpCode, OpCode, op_nop, op_mov_a_arg, op_dec_a, op_cmple_a_low_zx, op_cjmp, op_mov_c_a, op_mov_a_low_zx, op_mov_b_low_zx, op_xchange_a_b, op_add_b_a, op_loop, op_return_b)
+DAS_BASE_BIND_ENUM_98(OpCode, OpCode, op_nop, op_mov_a_arg, op_mov_arg_b, op_dec_a, op_cmple_a_low_zx, op_cjmp, op_mov_c_a, op_mov_a_low_zx, op_mov_b_low_zx, op_xchange_a_b, op_add_b_a, op_loop, op_return_b)
 
 //sample of your engine annotated struct
 MAKE_TYPE_FACTORY(TestObjectSmart,TestObjectSmart)
