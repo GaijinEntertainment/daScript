@@ -20,6 +20,7 @@
 #endif
 
 namespace das {
+    struct FStat;
     class Context;
     struct Block;
     struct SimNode_CallBase;
