@@ -696,13 +696,21 @@ def private walk_and_convert_table(data : uint8 const?; info : TypeDeclPtr; at :
 
 def private walk_and_convert_basic(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     unsafe {
-        if (info.baseType == Type.tInt) {
+        if (info.baseType == Type.tInt8) {
+            return new ExprConstInt8(at = at, value = *reinterpret<int8?> data)
+        } elif (info.baseType == Type.tInt16) {
+            return new ExprConstInt16(at = at, value = *reinterpret<int16?> data)
+        } elif (info.baseType == Type.tInt) {
             return new ExprConstInt(at = at, value = *reinterpret<int?> data)
-        } elif (info.baseType == Type.tUInt) {
-            return new ExprConstUInt(at = at, value = *reinterpret<uint?> data)
         } elif (info.baseType == Type.tInt64) {
             return new ExprConstInt64(at = at, value = *reinterpret<int64?> data)
-        } elif (info.baseType == Type.tUInt64) {
+        } elif (info.baseType == Type.tUInt8) {
+            return new ExprConstUInt8(at = at, value = *reinterpret<uint8?> data)
+        } elif (info.baseType == Type.tUInt16) {
+            return new ExprConstUInt16(at = at, value = *reinterpret<uint16?> data)
+        } elif (info.baseType == Type.tUInt) {
+            return new ExprConstUInt(at = at, value = *reinterpret<uint?> data)
+        }  elif (info.baseType == Type.tUInt64) {
             return new ExprConstUInt64(at = at, value = *reinterpret<uint64?> data)
         } elif (info.baseType == Type.tFloat) {
             return new ExprConstFloat(at = at, value = *reinterpret<float?> data)
