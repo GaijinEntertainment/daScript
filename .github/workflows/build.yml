@@ -165,8 +165,12 @@ jobs:
                 cd build
                 ninja
                 ;;
-              windows*)
+              windows32)
                 cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --build ./build --config ${{ matrix.cmake_preset }}
+                ;;
+              windows64)
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }}
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               *)
