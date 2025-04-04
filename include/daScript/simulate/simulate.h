@@ -532,8 +532,14 @@ namespace das
         void runInitScript ();
         bool runShutdownScript ();
 
-        virtual void to_out ( const LineInfo * at, const char * message );   // output to stdout or equivalent
-        virtual void to_err ( const LineInfo * at, const char * message );   // output to stderr or equivalent
+        virtual void to_out ( const LineInfo * at, int level, const char * message );   // output to stdout or equivalent
+        void to_out ( const LineInfo * at, const char * message ) {
+            to_out(at, LogLevel::defaultPrint, message);
+        }
+        virtual void to_err ( const LineInfo * at, const char * message ) {
+            // output to stderr or equivalent
+            to_out(at, LogLevel::error, message);
+        }
         virtual void breakPoint(const LineInfo & info, const char * reason = "breakpoint", const char * text = ""); // what to do in case of breakpoint
 
         __forceinline vec4f * abiArguments() {

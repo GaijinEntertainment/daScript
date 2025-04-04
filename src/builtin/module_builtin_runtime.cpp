@@ -1428,7 +1428,7 @@ namespace das
     }
 
     void toLog ( int level, const char * text, Context * context, LineInfoArg * at ) {
-        logger(level, getLogMarker(level), text, context, at);
+        context->to_out(at, level, text);
     }
 
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at ) {
