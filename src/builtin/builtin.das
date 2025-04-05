@@ -710,7 +710,6 @@ def get(var Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk :
 }
 
 def get(var Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : block<(var p : valT[typeinfo dim(Tab[type<keyT>])]&) : void>) {
-    print("this one\n")
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)

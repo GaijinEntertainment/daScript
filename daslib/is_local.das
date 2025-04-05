@@ -11,6 +11,29 @@ require rtti
 require daslib/ast_boost
 require strings
 
+def is_temp_safe(expr : ExpressionPtr) : bool {
+    //! Returns true if the exression had no calls, [] or table [] operators of any kind.
+    //! This is used to check expression can be safely casted to temp type.
+    if (expr is ExprVar) {
+        return (expr as ExprVar).varFlags.local // local variables are ok
+    } elif (expr is ExprAt) {
+        let ea = expr as ExprAt
+        if (ea.subexpr._type != null && ea.subexpr._type.dim |> length != 0) {
+            return is_temp_safe(ea.subexpr)
+        }
+    } elif (expr is ExprField) {
+        let ef = expr as ExprField
+        if (!(ef.value._type.baseType == Type.tHandle) || (ef.value._type.isLocal)) {
+            return is_temp_safe(ef.value)
+        }
+    } elif (expr is ExprSwizzle) {
+        return is_temp_safe((expr as ExprSwizzle).value)    // we can do swizzle on result
+    } elif (expr is ExprCall) {
+        return expr._type.isRef                             // we get to foo() which returns something &
+    }
+    return false;
+}
+
 def is_shared_expr(expr : ExpressionPtr) {
     //! Returns true if the expression is local to the current scope.
     if (expr is ExprVar) {

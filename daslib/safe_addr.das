@@ -80,6 +80,33 @@ class SharedAddrMacro : AstFunctionAnnotation {
     }
 }
 
+[tag_function(temp_value_tag)]
+def public temp_value(x : auto(T)& ==const) : T&# const {
+    //! returns temporary pointer to the given expression
+    unsafe {
+        return reinterpret<T&# const>(x)
+    }
+}
+
+[tag_function(temp_value_tag)]
+def public temp_value(var x : auto(T)& ==const) : T&# {
+    //! returns temporary pointer to the given expression
+    unsafe {
+        return reinterpret<T&#>(x)
+    }
+}
+
+[tag_function_macro(tag="temp_value_tag")]
+class TempValueMacro : AstFunctionAnnotation {
+    //! This macro reports an error if temp_value is attempted outside of function arguments.
+    def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+        if (is_temp_safe(call.arguments[0])) {
+            return true
+        }
+        compiling_program() |> macro_error(call.at, "{describe(call.arguments[0])} can't be simply promoted to temp value")
+        return false
+    }
+}
 
 /*
 
