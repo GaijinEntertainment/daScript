@@ -11,7 +11,7 @@ require rtti
 require daslib/ast_boost
 require strings
 
-def is_temp_safe(expr:ExpressionPtr) : bool {
+def is_temp_safe(expr : ExpressionPtr) : bool {
     //! Returns true if the exression had no calls, [] or table [] operators of any kind.
     //! This is used to check expression can be safely casted to temp type.
     if (expr is ExprVar) {

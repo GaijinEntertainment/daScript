@@ -99,7 +99,7 @@ def public temp_value(var x : auto(T)& ==const) : T&# {
 [tag_function_macro(tag="temp_value_tag")]
 class TempValueMacro : AstFunctionAnnotation {
     //! This macro reports an error if temp_value is attempted outside of function arguments.
-    def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool {
+    def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         if (is_temp_safe(call.arguments[0])) {
             return true
         }
