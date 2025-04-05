@@ -26,6 +26,10 @@ namespace das {
             if ( sw->value ) {
                 return isLocalOrGlobal(sw->value);
             }
+        } else if ( expr->rtti_isCallLikeExpr() ) {
+            if ( expr->type && expr->type->ref ) {
+                return true;
+            }
         }
         return false;
     }
