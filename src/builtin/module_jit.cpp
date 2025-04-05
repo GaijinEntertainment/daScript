@@ -396,11 +396,11 @@ extern "C" {
         char cmd[1024];
 
         if (!check_file_present(jitModuleObj)) {
-            das_to_stderr("Error: File '%s', containing daScript library, does not exist\n", jitModuleObj);
+            LOG(LogLevel::error) << "File '" << jitModuleObj << "' , containing daScript library, does not exist\n";
             return;
         }
         if (!check_file_present(objFilePath)) {
-            das_to_stderr("Error: File '%s', containing compiled definitions, does not exist\n", objFilePath);
+            LOG(LogLevel::error) << "File '" << objFilePath << "' , containing compiled definitions, does not exist\n";
             return;
         }
 
@@ -420,7 +420,7 @@ extern "C" {
 
         FILE * fp = popen(cmd, "r");
         if ( fp == NULL ) {
-            das_to_stderr("Failed to run command '%s'\n", cmd);
+            LOG(LogLevel::error) << "Failed to run command '" << cmd << "'\n";
             return;
         }
 
@@ -444,10 +444,10 @@ extern "C" {
         }
 
         if ( int status = pclose(fp); status != 0 ) {
-            das_to_stderr("Failed to make shared library %s, command '%s'\n", libraryName, cmd);
+            LOG(LogLevel::error) << "Failed to make shared library " << libraryName << ", command '" << cmd << "'\n";
             printf("Output:\n%s", output);
         } else {
-            das_to_stdout("Library %s made - ok\n", libraryName);
+            LOG(LogLevel::debug) << "Library " << libraryName << " made - ok\n";
         }
     }
 #else

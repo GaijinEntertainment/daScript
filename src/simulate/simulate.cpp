@@ -1706,11 +1706,7 @@ namespace das
             any |= pAgent->onLog(context, at, level, text);
         });
         if ( !any ) {
-            if ( level>=LogLevel::warning ) {
-                das_to_stderr("%s%s", prefix, text);
-            } else {
-                das_to_stdout("%s%s", prefix, text);
-            }
+            das_to_stdout_level_prefix_text(level, prefix, text);
         }
     }
 
@@ -1833,15 +1829,10 @@ namespace das
         os_debug_break();
     }
 
-    void Context::to_out ( const LineInfo *, const char * message ) {
+    void Context::to_out ( const LineInfo *, int level, const char * message ) {
         if (message) {
-            das_to_stdout("%s", message);
-        }
-    }
-
-    void Context::to_err ( const LineInfo *, const char * message ) {
-        if (message) {
-            das_to_stderr("%s", message);
+            const char * prefix = getLogMarker(level);
+            das_to_stdout_level_prefix_text(level, prefix, message);
         }
     }
 

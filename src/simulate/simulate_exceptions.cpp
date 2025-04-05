@@ -58,8 +58,7 @@ namespace das {
 #endif
             longjmp(*throwBuf,1);
         } else {
-            to_err(&at, "\nunhandled exception\n");
-            string msg = exceptionAt.describe() + ": " + exception;
+            string msg = "\nunhandled exception\n" + exceptionAt.describe() + ": " + exception;
             to_err(&at, msg.c_str());
             stackWalkToErr(*this, at, showArgumentsOnException, showLocalVariablesOnException);
             breakPoint(at, "exception", exception);
@@ -83,11 +82,11 @@ namespace das {
 
             longjmp(*throwBuf,1);
         } else {
-            to_err(nullptr, "\nunhandled exception\n");
             if ( exception ) {
-                string msg = exceptionAt.describe() + ": " + exception;
+                string msg = "\nunhandled exception\n" + exceptionAt.describe() + ": " + exception + "\n";
                 to_err(nullptr, msg.c_str());
-                to_err(nullptr, "\n");
+            } else {
+                to_err(nullptr, "\nunhandled exception\n");
             }
             stackWalk(nullptr, false, false);
             os_debug_break();
