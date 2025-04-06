@@ -16,6 +16,8 @@ namespace das {
     typedef vector<Function *>  MatchingFunctions;
     class CaptureLambda : public Visitor {
     public:
+        CaptureLambda() = delete;
+        CaptureLambda ( bool cm ) : inClassMethod(cm) {}
         virtual void preVisit ( ExprVar * expr ) override {
             if ( !expr->type ) {    // trying to capture non-inferred section
                 fail = true;
@@ -33,9 +35,16 @@ namespace das {
                 }
             }
         }
+        virtual void preVisit ( ExprCall * expr ) override {
+            if ( inClassMethod && !expr->type ) {   // the idea is if call is not resolved and its a class method
+                fail = true;                        // it could be self.call, so we need to wait til its resolved
+                return;
+            }
+        }
         das_hash_set<VariablePtr, smart_ptr_hash> scope;
         safe_var_set                              capt;
         bool                                      fail = false;
+        bool                                      inClassMethod = false;
     };
 
 // type inference
@@ -3115,7 +3124,7 @@ namespace das {
                             expr->at, CompilationError::invalid_argument_type);
                     } else {
                         // TODO: check validity of the generator type
-                        CaptureLambda cl;
+                        CaptureLambda cl(func && func->isClassMethod);
                         // we can only capture in-scope variables
                         // i.e stuff BEFORE the scope
                         for ( auto & lv : local )
@@ -3262,7 +3271,7 @@ namespace das {
                     error("can't infer lambda block type",  "", "",
                         expr->at, CompilationError::invalid_block);
                 } else {
-                    CaptureLambda cl;
+                    CaptureLambda cl(func && func->isClassMethod);
                     // we can only capture in-scope variables
                     // i.e stuff BEFORE the scope
                     for ( auto & lv : local )
