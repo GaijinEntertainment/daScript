@@ -128,6 +128,7 @@ namespace das {
 
         // DEBUG - information useful for application developers. (DEBUG is defaut level)
         debug       = 10000,
+        defaultPrint = debug,
 
         // TRACE - information useful for developers of subsystems, libraries, daScript etc.
         // For example: application activation/deactivation, key pressed, texture loaded from a file, sound file loaded.
