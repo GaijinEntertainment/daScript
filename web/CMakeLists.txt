@@ -634,7 +634,7 @@ ADD_DEPENDENCIES(libDaScript need_and_resolve)
 ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC
     ${DAS_SMMALLOC_DIR}
-    ${CMAKE_SOURCE_DIR}/../3rdparty/uriparser/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/uriparser/include
 )
 target_link_libraries(libDaScript libUriParser)
 IF(LINUX_UUID)

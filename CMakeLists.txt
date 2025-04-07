@@ -720,7 +720,7 @@ ADD_DEPENDENCIES(libDaScript need_and_resolve)
 ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC
     ${DAS_SMMALLOC_DIR}
-    ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include
     ${CMAKE_SOURCE_DIR}/include
 )
 target_link_libraries(libDaScript libUriParser)
@@ -748,8 +748,8 @@ ADD_DEPENDENCIES(libDaScriptStandalone standaloneGenerated)
 ADD_PROJECT_XXD_DEPENDS(libDaScriptStandalone)
 target_include_directories(libDaScriptStandalone PUBLIC
         ${DAS_SMMALLOC_DIR}
-        ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
-        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 target_compile_definitions(libDaScriptStandalone PUBLIC STANDALONE_MODE)
 target_link_libraries(libDaScriptStandalone libUriParser)
