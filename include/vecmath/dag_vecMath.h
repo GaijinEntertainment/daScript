@@ -198,27 +198,45 @@ VECTORCALL VECMATH_FINLINE vec4i v_cvt_byte_vec4i(uint32_t a);
 
 //! converts float vector to 4 halfs and stores(unaligned)
 VECTORCALL VECMATH_FINLINE void v_float_to_half(uint16_t* __restrict m, const vec4f v);
-//! unpacks 4 halfs into float vector. handles denorms, do not handles infs and nans
+//! unpacks 4 halfs into float vector. handles denorms, does not nesessarily (platform dependent) handles infs and nans
 VECTORCALL VECMATH_FINLINE vec4f v_half_to_float(vec4i m);
 //! unpacks 4 halfs into float vector. handles denorms, infs and nans
 VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_specials(vec4i m);
+//! unpacks 4 halfs from lo 64 bits of vec4i (.xy)into float vector. handles denorms, does not nesessarily handles infs and nans
+VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_lo(vec4i m);
+//! unpacks 4 halfs from lo 64 bits of vec4i (.xy)into float vector. handles denorms, infs and nans
+VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_specials_lo(vec4i m);
 //! reads(unaligned) and unpacks 4 halfs into float vector
 VECTORCALL VECMATH_FINLINE vec4f v_half_to_float(const uint16_t* __restrict m);
 //! reads(unaligned) and unpacks 4 halfs into float vector
 VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_specials(const uint16_t* __restrict m);
 
-//! converts float vector to 4 halfs (lower 16 bits of vec4i), doesn't round correctly
+//! converts float vector to 4 halfs (lower 16 bits of vec4i), truncates to zero, doesn't nesessarily handle specials
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_trunc(vec4f v);
+//! converts float vector to 4 halfs (lower 16 bits of vec4i), truncates to zero, doesn't nesessarily handle specials
 VECTORCALL VECMATH_FINLINE vec4i v_float_to_half(vec4f v);
 //handles infs/nans, doesn't round correctly
-//it (incorrectly) translates some of sNaNs into infinity, so be careful!
+//it may (incorrectly) translates some of sNaNs into infinity, depending on platform, so be careful!
 VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_specials(vec4f f);
 
-// round-to-nearest-even, doesn't handle NANs
+// round-to-nearest-even, doesn't nesessarily handle NANs
 VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_rtne(vec4f f);
-//! not check for NANs, result halves are always bigger than source
+//! does not nesessarily check for NANs, result halves are always bigger than source
 VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_up(vec4f a);
-//! not check for NANs, result halves are always smaller than source
+//! does not nesessarily check for NANs, result halves are always smaller than source
 VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_down(vec4f a);
+
+//! converts float vector to 4 halfs (lower 64 bits of vec4i, to .xy), truncates to zero, doesn't nesessarily handle specials
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_trunc_lo(vec4f v);
+//handles infs/nans, truncates
+//it may (incorrectly) translates some of sNaNs into infinity, so be careful!
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_specials_lo(vec4f f);
+// round-to-nearest-even, doesn't handle NANs
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_rtne_lo(vec4f f);
+//! not check for NANs, result halves are always bigger than source
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_up_lo(vec4f a);
+//! not check for NANs, result halves are always smaller than source
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_down_lo(vec4f a);
 
 //! pack float vector to 4 bytes with saturation
 VECMATH_FINLINE uint32_t v_float_to_byte ( vec4f x );
@@ -238,14 +256,20 @@ VECTORCALL VECMATH_FINLINE vec4i v_cvt_ceili(vec4f a);
 //! round to smallest integer (result remains int)
 VECTORCALL VECMATH_FINLINE vec4i v_cvt_floori(vec4f a);
 
-//! round to nearest integer (result remains int)
+//! round to nearest integer like roundf (result remains int)
 VECTORCALL VECMATH_FINLINE vec4i v_cvt_roundi(vec4f a);
+
+//! round to nearest even integer (result remains int)
+VECTORCALL VECMATH_FINLINE vec4i v_cvt_roundi_ieee(vec4f a);
 
 //! round to zero (result remains int)
 VECTORCALL VECMATH_FINLINE vec4i v_cvt_trunci(vec4f a);
 
-//! round to nearest integer (result remains fp)
+//! round to nearest integer like roundf (result remains fp)
 VECTORCALL VECMATH_FINLINE vec4f v_round(vec4f a);
+
+//! round to nearest even integer (result remains fp)
+VECTORCALL VECMATH_FINLINE vec4f v_round_ieee(vec4f a);
 
 //! round to zero (result remains fp)
 VECTORCALL VECMATH_FINLINE vec4f v_trunc(vec4f a);

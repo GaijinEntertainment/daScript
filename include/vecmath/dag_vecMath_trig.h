@@ -53,12 +53,12 @@
 
 VECTORCALL VECMATH_FINLINE vec4f v_deg_to_rad(vec4f deg)
 {
-  return v_mul(deg, v_splats(float(M_PI / 180.0)));
+  return v_mul(deg, v_splats(float(/*M_PI*/ 3.14159265358979323846 / 180.0)));
 }
 
 VECTORCALL VECMATH_FINLINE vec4f v_rad_to_deg(vec4f rad)
 {
-  return v_mul(rad, v_splats(float(180.0 / M_PI)));
+  return v_mul(rad, v_splats(float(180.0 / /*M_PI*/ 3.14159265358979323846)));
 }
 
 VECTORCALL VECMATH_FINLINE vec4f v_norm_s_angle(vec4f angle)
@@ -90,23 +90,23 @@ VECTORCALL VECMATH_FINLINE vec4f v_sin_from_cos_x(vec4f c) { return v_sqrt_x(v_s
 VECTORCALL VECMATH_FINLINE vec4f v_cos_from_sin_x(vec4f s) { return v_sin_from_cos_x(s); }
 
 // calculates 4 in ~2.14x speed of win libc implementation for 1, with same precision
-VECTORCALL VECMATH_FINLINE void v_sincos(vec4f ang, vec4f& s, vec4f& c)
+VECTORCALL VECMATH_FINLINE void v_sincos(vec4f x, vec4f& s, vec4f& c)
 {
   vec4f xl, xl2, xl3;
   vec4i q;
   vec4i offsetSin, offsetCos;
   vec4f vzero = v_zero();
 
-  xl = v_mul(ang, V_C_2_DIV_PI);
-  xl = v_add(xl, v_btsel(V_C_HALF, ang, v_msbit()));
+  xl = v_mul(x, V_C_2_DIV_PI);
+  xl = v_add(xl, v_btsel(V_C_HALF, x, v_msbit()));
 
   q = v_cvt_vec4i(xl);
 
   offsetSin = v_andi(q, V_CI_3);
   offsetCos = v_addi(V_CI_1, offsetSin);
 
-  vec4f qf = v_cvt_vec4f(q);
-  vec4f p1 = v_nmsub(qf, v_splats(_SINCOS_KC1), ang);
+  vec4f qf = v_trunc(xl);
+  vec4f p1 = v_nmsub(qf, v_splats(_SINCOS_KC1), x);
   xl = v_nmsub(qf, v_splats(_SINCOS_KC2), p1);
 
   xl2 = v_mul(xl, xl);

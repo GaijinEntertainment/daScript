@@ -205,8 +205,8 @@ VECTORCALL VECMATH_FINLINE vec4i v_cvt_ceili(vec4f a)
   return (vec4i)v_sel((vec4f)xi, (vec4f)xi1, v_cmp_gt(a, v_cvt_vec4f(xi)));
 }
 
-VECTORCALL VECMATH_FINLINE vec4f v_round(vec4f a) { return v_floor(v_add(a, V_C_HALF)); }
-VECTORCALL VECMATH_FINLINE vec4i v_cvt_roundi(vec4f a) { return v_cvt_floori(v_add(a, V_C_HALF)); }
+VECTORCALL VECMATH_FINLINE vec4f v_round_ieee(vec4f a) { return vcvtq_f32_s32(vcvtnq_s32_f32(a)); }
+VECTORCALL VECMATH_FINLINE vec4i v_cvt_roundi_ieee(vec4f a) { return vcvtnq_s32_f32(a); }
 
 VECTORCALL VECMATH_FINLINE vec4f v_add(vec4f a, vec4f b) { return vaddq_f32(a, b); }
 VECTORCALL VECMATH_FINLINE vec4f v_sub(vec4f a, vec4f b) { return vsubq_f32(a, b); }
@@ -1146,3 +1146,11 @@ VECTORCALL VECMATH_FINLINE vec4i v_packus16(vec4i a)
   uint8x8_t t = vqmovun_s16(vreinterpretq_s16_s32(a));
   return vreinterpretq_s32_u8(vcombine_u8(t,t));
 }
+
+// todo: implement this on NEON (it is vcvt_f16_f32/vcvt_f32_f16 instructions)
+// if it is faster, #define _TARGET_HAS_FC16 1
+VECTORCALL VECMATH_FINLINE vec4f v_fc16_half_to_float(vec4i f) {return v_half_to_float(f);}
+VECTORCALL VECMATH_FINLINE vec4i v_fc16_float_to_half_trunc(vec4f f) {return v_float_to_half_trunc(f);}
+VECTORCALL VECMATH_FINLINE vec4i v_fc16_float_to_half_rtne(vec4f f) {return v_float_to_half_rtne(f);}
+VECTORCALL VECMATH_FINLINE vec4i v_fc16_float_to_half_up(vec4f f) {return v_float_to_half_up(f);}
+VECTORCALL VECMATH_FINLINE vec4i v_fc16_float_to_half_down(vec4f f) {return v_float_to_half_down(f);}

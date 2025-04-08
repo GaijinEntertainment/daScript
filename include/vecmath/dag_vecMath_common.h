@@ -5,11 +5,6 @@
 #pragma once
 
 #include "dag_vecMath.h"
-#ifdef __cplusplus
-#include <cmath> //for fabsf, which is used once, and not wise
-#else
-#include <math.h>
-#endif
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -81,6 +76,20 @@ VECTORCALL VECMATH_FINLINE vec4f v_clamp(vec4f t, vec4f min_val, vec4f max_val)
 VECTORCALL VECMATH_FINLINE vec4i v_clampi(vec4i t, vec4i min_val, vec4i max_val)
 {
   return v_maxi(v_mini(t, max_val), min_val);
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_round(vec4f a)
+{
+  vec4f offset = v_btsel(V_C_HALF, a, V_CI_SIGN_MASK);
+  vec4f adjusted = v_add(a, offset);
+  return v_trunc(adjusted);
+}
+
+VECTORCALL VECMATH_FINLINE vec4i v_cvt_roundi(vec4f a)
+{
+  vec4f offset = v_btsel(V_C_HALF, a, V_CI_SIGN_MASK);
+  vec4f adjusted = v_add(a, offset);
+  return v_cvt_trunci(adjusted);
 }
 
 VECTORCALL VECMATH_FINLINE vec4f v_cmp_relative_equal(vec4f a, vec4f b, vec4f max_diff, vec4f max_rel_diff)
@@ -335,7 +344,11 @@ VECTORCALL VECMATH_FINLINE vec4f v_remove_nan(vec4f a)
 VECTORCALL VECMATH_FINLINE vec4f v_is_nan(vec4f a)
 {
   volatile vec4f v = a;
+#if !defined(_MSC_VER) || defined(__clang__)
+  return v_cmp_neq(a, v);
+#else
   return v_cmp_neq(a, (vec4f &)v);
+#endif
 }
 // Note: intentionally not const since some compliers (e.g. clang>=19) optimizes it off otherwise
 alignas(16) inline volatile int __infMask[4] = {0x7F800000, 0x7F800000, 0x7F800000, 0x7F800000};
@@ -1408,8 +1421,7 @@ VECTORCALL inline quat4f v_quat_slerp(vec4f t, quat4f a, quat4f b)
 VECTORCALL VECMATH_FINLINE quat4f v_quat_qslerp(float t, quat4f l, quat4f r)
 {
   float ca = v_extract_x(v_dot4_x(l, r));
-  //todo: vectorize
-  float d = fabsf(ca);
+  float d = v_extract_x(v_abs(v_set_x(ca)));
   float k = 0.931872f + d * (-1.25654f + d * 0.331442f);
   float ot = t + t * (t - 0.5f) * (t - 1) * k;
 
@@ -2871,11 +2883,32 @@ VECTORCALL VECMATH_FINLINE vec4f distance_to_seg_x(vec3f point, vec3f a, vec3f b
 }
 
 
+#if _TARGET_HAS_FC16
+// always use faster conversions on AVX2 (there are no HW which has AVX2 and no FC16 intrinsics)
+// tunc is most closer in results to v_float_to_half
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half(vec4f a) {return v_fc16_float_to_half_trunc(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_trunc(vec4f a) {return v_fc16_float_to_half_trunc(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_specials(vec4f a) {return v_fc16_float_to_half_trunc(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_rtne(vec4f a) {return v_fc16_float_to_half_rtne(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_up(vec4f a) {return v_fc16_float_to_half_up(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_down(vec4f a) {return v_fc16_float_to_half_down(a);}
+
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_trunc_lo(vec4f a) {return v_fc16_float_to_half_trunc_lo(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_specials_lo(vec4f a) {return v_fc16_float_to_half_trunc_lo(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_rtne_lo(vec4f a) {return v_fc16_float_to_half_rtne_lo(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_up_lo(vec4f a) {return v_fc16_float_to_half_up_lo(a);}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_down_lo(vec4f a) {return v_fc16_float_to_half_down_lo(a);}
+
+VECTORCALL VECMATH_FINLINE vec4f v_half_to_float(vec4i a) {return v_fc16_half_to_float(a);}
+VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_specials(vec4i a) {return v_fc16_half_to_float(a);}
+VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_lo(vec4i a) {return v_fc16_half_to_float_lo(a);}
+VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_specials_lo(vec4i a) {return v_fc16_half_to_float_lo(a);}
+#else
+
 //https://fgiesen.wordpress.com/2012/03/28/half-to-float-done-quic/
 //https://gist.github.com/rygorous/2156668
-
-//doesn't round correctly
-VECTORCALL VECMATH_FINLINE vec4i v_float_to_half(vec4f f)
+//doesn't round correctly, basically truncs to zero
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_trunc(vec4f f)
 {
   vec4i mask_fabs  = v_splatsi(0x7fffffff);
   vec4i c_f16max   = v_splatsi((127 + 16) << 23);
@@ -2898,7 +2931,9 @@ VECTORCALL VECMATH_FINLINE vec4i v_float_to_half(vec4f f)
   return final;
 }
 
-//handles infs/nans, doesn't round correctly
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half(vec4f f) {return v_float_to_half_trunc(f);}
+
+//handles infs/nans, doesn't round correctly (truncs)
 //it (incorrectly) translates some of sNaNs into infinity, so be careful!
 VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_specials(vec4f f)
 {
@@ -2976,12 +3011,6 @@ VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_rtne(vec4f f)
   return final;
 }
 
-VECTORCALL VECMATH_FINLINE void v_float_to_half(uint16_t* __restrict m, const vec4f v)
-{
-  v_stui_half(m, v_packus(v_float_to_half(v)));
-}
-
-
 VECTORCALL VECMATH_FINLINE vec4f v_half_to_float(vec4i h)
 {
   const vec4f magic = v_cast_vec4f(v_splatsi((254 - 15) << 23));
@@ -3000,6 +3029,16 @@ VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_specials(vec4i h)
   return v_or(of, v_cast_vec4f(v_sll(v_srl(h, 15), 31)));
 }
 
+VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_lo(vec4i a)
+{
+  return v_half_to_float(v_cvt_lo_ush_vec4i(a));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_half_to_float_specials_lo(vec4i a)
+{
+  return v_half_to_float_specials(v_cvt_lo_ush_vec4i(a));
+}
+
 //not checking for NANs
 VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_up(vec4f a)
 {
@@ -3014,6 +3053,18 @@ VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_down(vec4f a)
   vec4i c = v_float_to_half(a);//
   vec4f incMask = v_cmp_gt(v_half_to_float(c), a);
   return v_btseli(c, v_addi(c, v_splatsi(1)), v_cast_vec4i(incMask));
+}
+
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_specials_lo(vec4f v) {return v_packus(v_float_to_half_specials(v));}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_trunc_lo(vec4f v) {return v_packus(v_float_to_half_trunc(v));}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_down_lo(vec4f v) {return v_packus(v_float_to_half_down(v));}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_up_lo(vec4f v) {return v_packus(v_float_to_half_up(v));}
+VECTORCALL VECMATH_FINLINE vec4i v_float_to_half_rtne_lo(vec4f v) {return v_packus(v_float_to_half_rtne(v));}
+#endif
+
+VECTORCALL VECMATH_FINLINE void v_float_to_half(uint16_t* __restrict m, const vec4f v)
+{
+  v_stui_half(m, v_float_to_half_trunc_lo(v));
 }
 
 VECTORCALL VECMATH_FINLINE vec4f v_half_to_float(const uint16_t* __restrict m)
