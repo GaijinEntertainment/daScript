@@ -194,7 +194,7 @@ vector<TestData> test_cases() {
             "def main() {\n"
             "    foo(123) $() {} \n"
             "}\n",
-            "def foo(x){}\n"
+            "def foo(x, y){}\n"
             "def main() {\n"
             "    foo(123, $() {}); \n"
             "}\n"
@@ -225,6 +225,18 @@ vector<TestData> test_cases() {
             "    assume x = 1",
             "def f() {\n"
             "    assume x = 1;\n"
+            "}",
+        },
+        {
+            "def main() {\n"
+            "    let x = 1\n"
+            "+\n"
+            "2;\n"
+            "}",
+            "def main() {\n"
+            "    let x = (1\n"
+            "+\n"
+            "2);\n"
             "}",
         },
 //        {
