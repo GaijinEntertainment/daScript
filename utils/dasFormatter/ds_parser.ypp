@@ -1847,11 +1847,10 @@ expr_type_info
     ;
 
 expr_list
-    :   expr_not_wrapped[subexpr] {
-        // We use `expr_not_wrapped` because expr_list already wrapped in some braces
+    :   expr[subexpr] {
         $$ = $subexpr;
     }
-    |   expr_list[left] ',' expr_not_wrapped[right]     {
+    |   expr_list[left] ',' expr[right]     {
             $$ = new ExprSequence(tokAt(scanner,@left),$left,$right);
     }
     ;
@@ -2196,14 +2195,7 @@ expr_call
     ;
 
 expr_not_wrapped
-    :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(scanner,@loc),nullptr); }
-    |   name_in_namespace[name]               { $$ = new ExprVar(tokAt(scanner,@name),*$name); delete $name; }
-    |   expr_numeric_const[nc]                { $$ = $nc; }
-    |   expr_reader[rdr]                      { $$ = $rdr; }
-    |   string_builder[sb]                    { $$ = $sb; }
-    |   make_decl[md]                         { $$ = $md; }
-    |   DAS_TRUE[loc]                         { $$ = new ExprConstBool(tokAt(scanner,@loc),true); }
-    |   DAS_FALSE[loc]                        { $$ = new ExprConstBool(tokAt(scanner,@loc),false); }
+    :   name_in_namespace[name]               { $$ = new ExprVar(tokAt(scanner,@name),*$name); delete $name; }
     |   expr_field[subexpr]                   { $subexpr->at = tokAt(scanner,@subexpr); $$ = $subexpr; }
     |   expr_mtag[subexpr]                    { $subexpr->at = tokAt(scanner,@subexpr); $$ = $subexpr; }
     |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"!",$subexpr); }
@@ -2241,6 +2233,34 @@ expr_not_wrapped
     |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"--", $subexpr); }
     |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokRangeAt(scanner,@subexpr, @loc),"+++", $subexpr); }
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokRangeAt(scanner,@subexpr, @loc),"---", $subexpr); }
+    |   expr[subexpr] '['[loc] expr[index] ']'[end]   { $$ = new ExprAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index); }
+    |   expr[subexpr] '.' '['[loc] expr[index] ']'[end]   { $$ = new ExprAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index, true); }
+    |   expr[subexpr] QBRA[loc] expr[index] ']'[end]  { $$ = new ExprSafeAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index); }
+    |   expr[subexpr] '.' QBRA[loc] expr[index] ']'[end]  { $$ = new ExprSafeAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index, true); }
+    |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokRangeAt(scanner,@subexpr,@name), tokAt(scanner,@name), $subexpr, *$name); delete $name; }
+    |   expr[subexpr] '.' QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokRangeAt(scanner,@subexpr,@name), tokAt(scanner,@name), $subexpr, *$name, true); delete $name; }
+    |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
+    |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
+            $$ = new ExprOp3(tokRangeAt(scanner,@subexpr, @right),"?",$subexpr,$left,$right);
+        }
+
+
+expr
+    :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(scanner,@loc),nullptr); }
+    | expr_not_wrapped[subexpr] {
+        // Сheck next token.
+        // If it's not ')', then we should try wrap it as multiple line expression.
+        if (yychar != ')') {
+            format::wrap_par_expr_newline(tokAt(scanner,@subexpr), $subexpr->at);
+        }
+        $$ = $subexpr;
+    }
+    |   expr_numeric_const[nc]                { $$ = $nc; }
+    |   expr_reader[rdr]                      { $$ = $rdr; }
+    |   string_builder[sb]                    { $$ = $sb; }
+    |   make_decl[md]                         { $$ = $md; }
+    |   DAS_TRUE[loc]                         { $$ = new ExprConstBool(tokAt(scanner,@loc),true); }
+    |   DAS_FALSE[loc]                        { $$ = new ExprConstBool(tokAt(scanner,@loc),false); }
     |   '(' expr_list[subexpr] optional_comma[comma] ')' {
             if ( $subexpr->rtti_isSequence() ) {
                 auto mkt = new ExprMakeTuple(tokAt(scanner,@subexpr));
@@ -2255,15 +2275,8 @@ expr_not_wrapped
                 $$ = $subexpr;
             }
         }
-    |   expr[subexpr] '['[loc] expr[index] ']'[end]   { $$ = new ExprAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index); }
-    |   expr[subexpr] '.' '['[loc] expr[index] ']'[end]   { $$ = new ExprAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index, true); }
-    |   expr[subexpr] QBRA[loc] expr[index] ']'[end]  { $$ = new ExprSafeAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index); }
-    |   expr[subexpr] '.' QBRA[loc] expr[index] ']'[end]  { $$ = new ExprSafeAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index, true); }
-    |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokRangeAt(scanner,@subexpr,@name), tokAt(scanner,@name), $subexpr, *$name); delete $name; }
-    |   expr[subexpr] '.' QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokRangeAt(scanner,@subexpr,@name), tokAt(scanner,@name), $subexpr, *$name, true); delete $name; }
     |   func_addr_expr[subexpr]                  { $$ = $subexpr; }
     |   expr_call[call] { $$ = $call; }
-    |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
     |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
     |   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(scanner,@loc),$subexpr); }
     |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' ')' {
@@ -2273,9 +2286,6 @@ expr_not_wrapped
         $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc));
     }
     |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokRangeAt(scanner,@subexpr, @dval),$subexpr,$dval); }
-    |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
-            $$ = new ExprOp3(tokRangeAt(scanner,@subexpr, @right),"?",$subexpr,$left,$right);
-        }
     |   expr[subexpr] DAS_IS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>'[end] { yyextra->das_arrow_depth --; } {
         $$ = new ExprIs(tokRangeAt(scanner,@subexpr, @end),$subexpr,$decl);
     }
@@ -2341,11 +2351,6 @@ expr_not_wrapped
     }
     |   expression_keyword[kwd] { $$ = $kwd; }
     ;
-
-expr: expr_not_wrapped[subexpr] {
-        format::wrap_par_expr_newline(tokAt(scanner,@subexpr), $subexpr->at);
-        $$ = $subexpr;
-    }
 
 expr_mtag
     :   MTAG_E '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"e"); }
