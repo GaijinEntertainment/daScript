@@ -446,6 +446,7 @@
 %type <pEnum>           enum_list
 
 %type <pExpression>     expr
+%type <pExpression>     expr_not_wrapped
 %type <pExpression>     expr_mtag
 %type <pExpression>     expr_field
 %type <pExpression>     expr_assign
@@ -1846,10 +1847,11 @@ expr_type_info
     ;
 
 expr_list
-    :   expr[subexpr] {
+    :   expr_not_wrapped[subexpr] {
+        // We use `expr_not_wrapped` because expr_list already wrapped in some braces
         $$ = $subexpr;
     }
-    |   expr_list[left] ',' expr[right]     {
+    |   expr_list[left] ',' expr_not_wrapped[right]     {
             $$ = new ExprSequence(tokAt(scanner,@left),$left,$right);
     }
     ;
@@ -2193,7 +2195,7 @@ expr_call
     }
     ;
 
-expr
+expr_not_wrapped
     :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(scanner,@loc),nullptr); }
     |   name_in_namespace[name]               { $$ = new ExprVar(tokAt(scanner,@name),*$name); delete $name; }
     |   expr_numeric_const[nc]                { $$ = $nc; }
@@ -2339,6 +2341,11 @@ expr
     }
     |   expression_keyword[kwd] { $$ = $kwd; }
     ;
+
+expr: expr_not_wrapped[subexpr] {
+        format::wrap_par_expr_newline(tokAt(scanner,@subexpr), $subexpr->at);
+        $$ = $subexpr;
+    }
 
 expr_mtag
     :   MTAG_E '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"e"); }

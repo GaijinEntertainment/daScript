@@ -196,8 +196,14 @@ namespace das::format {
             format::get_writer() << "(" << format::get_substring(real_expr) << ")";
             format::finish_rule(Pos::from_last(real_expr));
         }
-
     }
+
+    void wrap_par_expr_newline(LineInfo real_expr, LineInfo info_expr) {
+        if (real_expr.line != real_expr.last_line) {
+            wrap_par_expr(real_expr, info_expr);
+        }
+    }
+
 
     LineInfo concat(LineInfo first, LineInfo last) {
         return LineInfo(
