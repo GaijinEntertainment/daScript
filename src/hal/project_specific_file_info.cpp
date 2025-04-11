@@ -6,9 +6,7 @@
 
 using namespace das;
 
-#if !DAS_NO_FILEIO
 static GetFileAccessFunc specificGetFileAccess = nullptr;
-#endif
 
 static GetNewContextFunc specificGetNewContext = nullptr;
 static GetCloneContextFunc specificGetCloneContext = nullptr;

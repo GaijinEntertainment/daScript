@@ -108,8 +108,61 @@ namespace das {
 }
 
 
+#if DAS_NO_FILEIO
+namespace das {
+    #define GENERATE_IO_STUB { context->throw_error_at(at, "%s is not implemented (because DAS_NO_FILEIO is enabled)", __FUNCTION__); }
+    void builtin_fprint(const FILE *f, const char *text, Context *context, LineInfoArg *at) GENERATE_IO_STUB
+    void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) GENERATE_IO_STUB
+    int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fread ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fgets(const FILE* f, Context* context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_fwrite ( const FILE * f, char * str, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_dirname ( const char * name, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_basename ( const char * name, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_dir ( const char * path, const Block & fblk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_getcwd ( Context * context, LineInfoArg * at) GENERATE_IO_STUB
+    int builtin_popen_impl ( const char * cmd, bool bin, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_popen_binary ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+#undef GENERATE_IO_STUB
 
-#if !DAS_NO_FILEIO
+#define GENERATE_IO_STUB { DAS_FATAL_ERROR("%s is not implemented (because DAS_NO_FILEIO is enabled).", __FUNCTION__); }
+    void builtin_sleep ( uint32_t msec ) GENERATE_IO_STUB
+    const FILE * builtin_stdin() GENERATE_IO_STUB
+    const FILE * builtin_stdout() GENERATE_IO_STUB
+    const FILE * builtin_stderr() GENERATE_IO_STUB
+    bool builtin_feof(const FILE* _f) GENERATE_IO_STUB
+    const FILE * builtin_fopen  ( const char * name, const char * mode ) GENERATE_IO_STUB
+    vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB
+    vec4f builtin_write ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB
+    vec4f builtin_load ( Context & context, SimNode_CallBase * node, vec4f * args ) GENERATE_IO_STUB
+    bool builtin_stat ( const char * filename, FStat & fs ) GENERATE_IO_STUB
+    bool builtin_chdir ( const char * path ) GENERATE_IO_STUB
+    bool builtin_mkdir ( const char * path ) GENERATE_IO_STUB
+    void builtin_exit ( int32_t ec ) GENERATE_IO_STUB
+    bool builtin_remove_file ( const char * path ) GENERATE_IO_STUB
+    bool builtin_rename_file ( const char * old_path, const char * new_path ) GENERATE_IO_STUB
+#undef GENERATE_IO_STUB
+
+
+    class Module_FIO : public Module {
+    public:
+        Module_FIO() : Module("fio") {
+        }
+        virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
+            return ModuleAotType::cpp;
+        }
+    };
+
+}
+#else // DAS_NO_FILEIO
 
 MAKE_TYPE_FACTORY(FStat, das::FStat)
 MAKE_TYPE_FACTORY(FILE,FILE)
@@ -669,8 +722,6 @@ namespace das {
     };
 }
 
-REGISTER_MODULE_IN_NAMESPACE(Module_FIO,das);
-
 #if _WIN32
 
 #define WIN32_LEAN_AND_MEAN
@@ -703,4 +754,5 @@ int munmap ( void* start, size_t ) {
 
 #endif
 
-#endif
+#endif // !DAS_NO_FILEIO
+REGISTER_MODULE_IN_NAMESPACE(Module_FIO,das);
