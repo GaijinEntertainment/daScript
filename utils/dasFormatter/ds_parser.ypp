@@ -1149,6 +1149,12 @@ optional_function_type
         $$ = $typeDecl;
         $$->at = tokAt(scanner,@typeDecl);
     }
+    |   ':' '('[loc] tuple_type_list[list] ')' {
+        $$ = new TypeDecl(Type::tTuple);
+        $$->at = tokAt(scanner,@loc);
+        varDeclToTypeDecl(scanner, $$, $list, true);
+        deleteVariableDeclarationList($list);
+    }
     ;
 
 function_name
