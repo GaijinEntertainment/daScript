@@ -5,14 +5,6 @@
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
 
-#if !DAS_NO_FILEIO
-#include <sys/stat.h>
-#if defined(_MSC_VER)
-#include <io.h>
-#include <direct.h>
-#endif
-#endif
-
 using namespace das;
 
 void use_utf8();
@@ -130,21 +122,6 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
 
 bool compileStandalone ( const string & inputFile, const string & outDir, const StandaloneContextCfg &cfg ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
-    struct stat st;
-    if (stat(outDir.c_str(), &st) == -1) {
-        bool dir_ok = false;
-#if defined(_MSC_VER)
-        dir_ok = _mkdir(outDir.c_str()) == 0;
-#elif defined(_EMSCRIPTEN_VER)
-        dir_ok = mkdir(outDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0;
-#else
-        dir_ok = mkdir(outDir.c_str(), ACCESSPERMS) == 0;
-#endif
-        if (!dir_ok) {
-            tout << "Couldn't create directory: " << outDir.c_str() << '\n';
-            return false;
-        }
-    }
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     policies.aot = false;
