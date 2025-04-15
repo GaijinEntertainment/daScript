@@ -332,9 +332,15 @@ namespace das {
     // Variable initializatoin
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * init ) override {
             Visitor::preVisitLetInit(let, var, init);
-            // TODO:
-            //  at some point we should do better data trackng for this type of aliasing
-            if ( var->type->ref ) propagateWrite(init);
+            if ( var->init_via_move ) {
+                propagateWrite(init);
+            } else if ( var->type->ref ) {
+                // TODO:
+                //  at some point we should do better data trackng for this type of aliasing
+                propagateWrite(init);
+            } else {
+                propagateRead(init);
+            }
         }
     // addr of expression
         virtual void preVisit ( ExprRef2Ptr * expr ) override {
