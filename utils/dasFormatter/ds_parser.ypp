@@ -2451,6 +2451,7 @@ structure_variable_declaration
 opt_sem
     :
     | SEMICOLON
+    | ';'
 
 struct_variable_declaration_list
     :   {
