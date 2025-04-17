@@ -3238,6 +3238,7 @@ namespace das
         context.thisProgram = this;
         context.breakOnException |= policies.debugger;
         context.persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
+        context.gcEnabled = options.getBoolOption("gc", false);
         if ( context.persistent ) {
             context.heap = make_smart<PersistentHeapAllocator>();
             context.stringHeap = make_smart<PersistentStringAllocator>();
