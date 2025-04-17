@@ -848,6 +848,12 @@ namespace das
     }
 
     void heap_collect ( bool sheap, bool validate, Context * context, LineInfoArg * info ) {
+        if ( !context->persistent ) {
+            context->throw_error_at(info, "heap collection is not allowed in this context, needs 'options persistent'");
+        }
+        if ( !context->gcEnabled ) {
+            context->throw_error_at(info, "heap collection is not allowed in this context, needs 'options gc'");
+        }
         context->collectHeap(info, sheap, validate);
     }
 

@@ -981,6 +981,7 @@ namespace das
     void Context::setup(size_t totalVars, size_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options) {
         verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         breakOnException |= policies.debugger;
+        gcEnabled = options.getBoolOption("gc", false);
         persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
         if ( persistent ) {
             heap = make_smart<PersistentHeapAllocator>();
@@ -1165,6 +1166,7 @@ namespace das
         : stack(opts.stackSize ? opts.stackSize : ctx.stack.size()) {
         verySafeContext = ctx.verySafeContext;
         persistent = ctx.persistent;
+        gcEnabled = ctx.gcEnabled;
         code = ctx.code;
         constStringHeap = ctx.constStringHeap;
         debugInfo = ctx.debugInfo;
