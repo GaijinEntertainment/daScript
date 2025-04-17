@@ -814,6 +814,7 @@ namespace das
         bool                            showLocalVariablesOnException = false;
         bool                            showArgumentsOnException = false;
         bool                            instrumentAllocations = false;
+        bool                            gcEnabled = false;
         bool                            failed = false;
         bool                            verySafeContext = false;    // when true, array and table reserves don't free memory
     public:
