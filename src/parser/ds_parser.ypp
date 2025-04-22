@@ -325,7 +325,7 @@
 %token<ui>      UNSIGNED_INTEGER        "unsigned integer constant"
 %token<ui64>    UNSIGNED_LONG_INTEGER   "unsigned long integer constant"
 %token<ui>      UNSIGNED_INT8           "unsigned int8 constant"
-%token<fd>      FLOAT                   "floating point constant"
+%token<fd>      DAS_FLOAT               "floating point constant"
 %token<d>       DOUBLE                  "double constant"
 %token<s>       NAME                    "name"
 %token<s>       KEYWORD                 "keyword"
@@ -936,7 +936,7 @@ annotation_argument_value
     :   string_constant[value]   { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   NAME[value]              { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   INTEGER[value]           { $$ = new AnnotationArgument("",$value); }
-    |   FLOAT[value]             { $$ = new AnnotationArgument("",float($value)); }
+    |   DAS_FLOAT[value]         { $$ = new AnnotationArgument("",float($value)); }
     |   DAS_TRUE                 { $$ = new AnnotationArgument("",true); }
     |   DAS_FALSE                { $$ = new AnnotationArgument("",false); }
     ;
@@ -964,7 +964,7 @@ annotation_argument
     :   annotation_argument_name[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokAt(scanner,@name)); delete $name; }
-    |   annotation_argument_name[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' DAS_FLOAT[value]         { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false,tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name]                              { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }
@@ -1869,7 +1869,7 @@ expr_numeric_const
     |   LONG_INTEGER[const]                   { $$ = new ExprConstInt64(tokAt(scanner,@const),(int64_t)$const); }
     |   UNSIGNED_LONG_INTEGER[const]          { $$ = new ExprConstUInt64(tokAt(scanner,@const),(uint64_t)$const); }
     |   UNSIGNED_INT8[const]                  { $$ = new ExprConstUInt8(tokAt(scanner,@const),(uint8_t)$const); }
-    |   FLOAT[const]                          { $$ = new ExprConstFloat(tokAt(scanner,@const),(float)$const); }
+    |   DAS_FLOAT[const]                      { $$ = new ExprConstFloat(tokAt(scanner,@const),(float)$const); }
     |   DOUBLE[const]                         { $$ = new ExprConstDouble(tokAt(scanner,@const),(double)$const); }
     ;
 
