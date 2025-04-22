@@ -58,7 +58,7 @@ namespace das
     #define WARN_SLOW_CAST(TYPE)
     // #define WARN_SLOW_CAST(TYPE)    DAS_ASSERTF(0, "internal perofrmance issue, casting eval to eval##TYPE" );
 
-    DAS_THREAD_LOCAL StackAllocator *SharedStackGuard::lastContextStack = nullptr;
+    DAS_THREAD_LOCAL(StackAllocator *) SharedStackGuard::lastContextStack = nullptr;
 
     SimNode * SimNode::copyNode ( Context &, NodeAllocator * code ) {
         auto prefix = ((NodePrefix *)this) - 1;
@@ -918,7 +918,7 @@ namespace das
     // Context
     std::recursive_mutex g_DebugAgentMutex;
     das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
-    static DAS_THREAD_LOCAL bool g_isInDebugAgentCreation = false;
+    static DAS_THREAD_LOCAL(bool) g_isInDebugAgentCreation = false;
     extern atomic<int> g_envTotal;
 
     template <typename TT>

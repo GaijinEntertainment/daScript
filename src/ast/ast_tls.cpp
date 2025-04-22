@@ -4,8 +4,8 @@
 
 namespace das {
 
-DAS_THREAD_LOCAL daScriptEnvironment * daScriptEnvironment::bound = nullptr;
-DAS_THREAD_LOCAL daScriptEnvironment * daScriptEnvironment::owned = nullptr;
+DAS_THREAD_LOCAL(daScriptEnvironment *) daScriptEnvironment::bound = nullptr;
+DAS_THREAD_LOCAL(daScriptEnvironment *) daScriptEnvironment::owned = nullptr;
 
 void daScriptEnvironment::ensure() {
     if ( !daScriptEnvironment::bound ) {

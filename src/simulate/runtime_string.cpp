@@ -14,8 +14,8 @@ namespace das
 
     #if (!defined(DAS_ENABLE_EXCEPTIONS)) || (!DAS_ENABLE_EXCEPTIONS)
 
-    DAS_THREAD_LOCAL jmp_buf * g_throwBuf = nullptr;
-    DAS_THREAD_LOCAL string g_throwMsg;
+    DAS_THREAD_LOCAL(jmp_buf *) g_throwBuf = nullptr;
+    DAS_THREAD_LOCAL(string) g_throwMsg;
 
     void das_throw(const char * msg) {
         if ( g_throwBuf ) {
