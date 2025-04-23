@@ -1,5 +1,5 @@
 options gen2
-options persistent_heap = true
+options persistent_heap
 options gc
 
 options log_compile_time
