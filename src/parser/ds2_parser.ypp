@@ -378,7 +378,10 @@
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
-%type <pVarDecl>        function_argument_declaration
+%type <pVarDecl>        variable_declaration_no_type
+%type <pVarDecl>        variable_declaration_type
+%type <pVarDecl>        function_argument_declaration_type
+%type <pVarDecl>        function_argument_declaration_no_type
 %type <pVarDecl>        structure_variable_declaration
 %type <pVarDecl>        let_variable_declaration
 %type <pVarDeclList>    variable_declaration_list
@@ -2190,8 +2193,20 @@ struct_variable_declaration_list
             }
     ;
 
-function_argument_declaration
-    :   optional_field_annotation[ann] kwd_let_var_or_nothing[is_let] variable_declaration[decl]  {
+function_argument_declaration_no_type
+    :   optional_field_annotation[ann] kwd_let_var_or_nothing[is_let] variable_declaration_no_type[decl]  {
+            $$ = $decl;
+            if ( $is_let ) {
+                $decl->pTypeDecl->constant = true;
+            } else {
+                $decl->pTypeDecl->removeConstant = true;
+            }
+            $decl->annotation = $ann;
+        }
+    ;
+
+function_argument_declaration_type
+    :   optional_field_annotation[ann] kwd_let_var_or_nothing[is_let] variable_declaration_type[decl]  {
             $$ = $decl;
             if ( $is_let ) {
                 $decl->pTypeDecl->constant = true;
@@ -2210,8 +2225,11 @@ function_argument_declaration
     ;
 
 function_argument_list
-    :   function_argument_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
-    |   function_argument_list[list] ';' function_argument_declaration[decl]     { $$ = $list; $list->push_back($decl); }
+    :   function_argument_declaration_no_type[decl]                                   { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   function_argument_declaration_type[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   function_argument_declaration_no_type[decl] ';' function_argument_list[list]  { $$ = $list; $list->insert($list->begin(),$decl); }
+    |   function_argument_declaration_type[decl]    ';' function_argument_list[list]  { $$ = $list; $list->insert($list->begin(),$decl); }
+    |   function_argument_declaration_type[decl]    ',' function_argument_list[list]  { $$ = $list; $list->insert($list->begin(),$decl); }
     ;
 
 tuple_type
@@ -2292,7 +2310,7 @@ copy_or_move
     |   LARROW      { $$ = true; }
     ;
 
-variable_declaration        /* this one can have uninitialized variable which has no type */
+variable_declaration_no_type        /* this one can have uninitialized variable which has no type */
     :   variable_name_with_pos_list[list] {
         auto autoT = new TypeDecl(Type::autoinfer);
         autoT->at = tokAt(scanner,@list);
@@ -2305,18 +2323,30 @@ variable_declaration        /* this one can have uninitialized variable which ha
         autoT->ref = true;
         $$ = new VariableDeclaration($list,autoT,nullptr);
     }
-    |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl]  {
+    |   variable_name_with_pos_list[list] copy_or_move[com] expr[init] {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(scanner,@list);
+        $$ = new VariableDeclaration($list,typeDecl,$init);
+        $$->init_via_move = $com;
+    }
+    ;
+
+variable_declaration_type
+    :   variable_name_with_pos_list[list] ':' type_declaration[typeDecl]  {
         $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
     |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr[init] {
         $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move = $com;
     }
-    |   variable_name_with_pos_list[list] copy_or_move[com] expr[init] {
-        auto typeDecl = new TypeDecl(Type::autoinfer);
-        typeDecl->at = tokAt(scanner,@list);
-        $$ = new VariableDeclaration($list,typeDecl,$init);
-        $$->init_via_move = $com;
+    ;
+
+variable_declaration
+    :   variable_declaration_type[decl] {
+        $$ = $decl;
+    }
+    |   variable_declaration_no_type[decl] {
+        $$ = $decl;
     }
     ;
 
