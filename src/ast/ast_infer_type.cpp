@@ -8783,7 +8783,7 @@ namespace das {
                             mks->makeType = make_smart<TypeDecl>(*aliasT);
                             return mks;
                         }
-                    } else if ( aliasT->isStructure() ) {
+                    } else if ( aliasT->isStructure() && expr->arguments.empty() ) {
                         // this is Struct() - so we promote to default<Struct>
                         reportAstChanged();
                         auto mks = make_smart<ExprMakeStruct>(expr->at);
@@ -9293,7 +9293,7 @@ namespace das {
                     }
                     error("constructor can't be inferred " + describeType(expr->makeType),
                         reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::function_not_found );
-                } else if ( expr->constructor->arguments.size() ) {
+                } else if ( expr->constructor->arguments.size() && expr->structs.empty() ) {
                     // this one with default arguments, we demote back to call
                     reportAstChanged();
                     auto callName = expr->constructor->module->name + "::" + expr->constructor->name;
