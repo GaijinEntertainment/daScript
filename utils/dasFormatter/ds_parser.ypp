@@ -3784,7 +3784,11 @@ make_struct_decl
                                                      type, is_initialized);
             if (static_cast<ExprMakeStruct*>($msd)->structs.size() == 1) {
                 // single struct
-                format::get_writer() << before << internal;
+                if (type.find('[') != size_t(-1)) {
+                    format::get_writer() << before << "fixed_array(" << internal << ")";
+                } else {
+                    format::get_writer() << before << internal;
+                }
                 if ($blk != nullptr) {
                     format::get_writer() << " <| " << format::get_substring($blk->at);
                 }
@@ -3792,7 +3796,7 @@ make_struct_decl
                 // array of structs
     //            const auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@msd)),
     //                                                          format::Pos::from(tokAt(scanner,@end)));
-                format::get_writer() << "[" << internal << "]";
+                format::get_writer() << "fixed_array(" << internal << ")";
             }
             format::finish_rule(format::Pos::from_last(tokAt(scanner,@end)));
         }
@@ -4059,7 +4063,7 @@ make_dim_decl
             if (static_cast<ExprMakeArray*>($mka)->values.size() == 1) {
                 // single element
                 if (type_name.value_or("").find('[') != size_t(-1)) {
-                    format::get_writer() << "[" << internal << "]";
+                    format::get_writer() << "fixed_array(" << internal << ")";
                 } else {
                     format::get_writer() << internal;
                 }
