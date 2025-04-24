@@ -108,6 +108,11 @@ vector<TestData> test_cases() {
          "fixed_array<tuple<string; float>>(\n"
          "    (\"a\", 1.0),\n"
          "    (\"b\", 2.0))"},
+        {
+            "let x = [[auto[] \"a\" ]]\n",
+            "let x = fixed_array(\"a\")\n",
+        },
+
 
         // nested
 

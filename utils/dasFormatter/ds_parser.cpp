@@ -1152,14 +1152,14 @@ static const yytype_int16 yyrline[] =
     3619,  3620,  3621,  3625,  3632,  3639,  3645,  3651,  3658,  3665,
     3671,  3680,  3683,  3689,  3697,  3702,  3709,  3714,  3721,  3726,
     3732,  3733,  3737,  3738,  3743,  3744,  3748,  3749,  3753,  3754,
-    3758,  3759,  3760,  3764,  3765,  3766,  3770,  3771,  3775,  3804,
-    3844,  3863,  3883,  3903,  3924,  3924,  3924,  3932,  3932,  3932,
-    3939,  3939,  3939,  3950,  3950,  3950,  3961,  3965,  3971,  3987,
-    3993,  3999,  4005,  4005,  4005,  4019,  4024,  4031,  4051,  4079,
-    4103,  4103,  4103,  4113,  4113,  4113,  4127,  4127,  4127,  4141,
-    4150,  4150,  4150,  4170,  4177,  4177,  4177,  4187,  4192,  4199,
-    4202,  4208,  4228,  4247,  4255,  4275,  4300,  4301,  4305,  4306,
-    4311,  4321,  4324,  4327,  4330,  4338,  4347,  4359,  4369
+    3758,  3759,  3760,  3764,  3765,  3766,  3770,  3771,  3775,  3808,
+    3848,  3867,  3887,  3907,  3928,  3928,  3928,  3936,  3936,  3936,
+    3943,  3943,  3943,  3954,  3954,  3954,  3965,  3969,  3975,  3991,
+    3997,  4003,  4009,  4009,  4009,  4023,  4028,  4035,  4055,  4083,
+    4107,  4107,  4107,  4117,  4117,  4117,  4131,  4131,  4131,  4145,
+    4154,  4154,  4154,  4174,  4181,  4181,  4181,  4191,  4196,  4203,
+    4206,  4212,  4232,  4251,  4259,  4279,  4304,  4305,  4309,  4310,
+    4315,  4325,  4328,  4331,  4334,  4342,  4351,  4363,  4373
 };
 #endif
 
@@ -11720,7 +11720,11 @@ yyreduce:
                                                      type, is_initialized);
             if (static_cast<ExprMakeStruct*>((yyvsp[-2].pExpression))->structs.size() == 1) {
                 // single struct
-                format::get_writer() << before << internal;
+                if (type.find('[') != size_t(-1)) {
+                    format::get_writer() << before << "fixed_array(" << internal << ")";
+                } else {
+                    format::get_writer() << before << internal;
+                }
                 if ((yyvsp[-1].pExpression) != nullptr) {
                     format::get_writer() << " <| " << format::get_substring((yyvsp[-1].pExpression)->at);
                 }
@@ -11728,7 +11732,7 @@ yyreduce:
                 // array of structs
     //            const auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@msd)),
     //                                                          format::Pos::from(tokAt(scanner,@end)));
-                format::get_writer() << "[" << internal << "]";
+                format::get_writer() << "fixed_array(" << internal << ")";
             }
             format::finish_rule(format::Pos::from_last(tokAt(scanner,(yylsp[0]))));
         }
@@ -12080,7 +12084,7 @@ yyreduce:
             if (static_cast<ExprMakeArray*>((yyvsp[-1].pExpression))->values.size() == 1) {
                 // single element
                 if (type_name.value_or("").find('[') != size_t(-1)) {
-                    format::get_writer() << "[" << internal << "]";
+                    format::get_writer() << "fixed_array(" << internal << ")";
                 } else {
                     format::get_writer() << internal;
                 }
