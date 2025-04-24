@@ -8785,12 +8785,15 @@ namespace das {
                         }
                     } else if ( aliasT->isStructure() ) {
                         // this is Struct() - so we promote to default<Struct>
-                        reportAstChanged();
-                        auto mks = make_smart<ExprMakeStruct>(expr->at);
-                        mks->makeType = make_smart<TypeDecl>(*aliasT);
-                        mks->useInitializer = true;
-                        mks->alwaysUseInitializer = true;
-                        return mks;
+                        expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get(); // we try again first
+                        if ( !expr->func ) {
+                            reportAstChanged();
+                            auto mks = make_smart<ExprMakeStruct>(expr->at);
+                            mks->makeType = make_smart<TypeDecl>(*aliasT);
+                            mks->useInitializer = true;
+                            mks->alwaysUseInitializer = true;
+                            return mks;
+                        }
                     }
                 }
             }
