@@ -309,7 +309,7 @@ enum yysymbol_kind_t
   YYSYMBOL_UNSIGNED_INTEGER = 168,         /* "unsigned integer constant"  */
   YYSYMBOL_UNSIGNED_LONG_INTEGER = 169,    /* "unsigned long integer constant"  */
   YYSYMBOL_UNSIGNED_INT8 = 170,            /* "unsigned int8 constant"  */
-  YYSYMBOL_FLOAT = 171,                    /* "floating point constant"  */
+  YYSYMBOL_DAS_FLOAT = 171,                /* "floating point constant"  */
   YYSYMBOL_DOUBLE = 172,                   /* "double constant"  */
   YYSYMBOL_NAME = 173,                     /* "name"  */
   YYSYMBOL_KEYWORD = 174,                  /* "keyword"  */
