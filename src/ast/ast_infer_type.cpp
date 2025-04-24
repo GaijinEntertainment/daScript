@@ -8785,15 +8785,12 @@ namespace das {
                         }
                     } else if ( aliasT->isStructure() ) {
                         // this is Struct() - so we promote to default<Struct>
-                        expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get(); // we try again first
-                        if ( !expr->func ) {
-                            reportAstChanged();
-                            auto mks = make_smart<ExprMakeStruct>(expr->at);
-                            mks->makeType = make_smart<TypeDecl>(*aliasT);
-                            mks->useInitializer = true;
-                            mks->alwaysUseInitializer = true;
-                            return mks;
-                        }
+                        reportAstChanged();
+                        auto mks = make_smart<ExprMakeStruct>(expr->at);
+                        mks->makeType = make_smart<TypeDecl>(*aliasT);
+                        mks->useInitializer = true;
+                        mks->alwaysUseInitializer = true;
+                        return mks;
                     }
                 }
             }
@@ -9296,6 +9293,12 @@ namespace das {
                     }
                     error("constructor can't be inferred " + describeType(expr->makeType),
                         reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::function_not_found );
+                } else if ( expr->constructor->arguments.size() ) {
+                    // this one with default arguments, we demote back to call
+                    reportAstChanged();
+                    auto callName = expr->constructor->module->name + "::" + expr->constructor->name;
+                    auto callMks = make_smart<ExprCall>(expr->at, callName);
+                    return callMks;
                 }
             }
 
