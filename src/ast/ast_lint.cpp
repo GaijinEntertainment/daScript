@@ -168,6 +168,7 @@ namespace das {
         bool checkDeprecated;
         bool disableInit;
         bool noLocalClassMembers;
+        bool noWritingToNameless;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -181,6 +182,7 @@ namespace das {
             checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
             noLocalClassMembers = prog->options.getBoolOption("no_local_class_members", prog->policies.no_local_class_members);
+            noWritingToNameless = prog->options.getBoolOption("no_writing_to_nameless", prog->policies.no_writing_to_nameless);
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -478,9 +480,19 @@ namespace das {
                 }
             }
         }
+        void verifyNoWrite ( ExprCallFunc * expr ) {
+            // TODO: add support for ExprInvoke
+            if ( noWritingToNameless ) {
+                if ( expr->write && !expr->type->ref ) {
+                    program->error("dead write is prohibited by CodeOfPolicies", "\tin " + expr->describe(), "",
+                        expr->at, CompilationError::no_writing_to_nameless);
+                }
+            }
+        }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            verifyNoWrite(expr);
             if ( checkDeprecated && expr->func->deprecated ) {
                 string message = "";
                 for ( auto & ann : expr->func->annotations ) {
@@ -537,10 +549,12 @@ namespace das {
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            verifyNoWrite(expr);
         }
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            verifyNoWrite(expr);
             if ( checkAotSideEffects ) {
                 if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
                     program->error("side effects may affect evaluation order", "", "", expr->at,
@@ -789,6 +803,7 @@ namespace das {
         "report_private_functions",     Type::tBool,
         "strict_properties",            Type::tBool,
         "very_safe_context",            Type::tBool,
+        "no_writing_to_nameless",       Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
