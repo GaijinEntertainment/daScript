@@ -4817,6 +4817,10 @@ namespace das {
                     }
                 }
                 else {
+                    if ( expr->typeexpr->baseType==Type::tStructure && !expr->typeexpr->structType->hasAnyInitializers() ) {
+                        expr->initializer = false;
+                        reportAstChanged();
+                    }
                     error("'" + describeType(expr->type->firstType) + "' does not have default initializer", "", "",
                         expr->at, CompilationError::invalid_new_type);
                 }
@@ -8643,7 +8647,7 @@ namespace das {
                                 if ( isPrivate && aliasT->structType->module != thisModule ) {
                                     error("can't access private structure " + aliasT->structType->name, "", "",
                                         expr->at, CompilationError::function_not_found);
-                                } else if ( !tryMakeStructureCtor (aliasT->structType, true, true) ) {
+                                } else { // if ( !tryMakeStructureCtor (aliasT->structType, true, true) ) {
                                     if ( failOnMissingCtor ) {
                                         error("default constructor " + aliasT->structType->name + " is not visible directly",
                                             "try default<" + expr->name + "> instead", "", expr->at, CompilationError::function_not_found);
@@ -8764,19 +8768,28 @@ namespace das {
                 return ecast;
             }
             if ( !expr->func ) {
-                auto aliasT = findAlias(expr->name);
-                if ( aliasT && aliasT->isTuple() ) {
-                    reportAstChanged();
-                    if ( expr->arguments.size() ) {
-                        auto mkt = make_smart<ExprMakeTuple>(expr->at);
-                        mkt->recordType = make_smart<TypeDecl>(*aliasT);
-                        for ( auto & arg : expr->arguments ) {
-                            mkt->values.push_back(arg->clone());
+                if ( auto aliasT = findAlias(expr->name) ) {
+                    if ( aliasT->isTuple() ) {
+                        reportAstChanged();
+                        if ( expr->arguments.size() ) {
+                            auto mkt = make_smart<ExprMakeTuple>(expr->at);
+                            mkt->recordType = make_smart<TypeDecl>(*aliasT);
+                            for ( auto & arg : expr->arguments ) {
+                                mkt->values.push_back(arg->clone());
+                            }
+                            return mkt;
+                        } else {
+                            auto mks = make_smart<ExprMakeStruct>(expr->at);
+                            mks->makeType = make_smart<TypeDecl>(*aliasT);
+                            return mks;
                         }
-                        return mkt;
-                    } else {
+                    } else if ( aliasT->isStructure() && expr->arguments.empty() ) {
+                        // this is Struct() - so we promote to default<Struct>
+                        reportAstChanged();
                         auto mks = make_smart<ExprMakeStruct>(expr->at);
                         mks->makeType = make_smart<TypeDecl>(*aliasT);
+                        mks->useInitializer = true;
+                        mks->alwaysUseInitializer = true;
                         return mks;
                     }
                 }
@@ -9274,8 +9287,18 @@ namespace das {
                   expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric, nullptr, false, !expr->ignoreVisCheck).get();
                 }
                 if ( !expr->constructor ) {
-                    error("class constructor can't be inferred " + describeType(expr->makeType),
+                    if ( !expr->makeType->structType->hasAnyInitializers() ) {
+                        expr->alwaysUseInitializer = false;
+                        reportAstChanged();
+                    }
+                    error("constructor can't be inferred " + describeType(expr->makeType),
                         reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::function_not_found );
+                } else if ( expr->constructor->arguments.size() && expr->structs.empty() ) {
+                    // this one with default arguments, we demote back to call
+                    reportAstChanged();
+                    auto callName = expr->constructor->module->name + "::" + expr->constructor->name;
+                    auto callMks = make_smart<ExprCall>(expr->at, callName);
+                    return callMks;
                 }
             }
 

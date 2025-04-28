@@ -332,7 +332,7 @@
 %token<ui>      UNSIGNED_INTEGER        "unsigned integer constant"
 %token<ui64>    UNSIGNED_LONG_INTEGER   "unsigned long integer constant"
 %token<ui>      UNSIGNED_INT8           "unsigned int8 constant"
-%token<fd>      FLOAT                   "floating point constant"
+%token<fd>      DAS_FLOAT               "floating point constant"
 %token<d>       DOUBLE                  "double constant"
 %token<s>       NAME                    "name"
 
@@ -378,7 +378,10 @@
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
 %type <pVarDecl>        variable_declaration
-%type <pVarDecl>        function_argument_declaration
+%type <pVarDecl>        variable_declaration_no_type
+%type <pVarDecl>        variable_declaration_type
+%type <pVarDecl>        function_argument_declaration_type
+%type <pVarDecl>        function_argument_declaration_no_type
 %type <pVarDecl>        structure_variable_declaration
 %type <pVarDecl>        let_variable_declaration
 %type <pVarDeclList>    variable_declaration_list
@@ -979,7 +982,7 @@ annotation_argument_value
     :   string_constant[value]   { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   NAME[value]              { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   INTEGER[value]           { $$ = new AnnotationArgument("",$value); }
-    |   FLOAT[value]             { $$ = new AnnotationArgument("",float($value)); }
+    |   DAS_FLOAT[value]         { $$ = new AnnotationArgument("",float($value)); }
     |   DAS_TRUE                 { $$ = new AnnotationArgument("",true); }
     |   DAS_FALSE                { $$ = new AnnotationArgument("",false); }
     ;
@@ -1007,7 +1010,7 @@ annotation_argument
     :   annotation_argument_name[name] '=' string_constant[value]   { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokAt(scanner,@name)); delete $name; }
-    |   annotation_argument_name[name] '=' FLOAT[value]             { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' DAS_FLOAT[value]         { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_TRUE                 { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_FALSE                { $$ = new AnnotationArgument(*$name,false,tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name]                              { $$ = new AnnotationArgument(*$name,true,tokAt(scanner,@name)); delete $name; }
@@ -1711,7 +1714,7 @@ expr_numeric_const
     |   LONG_INTEGER[const]                   { $$ = new ExprConstInt64(tokAt(scanner,@const),(int64_t)$const); }
     |   UNSIGNED_LONG_INTEGER[const]          { $$ = new ExprConstUInt64(tokAt(scanner,@const),(uint64_t)$const); }
     |   UNSIGNED_INT8[const]                  { $$ = new ExprConstUInt8(tokAt(scanner,@const),(uint8_t)$const); }
-    |   FLOAT[const]                          { $$ = new ExprConstFloat(tokAt(scanner,@const),(float)$const); }
+    |   DAS_FLOAT[const]                      { $$ = new ExprConstFloat(tokAt(scanner,@const),(float)$const); }
     |   DOUBLE[const]                         { $$ = new ExprConstDouble(tokAt(scanner,@const),(double)$const); }
     ;
 
@@ -2190,8 +2193,20 @@ struct_variable_declaration_list
             }
     ;
 
-function_argument_declaration
-    :   optional_field_annotation[ann] kwd_let_var_or_nothing[is_let] variable_declaration[decl]  {
+function_argument_declaration_no_type
+    :   optional_field_annotation[ann] kwd_let_var_or_nothing[is_let] variable_declaration_no_type[decl]  {
+            $$ = $decl;
+            if ( $is_let ) {
+                $decl->pTypeDecl->constant = true;
+            } else {
+                $decl->pTypeDecl->removeConstant = true;
+            }
+            $decl->annotation = $ann;
+        }
+    ;
+
+function_argument_declaration_type
+    :   optional_field_annotation[ann] kwd_let_var_or_nothing[is_let] variable_declaration_type[decl]  {
             $$ = $decl;
             if ( $is_let ) {
                 $decl->pTypeDecl->constant = true;
@@ -2210,8 +2225,11 @@ function_argument_declaration
     ;
 
 function_argument_list
-    :   function_argument_declaration[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
-    |   function_argument_list[list] ';' function_argument_declaration[decl]     { $$ = $list; $list->push_back($decl); }
+    :   function_argument_declaration_no_type[decl]                                   { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   function_argument_declaration_type[decl]                                      { $$ = new vector<VariableDeclaration*>(); $$->push_back($decl); }
+    |   function_argument_declaration_no_type[decl] ';' function_argument_list[list]  { $$ = $list; $list->insert($list->begin(),$decl); }
+    |   function_argument_declaration_type[decl]    ';' function_argument_list[list]  { $$ = $list; $list->insert($list->begin(),$decl); }
+    |   function_argument_declaration_type[decl]    ',' function_argument_list[list]  { $$ = $list; $list->insert($list->begin(),$decl); }
     ;
 
 tuple_type
@@ -2292,7 +2310,7 @@ copy_or_move
     |   LARROW      { $$ = true; }
     ;
 
-variable_declaration        /* this one can have uninitialized variable which has no type */
+variable_declaration_no_type        /* this one can have uninitialized variable which has no type */
     :   variable_name_with_pos_list[list] {
         auto autoT = new TypeDecl(Type::autoinfer);
         autoT->at = tokAt(scanner,@list);
@@ -2305,18 +2323,30 @@ variable_declaration        /* this one can have uninitialized variable which ha
         autoT->ref = true;
         $$ = new VariableDeclaration($list,autoT,nullptr);
     }
-    |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl]  {
+    |   variable_name_with_pos_list[list] copy_or_move[com] expr[init] {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(scanner,@list);
+        $$ = new VariableDeclaration($list,typeDecl,$init);
+        $$->init_via_move = $com;
+    }
+    ;
+
+variable_declaration_type
+    :   variable_name_with_pos_list[list] ':' type_declaration[typeDecl]  {
         $$ = new VariableDeclaration($list,$typeDecl,nullptr);
     }
     |   variable_name_with_pos_list[list] ':' type_declaration[typeDecl] copy_or_move[com] expr[init] {
         $$ = new VariableDeclaration($list,$typeDecl,$init);
         $$->init_via_move = $com;
     }
-    |   variable_name_with_pos_list[list] copy_or_move[com] expr[init] {
-        auto typeDecl = new TypeDecl(Type::autoinfer);
-        typeDecl->at = tokAt(scanner,@list);
-        $$ = new VariableDeclaration($list,typeDecl,$init);
-        $$->init_via_move = $com;
+    ;
+
+variable_declaration
+    :   variable_declaration_type[decl] {
+        $$ = $decl;
+    }
+    |   variable_declaration_no_type[decl] {
+        $$ = $decl;
     }
     ;
 

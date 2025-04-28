@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/das_common.h"
 
 #include <atomic>
 
@@ -25,7 +26,7 @@ namespace das {
         program->visit(subs,/*visitGenerics =*/true);
     }
 
-    DAS_THREAD_LOCAL unsigned ModuleKarma = 0;
+    DAS_THREAD_LOCAL(unsigned) ModuleKarma = 0;
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
         auto at = name.find("::");
@@ -795,7 +796,7 @@ namespace das {
         if ( module ) {
             thisModule = thisModule ? thisModule : module;
             if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
-                for ( auto dep : module->requireModule ) {
+                for ( auto dep : ordered(module->requireModule, [](auto m1, auto m2){ return m1->name < m2->name; }) ) {
                     if ( dep.first != module ) {
                         addModule ( dep.first );
                     }

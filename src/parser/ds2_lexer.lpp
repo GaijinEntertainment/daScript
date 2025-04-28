@@ -534,7 +534,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
-    return FLOAT;
+    return DAS_FLOAT;
 }
 <normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(f|F)?   {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
@@ -543,7 +543,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
-    return FLOAT;
+    return DAS_FLOAT;
 
 }
 <normal>[0-9]+(f|F) {
@@ -553,7 +553,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
-    return FLOAT;
+    return DAS_FLOAT;
 }
 <normal>[0-9]+[eE][+\-]?[0-9]+(f|F)? {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
@@ -562,7 +562,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
-    return FLOAT;
+    return DAS_FLOAT;
 }
 <normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(lf|d) {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);

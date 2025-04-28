@@ -382,7 +382,7 @@ inline size_t das_aligned_memsize(void * ptr){
 #endif
 
 #ifndef DAS_THREAD_LOCAL
-#define DAS_THREAD_LOCAL  thread_local
+#define DAS_THREAD_LOCAL(X)  thread_local X
 #endif
 
 #ifndef DAS_AOT_INLINE_LAMBDA

@@ -2712,7 +2712,7 @@ YY_RULE_SETUP
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
-    return FLOAT;
+    return DAS_FLOAT;
 }
 	YY_BREAK
 case 168:
@@ -2725,7 +2725,7 @@ YY_RULE_SETUP
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
-    return FLOAT;
+    return DAS_FLOAT;
 
 }
 	YY_BREAK
@@ -2739,7 +2739,7 @@ YY_RULE_SETUP
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
-    return FLOAT;
+    return DAS_FLOAT;
 }
 	YY_BREAK
 case 170:
@@ -2752,7 +2752,7 @@ YY_RULE_SETUP
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
-    return FLOAT;
+    return DAS_FLOAT;
 }
 	YY_BREAK
 case 171:

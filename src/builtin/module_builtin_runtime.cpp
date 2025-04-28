@@ -1242,7 +1242,8 @@ namespace das
 
     // static storage
 
-    DAS_THREAD_LOCAL das_hash_map<uint64_t, void*> g_static_storage;
+    using TStaticStorage = das_hash_map<uint64_t, void*>;
+    DAS_THREAD_LOCAL(TStaticStorage) g_static_storage;
 
     void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line ) {
         uint64_t hash = hash_function ( *context, name );

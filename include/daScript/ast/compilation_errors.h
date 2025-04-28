@@ -161,6 +161,7 @@ namespace das
     ,   make_local_aliasing                     =   40212       // a = [[... a.x ...]] with some form of potential cmres
     ,   in_scope_in_the_loop                    =   40213       // for ( a in b ) { let in scope ... ; }
     ,   no_init                                 =   40214       // [init] disabled via options or CodeOfPolicies
+    ,   no_writing_to_nameless                  =   40215       // writing to nameless variable, like in a().b = 5
 
     ,   duplicate_key                           =   40300       // { 1:1, ..., 1:* }
 

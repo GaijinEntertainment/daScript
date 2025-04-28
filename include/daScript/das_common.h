@@ -18,6 +18,18 @@ namespace das {
         return pctx;
     }
 
+    template <typename K, typename V, typename Compare = std::less<K>>
+    vector<pair<K, V>> ordered(const das_hash_map<K, V> &unsorted_map, Compare cmp = {}) {
+        static_assert(!std::is_pointer_v<K> ||
+                      !std::is_same_v<Compare, std::less<K>>,
+                      "When K is pointer you should provide user-defined comparator. "
+                      "Because we use this method to avoid nondeterminism in map traversal.");
+        vector<pair<K, V>> sorted_vector(unsorted_map.begin(), unsorted_map.end());
+
+        // Sort the vector by key
+        std::sort(sorted_vector.begin(), sorted_vector.end(), [&cmp](const auto &p1, const auto &p2) { return cmp(p1.first, p2.first); } );
+        return sorted_vector;
+    }
 
 }
 
