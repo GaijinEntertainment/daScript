@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/das_common.h"
 
 #include "../parser/parser_state.h"
 
@@ -194,7 +195,10 @@ namespace das {
             }
             if ( libGroup.addModule(mod) ) {
                 tab ++;
-                for ( auto & dep : mod->requireModule ) {
+                for ( auto & dep : ordered(mod->requireModule,
+                                           [](const auto &m1, const auto &m2) {
+                                               return m1->name < m2->name;
+                                           }) ) {
                     chain.push_back(dep.first->getFileInfo());
                     if ( !addRequirements(fileName, libGroup, dep.first, access, notAllowed, chain, log, tab) ) {
                         chain.pop_back();
