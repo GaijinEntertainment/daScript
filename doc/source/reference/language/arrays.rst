@@ -111,10 +111,10 @@ When array elements can't be copied, use ``push_clone`` to insert a clone of a v
 
 ``capacity`` returns the number of elements that can be stored in the array without reallocating.
 
-It's possible to iterate over an array via a regular ``for`` loop::
+It's possible to iterate over an array via a regular ``for`` loop. ::
 
-	for ( x in [1,2,3,4] ) {
-		print("x = {x}\n")
+  for ( x in [1,2,3,4] ) {
+    print("x = {x}\n")
   }
 
 Additionally, a collection of unsafe iterators is provided::
