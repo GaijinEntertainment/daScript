@@ -579,6 +579,63 @@ class BetterRttiVisitor : AstVariantMacro {
     }
 }
 
+def operator is BuiltInFunction(anything) {
+    return false
+}
+
+def operator is BuiltInFunction(foo : Function) {
+    return true
+}
+
+def operator as BuiltInFunction(foo : Function?) {
+    unsafe { return reinterpret<BuiltInFunction?>(foo); }
+}
+
+def operator is ExternalFnBase(anything) {
+    return false
+}
+
+def operator is ExternalFnBase(foo : Function) {
+    return true
+}
+
+def operator as ExternalFnBase(foo : Function?) {
+    unsafe { return reinterpret<ExternalFnBase?>(foo); }
+}
+
+def operator is FunctionAnnotation(anything) {
+    return false
+}
+
+def operator is FunctionAnnotation(foo : Annotation) {
+    return true
+}
+
+def operator as FunctionAnnotation(foo : Annotation?) {
+    unsafe { return reinterpret<FunctionAnnotation?>(foo); }
+}
+
+def operator as FunctionAnnotation(foo : smart_ptr<Annotation>) {
+    unsafe { return reinterpret<FunctionAnnotation?>(foo.get_ptr()); }
+}
+
+
+def operator is StructureAnnotation(anything) {
+    return false
+}
+
+def operator is StructureAnnotation(foo : Annotation) {
+    return true
+}
+
+def operator as StructureAnnotation(foo : Annotation?) {
+    unsafe { return reinterpret<StructureAnnotation?>(foo); }
+}
+
+def operator as StructureAnnotation(foo : smart_ptr<Annotation>) {
+    unsafe { return reinterpret<StructureAnnotation?>(foo.get_ptr()); }
+}
+
 def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     let total = any_array_size(data)
     if (total != 0) {
@@ -1035,6 +1092,13 @@ def public isMakeLocal(expr : ExpressionPtr) {
         ||  (expr.__rtti == "ExprMakeVariant")
         ||  (expr.__rtti == "ExprMakeArray")
         ||  (expr.__rtti == "ExprMakeTuple"))
+}
+
+def public isExprCallFunc(expr : ExpressionPtr) {
+    return ((expr.__rtti == "ExprCallFunc")
+        ||  (expr.__rtti == "ExprOp")
+        ||  (expr.__rtti == "ExprNew")
+        ||  (expr.__rtti == "ExprCall"))
 }
 
 def public get_workhorse_types {

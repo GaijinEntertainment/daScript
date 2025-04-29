@@ -18,6 +18,7 @@ typedef StructurePtr = smart_ptr<Structure>
 typedef FunctionPtr = smart_ptr<Function>
 typedef VariablePtr = smart_ptr<Variable>
 typedef MakeFieldDeclPtr = smart_ptr<MakeFieldDecl>
+typedef ExprMakeBlockPtr = smart_ptr<ExprMakeBlock>
 typedef FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
 typedef StructureAnnotationPtr = smart_ptr<StructureAnnotation>
 typedef EnumerationAnnotationPtr = smart_ptr<EnumerationAnnotation>
@@ -233,6 +234,7 @@ class AstVisitor {
     def abstract canVisitStructure(arg : Structure?) : bool
     def abstract preVisitStructure(str : StructurePtr) : void
     def abstract preVisitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) : void
+    def abstract canVisitStructureFieldInit(st : StructurePtr) : bool
     def abstract visitStructureField(str : StructurePtr; decl : FieldDeclaration; last : bool) : void
     def abstract visitStructure(str : StructurePtr) : StructurePtr
 // function
@@ -295,7 +297,7 @@ class AstVisitor {
 // looks like call (debug,assert,verify,erase,find,key_exists,keys,values,invoke,memzero etc)
     def abstract preVisitExprLooksLikeCall(expr : smart_ptr<ExprLooksLikeCall>) : void
     def abstract visitExprLooksLikeCall(expr : smart_ptr<ExprLooksLikeCall>) : ExpressionPtr
-    def abstract canVisitLooksLikeCallArgument(expr : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) : bool
+    def abstract canVisitExprLooksLikeCallArgument(expr : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) : bool
     def abstract preVisitExprLooksLikeCallArgument(expr : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) : void
     def abstract visitExprLooksLikeCallArgument(expr : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) : ExpressionPtr
 // call
@@ -315,7 +317,7 @@ class AstVisitor {
 // safe at
     def abstract preVisitExprSafeAt(expr : smart_ptr<ExprSafeAt>) : void
     def abstract visitExprSafeAt(expr : smart_ptr<ExprSafeAt>) : ExpressionPtr
-    def abstract preVisitExprSafeAtIndex(expr : smart_ptr<ExprAt>; index : ExpressionPtr) : void
+    def abstract preVisitExprSafeAtIndex(expr : smart_ptr<ExprSafeAt>; index : ExpressionPtr) : void
 // is
     def abstract preVisitExprIs(expr : smart_ptr<ExprIs>) : void
     def abstract visitExprIs(expr : smart_ptr<ExprIs>) : ExpressionPtr
@@ -380,8 +382,8 @@ class AstVisitor {
     def abstract preVisitExprMakeVariantField(expr : smart_ptr<ExprMakeVariant>; index : int; decl : MakeFieldDeclPtr; last : bool) : void
     def abstract visitExprMakeVariantField(expr : smart_ptr<ExprMakeVariant>; index : int; decl : MakeFieldDeclPtr; last : bool) : MakeFieldDeclPtr
 // make structure
-    def abstract canVisitMakeStructBody(expr : smart_ptr<ExprMakeStruct>) : bool
-    def abstract canVisitMakeStructBlock(expr : smart_ptr<ExprMakeStruct>; blk : ExpressionPtr) : bool
+    def abstract canVisitExprMakeStructBody(expr : smart_ptr<ExprMakeStruct>) : bool
+    def abstract canVisitExprMakeStructBlock(expr : smart_ptr<ExprMakeStruct>; blk : ExpressionPtr) : bool
     def abstract preVisitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) : void
     def abstract visitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) : ExpressionPtr
     def abstract preVisitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) : void
@@ -406,6 +408,7 @@ class AstVisitor {
     def abstract preVisitExprArrayComprehensionSubexpr(expr : smart_ptr<ExprArrayComprehension>; subexrp : ExpressionPtr) : void
     def abstract preVisitExprArrayComprehensionWhere(expr : smart_ptr<ExprArrayComprehension>; filter : ExpressionPtr) : void
 // type info
+    def abstract canVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>; expr_ : ExpressionPtr) : bool
     def abstract preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) : void
     def abstract visitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) : ExpressionPtr
 // ptr to ref
@@ -460,6 +463,7 @@ class AstVisitor {
     def abstract preVisitExprCast(expr : smart_ptr<ExprCast>) : void
     def abstract visitExprCast(expr : smart_ptr<ExprCast>) : ExpressionPtr
 // delete
+    def abstract preVisitExprDeleteSizeExpression(del : smart_ptr<ExprDelete>; expr : ExpressionPtr) : void
     def abstract preVisitExprDelete(expr : smart_ptr<ExprDelete>) : void
     def abstract visitExprDelete(expr : smart_ptr<ExprDelete>) : ExpressionPtr
 // var
