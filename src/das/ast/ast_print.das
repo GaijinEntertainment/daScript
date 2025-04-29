@@ -10,8 +10,28 @@ require daslib/ast_boost
 require daslib/strings_boost
 
 
-require daslib/ast_boost
+// require printer_flags_visitor // todo(aleksisch): standalone_context's not support convenient multiple files yet
+                                 // uncomment when PR with bootstrap merged
 
+//////////
+// example
+
+let {
+    function_annotation_flags = (
+        (FunctionFlags.fastCall) |
+        (FunctionFlags.exports) |
+        (FunctionFlags.privateFunction) |
+        (FunctionFlags.unsafeDeref) |
+        (FunctionFlags.unsafeOperation) |
+        (FunctionFlags._generator));
+}
+
+// TODO: fixme
+def noBracket(expr) {
+    return false;
+}
+
+// todo(aleksisch) remove it when PR with bootstrap merged
 class SetPrinterFlags : AstVisitor {
     def override preVisitExprBlockExpression(block1 : smart_ptr<ExprBlock>; var expr : ExpressionPtr) {
         expr.printFlags := ExprPrintFlags.argLevel
@@ -73,23 +93,7 @@ class SetPrinterFlags : AstVisitor {
     }
 }
 
-//////////
-// example
 
-let {
-    function_annotation_flags = (
-        (FunctionFlags.fastCall) |
-        (FunctionFlags.exports) |
-        (FunctionFlags.privateFunction) |
-        (FunctionFlags.unsafeDeref) |
-        (FunctionFlags.unsafeOperation) |
-        (FunctionFlags._generator));
-}
-
-// TODO: fixme
-def noBracket(expr) {
-    return false;
-}
 
 class PrintVisitor : AstVisitor {
     writer : StringBuilderWriter?
@@ -438,7 +442,7 @@ class PrintVisitor : AstVisitor {
         write(*writer, "]");
         return <- expr;
     }
-    def override preVisitExprSafeAtIndex(expr : smart_ptr<ExprAt>; index : ExpressionPtr) {
+    def override preVisitExprSafeAtIndex(expr : smart_ptr<ExprSafeAt>; index : ExpressionPtr) {
         write(*writer, "?[");
     }
 // is
