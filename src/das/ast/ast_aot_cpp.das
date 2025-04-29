@@ -1489,8 +1489,9 @@ class CppAot : AstVisitor {
     }
     def opPolicyName(that : smart_ptr<ExprOp>) {
         unsafe {
-            if ((reinterpret<ExprCallFunc?>(that.get_ptr())).func.flags.builtIn) {
-                let bfn = (reinterpret<ExprCallFunc?>(that.get_ptr())).func as BuiltInFunction;
+            assume fn = (reinterpret<ExprCallFunc?>(that.get_ptr())).func;
+            if (fn.flags.builtIn) {
+                let bfn = fn as BuiltInFunction;
                 return string(bfn.cppName.empty() ? bfn.name : bfn.cppName);
             } else {
                 return "/* NotAPolicy */";

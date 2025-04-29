@@ -583,40 +583,48 @@ def operator is BuiltInFunction(anything) {
     return false
 }
 
-def operator is BuiltInFunction(foo : Function) {
-    return true
+def operator is BuiltInFunction(foo : Function?) {
+    return foo.flags.builtIn
 }
 
 def operator as BuiltInFunction(foo : Function?) {
-    unsafe { return reinterpret<BuiltInFunction?>(foo); }
+    verify(foo is BuiltInFunction)
+    return unsafe(reinterpret<BuiltInFunction?>(foo));
 }
 
 def operator is ExternalFnBase(anything) {
     return false
 }
 
-def operator is ExternalFnBase(foo : Function) {
-    return true
+def operator is ExternalFnBase(foo : Function?) {
+    return foo.moreFlags.propertyFunction && foo.flags.builtIn
 }
 
 def operator as ExternalFnBase(foo : Function?) {
-    unsafe { return reinterpret<ExternalFnBase?>(foo); }
+    verify(foo is ExternalFnBase)
+    return unsafe(reinterpret<ExternalFnBase?>(foo));
 }
 
 def operator is FunctionAnnotation(anything) {
     return false
 }
 
-def operator is FunctionAnnotation(foo : Annotation) {
-    return true
+def operator is FunctionAnnotation(foo : Annotation?) {
+    return foo.isFunctionAnnotation
+}
+
+def operator is FunctionAnnotation(foo : smart_ptr<Annotation>) {
+    return foo.isFunctionAnnotation
 }
 
 def operator as FunctionAnnotation(foo : Annotation?) {
-    unsafe { return reinterpret<FunctionAnnotation?>(foo); }
+    verify(foo is FunctionAnnotation)
+    return unsafe(reinterpret<FunctionAnnotation?>(foo));
 }
 
 def operator as FunctionAnnotation(foo : smart_ptr<Annotation>) {
-    unsafe { return reinterpret<FunctionAnnotation?>(foo.get_ptr()); }
+    verify(foo is FunctionAnnotation)
+    return unsafe(reinterpret<FunctionAnnotation?>(foo.get_ptr()));
 }
 
 
@@ -624,16 +632,22 @@ def operator is StructureAnnotation(anything) {
     return false
 }
 
-def operator is StructureAnnotation(foo : Annotation) {
-    return true
+def operator is StructureAnnotation(foo : Annotation?) {
+    return foo.isStructureAnnotation
+}
+
+def operator is StructureAnnotation(foo : smart_ptr<Annotation>) {
+    return foo.isStructureAnnotation
 }
 
 def operator as StructureAnnotation(foo : Annotation?) {
-    unsafe { return reinterpret<StructureAnnotation?>(foo); }
+    verify(foo is StructureAnnotation)
+    return unsafe(reinterpret<StructureAnnotation?>(foo));
 }
 
 def operator as StructureAnnotation(foo : smart_ptr<Annotation>) {
-    unsafe { return reinterpret<StructureAnnotation?>(foo.get_ptr()); }
+    verify(foo is StructureAnnotation)
+    return unsafe(reinterpret<StructureAnnotation?>(foo.get_ptr()));
 }
 
 def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
