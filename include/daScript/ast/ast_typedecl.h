@@ -228,6 +228,7 @@ namespace das {
         void serialize ( AstSerializer & ser );
         string typeMacroName() const;
         uint64_t getOwnSemanticHash() const;
+        uint64_t getMangledNameHash() const;
         uint64_t getOwnSemanticHash(HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep) const;
         uint64_t getSemanticHash() const;
         uint64_t getSemanticHash(HashBuilder & hb) const;
