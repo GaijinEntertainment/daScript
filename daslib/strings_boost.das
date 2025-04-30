@@ -213,11 +213,3 @@ def replace_multiple(source : string; replaces : array<tuple<text : string; repl
         }
     }
 }
-
-def is_hex(ch : int) : bool {
-    return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
-}
-
-def is_tab_or_space(ch : int) : bool {
-    return ch == ' ' || ch == '\t'
-}
