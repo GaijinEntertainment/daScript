@@ -8794,8 +8794,8 @@ namespace das {
                             mks->makeType = make_smart<TypeDecl>(*aliasT);
                             return mks;
                         }
-                    } else if ( aliasT->isStructure() && expr->arguments.empty() ) {
-                        // this is Struct() - so we promote to default<Struct>
+                    } else if ( expr->arguments.empty() ) {
+                        // this is Blah() - so we promote to default<Blah>
                         reportAstChanged();
                         auto mks = make_smart<ExprMakeStruct>(expr->at);
                         mks->makeType = make_smart<TypeDecl>(*aliasT);
