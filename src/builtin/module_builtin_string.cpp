@@ -182,9 +182,10 @@ namespace das
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->allocateString(str, strLen, at);
+        char * ret = context->allocateString(nullptr, strLen, at);
         for (char *d = ret, *end = ret + strLen; d != end; ++str, ++d)
           *d = (char)to_lower(*str);
+        context->stringHeap->intern(ret, strLen);
         return ret;
     }
 
@@ -208,9 +209,10 @@ namespace das
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->allocateString(str, strLen, at);
+        char * ret = context->allocateString(nullptr, strLen, at);
         for (char *d = ret, *end = ret + strLen; d != end; ++str, ++d)
           *d = (char)to_upper(*str);
+        context->stringHeap->intern(ret, strLen);
         return ret;
     }
 
