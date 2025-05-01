@@ -206,6 +206,7 @@ namespace das {
                     CompilationError::invalid_aka);
             }
             pFor->iteratorsAt.push_back(np.at);
+            pFor->iteratorsTupleExpansion.push_back(np.isTupleExpansion);
             pFor->iteratorsTags.push_back(np.tag);
         }
         delete iters;
@@ -594,7 +595,7 @@ namespace das {
                 auto varName = func->name;
                 func->name = yyextra->g_thisStructure->name + "`" + func->name;
                 auto vars = new vector<VariableNameAndPosition>();
-                vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
+                vars->emplace_back(VariableNameAndPosition(varName,"",func->at));
                 TypeDecl * funcType = new TypeDecl(Type::tFunction);
                 funcType->at = func->at;
                 swap ( funcType->firstType, func->result );
@@ -687,7 +688,7 @@ namespace das {
                     auto varName = func->name;
                     func->name = yyextra->g_thisStructure->name + "`" + func->name;
                     auto vars = new vector<VariableNameAndPosition>();
-                    vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
+                    vars->emplace_back(VariableNameAndPosition(varName,"",func->at));
                     Expression * finit = new ExprAddr(func->at, inThisModule(func->name));
                     if ( ovr == OVERRIDE_OVERRIDE || ovr == OVERRIDE_SEALED ) {
                         finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
@@ -1060,6 +1061,7 @@ namespace das {
             pFor->iterators.push_back(np.name);
             pFor->iteratorsAka.push_back(np.aka);
             pFor->iteratorsAt.push_back(np.at);
+            pFor->iteratorsTupleExpansion.push_back(np.isTupleExpansion);
             pFor->iteratorsTags.push_back(np.tag);
         }
         delete iters;

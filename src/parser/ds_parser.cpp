@@ -9724,7 +9724,7 @@ yyreduce:
   case 574: /* function_argument_declaration_type: "$a" '(' expr ')'  */
                                      {
             auto na = new vector<VariableNameAndPosition>();
-            na->push_back(VariableNameAndPosition{"``MACRO``TAG``","",tokAt(scanner,(yylsp[-1]))});
+            na->push_back(VariableNameAndPosition("``MACRO``TAG``","",tokAt(scanner,(yylsp[-1]))));
             auto decl = new VariableDeclaration(na, new TypeDecl(Type::none), (yyvsp[-1].pExpression));
             decl->pTypeDecl->isTag = true;
             (yyval.pVarDecl) = decl;
@@ -9760,7 +9760,7 @@ yyreduce:
   case 581: /* tuple_type: "name" ':' type_declaration  */
                                                    {
         auto na = new vector<VariableNameAndPosition>();
-        na->push_back(VariableNameAndPosition{*(yyvsp[-2].s),"",tokAt(scanner,(yylsp[-2]))});
+        na->push_back(VariableNameAndPosition(*(yyvsp[-2].s),"",tokAt(scanner,(yylsp[-2]))));
         (yyval.pVarDecl) = new VariableDeclaration(na,(yyvsp[0].pTypeDecl),nullptr);
         delete (yyvsp[-2].s);
     }
@@ -9805,7 +9805,7 @@ yyreduce:
   case 587: /* variant_type: "name" ':' type_declaration  */
                                                    {
         auto na = new vector<VariableNameAndPosition>();
-        na->push_back(VariableNameAndPosition{*(yyvsp[-2].s),"",tokAt(scanner,(yylsp[-2]))});
+        na->push_back(VariableNameAndPosition(*(yyvsp[-2].s),"",tokAt(scanner,(yylsp[-2]))));
         (yyval.pVarDecl) = new VariableDeclaration(na,(yyvsp[0].pTypeDecl),nullptr);
         delete (yyvsp[-2].s);
     }
@@ -9929,7 +9929,7 @@ yyreduce:
                     {
         das_checkName(scanner,*(yyvsp[0].s),tokAt(scanner,(yylsp[0])));
         auto pSL = new vector<VariableNameAndPosition>();
-        pSL->push_back(VariableNameAndPosition{*(yyvsp[0].s),"",tokAt(scanner,(yylsp[0]))});
+        pSL->push_back(VariableNameAndPosition(*(yyvsp[0].s),"",tokAt(scanner,(yylsp[0]))));
         (yyval.pNameWithPosList) = pSL;
         delete (yyvsp[0].s);
     }
@@ -9938,7 +9938,7 @@ yyreduce:
   case 608: /* let_variable_name_with_pos_list: "$i" '(' expr ')'  */
                                      {
         auto pSL = new vector<VariableNameAndPosition>();
-        pSL->push_back(VariableNameAndPosition{"``MACRO``TAG``","",tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression)});
+        pSL->push_back(VariableNameAndPosition("``MACRO``TAG``","",tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression)));
         (yyval.pNameWithPosList) = pSL;
     }
     break;
@@ -9948,7 +9948,7 @@ yyreduce:
         das_checkName(scanner,*(yyvsp[-2].s),tokAt(scanner,(yylsp[-2])));
         das_checkName(scanner,*(yyvsp[0].s),tokAt(scanner,(yylsp[0])));
         auto pSL = new vector<VariableNameAndPosition>();
-        pSL->push_back(VariableNameAndPosition{*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))});
+        pSL->push_back(VariableNameAndPosition(*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))));
         (yyval.pNameWithPosList) = pSL;
         delete (yyvsp[-2].s);
         delete (yyvsp[0].s);
@@ -9958,7 +9958,7 @@ yyreduce:
   case 610: /* let_variable_name_with_pos_list: let_variable_name_with_pos_list ',' "name"  */
                                                              {
         das_checkName(scanner,*(yyvsp[0].s),tokAt(scanner,(yylsp[0])));
-        (yyvsp[-2].pNameWithPosList)->push_back(VariableNameAndPosition{*(yyvsp[0].s),"",tokAt(scanner,(yylsp[0]))});
+        (yyvsp[-2].pNameWithPosList)->push_back(VariableNameAndPosition(*(yyvsp[0].s),"",tokAt(scanner,(yylsp[0]))));
         (yyval.pNameWithPosList) = (yyvsp[-2].pNameWithPosList);
         delete (yyvsp[0].s);
     }
@@ -9968,7 +9968,7 @@ yyreduce:
                                                                                    {
         das_checkName(scanner,*(yyvsp[-2].s),tokAt(scanner,(yylsp[-2])));
         das_checkName(scanner,*(yyvsp[0].s),tokAt(scanner,(yylsp[0])));
-        (yyvsp[-4].pNameWithPosList)->push_back(VariableNameAndPosition{*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))});
+        (yyvsp[-4].pNameWithPosList)->push_back(VariableNameAndPosition(*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))));
         (yyval.pNameWithPosList) = (yyvsp[-4].pNameWithPosList);
         delete (yyvsp[-2].s);
         delete (yyvsp[0].s);
@@ -10369,7 +10369,7 @@ yyreduce:
                     {
         das_checkName(scanner,*(yyvsp[0].s),tokAt(scanner,(yylsp[0])));
         auto pSL = new vector<VariableNameAndPosition>();
-        pSL->push_back(VariableNameAndPosition{*(yyvsp[0].s),"",tokAt(scanner,(yylsp[0]))});
+        pSL->push_back(VariableNameAndPosition(*(yyvsp[0].s),"",tokAt(scanner,(yylsp[0]))));
         (yyval.pNameWithPosList) = pSL;
         delete (yyvsp[0].s);
     }
@@ -10378,7 +10378,7 @@ yyreduce:
   case 670: /* variable_name_with_pos_list: "$i" '(' expr ')'  */
                                      {
         auto pSL = new vector<VariableNameAndPosition>();
-        pSL->push_back(VariableNameAndPosition{"``MACRO``TAG``","",tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression)});
+        pSL->push_back(VariableNameAndPosition("``MACRO``TAG``","",tokAt(scanner,(yylsp[-1])),(yyvsp[-1].pExpression)));
         (yyval.pNameWithPosList) = pSL;
     }
     break;
@@ -10388,7 +10388,7 @@ yyreduce:
         das_checkName(scanner,*(yyvsp[-2].s),tokAt(scanner,(yylsp[-2])));
         das_checkName(scanner,*(yyvsp[0].s),tokAt(scanner,(yylsp[0])));
         auto pSL = new vector<VariableNameAndPosition>();
-        pSL->push_back(VariableNameAndPosition{*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))});
+        pSL->push_back(VariableNameAndPosition(*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))));
         (yyval.pNameWithPosList) = pSL;
         delete (yyvsp[-2].s);
         delete (yyvsp[0].s);
@@ -10398,7 +10398,7 @@ yyreduce:
   case 672: /* variable_name_with_pos_list: variable_name_with_pos_list ',' "name"  */
                                                          {
         das_checkName(scanner,*(yyvsp[0].s),tokAt(scanner,(yylsp[0])));
-        (yyvsp[-2].pNameWithPosList)->push_back(VariableNameAndPosition{*(yyvsp[0].s),"",tokAt(scanner,(yylsp[0]))});
+        (yyvsp[-2].pNameWithPosList)->push_back(VariableNameAndPosition(*(yyvsp[0].s),"",tokAt(scanner,(yylsp[0]))));
         (yyval.pNameWithPosList) = (yyvsp[-2].pNameWithPosList);
         delete (yyvsp[0].s);
     }
@@ -10408,7 +10408,7 @@ yyreduce:
                                                                                {
         das_checkName(scanner,*(yyvsp[-2].s),tokAt(scanner,(yylsp[-2])));
         das_checkName(scanner,*(yyvsp[0].s),tokAt(scanner,(yylsp[0])));
-        (yyvsp[-4].pNameWithPosList)->push_back(VariableNameAndPosition{*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))});
+        (yyvsp[-4].pNameWithPosList)->push_back(VariableNameAndPosition(*(yyvsp[-2].s),*(yyvsp[0].s),tokAt(scanner,(yylsp[-2]))));
         (yyval.pNameWithPosList) = (yyvsp[-4].pNameWithPosList);
         delete (yyvsp[-2].s);
         delete (yyvsp[0].s);

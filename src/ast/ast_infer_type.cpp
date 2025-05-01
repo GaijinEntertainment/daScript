@@ -7284,6 +7284,13 @@ namespace das {
                 }
                 local.push_back(pVar);
                 expr->iteratorVariables.push_back(pVar);
+                if ( !expr->iteratorsTupleExpansion.empty() && expr->iteratorsTupleExpansion[idx] ) {
+                    if ( pVar->type && !pVar->type->isTuple() ) {
+                        error("for loop iterator variable " + pVar->name + " is not a tuple", "", "",
+                            expr->at, CompilationError::invalid_iteration_source);
+                    }
+                    expandTupleName(pVar->name,pVar->at);
+                }
                 ++ idx;
             }
         }
@@ -7640,6 +7647,32 @@ namespace das {
             }
             return Visitor::visitLetInit(expr, var, init);
         }
+
+        void expandTupleName ( const string & name, const LineInfo & varAt ) {
+            // split name which consits of multiple names separated by ` into parts
+            vector<string> parts;
+            size_t pos = 0;
+            while ( pos < name.size() ) {
+                auto npos = name.find("`",pos);
+                if ( npos==string::npos ) {
+                    parts.push_back(name.substr(pos));
+                    break;
+                } else {
+                    parts.push_back(name.substr(pos,npos-pos));
+                    pos = npos+1;
+                }
+            }
+            int partIndex = 0;
+            for ( auto & part : parts ) {
+                // we build var_name._partIndex
+                auto varName = make_smart<ExprVar>(varAt,name);
+                auto partExpr = make_smart<ExprField>(varAt,varName,"_" + to_string(partIndex),true);
+                assume.push_back(make_smart<ExprAssume>(varAt,part,partExpr));
+                partIndex ++;
+            }
+
+        }
+
         virtual ExpressionPtr visit ( ExprLet * expr ) override {
             if ( func && func->generator ) {
                 // only topmost
@@ -7682,29 +7715,7 @@ namespace das {
                         error("expansion of " + var->name + " should be tuple", "", "",
                             var->at, CompilationError::invalid_type);
                     }
-                    string name = var->name;
-                    // split name which consits of multiple names separated by ` into parts
-                    vector<string> parts;
-                    size_t pos = 0;
-                    while ( pos < name.size() ) {
-                        auto npos = name.find("`",pos);
-                        if ( npos==string::npos ) {
-                            parts.push_back(name.substr(pos));
-                            break;
-                        } else {
-                            parts.push_back(name.substr(pos,npos-pos));
-                            pos = npos+1;
-                        }
-                    }
-                    int partIndex = 0;
-                    for ( auto & part : parts ) {
-                        // we build var_name._partIndex
-                        auto varName = make_smart<ExprVar>(var->at,var->name);
-                        auto partExpr = make_smart<ExprField>(var->at,varName,"_" + to_string(partIndex),true);
-                        assume.push_back(make_smart<ExprAssume>(var->at,part,partExpr));
-                        partIndex ++;
-                    }
-
+                    expandTupleName(var->name, var->at);
                 }
             }
             return Visitor::visit(expr);
