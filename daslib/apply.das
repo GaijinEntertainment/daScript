@@ -230,11 +230,11 @@ class ApplyMacro : AstCallMacro {
                 nfields = argT.structType.fields |> length
                 names <- generateApplyVisitStruct(expr.arguments[0]._type, callName, expr.at)
             } elif (argT.baseType == Type.tTuple) {
-                callName = "apply`tuple`{intptr(expr)}`{expr.at.line}"
+                callName = "apply`tuple`{expr.arguments[0]._type.get_mnh}`{expr.at.line}"
                 nfields = length(argT.argTypes)
                 names <- generateApplyVisitTuple(expr.arguments[0]._type, callName, expr.at)
             } elif (argT.baseType == Type.tVariant) {
-                callName = "apply`variant`{intptr(expr)}`{expr.at.line}"
+                callName = "apply`variant`{expr.arguments[0]._type.get_mnh}`{expr.at.line}"
                 nfields = length(argT.argTypes)
                 names <- generateApplyVisitVariant(expr.arguments[0]._type, callName, expr.at)
             } else {

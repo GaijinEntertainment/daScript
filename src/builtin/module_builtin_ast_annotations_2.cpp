@@ -178,6 +178,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(iterators)>("iterators");
             addField<DAS_BIND_MANAGED_FIELD(iteratorsAka)>("iteratorsAka");
             addField<DAS_BIND_MANAGED_FIELD(iteratorsAt)>("iteratorsAt");
+            addField<DAS_BIND_MANAGED_FIELD(iteratorsTupleExpansion)>("iteratorsTupleExpansion");
             addField<DAS_BIND_MANAGED_FIELD(iteratorVariables)>("iteratorVariables");
             addField<DAS_BIND_MANAGED_FIELD(iteratorsTags)>("iteratorsTags");
             addField<DAS_BIND_MANAGED_FIELD(sources)>("sources");

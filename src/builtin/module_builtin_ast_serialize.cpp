@@ -1509,7 +1509,7 @@ namespace das {
 
     void ExprFor::serialize(AstSerializer& ser) {
         Expression::serialize(ser);
-        ser << iterators << iteratorsAka << iteratorsAt << iteratorsTags
+        ser << iterators << iteratorsAka << iteratorsAt << iteratorsTupleExpansion << iteratorsTags
             << iteratorVariables << sources << body << visibility
             << allowIteratorOptimization << canShadow;
     }
@@ -2291,7 +2291,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 52;
+        static constexpr uint32_t currentVersion = 53;
         return currentVersion;
     }
 
