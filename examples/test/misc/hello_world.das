@@ -1,30 +1,16 @@
-template struct Foo  {
-    a_t : $t(TT) = 2;
+options gen2
 
-    def add(b : $t(TT)) {
-        a_t += b;
-    }
-
-    s : int;
-
-    def static sum(a, b : int) : int {
-        return a + b;
-    }
-
-
-    def init() {
-        s = sum(1, 2);
-    }
-
+variant Foo {
+    i : int
+    f : float
 }
+
+typedef Foo2 = variant<i : int; f : float>
 
 [export]
-def main() {
-    print("Hello, World!\n");
-    var f = Foo();
-    debug(f);
-    let t = @@Foo`sum;
-    debug(t);
+def main {
+    let x = Foo(i = 3)
+    let y : Foo = Foo2(f = 4.0)
+    let a = array variant<i : int; f : float>(i = 3, f = 4.0)
 }
 
-options log;
