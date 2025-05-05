@@ -333,7 +333,7 @@ class private TemplateVisitor : AstVisitor {
     }
 }
 
-def private visit_expression(var expr : ExpressionPtr&; var adapter : smart_ptr<VisitorAdapter>) {
+def visit_expression(var expr : ExpressionPtr&; var adapter : smart_ptr<VisitorAdapter>) {
     unsafe {
         // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
         var newExpr <- expr |> visit(adapter)

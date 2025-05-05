@@ -76,6 +76,9 @@ namespace das {
             }
         }
         */
+
+        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression *subexpr ) override;
+
         /*
         // TODO: implement
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override {
@@ -83,19 +86,6 @@ namespace das {
                 bool result = true;
                 runMacroFunction(context, "canVisitIfSubexpr", [&]() {
                     result = invoke_canVisitIfSubexpr(context,fnCanVisit,classPtr);
-                });
-                return result;
-            } else {
-                return true;
-            }
-        }
-        */
-        /* TODO: implement
-        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) override {
-            if ( auto fnCanVisit = get_canVisitExpr(classPtr) ) {
-                bool result = true;
-                runMacroFunction(context, "canVisitExpr", [&]() {
-                    result = invoke_canVisitExpr(context,fnCanVisit,classPtr,expr,subexpr);
                 });
                 return result;
             } else {
@@ -143,6 +133,7 @@ namespace das {
         // STRUCTURE
         virtual void preVisit ( Structure * var ) override;
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override;
+        virtual bool canVisitStructureFieldInit ( Structure * var ) override;
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override;
         virtual StructurePtr visit ( Structure * var ) override;
         // REAL THINGS (AFTER STRUCTS AND ENUMS)
@@ -260,8 +251,6 @@ namespace das {
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override;
         virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) override;
         // DELETE
-        /*
-        // TODO: implement
         virtual void preVisitDeleteSizeExpression ( ExprDelete * expr, Expression * that ) override {
             if ( auto fnPreVisit = get_preVisitExprDeleteSizeExpression(classPtr) ) {
                 runMacroFunction(context, "preVisitDeleteSizeExpression", [&]() {
@@ -269,7 +258,6 @@ namespace das {
                 });
             }
         }
-        */
 
 #define VISIT_EXPR(ExprType) \
        virtual void preVisit ( ExprType * that ) override { \

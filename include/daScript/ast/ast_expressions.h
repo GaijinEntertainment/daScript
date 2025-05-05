@@ -619,12 +619,14 @@ namespace das
         ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) { __rtti = "ExprFakeContext"; }
         ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) { __rtti = "ExprFakeContext"; }
         virtual bool rtti_isFakeContext() const override { return true; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprFakeLineInfo : ExprConstT<void *, ExprFakeLineInfo> {
         ExprFakeLineInfo(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeLineInfo) { __rtti = "ExprFakeLineInfo"; }
         ExprFakeLineInfo(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeLineInfo) { __rtti = "ExprFakeLineInfo"; }
         virtual bool rtti_isFakeLineInfo() const override { return true; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
@@ -637,6 +639,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
         virtual bool rtti_isNullPtr() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstInt : ExprConstT<int32_t,ExprConstInt> {
@@ -644,6 +647,7 @@ namespace das
             : ExprConstT(i,Type::tInt) { __rtti = "ExprConstInt";}
         ExprConstInt(const LineInfo & a, int32_t i = 0)
             : ExprConstT(a,i,Type::tInt) { __rtti = "ExprConstInt"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstEnumeration : ExprConst {
@@ -676,6 +680,7 @@ namespace das
             : ExprConstT(i,Type::tInt8) { __rtti = "ExprConstInt8"; }
         ExprConstInt8(const LineInfo & a, int8_t i = 0)
             : ExprConstT(a,i,Type::tInt8) { __rtti = "ExprConstInt8"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstInt16 : ExprConstT<int16_t,ExprConstInt16> {
@@ -683,6 +688,7 @@ namespace das
             : ExprConstT(i,Type::tInt16) { __rtti = "ExprConstInt16"; }
         ExprConstInt16(const LineInfo & a, int16_t i = 0)
             : ExprConstT(a,i,Type::tInt16) { __rtti = "ExprConstInt16"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
@@ -690,6 +696,7 @@ namespace das
             : ExprConstT(i,Type::tInt64) { __rtti = "ExprConstInt64"; }
         ExprConstInt64(const LineInfo & a, int64_t i = 0)
             : ExprConstT(a,i,Type::tInt64) { __rtti = "ExprConstInt64"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstBitfield : ExprConstT<uint32_t,ExprConstBitfield> {
@@ -698,6 +705,7 @@ namespace das
         ExprConstBitfield(const LineInfo & a, uint32_t i = 0)
             : ExprConstT(a,i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        auto getValue() const { return ExprConstT::getValue(); };
         TypeDeclPtr bitfieldType;
     };
 
@@ -706,6 +714,7 @@ namespace das
             : ExprConstT(i,Type::tInt2) { __rtti = "ExprConstInt2"; }
         ExprConstInt2(const LineInfo & a, int2 i)
             : ExprConstT(a,i,Type::tInt2) { __rtti = "ExprConstInt2"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstRange : ExprConstT<range,ExprConstRange> {
@@ -713,6 +722,7 @@ namespace das
             : ExprConstT(i,Type::tRange) { __rtti = "ExprConstRange"; }
         ExprConstRange(const LineInfo & a, range i)
             : ExprConstT(a,i,Type::tRange) { __rtti = "ExprConstRange"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstRange64 : ExprConstT<range64,ExprConstRange64> {
@@ -720,6 +730,7 @@ namespace das
             : ExprConstT(i,Type::tRange64) { __rtti = "ExprConstRange64"; }
         ExprConstRange64(const LineInfo & a, range64 i)
             : ExprConstT(a,i,Type::tRange64) { __rtti = "ExprConstRange64"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
 
@@ -728,6 +739,7 @@ namespace das
             : ExprConstT(i,Type::tInt3) { __rtti = "ExprConstInt3"; }
         ExprConstInt3(const LineInfo & a, int3 i)
             : ExprConstT(a,i,Type::tInt3) { __rtti = "ExprConstInt3"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstInt4 : ExprConstT<int4,ExprConstInt4> {
@@ -735,6 +747,7 @@ namespace das
             : ExprConstT(i,Type::tInt4) { __rtti = "ExprConstInt4"; }
         ExprConstInt4(const LineInfo & a, int4 i)
             : ExprConstT(a,i,Type::tInt4) { __rtti = "ExprConstInt4"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstUInt8 : ExprConstT<uint8_t,ExprConstUInt8> {
@@ -742,6 +755,7 @@ namespace das
             : ExprConstT(i,Type::tUInt8) { __rtti = "ExprConstUInt8"; }
         ExprConstUInt8(const LineInfo & a, uint8_t i = 0)
             : ExprConstT(a,i,Type::tUInt8) { __rtti = "ExprConstUInt8"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstUInt16 : ExprConstT<uint16_t,ExprConstUInt16> {
@@ -749,6 +763,7 @@ namespace das
             : ExprConstT(i,Type::tUInt16) { __rtti = "ExprConstUInt16"; }
         ExprConstUInt16(const LineInfo & a, uint16_t i = 0)
             : ExprConstT(a,i,Type::tUInt16) { __rtti = "ExprConstUInt16"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstUInt64 : ExprConstT<uint64_t,ExprConstUInt64> {
@@ -756,6 +771,7 @@ namespace das
             : ExprConstT(i,Type::tUInt64) { __rtti = "ExprConstUInt64"; }
         ExprConstUInt64(const LineInfo & a, uint64_t i = 0)
             : ExprConstT(a,i,Type::tUInt64) { __rtti = "ExprConstUInt64"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstUInt : ExprConstT<uint32_t,ExprConstUInt> {
@@ -763,6 +779,7 @@ namespace das
             : ExprConstT(i,Type::tUInt) { __rtti = "ExprConstUInt"; }
         ExprConstUInt(const LineInfo & a, uint32_t i = 0)
             : ExprConstT(a,i,Type::tUInt) { __rtti = "ExprConstUInt"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr );
@@ -772,6 +789,7 @@ namespace das
             : ExprConstT(i,Type::tUInt2) { __rtti = "ExprConstUInt2"; }
         ExprConstUInt2(const LineInfo & a, uint2 i)
             : ExprConstT(a,i,Type::tUInt2) { __rtti = "ExprConstUInt2"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstURange : ExprConstT<urange,ExprConstURange> {
@@ -779,6 +797,7 @@ namespace das
             : ExprConstT(i,Type::tURange) { __rtti = "ExprConstURange"; }
         ExprConstURange(const LineInfo & a, urange i)
             : ExprConstT(a,i,Type::tURange) { __rtti = "ExprConstURange"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstURange64 : ExprConstT<urange64,ExprConstURange64> {
@@ -786,6 +805,7 @@ namespace das
             : ExprConstT(i,Type::tURange64) { __rtti = "ExprConstURange64"; }
         ExprConstURange64(const LineInfo & a, urange64 i)
             : ExprConstT(a,i,Type::tURange64) { __rtti = "ExprConstURange64"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstUInt3 : ExprConstT<uint3,ExprConstUInt3> {
@@ -793,6 +813,7 @@ namespace das
             : ExprConstT(i,Type::tUInt3) { __rtti = "ExprConstUInt3"; }
         ExprConstUInt3(const LineInfo & a, uint3 i)
             : ExprConstT(a,i,Type::tUInt3) { __rtti = "ExprConstUInt3"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstUInt4 : ExprConstT<uint4,ExprConstUInt4> {
@@ -800,6 +821,7 @@ namespace das
             : ExprConstT(i,Type::tUInt4) { __rtti = "ExprConstUInt4"; }
         ExprConstUInt4(const LineInfo & a, uint4 i)
             : ExprConstT(a,i,Type::tUInt4) { __rtti = "ExprConstUInt4"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstBool : ExprConstT<bool,ExprConstBool> {
@@ -807,6 +829,7 @@ namespace das
             : ExprConstT(i,Type::tBool) { __rtti = "ExprConstBool"; }
         ExprConstBool(const LineInfo & a, bool i = false)
             : ExprConstT(a,i,Type::tBool) { __rtti = "ExprConstBool"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstFloat : ExprConstT<float,ExprConstFloat> {
@@ -818,6 +841,7 @@ namespace das
             : ExprConstT(float(i),Type::tFloat) { __rtti = "ExprConstFloat"; }
         ExprConstFloat(const LineInfo & a, float i = 0.0f)
             : ExprConstT(a,i,Type::tFloat) { __rtti = "ExprConstFloat"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstDouble : ExprConstT<double,ExprConstDouble> {
@@ -825,6 +849,7 @@ namespace das
             : ExprConstT(i,Type::tDouble) { __rtti = "ExprConstDouble"; }
         ExprConstDouble(const LineInfo & a, double i = 0.0)
             : ExprConstT(a,i,Type::tDouble) { __rtti = "ExprConstDouble"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstFloat2 : ExprConstT<float2,ExprConstFloat2> {
@@ -832,6 +857,7 @@ namespace das
             : ExprConstT(i,Type::tFloat2) { __rtti = "ExprConstFloat2"; }
         ExprConstFloat2(const LineInfo & a, float2 i)
             : ExprConstT(a,i,Type::tFloat2) { __rtti = "ExprConstFloat2"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstFloat3 : ExprConstT<float3,ExprConstFloat3> {
@@ -839,6 +865,7 @@ namespace das
             : ExprConstT(i,Type::tFloat3) { __rtti = "ExprConstFloat3"; }
         ExprConstFloat3(const LineInfo & a, float3 i)
             : ExprConstT(a,i,Type::tFloat3) { __rtti = "ExprConstFloat3"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstFloat4 : ExprConstT<float4,ExprConstFloat4> {
@@ -846,6 +873,7 @@ namespace das
             : ExprConstT(i,Type::tFloat4) { __rtti = "ExprConstFloat4"; }
         ExprConstFloat4(const LineInfo & a, float4 i)
             : ExprConstT(a,i,Type::tFloat4) { __rtti = "ExprConstFloat4"; }
+        auto getValue() const { return ExprConstT::getValue(); };
     };
 
     struct ExprConstString : ExprConst {

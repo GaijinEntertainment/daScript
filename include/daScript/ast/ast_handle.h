@@ -589,6 +589,8 @@ namespace das
                 SideEffects::none, "das_vector_each_const")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_length<TT>)>(*mod, lib, "length",
                 SideEffects::none, "das_vector_length")->generated = true;
+            addExtern<DAS_BIND_FUN(das_vector_empty<TT>)>(*mod, lib, "empty",
+                SideEffects::none, "das_vector_empty")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
                 SideEffects::none, "das_vector_capacity")->generated = true;
             registerVectorJitFunctions<TT>::init(mod,lib);
@@ -648,6 +650,8 @@ namespace das
                     ->args({"vec","context","at"})->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_length<TT>)>(*mod, lib, "length",
                 SideEffects::none, "das_vector_length")->generated = true;
+            addExtern<DAS_BIND_FUN(das_vector_empty<TT>)>(*mod, lib, "empty",
+                SideEffects::none, "das_vector_empty")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
                 SideEffects::none, "das_vector_capacity")->generated = true;
             registerVectorJitFunctions<TT>::init(mod,lib);
