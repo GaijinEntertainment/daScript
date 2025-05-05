@@ -94,6 +94,8 @@ extern int das_yydebug;
         TypeDecl * secondType;
     };
 
+    static bool need_wrap_current_expr = false;
+
 
 /* Token kinds.  */
 #ifndef DAS_YYTOKENTYPE
