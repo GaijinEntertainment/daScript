@@ -57,7 +57,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
             // header
             tw << AOT_INCLUDES;
             // lets comment on required modules
-            program->library.foreach([&](Module * mod){
+            program->library.foreach_in_order([&](Module * mod){
                 if ( mod->name=="" ) {
                     // nothing, its main program module. i.e ::
                 } else {
@@ -72,7 +72,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                     }
                 }
                 return true;
-            },"*");
+            }, program->getThisModule());
             if ( program->options.getBoolOption("no_aot",false) ) {
                 TextWriter noTw;
                 if (!noAotModule)

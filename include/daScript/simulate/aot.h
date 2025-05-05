@@ -2789,6 +2789,11 @@ namespace das {
     }
 
     template <typename TT>
+    __forceinline bool das_vector_empty ( const TT & vec ) {
+        return vec.empty();
+    }
+
+    template <typename TT>
     __forceinline int32_t das_vector_capacity ( const TT & vec ) {
         return int32_t(vec.capacity());
     }

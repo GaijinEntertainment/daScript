@@ -3194,7 +3194,7 @@ namespace das
         return vT->findArgumentIndex(name);
     }
 
-    uint64_t TypeDecl::getMangledNameHash() const { return Variable::getMangledNameHash(getMangledName()); }
+    uint64_t TypeDecl::getMangledNameHash() const { return hash_blockz64((uint8_t *)getMangledName().c_str()); }
 
     // Mangled name parser
 

@@ -4,6 +4,7 @@
 
 #include <fstream>
 #include <filesystem>
+
 #include "daScript/ast/ast.h"
 
 typedef void * yyscan_t;
@@ -169,12 +170,12 @@ Result transform_syntax(const string &filename, const string content, format::Fo
 
     int iter = 0;
     policies.version_2_syntax = false;
-    const auto tmp_name1 = (std::filesystem::temp_directory_path() / "tmp1.das").string();
+    const auto tmp_name1 = std::filesystem::temp_directory_path() / "tmp1.das";
     {
         std::ofstream ostream(tmp_name1);
         ostream << src.c_str();
     }
-    auto src_program = parseDaScript(tmp_name1, "", access, tout, libGroup, true, true, policies);
+    auto src_program = parseDaScript(tmp_name1.string(), "", access, tout, libGroup, true, true, policies);
     while (prev != src) {
         prev = src;
 
@@ -236,14 +237,14 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     if (!options.contains(FormatOpt::SemicolonEOL)) {
         src = remove_semicolons(src, options.contains(FormatOpt::V2Syntax));
     }
-    const auto tmp_name = (std::filesystem::temp_directory_path() / "tmp.das").string();
+    const auto tmp_name = std::filesystem::temp_directory_path() / "tmp.das";
     {
         std::ofstream ostream(tmp_name);
         ostream << src.c_str();
         ostream.flush();
     }
     policies.version_2_syntax = options.contains(format::FormatOpt::V2Syntax);
-    auto program = parseDaScript(tmp_name, "", access, tout, libGroup, true, true, policies);
+    auto program = parseDaScript(tmp_name.string(), "", access, tout, libGroup, true, true, policies);
     Result res;
     if (!program->failed()) {
         res.ok = src; // designated initializers not supported in CI
