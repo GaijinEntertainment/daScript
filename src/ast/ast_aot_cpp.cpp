@@ -108,19 +108,6 @@ namespace das {
         }
     }
 
-    template <typename K, typename V, typename Comparator = std::less<K>>
-    static vector<pair<K, V>> ordered(const das_hash_map<K, V> &unsorted_map, Comparator cmp = {}) {
-        vector<pair<K, V>> sorted_vector(unsorted_map.begin(), unsorted_map.end());
-
-        // Sort the vector by key
-        sort(sorted_vector.begin(), sorted_vector.end(),
-                  [](const auto& a, const auto& b) {
-                      return a.first < b.first;
-                  });
-        return sorted_vector;
-    }
-
-
     string aotFunctionName ( string str ) {
         string result;
         for (char c : str) {

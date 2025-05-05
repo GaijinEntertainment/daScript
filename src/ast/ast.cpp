@@ -2377,6 +2377,7 @@ namespace das {
         cexpr->iterators = iterators;
         cexpr->iteratorsAka = iteratorsAka;
         cexpr->iteratorsAt = iteratorsAt;
+        cexpr->iteratorsTupleExpansion = iteratorsTupleExpansion;
         for ( auto tag : iteratorsTags )
             cexpr->iteratorsTags.push_back(tag ? tag->clone() : nullptr);
         cexpr->visibility = visibility;

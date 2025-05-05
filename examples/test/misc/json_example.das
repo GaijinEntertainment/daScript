@@ -1,7 +1,8 @@
 // options debugger=true
 // options log = true
 
-options persistent_heap = true
+options persistent_heap
+options gc
 
 require fio
 require daslib/json

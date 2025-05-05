@@ -1,4 +1,6 @@
 options gen2
+options persistent_heap
+options gc
 module app_opengl_glfw private
 
 require rast2d public

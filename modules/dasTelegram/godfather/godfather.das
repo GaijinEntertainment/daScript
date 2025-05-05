@@ -1,4 +1,6 @@
 options gen2
+options persistent_heap
+options gc
 require fio
 require daslib/strings_boost
 require math

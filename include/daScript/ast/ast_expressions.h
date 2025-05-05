@@ -418,7 +418,13 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         Function *      func = nullptr;
         uint32_t        stackTop = 0;
-        bool            genericFunction = false; // do not clone, do not serialize. used only for infer
+        union {
+            struct {
+                bool            genericFunction : 1;    // do not clone, do not serialize. used only for infer
+                bool            write : 1;              // result of this function is written to via copy or move
+            };
+            uint32_t    callFlags = 0;
+        };
     };
 
     struct ExprOp : ExprCallFunc {
@@ -913,6 +919,7 @@ namespace das
         vector<string>          iteratorsAka;
         vector<LineInfo>        iteratorsAt;
         vector<ExpressionPtr>   iteratorsTags;
+        vector<uint8_t>         iteratorsTupleExpansion;
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
         ExpressionPtr           body;

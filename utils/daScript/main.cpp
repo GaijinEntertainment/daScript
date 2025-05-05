@@ -23,6 +23,7 @@ static bool paranoid_validation = false;
 static bool jitEnabled = false;
 static bool isAotLib = false;
 static bool version2syntax = true;
+static bool gen2MakeSyntax = false;
 
 bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
@@ -32,6 +33,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     policies.aot_module = true;
     policies.fail_on_lack_of_aot_export = true;
     policies.version_2_syntax = version2syntax;
+    policies.gen2_make_syntax = gen2MakeSyntax;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
@@ -128,6 +130,7 @@ bool compileStandalone ( const string & inputFile, const string & outDir, const 
     policies.aot_module = true;
     policies.fail_on_lack_of_aot_export = true;
     policies.version_2_syntax = version2syntax;
+    policies.gen2_make_syntax = gen2MakeSyntax;
     if ( auto program = compileDaScript(inputFile,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
@@ -152,7 +155,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
     if ( argc<=3 ) {
-        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-standalone-context <ctx_name>] [-q] [-j] [-standalone-class <class_name>]\n";
+        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-standalone-context <ctx_name>] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-standalone-class <class_name>]\n";
         return -1;
     }
     bool dryRun = false;
@@ -189,6 +192,13 @@ int das_aot_main ( int argc, char * argv[] ) {
                 }
                 setDasRoot(argv[ai+1]);
                 ai += 1;
+            } else if ( strcmp(argv[ai],"-v2syntax")==0 ) {
+                version2syntax = true;
+            } else if ( strcmp(argv[ai],"-v1syntax")==0 ) {
+                version2syntax = false;
+            } else if ( strcmp(argv[ai],"-v2makeSyntax")==0 ) {
+                version2syntax = false;
+                gen2MakeSyntax = true;
             } else if ( strcmp(argv[ai],"--")==0 ) {
                 scriptArgs = true;
             } else if ( !scriptArgs ) {
@@ -274,6 +284,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
     policies.version_2_syntax = version2syntax;
+    policies.gen2_make_syntax = gen2MakeSyntax;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
@@ -339,8 +350,10 @@ void print_help() {
     tout
         << "daslang version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n"
         << "daslang scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
-        << "    -v2syntax   enable version 2 syntax (experimental)\n"
-        << "    -jit        enable JIT\n"
+        << "    -v2syntax   enable version 2 syntax (uses braces {} for code blocks) [default]\n"
+        << "    -v1syntax   enable version 1 syntax (uses Python-style indentation for code blocks)\n"
+        << "    -v2makeSyntax enable version 1 syntax with version 2 constructors syntax (for arrays/structures)\n"
+        << "    -jit        enable Just-In-Time compilation\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -run-fmt    <inplace/dry> <v2/v1> run formatter, requires 2 arguments\n"
         << "    -log        output program code\n"
@@ -419,6 +432,11 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="v2syntax" ) {
                 version2syntax = true;
+            } else if ( cmd=="v1syntax" ) {
+                version2syntax = false;
+            } else if ( cmd=="v2makeSyntax" ) {
+                version2syntax = false;
+                gen2MakeSyntax = true;
             } else if ( cmd=="jit") {
                 jitEnabled = true;
             } else if ( cmd=="log" ) {

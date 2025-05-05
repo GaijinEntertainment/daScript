@@ -8,7 +8,7 @@ namespace das::format {
     optional<string> type_to_string(const TypeDecl *type_decl, LineInfo loc) {
         if (type_decl->isTemp(false) || type_decl->alias == "``MACRO``TAG``") {
             return "struct<" + format::get_substring(loc) + ">";
-        } else if (type_decl->isAuto() && !type_decl->isPointer()) {
+        } else if (type_decl->isAuto() && !type_decl->isArray() && !type_decl->isPointer()) {
             return nullopt;
         } else {
             return get_substring(loc);

@@ -182,9 +182,10 @@ namespace das
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->allocateString(str, strLen, at);
+        char * ret = context->allocateString(nullptr, strLen, at);
         for (char *d = ret, *end = ret + strLen; d != end; ++str, ++d)
           *d = (char)to_lower(*str);
+        context->stringHeap->intern(ret, strLen);
         return ret;
     }
 
@@ -208,9 +209,10 @@ namespace das
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->allocateString(str, strLen, at);
+        char * ret = context->allocateString(nullptr, strLen, at);
         for (char *d = ret, *end = ret + strLen; d != end; ++str, ++d)
           *d = (char)to_upper(*str);
+        context->stringHeap->intern(ret, strLen);
         return ret;
     }
 
@@ -1046,6 +1048,12 @@ namespace das
             // queries
             addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha",
                 SideEffects::none, "is_alpha")->arg("Character");
+            addExtern<DAS_BIND_FUN(is_alnum)> (*this, lib, "is_alnum",
+                SideEffects::none, "is_alnum")->arg("Character");
+            addExtern<DAS_BIND_FUN(is_hex)>(*this, lib, "is_hex",
+                SideEffects::none, "is_hex")->args({"Character"});
+            addExtern<DAS_BIND_FUN(is_tab_or_space)>(*this, lib, "is_tab_or_space",
+                SideEffects::none, "is_tab_or_space")->args({"Character"});
             addExtern<DAS_BIND_FUN(is_new_line)> (*this, lib, "is_new_line",
                 SideEffects::none, "is_new_line")->arg("Character");
             addExtern<DAS_BIND_FUN(is_white_space)> (*this, lib, "is_white_space",

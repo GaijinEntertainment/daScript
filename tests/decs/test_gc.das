@@ -1,5 +1,5 @@
 options gen2
-options persistent_heap = true
+options persistent_heap
 options gc
 
 require daslib/decs_boost

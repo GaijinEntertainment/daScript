@@ -272,7 +272,7 @@ extern int das_yydebug;
     UNSIGNED_INTEGER = 423,        /* "unsigned integer constant"  */
     UNSIGNED_LONG_INTEGER = 424,   /* "unsigned long integer constant"  */
     UNSIGNED_INT8 = 425,           /* "unsigned int8 constant"  */
-    FLOAT = 426,                   /* "floating point constant"  */
+    DAS_FLOAT = 426,               /* "floating point constant"  */
     DOUBLE = 427,                  /* "double constant"  */
     NAME = 428,                    /* "name"  */
     KEYWORD = 429,                 /* "keyword"  */
