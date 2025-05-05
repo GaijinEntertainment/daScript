@@ -3,13 +3,13 @@
 
 namespace das
 {
-    extern DAS_THREAD_LOCAL(unsigned) ModuleKarma;
+    extern DAS_THREAD_LOCAL2(unsigned, 0xb68d4cf9) ModuleKarma;
     class Module;
 };
 
 #define NEED_MODULE(ClassName) \
     extern das::Module * register_##ClassName (); \
-    das::ModuleKarma += unsigned(intptr_t(register_##ClassName()));
+    *das::ModuleKarma += unsigned(intptr_t(register_##ClassName()));
 
 #define NEED_ALL_DEFAULT_MODULES \
     NEED_MODULE(Module_BuiltIn); \

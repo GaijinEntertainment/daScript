@@ -340,10 +340,10 @@ namespace das {
     extern "C" int get_time_usec (int64_t reft);
     extern "C" int64_t ref_time_delta_to_usec (int64_t reft);
 
-    static DAS_THREAD_LOCAL(int64_t) totParse = 0;
-    static DAS_THREAD_LOCAL(int64_t) totInfer = 0;
-    static DAS_THREAD_LOCAL(int64_t) totOpt = 0;
-    static DAS_THREAD_LOCAL(int64_t) totM = 0;
+    static DAS_THREAD_LOCAL2(int64_t, 0x75436fa9) totParse;
+    static DAS_THREAD_LOCAL2(int64_t, 0xc4b4b1b0) totInfer;
+    static DAS_THREAD_LOCAL2(int64_t, 0xdddf3f0d) totOpt;
+    static DAS_THREAD_LOCAL2(int64_t, 0xc5ace515) totM;
 
     bool trySerializeProgramModule (
             ProgramPtr          & program,
@@ -550,7 +550,7 @@ namespace das {
             return program;
         }
         parserState = DasParserState();
-        totParse += get_time_usec(time0);
+        *totParse += get_time_usec(time0);
         if ( err || program->failed() ) {
             daScriptEnvironment::bound->g_Program.reset();
             daScriptEnvironment::bound->g_compilerLog = nullptr;
@@ -567,7 +567,7 @@ namespace das {
             auto timeI = ref_time_ticks();
             restartInfer: program->inferTypes(logs, libGroup);
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
-            totInfer += get_time_usec(timeI);
+            *totInfer += get_time_usec(timeI);
             if ( !program->failed() ) {
                 program->buildAccessFlags(logs);    // this is used by the lint pass
                 if ( program->patchAnnotations() ) {
@@ -587,7 +587,7 @@ namespace das {
                     program->buildAccessFlags(logs);
                 }
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
-                totOpt += get_time_usec(timeO);
+                *totOpt += get_time_usec(timeO);
                 if (!program->failed())
                     program->verifyAndFoldContracts();
                 if (!program->failed()) {
@@ -636,7 +636,7 @@ namespace das {
                         program->allocateStack(logs,true,false);
                     if (!program->failed())
                         program->makeMacroModule(logs);
-                    totM += get_time_usec(timeM);
+                    *totM += get_time_usec(timeM);
                 }
             }
             daScriptEnvironment::bound->g_Program.reset();
@@ -846,10 +846,10 @@ namespace das {
         ReuseCacheGuard rcg;
         bool exportAll = policies.export_all;
         auto time0 = ref_time_ticks();
-        totParse = 0;
-        totInfer = 0;
-        totOpt = 0;
-        totM = 0;
+        *totParse = 0;
+        *totInfer = 0;
+        *totOpt = 0;
+        *totM = 0;
         daScriptEnvironment::bound->macroTimeTicks = 0;
         vector<ModuleInfo> req;
         vector<RequireRecord> missing, circular, notAllowed;
@@ -957,11 +957,11 @@ namespace das {
                 auto totT = get_time_usec(time0);
                 logs << "compiler took " << (totT  / 1000000.) << ", " << fileName << "\n"
                      << "\trequire  " << (preqT    / 1000000.) << "\n"
-                     << "\tparse    " << (totParse / 1000000.) << "\n"
-                     << "\tinfer    " << (totInfer / 1000000.) << "\n"
-                     << "\toptimize " << (totOpt   / 1000000.) << "\n"
+                     << "\tparse    " << (*totParse / 1000000.) << "\n"
+                     << "\tinfer    " << (*totInfer / 1000000.) << "\n"
+                     << "\toptimize " << (*totOpt   / 1000000.) << "\n"
                      << "\tmacro    " << (ref_time_delta_to_usec(daScriptEnvironment::bound->macroTimeTicks)  / 1000000.) << "\n"
-                     << "\tmacro mods " << (totM     / 1000000.) << "\n"
+                     << "\tmacro mods " << (*totM     / 1000000.) << "\n"
                 ;
             }
             return res;

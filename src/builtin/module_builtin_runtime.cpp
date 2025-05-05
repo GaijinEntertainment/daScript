@@ -1243,14 +1243,14 @@ namespace das
     // static storage
 
     using TStaticStorage = das_hash_map<uint64_t, void*>;
-    DAS_THREAD_LOCAL(TStaticStorage) g_static_storage;
+    DAS_THREAD_LOCAL2(TStaticStorage, 0xee512f69) g_static_storage;
 
     void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line ) {
         uint64_t hash = hash_function ( *context, name );
-        if ( g_static_storage.find(hash)!=g_static_storage.end() ) {
+        if ( g_static_storage->find(hash)!=g_static_storage->end() ) {
             context->throw_error_at(line, "gc0 already there %s (or hash collision)", name);
         }
-        g_static_storage[hash] = data;
+        (*g_static_storage)[hash] = data;
     }
 
     void gc0_save_smart_ptr ( char * name, smart_ptr_raw<void> data, Context * context, LineInfoArg * line ) {
@@ -1259,10 +1259,10 @@ namespace das
 
     void * gc0_restore_ptr ( char * name, Context * context ) {
         uint64_t hash = hash_function ( *context, name );
-        auto it = g_static_storage.find(hash);
-        if ( it!=g_static_storage.end() ) {
+        auto it = g_static_storage->find(hash);
+        if ( it!=g_static_storage->end() ) {
             void * res = it->second;
-            g_static_storage.erase(it);
+            g_static_storage->erase(it);
             return res;
         } else {
             return nullptr;
@@ -1274,8 +1274,8 @@ namespace das
     }
 
     void gc0_reset() {
-        decltype(g_static_storage) dummy;
-        swap ( g_static_storage, dummy );
+        TStaticStorage dummy;
+        swap ( *g_static_storage, dummy );
     }
 
     __forceinline void i_das_ptr_inc ( void * & ptr, int stride ) {

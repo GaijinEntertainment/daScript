@@ -58,7 +58,7 @@ namespace das
     #define WARN_SLOW_CAST(TYPE)
     // #define WARN_SLOW_CAST(TYPE)    DAS_ASSERTF(0, "internal perofrmance issue, casting eval to eval##TYPE" );
 
-    DAS_THREAD_LOCAL(StackAllocator *) SharedStackGuard::lastContextStack = nullptr;
+    DAS_THREAD_LOCAL2(StackAllocator *, 0x129a764e) SharedStackGuard::lastContextStack;
 
     SimNode * SimNode::copyNode ( Context &, NodeAllocator * code ) {
         auto prefix = ((NodePrefix *)this) - 1;
@@ -918,7 +918,7 @@ namespace das
     // Context
     std::recursive_mutex g_DebugAgentMutex;
     das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
-    static DAS_THREAD_LOCAL(bool) g_isInDebugAgentCreation = false;
+    static DAS_THREAD_LOCAL2(bool, 0x557aeb8a) g_isInDebugAgentCreation;
     extern atomic<int> g_envTotal;
 
     template <typename TT>
@@ -1809,13 +1809,13 @@ namespace das
 {
 
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo ) {
-        g_isInDebugAgentCreation = true;
+        *g_isInDebugAgentCreation = true;
         shared_ptr<Context> forkContext;
         bool realPersistent = context->persistent;
         context->persistent = true;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::debug_context)));
         context->persistent = realPersistent;
-        g_isInDebugAgentCreation = false;
+        *g_isInDebugAgentCreation = false;
         vec4f args[1];
         args[0] = cast<Context *>::from(context);
         SimFunction * fun = exFn.PTR;
@@ -1823,7 +1823,7 @@ namespace das
     }
 
     bool isInDebugAgentCreation() {
-        return g_isInDebugAgentCreation;
+        return *g_isInDebugAgentCreation;
     }
 
     void shutdownDebugAgent() {

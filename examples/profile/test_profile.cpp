@@ -203,9 +203,9 @@ struct EsFunctionAnnotation : FunctionAnnotation {
 };
 
 void * getComponentData ( const string & name ) {
-    if (name == "pos") return g_pos.data();
-    else if (name == "vel") return g_vel.data();
-    else if (name == "velBoxed") return g_velBoxed.data();
+    if (name == "pos") return g_pos->data();
+    else if (name == "vel") return g_vel->data();
+    else if (name == "velBoxed") return g_velBoxed->data();
     else return nullptr;
 }
 
@@ -403,13 +403,13 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
         auto mb = static_pointer_cast<ExprMakeBlock>(call->arguments[0]);
         auto closure = static_pointer_cast<ExprBlock>(mb->block);
         EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
-        return aotEsRunBlockName(table, g_components);
+        return aotEsRunBlockName(table, *g_components);
     }
     virtual void aotPrefix ( TextWriter & ss, ExprCallFunc * call ) override {
         auto mb = static_pointer_cast<ExprMakeBlock>(call->arguments[0]);
         auto closure = static_pointer_cast<ExprBlock>(mb->block);
         EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
-        aotEsRunBlock(ss, table, g_components);
+        aotEsRunBlock(ss, table, *g_components);
     }
     virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList &, const AnnotationArgumentList &, string & err ) override {
         auto brt = call->arguments[0]->type->firstType;
@@ -441,10 +441,10 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
     }
 };
 
-DAS_THREAD_LOCAL(vector<float3>)          g_pos;
-DAS_THREAD_LOCAL(vector<float3>)          g_vel;
-DAS_THREAD_LOCAL(vector<float3 *>)        g_velBoxed;
-DAS_THREAD_LOCAL(vector<EsComponent>)     g_components;
+DAS_THREAD_LOCAL2(vector<float3>, 0x01c67c0a)          g_pos;
+DAS_THREAD_LOCAL2(vector<float3>, 0x72ace5c7)          g_vel;
+DAS_THREAD_LOCAL2(vector<float3 *>, 0xf81c229b)        g_velBoxed;
+DAS_THREAD_LOCAL2(vector<EsComponent>, 0xc19bf781)     g_components;
 
 template <typename TT>
 void releaseVec(vector<TT>& vec) {
@@ -453,29 +453,29 @@ void releaseVec(vector<TT>& vec) {
 }
 
 void releaseEsComponents() {
-    releaseVec(g_pos);
-    releaseVec(g_vel);
-    releaseVec(g_velBoxed);
+    releaseVec(*g_pos);
+    releaseVec(*g_vel);
+    releaseVec(*g_velBoxed);
 }
 
 void initEsComponents() {
     // build components
-    g_pos.resize(g_total);
-    g_vel.resize(g_total);
-    g_velBoxed.resize(g_total);
+    g_pos->resize(g_total);
+    g_vel->resize(g_total);
+    g_velBoxed->resize(g_total);
     float f = 1.0f;
     for (int i = 0; i != g_total; ++i, ++f) {
-        g_pos[i] = { f, f + 1, f + 2 };
-        g_vel[i] = { 1.0f, 2.0f, 3.0f };
-        g_velBoxed[i] = &g_vel[i];
+        (*g_pos)[i] = { f, f + 1, f + 2 };
+        (*g_vel)[i] = { 1.0f, 2.0f, 3.0f };
+        (*g_velBoxed)[i] = &(*g_vel)[i];
     }
 }
 
 void initEsComponentsTable() {
-    g_components.clear();
-    g_components.emplace_back("pos",      sizeof(float3), sizeof(float3),   false);
-    g_components.emplace_back("vel",      sizeof(float3), sizeof(float3),   false);
-    g_components.emplace_back("velBoxed", sizeof(float3), sizeof(float3 *), true );
+    g_components->clear();
+    g_components->emplace_back("pos",      sizeof(float3), sizeof(float3),   false);
+    g_components->emplace_back("vel",      sizeof(float3), sizeof(float3),   false);
+    g_components->emplace_back("velBoxed", sizeof(float3), sizeof(float3 *), true );
 }
 
 void verifyEsComponents(Context * context, LineInfoArg * at) {
@@ -488,9 +488,9 @@ void verifyEsComponents(Context * context, LineInfoArg * at) {
         npos.x = apos.x + avel.x * t;
         npos.y = apos.y + avel.y * t;
         npos.z = apos.z + avel.z * t;
-        if ( g_pos[i].x!=npos.x || g_pos[i].y!=npos.y || g_pos[i].z!=npos.z ) {
+        if ( (*g_pos)[i].x!=npos.x || (*g_pos)[i].y!=npos.y || (*g_pos)[i].z!=npos.z ) {
             TextWriter twrt;
-            twrt << "g_pos[" << i << "] (" << g_pos[i] << ") != npos (" << npos << ")\n";
+            twrt << "g_pos[" << i << "] (" << (*g_pos)[i] << ") != npos (" << npos << ")\n";
             context->throw_error_at(at, "verifyEsComponents failed, %s\n", twrt.str().c_str());
         }
     }
@@ -505,14 +505,14 @@ void testEsUpdate ( char * pass, Context * ctx, LineInfoArg * at ) {
     }
     for ( auto & tab : EsGroupData::THAT->g_esPassTable ) {
         if ( tab->pass==pass ) {
-            EsRunPass(*ctx, *tab, g_components, g_total);
+            EsRunPass(*ctx, *tab, *g_components, g_total);
         }
     }
 }
 
 uint32_t queryEs (const Block & block, Context * context, LineInfoArg * at) {
     das_stack_prologue guard(context,sizeof(Prologue), "queryEs " DAS_FILE_LINE);
-    return EsRunBlock(*context, at, block, g_components, g_total);
+    return EsRunBlock(*context, at, block, *g_components, g_total);
 }
 
 #if DAS_USE_EASTL

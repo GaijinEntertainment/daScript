@@ -26,7 +26,7 @@ namespace das {
         program->visit(subs,/*visitGenerics =*/true);
     }
 
-    DAS_THREAD_LOCAL(unsigned) ModuleKarma = 0;
+    DAS_THREAD_LOCAL2(unsigned, 0xb68d4cf9) ModuleKarma;
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
         auto at = name.find("::");
@@ -1095,7 +1095,7 @@ namespace das {
 
     void pull_all_auto_registered_modules() {
         for (module_pull_t pull : get_pullers()) {
-            das::ModuleKarma += unsigned(intptr_t(pull()));
+            *das::ModuleKarma += unsigned(intptr_t(pull()));
         }
     }
 }

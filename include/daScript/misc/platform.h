@@ -380,8 +380,37 @@ inline size_t das_aligned_memsize(void * ptr){
 #define _msc_inline_bug __forceinline
 #endif
 
+template<typename T, int TAG>
+class DasThreadLocal final
+{
+public:
+    using SelfType = DasThreadLocal<T, TAG>;
+
+    inline DasThreadLocal()
+    {
+        if (initCounter++)
+            throw std::logic_error("Type with tag is already used, pls change tag!");
+    }
+
+    DasThreadLocal(const SelfType & other) = delete;
+    DasThreadLocal(SelfType&& other) = delete;
+    DasThreadLocal & operator=(const SelfType & other) = delete;
+    DasThreadLocal & operator=(SelfType && other) = delete;
+
+    inline T & operator *() noexcept { return value_; }
+    inline T * operator->() noexcept { return &value_; }
+
+private:
+    inline static thread_local T value_{};
+    inline static int initCounter = 0;
+};
+
 #ifndef DAS_THREAD_LOCAL
 #define DAS_THREAD_LOCAL(X)  thread_local X
+#endif
+
+#ifndef DAS_THREAD_LOCAL2
+#define DAS_THREAD_LOCAL2(X, TAG) DasThreadLocal<X, TAG>
 #endif
 
 #ifndef DAS_AOT_INLINE_LAMBDA

@@ -898,19 +898,19 @@ namespace das
 
     class SharedStackGuard {
     public:
-        static DAS_THREAD_LOCAL(StackAllocator *) lastContextStack;
+        static DAS_THREAD_LOCAL2(StackAllocator *, 0x129a764e) lastContextStack;
         SharedStackGuard() = delete;
         SharedStackGuard(const SharedStackGuard &) = delete;
         SharedStackGuard & operator = (const SharedStackGuard &) = delete;
         __forceinline SharedStackGuard(Context & currentContext, StackAllocator & shared_stack) : savedStack(0) {
             savedStack.copy(currentContext.stack);
-            currentContext.stack.copy(lastContextStack ? *lastContextStack : shared_stack);
-            saveLastContextStack = lastContextStack;
-            lastContextStack = &currentContext.stack;
+            currentContext.stack.copy(*lastContextStack ? **lastContextStack : shared_stack);
+            saveLastContextStack = *lastContextStack;
+            *lastContextStack = &currentContext.stack;
         }
         __forceinline ~SharedStackGuard() {
-            lastContextStack->copy(savedStack);
-            lastContextStack = saveLastContextStack;
+            (*lastContextStack)->copy(savedStack);
+            *lastContextStack = saveLastContextStack;
             savedStack.letGo();
         }
     protected:
