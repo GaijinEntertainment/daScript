@@ -49,6 +49,7 @@ string help() {
            "das-fmt {-i} filename1 {filename2} ...:\n"
            "   -i inplace conversion, write to the same file. Multiple filenames only allowed in inplace mode\n"
            "   --tests Run tests, no filenames required\n"
+           "   --semicolon Keep semicolon after convertion\n"
            "";
 }
 
@@ -314,6 +315,8 @@ int main(int argc, char** argv) {
                 opts.insert(format::FormatOpt::Inplace);
             } else if (arg == "-v2" || arg == "--v2") {
                 opts.insert(format::FormatOpt::V2Syntax);
+            } else if (arg == "--semicolon") {
+                opts.insert(format::FormatOpt::SemicolonEOL);
             } else {
                 tp << help();
             }

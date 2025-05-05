@@ -355,7 +355,7 @@ void print_help() {
         << "    -v2makeSyntax enable version 1 syntax with version 2 constructors syntax (for arrays/structures)\n"
         << "    -jit        enable Just-In-Time compilation\n"
         << "    -project <path.das_project> path to project file\n"
-        << "    -run-fmt    <inplace/dry> <v2/v1> run formatter, requires 2 arguments\n"
+        << "    -run-fmt    <inplace/dry> <v2/v1> <semicolon> run formatter, requires 2 or more arguments\n"
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
         << "    -dry-run    compile and simulate script without execution\n"
@@ -468,6 +468,13 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                     return -1;
                 }
                 i++;
+
+                if (i + 1 < argc)  {
+                    if (string(argv[i + 1]) == "--semicolon") {
+                        formatter->insert(format::FormatOpt::SemicolonEOL);
+                        ++i;
+                    }
+                }
             } else if ( cmd=="args" ) {
                 break;
             } else if ( cmd=="pause" ) {
