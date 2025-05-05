@@ -58,6 +58,10 @@ namespace das::format {
             return line != rhs.line || column != rhs.column;
         }
 
+        bool operator == (const Pos &rhs) const {
+            return line == rhs.line && column == rhs.column;
+        }
+
         bool operator < (const Pos &rhs) const {
             return line < rhs.line || (line == rhs.line && column < rhs.column);
         }
