@@ -2820,7 +2820,8 @@ enum_list
     :   {
         $$ = new Enumeration();
     }
-    |   enum_list[pE] NAME[name] opt_sem {
+    |   enum_list[pE] NAME[name] opt_sem[sem] {
+        format::skip_token(true, tokAt(scanner,@sem));
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration already declared " + *$name, tokAt(scanner,@name),
@@ -2835,7 +2836,8 @@ enum_list
         delete $name;
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] '=' expr[value] opt_sem {
+    |   enum_list[pE] NAME[name] '=' expr[value] opt_sem[sem] {
+        format::skip_token(true, tokAt(scanner,@sem));
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,$value,tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration value already declared " + *$name, tokAt(scanner,@name),

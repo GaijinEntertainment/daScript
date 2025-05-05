@@ -191,6 +191,20 @@ namespace das::format {
         replace_with(v2_only, start, format::get_substring(internal), end, open, close);
     }
 
+    bool skip_token(bool v2_only, LineInfo token) {
+        auto start = format::Pos::from(token);
+        auto end = format::Pos::from_last(token);
+        if (start == end) {
+            return false;
+        }
+        if ((!v2_only || format::is_replace_braces()) && format::prepare_rule(start)) {
+            format::finish_rule(end);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     void wrap_par_expr(LineInfo real_expr, LineInfo info_expr) {
         if (format::is_replace_braces() && real_expr == info_expr && format::prepare_rule(Pos::from(real_expr))) {
             format::get_writer() << "(" << format::get_substring(real_expr) << ")";
