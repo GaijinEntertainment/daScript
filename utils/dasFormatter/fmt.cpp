@@ -3,7 +3,7 @@
 #include "../src/parser/parser_state.h"
 
 #include <fstream>
-
+#include <filesystem>
 #include "daScript/ast/ast.h"
 
 typedef void * yyscan_t;
@@ -169,7 +169,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
 
     int iter = 0;
     policies.version_2_syntax = false;
-    const auto tmp_name1 = "/tmp/tmp1.das";
+    const auto tmp_name1 = (std::filesystem::temp_directory_path() / "tmp1.das").string();
     {
         std::ofstream ostream(tmp_name1);
         ostream << src.c_str();
@@ -236,7 +236,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     if (!options.contains(FormatOpt::SemicolonEOL)) {
         src = remove_semicolons(src, options.contains(FormatOpt::V2Syntax));
     }
-    const auto tmp_name = "/tmp/tmp.das";
+    const auto tmp_name = (std::filesystem::temp_directory_path() / "tmp.das").string();
     {
         std::ofstream ostream(tmp_name);
         ostream << src.c_str();
