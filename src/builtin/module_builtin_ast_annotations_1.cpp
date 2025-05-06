@@ -227,6 +227,7 @@ namespace das {
             // properties
             this->template addProperty<DAS_BIND_MANAGED_PROP(getOriginPtr)>("origin","getOriginPtr");
             this->template addProperty<DAS_BIND_MANAGED_PROP(getMangledNameHash)>("getMangledNameHash");
+            this->template addProperty<DAS_BIND_MANAGED_PROP(isGeneric)>("isGeneric","isGeneric");
         }
     };
 

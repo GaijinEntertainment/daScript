@@ -817,7 +817,7 @@ namespace das {
     using DebugBlockT = TBlock<void,const char *, T>;
 
     template <typename T>
-    static void call_each(const vector<std::pair<std::string, T>> &data, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at) {
+    static void call_each(const vector<das::pair<das::string, T>> &data, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at) {
         for (auto &[name, v]: data) {
             vec4f args[2];
             args[0] = cast<const char *>::from(name.c_str());
