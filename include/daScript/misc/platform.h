@@ -406,11 +406,7 @@ private:
 };
 
 #ifndef DAS_THREAD_LOCAL
-#define DAS_THREAD_LOCAL(X)  thread_local X
-#endif
-
-#ifndef DAS_THREAD_LOCAL2
-#define DAS_THREAD_LOCAL2(X, TAG) DasThreadLocal<X, TAG>
+#define DAS_THREAD_LOCAL(X, TAG) DasThreadLocal<X, TAG>
 #endif
 
 #ifndef DAS_AOT_INLINE_LAMBDA

@@ -26,7 +26,7 @@ namespace das {
         program->visit(subs,/*visitGenerics =*/true);
     }
 
-    DAS_THREAD_LOCAL2(unsigned, 0xb68d4cf9) ModuleKarma;
+    DAS_THREAD_LOCAL(unsigned, 0xb68d4cf9) ModuleKarma;
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
         auto at = name.find("::");

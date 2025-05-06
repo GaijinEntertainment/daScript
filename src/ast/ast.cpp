@@ -54,7 +54,7 @@ namespace das {
 
     // aot library
 
-    DAS_THREAD_LOCAL2(unique_ptr<AotLibrary>, 0x46cc4bfc) g_AOT_lib;
+    DAS_THREAD_LOCAL(unique_ptr<AotLibrary>, 0x46cc4bfc) g_AOT_lib;
 
     AotLibrary & getGlobalAotLibrary() {
         if ( !*g_AOT_lib ) {

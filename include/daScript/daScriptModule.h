@@ -3,7 +3,7 @@
 
 namespace das
 {
-    extern DAS_THREAD_LOCAL2(unsigned, 0xb68d4cf9) ModuleKarma;
+    extern DAS_THREAD_LOCAL(unsigned, 0xb68d4cf9) ModuleKarma;
     class Module;
 };
 

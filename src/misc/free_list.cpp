@@ -14,8 +14,8 @@ struct ReuseCache {
     ReuseChunk *    hold[DAS_MAX_BUCKET_COUNT];
 };
 
-DAS_THREAD_LOCAL2(ReuseCache *, 0xb319af20) tlsReuseCache;
-DAS_THREAD_LOCAL2(uint32_t, 0x4cce28b5) tlsReuseCacheCount;
+DAS_THREAD_LOCAL(ReuseCache *, 0xb319af20) tlsReuseCache;
+DAS_THREAD_LOCAL(uint32_t, 0x4cce28b5) tlsReuseCacheCount;
 
 void reuse_cache_push() {
     if ( *tlsReuseCacheCount==0 ) reuse_cache_create();
