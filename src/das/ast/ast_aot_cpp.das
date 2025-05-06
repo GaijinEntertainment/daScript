@@ -634,7 +634,7 @@ class AotDebugInfoHelper {
                 writeDim(writer, info.fields[fi], suffix);
                 writeArgTypes(writer, info.fields[fi], suffix);
                 writeArgNames(writer, info.fields[fi], suffix);
-                write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(info.name, info.fields[fi],suffix)} \};\n");
+                write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(string(info.name), info.fields[fi],suffix)} \};\n");
             }
         }
 
@@ -3476,14 +3476,17 @@ def new_cpp_aot(var ss : StringBuilderWriter?; program : ProgramPtr) {
 
 
 
-def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; isAll : bool = false) : array<Function?> {
+def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_module : Module?; all_modules : bool; is_all : bool = false) : array<Function?> {
     var fnn : array<Function?>;
     fnn.reserve(totalFunctions);
     for (pm in modules) {
         pm |> for_each_module_function($(pfun) {
+            if (!all_modules && pfun._module != this_module) {
+                return ;
+            }
             if (pfun.index < 0 || !pfun.flags.used)
                 return ;
-            if (!isAll) {
+            if (!is_all) {
                 if (pfun.flags.builtIn || pfun.flags.noAot) return ;
             }
             fnn |> push(pfun.get_ptr());
@@ -3492,33 +3495,33 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; isAll :
     return <- fnn;
 }
 
-def collectProgramUsedFunctions(program : ProgramPtr; isAll : bool = false) : array<Function?> {
-    var all_modules : array<Module?>;
+def collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool; is_all : bool) : array<Function?> {
+    var modules : array<Module?>;
     program.get_ptr() |> for_each_module_no_order($(mod) {
-        all_modules.push(mod);
+        modules.push(mod);
     })
-    return collectUsedFunctions(all_modules, program.totalFunctions, isAll)
+    return collectUsedFunctions(modules, program.totalFunctions, program.getThisModule, all_modules, is_all)
 }
 
-def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, allModules : bool = false) {
-    let fnn = collectProgramUsedFunctions(program);
+def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, all_modules : bool = false) {
+    let fnn = collectProgramUsedFunctions(program, all_modules, false);
     if (headers) {
         write(*logs, "\nvoid registerAot ( AotLibrary & aotLib )\n\{\n");
     }
     var funInit = false;
     for (fn in fnn) {
-        if (!allModules && fn._module != program.getThisModule)
+        if (!all_modules && fn._module != program.getThisModule)
             continue;
         if (fn.flags.init) {
             funInit = true;
         }
         let semH = fn.aotHash;
-        write(*logs, "    aotLib[0x{semH:x}] = +[](Context & ctx) -> SimNode* \{ // {aotFuncName(fn)}\n");
-        write(*logs, "        return ctx.code->makeNode<SimNode_Aot");
+        write(*logs, "    aotLib[0x{semH:x}] = +[](Context & ctx) -> SimNode* \{\n");
+        write(*logs, "        return ctx.code->makeNode<AutoSimNode_Aot");
         if (fn.flags.copyOnReturn || fn.flags.moveOnReturn) {
             write(*logs, "CMRES");
         }
-        write(*logs, "<{describeCppFunc(unsafe(reinterpret<FunctionPtr>(fn)),null,cross_platform,false,false)},&{aotFuncName(fn)}>>()");
+        write(*logs, "<&{aotFuncName(fn)}>>()");
         write(*logs, ";\n    \};\n");
     }
 
@@ -3526,7 +3529,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         let semH = program |> getInitSemanticHashWithDep(context.getInitSemanticHash);
         write(*logs, "    // [[ init script ]]\n");
         write(*logs, "    aotLib[0x{semH:x}] = +[](Context & ctx) -> SimNode* \{\n");
-        write(*logs, "        ctx.aotInitScript = ctx.code->makeNode<SimNode_Aot<void (*)(Context *, bool),&__init_script>>();\n");
+        write(*logs, "        ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();\n");
         write(*logs, "        return ctx.aotInitScript;\n");
         write(*logs, "    \};\n");
     }
@@ -3562,7 +3565,7 @@ def dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var con
     write(*tw, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
     registerAotCpp(tw, program, context, cross_platform, false, allModules);
     write(*tw, "    resolveTypeInfoAnnotations();\n");
-    write(*tw, "};\n");
+    write(*tw, "\};\n");
     write(*tw, "\n");
     write(*tw, "AotListBase impl(registerAotFunctions);\n");
 }
