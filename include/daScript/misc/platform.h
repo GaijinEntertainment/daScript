@@ -380,7 +380,7 @@ inline size_t das_aligned_memsize(void * ptr){
 #define _msc_inline_bug __forceinline
 #endif
 
-template<typename T, int TAG>
+template<typename T, unsigned long long TAG>
 class DasThreadLocal final
 {
 public:
