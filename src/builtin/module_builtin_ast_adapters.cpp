@@ -2417,6 +2417,15 @@ namespace das {
         program->visit(*adapter);
     }
 
+    void astVisitModule ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter,
+                          Module* module, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(line_info, "adapter is required");
+        if (!program)
+            context->throw_error_at(line_info, "program is required");
+        program->visitModule(*adapter, module);
+    }
+
     void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
@@ -2474,6 +2483,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(astVisitModulesInOrder)>(*this, lib,  "visit_modules",
             SideEffects::accessExternal, "astVisitModulesInOrder")
                 ->args({"program","adapter","context","line"});
+        addExtern<DAS_BIND_FUN(astVisitModule)>(*this, lib,  "visit_module",
+            SideEffects::accessExternal, "astVisitModule")
+                ->args({"program","adapter","module","context","line"});
         addExtern<DAS_BIND_FUN(astVisitFunction)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisitFunction")
                 ->args({"function","adapter","context","line"});

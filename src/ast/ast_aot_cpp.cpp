@@ -3760,25 +3760,23 @@ namespace das {
         }
     }
 
-    static void writeRequiredModulesFor ( TextWriter &ss, Module * mod ) {
+    static void writeRequiredModulesFor ( TextWriter &ss, ProgramPtr program ) {
         // lets comment on required modules
-        auto ptr_cmp = [](const Module* lhs, const Module* rhs) {
-            return lhs->name < rhs->name;
-        };
-        for ( auto [req, pub] : ordered(mod->requireModule, ptr_cmp) ) {
-            if ( req->name.empty() ) {
+        program->library.foreach_in_order([&](Module * mod){
+            if ( mod->name=="" ) {
                 // nothing, its main program module. i.e ::
             } else {
-                if ( req->name=="$" ) {
+                if ( mod->name=="$" ) {
                     ss << " // require builtin\n";
                 } else {
-                    ss << " // require " << req->name << "\n";
+                    ss << " // require " << mod->name << "\n";
                 }
-                if ( req->aotRequire(ss)==ModuleAotType::no_aot ) {
-                    ss << "  // no_aot ignored in standalone context\n";
+                if ( mod->aotRequire(ss)==ModuleAotType::no_aot ) {
+                    ss << "  // AOT disabled due to this module\n";
                 }
             }
-        }
+            return true;
+        }, program->getThisModule());
     }
 
 
@@ -3931,7 +3929,7 @@ namespace das {
         }
 
         source << "#include \"daScript/simulate/standalone_ctx_utils.h\"\n";
-        writeRequiredModulesFor(source, mod);
+        writeRequiredModulesFor(source, program);
         source << "#include \"" << (mod->name.empty() ? cfg.context_name : mod->name) << ".das.h\"\n";
         source << AOT_HEADERS;
         {
@@ -3956,7 +3954,7 @@ namespace das {
                             ext_namespaces.emplace(pfun->module->getNamespace());
                         }
                     }
-                    for (const auto namesp: ext_namespaces) {
+                    for (const auto namesp: ordered(ext_namespaces)) {
                         source << "using namespace " << namesp << ";\n";
                     }
                 }

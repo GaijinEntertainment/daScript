@@ -357,10 +357,15 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(thisModuleName)>("thisModuleName");
             addField<DAS_BIND_MANAGED_FIELD(thisNamespace)>("thisNamespace");
             addField<DAS_BIND_MANAGED_FIELD(totalFunctions)>("totalFunctions");
+            addField<DAS_BIND_MANAGED_FIELD(totalVariables)>("totalVariables");
+            addField<DAS_BIND_MANAGED_FIELD(globalStringHeapSize)>("globalStringHeapSize");
+            addField<DAS_BIND_MANAGED_FIELD(initSemanticHashWithDep)>("initSemanticHashWithDep");
             addFieldEx ( "flags", "flags", offsetof(Program, flags), makeProgramFlags() );
             addProperty<DAS_BIND_MANAGED_PROP(getThisModule)>("getThisModule");
+            addProperty<DAS_BIND_MANAGED_PROP(getDebugger)>("getDebugger");
             addField<DAS_BIND_MANAGED_FIELD(errors)>("errors");
             addField<DAS_BIND_MANAGED_FIELD(options)>("_options","options");
+            addField<DAS_BIND_MANAGED_FIELD(policies)>("policies","policies");
         }
     };
 
@@ -788,6 +793,7 @@ namespace das {
     struct DebugInfoHelperAnnotation : ManagedStructureAnnotation<DebugInfoHelper> {
         DebugInfoHelperAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation<DebugInfoHelper> ("DebugInfoHelper", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(rtti)>("rtti");
         }
     };
 
@@ -1391,6 +1397,9 @@ namespace das {
             addAlias(makeStructInfoFlags());
             addAlias(makeModuleFlags());
             addAlias(makeAnnotationDeclarationFlags());
+            // CodeOfPolicies
+            addAnnotation(make_smart<CodeOfPoliciesAnnotation>(lib));
+            addCtorAndUsing<CodeOfPolicies>(*this,lib,"CodeOfPolicies","CodeOfPolicies");
             // enums
             addEnumeration(make_smart<EnumerationCompilationError>());
             // type annotations
@@ -1428,9 +1437,6 @@ namespace das {
             initRecAnnotation(sia, lib);
             addAnnotation(make_smart<FuncInfoAnnotation>(lib));
             addAnnotation(make_smart<SimFunctionAnnotation>(lib));
-            // CodeOfPolicies
-            addAnnotation(make_smart<CodeOfPoliciesAnnotation>(lib));
-            addCtorAndUsing<CodeOfPolicies>(*this,lib,"CodeOfPolicies","CodeOfPolicies");
             // DebugInfoHelper
             addAnnotation(make_smart<DebugInfoHelperAnnotation>(lib));
             // RttiValue
