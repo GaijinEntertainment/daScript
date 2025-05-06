@@ -483,7 +483,7 @@ namespace das {
         void verifyNoWrite ( ExprCallFunc * expr ) {
             // TODO: add support for ExprInvoke
             if ( noWritingToNameless ) {
-                if ( expr->write && !expr->type->ref ) {
+                if ( expr->write && !(expr->type->ref || expr->type->isPointer()) ) {
                     program->error("dead write is prohibited by CodeOfPolicies", "\tin " + expr->describe(), "",
                         expr->at, CompilationError::no_writing_to_nameless);
                 }
