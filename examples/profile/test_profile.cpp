@@ -359,7 +359,7 @@ void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsC
         });
         if ( a ) ss << ",";
         if ( it != components.end() ) {
-            ss << "g_" << table->attributes[a].name << "[i]";
+            ss << "(*g_" << table->attributes[a].name << ")[i]";
         } else {
             vec4f def = table->attributes[a].def;
             const char * def_s = table->attributes[a].def_s;
