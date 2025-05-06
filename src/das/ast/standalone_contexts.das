@@ -441,7 +441,10 @@ def runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var 
 }
 
 [export]
-def standalone_aot(input : string; cfg : StandaloneContextCfg; isAotLib, paranoid_validation : bool) : string {
+def standalone_aot(input : string; output_dir : string; isAotLib, paranoid_validation : bool) : string {
+    let cfg = StandaloneContextCfg(context_name = "context",
+                                   class_name = "Standalone",
+                                   cpp_output_dir = output_dir)
     var result = "";
     using <| $(var mg : ModuleGroup) {
         using <| $(var cop : CodeOfPolicies) {
