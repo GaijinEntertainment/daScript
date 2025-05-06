@@ -93,9 +93,9 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                     NamespaceGuard das_guard(tw, "das");
                     {
                         NamespaceGuard anon_guard(tw, program->thisNamespace); // anonymous
-                        daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
+                        (*daScriptEnvironment::bound)->g_Program = program;    // setting it for the AOT macros
                         program->aotCpp(*pctx, tw);
-                        daScriptEnvironment::bound->g_Program.reset();
+                        (*daScriptEnvironment::bound)->g_Program.reset();
                         // list STUFF
                         tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                         program->registerAotCpp(tw, *pctx, false);
@@ -250,7 +250,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
-    daScriptEnvironment::bound->g_isInAot = true;
+    (*daScriptEnvironment::bound)->g_isInAot = true;
     bool compiled = false;
     if ( standaloneContext ) {
         StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};

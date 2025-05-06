@@ -3899,7 +3899,7 @@ namespace das {
             return;
         }
         Context & context = *pctx;
-        daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
+        (*daScriptEnvironment::bound)->g_Program = program;    // setting it for the AOT macros
 
         // mark prologue
         PrologueMarker pmarker;
@@ -3989,7 +3989,7 @@ namespace das {
             saveToFile(logger, outputFile + ".cpp", source_content);
         }
 
-        daScriptEnvironment::bound->g_Program.reset();
+        (*daScriptEnvironment::bound)->g_Program.reset();
     }
 
     void Program::aotCpp ( Context & context, TextWriter & logs ) {

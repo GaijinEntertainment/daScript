@@ -18,16 +18,16 @@ namespace das {
     void runMacroFunction ( Context * context, const string & message, const callable<void()> & subexpr ) {
         auto timeM = ref_time_ticks();
         if ( !context->runWithCatch(subexpr) ) {
-            DAS_ASSERTF(daScriptEnvironment::bound->g_Program, "calling macros while not compiling a program");
-            daScriptEnvironment::bound->g_Program->error(
+            DAS_ASSERTF((*daScriptEnvironment::bound)->g_Program, "calling macros while not compiling a program");
+            (*daScriptEnvironment::bound)->g_Program->error(
                 "macro caused exception during " + message,
                 context->getException(), "",
                 context->exceptionAt,
                 CompilationError::exception_during_macro
             );
-            daScriptEnvironment::bound->g_Program->macroException = true;
+            (*daScriptEnvironment::bound)->g_Program->macroException = true;
         }
-        daScriptEnvironment::bound->macroTimeTicks += ref_time_ticks() - timeM;
+        (*daScriptEnvironment::bound)->macroTimeTicks += ref_time_ticks() - timeM;
     }
 
     VisitorAdapter::VisitorAdapter(char *pClass, const StructInfo *info, Context *ctx)
@@ -1670,8 +1670,8 @@ namespace das {
             if ( auto fnOpen = get_open(classPtr) ) {
                 runMacroFunction(context, "open", [&]() {
                     invoke_open(context,fnOpen,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             cppStyle,info);
                 });
             }
@@ -1680,8 +1680,8 @@ namespace das {
             if ( auto fnAccept = get_accept(classPtr) ) {
                 runMacroFunction(context, "accept", [&]() {
                     invoke_accept(context,fnAccept,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             Ch,info);
                 });
             }
@@ -1690,8 +1690,8 @@ namespace das {
             if ( auto fnClose = get_close(classPtr) ) {
                 runMacroFunction(context, "close", [&]() {
                     invoke_close(context,fnClose,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1700,8 +1700,8 @@ namespace das {
             if ( auto fnBeforeStructure = get_beforeStructure(classPtr) ) {
                 runMacroFunction(context, "beforeStructure", [&]() {
                     invoke_beforeStructure(context,fnBeforeStructure,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1710,8 +1710,8 @@ namespace das {
             if ( auto fnAfterStructure = get_afterStructure(classPtr) ) {
                 runMacroFunction(context, "afterStructure", [&]() {
                     invoke_afterStructure(context,fnAfterStructure,classPtr,
-                        st, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        st, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1721,8 +1721,8 @@ namespace das {
             if ( auto fnBeforeFunction = get_beforeFunction(classPtr) ) {
                 runMacroFunction(context, "beforeFunction", [&]() {
                     invoke_beforeFunction(context,fnBeforeFunction,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1731,8 +1731,8 @@ namespace das {
             if ( auto fnAfterFunction = get_afterFunction(classPtr) ) {
                 runMacroFunction(context, "afterFunction", [&]() {
                     invoke_afterFunction(context,fnAfterFunction,classPtr,
-                        fn, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        fn, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1741,8 +1741,8 @@ namespace das {
             if ( auto fnBeforeStructureFields = get_beforeStructureFields(classPtr) ) {
                 runMacroFunction(context, "beforeStructureFields", [&]() {
                     invoke_beforeStructureFields(context,fnBeforeStructureFields,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1751,8 +1751,8 @@ namespace das {
             if ( auto fnAfterStructureField = get_afterStructureField(classPtr) ) {
                 runMacroFunction(context, "afterStructureField", [&]() {
                     invoke_afterStructureField(context,fnAfterStructureField,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1761,8 +1761,8 @@ namespace das {
             if ( auto fnAfterStructureFields = get_afterStructureFields(classPtr) ) {
                 runMacroFunction(context, "afterStructureFields", [&]() {
                     invoke_afterStructureFields(context,fnAfterStructureFields,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1771,8 +1771,8 @@ namespace das {
             if ( auto fnGlobalVariables = get_beforeGlobalVariables(classPtr) ) {
                 runMacroFunction(context, "beforeGlobalVariables", [&]() {
                     invoke_beforeGlobalVariables(context,fnGlobalVariables,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1781,8 +1781,8 @@ namespace das {
             if ( auto fnGlobalVariable = get_afterGlobalVariable(classPtr) ) {
                 runMacroFunction(context, "afterGlobalVariable", [&]() {
                     invoke_afterGlobalVariable(context,fnGlobalVariable,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1791,8 +1791,8 @@ namespace das {
             if ( auto fnGlobalVariables = get_afterGlobalVariables(classPtr) ) {
                 runMacroFunction(context, "afterGlobalVariables", [&]() {
                     invoke_afterGlobalVariables(context,fnGlobalVariables,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1801,8 +1801,8 @@ namespace das {
             if ( auto fnTuple = get_beforeTuple(classPtr) ) {
                 runMacroFunction(context, "beforeTuple", [&]() {
                     invoke_beforeTuple(context,fnTuple,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1811,8 +1811,8 @@ namespace das {
             if ( auto fnTuple = get_beforeTupleEntries(classPtr) ) {
                 runMacroFunction(context, "beforeTupleEntries", [&]() {
                     invoke_beforeTupleEntries(context,fnTuple,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1821,8 +1821,8 @@ namespace das {
             if ( auto fnTuple = get_afterTupleEntry(classPtr) ) {
                 runMacroFunction(context, "afterTupleEntry", [&]() {
                     invoke_afterTupleEntry(context,fnTuple,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1831,8 +1831,8 @@ namespace das {
             if ( auto fnTuple = get_afterTupleEntries(classPtr) ) {
                 runMacroFunction(context, "afterTupleEntries", [&]() {
                     invoke_afterTupleEntries(context,fnTuple,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1841,8 +1841,8 @@ namespace das {
             if ( auto fnTuple = get_afterTuple(classPtr) ) {
                 runMacroFunction(context, "afterTuple", [&]() {
                     invoke_afterTuple(context,fnTuple,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1851,8 +1851,8 @@ namespace das {
             if ( auto fnVariant = get_beforeVariant(classPtr) ) {
                 runMacroFunction(context, "beforeVariant", [&]() {
                     invoke_beforeVariant(context,fnVariant,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1861,8 +1861,8 @@ namespace das {
             if ( auto fnVariant = get_beforeVariantEntries(classPtr) ) {
                 runMacroFunction(context, "beforeVariantEntries", [&]() {
                     invoke_beforeVariantEntries(context,fnVariant,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1871,8 +1871,8 @@ namespace das {
             if ( auto fnVariant = get_afterVariantEntry(classPtr) ) {
                 runMacroFunction(context, "afterVariantEntry", [&]() {
                     invoke_afterVariantEntry(context,fnVariant,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1881,8 +1881,8 @@ namespace das {
             if ( auto fnVariant = get_afterVariantEntries(classPtr) ) {
                 runMacroFunction(context, "afterVariantEntries", [&]() {
                     invoke_afterVariantEntries(context,fnVariant,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1891,8 +1891,8 @@ namespace das {
             if ( auto fnVariant = get_afterVariant(classPtr) ) {
                 runMacroFunction(context, "afterVariant", [&]() {
                     invoke_afterVariant(context,fnVariant,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1901,8 +1901,8 @@ namespace das {
             if ( auto fnBitfield = get_beforeBitfield(classPtr) ) {
                 runMacroFunction(context, "beforeBitfield", [&]() {
                     invoke_beforeBitfield(context,fnBitfield,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1911,8 +1911,8 @@ namespace das {
             if ( auto fnBitfield = get_beforeBitfieldEntries(classPtr) ) {
                 runMacroFunction(context, "beforeBitfieldEntries", [&]() {
                     invoke_beforeBitfieldEntries(context,fnBitfield,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1921,8 +1921,8 @@ namespace das {
             if ( auto fnBitfield = get_afterBitfieldEntry(classPtr) ) {
                 runMacroFunction(context, "afterBitfieldEntry", [&]() {
                     invoke_afterBitfieldEntry(context,fnBitfield,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1931,8 +1931,8 @@ namespace das {
             if ( auto fnBitfield = get_afterBitfieldEntries(classPtr) ) {
                 runMacroFunction(context, "afterBitfieldEntries", [&]() {
                     invoke_afterBitfieldEntries(context,fnBitfield,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1941,8 +1941,8 @@ namespace das {
             if ( auto fnBitfield = get_afterBitfield(classPtr) ) {
                 runMacroFunction(context, "afterBitfield", [&]() {
                     invoke_afterBitfield(context,fnBitfield,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1951,8 +1951,8 @@ namespace das {
             if ( auto fnEnum = get_beforeEnumeration(classPtr) ) {
                 runMacroFunction(context, "beforeEnumeration", [&]() {
                     invoke_beforeEnumeration(context,fnEnum,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1961,8 +1961,8 @@ namespace das {
             if ( auto fnEnum = get_beforeEnumerationEntries(classPtr) ) {
                 runMacroFunction(context, "beforeEnumerationEntries", [&]() {
                     invoke_beforeEnumerationEntries(context,fnEnum,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1971,8 +1971,8 @@ namespace das {
             if ( auto fnEnum = get_afterEnumerationEntry(classPtr) ) {
                 runMacroFunction(context, "afterEnumerationEntry", [&]() {
                     invoke_afterEnumerationEntry(context,fnEnum,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1981,8 +1981,8 @@ namespace das {
             if ( auto fnEnum = get_afterEnumerationEntries(classPtr) ) {
                 runMacroFunction(context, "afterEnumerationEntries", [&]() {
                     invoke_afterEnumerationEntries(context,fnEnum,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -1991,8 +1991,8 @@ namespace das {
             if ( auto fnEnum = get_afterEnumeration(classPtr) ) {
                 runMacroFunction(context, "afterEnumeration", [&]() {
                     invoke_afterEnumeration(context,fnEnum,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -2001,8 +2001,8 @@ namespace das {
             if ( auto fnAlias = get_beforeAlias(classPtr) ) {
                 runMacroFunction(context, "beforeAlias", [&]() {
                     invoke_beforeAlias(context,fnAlias,classPtr,
-                        daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -2011,8 +2011,8 @@ namespace das {
             if ( auto fnAlias = get_afterAlias(classPtr) ) {
                 runMacroFunction(context, "afterAlias", [&]() {
                     invoke_afterAlias(context,fnAlias,classPtr,
-                        (char *) name, daScriptEnvironment::bound->g_Program,
-                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                        (char *) name, (*daScriptEnvironment::bound)->g_Program,
+                        (*daScriptEnvironment::bound)->g_Program->thisModule.get(),
                             info);
                 });
             }
@@ -2347,7 +2347,7 @@ namespace das {
                 ann->annotation->name.c_str(), func->name.c_str());
         }
         auto fAnn = (FunctionAnnotation*)ann->annotation.get();
-        auto program = daScriptEnvironment::bound->g_Program;
+        auto program = (*daScriptEnvironment::bound)->g_Program;
         if ( !fAnn->apply(func, *program->thisModuleGroup, ann->arguments, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to function %s",
                 ann->annotation->name.c_str(), func->name.c_str());
@@ -2362,7 +2362,7 @@ namespace das {
                 ann->annotation->name.c_str(), blk->at.describe().c_str());
         }
         auto fAnn = (FunctionAnnotation*)ann->annotation.get();
-        auto program = daScriptEnvironment::bound->g_Program;
+        auto program = (*daScriptEnvironment::bound)->g_Program;
         if ( !fAnn->apply(blk.ptr, *program->thisModuleGroup, ann->arguments, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to block %s",
                 ann->annotation->name.c_str(), blk->at.describe().c_str());
@@ -2377,7 +2377,7 @@ namespace das {
                 ann->annotation->name.c_str(), st->name.c_str());
         }
         auto stAnn = (StructureAnnotation*)ann->annotation.get();
-        auto program = daScriptEnvironment::bound->g_Program;
+        auto program = (*daScriptEnvironment::bound)->g_Program;
         if ( !stAnn->touch(st, *program->thisModuleGroup, ann->arguments, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to struct %s",
                 ann->annotation->name.c_str(), st->name.c_str());

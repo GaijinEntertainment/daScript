@@ -1757,8 +1757,8 @@ namespace das
         AstSerializer * serializer_write = nullptr;
         DebugAgentInstance g_threadLocalDebugAgent;
         uint64_t        dataWalkerStringLimit = 0;
-        static DAS_THREAD_LOCAL(daScriptEnvironment *) bound;
-        static DAS_THREAD_LOCAL(daScriptEnvironment *) owned;
+        static DAS_THREAD_LOCAL2(daScriptEnvironment *, 0xa50e7db6) bound;
+        static DAS_THREAD_LOCAL2(daScriptEnvironment *, 0x3bb4532d) owned;
         static void ensure();
     };
 
@@ -1767,15 +1767,15 @@ namespace das
         das::daScriptEnvironment *initialOwned;
 
         daScriptEnvironmentGuard(das::daScriptEnvironment *bound = nullptr, das::daScriptEnvironment *owned = nullptr) {
-            initialBound = das::daScriptEnvironment::bound;
-            initialOwned = das::daScriptEnvironment::owned;
-            das::daScriptEnvironment::bound = bound;
-            das::daScriptEnvironment::owned = owned;
+            initialBound = *das::daScriptEnvironment::bound;
+            initialOwned = *das::daScriptEnvironment::owned;
+            *das::daScriptEnvironment::bound = bound;
+            *das::daScriptEnvironment::owned = owned;
         }
 
         ~daScriptEnvironmentGuard() {
-            das::daScriptEnvironment::bound = initialBound;
-            das::daScriptEnvironment::owned = initialOwned;
+            *das::daScriptEnvironment::bound = initialBound;
+            *das::daScriptEnvironment::owned = initialOwned;
         }
     };
 }

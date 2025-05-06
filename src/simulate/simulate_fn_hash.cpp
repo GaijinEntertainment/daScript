@@ -192,7 +192,7 @@ namespace das {
     };
 
     void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line ) {
-        auto program = daScriptEnvironment::bound->g_Program;
+        auto program = (*daScriptEnvironment::bound)->g_Program;
         if ( !program ) context->throw_error_at(line, "Can't collect dependencies outside of compilation.");
         program->markExecutableSymbolUse();
         DependencyCollector collector;
