@@ -384,6 +384,12 @@ namespace das {
         });
     }
 
+    void for_each_annotation_ordered ( Module * mod, const TBlock<void,uint64_t, uint64_t> & block, Context * context, LineInfoArg * at ) {
+        for (auto [k, v]: ordered(mod->annotationData)) {
+            das_invoke<void>::invoke<uint64_t, uint64_t>(context,at,block,k, v);
+        }
+    }
+
     void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->callThis ) {
             das_invoke<void>::invoke<const char *>(context,at,block,td.first.c_str());
@@ -866,6 +872,10 @@ namespace das {
         return mod->aotRequire(*ss) != ModuleAotType::no_aot;
     }
 
+    const char *modGetNamespace(Module *mod, Context * context, LineInfoArg * at) {
+        return context->allocateString(mod->getNamespace(), at);
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -1080,6 +1090,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(for_each_global)>(*this, lib,  "for_each_global",
             SideEffects::modifyExternal, "for_each_global")
                 ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_annotation_ordered)>(*this, lib,  "for_each_annotation_ordered",
+            SideEffects::modifyExternal, "for_each_annotation_ordered")
+                ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_call_macro)>(*this, lib,  "for_each_call_macro",
             SideEffects::modifyExternal, "for_each_call_macro")
                 ->args({"module","block","context","line"});
@@ -1235,6 +1248,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(modAotRequire)>(*this, lib,  "aot_require",
                                                           SideEffects::modifyExternal, "modAotRequire")
             ->args({"mod", "ss", "context", "at"});
+        addExtern<DAS_BIND_FUN(modGetNamespace)>(*this, lib,  "mod_get_namespace",
+                                                          SideEffects::modifyExternal, "modGetNamespace")
+            ->args({"mod", "context", "at"});
         // ast_aot_helpers)
         addExtern<DAS_BIND_FUN(findFieldParent)>(*this, lib,  "find_struct_field_parent",
                                                   SideEffects::modifyExternal, "findFieldParent")

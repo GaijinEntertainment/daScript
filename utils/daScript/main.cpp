@@ -131,6 +131,7 @@ bool compileStandalone ( const string & inputFile, const string & outDir, const 
     policies.fail_on_lack_of_aot_export = true;
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
+    policies.ignore_shared_modules = true;
     if ( auto program = compileDaScript(inputFile,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";

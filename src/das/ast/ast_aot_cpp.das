@@ -2229,7 +2229,9 @@ class CppAot : AstVisitor {
                 if (isSequencialMask(expr.fields)) {
                     write(*ss, "das_swizzle_seq<{type_str},{value_str},{expr.fields[0]:d}>::swizzle(");
                 } else {
-                    let field_str = join(expr.fields, ",");
+                    let field_str = (expr.fields |> each()
+                                                 |> map(@(f) { return "{f:d}"; })
+                                                 |> join(","));
                     write(*ss, "das_swizzle<{type_str},{value_str},{field_str}>::swizzle(");
                 }
             }
@@ -3410,12 +3412,16 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; isAll :
     return <- fnn;
 }
 
-def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; headers, allModules : bool = false) {
-    var modules : array<Module?>;
+def collectProgramUsedFunctions(program : ProgramPtr; isAll : bool = false) : array<Function?> {
+    var all_modules : array<Module?>;
     program.get_ptr() |> for_each_module_no_order($(mod) {
-        modules.push(mod);
+        all_modules.push(mod);
     })
-    let fnn = collectUsedFunctions(modules, program.totalFunctions);
+    return collectUsedFunctions(all_modules, program.totalFunctions, isAll)
+}
+
+def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; headers, allModules : bool = false) {
+    let fnn = collectProgramUsedFunctions(program);
     if (headers) {
         write(*logs, "\nvoid registerAot ( AotLibrary & aotLib )\n\{\n");
     }
@@ -3481,6 +3487,71 @@ def dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var con
     write(*tw, "AotListBase impl(registerAotFunctions);\n");
 }
 
+def getRequiredModulesFor(program : ProgramPtr) {
+    var modules_str : array<string>
+    // lets comment on required modules
+    /* todo: we don't need it?
+    for (cur_mod in ordered(mod.requireModule)) {
+        let (req, pub) = cur_mod
+        if (req.name.empty()) {
+            // nothing, its main program module. i.e ::
+        } else {
+            if (req.name == "$") {
+                write(ss, " // require builtin\n");
+            } else {
+                write(ss, " // require {req.name}\n");
+            }
+            if (req.aotRequire(ss) == ModuleAotType::no_aot) {
+                write(ss, "  // no_aot ignored in standalone context\n");
+            }
+        }
+    }
+    */
+    var noAotModule = false
+    program.get_ptr() |> for_each_module($(mod) {
+        if (mod.name == "") {
+            // nothing, its main program module. i.e ::
+        } else {
+            modules_str |> push(build_string() <| $(wr) {
+                if (mod.name == "$") {
+                    write(wr, " // require builtin\n");
+                } else {
+                    write(wr, " // require {mod.name}\n");
+                }
+                if (!(mod |> aot_require(unsafe(addr(wr))))) {
+                    write(wr, "  // AOT disabled due to this module");
+                    noAotModule = true;
+                }
+            });
+        }
+    });
+    return (modules_str, noAotModule)
+}
+
+def updateCOP(var cop : CodeOfPolicies) {
+    cop.threadlock_context = false
+    cop.aot = false;
+    cop.aot_module = true;
+    cop.fail_on_lack_of_aot_export = true;
+    cop.ignore_shared_modules = true;
+    cop.version_2_syntax = true; // true by default
+}
+
+def compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {
+    compile_file(input, access, mg, cop) <| $(ok, program, issues) {
+        if (!ok) {
+            print("failed to compile {input}\n{issues}\n")
+            return
+        }
+        simulate(program) <| $(sok; pctx; serrors) {
+            if (!sok) {
+                panic("Failed to simulate {serrors}")
+            }
+            blk(program, pctx)
+        }
+    }
+}
+
 
 
 [export]
@@ -3488,142 +3559,86 @@ def aot(input : string; isAotLib, paranoid_validation : bool) : string {
     var result = "";
     using <| $(var mg : ModuleGroup) {
         using <| $(var cop : CodeOfPolicies) {
-            cop.threadlock_context = true
-            cop.aot = false;
-            cop.rtti = true;
-            cop.aot_module = true;
-            cop.fail_on_lack_of_aot_export = true;
-            cop.ignore_shared_modules = true
-            cop.version_2_syntax = true; // true by default
+            updateCOP(cop);
             var inscope access <- make_file_access("")
-            compile_file(input, access, unsafe(addr(mg)), cop) <| $(ok, program, issues) {
-                if (!ok) {
-                    print("failed to compile {input}\n{issues}\n")
-                    return
-                }
-
-                simulate(program) <| $(sok; pctx; serrors) {
-                    if (!sok) {
-                        panic("Failed to simulate {serrors}")
-                    }
-                    result = build_string() <| $(writer) {
-                        // lets comment on required modules
-                        var noAotModule = false;
-                        var modules_str : array<string>
-                        program.get_ptr() |> for_each_module($(mod) {
-                            if (mod.name == "") {
-                                // nothing, its main program module. i.e ::
-                            } else {
-                                modules_str |> push(build_string() <| $(wr) {
-                                    if (mod.name == "$") {
-                                        write(wr, " // require builtin\n");
-                                    } else {
-                                        write(wr, " // require {mod.name}\n");
-                                    }
-                                    if (!(mod |> aot_require(unsafe(addr(wr))))) {
-                                        write(wr, "  // AOT disabled due to this module");
-                                        noAotModule = true;
-                                    }
-                                });
-                            }
-                        });
-                        if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
-                            if (!noAotModule) {
-                                write(writer, "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n");
-                            } else {
-                                write(writer, "// AOT disabled due to options no_aot=true. There are also some modules which require no_aot\n\n");
-                            }
-                        } elif (noAotModule) {
-                            write(writer, "// AOT disabled due to module requirements\n");
-                            write(writer, "#if 0\n\n");
-                            write(writer, join(modules_str, ""));
-                            write(writer, "\n#endif\n");
+            compile_and_simulate(input, access, unsafe(addr(mg)), cop) <| $(program : ProgramPtr; var pctx : smart_ptr<Context>) {
+                result = build_string() <| $(writer) {
+                    // lets comment on required modules
+                    let (modules_str, noAotModule) = getRequiredModulesFor(program)
+                    if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
+                        if (!noAotModule) {
+                            write(writer, "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n");
                         } else {
-                            // header
-                            write(writer, AOT_INCLUDES);
-                            write(writer, "{join(modules_str, "")}\n");
-                            write(writer, AOT_HEADERS);
-                            write(writer, "namespace das \{\n");
-                            write(writer, "namespace {program.thisNamespace} \{\n");
-                            build_string() <| $(tmp_writer) {
-                                let marker_vis = new NoAotMarker();
-                                var inscope adapter_marker <- make_visitor(*marker_vis)
-                                visit(program, adapter_marker);
-
-                                var coll = new BlockVariableCollector();
-                                var inscope adapter_coll <- make_visitor(*coll)
-                                visit(program, adapter_coll)
-
-                                // mark prologue
-                                var pmarker = new PrologueMarker();
-                                var inscope adapter_p <- make_visitor(*pmarker)
-                                visit(program, adapter_p)
-
-                                var flags = new SetPrinterFlags();
-                                var inscope flags_adapter <- make_visitor(*flags)
-                                visit(program, flags_adapter)
-
-
-                                setAotHashes(program, *pctx)
-
-                                var cpp_aot = new CppAot(ss = unsafe(addr(tmp_writer)), program := program, collector = coll)
-                                var inscope adapter <- make_visitor(*cpp_aot)
-                                cpp_aot.adapter := adapter
-                                dumpDependencies(program, cpp_aot);
-                                visit(program, cpp_aot.adapter)
-                                write(writer, "{cpp_aot.str()}");
-                            }
-                            write(writer, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
-                            registerAotCpp(unsafe(addr(writer)), program, *pctx, false);
-                            write(writer, "\tresolveTypeInfoAnnotations();\n");
-                            write(writer, "}\n");
-                            write(writer, "\n");
-                            if (!isAotLib) write(writer, "AotListBase impl(registerAotFunctions);\n");
-                            // validation stuff
-                            if (paranoid_validation) {
-                                /* todo: program->validateAotCpp(tw,*pctx);
-                                tw << "\n";*/
-                            }
-                            write(writer, "\} // namespace {program.thisNamespace}\n");
-                            if (isAotLib) {
-                                write(writer, "AotListBase impl_aot_{program.getThisModule.name}({program.thisNamespace}::registerAotFunctions);\n");
-                            }
-                            write(writer, "\} // namespace das\n");
-                            write(writer, AOT_FOOTER);
+                            write(writer, "// AOT disabled due to options no_aot=true. There are also some modules which require no_aot\n\n");
                         }
+                    } elif (noAotModule) {
+                        write(writer, "// AOT disabled due to module requirements\n");
+                        write(writer, "#if 0\n\n");
+                        write(writer, join(modules_str, ""));
+                        write(writer, "\n#endif\n");
+                    } else {
+                        // header
+                        write(writer, AOT_INCLUDES);
+                        write(writer, "{join(modules_str, "")}\n");
+                        write(writer, AOT_HEADERS);
+                        write(writer, "namespace das \{\n");
+                        write(writer, "namespace {program.thisNamespace} \{\n");
+                        build_string() <| $(tmp_writer) {
+                            let marker_vis = new NoAotMarker();
+                            var inscope adapter_marker <- make_visitor(*marker_vis)
+                            visit(program, adapter_marker);
+
+                            var coll = new BlockVariableCollector();
+                            var inscope adapter_coll <- make_visitor(*coll)
+                            visit(program, adapter_coll)
+
+                            // mark prologue
+                            var pmarker = new PrologueMarker();
+                            var inscope adapter_p <- make_visitor(*pmarker)
+                            visit(program, adapter_p)
+
+                            var flags = new SetPrinterFlags();
+                            var inscope flags_adapter <- make_visitor(*flags)
+                            visit(program, flags_adapter)
+
+
+                            setAotHashes(program, *pctx)
+
+                            var cpp_aot = new CppAot(ss = unsafe(addr(tmp_writer)),
+                                                     program := program,
+                                                     collector = coll,
+                                                     prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false ||
+                                                                program.getDebugger,
+                                                     solidContext = program.policies.solid_context ||
+                                                                (program._options |> find_arg("solid_context") ?as tBool ?? false))
+                            cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
+                            var inscope adapter <- make_visitor(*cpp_aot)
+                            cpp_aot.adapter := adapter
+                            dumpDependencies(program, cpp_aot);
+                            visit(program, cpp_aot.adapter)
+                            write(writer, "{cpp_aot.str()}");
+                        }
+                        write(writer, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
+                        registerAotCpp(unsafe(addr(writer)), program, *pctx, false);
+                        write(writer, "\tresolveTypeInfoAnnotations();\n");
+                        write(writer, "}\n");
+                        write(writer, "\n");
+                        if (!isAotLib) write(writer, "AotListBase impl(registerAotFunctions);\n");
+                        // validation stuff
+                        if (paranoid_validation) {
+                            /* todo: program->validateAotCpp(tw,*pctx);
+                            tw << "\n";*/
+                        }
+                        write(writer, "\} // namespace {program.thisNamespace}\n");
+                        if (isAotLib) {
+                            write(writer, "AotListBase impl_aot_{program.getThisModule.name}({program.thisNamespace}::registerAotFunctions);\n");
+                        }
+                        write(writer, "\} // namespace das\n");
+                        write(writer, AOT_FOOTER);
                     }
                 }
             }
         }
     }
     return result
-}
-
-def private find_argument(args : array<string>; key : string) {
-    for (i in range(length(args) - 1)) {
-        if (args[i] == key) {
-            return args[i + 1]
-        }
-    }
-    panic("expected {key} argument!")
-    return ""
-}
-
-
-[export]
-def main() {
-    let args <- get_command_line_arguments()
-    let input = find_argument(args, "--input");
-    let output = find_argument(args, "--output");
-    print("aot {input} to {output}\n")
-    let res = aot(input, false, false)
-    if (res |> length() > 0) {
-        fopen(output, "wb") <| $(fw) {
-            if (fw != null) {
-                fwrite(fw, res)
-            } else {
-                print("Couldn't create output file {output}")
-            }
-        }
-    }
 }
