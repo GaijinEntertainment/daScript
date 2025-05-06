@@ -134,22 +134,24 @@ namespace das {
 #undef GENERATE_IO_STUB
 
 #define GENERATE_IO_STUB { DAS_FATAL_ERROR("%s is not implemented (because DAS_NO_FILEIO is enabled).", __FUNCTION__); }
+#define GENERATE_IO_STUB_RET { GENERATE_IO_STUB; return {}; }
     void builtin_sleep ( uint32_t msec ) GENERATE_IO_STUB
-    const FILE * builtin_stdin() GENERATE_IO_STUB
-    const FILE * builtin_stdout() GENERATE_IO_STUB
-    const FILE * builtin_stderr() GENERATE_IO_STUB
-    bool builtin_feof(const FILE* _f) GENERATE_IO_STUB
-    const FILE * builtin_fopen  ( const char * name, const char * mode ) GENERATE_IO_STUB
-    vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB
-    vec4f builtin_write ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB
-    vec4f builtin_load ( Context & context, SimNode_CallBase * node, vec4f * args ) GENERATE_IO_STUB
-    bool builtin_stat ( const char * filename, FStat & fs ) GENERATE_IO_STUB
-    bool builtin_chdir ( const char * path ) GENERATE_IO_STUB
-    bool builtin_mkdir ( const char * path ) GENERATE_IO_STUB
+    const FILE * builtin_stdin() GENERATE_IO_STUB_RET
+    const FILE * builtin_stdout() GENERATE_IO_STUB_RET
+    const FILE * builtin_stderr() GENERATE_IO_STUB_RET
+    bool builtin_feof(const FILE* _f) GENERATE_IO_STUB_RET
+    const FILE * builtin_fopen  ( const char * name, const char * mode ) GENERATE_IO_STUB_RET
+    vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB_RET
+    vec4f builtin_write ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB_RET
+    vec4f builtin_load ( Context & context, SimNode_CallBase * node, vec4f * args ) GENERATE_IO_STUB_RET
+    bool builtin_stat ( const char * filename, FStat & fs ) GENERATE_IO_STUB_RET
+    bool builtin_chdir ( const char * path ) GENERATE_IO_STUB_RET
+    bool builtin_mkdir ( const char * path ) GENERATE_IO_STUB_RET
     void builtin_exit ( int32_t ec ) GENERATE_IO_STUB
-    bool builtin_remove_file ( const char * path ) GENERATE_IO_STUB
-    bool builtin_rename_file ( const char * old_path, const char * new_path ) GENERATE_IO_STUB
+    bool builtin_remove_file ( const char * path ) GENERATE_IO_STUB_RET
+    bool builtin_rename_file ( const char * old_path, const char * new_path ) GENERATE_IO_STUB_RET
 #undef GENERATE_IO_STUB
+#undef GENERATE_IO_STUB_RET
 
 
     class Module_FIO : public Module {
