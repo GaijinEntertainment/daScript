@@ -310,7 +310,7 @@ void __init_script ( Context * __context__, bool __init_shared )
 
 inline void finalize_9eb64692a374c6cb ( Context * __context__, AutoTuple<char *,char *> &  ____this_rename_at_1186_0 )
 {
-    memset(&(____this_rename_at_1186_0), 0, TypeSize<AutoTuple<char *,char *>>::size);
+    memset((void*)&(____this_rename_at_1186_0), 0, TypeSize<AutoTuple<char *,char *>>::size);
 }
 
 inline TArray<char *> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_354a9a0b57d554a0 ( Context * __context__, TArray<char *> &  __a_rename_at_50_1 )
@@ -348,14 +348,14 @@ inline void _FuncbuiltinTickpushTick14133213201864676143_d626258b591934af ( Cont
 
 inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1128_8 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_9; das_zero(__it_rename_at_1129_9);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_9;das_zero(__it_rename_at_1129_9);
     builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_9),__a_rename_at_1128_8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_9);
 }
 
 inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1143_10 )
 {
-    Sequence DAS_COMMENT((char * *)) __it_rename_at_1144_11; das_zero(__it_rename_at_1144_11);
+    Sequence DAS_COMMENT((char * *)) __it_rename_at_1144_11;das_zero(__it_rename_at_1144_11);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((char * const ))>::pass(__it_rename_at_1144_11),__a_rename_at_1143_10,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char * &))>::cast(__it_rename_at_1144_11);
 }
@@ -367,7 +367,7 @@ inline void _FuncbuiltinTicksortTick5995501125257068354_4524eaa061a094a8 ( Conte
 
 inline TArray<char *> uri_split_full_path_61c8cae43e9301c5 ( Context * __context__, Uri const  &  __uri_rename_at_14_14 )
 {
-    TArray<char *> __paths_rename_at_16_15; das_zero(__paths_rename_at_16_15);
+    TArray<char *> __paths_rename_at_16_15;das_zero(__paths_rename_at_16_15);
     UriPathSegmentStructA const  * __pcur_rename_at_17_16 = __uri_rename_at_14_14.uri /*uri*/.pathHead /*pathHead*/;
     while ( __pcur_rename_at_17_16 != nullptr )
     {
@@ -418,7 +418,7 @@ inline char * uri_compose_query_in_order_c110ae58bd0a3254 ( Context * __context_
 {
     Sequence DAS_COMMENT((char *)) _temp_make_local_47_23_64; _temp_make_local_47_23_64;
     Sequence DAS_COMMENT((char * *)) _temp_make_local_47_36_80; _temp_make_local_47_36_80;
-    TArray<AutoTuple<char *,char *>> __vq_rename_at_46_25; das_zero(__vq_rename_at_46_25);
+    TArray<AutoTuple<char *,char *>> __vq_rename_at_46_25;das_zero(__vq_rename_at_46_25);
     {
         bool __need_loop_47 = true;
         // key: string

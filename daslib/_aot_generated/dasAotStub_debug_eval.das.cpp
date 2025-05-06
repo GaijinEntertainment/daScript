@@ -639,14 +639,14 @@ inline void _FuncbuiltinTickclearTick13739625760977891612_bc21a7c19d5d96ed ( Con
 
 inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_d3d21e2c8adb2e77 ( Context * __context__, TTable<char *,debug_eval::Result> const  &  __a_rename_at_1128_2 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_3; das_zero(__it_rename_at_1129_3);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_3;das_zero(__it_rename_at_1129_3);
     builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_3),__a_rename_at_1128_2,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_3);
 }
 
 inline Sequence DAS_COMMENT((debug_eval::Result &)) _FuncbuiltinTickvaluesTick1935193042646774172_fa9f9c260fe9a102 ( Context * __context__, TTable<char *,debug_eval::Result> const  &  __a_rename_at_1143_4 )
 {
-    Sequence DAS_COMMENT((debug_eval::Result *)) __it_rename_at_1144_5; das_zero(__it_rename_at_1144_5);
+    Sequence DAS_COMMENT((debug_eval::Result *)) __it_rename_at_1144_5;das_zero(__it_rename_at_1144_5);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((debug_eval::Result const ))>::pass(__it_rename_at_1144_5),__a_rename_at_1143_4,112,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((debug_eval::Result &))>::cast(__it_rename_at_1144_5);
 }
@@ -661,7 +661,7 @@ inline void finalize_c2f42de354cd5bce ( Context * __context__, debug_eval::_lamb
     builtin_iterator_delete(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(____this_rename_at_26_8.chars),__context__);
     _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_26_8.__str_rename_at_42_20));
     _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_26_8.__str_rename_at_57_20));
-    memset(&(____this_rename_at_26_8), 0, TypeSize<debug_eval::_lambda_debug_eval_26_1>::size);
+    memset((void*)&(____this_rename_at_26_8), 0, TypeSize<debug_eval::_lambda_debug_eval_26_1>::size);
 }
 
 inline void _FuncbuiltinTickresizeTick4811697762258667383_f497868bddc80ac1 ( Context * __context__, TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>> &  __Arr_rename_at_68_9, int32_t __newSize_rename_at_68_10 )
@@ -671,7 +671,7 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_f497868bddc80ac1 ( Con
 
 inline Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) _FuncbuiltinTickeachTick9663565701927713696_acc6981303ddd856 ( Context * __context__, Lambda DAS_COMMENT((bool,AutoVariant<int64_t,int32_t,char *,char *,char *>)) const  __lam_rename_at_1289_11 )
 {
-    Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) __it_rename_at_1291_12; das_zero(__it_rename_at_1291_12);
+    Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) __it_rename_at_1291_12;das_zero(__it_rename_at_1291_12);
     builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::pass(__it_rename_at_1291_12),__lam_rename_at_1289_11,16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::cast(__it_rename_at_1291_12);
 }
@@ -719,7 +719,7 @@ inline void _FuncbuiltinTickcloneTick3147220447302434744_caf9a18f00151e46 ( Cont
 
 inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickeachTick4044332007967089362_d13e7572e5849aa5 ( Context * __context__, char * const  __str_rename_at_1256_25 )
 {
-    Sequence DAS_COMMENT((int32_t)) __it_rename_at_1257_26; das_zero(__it_rename_at_1257_26);
+    Sequence DAS_COMMENT((int32_t)) __it_rename_at_1257_26;das_zero(__it_rename_at_1257_26);
     builtin_make_string_iterator(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1257_26),__str_rename_at_1256_25,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((int32_t))>::cast(__it_rename_at_1257_26);
 }
@@ -786,7 +786,7 @@ inline bool _Func_lambda_debug_eval_26_1Tickfunction_f6c2387720b0ce3f ( Context 
     {
         goto label_10;
     };
-    memset(&(____this_rename_at_26_29.__str_rename_at_42_20), 0, TypeSize<TArray<uint8_t>>::size);
+    memset((void*)&(____this_rename_at_26_29.__str_rename_at_42_20), 0, TypeSize<TArray<uint8_t>>::size);
     _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_26_29.__str_rename_at_42_20),uint8_t(____this_rename_at_26_29.ahead));
     while ( _FuncbuiltinTicknextTick17450348357676149856_ba3f4a54e51a0d57(__context__,das_arg<Sequence DAS_COMMENT((int32_t))>::pass(____this_rename_at_26_29.chars),____this_rename_at_26_29.ahead) && is_number(____this_rename_at_26_29.ahead) )
     {
@@ -826,7 +826,7 @@ inline bool _Func_lambda_debug_eval_26_1Tickfunction_f6c2387720b0ce3f ( Context 
     {
         goto label_8;
     };
-    memset(&(____this_rename_at_26_29.__str_rename_at_57_20), 0, TypeSize<TArray<uint8_t>>::size);
+    memset((void*)&(____this_rename_at_26_29.__str_rename_at_57_20), 0, TypeSize<TArray<uint8_t>>::size);
     _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_26_29.__str_rename_at_57_20),uint8_t(____this_rename_at_26_29.ahead));
     while ( _FuncbuiltinTicknextTick17450348357676149856_ba3f4a54e51a0d57(__context__,das_arg<Sequence DAS_COMMENT((int32_t))>::pass(____this_rename_at_26_29.chars),____this_rename_at_26_29.ahead) && (((is_alpha(____this_rename_at_26_29.ahead) || is_number(____this_rename_at_26_29.ahead)) || (____this_rename_at_26_29.ahead == 95)) || (____this_rename_at_26_29.ahead == 96)) )
     {
@@ -962,7 +962,7 @@ inline debug_eval::TokenStream TokenStream_59176a02fe830623 ( Context * __contex
 
 inline AutoVariant<int64_t,int32_t,char *,char *,char *> token_36ce8667ed49d425 ( Context * __context__, debug_eval::TokenStream &  __st_rename_at_93_55 )
 {
-    AutoVariant<int64_t,int32_t,char *,char *,char *> __token_rename_at_94_56; das_zero(__token_rename_at_94_56);
+    AutoVariant<int64_t,int32_t,char *,char *,char *> __token_rename_at_94_56;das_zero(__token_rename_at_94_56);
     if ( _FuncbuiltinTickemptyTick15399874715904164783_4d77f401303a908c(__context__,das_arg<TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>>>::pass(__st_rename_at_93_55.stream)) )
     {
         if ( !_FuncbuiltinTicknextTick17450348357676149856_5cb3f1fd943d9108(__context__,das_arg<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::pass(__st_rename_at_93_55.tokens),das_arg<AutoVariant<int64_t,int32_t,char *,char *,char *>>::pass(__token_rename_at_94_56)) )
@@ -987,7 +987,7 @@ inline void unput_c08f1d95eea68a34 ( Context * __context__, debug_eval::TokenStr
 
 inline debug_eval::Result Result_38240f4c3f9f19dc ( Context * __context__, int64_t __value_rename_at_110_59 )
 {
-    debug_eval::Result __self_rename_at_111_60; das_zero(__self_rename_at_111_60);
+    debug_eval::Result __self_rename_at_111_60;das_zero(__self_rename_at_111_60);
     das_copy(__self_rename_at_111_60.tinfo.type /*basicType*/,DAS_COMMENT(bound_enum) das::Type::tInt64);
     das_copy(__self_rename_at_111_60.value,das_invoke_function<float4>::invoke<int64_t>(__context__,nullptr,Func(__context__->fnByMangledName(/*@math_bits::cast_to_vec4f Ci64*/ 0x3e76e6463b5d2a78)),__value_rename_at_110_59));
     return das_auto_cast_ref<debug_eval::Result>::cast(__self_rename_at_111_60);
@@ -995,7 +995,7 @@ inline debug_eval::Result Result_38240f4c3f9f19dc ( Context * __context__, int64
 
 inline debug_eval::Result Result_b262a84f440eb5c9 ( Context * __context__, bool __value_rename_at_117_61 )
 {
-    debug_eval::Result __self_rename_at_118_62; das_zero(__self_rename_at_118_62);
+    debug_eval::Result __self_rename_at_118_62;das_zero(__self_rename_at_118_62);
     das_copy(__self_rename_at_118_62.tinfo.type /*basicType*/,DAS_COMMENT(bound_enum) das::Type::tBool);
     das_copy(__self_rename_at_118_62.value,das_invoke_function<float4>::invoke<bool>(__context__,nullptr,Func(__context__->fnByMangledName(/*@math_bits::cast_to_vec4f Cb*/ 0x3d6f2ea296bbc09e)),__value_rename_at_117_61));
     return das_auto_cast_ref<debug_eval::Result>::cast(__self_rename_at_118_62);
@@ -1003,7 +1003,7 @@ inline debug_eval::Result Result_b262a84f440eb5c9 ( Context * __context__, bool 
 
 inline debug_eval::Result InvalidResult_e6549533a9b44e33 ( Context * __context__ )
 {
-    debug_eval::Result __self_rename_at_125_63; das_zero(__self_rename_at_125_63);
+    debug_eval::Result __self_rename_at_125_63;das_zero(__self_rename_at_125_63);
     das_copy(__self_rename_at_125_63.tinfo.type /*basicType*/,DAS_COMMENT(bound_enum) das::Type::tVoid);
     return das_auto_cast_ref<debug_eval::Result>::cast(__self_rename_at_125_63);
 }
@@ -1362,7 +1362,7 @@ inline debug_eval::Result expr_field_7b9abb4b48818ee6 ( Context * __context__, d
     AutoVariant<int64_t,int32_t,char *,char *,char *> const  & __field_rename_at_333_121 = __field_rename_at_333_121_ConstRef; ;
         if ( das_get_auto_variant_field<char *,2,int64_t,int32_t,char *,char *,char *>::is(__field_rename_at_333_121) )
         {
-            AutoTuple<int32_t,TypeInfo> __oti_rename_at_335_122; das_zero(__oti_rename_at_335_122);
+            AutoTuple<int32_t,TypeInfo> __oti_rename_at_335_122;das_zero(__oti_rename_at_335_122);
             das_copy(das_get_auto_tuple_field<int32_t,0,int32_t,TypeInfo>::get(__oti_rename_at_335_122),-1);
             if ( __result_rename_at_330_119.tinfo.dimSize /*dimSize*/ != 0x0u )
             {
@@ -1494,7 +1494,7 @@ inline debug_eval::Result expr_at_eb04195e4bb4b7e4 ( Context * __context__, debu
         {
             return das_auto_cast_ref<debug_eval::Result>::cast(error_3b51aee67e872094(__context__,das_arg<debug_eval::TokenStream>::pass(__st_rename_at_440_152),((char *) "expecting ]")));
         } else {
-            debug_eval::Result __nresult_rename_at_448_156; das_zero(__nresult_rename_at_448_156);
+            debug_eval::Result __nresult_rename_at_448_156;das_zero(__nresult_rename_at_448_156);
             if ( (__result_rename_at_441_153.tinfo.type /*basicType*/ == DAS_COMMENT(bound_enum) das::Type::tString) && (__result_rename_at_441_153.tinfo.dimSize /*dimSize*/ == 0x0u) )
             {
                 das_copy(__nresult_rename_at_448_156,opDimString_2d98ae0b9aba33b(__context__,das_arg<debug_eval::TokenStream>::pass(__st_rename_at_440_152),getI_e470f5a746b3541c(__context__,das_arg<debug_eval::TokenStream>::pass(__st_rename_at_440_152),__eindex_rename_at_444_155),das_arg<debug_eval::Result>::pass(__result_rename_at_441_153)));

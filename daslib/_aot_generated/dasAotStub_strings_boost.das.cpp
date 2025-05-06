@@ -196,7 +196,7 @@ inline char * wide_53059f73cffda483 ( Context * __context__, char * const  __tex
 
 inline TArray<char *> split_fd059c42eafc7a0e ( Context * __context__, char * const  __text_rename_at_96_24, char * const  __delim_rename_at_96_25 ) { das_stack_prologue __prologue(__context__,128,"split " DAS_FILE_LINE);
 {
-    TArray<char *> __res_rename_at_97_26; das_zero(__res_rename_at_97_26);
+    TArray<char *> __res_rename_at_97_26;das_zero(__res_rename_at_97_26);
     builtin_string_split(__text_rename_at_96_24,__delim_rename_at_96_25,das_make_block<void,TArray<char *> const  &>(__context__,112,0,&__func_info__d23ecd373e379628,[&](TArray<char *> const  & __arr_rename_at_98_27) -> void{
         _FuncbuiltinTickcloneTick3038771811667655495_4060192a3cb0948(__context__,das_arg<TArray<char *>>::pass(__res_rename_at_97_26),__arr_rename_at_98_27);
     }),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
@@ -205,7 +205,7 @@ inline TArray<char *> split_fd059c42eafc7a0e ( Context * __context__, char * con
 
 inline TArray<char *> split_by_chars_6cab5408b0530c5d ( Context * __context__, char * const  __text_rename_at_108_28, char * const  __delim_rename_at_108_29 ) { das_stack_prologue __prologue(__context__,128,"split_by_chars " DAS_FILE_LINE);
 {
-    TArray<char *> __res_rename_at_109_30; das_zero(__res_rename_at_109_30);
+    TArray<char *> __res_rename_at_109_30;das_zero(__res_rename_at_109_30);
     builtin_string_split_by_char(__text_rename_at_108_28,__delim_rename_at_108_29,das_make_block<void,TArray<char *> const  &>(__context__,112,0,&__func_info__d23ecd373e379628,[&](TArray<char *> const  & __arr_rename_at_110_31) -> void{
         _FuncbuiltinTickcloneTick3038771811667655495_4060192a3cb0948(__context__,das_arg<TArray<char *>>::pass(__res_rename_at_109_30),__arr_rename_at_110_31);
     }),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
@@ -214,16 +214,16 @@ inline TArray<char *> split_by_chars_6cab5408b0530c5d ( Context * __context__, c
 
 inline int32_t levenshtein_distance_81cc63ff8762bd35 ( Context * __context__, char * const  __s_rename_at_133_32, char * const  __t_rename_at_133_33 )
 {
-    int32_t __sLen_rename_at_134_34; memset(&__sLen_rename_at_134_34,0,sizeof(__sLen_rename_at_134_34));
-    int32_t __tLen_rename_at_135_35; memset(&__tLen_rename_at_135_35,0,sizeof(__tLen_rename_at_135_35));
-    TArray<TArray<int32_t>> __d_rename_at_136_36; memset(&__d_rename_at_136_36,0,sizeof(__d_rename_at_136_36));
-    int32_t __substitutionCost_rename_at_148_41; memset(&__substitutionCost_rename_at_148_41,0,sizeof(__substitutionCost_rename_at_148_41));
+    int32_t __sLen_rename_at_134_34; memset((void*)&__sLen_rename_at_134_34,0,sizeof(__sLen_rename_at_134_34));
+    int32_t __tLen_rename_at_135_35; memset((void*)&__tLen_rename_at_135_35,0,sizeof(__tLen_rename_at_135_35));
+    TArray<TArray<int32_t>> __d_rename_at_136_36; memset((void*)&__d_rename_at_136_36,0,sizeof(__d_rename_at_136_36));
+    int32_t __substitutionCost_rename_at_148_41; memset((void*)&__substitutionCost_rename_at_148_41,0,sizeof(__substitutionCost_rename_at_148_41));
     /* finally */ auto __finally_133= das_finally([&](){
     _FuncbuiltinTickfinalizeTick13836114024949725080_5be9a99f60cdfbba(__context__,das_arg<TArray<TArray<int32_t>>>::pass(__d_rename_at_136_36));
     /* end finally */ });
     __sLen_rename_at_134_34 = ((int32_t)builtin_string_length(__s_rename_at_133_32,__context__));
     __tLen_rename_at_135_35 = ((int32_t)builtin_string_length(__t_rename_at_133_33,__context__));
-    __d_rename_at_136_36; das_zero(__d_rename_at_136_36);
+    das_zero(__d_rename_at_136_36);
     _FuncbuiltinTickresizeTick4811697762258667383_c1a73db481e59a8b(__context__,das_arg<TArray<TArray<int32_t>>>::pass(__d_rename_at_136_36),__sLen_rename_at_134_34 + 1);
     {
         bool __need_loop_138 = true;
@@ -280,22 +280,22 @@ inline int32_t levenshtein_distance_81cc63ff8762bd35 ( Context * __context__, ch
 
 inline int32_t levenshtein_distance_fast_4be142fb1ec75f90 ( Context * __context__, char * const  __s_rename_at_161_42, char * const  __t_rename_at_161_43 )
 {
-    int32_t __sLen_rename_at_162_44; memset(&__sLen_rename_at_162_44,0,sizeof(__sLen_rename_at_162_44));
-    int32_t __tLen_rename_at_163_45; memset(&__tLen_rename_at_163_45,0,sizeof(__tLen_rename_at_163_45));
-    TArray<int32_t> __v0_rename_at_164_46; memset(&__v0_rename_at_164_46,0,sizeof(__v0_rename_at_164_46));
-    TArray<int32_t> __v1_rename_at_166_47; memset(&__v1_rename_at_166_47,0,sizeof(__v1_rename_at_166_47));
-    int32_t __deletionCost_rename_at_175_51; memset(&__deletionCost_rename_at_175_51,0,sizeof(__deletionCost_rename_at_175_51));
-    int32_t __insertionCost_rename_at_176_52; memset(&__insertionCost_rename_at_176_52,0,sizeof(__insertionCost_rename_at_176_52));
-    int32_t __substitutionCost_rename_at_177_53; memset(&__substitutionCost_rename_at_177_53,0,sizeof(__substitutionCost_rename_at_177_53));
+    int32_t __sLen_rename_at_162_44; memset((void*)&__sLen_rename_at_162_44,0,sizeof(__sLen_rename_at_162_44));
+    int32_t __tLen_rename_at_163_45; memset((void*)&__tLen_rename_at_163_45,0,sizeof(__tLen_rename_at_163_45));
+    TArray<int32_t> __v0_rename_at_164_46; memset((void*)&__v0_rename_at_164_46,0,sizeof(__v0_rename_at_164_46));
+    TArray<int32_t> __v1_rename_at_166_47; memset((void*)&__v1_rename_at_166_47,0,sizeof(__v1_rename_at_166_47));
+    int32_t __deletionCost_rename_at_175_51; memset((void*)&__deletionCost_rename_at_175_51,0,sizeof(__deletionCost_rename_at_175_51));
+    int32_t __insertionCost_rename_at_176_52; memset((void*)&__insertionCost_rename_at_176_52,0,sizeof(__insertionCost_rename_at_176_52));
+    int32_t __substitutionCost_rename_at_177_53; memset((void*)&__substitutionCost_rename_at_177_53,0,sizeof(__substitutionCost_rename_at_177_53));
     /* finally */ auto __finally_161= das_finally([&](){
     _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8(__context__,das_arg<TArray<int32_t>>::pass(__v0_rename_at_164_46));
     _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8(__context__,das_arg<TArray<int32_t>>::pass(__v1_rename_at_166_47));
     /* end finally */ });
     __sLen_rename_at_162_44 = ((int32_t)builtin_string_length(__s_rename_at_161_42,__context__));
     __tLen_rename_at_163_45 = ((int32_t)builtin_string_length(__t_rename_at_161_43,__context__));
-    __v0_rename_at_164_46; das_zero(__v0_rename_at_164_46);
+    das_zero(__v0_rename_at_164_46);
     _FuncbuiltinTickresizeTick4811697762258667383_1bdb9995fa062a51(__context__,das_arg<TArray<int32_t>>::pass(__v0_rename_at_164_46),__tLen_rename_at_163_45 + 1);
-    __v1_rename_at_166_47; das_zero(__v1_rename_at_166_47);
+    das_zero(__v1_rename_at_166_47);
     _FuncbuiltinTickresizeTick4811697762258667383_1bdb9995fa062a51(__context__,das_arg<TArray<int32_t>>::pass(__v1_rename_at_166_47),__tLen_rename_at_163_45 + 1);
     {
         bool __need_loop_168 = true;

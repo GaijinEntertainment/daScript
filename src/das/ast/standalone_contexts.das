@@ -1,5 +1,7 @@
 options gen2
 
+module standalone_contexts
+
 require fio
 require rtti
 require strings
@@ -45,7 +47,7 @@ def getInitSemanticHash(ctx : Context) {
 }
 
 def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilderWriter; prefix : string; declare_only : bool; cfg : StandaloneContextCfg) {
-    let fnn = collectProgramUsedFunctions(prog);
+    let fnn = collectProgramUsedFunctions(prog, false, false);
 
     var coll = new BlockVariableCollector();
 
@@ -59,6 +61,10 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
     // describe arguments
         var vars : array<string>
         for (variable in fn.arguments) {
+            if (variable._type.baseType == Type.tStructure && declare_only) {
+                // It doesn't cover all cases, but anyway we'll get CE.
+                panic("Structures is not allowed in standalone contexts arguments.")
+            }
             let type_str = build_string() <| $(var wr) {
                 if (isLocalVec(variable._type)) {
                     describeLocalCppType(unsafe(addr(wr)), variable._type, cfg.cross_platform);
@@ -70,6 +76,10 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
         }
         let vars_str = join(vars, ", ");
         write(logs, "{vars_str}{!fn.arguments.empty() ? " " : ""}) -> ")
+        if (fn.result.baseType == Type.tStructure && declare_only) {
+            // It doesn't cover all cases, but anyway we'll get CE.
+            panic("Structures is not allowed in standalone contexts return types.");
+        }
         describeLocalCppType(unsafe(addr(logs)), fn.result, cfg.cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
         if (declare_only) {
             write(logs, ";\n");
@@ -158,7 +168,6 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
             write(tw, "    (*context.tabAdLookup)[{k : x}] = {v};\n");
         });
     });
-    let fnn = collectProgramUsedFunctions(program, true);
 
     // aot init
     if (program.initSemanticHashWithDep != uint64(0)) {
@@ -198,14 +207,15 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
 
 class StandaloneContextGen : CppAot {
 
-    def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector ?, cross_platform : bool) {
+    def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector ?, cp : bool) {
         ss <- ss_;
         collector <- coll;
         program <- program_;
+        cross_platform = cp;
         prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false;
         solidContext = program.policies.solid_context || (program._options |> find_arg("solid_context") ?as tBool ?? false);
         helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
-        helper.cross_platform = cross_platform;
+        helper.cross_platform = cp;
     }
 
     used_functions : table<string>;
@@ -241,9 +251,11 @@ class StandaloneContextGen : CppAot {
     }
     def override preVisitProgramBody(var prog : ProgramPtr, that : Module ?) {
         // functions
+        declarations = ss |> string_builder_str();
+        ss |> string_builder_clear();
         write(*ss, "\n");
         // print forward declarations
-        let fnn = collectProgramUsedFunctions(prog);
+        let fnn = collectProgramUsedFunctions(prog, false, false);
         var inline_fns : array<string>
         for (pfun in fnn) {
             let needInline = that == pfun._module;
@@ -254,7 +266,7 @@ class StandaloneContextGen : CppAot {
         }
         let sep = ";\n";
         let maybe_sem = inline_fns |> empty() ? "" : sep;
-        write(*ss, "{inline_fns |> join(sep)}{sep}\n")
+        write(*ss, "{inline_fns |> join(sep)}{maybe_sem}\n")
     }
     tw : StringBuilderWriter ?
 };
@@ -267,7 +279,7 @@ def writeRegistration(var header : StringBuilderWriter;
                       cfg : StandaloneContextCfg;
                       var context : Context) {
     write(source, "using namespace {program.thisNamespace};\n");
-    dumpRegisterAot(unsafe(addr(source)), program, context, cfg.cross_platform, true);
+    dumpRegisterAot(unsafe(addr(source)), program, context, false, cfg.cross_platform);
     write(header, "namespace {cfg.context_name} \{\n");
     write(source, "namespace {cfg.context_name} \{\n");
     writeStandaloneContext(program, initFunctions, header, source, cfg);
@@ -315,47 +327,27 @@ def addFunctionInfo(disableInit : bool; rtti : bool, fnn : array<Function?>, var
 def genStandaloneSrc(var program : ProgramPtr;
                      var source : StringBuilderWriter; cfg : StandaloneContextCfg;
                      var coll : BlockVariableCollector?) {
-    let functions = collectProgramUsedFunctions(program);
-
-    var cpp_aot = new CppAot(program := program, collector = coll, ss = unsafe(addr(source)));
-    var inscope aot_adapter <- make_visitor(*cpp_aot)
-    cpp_aot.adapter := aot_adapter
-
-    write(source, "namespace {program.thisNamespace} \{\n")
-    dumpDependencies(program, cpp_aot);
-    write(source, "\} // namespace {program.thisNamespace}\n")
-
-    var ext_namespaces = array<string>();
-
     var initFunctions : string;
     let ctx_generated = build_string() <| $(tw) {
+        let deps = build_string() <| $(tmp_writer) {
+            var cpp_aot = new CppAot(program := program, collector = coll, ss = unsafe(addr(tmp_writer)), cross_platform = cfg.cross_platform);
+            var inscope aot_adapter <- make_visitor(*cpp_aot)
+            cpp_aot.adapter := aot_adapter
+            dumpDependencies(program, cpp_aot);
+        }
+        write(tw, deps);
         build_string() <| $(tmp_writer) {
             var gen = new StandaloneContextGen(program, unsafe(addr(tmp_writer)), coll, cfg.cross_platform);
             var inscope adapter <- make_visitor(*gen)
             gen.adapter := adapter
             program |> visit_module(adapter, program.getThisModule);
 
-            for (pfun in functions) {
-                let needInline = program.getThisModule == pfun._module;
-                if (!needInline && !gen.used_functions |> key_exists(aotFuncName(pfun))) {
-                    write(source, "namespace {pfun._module |> mod_get_namespace()} \{\n");
-
-                    write(source, "{describeCppFunc(unsafe(reinterpret<FunctionPtr>(pfun)), coll, true, needInline)};\n");
-                    ext_namespaces.push(pfun._module |> mod_get_namespace());
-
-                    write(source, "\} // namespace {pfun._module |> mod_get_namespace()}\n");
-                }
-            }
             initFunctions = addFunctionInfo(program._options |> find_arg("no_init") ?as tBool ?? program.policies.no_init,
                                             program._options |> find_arg("rtti") ?as tBool ?? program.policies.rtti,
-                                            collectProgramUsedFunctions(program, true),
+                                            collectProgramUsedFunctions(program, false, false),
                                             gen.helper);
             write(tw, gen.str());
         }
-    }
-    sort_unique(ext_namespaces)
-    for (nm in ext_namespaces) {
-        write(source, "using namespace {nm};\n")
     }
 
     write(source, "namespace {program.thisNamespace} \{\n");
@@ -419,7 +411,7 @@ def runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var 
 
     let cur_mod = mod.name.empty() ? cfg.context_name : string(mod.name);
     let outputFile = "{cfg.cpp_output_dir}/{cur_mod}.das";
-    if (mod.name.empty()) {
+    // if (mod.name.empty()) {
         fopen("{outputFile}.h", "wb") <| $(fw) {
             if (fw != null) {
                 fwrite(fw, header_content)
@@ -427,7 +419,7 @@ def runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var 
                 print("Couldn't create output file {outputFile}.h")
             }
         }
-    }
+    // }
     fopen("{outputFile}.cpp", "wb") <| $(fw) {
         if (fw != null) {
             fwrite(fw, source_content)
@@ -438,24 +430,25 @@ def runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var 
 }
 
 [export]
-def standalone_aot(input : string; cfg : StandaloneContextCfg; isAotLib, paranoid_validation : bool) : string {
+def standalone_aot(input : string; output_dir : string; isAotLib, cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
+    let cfg = StandaloneContextCfg(context_name = "context",
+                                   class_name = "Standalone",
+                                   cpp_output_dir = output_dir,
+                                   cross_platform = cross_platform)
     var result = "";
     using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
-            updateCOP(cop)
-            var inscope access <- make_file_access("")
-            compile_and_simulate(input, access, unsafe(addr(mg)), cop) <| $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
-                result = build_string() <| $(writer) {
-                    // lets comment on required modules
-                    var modules_str : array<string>
-                    let (modules_str, noAotModule) = getRequiredModulesFor(program)
-                    if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
-                        panic("Standalone context called on non aot module {input}")
-                    } elif (noAotModule) {
-                        panic("Standalone context called on non aot module {input}")
-                    } else {
-                        runStandaloneVisitor(program, modules_str, pctx, cfg)
-                    }
+        var inscope access <- make_file_access("")
+        compile_and_simulate(input, access, unsafe(addr(mg)), cop) <| $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
+            result = build_string() <| $(writer) {
+                // lets comment on required modules
+                var modules_str : array<string>
+                let (modules_str, noAotModule) = getRequiredModulesFor(program)
+                if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
+                    panic("Standalone context called on non aot module {input}")
+                } elif (noAotModule) {
+                    panic("Standalone context called on non aot module {input}")
+                } else {
+                    runStandaloneVisitor(program, modules_str, pctx, cfg)
                 }
             }
         }

@@ -270,34 +270,34 @@ static void resolveTypeInfoAnnotations()
 
 TypeInfo * __tinfo_0[1] = { &__type_info__6b1c7db4b71a781f };
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_9a94d5ed4f7c5f3d ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b0a5914510dbae41 ( Context * __context__, lpipe::LpipeMacro const  & __cl_rename_at_116_2 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c3c4b8e51b91c26b ( Context * __context__, lpipe::LpipeMacro const  & __cl_rename_at_116_2 );
 inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __context__, smart_ptr_raw<Expression> & __fnCall_rename_at_15_3, smart_ptr_raw<Expression> & __arg_rename_at_15_4 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_9a94d5ed4f7c5f3d ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 )
 {
     das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstCallMacro *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b0a5914510dbae41 ( Context * __context__, lpipe::LpipeMacro const  &  __cl_rename_at_116_2 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c3c4b8e51b91c26b ( Context * __context__, lpipe::LpipeMacro const  &  __cl_rename_at_116_2 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
 }
 
 inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __context__, smart_ptr_raw<Expression> & __fnCall_rename_at_15_3, smart_ptr_raw<Expression> & __arg_rename_at_15_4 )
 {
-    ExprVar * __pVar_rename_at_17_5; memset(&__pVar_rename_at_17_5,0,sizeof(__pVar_rename_at_17_5));
-    smart_ptr_raw<Expression> __pCall_rename_at_18_6; memset(&__pCall_rename_at_18_6,0,sizeof(__pCall_rename_at_18_6));
-    ExprLooksLikeCall * __pCallFunc_rename_at_20_7; memset(&__pCallFunc_rename_at_20_7,0,sizeof(__pCallFunc_rename_at_20_7));
-    smart_ptr_raw<Expression> __cCopy_rename_at_24_8; memset(&__cCopy_rename_at_24_8,0,sizeof(__cCopy_rename_at_24_8));
-    smart_ptr_raw<Expression> __cCopy_rename_at_28_9; memset(&__cCopy_rename_at_28_9,0,sizeof(__cCopy_rename_at_28_9));
-    smart_ptr_raw<Expression> __cCopy_rename_at_32_10; memset(&__cCopy_rename_at_32_10,0,sizeof(__cCopy_rename_at_32_10));
-    smart_ptr_raw<Expression> ___VarcLetTickatTick41Tick20_rename_at_41_11; memset(&___VarcLetTickatTick41Tick20_rename_at_41_11,0,sizeof(___VarcLetTickatTick41Tick20_rename_at_41_11));
-    ExprLet * __pLet_rename_at_36_12; memset(&__pLet_rename_at_36_12,0,sizeof(__pLet_rename_at_36_12));
+    ExprVar * __pVar_rename_at_17_5; memset((void*)&__pVar_rename_at_17_5,0,sizeof(__pVar_rename_at_17_5));
+    smart_ptr_raw<Expression> __pCall_rename_at_18_6; memset((void*)&__pCall_rename_at_18_6,0,sizeof(__pCall_rename_at_18_6));
+    ExprLooksLikeCall * __pCallFunc_rename_at_20_7; memset((void*)&__pCallFunc_rename_at_20_7,0,sizeof(__pCallFunc_rename_at_20_7));
+    smart_ptr_raw<Expression> __cCopy_rename_at_24_8; memset((void*)&__cCopy_rename_at_24_8,0,sizeof(__cCopy_rename_at_24_8));
+    smart_ptr_raw<Expression> __cCopy_rename_at_28_9; memset((void*)&__cCopy_rename_at_28_9,0,sizeof(__cCopy_rename_at_28_9));
+    smart_ptr_raw<Expression> __cCopy_rename_at_32_10; memset((void*)&__cCopy_rename_at_32_10,0,sizeof(__cCopy_rename_at_32_10));
+    smart_ptr_raw<Expression> ___VarcLetTickatTick41Tick20_rename_at_41_11; memset((void*)&___VarcLetTickatTick41Tick20_rename_at_41_11,0,sizeof(___VarcLetTickatTick41Tick20_rename_at_41_11));
+    ExprLet * __pLet_rename_at_36_12; memset((void*)&__pLet_rename_at_36_12,0,sizeof(__pLet_rename_at_36_12));
     if ( SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprVar")),*__context__,nullptr) )
     {
         /* finally */ auto __finally_16= das_finally([&](){
@@ -338,7 +338,7 @@ inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __conte
         /* finally */ auto __finally_35= das_finally([&](){
         das_delete_handle<smart_ptr_raw<Expression>>::clear(__context__,___VarcLetTickatTick41Tick20_rename_at_41_11);
         /* end finally */ });
-        ___VarcLetTickatTick41Tick20_rename_at_41_11; das_zero(___VarcLetTickatTick41Tick20_rename_at_41_11);
+        das_zero(___VarcLetTickatTick41Tick20_rename_at_41_11);
         __pLet_rename_at_36_12 = (((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__fnCall_rename_at_15_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprLet")),*__context__,nullptr))) ? das_auto_cast<ExprLet *>::cast(das_cast<ExprLet *>::cast(__fnCall_rename_at_15_3)) : das_auto_cast<ExprLet *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))));
         if ( (das_vector_length(das_arg<das::vector<smart_ptr<Variable>>>::pass(__pLet_rename_at_36_12->variables /*variables*/)) != 1) || (equ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(das_index<das::vector<smart_ptr<Variable>>>::at(__pLet_rename_at_36_12->variables /*variables*/,0,__context__)->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) )
         {
@@ -366,11 +366,11 @@ inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __conte
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0x3fdd65aa3293d0d8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_9a94d5ed4f7c5f3d>>();
+    aotLib[0xe553d306a044fc24] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce>>();
     };
-    aotLib[0x4a8d02cd0c628a3c] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_b0a5914510dbae41>>();
+    aotLib[0xa0d309b2e95c9314] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_c3c4b8e51b91c26b>>();
     };
     aotLib[0x7d603bf2fe172b61] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&lpipe_expr_e67a42ebecb119e3>>();

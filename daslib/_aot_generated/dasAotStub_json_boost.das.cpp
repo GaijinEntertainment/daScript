@@ -160,7 +160,64 @@ namespace apply { struct ApplyMacro; };
 // unused enumeration ConstMatters
 // unused enumeration RefMatters
 // unused enumeration TemporaryMatters
-// unused enumeration Type
+#if 0 // external enum
+namespace rtti {
+
+enum class Type : int32_t {
+    none = int32_t(INT64_C(0)),
+    autoinfer = int32_t(INT64_C(1)),
+    alias = int32_t(INT64_C(2)),
+    option = int32_t(INT64_C(3)),
+    typeDecl = int32_t(INT64_C(4)),
+    typeMacro = int32_t(INT64_C(5)),
+    fakeContext = int32_t(INT64_C(6)),
+    fakeLineInfo = int32_t(INT64_C(7)),
+    anyArgument = int32_t(INT64_C(8)),
+    tVoid = int32_t(INT64_C(9)),
+    tBool = int32_t(INT64_C(10)),
+    tInt8 = int32_t(INT64_C(11)),
+    tUInt8 = int32_t(INT64_C(12)),
+    tInt16 = int32_t(INT64_C(13)),
+    tUInt16 = int32_t(INT64_C(14)),
+    tInt64 = int32_t(INT64_C(15)),
+    tUInt64 = int32_t(INT64_C(16)),
+    tInt = int32_t(INT64_C(17)),
+    tInt2 = int32_t(INT64_C(18)),
+    tInt3 = int32_t(INT64_C(19)),
+    tInt4 = int32_t(INT64_C(20)),
+    tUInt = int32_t(INT64_C(21)),
+    tUInt2 = int32_t(INT64_C(22)),
+    tUInt3 = int32_t(INT64_C(23)),
+    tUInt4 = int32_t(INT64_C(24)),
+    tFloat = int32_t(INT64_C(25)),
+    tFloat2 = int32_t(INT64_C(26)),
+    tFloat3 = int32_t(INT64_C(27)),
+    tFloat4 = int32_t(INT64_C(28)),
+    tDouble = int32_t(INT64_C(29)),
+    tRange = int32_t(INT64_C(30)),
+    tURange = int32_t(INT64_C(31)),
+    tRange64 = int32_t(INT64_C(32)),
+    tURange64 = int32_t(INT64_C(33)),
+    tString = int32_t(INT64_C(34)),
+    tStructure = int32_t(INT64_C(35)),
+    tHandle = int32_t(INT64_C(36)),
+    tEnumeration = int32_t(INT64_C(37)),
+    tEnumeration8 = int32_t(INT64_C(38)),
+    tEnumeration16 = int32_t(INT64_C(39)),
+    tEnumeration64 = int32_t(INT64_C(40)),
+    tBitfield = int32_t(INT64_C(41)),
+    tPointer = int32_t(INT64_C(42)),
+    tFunction = int32_t(INT64_C(43)),
+    tLambda = int32_t(INT64_C(44)),
+    tIterator = int32_t(INT64_C(45)),
+    tArray = int32_t(INT64_C(46)),
+    tTable = int32_t(INT64_C(47)),
+    tBlock = int32_t(INT64_C(48)),
+    tTuple = int32_t(INT64_C(49)),
+    tVariant = int32_t(INT64_C(50)),
+};
+}
+#endif // external enum
 // unused enumeration ConversionResult
 // unused enumeration CaptureMode
 // unused enumeration SideEffects
@@ -311,10 +368,10 @@ static void resolveTypeInfoAnnotations()
 TypeInfo * __tinfo_0[1] = { &__type_info__8d8d8008262e16ec };
 TypeInfo * __tinfo_1[1] = { &__type_info__b68d800849332aec };
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_2dbef66663d682d8 ( Context * __context__, TArray<ast::AstVariantMacro *> & __Arr_rename_at_181_0, ast::AstVariantMacro * __value_rename_at_181_1 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9fd87b225af26eb8 ( Context * __context__, json_boost::BetterJsonMacro const  & __cl_rename_at_116_2 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_360a0fc531bcb532 ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d01402ef40f6562a ( Context * __context__, json_boost::JsonReader const  & __cl_rename_at_116_5 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_a81de2bae076fb95 ( Context * __context__, TArray<ast::AstVariantMacro *> & __Arr_rename_at_181_0, ast::AstVariantMacro * __value_rename_at_181_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_282cf6721f218453 ( Context * __context__, json_boost::BetterJsonMacro const  & __cl_rename_at_116_2 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_8e4364e894fa22ef ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a4adb0331fdda85d ( Context * __context__, json_boost::JsonReader const  & __cl_rename_at_116_5 );
 inline json::JsonValue * _FuncQmarkSqblSqbr_3538a35cc5ccc9d5 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_21_10, char * const  __key_rename_at_21_11 );
 inline json::JsonValue * _FuncQmarkSqblSqbr_5655a09dd3be2073 ( Context * __context__, json::JsonValue * __a_rename_at_26_12, char * const  __key_rename_at_26_13 );
 inline json::JsonValue * _FuncQmarkDot_3538a35cc5ccc9d5 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_31_14, char * const  __key_rename_at_31_15 );
@@ -350,22 +407,22 @@ void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_2dbef66663d682d8 ( Context * __context__, TArray<ast::AstVariantMacro *> &  __Arr_rename_at_181_0, ast::AstVariantMacro * __value_rename_at_181_1 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_a81de2bae076fb95 ( Context * __context__, TArray<ast::AstVariantMacro *> &  __Arr_rename_at_181_0, ast::AstVariantMacro * __value_rename_at_181_1 )
 {
     das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstVariantMacro *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9fd87b225af26eb8 ( Context * __context__, json_boost::BetterJsonMacro const  &  __cl_rename_at_116_2 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_282cf6721f218453 ( Context * __context__, json_boost::BetterJsonMacro const  &  __cl_rename_at_116_2 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_360a0fc531bcb532 ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_8e4364e894fa22ef ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 )
 {
     das_copy(__Arr_rename_at_181_3(builtin_array_push_back(das_arg<TArray<ast::AstReaderMacro *>>::pass(__Arr_rename_at_181_3),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_4);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d01402ef40f6562a ( Context * __context__, json_boost::JsonReader const  &  __cl_rename_at_116_5 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a4adb0331fdda85d ( Context * __context__, json_boost::JsonReader const  &  __cl_rename_at_116_5 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti))).getStructType())));
 }
@@ -629,17 +686,17 @@ inline json::JsonValue * JV_8425ea1d753a21fb ( Context * __context__, uint64_t _
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0x9ffb73e1b24f1623] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_2dbef66663d682d8>>();
+    aotLib[0xb0e62250de77627d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_a81de2bae076fb95>>();
     };
-    aotLib[0x8e9da741b004b839] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_9fd87b225af26eb8>>();
+    aotLib[0x532c4508b1a38a3d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_282cf6721f218453>>();
     };
-    aotLib[0x27004c5f7ca4b606] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_360a0fc531bcb532>>();
+    aotLib[0x92d5b2bdb4b14a67] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_8e4364e894fa22ef>>();
     };
-    aotLib[0x621bc12228fb29bb] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_d01402ef40f6562a>>();
+    aotLib[0xb80633f46a7d18d0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_a4adb0331fdda85d>>();
     };
     aotLib[0xf020fec97fe5f7be] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncQmarkSqblSqbr_3538a35cc5ccc9d5>>();

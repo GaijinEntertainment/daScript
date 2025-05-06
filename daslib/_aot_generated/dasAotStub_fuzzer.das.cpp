@@ -216,9 +216,51 @@ namespace testing_boost { struct TestFunctionAnnotation; };
 // unused structure SetupOptimizationMacro
 // unused structure TagFunctionMacro
 // unused structure BetterRttiVisitor
-// unused enumeration ReOp
-// unused structure ReNode
-// unused structure Regex
+namespace regex {
+
+enum class ReOp : int32_t {
+    Char = int32_t(0),
+    Set = int32_t(1),
+    Any = int32_t(2),
+    Eos = int32_t(3),
+    Group = int32_t(4),
+    Plus = int32_t(5),
+    Star = int32_t(6),
+    Question = int32_t(7),
+    Concat = int32_t(8),
+    Union = int32_t(9),
+};
+}
+namespace regex {
+
+struct ReNode {
+    DAS_COMMENT(enum) regex::ReOp op;
+    int32_t id;
+    Func DAS_COMMENT((uint8_t const  *,regex::Regex,regex::ReNode *,uint8_t const  * const )) fun2;
+    Func DAS_COMMENT((void,regex::ReNode *,Sequence DAS_COMMENT((uint32_t)),StringBuilderWriter)) gen2;
+    range at;
+    char * text;
+    int32_t textLen;
+    TArray<regex::ReNode *> all;
+    regex::ReNode * left;
+    regex::ReNode * right;
+    regex::ReNode * subexpr;
+    regex::ReNode * next;
+    TDim<uint32_t,8> cset;
+    int32_t index;
+    uint8_t const  * tail;
+};
+}
+namespace regex {
+
+struct Regex {
+    regex::ReNode * root;
+    uint8_t const  * match;
+    TArray<AutoTuple<range,char *>> groups;
+    TDim<uint32_t,8> earlyOut;
+    bool canEarlyOut;
+};
+}
 // unused structure RegexReader
 // unused structure _lambda_random_111_1
 // unused structure DecltypeMacro

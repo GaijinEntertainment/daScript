@@ -1,7 +1,8 @@
 options gen2
 
+module ast_aot_cpp
+
 require fio
-require rtti
 require strings
 
 require daslib/match
@@ -397,7 +398,7 @@ class NoAotMarker : AstVisitor {
         func = get_ptr(f);
     }
     def override visitFunction(var that : FunctionPtr) : FunctionPtr {
-        var tmp = func
+        var tmp := func
         func = null;
         return <- unsafe(reinterpret<FunctionPtr>(tmp));
     }
@@ -589,7 +590,7 @@ class AotDebugInfoHelper {
             if (cross_platform) {
                 write(writer, "offsetof({struct_name},{info.name}), {info.nextGcField:d}");
             } else {
-                write(writer, "{info.offset}, {info.nextGcField:d}")
+                write(writer, "{info.offset:d}, {info.nextGcField:d}")
             }
         }
     }
@@ -640,7 +641,7 @@ class AotDebugInfoHelper {
                 writeDim(writer, info.fields[fi], suffix);
                 writeArgTypes(writer, info.fields[fi], suffix);
                 writeArgNames(writer, info.fields[fi], suffix);
-                write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(info.name, info.fields[fi],suffix)} \};\n");
+                write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(string(info.name), info.fields[fi],suffix)} \};\n");
             }
         }
 
@@ -922,11 +923,31 @@ def describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; c
         unsafe {describeLocalCppType(addr(writer), fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes); }
         write(writer, " {needName ? aotFuncName(fn.get_ptr()) : "(*)"}");
         unsafe {
+            // let prefix = fn.arguments |> empty() ? "" : ", "
+            /*
+            let prefix = "";
+            var args_str = "";
+            for (arg1 in fn.arguments) {
+                let arg : smart_ptr<Variable> := arg1;
+                args_str += ", ";
+                args_str += build_string() <| $(writer2) {
+                                                    if (isLocalVec(arg._type)) {
+                                                        unsafe {describeLocalCppType(addr(writer2), arg._type, cross_platform); }
+                                                    } else {
+                                                        write(writer2, "{describeCppType(arg._type, DescribeConfig(cross_platform=cross_platform))}");
+                                                    }
+                                                    write(writer2, " {(arg._type.isRefType) ? "& " : ""}");
+                                                    if (collector != null) {
+                                                        write(writer2, "{collector.getVarName(arg)}");
+                                                    }
+                                                }
+            }
+            */
             let prefix = fn.arguments |> empty() ? "" : ", "
             let args_str = (
                 fn.arguments
                 |> each()
-                |> map(@(arg) : string {
+                |> map(@(arg : smart_ptr<Variable>) : string {
                     return build_string() <| $(writer2) {
                         if (isLocalVec(arg._type)) {
                             unsafe {describeLocalCppType(addr(writer2), arg._type, cross_platform); }
@@ -1197,8 +1218,20 @@ class CppAot : AstVisitor {
 // blk
     def makeLocalTempName(expr : ExpressionPtr) {
         var stackTop : uint = 0u;
-        if (isMakeLocal(expr)) {
-            stackTop = unsafe(reinterpret<ExprMakeLocal>(expr)).stackTop;
+        // todo: fix casts to parents A -> B -> C (from A to B)
+        /*if (isMakeLocal(expr)) {
+            stackTop = (expr as ExprMakeLocal).stackTop;
+        }*/
+        if (expr is ExprMakeLocal) {
+            stackTop = (expr as ExprMakeLocal).stackTop;
+        } elif (expr is ExprMakeStruct) {
+            stackTop = (expr as ExprMakeStruct).stackTop;
+        } elif (expr is ExprMakeVariant) {
+            stackTop = (expr as ExprMakeVariant).stackTop;
+        } elif (expr is ExprMakeArray) {
+            stackTop = (expr as ExprMakeArray).stackTop;
+        } elif (expr is ExprMakeTuple) {
+            stackTop = (expr as ExprMakeTuple).stackTop;
         } elif (expr is ExprCall) {
             stackTop = (expr as ExprCall).stackTop;
         } else {
@@ -1469,7 +1502,8 @@ class CppAot : AstVisitor {
     def override preVisitExprOp1(var that : smart_ptr<ExprOp1>) {
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
-            that.arguments |> emplace(that.subexpr);
+            var subexpr := that.subexpr
+            that.arguments |> emplace(subexpr);
             CallFunc_preVisit(that);
             CallFunc_preVisitCallArg(that, that.subexpr, true);
         } elif (isOpPolicy1(that)) {
@@ -1550,8 +1584,10 @@ class CppAot : AstVisitor {
         if (!noBracket(that)) write(*ss, "(");
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
-            that.arguments |> emplace(that.left);
-            that.arguments |> emplace(that.right);
+            var left := that.left;
+            var right := that.right;
+            that.arguments |> emplace(left);
+            that.arguments |> emplace(right);
             CallFunc_preVisit(that);
             CallFunc_preVisitCallArg(that, that.left, false);
         } elif (isOpPolicy2(that)) {
@@ -3337,7 +3373,7 @@ class CppAot : AstVisitor {
     }
 // for
     def forSrcName(varName : das_string) {
-        return "__{varName}_iterator";
+        return "__{aotSuffixNameEx(varName, "")}_iterator";
     }
     def needLoopName(ffor : smart_ptr<ExprFor>) {
         return "__need_loop_{ffor.at.line:d}";
@@ -3447,6 +3483,13 @@ def dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
         pm |> for_each_structure($(ps) {
             write(*aotVisitor.ss, "namespace {aotModuleName(ps._module)} \{ struct {aotStructName(ps.get_ptr())}; \};\n");
         });
+        pm |> for_each_module_function($(fn) {
+            // Is some functions from another module used we need to declare this type.
+            // Because we have to add debug info about this function signature in our module
+            if (fn.index < 0 || !fn.flags.used)
+                return ;
+            visit(fn, adapter);
+        });
     });
     program.get_ptr() |> for_each_module_no_order($(pm) {
         if (pm == program.getThisModule) {
@@ -3476,14 +3519,17 @@ def new_cpp_aot(var ss : StringBuilderWriter?; program : ProgramPtr) {
 
 
 
-def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; isAll : bool = false) : array<Function?> {
+def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_module : Module?; all_modules : bool; is_all : bool = false) : array<Function?> {
     var fnn : array<Function?>;
     fnn.reserve(totalFunctions);
     for (pm in modules) {
         pm |> for_each_module_function($(pfun) {
+            if (!all_modules && pfun._module != this_module) {
+                return ;
+            }
             if (pfun.index < 0 || !pfun.flags.used)
                 return ;
-            if (!isAll) {
+            if (!is_all) {
                 if (pfun.flags.builtIn || pfun.flags.noAot) return ;
             }
             fnn |> push(pfun.get_ptr());
@@ -3492,22 +3538,22 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; isAll :
     return <- fnn;
 }
 
-def collectProgramUsedFunctions(program : ProgramPtr; isAll : bool = false) : array<Function?> {
-    var all_modules : array<Module?>;
+def collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool; is_all : bool) : array<Function?> {
+    var modules : array<Module?>;
     program.get_ptr() |> for_each_module_no_order($(mod) {
-        all_modules.push(mod);
+        modules.push(mod);
     })
-    return collectUsedFunctions(all_modules, program.totalFunctions, isAll)
+    return collectUsedFunctions(modules, program.totalFunctions, program.getThisModule, all_modules, is_all)
 }
 
-def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, allModules : bool = false) {
-    let fnn = collectProgramUsedFunctions(program);
+def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, all_modules : bool = false) {
+    let fnn = collectProgramUsedFunctions(program, all_modules, false);
     if (headers) {
         write(*logs, "\nvoid registerAot ( AotLibrary & aotLib )\n\{\n");
     }
     var funInit = false;
     for (fn in fnn) {
-        if (!allModules && fn._module != program.getThisModule)
+        if (!all_modules && fn._module != program.getThisModule)
             continue;
         if (fn.flags.init) {
             funInit = true;
@@ -3562,9 +3608,9 @@ def dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var con
     write(*tw, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
     registerAotCpp(tw, program, context, cross_platform, false, allModules);
     write(*tw, "    resolveTypeInfoAnnotations();\n");
-    write(*tw, "};\n");
+    write(*tw, "\};\n");
     write(*tw, "\n");
-    write(*tw, "AotListBase impl(registerAotFunctions);\n");
+    write(*tw, "static AotListBase impl(registerAotFunctions);\n");
 }
 
 def getRequiredModulesFor(program : ProgramPtr) {
@@ -3608,23 +3654,14 @@ def getRequiredModulesFor(program : ProgramPtr) {
     return (modules_str, noAotModule)
 }
 
-def updateCOP(var cop : CodeOfPolicies) {
-    cop.threadlock_context = false
-    cop.aot = false;
-    cop.aot_module = true;
-    cop.fail_on_lack_of_aot_export = true;
-    cop.ignore_shared_modules = true;
-    cop.version_2_syntax = true; // true by default
-}
-
 def compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {
     set_aot();
-    compile_file(input, access, mg, cop) <| $(ok, program, issues) {
+    compile_file(input, access, mg, cop) <| $(ok; var program : smart_ptr<Program>; issues) {
         if (!ok) {
             print("failed to compile {input}\n{issues}\n")
             return
         }
-        simulate(program) <| $(sok; pctx; serrors) {
+        simulate(program) <| $(sok; var pctx : smart_ptr<Context>; serrors) {
             if (!sok) {
                 panic("Failed to simulate {serrors}")
             }
@@ -3636,89 +3673,86 @@ def compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop,
 
 
 [export]
-def aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : bool) : string {
+def aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {
     var result = "";
     using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
-            updateCOP(cop);
-            var inscope access <- make_file_access("")
-            compile_and_simulate(input, access, unsafe(addr(mg)), cop) <| $(program : ProgramPtr; var pctx : smart_ptr<Context>) {
-                result = build_string() <| $(writer) {
-                    // lets comment on required modules
-                    let (modules_str, noAotModule) = getRequiredModulesFor(program)
-                    if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
-                        if (!noAotModule) {
-                            write(writer, "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n");
-                        } else {
-                            write(writer, "// AOT disabled due to options no_aot=true. There are also some modules which require no_aot\n\n");
-                        }
-                    } elif (noAotModule) {
-                        write(writer, "// AOT disabled due to module requirements\n");
-                        write(writer, "#if 0\n\n");
-                        write(writer, join(modules_str, ""));
-                        write(writer, "\n#endif\n");
+        var inscope access <- make_file_access("")
+        compile_and_simulate(input, access, unsafe(addr(mg)), cop) <| $(program : ProgramPtr; var pctx : smart_ptr<Context>) {
+            result = build_string() <| $(writer) {
+                // lets comment on required modules
+                let (modules_str, noAotModule) = getRequiredModulesFor(program)
+                if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
+                    if (!noAotModule) {
+                        write(writer, "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n");
                     } else {
-                        // header
-                        write(writer, AOT_INCLUDES);
-                        write(writer, "{join(modules_str, "")}\n");
-                        write(writer, AOT_HEADERS);
-                        write(writer, "namespace das \{\n");
-                        write(writer, "namespace {program.thisNamespace} \{\n");
-                        build_string() <| $(tmp_writer) {
-                            let marker_vis = new NoAotMarker();
-                            var inscope adapter_marker <- make_visitor(*marker_vis)
-                            visit(program, adapter_marker);
-
-                            var coll = new BlockVariableCollector();
-                            var inscope adapter_coll <- make_visitor(*coll)
-                            visit(program, adapter_coll)
-
-                            // mark prologue
-                            var pmarker = new PrologueMarker();
-                            var inscope adapter_p <- make_visitor(*pmarker)
-                            visit(program, adapter_p)
-
-                            var flags = new SetPrinterFlags();
-                            var inscope flags_adapter <- make_visitor(*flags)
-                            visit(program, flags_adapter)
-
-
-                            setAotHashes(program, *pctx)
-
-                            var cpp_aot = new CppAot(ss = unsafe(addr(tmp_writer)),
-                                                     program := program,
-                                                     collector = coll,
-                                                     prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false ||
-                                                                program.getDebugger,
-                                                     solidContext = program.policies.solid_context ||
-                                                                (program._options |> find_arg("solid_context") ?as tBool ?? false),
-                                                     cross_platform = cross_platform)
-                            cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
-                            cpp_aot.helper.cross_platform = cross_platform;
-                            var inscope adapter <- make_visitor(*cpp_aot)
-                            cpp_aot.adapter := adapter
-                            dumpDependencies(program, cpp_aot);
-                            visit(program, cpp_aot.adapter)
-                            write(writer, "{cpp_aot.str()}");
-                        }
-                        write(writer, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
-                        registerAotCpp(unsafe(addr(writer)), program, *pctx, cross_platform, false);
-                        write(writer, "\tresolveTypeInfoAnnotations();\n");
-                        write(writer, "}\n");
-                        write(writer, "\n");
-                        if (!isAotLib) write(writer, "AotListBase impl(registerAotFunctions);\n");
-                        // validation stuff
-                        if (paranoid_validation) {
-                            /* todo: program->validateAotCpp(tw,*pctx);
-                            tw << "\n";*/
-                        }
-                        write(writer, "\} // namespace {program.thisNamespace}\n");
-                        if (isAotLib) {
-                            write(writer, "AotListBase impl_aot_{program.getThisModule.name}({program.thisNamespace}::registerAotFunctions);\n");
-                        }
-                        write(writer, "\} // namespace das\n");
-                        write(writer, AOT_FOOTER);
+                        write(writer, "// AOT disabled due to options no_aot=true. There are also some modules which require no_aot\n\n");
                     }
+                } elif (noAotModule) {
+                    write(writer, "// AOT disabled due to module requirements\n");
+                    write(writer, "#if 0\n\n");
+                    write(writer, join(modules_str, ""));
+                    write(writer, "\n#endif\n");
+                } else {
+                    // header
+                    write(writer, AOT_INCLUDES);
+                    write(writer, "{join(modules_str, "")}\n");
+                    write(writer, AOT_HEADERS);
+                    write(writer, "namespace das \{\n");
+                    write(writer, "namespace {program.thisNamespace} \{\n");
+                    build_string() <| $(tmp_writer) {
+                        let marker_vis = new NoAotMarker();
+                        var inscope adapter_marker <- make_visitor(*marker_vis)
+                        visit(program, adapter_marker);
+
+                        var coll = new BlockVariableCollector();
+                        var inscope adapter_coll <- make_visitor(*coll)
+                        visit(program, adapter_coll)
+
+                        // mark prologue
+                        var pmarker = new PrologueMarker();
+                        var inscope adapter_p <- make_visitor(*pmarker)
+                        visit(program, adapter_p)
+
+                        var flags = new SetPrinterFlags();
+                        var inscope flags_adapter <- make_visitor(*flags)
+                        visit(program, flags_adapter)
+
+
+                        setAotHashes(program, *pctx)
+
+                        var cpp_aot = new CppAot(ss = unsafe(addr(tmp_writer)),
+                                                 program := program,
+                                                 collector = coll,
+                                                 prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false ||
+                                                            program.getDebugger,
+                                                 solidContext = program.policies.solid_context ||
+                                                            (program._options |> find_arg("solid_context") ?as tBool ?? false),
+                                                 cross_platform = cross_platform)
+                        cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
+                        cpp_aot.helper.cross_platform = cross_platform;
+                        var inscope adapter <- make_visitor(*cpp_aot)
+                        cpp_aot.adapter := adapter
+                        dumpDependencies(program, cpp_aot);
+                        visit(program, cpp_aot.adapter)
+                        write(writer, "{cpp_aot.str()}");
+                    }
+                    write(writer, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
+                    registerAotCpp(unsafe(addr(writer)), program, *pctx, cross_platform, false);
+                    write(writer, "\tresolveTypeInfoAnnotations();\n");
+                    write(writer, "}\n");
+                    write(writer, "\n");
+                    if (!isAotLib) write(writer, "static AotListBase impl(registerAotFunctions);\n");
+                    // validation stuff
+                    if (paranoid_validation) {
+                        /* todo: program->validateAotCpp(tw,*pctx);
+                        tw << "\n";*/
+                    }
+                    write(writer, "\} // namespace {program.thisNamespace}\n");
+                    if (isAotLib) {
+                        write(writer, "AotListBase impl_aot_{program.getThisModule.name}({program.thisNamespace}::registerAotFunctions);\n");
+                    }
+                    write(writer, "\} // namespace das\n");
+                    write(writer, AOT_FOOTER);
                 }
             }
         }

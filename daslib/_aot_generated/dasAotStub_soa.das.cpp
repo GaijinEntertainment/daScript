@@ -3879,9 +3879,9 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_7af251da517ddbb8 ( Cont
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_8e6738fccfa7ec71 ( Context * __context__, soa::SoaStructMacro const  & __cl_rename_at_116_2 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_3, ast::AstFunctionAnnotation * __value_rename_at_181_4 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_786a62bee20869e3 ( Context * __context__, soa::SoaCallMacro const  & __cl_rename_at_116_5 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_c7bbeb75cbc76881 ( Context * __context__, TArray<ast::AstForLoopMacro *> & __Arr_rename_at_181_6, ast::AstForLoopMacro * __value_rename_at_181_7 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1292c517594c3ad3 ( Context * __context__, soa::SoaForLoop const  & __cl_rename_at_116_8 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_8c0e7721b93fa7a3 ( Context * __context__, soa::CollectAndReplaceIteratorFields const  & __cl_rename_at_116_9 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_685aa23e76c3f82a ( Context * __context__, TArray<ast::AstForLoopMacro *> & __Arr_rename_at_181_6, ast::AstForLoopMacro * __value_rename_at_181_7 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_233f5bea63e3ff11 ( Context * __context__, soa::SoaForLoop const  & __cl_rename_at_116_8 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f9e5a45c29a7b014 ( Context * __context__, soa::CollectAndReplaceIteratorFields const  & __cl_rename_at_116_9 );
 inline void _FuncbuiltinTickfinalizeTick5454204887383796109_9c4083566563a85a ( Context * __context__, TTable<char *,bool> & __a_rename_at_1193_10 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_790bb8da54666a77 ( Context * __context__, char * const  __name_rename_at_631_11, soa::SoaCallMacro * __someClassPtr_rename_at_631_12 );
 inline void _FuncbuiltinTickinsertTick12964066441666329206_963edeee5917200b ( Context * __context__, TTable<char *,bool> & __Tab_rename_at_947_14, char * const  __at_rename_at_947_15, bool __val_rename_at_947_16 );
@@ -3891,15 +3891,15 @@ inline void _FuncbuiltinTickpushTick14133213201864676143_d626258b591934af ( Cont
 inline char * _FuncastTickdescribeTick842554968825501494_452cfc8955963a18 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_48_22 );
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_ee00e2a3a0e6d3b2 ( Context * __context__, char * const  __name_rename_at_273_23, char * const  __tag_rename_at_273_24, soa::SoaCallMacro * __classPtr_rename_at_273_25 );
 inline Structure * _FuncbuiltinTickget_ptrTick5807679485210906136_bd8120dfe7363955 ( Context * __context__, smart_ptr_raw<Structure> __src_rename_at_1732_27 );
-inline void finalize_f38b042d238cb701 ( Context * __context__, soa::CollectAndReplaceIteratorFields & ____this_rename_at_211_28 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_9a0b572028f3c8ad ( Context * __context__, soa::CollectAndReplaceIteratorFields const  & __someClass_rename_at_684_29 );
+inline void finalize_fdd1cea66d626a4c ( Context * __context__, soa::CollectAndReplaceIteratorFields & ____this_rename_at_211_28 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_c89d26cbc9007872 ( Context * __context__, soa::CollectAndReplaceIteratorFields const  & __someClass_rename_at_684_29 );
 inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2f51144ec5978438 ( Context * __context__, TTable<char *,bool> const  & __a_rename_at_1128_32 );
-inline void finalize_d96daf2ab9fec4e5 ( Context * __context__, soa::CollectAndReplaceIteratorFields * & ____this_rename_at_238_34 );
+inline void finalize_807b9705b42c57d7 ( Context * __context__, soa::CollectAndReplaceIteratorFields * & ____this_rename_at_238_34 );
 inline void _FuncDot_1409e2eff7f3b83c ( Context * __context__, soa::SOA_INDEX const  & __src_rename_at_18_36, char * const  __field_rename_at_18_37 );
-inline soa::CollectAndReplaceIteratorFields CollectAndReplaceIteratorFields_7479ddde6052fe59 ( Context * __context__, char * const  __prefix_rename_at_214_38 );
-inline void _FuncCollectAndReplaceIteratorFieldsTickCollectAndReplaceIteratorFields_fb5209d2e7cbf04 ( Context * __context__, soa::CollectAndReplaceIteratorFields & __self_rename_at_214_40, char * const  __prefix_rename_at_214_41 );
-inline smart_ptr_raw<Expression> _FuncCollectAndReplaceIteratorFieldsTickvisitExprField_43a640b3a1956655 ( Context * __context__, soa::CollectAndReplaceIteratorFields & __self_rename_at_217_42, smart_ptr_raw<ExprField> __expr_rename_at_217_43 );
-inline void _FuncCollectAndReplaceIteratorFields_0x27___finalize_5c83a6b3bf972f19 ( Context * __context__, soa::CollectAndReplaceIteratorFields & __self_rename_at_211_46 );
+inline soa::CollectAndReplaceIteratorFields CollectAndReplaceIteratorFields_5f22a6894af78ad3 ( Context * __context__, char * const  __prefix_rename_at_214_38 );
+inline void _FuncCollectAndReplaceIteratorFieldsTickCollectAndReplaceIteratorFields_c55b82b70d10e186 ( Context * __context__, soa::CollectAndReplaceIteratorFields & __self_rename_at_214_40, char * const  __prefix_rename_at_214_41 );
+inline smart_ptr_raw<Expression> _FuncCollectAndReplaceIteratorFieldsTickvisitExprField_8cf74d91f0d3ac5f ( Context * __context__, soa::CollectAndReplaceIteratorFields & __self_rename_at_217_42, smart_ptr_raw<ExprField> __expr_rename_at_217_43 );
+inline void _FuncCollectAndReplaceIteratorFields_0x27___finalize_5252406c8271041f ( Context * __context__, soa::CollectAndReplaceIteratorFields & __self_rename_at_211_46 );
 inline TArray<char *> collect_and_replace_iterator_fields_667356569e4de14a ( Context * __context__, char * const  __prefix_rename_at_229_47, smart_ptr_raw<Expression> const  __blk_rename_at_229_48 );
 
 void __init_script ( Context * __context__, bool __init_shared )
@@ -3926,17 +3926,17 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_786a6
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti))).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_c7bbeb75cbc76881 ( Context * __context__, TArray<ast::AstForLoopMacro *> &  __Arr_rename_at_181_6, ast::AstForLoopMacro * __value_rename_at_181_7 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_685aa23e76c3f82a ( Context * __context__, TArray<ast::AstForLoopMacro *> &  __Arr_rename_at_181_6, ast::AstForLoopMacro * __value_rename_at_181_7 )
 {
     das_copy(__Arr_rename_at_181_6(builtin_array_push_back(das_arg<TArray<ast::AstForLoopMacro *>>::pass(__Arr_rename_at_181_6),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_7);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1292c517594c3ad3 ( Context * __context__, soa::SoaForLoop const  &  __cl_rename_at_116_8 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_233f5bea63e3ff11 ( Context * __context__, soa::SoaForLoop const  &  __cl_rename_at_116_8 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_8.__rtti))).getStructType())));
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_8c0e7721b93fa7a3 ( Context * __context__, soa::CollectAndReplaceIteratorFields const  &  __cl_rename_at_116_9 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f9e5a45c29a7b014 ( Context * __context__, soa::CollectAndReplaceIteratorFields const  &  __cl_rename_at_116_9 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_9.__rtti))).getStructType())));
 }
@@ -3981,7 +3981,7 @@ inline char * _FuncastTickdescribeTick842554968825501494_452cfc8955963a18 ( Cont
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_ee00e2a3a0e6d3b2 ( Context * __context__, char * const  __name_rename_at_273_23, char * const  __tag_rename_at_273_24, soa::SoaCallMacro * __classPtr_rename_at_273_25 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_26; memset(&__ann_rename_at_274_26,0,sizeof(__ann_rename_at_274_26));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_26; memset((void*)&__ann_rename_at_274_26,0,sizeof(__ann_rename_at_274_26));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_26);
     /* end finally */ });
@@ -3995,27 +3995,27 @@ inline Structure * _FuncbuiltinTickget_ptrTick5807679485210906136_bd8120dfe73639
     return das_auto_cast<Structure *>::cast(das_cast<Structure *>::cast(__src_rename_at_1732_27));
 }
 
-inline void finalize_f38b042d238cb701 ( Context * __context__, soa::CollectAndReplaceIteratorFields &  ____this_rename_at_211_28 )
+inline void finalize_fdd1cea66d626a4c ( Context * __context__, soa::CollectAndReplaceIteratorFields &  ____this_rename_at_211_28 )
 {
     _FuncbuiltinTickfinalizeTick5454204887383796109_9c4083566563a85a(__context__,das_arg<TTable<char *,bool>>::pass(____this_rename_at_211_28.names));
-    memset(&(____this_rename_at_211_28), 0, TypeSize<soa::CollectAndReplaceIteratorFields>::size);
+    memset((void*)&(____this_rename_at_211_28), 0, TypeSize<soa::CollectAndReplaceIteratorFields>::size);
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_9a0b572028f3c8ad ( Context * __context__, soa::CollectAndReplaceIteratorFields const  &  __someClass_rename_at_684_29 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_c89d26cbc9007872 ( Context * __context__, soa::CollectAndReplaceIteratorFields const  &  __someClass_rename_at_684_29 )
 {
     soa::CollectAndReplaceIteratorFields const  * __classPtr_rename_at_687_30 = ((soa::CollectAndReplaceIteratorFields const  *)das_ref(__context__,__someClass_rename_at_684_29));
-    StructInfo const  * __classInfo_rename_at_688_31 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_8c0e7721b93fa7a3(__context__,__someClass_rename_at_684_29));
+    StructInfo const  * __classInfo_rename_at_688_31 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_f9e5a45c29a7b014(__context__,__someClass_rename_at_684_29));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_30),__classInfo_rename_at_688_31,__context__));
 }
 
 inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2f51144ec5978438 ( Context * __context__, TTable<char *,bool> const  &  __a_rename_at_1128_32 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_33; das_zero(__it_rename_at_1129_33);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_33;das_zero(__it_rename_at_1129_33);
     builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_33),__a_rename_at_1128_32,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_33);
 }
 
-inline void finalize_d96daf2ab9fec4e5 ( Context * __context__, soa::CollectAndReplaceIteratorFields * & ____this_rename_at_238_34 )
+inline void finalize_807b9705b42c57d7 ( Context * __context__, soa::CollectAndReplaceIteratorFields * & ____this_rename_at_238_34 )
 {
     if ( ____this_rename_at_238_34 != nullptr )
     {
@@ -4031,7 +4031,7 @@ inline void _FuncDot_1409e2eff7f3b83c ( Context * __context__, soa::SOA_INDEX co
     DAS_ASSERTF((false),(((char *) "this code should never been instanced. soa_call macro replaces the soa[index].field with soa.field[index]")));
 }
 
-inline soa::CollectAndReplaceIteratorFields CollectAndReplaceIteratorFields_7479ddde6052fe59 ( Context * __context__, char * const  __prefix_rename_at_214_38 )
+inline soa::CollectAndReplaceIteratorFields CollectAndReplaceIteratorFields_5f22a6894af78ad3 ( Context * __context__, char * const  __prefix_rename_at_214_38 )
 {
     soa::CollectAndReplaceIteratorFields __self_rename_at_214_39; das_zero(__self_rename_at_214_39); das_move(__self_rename_at_214_39, (([&]() -> soa::CollectAndReplaceIteratorFields {
         soa::CollectAndReplaceIteratorFields __mks_214;
@@ -4041,16 +4041,16 @@ inline soa::CollectAndReplaceIteratorFields CollectAndReplaceIteratorFields_7479
         das_copy((__mks_214.visitExprField),(das_cast<Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstVisitor,smart_ptr_raw<ExprField> const ))>::cast(Func(__context__->fnByMangledName(/*@soa::CollectAndReplaceIteratorFields`visitExprField S<soa::CollectAndReplaceIteratorFields> 1<H<ast::ExprField>>?M*/ 0x57c2c88ce5199bb7)))));
         return __mks_214;
     })()));
-    _FuncCollectAndReplaceIteratorFieldsTickCollectAndReplaceIteratorFields_fb5209d2e7cbf04(__context__,das_arg<soa::CollectAndReplaceIteratorFields>::pass(__self_rename_at_214_39),__prefix_rename_at_214_38);
+    _FuncCollectAndReplaceIteratorFieldsTickCollectAndReplaceIteratorFields_c55b82b70d10e186(__context__,das_arg<soa::CollectAndReplaceIteratorFields>::pass(__self_rename_at_214_39),__prefix_rename_at_214_38);
     return /* <- */ das_auto_cast_move<soa::CollectAndReplaceIteratorFields>::cast(__self_rename_at_214_39);
 }
 
-inline void _FuncCollectAndReplaceIteratorFieldsTickCollectAndReplaceIteratorFields_fb5209d2e7cbf04 ( Context * __context__, soa::CollectAndReplaceIteratorFields &  __self_rename_at_214_40, char * const  __prefix_rename_at_214_41 )
+inline void _FuncCollectAndReplaceIteratorFieldsTickCollectAndReplaceIteratorFields_c55b82b70d10e186 ( Context * __context__, soa::CollectAndReplaceIteratorFields &  __self_rename_at_214_40, char * const  __prefix_rename_at_214_41 )
 {
     das_copy(__self_rename_at_214_40.it_prefix,__prefix_rename_at_214_41);
 }
 
-inline smart_ptr_raw<Expression> _FuncCollectAndReplaceIteratorFieldsTickvisitExprField_43a640b3a1956655 ( Context * __context__, soa::CollectAndReplaceIteratorFields &  __self_rename_at_217_42, smart_ptr_raw<ExprField> __expr_rename_at_217_43 ) { das_stack_prologue __prologue(__context__,128,"CollectAndReplaceIteratorFields`visitExprField " DAS_FILE_LINE);
+inline smart_ptr_raw<Expression> _FuncCollectAndReplaceIteratorFieldsTickvisitExprField_8cf74d91f0d3ac5f ( Context * __context__, soa::CollectAndReplaceIteratorFields &  __self_rename_at_217_42, smart_ptr_raw<ExprField> __expr_rename_at_217_43 ) { das_stack_prologue __prologue(__context__,128,"CollectAndReplaceIteratorFields`visitExprField " DAS_FILE_LINE);
 {
     if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_217_43->value /*value*/->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprVar")),*__context__,nullptr) )
     {
@@ -4068,23 +4068,23 @@ inline smart_ptr_raw<Expression> _FuncCollectAndReplaceIteratorFieldsTickvisitEx
     return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__expr_rename_at_217_43);
 }}
 
-inline void _FuncCollectAndReplaceIteratorFields_0x27___finalize_5c83a6b3bf972f19 ( Context * __context__, soa::CollectAndReplaceIteratorFields &  __self_rename_at_211_46 )
+inline void _FuncCollectAndReplaceIteratorFields_0x27___finalize_5252406c8271041f ( Context * __context__, soa::CollectAndReplaceIteratorFields &  __self_rename_at_211_46 )
 {
-    finalize_f38b042d238cb701(__context__,das_arg<soa::CollectAndReplaceIteratorFields>::pass(__self_rename_at_211_46));
+    finalize_fdd1cea66d626a4c(__context__,das_arg<soa::CollectAndReplaceIteratorFields>::pass(__self_rename_at_211_46));
 }
 
 inline TArray<char *> collect_and_replace_iterator_fields_667356569e4de14a ( Context * __context__, char * const  __prefix_rename_at_229_47, smart_ptr_raw<Expression> const  __blk_rename_at_229_48 )
 {
-    TArray<char *> __names_rename_at_230_49; memset(&__names_rename_at_230_49,0,sizeof(__names_rename_at_230_49));
-    soa::CollectAndReplaceIteratorFields * __astVisitor_rename_at_231_50; memset(&__astVisitor_rename_at_231_50,0,sizeof(__astVisitor_rename_at_231_50));
-    smart_ptr_raw<VisitorAdapter> __astVisitorAdapter_rename_at_232_51; memset(&__astVisitorAdapter_rename_at_232_51,0,sizeof(__astVisitorAdapter_rename_at_232_51));
+    TArray<char *> __names_rename_at_230_49; memset((void*)&__names_rename_at_230_49,0,sizeof(__names_rename_at_230_49));
+    soa::CollectAndReplaceIteratorFields * __astVisitor_rename_at_231_50; memset((void*)&__astVisitor_rename_at_231_50,0,sizeof(__astVisitor_rename_at_231_50));
+    smart_ptr_raw<VisitorAdapter> __astVisitorAdapter_rename_at_232_51; memset((void*)&__astVisitorAdapter_rename_at_232_51,0,sizeof(__astVisitorAdapter_rename_at_232_51));
     Sequence DAS_COMMENT((char *)) _temp_make_local_234_14_96; _temp_make_local_234_14_96;
     /* finally */ auto __finally_229= das_finally([&](){
     das_delete_handle<smart_ptr_raw<VisitorAdapter>>::clear(__context__,__astVisitorAdapter_rename_at_232_51);
     /* end finally */ });
-    __names_rename_at_230_49; das_zero(__names_rename_at_230_49);
-    __astVisitor_rename_at_231_50 = das_new<soa::CollectAndReplaceIteratorFields>::make_and_init(__context__,[&]() { return CollectAndReplaceIteratorFields_7479ddde6052fe59(__context__,__prefix_rename_at_229_47); });
-    __astVisitorAdapter_rename_at_232_51; das_zero(__astVisitorAdapter_rename_at_232_51); das_move(__astVisitorAdapter_rename_at_232_51, _FuncastTickmake_visitorTick897644165917210720_9a0b572028f3c8ad(__context__,das_arg<soa::CollectAndReplaceIteratorFields>::pass(das_deref(__context__,__astVisitor_rename_at_231_50))));
+    das_zero(__names_rename_at_230_49);
+    __astVisitor_rename_at_231_50 = das_new<soa::CollectAndReplaceIteratorFields>::make_and_init(__context__,[&]() { return CollectAndReplaceIteratorFields_5f22a6894af78ad3(__context__,__prefix_rename_at_229_47); });
+    __astVisitorAdapter_rename_at_232_51; das_zero(__astVisitorAdapter_rename_at_232_51); das_move(__astVisitorAdapter_rename_at_232_51, _FuncastTickmake_visitorTick897644165917210720_c89d26cbc9007872(__context__,das_arg<soa::CollectAndReplaceIteratorFields>::pass(das_deref(__context__,__astVisitor_rename_at_231_50))));
     astVisitExpression(__blk_rename_at_229_48,__astVisitorAdapter_rename_at_232_51,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     {
         bool __need_loop_234 = true;
@@ -4098,7 +4098,7 @@ inline TArray<char *> collect_and_replace_iterator_fields_667356569e4de14a ( Con
         }
         __n_iterator.close(__context__,(__n_rename_at_234_52));
     };
-    finalize_d96daf2ab9fec4e5(__context__,__astVisitor_rename_at_231_50);
+    finalize_807b9705b42c57d7(__context__,__astVisitor_rename_at_231_50);
     return /* <- */ das_auto_cast_move<TArray<char *>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_354a9a0b57d554a0(__context__,das_arg<TArray<char *>>::pass(__names_rename_at_230_49)));
 }
 
@@ -4115,14 +4115,14 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xf221a453e354e1b3] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_786a62bee20869e3>>();
     };
-    aotLib[0x6f9fd46c08131f50] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_c7bbeb75cbc76881>>();
+    aotLib[0x1fe878d5239327e5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_685aa23e76c3f82a>>();
     };
-    aotLib[0x7d94f6c807f51f10] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_1292c517594c3ad3>>();
+    aotLib[0xcae6207fe182df9f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_233f5bea63e3ff11>>();
     };
-    aotLib[0x8ef8f87f20af1816] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_8c0e7721b93fa7a3>>();
+    aotLib[0xa5f972a054485a2c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_f9e5a45c29a7b014>>();
     };
     aotLib[0x19581459265363be] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick5454204887383796109_9c4083566563a85a>>();
@@ -4151,34 +4151,34 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x5668daa1685b0ea8] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick5807679485210906136_bd8120dfe7363955>>();
     };
-    aotLib[0x62cdebb811c3e974] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_f38b042d238cb701>>();
+    aotLib[0x486575abbef8912c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_fdd1cea66d626a4c>>();
     };
-    aotLib[0xa4b25fedb3f7e33d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_9a0b572028f3c8ad>>();
+    aotLib[0x523008e841991295] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_c89d26cbc9007872>>();
     };
     aotLib[0xc132a1df3189ad15] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickkeysTick2205854368403803976_2f51144ec5978438>>();
     };
-    aotLib[0x3dcff618a306eba8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_d96daf2ab9fec4e5>>();
+    aotLib[0x9ab42744861f4ee6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_807b9705b42c57d7>>();
     };
     aotLib[0x8c971f1dfe2baa86] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncDot_1409e2eff7f3b83c>>();
     };
-    aotLib[0x65ef5f79f547a94a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&CollectAndReplaceIteratorFields_7479ddde6052fe59>>();
+    aotLib[0x83ebd5bf8b4f303b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&CollectAndReplaceIteratorFields_5f22a6894af78ad3>>();
     };
-    aotLib[0x6f410d2420aad5c8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCollectAndReplaceIteratorFieldsTickCollectAndReplaceIteratorFields_fb5209d2e7cbf04>>();
+    aotLib[0x457c06e8da83dda7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCollectAndReplaceIteratorFieldsTickCollectAndReplaceIteratorFields_c55b82b70d10e186>>();
     };
-    aotLib[0xe60a7863d86c9ed1] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCollectAndReplaceIteratorFieldsTickvisitExprField_43a640b3a1956655>>();
+    aotLib[0xa340020f3cba23e7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCollectAndReplaceIteratorFieldsTickvisitExprField_8cf74d91f0d3ac5f>>();
     };
-    aotLib[0x842358aa1c0deea6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCollectAndReplaceIteratorFields_0x27___finalize_5c83a6b3bf972f19>>();
+    aotLib[0x1542d0705cfad53c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCollectAndReplaceIteratorFields_0x27___finalize_5252406c8271041f>>();
     };
-    aotLib[0x230441ff2af7f3b0] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x7890013a3f481099] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&collect_and_replace_iterator_fields_667356569e4de14a>>();
     };
     // [[ init script ]]

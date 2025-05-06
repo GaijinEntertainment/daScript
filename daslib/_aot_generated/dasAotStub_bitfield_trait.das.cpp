@@ -143,7 +143,64 @@ namespace templates_boost { struct AstQMethodMacro; };
 // unused enumeration ConstMatters
 // unused enumeration RefMatters
 // unused enumeration TemporaryMatters
-// unused enumeration Type
+#if 0 // external enum
+namespace rtti {
+
+enum class Type : int32_t {
+    none = int32_t(INT64_C(0)),
+    autoinfer = int32_t(INT64_C(1)),
+    alias = int32_t(INT64_C(2)),
+    option = int32_t(INT64_C(3)),
+    typeDecl = int32_t(INT64_C(4)),
+    typeMacro = int32_t(INT64_C(5)),
+    fakeContext = int32_t(INT64_C(6)),
+    fakeLineInfo = int32_t(INT64_C(7)),
+    anyArgument = int32_t(INT64_C(8)),
+    tVoid = int32_t(INT64_C(9)),
+    tBool = int32_t(INT64_C(10)),
+    tInt8 = int32_t(INT64_C(11)),
+    tUInt8 = int32_t(INT64_C(12)),
+    tInt16 = int32_t(INT64_C(13)),
+    tUInt16 = int32_t(INT64_C(14)),
+    tInt64 = int32_t(INT64_C(15)),
+    tUInt64 = int32_t(INT64_C(16)),
+    tInt = int32_t(INT64_C(17)),
+    tInt2 = int32_t(INT64_C(18)),
+    tInt3 = int32_t(INT64_C(19)),
+    tInt4 = int32_t(INT64_C(20)),
+    tUInt = int32_t(INT64_C(21)),
+    tUInt2 = int32_t(INT64_C(22)),
+    tUInt3 = int32_t(INT64_C(23)),
+    tUInt4 = int32_t(INT64_C(24)),
+    tFloat = int32_t(INT64_C(25)),
+    tFloat2 = int32_t(INT64_C(26)),
+    tFloat3 = int32_t(INT64_C(27)),
+    tFloat4 = int32_t(INT64_C(28)),
+    tDouble = int32_t(INT64_C(29)),
+    tRange = int32_t(INT64_C(30)),
+    tURange = int32_t(INT64_C(31)),
+    tRange64 = int32_t(INT64_C(32)),
+    tURange64 = int32_t(INT64_C(33)),
+    tString = int32_t(INT64_C(34)),
+    tStructure = int32_t(INT64_C(35)),
+    tHandle = int32_t(INT64_C(36)),
+    tEnumeration = int32_t(INT64_C(37)),
+    tEnumeration8 = int32_t(INT64_C(38)),
+    tEnumeration16 = int32_t(INT64_C(39)),
+    tEnumeration64 = int32_t(INT64_C(40)),
+    tBitfield = int32_t(INT64_C(41)),
+    tPointer = int32_t(INT64_C(42)),
+    tFunction = int32_t(INT64_C(43)),
+    tLambda = int32_t(INT64_C(44)),
+    tIterator = int32_t(INT64_C(45)),
+    tArray = int32_t(INT64_C(46)),
+    tTable = int32_t(INT64_C(47)),
+    tBlock = int32_t(INT64_C(48)),
+    tTuple = int32_t(INT64_C(49)),
+    tVariant = int32_t(INT64_C(50)),
+};
+}
+#endif // external enum
 // unused enumeration ConversionResult
 // unused enumeration CaptureMode
 // unused enumeration SideEffects
@@ -323,7 +380,7 @@ inline void _FuncbuiltinTickfinalizeTick13836114024949725080_473a42788c45df36 ( 
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_68e2d9cc7a378291 ( Context * __context__, char * const  __name_rename_at_273_13, char * const  __tag_rename_at_273_14, bitfield_trait::EachBitfieldMacro * __classPtr_rename_at_273_15 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_16; memset(&__ann_rename_at_274_16,0,sizeof(__ann_rename_at_274_16));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_16; memset((void*)&__ann_rename_at_274_16,0,sizeof(__ann_rename_at_274_16));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_16);
     /* end finally */ });

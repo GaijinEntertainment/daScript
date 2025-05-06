@@ -843,6 +843,10 @@ SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 
 set(StandaloneFilesList
     src/das/ast/ast_print.das
+    src/das/ast/ast_aot_cpp.das
+    src/das/ast/aot_constants.das
+    src/das/ast/standalone_contexts.das
+    src/das/ast/printer_flags_visitor.das
 )
 
 SET(STANDALONE_SRC)
@@ -865,6 +869,9 @@ foreach(FILE ${STANDALONE_SRC})
     endif()
 endforeach()
 
+SET(AOT_STUB_SRC
+        utils/daScript/aot_stub.cpp
+)
 
 MACRO(SETUP_LIBDASCRIPT library aotFiles standaloneFiles)
     ADD_LIBRARY(${library} STATIC ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}

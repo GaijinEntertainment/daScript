@@ -959,13 +959,13 @@ inline void finalize_500fce7609128ffb ( Context * __context__, ast_debug::Sample
 
 inline void finalize_5733f4cfa043e920 ( Context * __context__, ast_debug::SampleStackWalker &  ____this_rename_at_103_56 )
 {
-    memset(&(____this_rename_at_103_56), 0, TypeSize<ast_debug::SampleStackWalker>::size);
+    memset((void*)&(____this_rename_at_103_56), 0, TypeSize<ast_debug::SampleStackWalker>::size);
 }
 
 inline void _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_3e1c20224cd19f2e ( Context * __context__, ast_debug::ContextStateAgent * __agentPtr_rename_at_37_57, char * const  __category_rename_at_37_58 )
 {
-    StructInfo const  * __agentInfo_rename_at_39_59; memset(&__agentInfo_rename_at_39_59,0,sizeof(__agentInfo_rename_at_39_59));
-    smart_ptr_raw<DebugAgent> __agentAdapter_rename_at_40_60; memset(&__agentAdapter_rename_at_40_60,0,sizeof(__agentAdapter_rename_at_40_60));
+    StructInfo const  * __agentInfo_rename_at_39_59; memset((void*)&__agentInfo_rename_at_39_59,0,sizeof(__agentInfo_rename_at_39_59));
+    smart_ptr_raw<DebugAgent> __agentAdapter_rename_at_40_60; memset((void*)&__agentAdapter_rename_at_40_60,0,sizeof(__agentAdapter_rename_at_40_60));
     {
         /* finally */ auto __finally_38= das_finally([&](){
         das_delete_handle<smart_ptr_raw<DebugAgent>>::clear(__context__,__agentAdapter_rename_at_40_60);

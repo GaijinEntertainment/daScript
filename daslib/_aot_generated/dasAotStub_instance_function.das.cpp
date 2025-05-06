@@ -365,47 +365,47 @@ inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c6f9bc68b25c5dd6 ( 
 
 inline void finalize_eef6fcd067cd43cb ( Context * __context__, AutoTuple<char *,char *> &  ____this_rename_at_1197_4 )
 {
-    memset(&(____this_rename_at_1197_4), 0, TypeSize<AutoTuple<char *,char *>>::size);
+    memset((void*)&(____this_rename_at_1197_4), 0, TypeSize<AutoTuple<char *,char *>>::size);
 }
 
 inline Sequence DAS_COMMENT((AutoTuple<char *,char *> &)) _FuncbuiltinTickvaluesTick1351216622833168869_a3fd0ea19752c392 ( Context * __context__, TTable<char *,AutoTuple<char *,char *>> &  __a_rename_at_1150_5 )
 {
-    Sequence DAS_COMMENT((AutoTuple<char *,char *> *)) __it_rename_at_1151_6; das_zero(__it_rename_at_1151_6);
+    Sequence DAS_COMMENT((AutoTuple<char *,char *> *)) __it_rename_at_1151_6;das_zero(__it_rename_at_1151_6);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((AutoTuple<char *,char *>))>::pass(__it_rename_at_1151_6),das_arg<TTable<char *,AutoTuple<char *,char *>>>::pass(__a_rename_at_1150_5),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((AutoTuple<char *,char *> &))>::cast(__it_rename_at_1151_6);
 }
 
 inline Sequence DAS_COMMENT((smart_ptr_raw<Expression> &)) _FuncbuiltinTickvaluesTick1351216622833168869_9f93f2d584a44443 ( Context * __context__, TTable<char *,smart_ptr_raw<Expression>> &  __a_rename_at_1150_7 )
 {
-    Sequence DAS_COMMENT((smart_ptr_raw<Expression> *)) __it_rename_at_1151_8; das_zero(__it_rename_at_1151_8);
+    Sequence DAS_COMMENT((smart_ptr_raw<Expression> *)) __it_rename_at_1151_8;das_zero(__it_rename_at_1151_8);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((smart_ptr_raw<Expression>))>::pass(__it_rename_at_1151_8),das_arg<TTable<char *,smart_ptr_raw<Expression>>>::pass(__a_rename_at_1150_7),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((smart_ptr_raw<Expression> &))>::cast(__it_rename_at_1151_8);
 }
 
 inline Sequence DAS_COMMENT((TArray<smart_ptr_raw<Expression>> &)) _FuncbuiltinTickvaluesTick1351216622833168869_ed995e484a7830c3 ( Context * __context__, TTable<char *,TArray<smart_ptr_raw<Expression>>> &  __a_rename_at_1150_9 )
 {
-    Sequence DAS_COMMENT((TArray<smart_ptr_raw<Expression>> *)) __it_rename_at_1151_10; das_zero(__it_rename_at_1151_10);
+    Sequence DAS_COMMENT((TArray<smart_ptr_raw<Expression>> *)) __it_rename_at_1151_10;das_zero(__it_rename_at_1151_10);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((TArray<smart_ptr_raw<Expression>>))>::pass(__it_rename_at_1151_10),das_arg<TTable<char *,TArray<smart_ptr_raw<Expression>>>>::pass(__a_rename_at_1150_9),24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((TArray<smart_ptr_raw<Expression>> &))>::cast(__it_rename_at_1151_10);
 }
 
 inline Sequence DAS_COMMENT((smart_ptr_raw<TypeDecl> &)) _FuncbuiltinTickvaluesTick1351216622833168869_177a8cc7607a3188 ( Context * __context__, TTable<char *,smart_ptr_raw<TypeDecl>> &  __a_rename_at_1150_11 )
 {
-    Sequence DAS_COMMENT((smart_ptr_raw<TypeDecl> *)) __it_rename_at_1151_12; das_zero(__it_rename_at_1151_12);
+    Sequence DAS_COMMENT((smart_ptr_raw<TypeDecl> *)) __it_rename_at_1151_12;das_zero(__it_rename_at_1151_12);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((smart_ptr_raw<TypeDecl>))>::pass(__it_rename_at_1151_12),das_arg<TTable<char *,smart_ptr_raw<TypeDecl>>>::pass(__a_rename_at_1150_11),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((smart_ptr_raw<TypeDecl> &))>::cast(__it_rename_at_1151_12);
 }
 
 inline Sequence DAS_COMMENT((Lambda DAS_COMMENT((void,AnnotationDeclaration)) &)) _FuncbuiltinTickvaluesTick1351216622833168869_5a3b3b1bc5535e7 ( Context * __context__, TTable<char *,Lambda DAS_COMMENT((void,AnnotationDeclaration))> &  __a_rename_at_1150_13 )
 {
-    Sequence DAS_COMMENT((Lambda DAS_COMMENT((void,AnnotationDeclaration)) *)) __it_rename_at_1151_14; das_zero(__it_rename_at_1151_14);
+    Sequence DAS_COMMENT((Lambda DAS_COMMENT((void,AnnotationDeclaration)) *)) __it_rename_at_1151_14;das_zero(__it_rename_at_1151_14);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((Lambda DAS_COMMENT((void,AnnotationDeclaration))))>::pass(__it_rename_at_1151_14),das_arg<TTable<char *,Lambda DAS_COMMENT((void,AnnotationDeclaration))>>::pass(__a_rename_at_1150_13),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((Lambda DAS_COMMENT((void,AnnotationDeclaration)) &))>::cast(__it_rename_at_1151_14);
 }
 
 inline Sequence DAS_COMMENT((TArray<smart_ptr_raw<Variable>> &)) _FuncbuiltinTickvaluesTick1351216622833168869_3bfbad65b3a94788 ( Context * __context__, TTable<char *,TArray<smart_ptr_raw<Variable>>> &  __a_rename_at_1150_15 )
 {
-    Sequence DAS_COMMENT((TArray<smart_ptr_raw<Variable>> *)) __it_rename_at_1151_16; das_zero(__it_rename_at_1151_16);
+    Sequence DAS_COMMENT((TArray<smart_ptr_raw<Variable>> *)) __it_rename_at_1151_16;das_zero(__it_rename_at_1151_16);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((TArray<smart_ptr_raw<Variable>>))>::pass(__it_rename_at_1151_16),das_arg<TTable<char *,TArray<smart_ptr_raw<Variable>>>>::pass(__a_rename_at_1150_15),24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((TArray<smart_ptr_raw<Variable>> &))>::cast(__it_rename_at_1151_16);
 }
@@ -552,7 +552,7 @@ inline void finalize_3776fc7b3e3cd043 ( Context * __context__, templates_boost::
     _FuncbuiltinTickfinalizeTick5454204887383796109_17b2a8135dd9ee60(__context__,das_arg<TTable<char *,Lambda DAS_COMMENT((void,AnnotationDeclaration))>>::pass(____this_rename_at_13_35.annArg));
     _FuncbuiltinTickfinalizeTick5454204887383796109_4dd9f9509dc9606d(__context__,das_arg<TTable<char *,TArray<smart_ptr_raw<Variable>>>>::pass(____this_rename_at_13_35.blkArg));
     _FuncbuiltinTickfinalizeTick5454204887383796109_5d7ad8587e6289cc(__context__,das_arg<TTable<char *,smart_ptr_raw<Expression>>>::pass(____this_rename_at_13_35.tag2expr));
-    memset(&(____this_rename_at_13_35), 0, TypeSize<templates_boost::Template>::size);
+    memset((void*)&(____this_rename_at_13_35), 0, TypeSize<templates_boost::Template>::size);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {

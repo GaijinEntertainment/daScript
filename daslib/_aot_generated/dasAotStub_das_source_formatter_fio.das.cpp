@@ -250,12 +250,79 @@ namespace das_source_formatter { struct ParenCounter; };
 // unused structure ReturnSkipLockcheck
 // unused structure DeferMacro
 // unused structure DeferDeleteMacro
-// unused enumeration TokenType
-// unused structure TokenTemplate
-// unused structure Token
-// unused structure FormatterToken
-// unused structure FormatterCtx
-// unused structure ParenCounter
+namespace das_source_formatter {
+
+enum class TokenType : int32_t {
+    UNKNOWN = int32_t(0),
+    KEYWORD_OR_IDENTIFIER = int32_t(1),
+    NUMBER = int32_t(2),
+    COMMENT = int32_t(3),
+    STRING = int32_t(4),
+};
+}
+namespace das_source_formatter {
+
+struct TokenTemplate {
+    int32_t firstChar;
+    char * str;
+    TArray<uint8_t> codes;
+    int32_t length;
+};
+}
+namespace das_source_formatter {
+
+struct Token {
+    char * str;
+    int32_t spaces;
+    int32_t newLines;
+    int32_t lineInSource;
+    int32_t column;
+    DAS_COMMENT(enum) das_source_formatter::TokenType tokenType;
+    bool isInFunctionParam;
+    bool isInType;
+    bool dontFormat;
+    bool dontAddSpacesAround;
+};
+}
+namespace das_source_formatter {
+
+struct FormatterToken {
+    int32_t tokenIndex;
+    char * command;
+};
+}
+namespace das_source_formatter {
+
+struct FormatterCtx {
+    TArray<das_source_formatter::TokenTemplate> tokenTemplates;
+    TArray<das_source_formatter::Token> tokens;
+    TArray<das_source_formatter::FormatterToken> formatterTokens;
+    int32_t pos;
+    int32_t c;
+    TArray<uint8_t> data;
+    bool eof;
+    bool haveUtf8Bom;
+    int32_t newLineCounter;
+    int32_t spaceCounter;
+    int32_t srcLine;
+    int32_t curColumn;
+    int32_t curLineIndex;
+    bool debugMode;
+    int32_t indenting;
+    bool insideOptions;
+    int32_t crCount;
+    int32_t lfCount;
+};
+}
+namespace das_source_formatter {
+
+struct ParenCounter {
+    int32_t angle;
+    int32_t paren;
+    int32_t square;
+    int32_t curly;
+};
+}
 extern TypeInfo __type_info__16d0aa3dd6b69257;
 extern TypeInfo __type_info__af90fe4c864e9d52;
 extern TypeInfo __type_info__af5be84c85f468f0;

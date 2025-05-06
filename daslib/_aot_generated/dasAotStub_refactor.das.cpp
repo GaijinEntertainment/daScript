@@ -419,8 +419,8 @@ inline void _FuncbuiltinTickfinalizeTick5454204887383796109_4c53369d1a9c0194 ( C
 inline void _FuncbuiltinTickfinalizeTick13836114024949725080_dc31ee4da771c4 ( Context * __context__, TArray<json::JsonValue *> & __a_rename_at_1182_24 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_26, ast::AstFunctionAnnotation * __value_rename_at_181_27 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f71f3d89fb753b2 ( Context * __context__, refactor::ExtractMethodMacro const  & __cl_rename_at_116_28 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_9a94d5ed4f7c5f3d ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_29, ast::AstCallMacro * __value_rename_at_181_30 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7fc1c676a0c803b0 ( Context * __context__, refactor::ExtractVariableMacro const  & __cl_rename_at_116_31 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_29, ast::AstCallMacro * __value_rename_at_181_30 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_487555842f5620fe ( Context * __context__, refactor::ExtractVariableMacro const  & __cl_rename_at_116_31 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_42f12d0f0ca9b24d ( Context * __context__, refactor::ExtractVariableFunction const  & __cl_rename_at_116_32 );
 inline void finalize_435c75a1641e15fa ( Context * __context__, AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> & ____this_rename_at_24_33 );
 inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5df8cb221c94902 ( Context * __context__, TTable<char *,char *> & __a_rename_at_1193_34 );
@@ -452,14 +452,14 @@ inline void _FuncbuiltinTickinsertTick4246857231018487965_29d8ad7ca1533e22 ( Con
 
 inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1128_3 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_4; das_zero(__it_rename_at_1129_4);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_4;das_zero(__it_rename_at_1129_4);
     builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_4),__a_rename_at_1128_3,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_4);
 }
 
 inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1143_5 )
 {
-    Sequence DAS_COMMENT((char * *)) __it_rename_at_1144_6; das_zero(__it_rename_at_1144_6);
+    Sequence DAS_COMMENT((char * *)) __it_rename_at_1144_6;das_zero(__it_rename_at_1144_6);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((char * const ))>::pass(__it_rename_at_1144_6),__a_rename_at_1143_5,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char * &))>::cast(__it_rename_at_1144_6);
 }
@@ -485,7 +485,7 @@ inline void _FuncapplyTickstructTickExtractVariableDescTick0x217Tick0Tick6_d8045
 
 inline Sequence DAS_COMMENT((json::JsonValue * &)) _FuncbuiltinTickvaluesTick1351216622833168869_e4c809c3c6fa4dfd ( Context * __context__, TTable<char *,json::JsonValue *> &  __a_rename_at_1150_20 )
 {
-    Sequence DAS_COMMENT((json::JsonValue * *)) __it_rename_at_1151_21; das_zero(__it_rename_at_1151_21);
+    Sequence DAS_COMMENT((json::JsonValue * *)) __it_rename_at_1151_21;das_zero(__it_rename_at_1151_21);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((json::JsonValue *))>::pass(__it_rename_at_1151_21),das_arg<TTable<char *,json::JsonValue *>>::pass(__a_rename_at_1150_20),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((json::JsonValue * &))>::cast(__it_rename_at_1151_21);
 }
@@ -535,12 +535,12 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f71f3
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_28.__rtti))).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_9a94d5ed4f7c5f3d ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_29, ast::AstCallMacro * __value_rename_at_181_30 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_29, ast::AstCallMacro * __value_rename_at_181_30 )
 {
     das_copy(__Arr_rename_at_181_29(builtin_array_push_back(das_arg<TArray<ast::AstCallMacro *>>::pass(__Arr_rename_at_181_29),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_30);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7fc1c676a0c803b0 ( Context * __context__, refactor::ExtractVariableMacro const  &  __cl_rename_at_116_31 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_487555842f5620fe ( Context * __context__, refactor::ExtractVariableMacro const  &  __cl_rename_at_116_31 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_31.__rtti))).getStructType())));
 }
@@ -559,7 +559,7 @@ inline void finalize_435c75a1641e15fa ( Context * __context__, AutoVariant<TTabl
     {
         _FuncbuiltinTickfinalizeTick13836114024949725080_dc31ee4da771c4(__context__,das_arg<TArray<json::JsonValue *>>::pass(das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::get(____this_rename_at_24_33)));
     };
-    memset(&(____this_rename_at_24_33), 0, TypeSize<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>>::size);
+    memset((void*)&(____this_rename_at_24_33), 0, TypeSize<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>>::size);
 }
 
 inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5df8cb221c94902 ( Context * __context__, TTable<char *,char *> &  __a_rename_at_1193_34 )
@@ -570,14 +570,14 @@ inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5df8cb221c94902 ( Co
 inline void finalize_23291ba5b15c15ae ( Context * __context__, json::JsonValue &  ____this_rename_at_22_35 )
 {
     finalize_435c75a1641e15fa(__context__,das_arg<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>>::pass(____this_rename_at_22_35.value));
-    memset(&(____this_rename_at_22_35), 0, TypeSize<json::JsonValue>::size);
+    memset((void*)&(____this_rename_at_22_35), 0, TypeSize<json::JsonValue>::size);
 }
 
 inline json::JsonValue * _Funcjson_boostTickJVTick13966542468881610056_6e31ec00abc1b8a7 ( Context * __context__, TTable<char *,char *> const  &  __value_rename_at_517_36 )
 {
     Sequence DAS_COMMENT((char *)) _temp_make_local_551_21_80; _temp_make_local_551_21_80;
     Sequence DAS_COMMENT((char * *)) _temp_make_local_551_34_96; _temp_make_local_551_34_96;
-    TTable<char *,json::JsonValue *> __map_rename_at_550_37; das_zero(__map_rename_at_550_37);
+    TTable<char *,json::JsonValue *> __map_rename_at_550_37;das_zero(__map_rename_at_550_37);
     {
         bool __need_loop_551 = true;
         // k: string
@@ -614,7 +614,7 @@ inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTic
 
 inline TTable<char *,char *> _FuncbuiltinTickto_table_moveTick5858896087460481804_9bc7a430485b2b12 ( Context * __context__, TDim<AutoTuple<char *,char *>,6> &  __a_rename_at_1455_48 )
 {
-    TTable<char *,char *> __tab_rename_at_1456_49; das_zero(__tab_rename_at_1456_49);
+    TTable<char *,char *> __tab_rename_at_1456_49;das_zero(__tab_rename_at_1456_49);
     {
         bool __need_loop_1458 = true;
         // x: tuple<string aka keyT;string aka valT>&
@@ -652,7 +652,7 @@ inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Con
 
 inline json::JsonValue * _Funcjson_boostTickJVTick13966542468881610056_1ada305f850b7c84 ( Context * __context__, refactor::ExtractMethodDesc const  &  __value_rename_at_517_58 ) { das_stack_prologue __prologue(__context__,400,"json_boost`JV`13966542468881610056 " DAS_FILE_LINE);
 {
-    TTable<char *,json::JsonValue *> __map_rename_at_534_59; das_zero(__map_rename_at_534_59);
+    TTable<char *,json::JsonValue *> __map_rename_at_534_59;das_zero(__map_rename_at_534_59);
     _FuncapplyTickstructTickExtractMethodDescTick0x217Tick0Tick5_48404bf757ad1933(__context__,__value_rename_at_517_58,das_make_block<void,char * const  &>(__context__,128,0,&__func_info__bbb85e1b55dc84f,[&](char * const  & __field_rename_at_535_60) -> void{
         _FuncbuiltinTickinsertTick4246857231018487965_29d8ad7ca1533e22(__context__,das_arg<TTable<char *,json::JsonValue *>>::pass(__map_rename_at_534_59),((char *) "call_name"),das_invoke_function<json::JsonValue *>::invoke<char * const >(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JV Cs*/ 0x7935bbf71114917)),__field_rename_at_535_60));
     }),das_make_block<void,char * const  &>(__context__,192,0,&__func_info__bbb85e1b55dc84f,[&](char * const  & __field_rename_at_535_61) -> void{
@@ -669,7 +669,7 @@ inline json::JsonValue * _Funcjson_boostTickJVTick13966542468881610056_1ada305f8
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_480816f933565535 ( Context * __context__, char * const  __name_rename_at_273_65, char * const  __tag_rename_at_273_66, refactor::ExtractMethodMacro * __classPtr_rename_at_273_67 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_68; memset(&__ann_rename_at_274_68,0,sizeof(__ann_rename_at_274_68));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_68; memset((void*)&__ann_rename_at_274_68,0,sizeof(__ann_rename_at_274_68));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_68);
     /* end finally */ });
@@ -680,7 +680,7 @@ inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_480816
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_a30263d9bfe747d3 ( Context * __context__, char * const  __name_rename_at_273_69, char * const  __tag_rename_at_273_70, refactor::ExtractVariableFunction * __classPtr_rename_at_273_71 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_72; memset(&__ann_rename_at_274_72,0,sizeof(__ann_rename_at_274_72));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_72; memset((void*)&__ann_rename_at_274_72,0,sizeof(__ann_rename_at_274_72));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_72);
     /* end finally */ });
@@ -691,7 +691,7 @@ inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_a30263
 
 inline json::JsonValue * _Funcjson_boostTickJVTick13966542468881610056_802f12bd209d8b61 ( Context * __context__, refactor::ExtractVariableDesc const  &  __value_rename_at_517_73 ) { das_stack_prologue __prologue(__context__,464,"json_boost`JV`13966542468881610056 " DAS_FILE_LINE);
 {
-    TTable<char *,json::JsonValue *> __map_rename_at_534_74; das_zero(__map_rename_at_534_74);
+    TTable<char *,json::JsonValue *> __map_rename_at_534_74;das_zero(__map_rename_at_534_74);
     _FuncapplyTickstructTickExtractVariableDescTick0x217Tick0Tick6_d80450c9c7a35438(__context__,__value_rename_at_517_73,das_make_block<void,char * const  &>(__context__,128,0,&__func_info__bbb85e1b55dc84f,[&](char * const  & __field_rename_at_535_75) -> void{
         _FuncbuiltinTickinsertTick4246857231018487965_29d8ad7ca1533e22(__context__,das_arg<TTable<char *,json::JsonValue *>>::pass(__map_rename_at_534_74),((char *) "variable_name"),das_invoke_function<json::JsonValue *>::invoke<char * const >(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JV Cs*/ 0x7935bbf71114917)),__field_rename_at_535_75));
     }),das_make_block<void,char * const  &>(__context__,192,0,&__func_info__bbb85e1b55dc84f,[&](char * const  & __field_rename_at_535_76) -> void{
@@ -720,9 +720,9 @@ inline char * log_range_8671290fdeeface ( Context * __context__, LineInfo const 
 
 inline json::JsonValue * JV_b6f7ce5a2e653514 ( Context * __context__, LineInfo const  &  __li_rename_at_40_84 )
 {
-    char * __fname_rename_at_41_85; memset(&__fname_rename_at_41_85,0,sizeof(__fname_rename_at_41_85));
-    int32_t __tabSize_rename_at_42_86; memset(&__tabSize_rename_at_42_86,0,sizeof(__tabSize_rename_at_42_86));
-    TTable<char *,char *> __kv_rename_at_43_87; memset(&__kv_rename_at_43_87,0,sizeof(__kv_rename_at_43_87));
+    char * __fname_rename_at_41_85; memset((void*)&__fname_rename_at_41_85,0,sizeof(__fname_rename_at_41_85));
+    int32_t __tabSize_rename_at_42_86; memset((void*)&__tabSize_rename_at_42_86,0,sizeof(__tabSize_rename_at_42_86));
+    TTable<char *,char *> __kv_rename_at_43_87; memset((void*)&__kv_rename_at_43_87,0,sizeof(__kv_rename_at_43_87));
     TDim<AutoTuple<char *,char *>,6> _temp_make_local_43_22_112; _temp_make_local_43_22_112;
     /* finally */ auto __finally_40= das_finally([&](){
     _FuncbuiltinTickfinalizeTick5454204887383796109_5df8cb221c94902(__context__,das_arg<TTable<char *,char *>>::pass(__kv_rename_at_43_87));
@@ -802,11 +802,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x2af26f08da38ed03] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_f71f3d89fb753b2>>();
     };
-    aotLib[0x3fdd65aa3293d0d8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_9a94d5ed4f7c5f3d>>();
+    aotLib[0xe553d306a044fc24] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce>>();
     };
-    aotLib[0xfe124f9bcef0523e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_7fc1c676a0c803b0>>();
+    aotLib[0xc692569c514658cb] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_487555842f5620fe>>();
     };
     aotLib[0xe1a51901728bc04f] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_42f12d0f0ca9b24d>>();

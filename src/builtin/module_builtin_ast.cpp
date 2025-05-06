@@ -352,7 +352,7 @@ namespace das {
 
     void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,smart_ptr_raw<TypeDecl>> & block, Context * context, LineInfoArg * at ) {
         mod->aliasTypes.foreach([&](auto aliasType){
-            das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,aliasType->alias.c_str(),aliasType);
+            das_invoke<void>::invoke<const char *,smart_ptr_raw<TypeDecl>>(context,at,block,aliasType->alias.c_str(),aliasType);
         });
     }
 
@@ -362,25 +362,25 @@ namespace das {
             enums.emplace(penum->name, penum);
         });
         for (auto [k, penum]: ordered(enums)) {
-            das_invoke<void>::invoke<EnumerationPtr>(context,at,block,penum);
+            das_invoke<void>::invoke<smart_ptr_raw<Enumeration>>(context,at,block,penum);
         }
     }
 
     void for_each_structure ( Module * mod, const TBlock<void,smart_ptr_raw<Structure>> & block, Context * context, LineInfoArg * at ) {
         mod->structures.foreach([&](auto pst){
-            das_invoke<void>::invoke<StructurePtr>(context,at,block,pst);
+            das_invoke<void>::invoke<smart_ptr_raw<Structure>>(context,at,block,pst);
         });
     }
 
     void for_each_generic ( Module * mod, const TBlock<void,smart_ptr_raw<Function>> & block, Context * context, LineInfoArg * at ) {
         mod->generics.foreach([&](auto fn){
-            das_invoke<void>::invoke<FunctionPtr>(context,at,block,fn);
+            das_invoke<void>::invoke<smart_ptr_raw<Function>>(context,at,block,fn);
         });
     }
 
     void for_each_global ( Module * mod, const TBlock<void,smart_ptr_raw<Variable>> & block, Context * context, LineInfoArg * at ) {
         mod->globals.foreach([&](auto var){
-            das_invoke<void>::invoke<VariablePtr>(context,at,block,var);
+            das_invoke<void>::invoke<smart_ptr_raw<Variable>>(context,at,block,var);
         });
     }
 

@@ -284,12 +284,12 @@ inline void finalize_84c79a7dca44bc54 ( Context * __context__, json::_lambda_jso
 {
     builtin_iterator_delete(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(____this_rename_at_99_1.tin),__context__);
     _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_99_1.str));
-    memset(&(____this_rename_at_99_1), 0, TypeSize<json::_lambda_json_99_1>::size);
+    memset((void*)&(____this_rename_at_99_1), 0, TypeSize<json::_lambda_json_99_1>::size);
 }
 
 inline Sequence DAS_COMMENT((json::TokenAt)) _FuncbuiltinTickeachTick9663565701927713696_a5be278cde5d81db ( Context * __context__, Lambda DAS_COMMENT((bool,json::TokenAt)) const  __lam_rename_at_1289_2 )
 {
-    Sequence DAS_COMMENT((json::TokenAt)) __it_rename_at_1291_3; das_zero(__it_rename_at_1291_3);
+    Sequence DAS_COMMENT((json::TokenAt)) __it_rename_at_1291_3;das_zero(__it_rename_at_1291_3);
     builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((json::TokenAt))>::pass(__it_rename_at_1291_3),__lam_rename_at_1289_2,24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((json::TokenAt))>::cast(__it_rename_at_1291_3);
 }
@@ -301,7 +301,7 @@ inline bool _FuncbuiltinTicknextTick17450348357676149856_ba3f4a54e51a0d57 ( Cont
 
 inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickeachTick4044332007967089362_d13e7572e5849aa5 ( Context * __context__, char * const  __str_rename_at_1256_6 )
 {
-    Sequence DAS_COMMENT((int32_t)) __it_rename_at_1257_7; das_zero(__it_rename_at_1257_7);
+    Sequence DAS_COMMENT((int32_t)) __it_rename_at_1257_7;das_zero(__it_rename_at_1257_7);
     builtin_make_string_iterator(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1257_7),__str_rename_at_1256_6,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((int32_t))>::cast(__it_rename_at_1257_7);
 }
@@ -353,10 +353,10 @@ inline bool _Func_lambda_json_99_1Tickfunction_68f4b5ef1fe57bcb ( Context * __co
     default: __context__->throw_error("invalid label");
     };
     label_0:;;
-    memset(&(____this_rename_at_99_10.tin), 0, TypeSize<Sequence DAS_COMMENT((int32_t))>::size);
+    memset((void*)&(____this_rename_at_99_10.tin), 0, TypeSize<Sequence DAS_COMMENT((int32_t))>::size);
     das_move(____this_rename_at_99_10.tin,_FuncbuiltinTickeachTick4044332007967089362_d13e7572e5849aa5(__context__,____this_rename_at_99_10.stext));
     das_copy(____this_rename_at_99_10.ahead,32);
-    memset(&(____this_rename_at_99_10.str), 0, TypeSize<TArray<uint8_t>>::size);
+    memset((void*)&(____this_rename_at_99_10.str), 0, TypeSize<TArray<uint8_t>>::size);
     das_copy(____this_rename_at_99_10.line,1);
     das_copy(____this_rename_at_99_10.row,0);
     label_34:;;
@@ -720,14 +720,14 @@ inline void _FuncbuiltinTickinsertTick4246857231018487965_29d8ad7ca1533e22 ( Con
 
 inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_af3fb0980986a73d ( Context * __context__, TTable<char *,json::JsonValue *> const  &  __a_rename_at_1128_22 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_23; das_zero(__it_rename_at_1129_23);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_23;das_zero(__it_rename_at_1129_23);
     builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_23),__a_rename_at_1128_22,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_23);
 }
 
 inline Sequence DAS_COMMENT((json::JsonValue * &)) _FuncbuiltinTickvaluesTick1935193042646774172_28fa1957dfd9ef24 ( Context * __context__, TTable<char *,json::JsonValue *> const  &  __a_rename_at_1143_24 )
 {
-    Sequence DAS_COMMENT((json::JsonValue * *)) __it_rename_at_1144_25; das_zero(__it_rename_at_1144_25);
+    Sequence DAS_COMMENT((json::JsonValue * *)) __it_rename_at_1144_25;das_zero(__it_rename_at_1144_25);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((json::JsonValue * const ))>::pass(__it_rename_at_1144_25),__a_rename_at_1143_24,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((json::JsonValue * &))>::cast(__it_rename_at_1144_25);
 }
@@ -893,7 +893,7 @@ inline bool expect_symbol_43731f7509c5cf1d ( Context * __context__, Sequence DAS
 
 inline json::JsonValue * parse_value_98ae1ad97bf60f4e ( Context * __context__, Sequence DAS_COMMENT((json::TokenAt)) &  __itv_rename_at_246_48, char * & __error_rename_at_246_49 )
 {
-    json::TokenAt __ahead_rename_at_247_50; das_zero(__ahead_rename_at_247_50);
+    json::TokenAt __ahead_rename_at_247_50;das_zero(__ahead_rename_at_247_50);
     if ( !_FuncbuiltinTicknextTick17450348357676149856_1b3ef80a3dcc04cd(__context__,das_arg<Sequence DAS_COMMENT((json::TokenAt))>::pass(__itv_rename_at_246_48),das_arg<json::TokenAt>::pass(__ahead_rename_at_247_50)) )
     {
         return das_auto_cast<json::JsonValue *>::cast(nullptr);
@@ -908,7 +908,7 @@ inline json::JsonValue * parse_value_98ae1ad97bf60f4e ( Context * __context__, S
             } else {
                 if ( __sym_rename_at_252_51 == 91 )
                 {
-                    TArray<json::JsonValue *> __arr_rename_at_258_52; das_zero(__arr_rename_at_258_52);
+                    TArray<json::JsonValue *> __arr_rename_at_258_52;das_zero(__arr_rename_at_258_52);
                     while ( !builtin_iterator_empty(das_arg<Sequence DAS_COMMENT((json::TokenAt))>::pass(__itv_rename_at_246_48)) )
                     {
                         json::JsonValue * __value_rename_at_260_53 = parse_value_98ae1ad97bf60f4e(__context__,das_arg<Sequence DAS_COMMENT((json::TokenAt))>::pass(__itv_rename_at_246_48),__error_rename_at_246_49);
@@ -947,7 +947,7 @@ inline json::JsonValue * parse_value_98ae1ad97bf60f4e ( Context * __context__, S
                     };
                 } else if ( __sym_rename_at_252_51 == 123 )
                 {
-                    TTable<char *,json::JsonValue *> __tab_rename_at_286_55; das_zero(__tab_rename_at_286_55);
+                    TTable<char *,json::JsonValue *> __tab_rename_at_286_55;das_zero(__tab_rename_at_286_55);
                     while ( !builtin_iterator_empty(das_arg<Sequence DAS_COMMENT((json::TokenAt))>::pass(__itv_rename_at_246_48)) )
                     {
                         if ( !expect_token_64d38888955068d7(__context__,das_arg<Sequence DAS_COMMENT((json::TokenAt))>::pass(__itv_rename_at_246_48),das_arg<json::TokenAt>::pass(__ahead_rename_at_247_50),0,__error_rename_at_246_49) )

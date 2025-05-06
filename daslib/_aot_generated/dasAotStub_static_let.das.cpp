@@ -347,7 +347,7 @@ void __init_script ( Context * __context__, bool __init_shared )
 
 inline void finalize_d24b8ca870748b86 ( Context * __context__, AutoTuple<char *,char *> &  ____this_rename_at_1186_0 )
 {
-    memset(&(____this_rename_at_1186_0), 0, TypeSize<AutoTuple<char *,char *>>::size);
+    memset((void*)&(____this_rename_at_1186_0), 0, TypeSize<AutoTuple<char *,char *>>::size);
 }
 
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_1, ast::AstFunctionAnnotation * __value_rename_at_181_2 )
@@ -391,7 +391,7 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_b1d2457362f3ba22 ( Cont
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_54c2da3d6fda4cde ( Context * __context__, char * const  __name_rename_at_273_11, char * const  __tag_rename_at_273_12, static_let::StaticLetMacro * __classPtr_rename_at_273_13 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_14; memset(&__ann_rename_at_274_14,0,sizeof(__ann_rename_at_274_14));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_14; memset((void*)&__ann_rename_at_274_14,0,sizeof(__ann_rename_at_274_14));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_14);
     /* end finally */ });
@@ -410,9 +410,9 @@ inline void static_let_finalize_ff319dd1eed67c66 ( Context * __context__, Block 
 
 inline bool make_shutdown_function_ac3d2b9ea5a9dd23 ( Context * __context__, char * const  __varname_rename_at_27_17, LineInfo const  &  __at_rename_at_27_18 ) { das_stack_prologue __prologue(__context__,288,"make_shutdown_function " DAS_FILE_LINE);
 {
-    smart_ptr_raw<Function> __fn_rename_at_28_19; memset(&__fn_rename_at_28_19,0,sizeof(__fn_rename_at_28_19));
-    smart_ptr_raw<ExprBlock> __blk_rename_at_32_21; memset(&__blk_rename_at_32_21,0,sizeof(__blk_rename_at_32_21));
-    smart_ptr_raw<ExprDelete> __delv_rename_at_33_22; memset(&__delv_rename_at_33_22,0,sizeof(__delv_rename_at_33_22));
+    smart_ptr_raw<Function> __fn_rename_at_28_19; memset((void*)&__fn_rename_at_28_19,0,sizeof(__fn_rename_at_28_19));
+    smart_ptr_raw<ExprBlock> __blk_rename_at_32_21; memset((void*)&__blk_rename_at_32_21,0,sizeof(__blk_rename_at_32_21));
+    smart_ptr_raw<ExprDelete> __delv_rename_at_33_22; memset((void*)&__delv_rename_at_33_22,0,sizeof(__delv_rename_at_33_22));
     /* finally */ auto __finally_27= das_finally([&](){
     das_delete_handle<smart_ptr_raw<ExprDelete>>::clear(__context__,__delv_rename_at_33_22);
     das_delete_handle<smart_ptr_raw<ExprBlock>>::clear(__context__,__blk_rename_at_32_21);

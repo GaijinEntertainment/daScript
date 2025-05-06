@@ -223,9 +223,6 @@ enum class ReOp : int32_t {
     Union = int32_t(9),
 };
 }
-}
-template <> struct cast< das::_anon_12350235091001437762::regex::ReOp > : cast_enum < das::_anon_12350235091001437762::regex::ReOp > {};
-namespace _anon_12350235091001437762 {
 namespace regex {
 
 struct ReNode {
@@ -257,7 +254,16 @@ struct Regex {
 };
 }
 // unused structure RegexReader
-// unused structure _lambda_random_111_1
+namespace random {
+
+struct _lambda_random_111_1 {
+    Func DAS_COMMENT((bool,random::_lambda_random_111_1,uint32_t &)) __lambda;
+    Func DAS_COMMENT((void,random::_lambda_random_111_1 *)) __finalize;
+    int32_t __yield;
+    int32_t rnd_seed;
+    int4 seed;
+};
+}
 // unused structure DecltypeMacro
 // unused structure DecltypeNoRefMacro
 // unused structure TemplateMacro
@@ -2337,16 +2343,16 @@ inline faker::Faker Faker_59d46974b1b304d6 ( Context * __context__, Sequence DAS
 
 inline char * long_string_875b49b236ac4f89 ( Context * __context__, faker::Faker &  __faker_rename_at_70_21 )
 {
-    uint32_t __len_rename_at_72_22; memset(&__len_rename_at_72_22,0,sizeof(__len_rename_at_72_22));
-    TArray<uint8_t> __arr_rename_at_75_23; memset(&__arr_rename_at_75_23,0,sizeof(__arr_rename_at_75_23));
-    uint32_t __Ch_rename_at_78_25; memset(&__Ch_rename_at_78_25,0,sizeof(__Ch_rename_at_78_25));
+    uint32_t __len_rename_at_72_22; memset((void*)&__len_rename_at_72_22,0,sizeof(__len_rename_at_72_22));
+    TArray<uint8_t> __arr_rename_at_75_23; memset((void*)&__arr_rename_at_75_23,0,sizeof(__arr_rename_at_75_23));
+    uint32_t __Ch_rename_at_78_25; memset((void*)&__Ch_rename_at_78_25,0,sizeof(__Ch_rename_at_78_25));
     /* finally */ auto __finally_70= das_finally([&](){
     _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_75_23));
     /* end finally */ });
     __len_rename_at_72_22 = 0x0u;
     _FuncbuiltinTicknextTick17450348357676149856_78a056decb3ca45d(__context__,das_arg<Sequence DAS_COMMENT((uint32_t))>::pass(__faker_rename_at_70_21.rnd),__len_rename_at_72_22);
     __len_rename_at_72_22 %= __faker_rename_at_70_21.max_long_string;
-    __arr_rename_at_75_23; das_zero(__arr_rename_at_75_23);
+    das_zero(__arr_rename_at_75_23);
     _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_75_23),int32_t(__len_rename_at_72_22));
     {
         bool __need_loop_77 = true;
@@ -2491,7 +2497,7 @@ inline float4 random_float4_600d6fdfcbdad12a ( Context * __context__, faker::Fak
 
 inline float3x3 random_float3x3_bc3a1d35f3f59d7a ( Context * __context__, faker::Faker &  __faker_rename_at_209_55 )
 {
-    float3x3 __m_rename_at_211_56; das_zero(__m_rename_at_211_56);
+    float3x3 __m_rename_at_211_56;das_zero(__m_rename_at_211_56);
     das_copy(das_index<float3x3>::at(__m_rename_at_211_56,0,__context__),random_float3_78ce5f1725e2deaf(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_209_55)));
     das_copy(das_index<float3x3>::at(__m_rename_at_211_56,1,__context__),random_float3_78ce5f1725e2deaf(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_209_55)));
     das_copy(das_index<float3x3>::at(__m_rename_at_211_56,2,__context__),random_float3_78ce5f1725e2deaf(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_209_55)));
@@ -2500,7 +2506,7 @@ inline float3x3 random_float3x3_bc3a1d35f3f59d7a ( Context * __context__, faker:
 
 inline float3x4 random_float3x4_298a931cbd00a5b ( Context * __context__, faker::Faker &  __faker_rename_at_218_57 )
 {
-    float3x4 __m_rename_at_220_58; das_zero(__m_rename_at_220_58);
+    float3x4 __m_rename_at_220_58;das_zero(__m_rename_at_220_58);
     das_copy(das_index<float3x4>::at(__m_rename_at_220_58,0,__context__),random_float3_78ce5f1725e2deaf(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_218_57)));
     das_copy(das_index<float3x4>::at(__m_rename_at_220_58,1,__context__),random_float3_78ce5f1725e2deaf(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_218_57)));
     das_copy(das_index<float3x4>::at(__m_rename_at_220_58,2,__context__),random_float3_78ce5f1725e2deaf(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_218_57)));
@@ -2510,7 +2516,7 @@ inline float3x4 random_float3x4_298a931cbd00a5b ( Context * __context__, faker::
 
 inline float4x4 random_float4x4_55310cc6af0b00d3 ( Context * __context__, faker::Faker &  __faker_rename_at_228_59 )
 {
-    float4x4 __m_rename_at_230_60; das_zero(__m_rename_at_230_60);
+    float4x4 __m_rename_at_230_60;das_zero(__m_rename_at_230_60);
     das_copy(das_index<float4x4>::at(__m_rename_at_230_60,0,__context__),random_float4_600d6fdfcbdad12a(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_228_59)));
     das_copy(das_index<float4x4>::at(__m_rename_at_230_60,1,__context__),random_float4_600d6fdfcbdad12a(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_228_59)));
     das_copy(das_index<float4x4>::at(__m_rename_at_230_60,2,__context__),random_float4_600d6fdfcbdad12a(__context__,das_arg<faker::Faker>::pass(__faker_rename_at_228_59)));
@@ -2565,7 +2571,7 @@ inline double random_double_630e8e853e6b1b86 ( Context * __context__, faker::Fak
 
 inline TDim<uint32_t,8> any_set_80905e8b9babc71e ( Context * __context__, faker::Faker &  __faker_rename_at_263_67 )
 {
-    TDim<uint32_t,8> __ch_rename_at_265_68; das_zero(__ch_rename_at_265_68);
+    TDim<uint32_t,8> __ch_rename_at_265_68;das_zero(__ch_rename_at_265_68);
     {
         bool __need_loop_266 = true;
         // c: uint& -const
@@ -2694,7 +2700,7 @@ inline faker::Faker Faker_f3a80b9fc0a885fc ( Context * __context__ )
 
 inline TArray<faker::MonthNameAndDay> _FuncbuiltinTickto_array_moveTick3185538323411982277_978394c279bac03f ( Context * __context__, TDim<faker::MonthNameAndDay,12> &  __a_rename_at_1342_98 )
 {
-    TArray<faker::MonthNameAndDay> __arr_rename_at_1344_99; das_zero(__arr_rename_at_1344_99);
+    TArray<faker::MonthNameAndDay> __arr_rename_at_1344_99;das_zero(__arr_rename_at_1344_99);
     _FuncbuiltinTickresizeTick4811697762258667383_4a11e1a2d7a26774(__context__,das_arg<TArray<faker::MonthNameAndDay>>::pass(__arr_rename_at_1344_99),12);
     das_copy(das_cast<TDim<faker::MonthNameAndDay,12>>::cast(das_ref(__context__,__arr_rename_at_1344_99(0,__context__))),__a_rename_at_1342_98);
     return /* <- */ das_auto_cast_move<TArray<faker::MonthNameAndDay>>::cast(__arr_rename_at_1344_99);
@@ -2702,7 +2708,7 @@ inline TArray<faker::MonthNameAndDay> _FuncbuiltinTickto_array_moveTick318553832
 
 inline TArray<AutoTuple<range,char *>> _FuncbuiltinTickto_array_moveTick3185538323411982277_1a5781405ff696dd ( Context * __context__, TDim<AutoTuple<range,char *>,1> &  __a_rename_at_1342_100 )
 {
-    TArray<AutoTuple<range,char *>> __arr_rename_at_1344_101; das_zero(__arr_rename_at_1344_101);
+    TArray<AutoTuple<range,char *>> __arr_rename_at_1344_101;das_zero(__arr_rename_at_1344_101);
     _FuncbuiltinTickresizeTick4811697762258667383_401f694502683cef(__context__,das_arg<TArray<AutoTuple<range,char *>>>::pass(__arr_rename_at_1344_101),1);
     das_copy(das_cast<TDim<AutoTuple<range,char *>,1>>::cast(das_ref(__context__,__arr_rename_at_1344_101(0,__context__))),__a_rename_at_1342_100);
     return /* <- */ das_auto_cast_move<TArray<AutoTuple<range,char *>>>::cast(__arr_rename_at_1344_101);
@@ -2710,7 +2716,7 @@ inline TArray<AutoTuple<range,char *>> _FuncbuiltinTickto_array_moveTick31855383
 
 inline TArray<AutoTuple<range,char *>> _FuncbuiltinTickto_array_moveTick3185538323411982277_aa3e7370cfbb5f4f ( Context * __context__, TDim<AutoTuple<range,char *>,2> &  __a_rename_at_1342_102 )
 {
-    TArray<AutoTuple<range,char *>> __arr_rename_at_1344_103; das_zero(__arr_rename_at_1344_103);
+    TArray<AutoTuple<range,char *>> __arr_rename_at_1344_103;das_zero(__arr_rename_at_1344_103);
     _FuncbuiltinTickresizeTick4811697762258667383_401f694502683cef(__context__,das_arg<TArray<AutoTuple<range,char *>>>::pass(__arr_rename_at_1344_103),2);
     das_copy(das_cast<TDim<AutoTuple<range,char *>,2>>::cast(das_ref(__context__,__arr_rename_at_1344_103(0,__context__))),__a_rename_at_1342_102);
     return /* <- */ das_auto_cast_move<TArray<AutoTuple<range,char *>>>::cast(__arr_rename_at_1344_103);
@@ -2718,7 +2724,7 @@ inline TArray<AutoTuple<range,char *>> _FuncbuiltinTickto_array_moveTick31855383
 
 inline TArray<regex::ReNode *> _FuncbuiltinTickto_array_moveTick3185538323411982277_b89e28f7cfb5d3e4 ( Context * __context__, TDim<regex::ReNode *,11> &  __a_rename_at_1342_104 )
 {
-    TArray<regex::ReNode *> __arr_rename_at_1344_105; das_zero(__arr_rename_at_1344_105);
+    TArray<regex::ReNode *> __arr_rename_at_1344_105;das_zero(__arr_rename_at_1344_105);
     _FuncbuiltinTickresizeTick4811697762258667383_839271fc9974c3bd(__context__,das_arg<TArray<regex::ReNode *>>::pass(__arr_rename_at_1344_105),11);
     das_copy(das_cast<TDim<regex::ReNode *,11>>::cast(das_ref(__context__,__arr_rename_at_1344_105(0,__context__))),__a_rename_at_1342_104);
     return /* <- */ das_auto_cast_move<TArray<regex::ReNode *>>::cast(__arr_rename_at_1344_105);
@@ -2726,7 +2732,7 @@ inline TArray<regex::ReNode *> _FuncbuiltinTickto_array_moveTick3185538323411982
 
 inline TArray<int32_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_941c3382ff6a8f19 ( Context * __context__, TDim<int32_t,12> &  __a_rename_at_1342_106 )
 {
-    TArray<int32_t> __arr_rename_at_1344_107; das_zero(__arr_rename_at_1344_107);
+    TArray<int32_t> __arr_rename_at_1344_107;das_zero(__arr_rename_at_1344_107);
     _FuncbuiltinTickresizeTick4811697762258667383_1bdb9995fa062a51(__context__,das_arg<TArray<int32_t>>::pass(__arr_rename_at_1344_107),12);
     das_copy(das_cast<TDim<int32_t,12>>::cast(das_ref(__context__,__arr_rename_at_1344_107(0,__context__))),__a_rename_at_1342_106);
     return /* <- */ das_auto_cast_move<TArray<int32_t>>::cast(__arr_rename_at_1344_107);

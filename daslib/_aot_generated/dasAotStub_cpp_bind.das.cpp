@@ -239,9 +239,9 @@ inline void _FuncbuiltinTickpush_cloneTick15769051505004837089_338aab8aa242d2bb 
 
 inline void log_cpp_class_method_36d323d98780e7f9 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_15_13, char * const  __name_rename_at_15_14, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_15_15 )
 {
-    smart_ptr_raw<TypeDecl> __cft_rename_at_16_16; memset(&__cft_rename_at_16_16,0,sizeof(__cft_rename_at_16_16));
-    char * __rettd_rename_at_18_17; memset(&__rettd_rename_at_18_17,0,sizeof(__rettd_rename_at_18_17));
-    char * __argtd_rename_at_25_27; memset(&__argtd_rename_at_25_27,0,sizeof(__argtd_rename_at_25_27));
+    smart_ptr_raw<TypeDecl> __cft_rename_at_16_16; memset((void*)&__cft_rename_at_16_16,0,sizeof(__cft_rename_at_16_16));
+    char * __rettd_rename_at_18_17; memset((void*)&__rettd_rename_at_18_17,0,sizeof(__rettd_rename_at_18_17));
+    char * __argtd_rename_at_25_27; memset((void*)&__argtd_rename_at_25_27,0,sizeof(__argtd_rename_at_25_27));
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_20_63_64; _temp_make_local_20_63_64;
     /* finally */ auto __finally_15= das_finally([&](){
     das_delete_handle<smart_ptr_raw<TypeDecl>>::clear(__context__,__cft_rename_at_16_16);
@@ -360,9 +360,9 @@ inline void log_cpp_class_method_call_358e578e3a125dd1 ( Context * __context__, 
 
 inline void log_cpp_class_adapter_92277e6cbae7f863 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_66_46, char * const  __name_rename_at_66_47, smart_ptr_raw<TypeDecl> const  __cinfo_rename_at_66_48 )
 {
-    TArray<AutoTuple<char *,int32_t>> __methods_rename_at_72_49; memset(&__methods_rename_at_72_49,0,sizeof(__methods_rename_at_72_49));
-    TArray<smart_ptr_raw<TypeDecl>> __types_rename_at_73_50; memset(&__types_rename_at_73_50,0,sizeof(__types_rename_at_73_50));
-    int32_t __nmet_rename_at_81_55; memset(&__nmet_rename_at_81_55,0,sizeof(__nmet_rename_at_81_55));
+    TArray<AutoTuple<char *,int32_t>> __methods_rename_at_72_49; memset((void*)&__methods_rename_at_72_49,0,sizeof(__methods_rename_at_72_49));
+    TArray<smart_ptr_raw<TypeDecl>> __types_rename_at_73_50; memset((void*)&__types_rename_at_73_50,0,sizeof(__types_rename_at_73_50));
+    int32_t __nmet_rename_at_81_55; memset((void*)&__nmet_rename_at_81_55,0,sizeof(__nmet_rename_at_81_55));
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_74_46_96; _temp_make_local_74_46_96;
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_85_29_272; _temp_make_local_85_29_272;
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_93_29_320; _temp_make_local_93_29_320;
@@ -370,8 +370,8 @@ inline void log_cpp_class_adapter_92277e6cbae7f863 ( Context * __context__, FILE
     _FuncbuiltinTickfinalizeTick13836114024949725080_615e0425516708d9(__context__,das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__types_rename_at_73_50));
     /* end finally */ });
     DAS_ASSERTF((((das_deref(__context__,__cinfo_rename_at_66_48)).isClass())),(((char *) "can only make adapter out of a class")));
-    __methods_rename_at_72_49; das_zero(__methods_rename_at_72_49);
-    __types_rename_at_73_50; das_zero(__types_rename_at_73_50);
+    das_zero(__methods_rename_at_72_49);
+    das_zero(__types_rename_at_73_50);
     {
         bool __need_loop_74 = true;
         // fld: ast::FieldDeclaration const&

@@ -882,11 +882,11 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c704a
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_15c4362097f0dada ( Context * __context__, ast_boost::SetupOptimizationMacro const  & __cl_rename_at_116_24 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_6553cf4d8c46fc96 ( Context * __context__, ast_boost::SetupLintMacro const  & __cl_rename_at_116_25 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_81497c7eb9a77f41 ( Context * __context__, ast_boost::SetupGlobalLintMacro const  & __cl_rename_at_116_26 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_2dbef66663d682d8 ( Context * __context__, TArray<ast::AstVariantMacro *> & __Arr_rename_at_181_27, ast::AstVariantMacro * __value_rename_at_181_28 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_864b36dcb794fd86 ( Context * __context__, ast_boost::BetterRttiVisitor const  & __cl_rename_at_116_29 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_a81de2bae076fb95 ( Context * __context__, TArray<ast::AstVariantMacro *> & __Arr_rename_at_181_27, ast::AstVariantMacro * __value_rename_at_181_28 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_fd6ba31be5b05172 ( Context * __context__, ast_boost::BetterRttiVisitor const  & __cl_rename_at_116_29 );
 inline void clone_a23f2772d6a2dd68 ( Context * __context__, smart_ptr_raw<FunctionAnnotation> & __dest_rename_at_1059_30, smart_ptr_raw<FunctionAnnotation> const  __src_rename_at_1059_31 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncbuiltinTickclone_to_moveTick2007252383599261567_ddf94d0785b39e5b ( Context * __context__, smart_ptr_raw<FunctionAnnotation> const  __clone_src_rename_at_1056_32 );
-inline Module * _FuncastTickfind_moduleTick11101329256228773934_81acafb2bdc0977 ( Context * __context__, smart_ptr_raw<Program> const  __prog_rename_at_948_34, char * const  __name_rename_at_948_35 );
+inline Module * _FuncastTickfind_moduleTick11101329256228773934_807358ad759937fa ( Context * __context__, smart_ptr_raw<Program> const  __prog_rename_at_948_34, char * const  __name_rename_at_948_35 );
 inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> & __a_rename_at_1182_38 );
 inline void _FuncbuiltinTickfinalizeTick13836114024949725080_615e0425516708d9 ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> & __a_rename_at_1182_39 );
 inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c6f9bc68b25c5dd6 ( Context * __context__, TArray<smart_ptr_raw<Variable>> & __a_rename_at_1182_41 );
@@ -1123,12 +1123,12 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_81497
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_26.__rtti))).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_2dbef66663d682d8 ( Context * __context__, TArray<ast::AstVariantMacro *> &  __Arr_rename_at_181_27, ast::AstVariantMacro * __value_rename_at_181_28 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_a81de2bae076fb95 ( Context * __context__, TArray<ast::AstVariantMacro *> &  __Arr_rename_at_181_27, ast::AstVariantMacro * __value_rename_at_181_28 )
 {
     das_copy(__Arr_rename_at_181_27(builtin_array_push_back(das_arg<TArray<ast::AstVariantMacro *>>::pass(__Arr_rename_at_181_27),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_28);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_864b36dcb794fd86 ( Context * __context__, ast_boost::BetterRttiVisitor const  &  __cl_rename_at_116_29 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_fd6ba31be5b05172 ( Context * __context__, ast_boost::BetterRttiVisitor const  &  __cl_rename_at_116_29 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_29.__rtti))).getStructType())));
 }
@@ -1140,12 +1140,12 @@ inline void clone_a23f2772d6a2dd68 ( Context * __context__, smart_ptr_raw<Functi
 
 inline smart_ptr_raw<FunctionAnnotation> _FuncbuiltinTickclone_to_moveTick2007252383599261567_ddf94d0785b39e5b ( Context * __context__, smart_ptr_raw<FunctionAnnotation> const  __clone_src_rename_at_1056_32 )
 {
-    smart_ptr_raw<FunctionAnnotation> __clone_dest_rename_at_1058_33; das_zero(__clone_dest_rename_at_1058_33);
+    smart_ptr_raw<FunctionAnnotation> __clone_dest_rename_at_1058_33;das_zero(__clone_dest_rename_at_1058_33);
     clone_a23f2772d6a2dd68(__context__,__clone_dest_rename_at_1058_33,__clone_src_rename_at_1056_32);
     return /* <- */ das_auto_cast_move<smart_ptr_raw<FunctionAnnotation>>::cast(__clone_dest_rename_at_1058_33);
 }
 
-inline Module * _FuncastTickfind_moduleTick11101329256228773934_81acafb2bdc0977 ( Context * __context__, smart_ptr_raw<Program> const  __prog_rename_at_948_34, char * const  __name_rename_at_948_35 ) { das_stack_prologue __prologue(__context__,112,"ast`find_module`11101329256228773934 " DAS_FILE_LINE);
+inline Module * _FuncastTickfind_moduleTick11101329256228773934_807358ad759937fa ( Context * __context__, smart_ptr_raw<Program> const  __prog_rename_at_948_34, char * const  __name_rename_at_948_35 ) { das_stack_prologue __prologue(__context__,112,"ast`find_module`11101329256228773934 " DAS_FILE_LINE);
 {
     Module * __rm_rename_at_949_36 = 0;
     rtti_builtin_program_for_each_module(__prog_rename_at_948_34,das_make_block<void,Module *>(__context__,96,0,&__func_info__4dedd3fc50b439aa,[&](Module * __mod_rename_at_950_37) -> void{
@@ -1292,7 +1292,7 @@ inline Structure * _FuncbuiltinTickget_ptrTick8468476673553620226_88f5777a813978
 
 inline AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f> _FuncrttiTickRttiValue_nothingTick4715542659269841615_3746f4c2db327a87 ( Context * __context__ )
 {
-    AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f> __t_rename_at_164_66; das_zero(__t_rename_at_164_66);
+    AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f> __t_rename_at_164_66;das_zero(__t_rename_at_164_66);
     set_variant_index(das_arg<AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::pass(__t_rename_at_164_66),8);
     return das_auto_cast_ref<AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::cast(__t_rename_at_164_66);
 }
@@ -1309,16 +1309,16 @@ inline Structure * _FuncbuiltinTickget_ptrTick5807679485210906136_bd8120dfe73639
 
 inline smart_ptr_raw<ExprOp3> _Funcast_boostTickmakeAsOrSafeAsTick3414563941976524297_79fcde505e4146b3 ( Context * __context__, smart_ptr_raw<ExprAsVariant> const  __expr_rename_at_515_69, smart_ptr_raw<Expression> __enull_rename_at_515_70 ) { das_stack_prologue __prologue(__context__,816,"ast_boost`makeAsOrSafeAs`3414563941976524297 " DAS_FILE_LINE);
 {
-    smart_ptr_raw<ExprField> __vdr_rename_at_516_71; memset(&__vdr_rename_at_516_71,0,sizeof(__vdr_rename_at_516_71));
-    smart_ptr_raw<ExprConstString> __cna_rename_at_517_73; memset(&__cna_rename_at_517_73,0,sizeof(__cna_rename_at_517_73));
-    smart_ptr_raw<ExprOp2> __cond_rename_at_518_75; memset(&__cond_rename_at_518_75,0,sizeof(__cond_rename_at_518_75));
-    smart_ptr_raw<TypeDecl> __ctype_rename_at_519_77; memset(&__ctype_rename_at_519_77,0,sizeof(__ctype_rename_at_519_77));
-    smart_ptr_raw<Expression> __esub_rename_at_523_79; memset(&__esub_rename_at_523_79,0,sizeof(__esub_rename_at_523_79));
-    smart_ptr_raw<ExprOp2> __neqz_rename_at_525_80; memset(&__neqz_rename_at_525_80,0,sizeof(__neqz_rename_at_525_80));
-    smart_ptr_raw<ExprOp2> __nand_rename_at_529_82; memset(&__nand_rename_at_529_82,0,sizeof(__nand_rename_at_529_82));
-    smart_ptr_raw<ExprRef2Ptr> __nsub_rename_at_535_84; memset(&__nsub_rename_at_535_84,0,sizeof(__nsub_rename_at_535_84));
-    smart_ptr_raw<ExprCast> __vcast_rename_at_541_85; memset(&__vcast_rename_at_541_85,0,sizeof(__vcast_rename_at_541_85));
-    smart_ptr_raw<ExprOp3> __tri_rename_at_547_86; memset(&__tri_rename_at_547_86,0,sizeof(__tri_rename_at_547_86));
+    smart_ptr_raw<ExprField> __vdr_rename_at_516_71; memset((void*)&__vdr_rename_at_516_71,0,sizeof(__vdr_rename_at_516_71));
+    smart_ptr_raw<ExprConstString> __cna_rename_at_517_73; memset((void*)&__cna_rename_at_517_73,0,sizeof(__cna_rename_at_517_73));
+    smart_ptr_raw<ExprOp2> __cond_rename_at_518_75; memset((void*)&__cond_rename_at_518_75,0,sizeof(__cond_rename_at_518_75));
+    smart_ptr_raw<TypeDecl> __ctype_rename_at_519_77; memset((void*)&__ctype_rename_at_519_77,0,sizeof(__ctype_rename_at_519_77));
+    smart_ptr_raw<Expression> __esub_rename_at_523_79; memset((void*)&__esub_rename_at_523_79,0,sizeof(__esub_rename_at_523_79));
+    smart_ptr_raw<ExprOp2> __neqz_rename_at_525_80; memset((void*)&__neqz_rename_at_525_80,0,sizeof(__neqz_rename_at_525_80));
+    smart_ptr_raw<ExprOp2> __nand_rename_at_529_82; memset((void*)&__nand_rename_at_529_82,0,sizeof(__nand_rename_at_529_82));
+    smart_ptr_raw<ExprRef2Ptr> __nsub_rename_at_535_84; memset((void*)&__nsub_rename_at_535_84,0,sizeof(__nsub_rename_at_535_84));
+    smart_ptr_raw<ExprCast> __vcast_rename_at_541_85; memset((void*)&__vcast_rename_at_541_85,0,sizeof(__vcast_rename_at_541_85));
+    smart_ptr_raw<ExprOp3> __tri_rename_at_547_86; memset((void*)&__tri_rename_at_547_86,0,sizeof(__tri_rename_at_547_86));
     /* finally */ auto __finally_515= das_finally([&](){
     das_delete_handle<smart_ptr_raw<ExprOp3>>::clear(__context__,__tri_rename_at_547_86);
     das_delete_handle<smart_ptr_raw<ExprCast>>::clear(__context__,__vcast_rename_at_541_85);
@@ -1412,16 +1412,16 @@ inline smart_ptr_raw<ExprOp3> _Funcast_boostTickmakeAsOrSafeAsTick34145639419765
 
 inline smart_ptr_raw<ExprOp3> _Funcast_boostTickmakeAsOrSafeAsTick3414563941976524297_bacff81c7e21ce9 ( Context * __context__, smart_ptr_raw<ExprSafeAsVariant> const  __expr_rename_at_515_88, smart_ptr_raw<Expression> __enull_rename_at_515_89 ) { das_stack_prologue __prologue(__context__,816,"ast_boost`makeAsOrSafeAs`3414563941976524297 " DAS_FILE_LINE);
 {
-    smart_ptr_raw<ExprField> __vdr_rename_at_516_90; memset(&__vdr_rename_at_516_90,0,sizeof(__vdr_rename_at_516_90));
-    smart_ptr_raw<ExprConstString> __cna_rename_at_517_92; memset(&__cna_rename_at_517_92,0,sizeof(__cna_rename_at_517_92));
-    smart_ptr_raw<ExprOp2> __cond_rename_at_518_94; memset(&__cond_rename_at_518_94,0,sizeof(__cond_rename_at_518_94));
-    smart_ptr_raw<TypeDecl> __ctype_rename_at_519_96; memset(&__ctype_rename_at_519_96,0,sizeof(__ctype_rename_at_519_96));
-    smart_ptr_raw<Expression> __esub_rename_at_523_98; memset(&__esub_rename_at_523_98,0,sizeof(__esub_rename_at_523_98));
-    smart_ptr_raw<ExprOp2> __neqz_rename_at_525_99; memset(&__neqz_rename_at_525_99,0,sizeof(__neqz_rename_at_525_99));
-    smart_ptr_raw<ExprOp2> __nand_rename_at_529_101; memset(&__nand_rename_at_529_101,0,sizeof(__nand_rename_at_529_101));
-    smart_ptr_raw<ExprRef2Ptr> __nsub_rename_at_535_103; memset(&__nsub_rename_at_535_103,0,sizeof(__nsub_rename_at_535_103));
-    smart_ptr_raw<ExprCast> __vcast_rename_at_541_104; memset(&__vcast_rename_at_541_104,0,sizeof(__vcast_rename_at_541_104));
-    smart_ptr_raw<ExprOp3> __tri_rename_at_547_105; memset(&__tri_rename_at_547_105,0,sizeof(__tri_rename_at_547_105));
+    smart_ptr_raw<ExprField> __vdr_rename_at_516_90; memset((void*)&__vdr_rename_at_516_90,0,sizeof(__vdr_rename_at_516_90));
+    smart_ptr_raw<ExprConstString> __cna_rename_at_517_92; memset((void*)&__cna_rename_at_517_92,0,sizeof(__cna_rename_at_517_92));
+    smart_ptr_raw<ExprOp2> __cond_rename_at_518_94; memset((void*)&__cond_rename_at_518_94,0,sizeof(__cond_rename_at_518_94));
+    smart_ptr_raw<TypeDecl> __ctype_rename_at_519_96; memset((void*)&__ctype_rename_at_519_96,0,sizeof(__ctype_rename_at_519_96));
+    smart_ptr_raw<Expression> __esub_rename_at_523_98; memset((void*)&__esub_rename_at_523_98,0,sizeof(__esub_rename_at_523_98));
+    smart_ptr_raw<ExprOp2> __neqz_rename_at_525_99; memset((void*)&__neqz_rename_at_525_99,0,sizeof(__neqz_rename_at_525_99));
+    smart_ptr_raw<ExprOp2> __nand_rename_at_529_101; memset((void*)&__nand_rename_at_529_101,0,sizeof(__nand_rename_at_529_101));
+    smart_ptr_raw<ExprRef2Ptr> __nsub_rename_at_535_103; memset((void*)&__nsub_rename_at_535_103,0,sizeof(__nsub_rename_at_535_103));
+    smart_ptr_raw<ExprCast> __vcast_rename_at_541_104; memset((void*)&__vcast_rename_at_541_104,0,sizeof(__vcast_rename_at_541_104));
+    smart_ptr_raw<ExprOp3> __tri_rename_at_547_105; memset((void*)&__tri_rename_at_547_105,0,sizeof(__tri_rename_at_547_105));
     /* finally */ auto __finally_515= das_finally([&](){
     das_delete_handle<smart_ptr_raw<ExprOp3>>::clear(__context__,__tri_rename_at_547_105);
     das_delete_handle<smart_ptr_raw<ExprCast>>::clear(__context__,__vcast_rename_at_541_104);
@@ -1530,7 +1530,7 @@ inline void clone_9ab0f6a4e0a6006e ( Context * __context__, smart_ptr_raw<Enumer
 
 inline Module * _FuncastTickfind_compiling_moduleTick4523452840392654583_34f86625d1f8ecb2 ( Context * __context__, char * const  __name_rename_at_967_112 )
 {
-    return das_auto_cast<Module *>::cast(_FuncastTickfind_moduleTick11101329256228773934_81acafb2bdc0977(__context__,compileProgram(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__name_rename_at_967_112));
+    return das_auto_cast<Module *>::cast(_FuncastTickfind_moduleTick11101329256228773934_807358ad759937fa(__context__,compileProgram(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__name_rename_at_967_112));
 }
 
 inline void clone_3a3075a3a0c0cb06 ( Context * __context__, smart_ptr_raw<Annotation> & __dest_rename_at_906_113, smart_ptr_raw<Annotation> const  __src_rename_at_906_114 )
@@ -1629,7 +1629,7 @@ inline bool isVectorType_e16b21c2cb0df3cf ( Context * __context__, DAS_COMMENT(b
 inline char * describe_f8955cd58aaa956c ( Context * __context__, AnnotationArgumentList const  &  __list_rename_at_59_131 )
 {
     return das_auto_cast<char *>::cast(_Funcstrings_boostTickjoinTick16475640899284277631_97cbd29033d05835(__context__,das_arg<TArray<char *>>::pass(das_invoke<TArray<char *>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<char *>{
-        TArray<char *> ____acomp_60_18_rename_at_60_132; das_zero(____acomp_60_18_rename_at_60_132);
+        TArray<char *> ____acomp_60_18_rename_at_60_132;das_zero(____acomp_60_18_rename_at_60_132);
         builtin_set_verify_array_locks(das_arg<TArray<char *>>::pass(____acomp_60_18_rename_at_60_132),false);
         {
             bool __need_loop_60 = true;
@@ -1657,7 +1657,7 @@ inline char * describe_16a184ebde2f5850 ( Context * __context__, AnnotationDecla
 inline char * describe_5703109ec79a52b4 ( Context * __context__, AnnotationList const  &  __list_rename_at_71_135 )
 {
     return das_auto_cast<char *>::cast(_Funcstrings_boostTickjoinTick16475640899284277631_97cbd29033d05835(__context__,das_arg<TArray<char *>>::pass(das_invoke<TArray<char *>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<char *>{
-        TArray<char *> ____acomp_72_18_rename_at_72_136; das_zero(____acomp_72_18_rename_at_72_136);
+        TArray<char *> ____acomp_72_18_rename_at_72_136;das_zero(____acomp_72_18_rename_at_72_136);
         builtin_set_verify_array_locks(das_arg<TArray<char *>>::pass(____acomp_72_18_rename_at_72_136),false);
         {
             bool __need_loop_72 = true;
@@ -1737,7 +1737,7 @@ inline void emplace_new_4fd4a83325c5619f ( Context * __context__, MakeStruct &  
 
 inline bool override_method_38d6ecad3789a50f ( Context * __context__, smart_ptr_raw<Structure> __str_rename_at_163_154, char * const  __name_rename_at_163_155, char * const  __funcName_rename_at_163_156 ) { das_stack_prologue __prologue(__context__,272,"override_method " DAS_FILE_LINE);
 {
-    smart_ptr_raw<ExprCast> __vcast_rename_at_166_158; memset(&__vcast_rename_at_166_158,0,sizeof(__vcast_rename_at_166_158));
+    smart_ptr_raw<ExprCast> __vcast_rename_at_166_158; memset((void*)&__vcast_rename_at_166_158,0,sizeof(__vcast_rename_at_166_158));
     {
         bool __need_loop_164 = true;
         // fld: ast::FieldDeclaration&
@@ -1880,12 +1880,12 @@ inline AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,ve
 
 inline void apply_tag_annotation_f773cf67c31220 ( Context * __context__, char * const  __tag_rename_at_260_175, smart_ptr_raw<FunctionAnnotation> __ann_rename_at_260_176 ) { das_stack_prologue __prologue(__context__,160,"apply_tag_annotation " DAS_FILE_LINE);
 {
-    TArray<smart_ptr_raw<Function>> __funcs_rename_at_261_177; memset(&__funcs_rename_at_261_177,0,sizeof(__funcs_rename_at_261_177));
-    smart_ptr_raw<FunctionAnnotation> __tagAnn_rename_at_267_180; memset(&__tagAnn_rename_at_267_180,0,sizeof(__tagAnn_rename_at_267_180));
+    TArray<smart_ptr_raw<Function>> __funcs_rename_at_261_177; memset((void*)&__funcs_rename_at_261_177,0,sizeof(__funcs_rename_at_261_177));
+    smart_ptr_raw<FunctionAnnotation> __tagAnn_rename_at_267_180; memset((void*)&__tagAnn_rename_at_267_180,0,sizeof(__tagAnn_rename_at_267_180));
     /* finally */ auto __finally_260= das_finally([&](){
     _FuncbuiltinTickfinalizeTick13836114024949725080_aba46312bb49c9f6(__context__,das_arg<TArray<smart_ptr_raw<Function>>>::pass(__funcs_rename_at_261_177));
     /* end finally */ });
-    __funcs_rename_at_261_177; das_zero(__funcs_rename_at_261_177);
+    das_zero(__funcs_rename_at_261_177);
     for_each_tag_function_bfda4041b94932d7(__context__,thisModule(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__tag_rename_at_260_175,das_make_block<void,smart_ptr_raw<Function>>(__context__,112,0,&__func_info__806bd08fbfbd09f4,[&](smart_ptr_raw<Function> __func_rename_at_262_178) -> void{
         _FuncbuiltinTickpush_cloneTick2035469273396957942_a44b26c5d2257edc(__context__,das_arg<TArray<smart_ptr_raw<Function>>>::pass(__funcs_rename_at_261_177),__func_rename_at_262_178);
     }));
@@ -1911,12 +1911,12 @@ inline void apply_tag_annotation_f773cf67c31220 ( Context * __context__, char * 
 
 inline smart_ptr_raw<Function> find_unique_function_aab3bc60151e96ec ( Context * __context__, Module * const  __mod_rename_at_279_181, char * const  __name_rename_at_279_182, bool __canfail_rename_at_279_183 ) { das_stack_prologue __prologue(__context__,128,"find_unique_function " DAS_FILE_LINE);
 {
-    smart_ptr_raw<Function> __res_rename_at_280_184; memset(&__res_rename_at_280_184,0,sizeof(__res_rename_at_280_184));
-    int32_t __count_rename_at_281_185; memset(&__count_rename_at_281_185,0,sizeof(__count_rename_at_281_185));
+    smart_ptr_raw<Function> __res_rename_at_280_184; memset((void*)&__res_rename_at_280_184,0,sizeof(__res_rename_at_280_184));
+    int32_t __count_rename_at_281_185; memset((void*)&__count_rename_at_281_185,0,sizeof(__count_rename_at_281_185));
     /* finally */ auto __finally_279= das_finally([&](){
     das_delete_handle<smart_ptr_raw<Function>>::clear(__context__,__res_rename_at_280_184);
     /* end finally */ });
-    __res_rename_at_280_184; das_zero(__res_rename_at_280_184);
+    das_zero(__res_rename_at_280_184);
     __count_rename_at_281_185 = 0;
     forEachFunction(__mod_rename_at_279_181,__name_rename_at_279_182,das_make_block<void,smart_ptr_raw<Function>>(__context__,112,0,&__func_info__8075d08fbfce07f4,[&](smart_ptr_raw<Function> __func_rename_at_282_186) -> void{
         clone_8c54ff7e0079253a(__context__,__res_rename_at_280_184,__func_rename_at_282_186);
@@ -1936,12 +1936,12 @@ inline smart_ptr_raw<Function> find_unique_function_aab3bc60151e96ec ( Context *
 
 inline smart_ptr_raw<Function> find_unique_generic_b6f2e7df17214306 ( Context * __context__, Module * const  __mod_rename_at_295_187, char * const  __name_rename_at_295_188, bool __canfail_rename_at_295_189 ) { das_stack_prologue __prologue(__context__,128,"find_unique_generic " DAS_FILE_LINE);
 {
-    smart_ptr_raw<Function> __res_rename_at_296_190; memset(&__res_rename_at_296_190,0,sizeof(__res_rename_at_296_190));
-    int32_t __count_rename_at_297_191; memset(&__count_rename_at_297_191,0,sizeof(__count_rename_at_297_191));
+    smart_ptr_raw<Function> __res_rename_at_296_190; memset((void*)&__res_rename_at_296_190,0,sizeof(__res_rename_at_296_190));
+    int32_t __count_rename_at_297_191; memset((void*)&__count_rename_at_297_191,0,sizeof(__count_rename_at_297_191));
     /* finally */ auto __finally_295= das_finally([&](){
     das_delete_handle<smart_ptr_raw<Function>>::clear(__context__,__res_rename_at_296_190);
     /* end finally */ });
-    __res_rename_at_296_190; das_zero(__res_rename_at_296_190);
+    das_zero(__res_rename_at_296_190);
     __count_rename_at_297_191 = 0;
     forEachGenericFunction(__mod_rename_at_295_187,__name_rename_at_295_188,das_make_block<void,smart_ptr_raw<Function>>(__context__,112,0,&__func_info__8075d08fbfce07f4,[&](smart_ptr_raw<Function> __func_rename_at_298_192) -> void{
         clone_8c54ff7e0079253a(__context__,__res_rename_at_296_190,__func_rename_at_298_192);
@@ -1961,9 +1961,9 @@ inline smart_ptr_raw<Function> find_unique_generic_b6f2e7df17214306 ( Context * 
 
 inline ExprBlock * setup_call_list_b8c9a73202ae3a27 ( Context * __context__, char * const  __name_rename_at_311_193, LineInfo const  &  __at_rename_at_311_194, Block DAS_COMMENT((void,smart_ptr_raw<Function>)) const  &  __subblock_rename_at_311_195 ) { das_stack_prologue __prologue(__context__,192,"setup_call_list " DAS_FILE_LINE);
 {
-    smart_ptr_raw<Function> __fn_rename_at_312_196; memset(&__fn_rename_at_312_196,0,sizeof(__fn_rename_at_312_196));
-    smart_ptr_raw<ExprBlock> __blk_rename_at_318_198; memset(&__blk_rename_at_318_198,0,sizeof(__blk_rename_at_318_198));
-    ExprBlock * __res_rename_at_319_199; memset(&__res_rename_at_319_199,0,sizeof(__res_rename_at_319_199));
+    smart_ptr_raw<Function> __fn_rename_at_312_196; memset((void*)&__fn_rename_at_312_196,0,sizeof(__fn_rename_at_312_196));
+    smart_ptr_raw<ExprBlock> __blk_rename_at_318_198; memset((void*)&__blk_rename_at_318_198,0,sizeof(__blk_rename_at_318_198));
+    ExprBlock * __res_rename_at_319_199; memset((void*)&__res_rename_at_319_199,0,sizeof(__res_rename_at_319_199));
     /* finally */ auto __finally_311= das_finally([&](){
     das_delete_handle<smart_ptr_raw<Function>>::clear(__context__,__fn_rename_at_312_196);
     /* end finally */ });
@@ -2022,15 +2022,15 @@ inline ExprBlock * setup_call_list_65ff2b6093057bff ( Context * __context__, cha
 
 inline ExprBlock * setup_macro_94d072840a9b539d ( Context * __context__, char * const  __name_rename_at_346_206, LineInfo const  &  __at_rename_at_346_207 ) { das_stack_prologue __prologue(__context__,480,"setup_macro " DAS_FILE_LINE);
 {
-    smart_ptr_raw<Function> __fn_rename_at_348_208; memset(&__fn_rename_at_348_208,0,sizeof(__fn_rename_at_348_208));
-    smart_ptr_raw<ExprBlock> __blk_rename_at_354_210; memset(&__blk_rename_at_354_210,0,sizeof(__blk_rename_at_354_210));
-    smart_ptr_raw<ExprBlock> __iblk_rename_at_355_211; memset(&__iblk_rename_at_355_211,0,sizeof(__iblk_rename_at_355_211));
-    ExprBlock * __res_rename_at_356_212; memset(&__res_rename_at_356_212,0,sizeof(__res_rename_at_356_212));
-    smart_ptr_raw<ExprCall> __ifm_rename_at_357_213; memset(&__ifm_rename_at_357_213,0,sizeof(__ifm_rename_at_357_213));
-    smart_ptr_raw<ExprConstString> __ifmn_rename_at_358_215; memset(&__ifmn_rename_at_358_215,0,sizeof(__ifmn_rename_at_358_215));
-    smart_ptr_raw<ExprIfThenElse> __ife_rename_at_360_217; memset(&__ife_rename_at_360_217,0,sizeof(__ife_rename_at_360_217));
-    ExprBlock * __blk_rename_at_372_218; memset(&__blk_rename_at_372_218,0,sizeof(__blk_rename_at_372_218));
-    ExprIfThenElse * __ife_rename_at_376_219; memset(&__ife_rename_at_376_219,0,sizeof(__ife_rename_at_376_219));
+    smart_ptr_raw<Function> __fn_rename_at_348_208; memset((void*)&__fn_rename_at_348_208,0,sizeof(__fn_rename_at_348_208));
+    smart_ptr_raw<ExprBlock> __blk_rename_at_354_210; memset((void*)&__blk_rename_at_354_210,0,sizeof(__blk_rename_at_354_210));
+    smart_ptr_raw<ExprBlock> __iblk_rename_at_355_211; memset((void*)&__iblk_rename_at_355_211,0,sizeof(__iblk_rename_at_355_211));
+    ExprBlock * __res_rename_at_356_212; memset((void*)&__res_rename_at_356_212,0,sizeof(__res_rename_at_356_212));
+    smart_ptr_raw<ExprCall> __ifm_rename_at_357_213; memset((void*)&__ifm_rename_at_357_213,0,sizeof(__ifm_rename_at_357_213));
+    smart_ptr_raw<ExprConstString> __ifmn_rename_at_358_215; memset((void*)&__ifmn_rename_at_358_215,0,sizeof(__ifmn_rename_at_358_215));
+    smart_ptr_raw<ExprIfThenElse> __ife_rename_at_360_217; memset((void*)&__ife_rename_at_360_217,0,sizeof(__ife_rename_at_360_217));
+    ExprBlock * __blk_rename_at_372_218; memset((void*)&__blk_rename_at_372_218,0,sizeof(__blk_rename_at_372_218));
+    ExprIfThenElse * __ife_rename_at_376_219; memset((void*)&__ife_rename_at_376_219,0,sizeof(__ife_rename_at_376_219));
     /* finally */ auto __finally_346= das_finally([&](){
     das_delete_handle<smart_ptr_raw<Function>>::clear(__context__,__fn_rename_at_348_208);
     /* end finally */ });
@@ -2179,9 +2179,9 @@ inline StructureAnnotation * _FuncTickasTickStructureAnnotation_89a03630f5c3491e
 
 inline smart_ptr_raw<Expression> walk_and_convert_array_ee3d32559a523360 ( Context * __context__, uint8_t const  * const  __data_rename_at_653_232, smart_ptr_raw<TypeDecl> const  __info_rename_at_653_233, LineInfo const  &  __at_rename_at_653_234 ) { das_stack_prologue __prologue(__context__,272,"walk_and_convert_array " DAS_FILE_LINE);
 {
-    int32_t __stride_rename_at_656_236; memset(&__stride_rename_at_656_236,0,sizeof(__stride_rename_at_656_236));
-    smart_ptr_raw<ExprMakeArray> __mkArr_rename_at_657_237; memset(&__mkArr_rename_at_657_237,0,sizeof(__mkArr_rename_at_657_237));
-    smart_ptr_raw<ExprCall> __mkToArrayMove_rename_at_662_239; memset(&__mkToArrayMove_rename_at_662_239,0,sizeof(__mkToArrayMove_rename_at_662_239));
+    int32_t __stride_rename_at_656_236; memset((void*)&__stride_rename_at_656_236,0,sizeof(__stride_rename_at_656_236));
+    smart_ptr_raw<ExprMakeArray> __mkArr_rename_at_657_237; memset((void*)&__mkArr_rename_at_657_237,0,sizeof(__mkArr_rename_at_657_237));
+    smart_ptr_raw<ExprCall> __mkToArrayMove_rename_at_662_239; memset((void*)&__mkToArrayMove_rename_at_662_239,0,sizeof(__mkToArrayMove_rename_at_662_239));
     int32_t __total_rename_at_654_235 = ((int32_t)any_array_size(das_auto_cast<void * const >::cast(__data_rename_at_653_232)));
     if ( __total_rename_at_654_235 != 0 )
     {
@@ -2215,11 +2215,11 @@ inline smart_ptr_raw<Expression> walk_and_convert_array_ee3d32559a523360 ( Conte
 
 inline smart_ptr_raw<Expression> walk_and_convert_dim_307e83e2e898f055 ( Context * __context__, uint8_t const  * const  __data_rename_at_670_241, smart_ptr_raw<TypeDecl> const  __info_rename_at_670_242, LineInfo const  &  __at_rename_at_670_243 ) { das_stack_prologue __prologue(__context__,208,"walk_and_convert_dim " DAS_FILE_LINE);
 {
-    int32_t __stride_rename_at_671_244; memset(&__stride_rename_at_671_244,0,sizeof(__stride_rename_at_671_244));
-    int32_t __total_rename_at_672_245; memset(&__total_rename_at_672_245,0,sizeof(__total_rename_at_672_245));
-    smart_ptr_raw<TypeDecl> __einfo_rename_at_673_246; memset(&__einfo_rename_at_673_246,0,sizeof(__einfo_rename_at_673_246));
-    smart_ptr_raw<ExprMakeArray> __mkArr_rename_at_675_247; memset(&__mkArr_rename_at_675_247,0,sizeof(__mkArr_rename_at_675_247));
-    smart_ptr_raw<Expression> __elem_rename_at_678_250; memset(&__elem_rename_at_678_250,0,sizeof(__elem_rename_at_678_250));
+    int32_t __stride_rename_at_671_244; memset((void*)&__stride_rename_at_671_244,0,sizeof(__stride_rename_at_671_244));
+    int32_t __total_rename_at_672_245; memset((void*)&__total_rename_at_672_245,0,sizeof(__total_rename_at_672_245));
+    smart_ptr_raw<TypeDecl> __einfo_rename_at_673_246; memset((void*)&__einfo_rename_at_673_246,0,sizeof(__einfo_rename_at_673_246));
+    smart_ptr_raw<ExprMakeArray> __mkArr_rename_at_675_247; memset((void*)&__mkArr_rename_at_675_247,0,sizeof(__mkArr_rename_at_675_247));
+    smart_ptr_raw<Expression> __elem_rename_at_678_250; memset((void*)&__elem_rename_at_678_250,0,sizeof(__elem_rename_at_678_250));
     /* finally */ auto __finally_670= das_finally([&](){
     das_delete_handle<smart_ptr_raw<ExprMakeArray>>::clear(__context__,__mkArr_rename_at_675_247);
     das_delete_handle<smart_ptr_raw<TypeDecl>>::clear(__context__,__einfo_rename_at_673_246);
@@ -2262,9 +2262,9 @@ inline smart_ptr_raw<Expression> walk_and_convert_pointer_99fa96f2fad2fabb ( Con
 
 inline smart_ptr_raw<Expression> walk_and_convert_tuple_d283511dc79b27c5 ( Context * __context__, uint8_t const  * const  __data_rename_at_694_257, smart_ptr_raw<TypeDecl> const  __info_rename_at_694_258, LineInfo const  &  __at_rename_at_694_259 )
 {
-    smart_ptr_raw<ExprMakeTuple> __mkArr_rename_at_695_260; memset(&__mkArr_rename_at_695_260,0,sizeof(__mkArr_rename_at_695_260));
-    int32_t __offset_rename_at_697_262; memset(&__offset_rename_at_697_262,0,sizeof(__offset_rename_at_697_262));
-    smart_ptr_raw<Expression> __elem_rename_at_699_263; memset(&__elem_rename_at_699_263,0,sizeof(__elem_rename_at_699_263));
+    smart_ptr_raw<ExprMakeTuple> __mkArr_rename_at_695_260; memset((void*)&__mkArr_rename_at_695_260,0,sizeof(__mkArr_rename_at_695_260));
+    int32_t __offset_rename_at_697_262; memset((void*)&__offset_rename_at_697_262,0,sizeof(__offset_rename_at_697_262));
+    smart_ptr_raw<Expression> __elem_rename_at_699_263; memset((void*)&__elem_rename_at_699_263,0,sizeof(__elem_rename_at_699_263));
     /* finally */ auto __finally_694= das_finally([&](){
     das_delete_handle<smart_ptr_raw<ExprMakeTuple>>::clear(__context__,__mkArr_rename_at_695_260);
     /* end finally */ });
@@ -2291,12 +2291,12 @@ inline smart_ptr_raw<Expression> walk_and_convert_tuple_d283511dc79b27c5 ( Conte
 
 inline smart_ptr_raw<Expression> walk_and_convert_structure_461cae90387df9d8 ( Context * __context__, uint8_t const  * const  __data_rename_at_706_264, smart_ptr_raw<TypeDecl> const  __info_rename_at_706_265, LineInfo const  &  __at_rename_at_706_266 ) { das_stack_prologue __prologue(__context__,368,"walk_and_convert_structure " DAS_FILE_LINE);
 {
-    smart_ptr_raw<ExprMakeStruct> __mkStruct_rename_at_707_267; memset(&__mkStruct_rename_at_707_267,0,sizeof(__mkStruct_rename_at_707_267));
-    Structure * __stype_rename_at_708_268; memset(&__stype_rename_at_708_268,0,sizeof(__stype_rename_at_708_268));
-    smart_ptr_raw<MakeStruct> __mkS_rename_at_709_269; memset(&__mkS_rename_at_709_269,0,sizeof(__mkS_rename_at_709_269));
-    uint8_t const  * __fdata_rename_at_713_271; memset(&__fdata_rename_at_713_271,0,sizeof(__fdata_rename_at_713_271));
-    smart_ptr_raw<Expression> __elem_rename_at_714_272; memset(&__elem_rename_at_714_272,0,sizeof(__elem_rename_at_714_272));
-    smart_ptr_raw<MakeFieldDecl> __mkF_rename_at_715_273; memset(&__mkF_rename_at_715_273,0,sizeof(__mkF_rename_at_715_273));
+    smart_ptr_raw<ExprMakeStruct> __mkStruct_rename_at_707_267; memset((void*)&__mkStruct_rename_at_707_267,0,sizeof(__mkStruct_rename_at_707_267));
+    Structure * __stype_rename_at_708_268; memset((void*)&__stype_rename_at_708_268,0,sizeof(__stype_rename_at_708_268));
+    smart_ptr_raw<MakeStruct> __mkS_rename_at_709_269; memset((void*)&__mkS_rename_at_709_269,0,sizeof(__mkS_rename_at_709_269));
+    uint8_t const  * __fdata_rename_at_713_271; memset((void*)&__fdata_rename_at_713_271,0,sizeof(__fdata_rename_at_713_271));
+    smart_ptr_raw<Expression> __elem_rename_at_714_272; memset((void*)&__elem_rename_at_714_272,0,sizeof(__elem_rename_at_714_272));
+    smart_ptr_raw<MakeFieldDecl> __mkF_rename_at_715_273; memset((void*)&__mkF_rename_at_715_273,0,sizeof(__mkF_rename_at_715_273));
     /* finally */ auto __finally_706= das_finally([&](){
     das_delete_handle<smart_ptr_raw<MakeStruct>>::clear(__context__,__mkS_rename_at_709_269);
     das_delete_handle<smart_ptr_raw<ExprMakeStruct>>::clear(__context__,__mkStruct_rename_at_707_267);
@@ -2364,11 +2364,11 @@ inline smart_ptr_raw<Expression> walk_and_convert_variant_50ce6cc7d88f2c68 ( Con
 
 inline smart_ptr_raw<Expression> walk_and_convert_table_2f282e6c7908d091 ( Context * __context__, uint8_t const  * const  __data_rename_at_742_284, smart_ptr_raw<TypeDecl> const  __info_rename_at_742_285, LineInfo const  &  __at_rename_at_742_286 ) { das_stack_prologue __prologue(__context__,384,"walk_and_convert_table " DAS_FILE_LINE);
 {
-    smart_ptr_raw<TypeDecl> __tupT_rename_at_745_288; memset(&__tupT_rename_at_745_288,0,sizeof(__tupT_rename_at_745_288));
-    smart_ptr_raw<ExprMakeArray> __mkArr_rename_at_748_289; memset(&__mkArr_rename_at_748_289,0,sizeof(__mkArr_rename_at_748_289));
-    int32_t __key_stride_rename_at_749_290; memset(&__key_stride_rename_at_749_290,0,sizeof(__key_stride_rename_at_749_290));
-    int32_t __value_stride_rename_at_750_291; memset(&__value_stride_rename_at_750_291,0,sizeof(__value_stride_rename_at_750_291));
-    smart_ptr_raw<ExprCall> __mkToTableMove_rename_at_760_297; memset(&__mkToTableMove_rename_at_760_297,0,sizeof(__mkToTableMove_rename_at_760_297));
+    smart_ptr_raw<TypeDecl> __tupT_rename_at_745_288; memset((void*)&__tupT_rename_at_745_288,0,sizeof(__tupT_rename_at_745_288));
+    smart_ptr_raw<ExprMakeArray> __mkArr_rename_at_748_289; memset((void*)&__mkArr_rename_at_748_289,0,sizeof(__mkArr_rename_at_748_289));
+    int32_t __key_stride_rename_at_749_290; memset((void*)&__key_stride_rename_at_749_290,0,sizeof(__key_stride_rename_at_749_290));
+    int32_t __value_stride_rename_at_750_291; memset((void*)&__value_stride_rename_at_750_291,0,sizeof(__value_stride_rename_at_750_291));
+    smart_ptr_raw<ExprCall> __mkToTableMove_rename_at_760_297; memset((void*)&__mkToTableMove_rename_at_760_297,0,sizeof(__mkToTableMove_rename_at_760_297));
     int32_t __total_rename_at_743_287 = ((int32_t)any_table_size(das_auto_cast<void * const >::cast(__data_rename_at_742_284)));
     if ( __total_rename_at_743_287 != 0 )
     {
@@ -2390,9 +2390,9 @@ inline smart_ptr_raw<Expression> walk_and_convert_table_2f282e6c7908d091 ( Conte
         __key_stride_rename_at_749_290 = ((int32_t)((das_deref(__context__,__info_rename_at_742_285->firstType /*firstType*/)).getSizeOf()));
         __value_stride_rename_at_750_291 = ((int32_t)((das_deref(__context__,__info_rename_at_742_285->secondType /*secondType*/)).getSizeOf()));
         any_table_foreach(das_auto_cast<void * const >::cast(__data_rename_at_742_284),__key_stride_rename_at_749_290,__value_stride_rename_at_750_291,das_make_block<void,void *,void *>(__context__,192,0,&__func_info__b50c88059cb1bcc,[&](void * __pkey_rename_at_751_292, void * __pvalue_rename_at_751_293) -> void{
-            smart_ptr_raw<Expression> __key_rename_at_752_294; memset(&__key_rename_at_752_294,0,sizeof(__key_rename_at_752_294));
-            smart_ptr_raw<Expression> __value_rename_at_753_295; memset(&__value_rename_at_753_295,0,sizeof(__value_rename_at_753_295));
-            smart_ptr_raw<ExprMakeTuple> __mkTup_rename_at_754_296; memset(&__mkTup_rename_at_754_296,0,sizeof(__mkTup_rename_at_754_296));
+            smart_ptr_raw<Expression> __key_rename_at_752_294; memset((void*)&__key_rename_at_752_294,0,sizeof(__key_rename_at_752_294));
+            smart_ptr_raw<Expression> __value_rename_at_753_295; memset((void*)&__value_rename_at_753_295,0,sizeof(__value_rename_at_753_295));
+            smart_ptr_raw<ExprMakeTuple> __mkTup_rename_at_754_296; memset((void*)&__mkTup_rename_at_754_296,0,sizeof(__mkTup_rename_at_754_296));
             /* finally */ auto __finally_751= das_finally([&](){
             das_delete_handle<smart_ptr_raw<Expression>>::clear(__context__,__value_rename_at_753_295);
             das_delete_handle<smart_ptr_raw<Expression>>::clear(__context__,__key_rename_at_752_294);
@@ -2619,10 +2619,10 @@ inline Annotation const  * find_annotation_3783ce606e338529 ( Context * __contex
 
 inline smart_ptr_raw<AnnotationDeclaration> append_annotation_b981e8a02afe1ee4 ( Context * __context__, char * const  __mod_name_rename_at_902_317, char * const  __ann_name_rename_at_902_318, TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const  &  __args_rename_at_902_319 )
 {
-    Annotation const  * __ann_rename_at_903_320; memset(&__ann_rename_at_903_320,0,sizeof(__ann_rename_at_903_320));
-    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_905_321; memset(&__decl_rename_at_905_321,0,sizeof(__decl_rename_at_905_321));
-    char * * __argName_rename_at_908_323; memset(&__argName_rename_at_908_323,0,sizeof(__argName_rename_at_908_323));
-    AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f> * __arg_rename_at_909_324; memset(&__arg_rename_at_909_324,0,sizeof(__arg_rename_at_909_324));
+    Annotation const  * __ann_rename_at_903_320; memset((void*)&__ann_rename_at_903_320,0,sizeof(__ann_rename_at_903_320));
+    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_905_321; memset((void*)&__decl_rename_at_905_321,0,sizeof(__decl_rename_at_905_321));
+    char * * __argName_rename_at_908_323; memset((void*)&__argName_rename_at_908_323,0,sizeof(__argName_rename_at_908_323));
+    AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f> * __arg_rename_at_909_324; memset((void*)&__arg_rename_at_909_324,0,sizeof(__arg_rename_at_909_324));
     /* finally */ auto __finally_902= das_finally([&](){
     das_delete_handle<smart_ptr_raw<AnnotationDeclaration>>::clear(__context__,__decl_rename_at_905_321);
     /* end finally */ });
@@ -2663,8 +2663,8 @@ inline smart_ptr_raw<AnnotationDeclaration> append_annotation_b981e8a02afe1ee4 (
 
 inline smart_ptr_raw<AnnotationDeclaration> append_annotation_304ed986ed5830b8 ( Context * __context__, char * const  __mod_name_rename_at_925_325, char * const  __ann_name_rename_at_925_326 )
 {
-    Annotation const  * __ann_rename_at_926_327; memset(&__ann_rename_at_926_327,0,sizeof(__ann_rename_at_926_327));
-    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_928_328; memset(&__decl_rename_at_928_328,0,sizeof(__decl_rename_at_928_328));
+    Annotation const  * __ann_rename_at_926_327; memset((void*)&__ann_rename_at_926_327,0,sizeof(__ann_rename_at_926_327));
+    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_928_328; memset((void*)&__decl_rename_at_928_328,0,sizeof(__decl_rename_at_928_328));
     /* finally */ auto __finally_925= das_finally([&](){
     das_delete_handle<smart_ptr_raw<AnnotationDeclaration>>::clear(__context__,__decl_rename_at_928_328);
     /* end finally */ });
@@ -2677,8 +2677,8 @@ inline smart_ptr_raw<AnnotationDeclaration> append_annotation_304ed986ed5830b8 (
 
 inline void append_annotation_a089579603ac9094 ( Context * __context__, smart_ptr_raw<Function> __func_rename_at_933_329, char * const  __mod_name_rename_at_933_330, char * const  __ann_name_rename_at_933_331 )
 {
-    Annotation const  * __ann_rename_at_934_332; memset(&__ann_rename_at_934_332,0,sizeof(__ann_rename_at_934_332));
-    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_936_333; memset(&__decl_rename_at_936_333,0,sizeof(__decl_rename_at_936_333));
+    Annotation const  * __ann_rename_at_934_332; memset((void*)&__ann_rename_at_934_332,0,sizeof(__ann_rename_at_934_332));
+    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_936_333; memset((void*)&__decl_rename_at_936_333,0,sizeof(__decl_rename_at_936_333));
     /* finally */ auto __finally_933= das_finally([&](){
     das_delete_handle<smart_ptr_raw<AnnotationDeclaration>>::clear(__context__,__decl_rename_at_936_333);
     /* end finally */ });
@@ -2690,8 +2690,8 @@ inline void append_annotation_a089579603ac9094 ( Context * __context__, smart_pt
 
 inline void append_annotation_ad40f3b057e634fd ( Context * __context__, smart_ptr_raw<ExprBlock> __blk_rename_at_940_334, char * const  __mod_name_rename_at_940_335, char * const  __ann_name_rename_at_940_336 )
 {
-    Annotation const  * __ann_rename_at_941_337; memset(&__ann_rename_at_941_337,0,sizeof(__ann_rename_at_941_337));
-    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_943_338; memset(&__decl_rename_at_943_338,0,sizeof(__decl_rename_at_943_338));
+    Annotation const  * __ann_rename_at_941_337; memset((void*)&__ann_rename_at_941_337,0,sizeof(__ann_rename_at_941_337));
+    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_943_338; memset((void*)&__decl_rename_at_943_338,0,sizeof(__decl_rename_at_943_338));
     /* finally */ auto __finally_940= das_finally([&](){
     das_delete_handle<smart_ptr_raw<AnnotationDeclaration>>::clear(__context__,__decl_rename_at_943_338);
     /* end finally */ });
@@ -2703,8 +2703,8 @@ inline void append_annotation_ad40f3b057e634fd ( Context * __context__, smart_pt
 
 inline void append_annotation_33c7fba9141ce1dc ( Context * __context__, smart_ptr_raw<Structure> __st_rename_at_947_339, char * const  __mod_name_rename_at_947_340, char * const  __ann_name_rename_at_947_341 )
 {
-    Annotation const  * __ann_rename_at_948_342; memset(&__ann_rename_at_948_342,0,sizeof(__ann_rename_at_948_342));
-    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_950_343; memset(&__decl_rename_at_950_343,0,sizeof(__decl_rename_at_950_343));
+    Annotation const  * __ann_rename_at_948_342; memset((void*)&__ann_rename_at_948_342,0,sizeof(__ann_rename_at_948_342));
+    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_950_343; memset((void*)&__decl_rename_at_950_343,0,sizeof(__decl_rename_at_950_343));
     /* finally */ auto __finally_947= das_finally([&](){
     das_delete_handle<smart_ptr_raw<AnnotationDeclaration>>::clear(__context__,__decl_rename_at_950_343);
     /* end finally */ });
@@ -2716,8 +2716,8 @@ inline void append_annotation_33c7fba9141ce1dc ( Context * __context__, smart_pt
 
 inline void append_annotation_8d7b2c303573ac ( Context * __context__, smart_ptr_raw<Function> __func_rename_at_954_344, char * const  __mod_name_rename_at_954_345, char * const  __ann_name_rename_at_954_346, TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const  &  __args_rename_at_954_347 )
 {
-    Annotation const  * __ann_rename_at_955_348; memset(&__ann_rename_at_955_348,0,sizeof(__ann_rename_at_955_348));
-    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_957_349; memset(&__decl_rename_at_957_349,0,sizeof(__decl_rename_at_957_349));
+    Annotation const  * __ann_rename_at_955_348; memset((void*)&__ann_rename_at_955_348,0,sizeof(__ann_rename_at_955_348));
+    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_957_349; memset((void*)&__decl_rename_at_957_349,0,sizeof(__decl_rename_at_957_349));
     /* finally */ auto __finally_954= das_finally([&](){
     das_delete_handle<smart_ptr_raw<AnnotationDeclaration>>::clear(__context__,__decl_rename_at_957_349);
     /* end finally */ });
@@ -2729,8 +2729,8 @@ inline void append_annotation_8d7b2c303573ac ( Context * __context__, smart_ptr_
 
 inline void append_annotation_58166e5ad7a07209 ( Context * __context__, smart_ptr_raw<ExprBlock> __blk_rename_at_961_350, char * const  __mod_name_rename_at_961_351, char * const  __ann_name_rename_at_961_352, TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const  &  __args_rename_at_961_353 )
 {
-    Annotation const  * __ann_rename_at_962_354; memset(&__ann_rename_at_962_354,0,sizeof(__ann_rename_at_962_354));
-    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_964_355; memset(&__decl_rename_at_964_355,0,sizeof(__decl_rename_at_964_355));
+    Annotation const  * __ann_rename_at_962_354; memset((void*)&__ann_rename_at_962_354,0,sizeof(__ann_rename_at_962_354));
+    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_964_355; memset((void*)&__decl_rename_at_964_355,0,sizeof(__decl_rename_at_964_355));
     /* finally */ auto __finally_961= das_finally([&](){
     das_delete_handle<smart_ptr_raw<AnnotationDeclaration>>::clear(__context__,__decl_rename_at_964_355);
     /* end finally */ });
@@ -2742,8 +2742,8 @@ inline void append_annotation_58166e5ad7a07209 ( Context * __context__, smart_pt
 
 inline void append_annotation_4557d674e6f0275a ( Context * __context__, smart_ptr_raw<Structure> __st_rename_at_968_356, char * const  __mod_name_rename_at_968_357, char * const  __ann_name_rename_at_968_358, TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const  &  __args_rename_at_968_359 )
 {
-    Annotation const  * __ann_rename_at_969_360; memset(&__ann_rename_at_969_360,0,sizeof(__ann_rename_at_969_360));
-    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_971_361; memset(&__decl_rename_at_971_361,0,sizeof(__decl_rename_at_971_361));
+    Annotation const  * __ann_rename_at_969_360; memset((void*)&__ann_rename_at_969_360,0,sizeof(__ann_rename_at_969_360));
+    smart_ptr_raw<AnnotationDeclaration> __decl_rename_at_971_361; memset((void*)&__decl_rename_at_971_361,0,sizeof(__decl_rename_at_971_361));
     /* finally */ auto __finally_968= das_finally([&](){
     das_delete_handle<smart_ptr_raw<AnnotationDeclaration>>::clear(__context__,__decl_rename_at_971_361);
     /* end finally */ });
@@ -2861,7 +2861,7 @@ inline int32_t get_for_source_index_abd35d71e424e7aa ( Context * __context__, sm
 
 inline smart_ptr_raw<TypeDecl> function_to_type_84839d9adeaf04f3 ( Context * __context__, smart_ptr_raw<Function> const  __fn_rename_at_1077_393 )
 {
-    smart_ptr_raw<TypeDecl> __td_rename_at_1078_394; memset(&__td_rename_at_1078_394,0,sizeof(__td_rename_at_1078_394));
+    smart_ptr_raw<TypeDecl> __td_rename_at_1078_394; memset((void*)&__td_rename_at_1078_394,0,sizeof(__td_rename_at_1078_394));
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_1082_36_80; _temp_make_local_1082_36_80;
     /* finally */ auto __finally_1077= das_finally([&](){
     das_delete_handle<smart_ptr_raw<TypeDecl>>::clear(__context__,__td_rename_at_1078_394);
@@ -3270,11 +3270,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x256eabce845275ea] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_81497c7eb9a77f41>>();
     };
-    aotLib[0x9ffb73e1b24f1623] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_2dbef66663d682d8>>();
+    aotLib[0xb0e62250de77627d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_a81de2bae076fb95>>();
     };
-    aotLib[0xdd917166eecdedc4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_864b36dcb794fd86>>();
+    aotLib[0xc7521532f8873d4e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_fd6ba31be5b05172>>();
     };
     aotLib[0xa9dd19487d9457be] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&clone_a23f2772d6a2dd68>>();
@@ -3282,8 +3282,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xab48dcd96347fd3b] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickclone_to_moveTick2007252383599261567_ddf94d0785b39e5b>>();
     };
-    aotLib[0xab23b6857249dbef] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickfind_moduleTick11101329256228773934_81acafb2bdc0977>>();
+    aotLib[0x3c88b284fd32d90b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickfind_moduleTick11101329256228773934_807358ad759937fa>>();
     };
     aotLib[0x78948a08f0d98f51] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8>>();
@@ -3345,7 +3345,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x6c2d7a1325fbe337] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&clone_9ab0f6a4e0a6006e>>();
     };
-    aotLib[0xc9ad0582c81eb56b] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xab9286b99d5186da] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickfind_compiling_moduleTick4523452840392654583_34f86625d1f8ecb2>>();
     };
     aotLib[0x418aeaaaf2e8ad98] = +[](Context & ctx) -> SimNode* {
@@ -3504,31 +3504,31 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x4a70d8c17df28ad] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&walk_and_convert_52e7fa0c06656c3c>>();
     };
-    aotLib[0x7c0f5000fd448fcf] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x41a70cc0c4e010f9] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&find_annotation_3783ce606e338529>>();
     };
-    aotLib[0x3c1bad92be4bb9c6] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xab1a15b7cf53f0e6] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&append_annotation_b981e8a02afe1ee4>>();
     };
-    aotLib[0x6acdd21393d5ff04] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x36716c1df2d67d9e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&append_annotation_304ed986ed5830b8>>();
     };
-    aotLib[0xe338b7513f02b8ed] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x8e375b27c75e5938] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&append_annotation_a089579603ac9094>>();
     };
-    aotLib[0xc7c2121c7a39611c] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xe1d050a307095f57] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&append_annotation_ad40f3b057e634fd>>();
     };
-    aotLib[0x7584a4cc5e607ca8] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x1e5bc187c7a89526] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&append_annotation_33c7fba9141ce1dc>>();
     };
-    aotLib[0x82ff7a302d1df852] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x47e3ace21e07bac2] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&append_annotation_8d7b2c303573ac>>();
     };
-    aotLib[0x2943da9d5d5dc725] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x864ba230b3d3dbd3] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&append_annotation_58166e5ad7a07209>>();
     };
-    aotLib[0xd9f3641ca9146d96] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xe8d3a704cb612e6e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&append_annotation_4557d674e6f0275a>>();
     };
     aotLib[0xa1068c4707fb2469] = +[](Context & ctx) -> SimNode* {
