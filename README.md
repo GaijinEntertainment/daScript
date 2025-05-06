@@ -11,3 +11,19 @@ Read my [BLOG](https://borisbat.github.io/dascf-blog)
 Serialization, JIT (via LLVM), and many more good language features are in.
 We are putting in last finishing touches, documentation, and all that jazz.
 See you soon...
+
+## Installation
+
+```sh
+git clone https://github.com/GaijinEntertainment/daScript.git daScript
+cd daScript
+git submodule update --init --recursive
+```
+
+## Building
+
+```sh
+mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build . --target daslang --config RelWithDebInfo
+```

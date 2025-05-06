@@ -50,6 +50,8 @@
         TypeDecl * firstType;
         TypeDecl * secondType;
     };
+
+    static bool need_wrap_current_expr = false;
 }
 
 %{
@@ -449,7 +451,7 @@
 %type <pEnum>           enum_list
 
 %type <pExpression>     expr
-%type <pExpression>     expr_not_wrapped
+%type <pExpression>     expr_not_wrapped expr2 expr_wrapped
 %type <pExpression>     expr_mtag
 %type <pExpression>     expr_field
 %type <pExpression>     expr_assign
@@ -1409,6 +1411,7 @@ expressions
 
 expr_keyword
     :   KEYWORD[kwd] expr[subexpr] expression_block[block] {
+        format::wrap_par_expr(tokAt(scanner,@subexpr), $subexpr->at); // wrap match (expr)
         auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),*$kwd);
         pCall->arguments.push_back($subexpr);
         auto resT = new TypeDecl(Type::autoinfer);
@@ -1850,10 +1853,10 @@ expr_type_info
     ;
 
 expr_list
-    :   expr[subexpr] {
+    :   expr2[subexpr] {
         $$ = $subexpr;
     }
-    |   expr_list[left] ',' expr[right]     {
+    |   expr_list[left] ',' expr2[right]     {
             $$ = new ExprSequence(tokAt(scanner,@left),$left,$right);
     }
     ;
@@ -1908,9 +1911,12 @@ optional_capture_list
     :   { $$ = nullptr; }
     |   BRABRAB[open] capture_list[cl] ']'[sq_end] ']'[close] {
         if (format::prepare_rule(format::Pos::from(tokAt(scanner, @open)))) {
-            format::get_writer() << format::substring_between(tokAt(scanner, @open), tokAt(scanner, @cl))
-                      << "capture(" << format::get_substring(tokAt(scanner, @cl)) << ")"
-                      << format::substring_between(tokAt(scanner, @cl), tokAt(scanner, @sq_end));
+            format::get_writer()
+                      << "capture("
+                      << format::substring_between(tokAt(scanner, @open), tokAt(scanner, @cl))
+                      << format::get_substring(tokAt(scanner, @cl))
+                      << format::substring_between(tokAt(scanner, @cl), tokAt(scanner, @sq_end))
+                      << ")";
             format::finish_rule(format::Pos::from_last(tokAt(scanner, @close)));
         }
 
@@ -2077,7 +2083,7 @@ func_addr_name
         $$ = new ExprAddr(tokAt(scanner,@name),*$name);
         delete $name;
     }
-    |   MTAG_I[loc] '(' expr[subexpr] ')' {
+    |   MTAG_I[loc] '(' expr2[subexpr] ')' {
         auto expr = new ExprAddr(tokAt(scanner,@loc),"``MACRO``TAG``ADDR``");
         $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr, expr, "i");
     }
@@ -2201,63 +2207,55 @@ expr_not_wrapped
     :   name_in_namespace[name]               { $$ = new ExprVar(tokAt(scanner,@name),*$name); delete $name; }
     |   expr_field[subexpr]                   { $subexpr->at = tokAt(scanner,@subexpr); $$ = $subexpr; }
     |   expr_mtag[subexpr]                    { $subexpr->at = tokAt(scanner,@subexpr); $$ = $subexpr; }
-    |   '!'[loc] expr[subexpr]                { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"!",$subexpr); }
-    |   '~'[loc] expr[subexpr]                { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"~",$subexpr); }
-    |   '+'[loc] expr[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"+",$subexpr); }
-    |   '-'[loc] expr[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"-",$subexpr); }
-    |   expr[left] SHL[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"<<", $left, $right); }
-    |   expr[left] SHR[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),">>", $left, $right); }
-    |   expr[left] ROTL[loc]    expr[right]  { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"<<<", $left, $right); }
-    |   expr[left] ROTR[loc]    expr[right]  { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),">>>", $left, $right); }
-    |   expr[left] '+'[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"+", $left, $right); }
-    |   expr[left] '-'[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"-", $left, $right); }
-    |   expr[left] '*'[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"*", $left, $right); }
-    |   expr[left] '/'[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"/", $left, $right); }
-    |   expr[left] '%'[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"%", $left, $right); }
-    |   expr[left] '<'[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"<", $left, $right); }
-    |   expr[left] '>'[loc]    expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),">", $left, $right); }
-    |   expr[left] EQUEQU[loc] expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"==", $left, $right); }
-    |   expr[left] NOTEQU[loc] expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"!=", $left, $right); }
-    |   expr[left] LEEQU[loc]  expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"<=", $left, $right); }
-    |   expr[left] GREQU[loc]  expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),">=", $left, $right); }
-    |   expr[left] '&'[loc] expr[right]      { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"&", $left, $right); }
-    |   expr[left] '|'[loc] expr[right]      { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"|", $left, $right); }
-    |   expr[left] '^'[loc] expr[right]      { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"^", $left, $right); }
-    |   expr[left] ANDAND[loc] expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"&&", $left, $right); }
-    |   expr[left] OROR[loc] expr[right]     { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"||", $left, $right); }
-    |   expr[left] XORXOR[loc] expr[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"^^", $left, $right); }
-    |   expr[left] DOTDOT[loc] expr[right]   {
+    |   '!'[loc] expr2[subexpr]                { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"!",$subexpr); }
+    |   '~'[loc] expr2[subexpr]                { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"~",$subexpr); }
+    |   '+'[loc] expr2[subexpr] %prec  UNARY_PLUS  { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"+",$subexpr); }
+    |   '-'[loc] expr2[subexpr] %prec  UNARY_MINUS { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"-",$subexpr); }
+    |   expr2[left] SHL[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"<<", $left, $right); }
+    |   expr2[left] SHR[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),">>", $left, $right); }
+    |   expr2[left] ROTL[loc]    expr2[right]  { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"<<<", $left, $right); }
+    |   expr2[left] ROTR[loc]    expr2[right]  { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),">>>", $left, $right); }
+    |   expr2[left] '+'[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"+", $left, $right); }
+    |   expr2[left] '-'[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"-", $left, $right); }
+    |   expr2[left] '*'[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"*", $left, $right); }
+    |   expr2[left] '/'[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"/", $left, $right); }
+    |   expr2[left] '%'[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"%", $left, $right); }
+    |   expr2[left] '<'[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"<", $left, $right); }
+    |   expr2[left] '>'[loc]    expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),">", $left, $right); }
+    |   expr2[left] EQUEQU[loc] expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"==", $left, $right); }
+    |   expr2[left] NOTEQU[loc] expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"!=", $left, $right); }
+    |   expr2[left] LEEQU[loc]  expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"<=", $left, $right); }
+    |   expr2[left] GREQU[loc]  expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),">=", $left, $right); }
+    |   expr2[left] '&'[loc] expr2[right]      { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"&", $left, $right); }
+    |   expr2[left] '|'[loc] expr2[right]      { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"|", $left, $right); }
+    |   expr2[left] '^'[loc] expr2[right]      { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"^", $left, $right); }
+    |   expr2[left] ANDAND[loc] expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"&&", $left, $right); }
+    |   expr2[left] OROR[loc] expr2[right]     { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"||", $left, $right); }
+    |   expr2[left] XORXOR[loc] expr2[right]   { $$ = new ExprOp2(tokRangeAt(scanner,@left, @right),"^^", $left, $right); }
+    |   expr2[left] DOTDOT[loc] expr2[right]   {
         auto itv = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"interval");
         itv->arguments.push_back($left);
         itv->arguments.push_back($right);
         $$ = itv;
     }
-    |   ADDADD[loc] expr[subexpr] %prec PRE_INC  { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"++", $subexpr); }
-    |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"--", $subexpr); }
-    |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokRangeAt(scanner,@subexpr, @loc),"+++", $subexpr); }
-    |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokRangeAt(scanner,@subexpr, @loc),"---", $subexpr); }
-    |   expr[subexpr] '['[loc] expr[index] ']'[end]   { $$ = new ExprAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index); }
-    |   expr[subexpr] '.' '['[loc] expr[index] ']'[end]   { $$ = new ExprAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index, true); }
-    |   expr[subexpr] QBRA[loc] expr[index] ']'[end]  { $$ = new ExprSafeAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index); }
-    |   expr[subexpr] '.' QBRA[loc] expr[index] ']'[end]  { $$ = new ExprSafeAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index, true); }
-    |   expr[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokRangeAt(scanner,@subexpr,@name), tokAt(scanner,@name), $subexpr, *$name); delete $name; }
-    |   expr[subexpr] '.' QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokRangeAt(scanner,@subexpr,@name), tokAt(scanner,@name), $subexpr, *$name, true); delete $name; }
-    |   '*'[loc] expr[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
-    |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
+    |   ADDADD[loc] expr2[subexpr] %prec PRE_INC  { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"++", $subexpr); }
+    |   SUBSUB[loc] expr2[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokRangeAt(scanner,@loc, @subexpr),"--", $subexpr); }
+    |   expr2[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokRangeAt(scanner,@subexpr, @loc),"+++", $subexpr); }
+    |   expr2[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokRangeAt(scanner,@subexpr, @loc),"---", $subexpr); }
+    |   expr2[subexpr] '['[loc] expr2[index] ']'[end]   { $$ = new ExprAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index); }
+    |   expr2[subexpr] '.' '['[loc] expr2[index] ']'[end]   { $$ = new ExprAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index, true); }
+    |   expr2[subexpr] QBRA[loc] expr2[index] ']'[end]  { $$ = new ExprSafeAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index); }
+    |   expr2[subexpr] '.' QBRA[loc] expr2[index] ']'[end]  { $$ = new ExprSafeAt(tokRangeAt(scanner,@subexpr, @end), $subexpr, $index, true); }
+    |   expr2[subexpr] QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokRangeAt(scanner,@subexpr,@name), tokAt(scanner,@name), $subexpr, *$name); delete $name; }
+    |   expr2[subexpr] '.' QDOT[loc] NAME[name]       { $$ = new ExprSafeField(tokRangeAt(scanner,@subexpr,@name), tokAt(scanner,@name), $subexpr, *$name, true); delete $name; }
+    |   '*'[loc] expr2[subexpr] %prec DEREF         { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
+    |   expr2[subexpr] '?'[loc] expr2[left] ':' expr2[right] {
             $$ = new ExprOp3(tokRangeAt(scanner,@subexpr, @right),"?",$subexpr,$left,$right);
         }
 
 
-expr
+expr_wrapped
     :   DAS_NULL[loc]                         { $$ = new ExprConstPtr(tokAt(scanner,@loc),nullptr); }
-    | expr_not_wrapped[subexpr] {
-        // Сheck next token.
-        // If it's not ')', then we should try wrap it as multiple line expression.
-        if (yychar != ')') {
-            format::wrap_par_expr_newline(tokAt(scanner,@subexpr), $subexpr->at);
-        }
-        $$ = $subexpr;
-    }
     |   expr_numeric_const[nc]                { $$ = $nc; }
     |   expr_reader[rdr]                      { $$ = $rdr; }
     |   string_builder[sb]                    { $$ = $sb; }
@@ -2280,49 +2278,49 @@ expr
         }
     |   func_addr_expr[subexpr]                  { $$ = $subexpr; }
     |   expr_call[call] { $$ = $call; }
-    |   DAS_DEREF[loc] '(' expr[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
-    |   DAS_ADDR[loc] '(' expr[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(scanner,@loc),$subexpr); }
+    |   DAS_DEREF[loc] '(' expr2[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
+    |   DAS_ADDR[loc] '(' expr2[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(scanner,@loc),$subexpr); }
     |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' ')' {
         $$ = ast_makeGenerator(scanner,$typeDecl,$clist,nullptr,tokAt(scanner,@loc));
     }
-    |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' expr[subexpr] ')' {
+    |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' expr2[subexpr] ')' {
         $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc));
     }
-    |   expr[subexpr] QQ[loc] expr[dval]           { $$ = new ExprNullCoalescing(tokRangeAt(scanner,@subexpr, @dval),$subexpr,$dval); }
-    |   expr[subexpr] DAS_IS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>'[end] { yyextra->das_arrow_depth --; } {
+    |   expr2[subexpr] QQ[loc] expr2[dval]           { $$ = new ExprNullCoalescing(tokRangeAt(scanner,@subexpr, @dval),$subexpr,$dval); }
+    |   expr2[subexpr] DAS_IS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>'[end] { yyextra->das_arrow_depth --; } {
         $$ = new ExprIs(tokRangeAt(scanner,@subexpr, @end),$subexpr,$decl);
     }
-    |   expr[subexpr] DAS_IS[loc] basic_type_declaration[decl] {
+    |   expr2[subexpr] DAS_IS[loc] basic_type_declaration[decl] {
         auto vdecl = new TypeDecl($decl);
         vdecl->at = tokAt(scanner,@decl);
         $$ = new ExprIs(tokRangeAt(scanner,@subexpr,@decl),$subexpr,vdecl);
     }
-    |   expr[subexpr] DAS_IS[loc] NAME[vname] {
+    |   expr2[subexpr] DAS_IS[loc] NAME[vname] {
         $$ = new ExprIsVariant(tokRangeAt(scanner,@subexpr, @vname),$subexpr,*$vname);
         delete $vname;
     }
-    |   expr[subexpr] DAS_AS[loc] NAME[vname] {
+    |   expr2[subexpr] DAS_AS[loc] NAME[vname] {
         $$ = new ExprAsVariant(tokRangeAt(scanner,@subexpr, @vname),$subexpr,*$vname);
         delete $vname;
     }
-    |   expr[subexpr] DAS_AS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>'[end] { yyextra->das_arrow_depth --; } {
+    |   expr2[subexpr] DAS_AS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>'[end] { yyextra->das_arrow_depth --; } {
         auto vname = $decl->describe();
         $$ = new ExprAsVariant(tokRangeAt(scanner,@subexpr, @end),$subexpr,vname);
         delete $decl;
     }
-    |   expr[subexpr] DAS_AS[loc] basic_type_declaration[decl] {
+    |   expr2[subexpr] DAS_AS[loc] basic_type_declaration[decl] {
         $$ = new ExprAsVariant(tokRangeAt(scanner,@subexpr, @decl),$subexpr,das_to_string($decl));
     }
-    |   expr[subexpr] '?' DAS_AS[loc] NAME[vname] {
+    |   expr2[subexpr] '?' DAS_AS[loc] NAME[vname] {
         $$ = new ExprSafeAsVariant(tokRangeAt(scanner,@subexpr, @vname),$subexpr,*$vname);
         delete $vname;
     }
-    |   expr[subexpr] '?' DAS_AS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>'[end] { yyextra->das_arrow_depth --; } {
+    |   expr2[subexpr] '?' DAS_AS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>'[end] { yyextra->das_arrow_depth --; } {
         auto vname = $decl->describe();
         $$ = new ExprSafeAsVariant(tokRangeAt(scanner,@subexpr, @end),$subexpr,vname);
         delete $decl;
     }
-    |   expr[subexpr] '?' DAS_AS[loc] basic_type_declaration[decl] {
+    |   expr2[subexpr] '?' DAS_AS[loc] basic_type_declaration[decl] {
         $$ = new ExprSafeAsVariant(tokRangeAt(scanner,@subexpr, @decl),$subexpr,das_to_string($decl));
     }
     |   expr_type_info[subexpr]                 { $$ = $subexpr; }
@@ -2332,10 +2330,10 @@ expr
     |   expr_method_call[subexpr]               { $$ = $subexpr; $$->at = tokAt(scanner, @subexpr); }
     |   expr_named_call[subexpr]                { $$ = $subexpr; }
     |   expr_full_block[subexpr]                { $$ = $subexpr; }
-    |   expr[fncall] LPIPE[loc] expr[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokRangeAt(scanner,@fncall,@arg)); }
-    |   expr[arg] RPIPE[loc] expr[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokRangeAt(scanner,@arg, @fncall)); $$->at = tokRangeAt(scanner,@arg, @fncall); }
+    |   expr2[fncall] LPIPE[loc] expr2[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokRangeAt(scanner,@fncall,@arg)); }
+    |   expr2[arg] RPIPE[loc] expr2[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokRangeAt(scanner,@arg, @fncall)); $$->at = tokRangeAt(scanner,@arg, @fncall); }
 
-    |   expr[arg] RPIPE[loc] basic_type_declaration[type] {
+    |   expr2[arg] RPIPE[loc] basic_type_declaration[type] {
         auto fncall = yyextra->g_Program->makeCall(tokAt(scanner,@type),tokAt(scanner,@type),das_to_string($type));
         $$ = ast_rpipe(scanner,$arg,fncall,tokRangeAt(scanner,@arg, @type));
     }
@@ -2347,7 +2345,7 @@ expr
 
         $$ = ast_NameName(scanner,$ena,$eni,tokRangeAt(scanner,@ena,@eni),tokAt(scanner,@eni));
     }
-    |   DAS_UNSAFE '(' expr[subexpr] ')' {
+    |   DAS_UNSAFE '(' expr2[subexpr] ')' {
         $subexpr->alwaysSafe = true;
         $subexpr->userSaidItsSafe = true;
         $$ = $subexpr;
@@ -2355,50 +2353,70 @@ expr
     |   expression_keyword[kwd] { $$ = $kwd; }
     ;
 
+expr2
+    : expr_wrapped[ex] {
+        // Bison is bottom up grammar. Top expression will be parsed latest.
+        need_wrap_current_expr = false;
+        $$ = $ex;
+    }
+    | expr_not_wrapped[ex] {
+        need_wrap_current_expr = true;
+        $$ = $ex;
+    }
+
+expr
+    : expr2[subexpr] {
+        if (need_wrap_current_expr) {
+            format::wrap_par_expr_newline(tokAt(scanner,@subexpr), $subexpr->at);
+            need_wrap_current_expr = false;
+        }
+        $$ = $subexpr;
+    }
+
 expr_mtag
-    :   MTAG_E '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"e"); }
-    |   MTAG_I '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"i"); }
-    |   MTAG_V '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"v"); }
-    |   MTAG_B '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"b"); }
-    |   MTAG_A '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"a"); }
+    :   MTAG_E '(' expr2[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"e"); }
+    |   MTAG_I '(' expr2[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"i"); }
+    |   MTAG_V '(' expr2[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"v"); }
+    |   MTAG_B '(' expr2[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"b"); }
+    |   MTAG_A '(' expr2[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"a"); }
     |   MTAG_DOTDOTDOT[subexpr]                      { $$ = new ExprTag(tokAt(scanner,@subexpr),nullptr,"..."); }
-    |   MTAG_C[cname] '(' expr[subexpr] ')' '(' ')' [atend] {
+    |   MTAG_C[cname] '(' expr2[subexpr] ')' '(' ')' [atend] {
             auto ccall = yyextra->g_Program->makeCall(tokAt(scanner,@cname),tokAt(scanner,@atend),"``MACRO``TAG``CALL``");
             $$ = new ExprTag(tokAt(scanner,@cname),$subexpr,ccall,"c");
         }
-    |   MTAG_C[cname] '(' expr[subexpr] ')' '(' expr_list[arguments] ')'[atend] {
+    |   MTAG_C[cname] '(' expr2[subexpr] ')' '(' expr_list[arguments] ')'[atend] {
             auto ccall = parseFunctionArguments(yyextra->g_Program->makeCall(tokAt(scanner,@cname),tokAt(scanner,@atend),"``MACRO``TAG``CALL``"),$arguments);
             $$ = new ExprTag(tokAt(scanner,@cname),$subexpr,ccall,"c");
         }
-    |   expr[subexpr] '.'[loc] MTAG_F[cname] '(' expr[name] ')' {
+    |   expr2[subexpr] '.'[loc] MTAG_F[cname] '(' expr2[name] ')' {
         auto cfield = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, "``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
-    |   expr[subexpr] QDOT[loc] MTAG_F[cname] '(' expr[name] ')' {
+    |   expr2[subexpr] QDOT[loc] MTAG_F[cname] '(' expr2[name] ')' {
         auto cfield = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, "``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
-    |   expr[subexpr] '.' '.'[loc] MTAG_F[cname] '(' expr[name] ')' {
+    |   expr2[subexpr] '.' '.'[loc] MTAG_F[cname] '(' expr2[name] ')' {
         auto cfield = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, "``MACRO``TAG``FIELD``", true);
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
-    |   expr[subexpr] '.' QDOT[loc] MTAG_F[cname] '(' expr[name] ')' {
+    |   expr2[subexpr] '.' QDOT[loc] MTAG_F[cname] '(' expr2[name] ')' {
         auto cfield = new ExprSafeField(tokAt(scanner,@loc), tokAt(scanner,@name), $subexpr, "``MACRO``TAG``FIELD``", true);
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
-    |   expr[subexpr] DAS_AS[loc] MTAG_F[cname] '(' expr[name] ')' {
+    |   expr2[subexpr] DAS_AS[loc] MTAG_F[cname] '(' expr2[name] ')' {
         auto cfield = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
-    |   expr[subexpr] '?' DAS_AS[loc] MTAG_F[cname] '(' expr[name] ')' {
+    |   expr2[subexpr] '?' DAS_AS[loc] MTAG_F[cname] '(' expr2[name] ')' {
         auto cfield = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
-    |   expr[subexpr] DAS_IS[loc] MTAG_F[cname] '(' expr[name] ')' {
+    |   expr2[subexpr] DAS_IS[loc] MTAG_F[cname] '(' expr2[name] ')' {
         auto cfield = new ExprIsVariant(tokAt(scanner,@loc),$subexpr,"``MACRO``TAG``FIELD``");
         $$ = new ExprTag(tokAt(scanner,@name),$name,cfield,"f");
     }
-    |   '@' '@'[loc] MTAG_C[cname] '(' expr[subexpr] ')' {
+    |   '@' '@'[loc] MTAG_C[cname] '(' expr2[subexpr] ')' {
         auto ccall = new ExprAddr(tokAt(scanner,@loc),"``MACRO``TAG``ADDR``");
         $$ = new ExprTag(tokAt(scanner,@cname),$subexpr,ccall,"c");
     }
@@ -2540,7 +2558,7 @@ function_argument_declaration_type
             }
             $decl->annotation = $ann;
         }
-    |   MTAG_A '(' expr[subexpr] ')' {
+    |   MTAG_A '(' expr2[subexpr] ')' {
             auto na = new vector<VariableNameAndPosition>();
             na->push_back(VariableNameAndPosition("``MACRO``TAG``","",tokAt(scanner,@subexpr)));
             auto decl = new VariableDeclaration(na, new TypeDecl(Type::none), $subexpr);
@@ -2694,7 +2712,7 @@ let_variable_name_with_pos_list
         $$ = pSL;
         delete $name;
     }
-    |   MTAG_I '(' expr[subexpr] ')' {
+    |   MTAG_I '(' expr2[subexpr] ')' {
         auto pSL = new vector<VariableNameAndPosition>();
         pSL->push_back(VariableNameAndPosition("``MACRO``TAG``","",tokAt(scanner,@subexpr),$subexpr));
         $$ = pSL;
@@ -2820,7 +2838,8 @@ enum_list
     :   {
         $$ = new Enumeration();
     }
-    |   enum_list[pE] NAME[name] opt_sem {
+    |   enum_list[pE] NAME[name] opt_sem[sem] {
+        format::skip_token(true, tokAt(scanner,@sem));
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration already declared " + *$name, tokAt(scanner,@name),
@@ -2835,7 +2854,8 @@ enum_list
         delete $name;
         $$ = $pE;
     }
-    |   enum_list[pE] NAME[name] '=' expr[value] opt_sem {
+    |   enum_list[pE] NAME[name] '=' expr[value] opt_sem[sem] {
+        format::skip_token(true, tokAt(scanner,@sem));
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,$value,tokAt(scanner,@name)) ) {
             das_yyerror(scanner,"enumeration value already declared " + *$name, tokAt(scanner,@name),
@@ -3049,7 +3069,7 @@ variable_name_with_pos_list
         $$ = pSL;
         delete $name;
     }
-    |   MTAG_I '(' expr[subexpr] ')' {
+    |   MTAG_I '(' expr2[subexpr] ')' {
         auto pSL = new vector<VariableNameAndPosition>();
         pSL->push_back(VariableNameAndPosition("``MACRO``TAG``","",tokAt(scanner,@subexpr),$subexpr));
         $$ = pSL;
@@ -3143,7 +3163,7 @@ auto_type_declaration
         $$->alias = *$alias;
         delete $alias;
     }
-    |   MTAG_T[loc] '(' expr[subexpr] ')' {
+    |   MTAG_T[loc] '(' expr2[subexpr] ')' {
         $$ = new TypeDecl(Type::alias);
         $$->at = tokAt(scanner,@loc);
         $$->alias = "``MACRO``TAG``";
@@ -3243,11 +3263,11 @@ table_type_pair
     ;
 
 dim_list
-    :  '[' expr[dimExpr] ']' {
+    :  '[' expr2[dimExpr] ']' {
         $$ = new TypeDecl(Type::autoinfer);
         appendDimExpr($$, $dimExpr);
     }
-    |  dim_list[list] '[' expr[dimExpr] ']' {
+    |  dim_list[list] '[' expr2[dimExpr] ']' {
         $$ = $list;
         appendDimExpr($$, $dimExpr);
     }
@@ -3283,7 +3303,7 @@ type_declaration_no_options
         $typeDecl->autoToAlias = true;
         $$ = $typeDecl;
     }
-    |   DAS_TYPEDECL[td] '(' expr[subexpr] ')' {
+    |   DAS_TYPEDECL[td] '(' expr2[subexpr] ')' {
         $$ = new TypeDecl(Type::typeDecl);
         $$->at = tokRangeAt(scanner,@td,@subexpr);
         $$->dimExpr.push_back($subexpr);
@@ -3648,27 +3668,27 @@ make_struct_fields
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
     }
-    |   MTAG_F [begin] '(' expr[subexpr] ')' copy_or_move[com] expr[value] {
+    |   MTAG_F [begin] '(' expr2[subexpr] ')' copy_or_move[com] expr[value] {
         auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@begin, @value),"``MACRO``TAG``FIELD``",$value,$com,false);
         mfd->tag = $subexpr;
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
-    |   MTAG_F [begin] '(' expr[subexpr] ')' CLONEEQU expr[value] {
+    |   MTAG_F [begin] '(' expr2[subexpr] ')' CLONEEQU expr[value] {
         auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner, @begin, @value),"``MACRO``TAG``FIELD``",$value,false,true);
         mfd->tag = $subexpr;
         auto msd = new MakeStruct();
         msd->push_back(mfd);
         $$ = msd;
     }
-    |   make_struct_fields[msd] ',' MTAG_F [begin] '(' expr[subexpr] ')' copy_or_move[com] expr[value] {
+    |   make_struct_fields[msd] ',' MTAG_F [begin] '(' expr2[subexpr] ')' copy_or_move[com] expr[value] {
         auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@begin,@value),"``MACRO``TAG``FIELD``",$value,$com,false);
         mfd->tag = $subexpr;
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
     }
-    |   make_struct_fields[msd] ',' MTAG_F [begin] '(' expr[subexpr] ')' CLONEEQU expr[value] {
+    |   make_struct_fields[msd] ',' MTAG_F [begin] '(' expr2[subexpr] ')' CLONEEQU expr[value] {
         auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,@begin, @value),"``MACRO``TAG``FIELD``",$value,false,true);
         mfd->tag = $subexpr;
         ((MakeStruct *)$msd)->push_back(mfd);
@@ -3785,7 +3805,7 @@ make_struct_decl
             if (static_cast<ExprMakeStruct*>($msd)->structs.size() == 1) {
                 // single struct
                 if (type.find('[') != size_t(-1)) {
-                    format::get_writer() << before << "fixed_array(" << internal << ")";
+                    format::get_writer() << "fixed_array(" << before << internal << ")";
                 } else {
                     format::get_writer() << before << internal;
                 }
@@ -3824,7 +3844,6 @@ make_struct_decl
                                                       format::Pos::from(tokAt(scanner, @mkt)));
             const auto after = format::get_substring(format::Pos::from_last(tokAt(scanner,@mkt)),
                                                       format::Pos::from(tokAt(scanner, @end)));
-            format::get_writer() << before;
             string suffix = ")";
             if ($mkt->isPointer()) {
                 format::get_writer() << "default<" << type.value() << ">";
@@ -3835,7 +3854,7 @@ make_struct_decl
             } else {
                 format::get_writer() << type.value_or("") << "("; // Possible uninitialized
             }
-            format::get_writer() << after << suffix;
+            format::get_writer() << before << after << suffix;
             format::finish_rule(format::Pos::from_last(tokAt(scanner,@end)));
         }
 
@@ -3850,11 +3869,11 @@ make_struct_decl
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             const auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt));
             auto maybe_init = (format::can_default_init(type_name.value_or(""))) ? "" : ""; // Possible uninitialized
-            format::get_writer() << format::substring_between(tokAt(scanner,@loc), tokAt(scanner, @mkt))
-                                 << type_name.value_or("") << "("
+            format::get_writer() << type_name.value_or("") << "("
+                                 << format::substring_between(tokAt(scanner,@loc), tokAt(scanner, @mkt))
                                  << format::substring_between(tokAt(scanner,@l_par), tokAt(scanner, @r_par))
-                                 << maybe_init << ")"
-                                 << format::substring_between(tokAt(scanner,@r_par), tokAt(scanner, @end_loc));
+                                 << format::substring_between(tokAt(scanner,@r_par), tokAt(scanner, @end_loc))
+                                 << maybe_init << ")";
             format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_loc)));
         }
         auto msd = new ExprMakeStruct();
@@ -3888,7 +3907,7 @@ make_struct_decl
         // std::cout << "case6" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
-            format::get_writer() << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt)) << "["
+            format::get_writer() << "[" << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt))
                                      << format::handle_msd(tokAt(scanner, @mkt),
                                                               static_cast<ExprMakeStruct*>($msd),
                                                               tokAt(scanner, @end_loc),
@@ -3908,7 +3927,7 @@ make_struct_decl
         // std::cout << "case7" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc)))) {
             auto type_name = format::type_to_string($mkt, tokAt(scanner,@mkt)).value_or("");
-            format::get_writer() << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt)) << "["
+            format::get_writer() << "[" << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt))
                                    << format::handle_msd(tokAt(scanner, @st_msd),
                                                          static_cast<ExprMakeStruct*>($msd),
                                                          tokAt(scanner, @end_loc),
@@ -4059,20 +4078,20 @@ make_dim_decl
             auto internal = format::handle_mka(tokAt(scanner, @mkt),
                                                static_cast<ExprMakeArray*>($mka),
                                                tokAt(scanner, @end_loc));
-            format::get_writer() << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt));
+            const auto before = format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt));
             if (static_cast<ExprMakeArray*>($mka)->values.size() == 1) {
                 // single element
                 if (type_name.value_or("").find('[') != size_t(-1)) {
-                    format::get_writer() << "fixed_array(" << internal << ")";
+                    format::get_writer() << "fixed_array(" << before << internal << ")";
                 } else {
-                    format::get_writer() << internal;
+                    format::get_writer() << before << internal;
                 }
             } else {
                 format::get_writer() << "fixed_array";
                 if (!$mkt->isAuto()) {
                     format::get_writer() << "<" << type_name.value().substr(0, type_name.value().find('[')) << ">";
                 }
-                format::get_writer() << "(" << internal << ")";
+                format::get_writer() << "(" << before << internal << ")";
             }
             format::finish_rule(format::Pos::from_last(tokAt(scanner,@end_loc)));
         }
@@ -4089,8 +4108,8 @@ make_dim_decl
                 prefix = "array<" + format::get_substring(tokAt(scanner,@mkt)) + ">(";
                 suffix = ")";
             }
-            format::get_writer() << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt))
-                                 << prefix
+            format::get_writer() << prefix
+                                 << format::substring_between(tokAt(scanner, @loc), tokAt(scanner, @mkt))
                                  << format::handle_mka(tokAt(scanner, @mkt),
                                                                  static_cast<ExprMakeArray*>($mka),
                                                                  tokAt(scanner, @end_loc))
@@ -4312,7 +4331,7 @@ optional_comma
 
 
 array_comprehension
-    :   '[' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+    :   '[' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr2[subexpr] array_comprehension_where[where] ']' [forend] {
         if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner,@iters)))) {
             format::get_writer() << "(" << format::get_substring(format::Pos::from(tokAt(scanner,@iters)),
                                                                  format::Pos::from_last(tokAt(scanner,@srcs))) << ")";
@@ -4322,16 +4341,16 @@ array_comprehension
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
     // we have to add v2 syntax
-    |   '[' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+    |   '[' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr2[subexpr] array_comprehension_where[where] ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
     }
-    |   '[' DAS_ITERATOR DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+    |   '[' DAS_ITERATOR DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr2[subexpr] array_comprehension_where[where] ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
     |   '{' DAS_FOR[loc] '(' variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
     }
-    |   '[' DAS_ITERATOR DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+    |   '[' DAS_ITERATOR DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr2[subexpr] array_comprehension_where[where] ']' [forend] {
         if (format::is_replace_braces() && format::prepare_rule(format::Pos::from(tokAt(scanner,@iters)))) {
             format::get_writer() << "(" << format::get_substring(format::Pos::from(tokAt(scanner,@iters)),
                                                                  format::Pos::from_last(tokAt(scanner,@srcs))) << ")";
@@ -4339,7 +4358,7 @@ array_comprehension
         }
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
-    |   BRABRAB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
+    |   BRABRAB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr2[subexpr] array_comprehension_where[where] ']' ']' [forend] {
         // std::cout << "case5" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
             auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));
@@ -4348,7 +4367,7 @@ array_comprehension
         }
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
-    |   BRACBRB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}'[sq_end] ']' [forend] {
+    |   BRACBRB [loc_start] DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr2[subexpr] array_comprehension_where[where] '}'[sq_end] ']' [forend] {
         // std::cout << "case9" << std::endl;
         if (format::prepare_rule(format::Pos::from(tokAt(scanner,@loc_start)))) {
             auto internal = format::get_substring(format::Pos::from(tokAt(scanner,@loc)), format::Pos::from_last(tokAt(scanner,@where)));

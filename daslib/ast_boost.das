@@ -579,6 +579,77 @@ class BetterRttiVisitor : AstVariantMacro {
     }
 }
 
+def operator is BuiltInFunction(anything) {
+    return false
+}
+
+def operator is BuiltInFunction(foo : Function?) {
+    return foo.flags.builtIn
+}
+
+def operator as BuiltInFunction(foo : Function?) {
+    verify(foo is BuiltInFunction)
+    return unsafe(reinterpret<BuiltInFunction?>(foo));
+}
+
+def operator is ExternalFnBase(anything) {
+    return false
+}
+
+def operator is ExternalFnBase(foo : Function?) {
+    return foo.moreFlags.propertyFunction && foo.flags.builtIn
+}
+
+def operator as ExternalFnBase(foo : Function?) {
+    verify(foo is ExternalFnBase)
+    return unsafe(reinterpret<ExternalFnBase?>(foo));
+}
+
+def operator is FunctionAnnotation(anything) {
+    return false
+}
+
+def operator is FunctionAnnotation(foo : Annotation?) {
+    return foo.isFunctionAnnotation
+}
+
+def operator is FunctionAnnotation(foo : smart_ptr<Annotation>) {
+    return foo.isFunctionAnnotation
+}
+
+def operator as FunctionAnnotation(foo : Annotation?) {
+    verify(foo is FunctionAnnotation)
+    return unsafe(reinterpret<FunctionAnnotation?>(foo));
+}
+
+def operator as FunctionAnnotation(foo : smart_ptr<Annotation>) {
+    verify(foo is FunctionAnnotation)
+    return unsafe(reinterpret<FunctionAnnotation?>(foo.get_ptr()));
+}
+
+
+def operator is StructureAnnotation(anything) {
+    return false
+}
+
+def operator is StructureAnnotation(foo : Annotation?) {
+    return foo.isStructureAnnotation
+}
+
+def operator is StructureAnnotation(foo : smart_ptr<Annotation>) {
+    return foo.isStructureAnnotation
+}
+
+def operator as StructureAnnotation(foo : Annotation?) {
+    verify(foo is StructureAnnotation)
+    return unsafe(reinterpret<StructureAnnotation?>(foo));
+}
+
+def operator as StructureAnnotation(foo : smart_ptr<Annotation>) {
+    verify(foo is StructureAnnotation)
+    return unsafe(reinterpret<StructureAnnotation?>(foo.get_ptr()));
+}
+
 def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     let total = any_array_size(data)
     if (total != 0) {
@@ -1035,6 +1106,13 @@ def public isMakeLocal(expr : ExpressionPtr) {
         ||  (expr.__rtti == "ExprMakeVariant")
         ||  (expr.__rtti == "ExprMakeArray")
         ||  (expr.__rtti == "ExprMakeTuple"))
+}
+
+def public isExprCallFunc(expr : ExpressionPtr) {
+    return ((expr.__rtti == "ExprCallFunc")
+        ||  (expr.__rtti == "ExprOp")
+        ||  (expr.__rtti == "ExprNew")
+        ||  (expr.__rtti == "ExprCall"))
 }
 
 def public get_workhorse_types {

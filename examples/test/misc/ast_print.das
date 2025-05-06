@@ -369,7 +369,7 @@ class PrintVisitor : AstVisitor {
         print("]")
         return <- expr
     }
-    def override preVisitExprSafeAtIndex(expr : smart_ptr<ExprAt> index : ExpressionPtr) {
+    def override preVisitExprSafeAtIndex(expr : smart_ptr<ExprSafeAt> index : ExpressionPtr) {
         print("?[")
     }
 // is

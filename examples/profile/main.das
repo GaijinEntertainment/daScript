@@ -124,7 +124,7 @@ struct ProfileEntry {
 }
 
 def parse_profile_entry(invocation : string; blk : block<(var res : ProfileEntry; errors : array<ParsingError>) : void>) {
-    parse invocation {
+    parse(invocation) {
         var profile_entry : ProfileEntry
         rule(WS, string_ as language, WS, ",", WS, string_ as category, WS, ",", WS, double_ as time, WS, ",", WS, double_ as count) <| $() {
             return <- ProfileEntry(language = language, category = category, time = time, count = int(count))
@@ -133,7 +133,7 @@ def parse_profile_entry(invocation : string; blk : block<(var res : ProfileEntry
 }
 
 def parse_short_profile_entry(invocation : string; blk : block<(var res : ProfileEntry; errors : array<ParsingError>) : void>) {
-    parse invocation {
+    parse(invocation) {
         var profile_entry : ProfileEntry
         rule(WS, string_ as category, WS, ",", WS, double_ as time, WS, ",", WS, double_ as count) <| $() {
             return <- ProfileEntry(category = category, time = time, count = int(count))

@@ -7,9 +7,12 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/das_common.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/performance_time.h"
+
+MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 #include "module_builtin_ast.h"
 namespace das {
@@ -340,6 +343,13 @@ namespace das {
         },prog->thisModule.get());
     }
 
+    void for_each_module_no_order ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
+        prog->library.foreach_in_order([&](auto mod){
+            das_invoke<void>::invoke<Module *>(context,at,block,mod);
+            return true;
+        },nullptr);
+    }
+
     void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context, LineInfoArg * at ) {
         mod->aliasTypes.foreach([&](auto aliasType){
             das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,aliasType->alias.c_str(),aliasType);
@@ -347,9 +357,13 @@ namespace das {
     }
 
     void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context, LineInfoArg * at ) {
+        das_hash_map<string, EnumerationPtr> enums;
         mod->enumerations.foreach([&](auto penum){
-            das_invoke<void>::invoke<EnumerationPtr>(context,at,block,penum);
+            enums.emplace(penum->name, penum);
         });
+        for (auto [k, penum]: ordered(enums)) {
+            das_invoke<void>::invoke<EnumerationPtr>(context,at,block,penum);
+        }
     }
 
     void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context, LineInfoArg * at ) {
@@ -679,6 +693,179 @@ namespace das {
         return program->updateAliasMapCallback(argType, passType);
     }
 
+    const Structure * findFieldParent( smart_ptr_raw<Structure> structure, const char *name, Context * context, LineInfoArg * at ) {
+        return structure->findFieldParent(name);
+    }
+
+    void aotVisitGetFieldPtr( TypeAnnotation* ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at ) {
+        ann->aotVisitGetFieldPtr(*ss, name);
+    }
+
+    const char * getAotArgumentSuffix(Function* func, ExprCallFunc * call, int argIndex, Context * context, LineInfoArg * at ) {
+        return context->allocateString(func->getAotArgumentSuffix(call, argIndex),at);
+    }
+
+    const char * getAotArgumentPrefix(Function* func, ExprCallFunc * call, int argIndex, Context * context, LineInfoArg * at ) {
+        return context->allocateString(func->getAotArgumentPrefix(call, argIndex),at);
+    }
+
+    bool isAstSameType(smart_ptr<TypeDecl> argType, smart_ptr<TypeDecl> passType, bool refMatters,
+                    bool constMatters,
+                    bool temporaryMatters,
+                    bool allowSubstitute, Context * context, LineInfoArg * at ) {
+        return argType->isSameType(*passType,
+                                   refMatters ? RefMatters::yes : RefMatters::no,
+                                   constMatters ? ConstMatters::yes : ConstMatters::no,
+                                   temporaryMatters ? TemporaryMatters::yes : TemporaryMatters::no,
+                                   allowSubstitute ? AllowSubstitute::yes : AllowSubstitute::no);
+    }
+
+    void aotFuncPrefix(FunctionAnnotation* ann, StringBuilderWriter * stg, ExprCallFunc *call, Context * context, LineInfoArg * at ) {
+        ann->aotPrefix(*stg, call);
+    }
+
+    void aotStructPrefix(StructureAnnotation* ann, Structure *structure, const AnnotationArgumentList &args,
+                         StringBuilderWriter * stg, Context * context, LineInfoArg * at ) {
+        ann->aotPrefix(structure, args, *stg);
+    }
+
+    const char *getAotName(Function* func, ExprCallFunc *call, Context * context, LineInfoArg * at ) {
+        return context->allocateString(func->getAotName(call), at);
+    }
+
+    void aotBody( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context * context, LineInfoArg * at) {
+        structure->aotBody(st, args, *writer);
+    }
+
+    void aotSuffix( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context * context, LineInfoArg * at) {
+        structure->aotSuffix(st, args, *writer);
+    }
+
+    void aotMacroSuffix( TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr) {
+        macro->aotSuffix(*ss, expr);
+    }
+
+    void aotMacroPrefix( TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr) {
+        macro->aotPrefix(*ss, expr);
+    }
+
+    void aotPreVisitGetFieldPtr(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at) {
+        ann->aotPreVisitGetFieldPtr(*ss, name);
+    }
+
+    void aotPreVisitGetField(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at) {
+        ann->aotPreVisitGetField(*ss, name);
+    }
+
+    void aotVisitGetField(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at) {
+        ann->aotVisitGetField(*ss, name);
+    }
+
+    bool aotNeedTypeInfo(const TypeInfoMacro *macro, ExpressionPtr expr) {
+        return macro->aotNeedTypeInfo(expr);
+    }
+
+    const char * stringBuilderStr(StringBuilderWriter *ss, Context * context, LineInfoArg * at) {
+        return context->allocateString(ss->str(), at);
+    }
+
+    void stringBuilderClear(StringBuilderWriter *ss) {
+        ss->clear();
+    }
+
+    TypeDeclPtr makeBlockType(ExprBlock *blk) {
+        return blk->makeBlockType();
+    }
+
+// debugInfoHelper
+
+    TypeInfo * makeTypeInfo ( smart_ptr<DebugInfoHelper> helper, TypeInfo * info, const TypeDeclPtr & type ) {
+        return helper->makeTypeInfo(info, type);
+    }
+
+    VarInfo * makeVariableDebugInfo ( smart_ptr<DebugInfoHelper> helper, Variable *var ) {
+        return helper->makeVariableDebugInfo(*var);
+    }
+
+    VarInfo * makeStructVariableDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Structure * st, const Structure::FieldDeclaration * var ) {
+        return helper->makeVariableDebugInfo(*st, *var);
+    }
+
+    StructInfo * makeStructureDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Structure * st ) {
+        return helper->makeStructureDebugInfo(*st);
+    }
+
+    FuncInfo * makeFunctionDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Function * fn ) {
+        return helper->makeFunctionDebugInfo(*fn);
+    }
+
+    EnumInfo * makeEnumDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Enumeration * en ) {
+        return helper->makeEnumDebugInfo(*en);
+    }
+
+    FuncInfo * makeInvokeableTypeDebugInfo ( smart_ptr<DebugInfoHelper> helper, TypeDeclPtr blk, const LineInfo & at ) {
+        return helper->makeInvokeableTypeDebugInfo(blk, at);
+    }
+
+    template <typename T>
+    using DebugBlockT = TBlock<void,const char *, T>;
+
+    template <typename T>
+    static void call_each(const vector<std::pair<std::string, T>> &data, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at) {
+        for (auto &[name, v]: data) {
+            vec4f args[2];
+            args[0] = cast<const char *>::from(name.c_str());
+            args[1] = cast<T>::from(v);
+            context->invoke(block, args, nullptr, at);
+        }
+    }
+
+    void debug_helper_iter_structs(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at) {
+        call_each(ordered(helper->smn2s), block, context, at);
+    }
+
+    void debug_helper_iter_types(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<TypeInfo*> & block, Context * context, LineInfoArg * at) {
+        call_each(ordered(helper->tmn2t), block, context, at);
+    }
+
+    void debug_helper_iter_vars(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<VarInfo*> & block, Context * context, LineInfoArg * at) {
+        call_each(ordered(helper->vmn2v), block, context, at);
+    }
+
+    void debug_helper_iter_funcs(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<FuncInfo*> & block, Context * context, LineInfoArg * at) {
+        call_each(ordered(helper->fmn2f), block, context, at);
+    }
+
+    void debug_helper_iter_enums(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<EnumInfo*> & block, Context * context, LineInfoArg * at) {
+        call_each(ordered(helper->emn2e), block, context, at);
+    }
+
+    bool macro_aot_infix(TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr) {
+        return macro->aotInfix(*ss, expr);
+    }
+
+    void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at) {
+        module->functions.foreach([&](auto fn) {
+            vec4f args[1];
+            args[0] = cast<Function*>::from(fn.get());
+            context->invoke(blk, args, nullptr, at);
+        });
+    }
+
+    uint64_t getInitSemanticHashWithDep(ProgramPtr program, uint64_t semH) { // todo: implement on das side after .cpp aot removed
+        return program->getInitSemanticHashWithDep(semH);
+    }
+
+    uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * context, LineInfoArg * at) {
+        auto fn = ((Context*)pctx)->getFunction(id);
+        assert(fn->mangledName == fun->getMangledName());
+        return getFunctionHash(fun, fn->code, ((Context*)pctx));
+    }
+
+    bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * context, LineInfoArg * at) {
+        return mod->aotRequire(*ss) != ModuleAotType::no_aot;
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -720,6 +907,9 @@ namespace das {
                 ->args({"context","at"});
         addExtern<DAS_BIND_FUN(for_each_module)>(*this, lib,  "for_each_module",
             SideEffects::accessExternal, "for_each_module")
+                ->args({"program","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_module_no_order)>(*this, lib,  "for_each_module_no_order",
+            SideEffects::accessExternal, "for_each_module_no_order")
                 ->args({"program","block","context","line"});
         addExtern<DAS_BIND_FUN(forEachFunction)>(*this, lib,  "for_each_function",
             SideEffects::accessExternal, "forEachFunction")
@@ -993,6 +1183,118 @@ namespace das {
         addExtern<DAS_BIND_FUN(updateAliasMapEx)>(*this, lib,  "update_alias_map",
             SideEffects::modifyExternal, "updateAliasMapEx")
                 ->args({"program","argType","passType","context","at"});
+        // debug_info_methods
+        addExtern<DAS_BIND_FUN(makeTypeInfo)>(*this, lib,  "make_type_info",
+                                                    SideEffects::none, "makeTypeInfo")
+            ->args({"helper","info","type"});
+        addExtern<DAS_BIND_FUN(makeVariableDebugInfo)>(*this, lib,  "make_variable_debug_info",
+                                              SideEffects::none, "makeVariableDebugInfo")
+            ->args({"helper","var"});
+        addExtern<DAS_BIND_FUN(makeStructVariableDebugInfo)>(*this, lib,  "make_struct_variable_debug_info",
+                                                       SideEffects::none, "makeVariableDebugInfo")
+            ->args({"helper","st", "var"});
+        addExtern<DAS_BIND_FUN(makeStructureDebugInfo)>(*this, lib,  "make_struct_debug_info",
+                                                             SideEffects::none, "makeStructureDebugInfo")
+            ->args({"helper","st"});
+        addExtern<DAS_BIND_FUN(makeFunctionDebugInfo)>(*this, lib,  "make_function_debug_info",
+                                                        SideEffects::none, "makeFunctionDebugInfo")
+            ->args({"helper","fn"});
+        addExtern<DAS_BIND_FUN(makeEnumDebugInfo)>(*this, lib,  "make_enum_debug_info",
+                                                       SideEffects::none, "makeEnumDebugInfo")
+            ->args({"helper","en"});
+        addExtern<DAS_BIND_FUN(makeInvokeableTypeDebugInfo)>(*this, lib,  "make_invokable_type_debug_info",
+                                                   SideEffects::none, "makeInvokeableTypeDebugInfo")
+            ->args({"helper","blk", "at"});
+        addExtern<DAS_BIND_FUN(debug_helper_iter_structs)>(*this, lib,  "debug_helper_iter_structs",
+                                                   SideEffects::modifyExternal, "debug_helper_iter_structs")
+            ->args({"helper","blk", "context", "at"});
+        addExtern<DAS_BIND_FUN(debug_helper_iter_types)>(*this, lib,  "debug_helper_iter_types",
+                                                           SideEffects::modifyExternal, "debug_helper_iter_types")
+            ->args({"helper","blk", "context", "at"});
+        addExtern<DAS_BIND_FUN(debug_helper_iter_vars)>(*this, lib,  "debug_helper_iter_vars",
+                                                           SideEffects::modifyExternal, "debug_helper_iter_vars")
+            ->args({"helper","blk", "context", "at"});
+        addExtern<DAS_BIND_FUN(debug_helper_iter_funcs)>(*this, lib,  "debug_helper_iter_funcs",
+                                                           SideEffects::modifyExternal, "debug_helper_iter_funcs")
+            ->args({"helper","blk", "context", "at"});
+        addExtern<DAS_BIND_FUN(debug_helper_iter_enums)>(*this, lib,  "debug_helper_iter_enums",
+                                                           SideEffects::modifyExternal, "debug_helper_iter_enums")
+            ->args({"helper","blk", "context", "at"});
+        addExtern<DAS_BIND_FUN(macro_aot_infix)>(*this, lib,  "macro_aot_infix",
+                                                           SideEffects::modifyArgument, "macro_aot_infix")
+            ->args({"macro","ss", "expr"});
+        addExtern<DAS_BIND_FUN(for_each_module_function)>(*this, lib,  "for_each_module_function",
+                                                          SideEffects::modifyExternal, "for_each_module_function")
+            ->args({"module","blk", "context", "at"});
+        addExtern<DAS_BIND_FUN(getInitSemanticHashWithDep)>(*this, lib,  "getInitSemanticHashWithDep",
+                                                          SideEffects::none, "getInitSemanticHashWithDep")
+            ->args({"program","init"});
+        addExtern<DAS_BIND_FUN(getFunctionHashById)>(*this, lib,  "get_function_hash_by_id",
+                                                          SideEffects::modifyExternal, "getFunctionHashById")
+            ->args({    "fun", "id", "pctx", "context", "at"});
+        addExtern<DAS_BIND_FUN(modAotRequire)>(*this, lib,  "aot_require",
+                                                          SideEffects::modifyExternal, "modAotRequire")
+            ->args({"mod", "ss", "context", "at"});
+        // ast_aot_helpers)
+        addExtern<DAS_BIND_FUN(findFieldParent)>(*this, lib,  "find_struct_field_parent",
+                                                  SideEffects::modifyExternal, "findFieldParent")
+            ->args({"structure","name","context","at"});
+        addExtern<DAS_BIND_FUN(aotVisitGetFieldPtr)>(*this, lib,  "aot_type_ann_get_field_ptr",
+                                                  SideEffects::modifyExternal, "aotVisitGetFieldPtr")
+            ->args({"ann","ss", "name","context","at"});
+        addExtern<DAS_BIND_FUN(aotNeedTypeInfo)>(*this, lib,  "aot_need_type_info",
+                                                  SideEffects::none, "aotNeedTypeInfo")
+            ->args({"macro","expr"});
+        addExtern<DAS_BIND_FUN(getAotArgumentSuffix)>(*this, lib,  "get_aot_arg_suffix",
+                                                  SideEffects::modifyExternal, "getAotArgumentSuffix")
+            ->args({"func","call", "argIndex","context","at"});
+        addExtern<DAS_BIND_FUN(getAotArgumentPrefix)>(*this, lib,  "get_aot_arg_prefix",
+                                                  SideEffects::modifyExternal, "getAotArgumentPrefix")
+            ->args({"func","call", "argIndex","context","at"});
+        addExtern<DAS_BIND_FUN(aotFuncPrefix)>(*this, lib,  "get_func_aot_prefix",
+                                                  SideEffects::modifyExternal, "aotFuncPrefix")
+            ->args({"ann","stg", "call","context","at"});
+        addExtern<DAS_BIND_FUN(aotStructPrefix)>(*this, lib,  "get_struct_aot_prefix",
+                                                  SideEffects::modifyExternal, "aotStructPrefix")
+            ->args({"ann","structure", "args", "stg","context","at"});
+        addExtern<DAS_BIND_FUN(getAotName)>(*this, lib,  "get_aot_name",
+                                                  SideEffects::modifyExternal, "getAotName")
+            ->args({"func","call","context","at"});
+        addExtern<DAS_BIND_FUN(aotBody)>(*this, lib,  "write_aot_body",
+                                                  SideEffects::modifyExternal, "aotBody")
+            ->args({"structure", "st", "args", "writer","context","at"});
+        addExtern<DAS_BIND_FUN(aotSuffix)>(*this, lib,  "write_aot_suffix",
+                                                  SideEffects::modifyExternal, "aotSuffix")
+            ->args({"structure", "st", "args", "writer","context","at"});
+        addExtern<DAS_BIND_FUN(aotMacroSuffix)>(*this, lib,  "write_aot_macro_suffix",
+                                                  SideEffects::modifyArgument, "aotMacroSuffix")
+            ->args({"macro", "ss", "expr"});
+        addExtern<DAS_BIND_FUN(aotMacroPrefix)>(*this, lib,  "write_aot_macro_prefix",
+                                                SideEffects::modifyArgument, "aotMacroPrefix")
+            ->args({"macro", "ss", "expr"});
+        addExtern<DAS_BIND_FUN(aotPreVisitGetFieldPtr)>(*this, lib,  "aot_previsit_get_field_ptr",
+                                                  SideEffects::modifyExternal, "aotPreVisitGetFieldPtr")
+            ->args({"ann", "ss", "name","context","at"});
+        addExtern<DAS_BIND_FUN(aotPreVisitGetField)>(*this, lib,  "aot_previsit_get_field",
+                                                        SideEffects::modifyExternal, "aotPreVisitGetField")
+            ->args({"ann", "ss", "name","context","at"});
+        addExtern<DAS_BIND_FUN(aotVisitGetField)>(*this, lib,  "aot_visit_get_field",
+                                                        SideEffects::modifyExternal, "aotVisitGetField")
+            ->args({"ann", "ss", "name","context","at"});
+        addExtern<DAS_BIND_FUN(stringBuilderStr)>(*this, lib,  "string_builder_str",
+                                                        SideEffects::modifyArgumentAndExternal, "stringBuilderStr")
+            ->args({"ss","context","at"});
+        addExtern<DAS_BIND_FUN(stringBuilderClear)>(*this, lib,  "string_builder_clear",
+                                                        SideEffects::modifyArgument, "stringBuilderClear")
+            ->args({"ss"});
+        addExtern<DAS_BIND_FUN(isAstSameType)>(*this, lib,  "is_same_type",
+                                                  SideEffects::modifyExternal, "isAstSameType")
+            ->args({"argType","passType", "refMatters",
+                    "constMatters", "temporaryMatters", "allowSubstitute",
+                    "context","at"});
+        addExtern<DAS_BIND_FUN(makeBlockType)>(*this, lib,  "make_block_type",
+                                                  SideEffects::none, "makeBlockType")
+            ->args({"blk"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {

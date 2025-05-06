@@ -352,6 +352,10 @@ namespace das
         return fast_to_int_TT<uint64_t>(str, hex);
     }
 
+    const char * das_to_cpp_float ( float val, Context * context, LineInfoArg * at ) {
+        return context->allocateString(to_cpp_float(val), at);
+    }
+
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at ) {
         StringBuilderWriter writer;
         vec4f args[1];
@@ -969,6 +973,8 @@ namespace das
                 SideEffects::none, "fast_to_int64")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(fast_to_uint64)>(*this, lib, "to_uint64",
                 SideEffects::none, "fast_to_uint64")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+            addExtern<DAS_BIND_FUN(das_to_cpp_float)>(*this, lib, "to_cpp_float",
+                SideEffects::modifyExternal, "das_to_cpp_float")->args({"value","context", "at"});
             addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float",
                 SideEffects::none, "fast_to_float")->arg("value");
             addExtern<DAS_BIND_FUN(fast_to_double)>(*this, lib, "to_double",

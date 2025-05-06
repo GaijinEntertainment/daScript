@@ -4,6 +4,7 @@
 #include "daScript/misc/arraytype.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/simulate.h"
+#include <inttypes.h>
 
 namespace das {
 
@@ -134,9 +135,9 @@ namespace das {
     char * builtin_build_string_T ( TT && block, Context * context, LineInfoArg * at ) {
         StringBuilderWriter writer;
         block(writer);
-        auto length = writer.tellp();
+        uint64_t length = writer.tellp();
         if ( length > INT32_MAX ) {
-            context->throw_error_at(at, "string is too long (%llu characters)", length);
+            context->throw_error_at(at, "string is too long (%" PRIu64 " characters)", length);
             return nullptr;
         }
         if ( length ) {

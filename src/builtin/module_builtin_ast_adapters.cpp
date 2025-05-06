@@ -81,11 +81,23 @@ namespace das {
         }
     }
 
+    bool VisitorAdapter::canVisitExpr(ExprTypeInfo *expr, Expression *subexpr) {
+        if ( auto fnCanVisit = get_canVisitExprTypeInfo(classPtr) ) {
+            bool result = true;
+            runMacroFunction(context, "canVisitExprTypeInfo", [&]() {
+                result = invoke_canVisitExprTypeInfo(context,fnCanVisit,classPtr,expr, subexpr);
+            });
+            return result;
+        } else {
+            return true;
+        }
+    }
+
     bool VisitorAdapter::canVisitMakeStructureBlock(ExprMakeStruct *expr, Expression *blk) {
-        if ( auto fnCanVisit = get_canVisitMakeStructBlock(classPtr) ) {
+        if ( auto fnCanVisit = get_canVisitExprMakeStructBlock(classPtr) ) {
             bool result = true;
             runMacroFunction(context, "canVisitMakeStructureBlock", [&]() {
-                result = invoke_canVisitMakeStructBlock(context,fnCanVisit,classPtr,expr,blk);
+                result = invoke_canVisitExprMakeStructBlock(context,fnCanVisit,classPtr,expr,blk);
             });
             return result;
         } else {
@@ -94,10 +106,10 @@ namespace das {
     }
 
     bool VisitorAdapter::canVisitMakeStructureBody(ExprMakeStruct *expr) {
-        if ( auto fnCanVisit = get_canVisitMakeStructBody(classPtr) ) {
+        if ( auto fnCanVisit = get_canVisitExprMakeStructBody(classPtr) ) {
             bool result = true;
             runMacroFunction(context, "canVisitMakeStructureBody", [&]() {
-                result = invoke_canVisitMakeStructBody(context,fnCanVisit,classPtr,expr);
+                result = invoke_canVisitExprMakeStructBody(context,fnCanVisit,classPtr,expr);
             });
             return result;
         } else {
@@ -278,6 +290,18 @@ namespace das {
             runMacroFunction(context, "preVisitStructureField", [&]() {
                 invoke_preVisitStructureField(context,fnPreVisit,classPtr,var,decl,last);
             });
+        }
+    }
+
+    bool VisitorAdapter::canVisitStructureFieldInit(Structure *var) {
+        if ( auto fnCanVisit = get_canVisitStructureFieldInit(classPtr) ) {
+            bool result = true;
+            runMacroFunction(context, "canVisitStructureFieldInit", [&]() {
+                result = invoke_canVisitStructureFieldInit(context,fnCanVisit,classPtr,var);
+            });
+            return result;
+        } else {
+            return true;
         }
     }
 
@@ -701,10 +725,10 @@ namespace das {
     }
 
     bool VisitorAdapter::canVisitLooksLikeCallArg(ExprLooksLikeCall *call, Expression *arg, bool last) {
-        if ( auto fnCanVisit = get_canVisitLooksLikeCallArgument(classPtr) ) {
+        if ( auto fnCanVisit = get_canVisitExprLooksLikeCallArgument(classPtr) ) {
             bool result = true;
             runMacroFunction(context, "canVisitLooksLikeCallArg", [&]() {
-                result = invoke_canVisitLooksLikeCallArgument(context,fnCanVisit,classPtr,call,arg,last);
+                result = invoke_canVisitExprLooksLikeCallArgument(context,fnCanVisit,classPtr,call,arg,last);
             });
             return result;
         } else {
@@ -2409,6 +2433,14 @@ namespace das {
         func->visit(*adapter);
     }
 
+    void visitEnumeration ( ProgramPtr program, smart_ptr_raw<Enumeration> enumeration, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        program->visitEnumeration(*adapter, enumeration.get());
+    }
+
+    void visitStructure ( ProgramPtr program, smart_ptr_raw<Structure> structure, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        program->visitStructure(*adapter, structure.get());
+    }
+
     smart_ptr_raw<Expression> astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
@@ -2445,6 +2477,12 @@ namespace das {
         addExtern<DAS_BIND_FUN(astVisitFunction)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisitFunction")
                 ->args({"function","adapter","context","line"});
+        addExtern<DAS_BIND_FUN(visitEnumeration)>(*this, lib,  "visit_enumeration",
+                                                  SideEffects::accessExternal, "visitEnumeration")
+            ->args({"program", "enumeration","adapter","context","line"});
+        addExtern<DAS_BIND_FUN(visitStructure)>(*this, lib,  "visit_structure",
+                                                  SideEffects::accessExternal, "visitStructure")
+            ->args({"program", "structure","adapter","context","line"});
         addExtern<DAS_BIND_FUN(astVisitExpression)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisitExpression")
                 ->args({"expression","adapter","context","line"});

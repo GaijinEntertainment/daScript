@@ -827,11 +827,13 @@ namespace das {
     void ModuleLibrary::foreach_in_order ( const callable<bool (Module * module)> & func, Module * thisM ) const {
         DAS_ASSERT(modules.size());
         // {builtin} {THIS_MODULE} {require1} {require2} ...
-        for ( auto m = modules.begin(), ms=modules.end(); m!=ms; ++m ) {
-            if ( *m==thisM ) continue;
-            if ( !func(*m) ) return;
+        for (auto module : modules) {
+            if ( module==thisM ) continue;
+            if ( !func(module) ) return;
         }
-        func(thisM);
+        if (thisM) {
+            func(thisM);
+        }
     }
 
     Module * ModuleLibrary::findModuleByMangledNameHash ( uint64_t hash ) const {
