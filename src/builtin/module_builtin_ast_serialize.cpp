@@ -2173,7 +2173,6 @@ namespace das {
               << value.aot_order_side_effects
               << value.no_unused_function_arguments
               << value.no_unused_block_arguments
-              << value.smart_pointer_by_value_unsafe
               << value.allow_block_variable_shadowing
               << value.allow_local_variable_shadowing
               << value.allow_shared_lambda
