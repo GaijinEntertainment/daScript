@@ -36,7 +36,7 @@ namespace das {
             func.reset();
             cmresVAR.reset();
             failedToCMRES = false;
-            assert(blocks.size()==0);
+            DAS_ASSERT(blocks.size()==0);
             return Visitor::visit(that);
         }
     // ExprBlock

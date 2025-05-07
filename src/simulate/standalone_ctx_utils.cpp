@@ -49,7 +49,7 @@ namespace das {
                 fn->aotFunction = fcb->aotFunction;
             } else {
                 // Can't fill noAot functions.
-                assert(false);
+                DAS_ASSERT(false);
             }
         }
     }

@@ -48,7 +48,7 @@ namespace das {
             logTab --;
         }
         void propageteVarUse(Variable * var) {
-            assert(var);
+            DAS_ASSERT(var);
             if (var->used) return;
             push(var);
             var->used = true;
@@ -61,7 +61,7 @@ namespace das {
             pop();
         }
         void propagateFunctionUse(Function * fn) {
-            assert(fn);
+            DAS_ASSERT(fn);
             if (fn->isTemplate) return;
             if (fn->used) return;
             if (fn->builtIn) return;
@@ -196,7 +196,7 @@ namespace das {
         virtual void preVisit(ExprAddr * addr) override {
             Visitor::preVisit(addr);
             if (builtInDependencies || (addr->func && !addr->func->builtIn)) {
-                assert(addr->func);
+                DAS_ASSERT(addr->func);
                 if (func) {
                     func->useFunctions.insert(addr->func);
                 } else if (gVar) {
@@ -224,7 +224,7 @@ namespace das {
             Visitor::preVisit(call);
             if ( call->initializer ) {
                 if (builtInDependencies || !call->func->builtIn) {
-                    assert(call->func);
+                    DAS_ASSERT(call->func);
                     if (func) {
                         func->useFunctions.insert(call->func);
                     } else if (gVar) {
@@ -247,7 +247,7 @@ namespace das {
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);
             if (builtInDependencies || !expr->func->builtIn) {
-                assert(expr->func);
+                DAS_ASSERT(expr->func);
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {
@@ -259,7 +259,7 @@ namespace das {
         virtual void preVisit(ExprOp2 * expr) override {
             Visitor::preVisit(expr);
             if (builtInDependencies || !expr->func->builtIn) {
-                assert(expr->func);
+                DAS_ASSERT(expr->func);
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {
@@ -271,7 +271,7 @@ namespace das {
         virtual void preVisit(ExprOp3 * expr) override {
             Visitor::preVisit(expr);
             if ( expr->func && (builtInDependencies || !expr->func->builtIn) ) {
-                assert(expr->func);
+                DAS_ASSERT(expr->func);
                 if (func) {
                     func->useFunctions.insert(expr->func);
                 } else if (gVar) {

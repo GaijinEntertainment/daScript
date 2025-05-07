@@ -283,7 +283,7 @@ namespace das {
         info->argNames = nullptr;
         auto argNamesCount = uint32_t(type->argNames.size());
         if ( argNamesCount ) {
-            assert(info->argCount == 0 || info->argCount == argNamesCount);
+            DAS_ASSERT(info->argCount == 0 || info->argCount == argNamesCount);
             info->argCount = argNamesCount;
             info->argNames = (const char **) debugInfo->allocate(sizeof(char *) * info->argCount );
             for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
