@@ -126,16 +126,13 @@ namespace das {
         return typeName.empty() ? name : (name + "<" + typeName + ">");
     }
 
-    // TODO: at some point we should share fusion engine
-    DAS_THREAD_LOCAL(unique_ptr<FusionEngine>) g_fusionEngine;
-
     void resetFusionEngine() {
-        g_fusionEngine.reset();
+        g_fusionEngine->reset();
     }
 
     void createFusionEngine() {
-        if ( !g_fusionEngine ) {
-            g_fusionEngine = make_unique<FusionEngine>();
+        if ( !*g_fusionEngine ) {
+            *g_fusionEngine = make_unique<FusionEngine>();
 #if DAS_FUSION
             // misc (note, misc before everything)
             createFusionEngine_misc_copy_reference();
@@ -193,8 +190,8 @@ namespace das {
         }
         virtual SimNode * visit ( SimNode * node ) override {
             auto & ni = info[node];
-            auto it = g_fusionEngine->find(fuseName(ni.name, ni.typeName));
-            if ( it != g_fusionEngine->end() ) {
+            auto it = (*g_fusionEngine)->find(fuseName(ni.name, ni.typeName));
+            if ( it != (*g_fusionEngine)->end() ) {
                 auto & nv = it->second;
                 for ( const auto & fe : nv ) {
                     auto newNode = fe->fuse(info, node, context);
@@ -241,7 +238,7 @@ namespace das {
     }
 
     void registerFusion ( const char * OpName, const char * CTypeName, FusionPoint * node ) {
-        (*g_fusionEngine)[fuseName(OpName,CTypeName)].emplace_back(node);
+        (**g_fusionEngine)[fuseName(OpName,CTypeName)].emplace_back(node);
     }
 }
 

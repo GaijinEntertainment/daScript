@@ -57,15 +57,15 @@ namespace das {
     DAS_THREAD_LOCAL(unique_ptr<AotLibrary>) g_AOT_lib;
 
     AotLibrary & getGlobalAotLibrary() {
-        if ( !g_AOT_lib ) {
-            g_AOT_lib = make_unique<AotLibrary>();
-            AotListBase::registerAot(*g_AOT_lib);
+        if ( !*g_AOT_lib ) {
+            *g_AOT_lib = make_unique<AotLibrary>();
+            AotListBase::registerAot(**g_AOT_lib);
         }
-        return *g_AOT_lib;
+        return **g_AOT_lib;
     }
 
     void clearGlobalAotLibrary() {
-        g_AOT_lib.reset();
+        g_AOT_lib->reset();
     }
 
     // annotations

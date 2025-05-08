@@ -226,13 +226,13 @@ namespace das {
     }
 
     Module * compileModule ( Context * context, LineInfoArg * at ) {
-        auto program = daScriptEnvironment::bound->g_Program;
+        auto program = (*daScriptEnvironment::bound)->g_Program;
         if ( !program ) context->throw_error_at(at, "compileModule only available during compilation");
         return program->thisModule.get();
     }
 
     smart_ptr_raw<Program> compileProgram ( Context * context, LineInfoArg * at ) {
-        auto program = daScriptEnvironment::bound->g_Program;
+        auto program = (*daScriptEnvironment::bound)->g_Program;
         if ( !program ) context->throw_error_at(at, "compileProgram only available during compilation");
         return program;
     }
@@ -513,7 +513,7 @@ namespace das {
 
     ExpressionPtr makeCall ( const LineInfo & at, const char * name ) {
         name = name ? name : "";
-        auto program = daScriptEnvironment::bound->g_Program;
+        auto program = (*daScriptEnvironment::bound)->g_Program;
         return program->makeCall(at, name);
     }
 
@@ -632,15 +632,15 @@ namespace das {
 
     void das_comp_log ( const char * text, Context * context, LineInfoArg * at ) {
         if ( !text ) return;
-        if ( !daScriptEnvironment::bound || !daScriptEnvironment::bound->g_compilerLog ) {
+        if ( !*daScriptEnvironment::bound || !(*daScriptEnvironment::bound)->g_compilerLog ) {
              context->throw_error_at(at, "compiler log is not set. its only available for the macros during compilation");
         }
-        (*daScriptEnvironment::bound->g_compilerLog) << text;
+        (*(*daScriptEnvironment::bound)->g_compilerLog) << text;
     }
 
     Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at ) {
         if ( !expr ) return nullptr;
-        if ( !daScriptEnvironment::bound ) context->throw_error_at(at, "expecting bound environment");
+        if ( !*daScriptEnvironment::bound ) context->throw_error_at(at, "expecting bound environment");
         auto mod = Module::require("ast");
         return mod->findAnnotation(expr->__rtti).get();
     }

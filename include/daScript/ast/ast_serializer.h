@@ -3,6 +3,7 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
+#include "daScript/misc/hash.h"
 #include <optional>
 #include <utility>
 
@@ -12,19 +13,6 @@
 #endif
 
 namespace das {
-
-    // use FNV32 hash for tags. it's fast and good enough for our purposes
-    constexpr uint32_t hash_tag(const char* block) {
-        constexpr uint32_t FNV_offset_basis = 2166136261u;
-        constexpr uint32_t FNV_prime = 16777619u;
-        uint32_t h = FNV_offset_basis;
-        while (*block) {
-            h ^= uint8_t(*block++);
-            h *= FNV_prime;
-        }
-        return h;
-    }
-
     struct SerializationStorage {
         vector<uint8_t> buffer;
         size_t bufferPos = 0;

@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/das_common.h"
+#include "daScript/daScriptModule.h"
 
 #include <atomic>
 
@@ -25,8 +26,6 @@ namespace das {
         SubstituteModuleRefs subs ( from, to );
         program->visit(subs,/*visitGenerics =*/true);
     }
-
-    DAS_THREAD_LOCAL(unsigned) ModuleKarma = 0;
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
         auto at = name.find("::");
@@ -97,7 +96,7 @@ namespace das {
         }
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
-            DAS_VERIFYF(daScriptEnvironment::bound && daScriptEnvironment::bound->modules,"missing bound environment");
+            DAS_VERIFYF(*daScriptEnvironment::bound && (*daScriptEnvironment::bound)->modules,"missing bound environment");
             // we add ~ at the beginning of the name for padding
             // if name is allocated by the compiler, it does not guarantee that it is aligned
             // we check if there is a ~ at the beginning of the name, and if it is - we skip it
@@ -107,7 +106,7 @@ namespace das {
             string moduleName, annName;
             splitTypeName(cvtbuf, moduleName, annName);
             TypeAnnotation * resolve = nullptr;
-            for ( auto pm = daScriptEnvironment::bound->modules; pm!=nullptr; pm=pm->next ) {
+            for ( auto pm = (*daScriptEnvironment::bound)->modules; pm!=nullptr; pm=pm->next ) {
                 if ( pm->name == moduleName ) {
                     if ( auto annT = pm->findAnnotation(annName) ) {
                         resolve = (TypeAnnotation *) annT.get();
@@ -115,7 +114,7 @@ namespace das {
                     break;
                 }
             }
-            if ( daScriptEnvironment::bound->g_resolve_annotations ) {
+            if ( (*daScriptEnvironment::bound)->g_resolve_annotations ) {
                 info->annotation_or_name = resolve;
             }
             return resolve;
@@ -134,16 +133,16 @@ namespace das {
         bool all = false;
         while ( !all ) {
             all = true;
-            for ( auto m = daScriptEnvironment::bound->modules; m ; m = m->next ) {
+            for ( auto m = (*daScriptEnvironment::bound)->modules; m ; m = m->next ) {
                 all &= m->initDependencies();
             }
         }
     }
 
     void Module::CollectFileInfo(das::vector<FileInfoPtr> &finfos) {
-        DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
-        DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
-        auto m = daScriptEnvironment::bound->modules;
+        DAS_ASSERT(*daScriptEnvironment::owned!=nullptr);
+        DAS_ASSERT(*daScriptEnvironment::bound!=nullptr);
+        auto m = (*daScriptEnvironment::bound)->modules;
         while ( m ) {
             finfos.emplace_back(das::move(m->ownFileInfo));
             m = m->next;
@@ -151,13 +150,13 @@ namespace das {
     }
 
     void Module::Shutdown() {
-        DAS_ASSERT(daScriptEnvironment::owned!=nullptr);
-        DAS_ASSERT(daScriptEnvironment::bound!=nullptr);
+        DAS_ASSERT(*daScriptEnvironment::owned!=nullptr);
+        DAS_ASSERT(*daScriptEnvironment::bound!=nullptr);
         g_envTotal --;
         if ( g_envTotal==0 ) {
             shutdownDebugAgent();
         }
-        auto m = daScriptEnvironment::bound->modules;
+        auto m = (*daScriptEnvironment::bound)->modules;
         while ( m ) {
             auto pM = m;
             m = m->next;
@@ -165,16 +164,16 @@ namespace das {
         }
         clearGlobalAotLibrary();
         resetFusionEngine();
-        daScriptEnvironment::bound = nullptr;
-        if ( daScriptEnvironment::owned ) {
-            delete daScriptEnvironment::owned;
-            daScriptEnvironment::owned = nullptr;
+        *daScriptEnvironment::bound = nullptr;
+        if ( *daScriptEnvironment::owned ) {
+            delete *daScriptEnvironment::owned;
+            *daScriptEnvironment::owned = nullptr;
         }
     }
 
     void Module::Reset(bool debAg) {
         if ( debAg ) shutdownDebugAgent();
-        auto m = daScriptEnvironment::bound->modules;
+        auto m = (*daScriptEnvironment::bound)->modules;
         while ( m ) {
             auto pM = m;
             m = m->next;
@@ -183,14 +182,14 @@ namespace das {
     }
 
     void Module::foreach ( const callable<bool (Module * module)> & func ) {
-        for (auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next) {
+        for (auto m = (*daScriptEnvironment::bound)->modules; m != nullptr; m = m->next) {
             if (!func(m)) break;
         }
     }
 
     Module * Module::require ( const string & name ) {
-        if ( !daScriptEnvironment::bound ) return nullptr;
-        for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
+        if ( !*daScriptEnvironment::bound ) return nullptr;
+        for ( auto m = (*daScriptEnvironment::bound)->modules; m != nullptr; m = m->next ) {
             if ( m->name == name ) {
                 return m;
             }
@@ -199,8 +198,8 @@ namespace das {
     }
 
     Module * Module::requireEx ( const string & name, bool allowPromoted ) {
-        if ( !daScriptEnvironment::bound ) return nullptr;
-        for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
+        if ( !*daScriptEnvironment::bound ) return nullptr;
+        for ( auto m = (*daScriptEnvironment::bound)->modules; m != nullptr; m = m->next ) {
             if ( allowPromoted || !m->promoted ) {
                 if ( m->name == name ) {
                     return m;
@@ -221,7 +220,7 @@ namespace das {
 
     Type Module::findOption ( const string & name ) {
         Type optT = Type::none;
-        for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
+        for ( auto m = (*daScriptEnvironment::bound)->modules; m != nullptr; m = m->next ) {
             auto tt = m->getOptionType(name);
             if ( tt != Type::none ) {
                 DAS_ASSERTF(optT==Type::none, "duplicate module option %s", name.c_str());
@@ -234,7 +233,7 @@ namespace das {
     Module::Module ( const string & n ) {
         setModuleName(n);
         if ( !name.empty() ) {
-            auto first = daScriptEnvironment::bound->modules;
+            auto first = (*daScriptEnvironment::bound)->modules;
             while (first != nullptr)
             {
                 if (first->name == n) {
@@ -242,8 +241,8 @@ namespace das {
                 }
                 first = first->next;
             }
-            next = daScriptEnvironment::bound->modules;
-            daScriptEnvironment::bound->modules = this;
+            next = (*daScriptEnvironment::bound)->modules;
+            (*daScriptEnvironment::bound)->modules = this;
             builtIn = true;
         }
         if ( n != "$" ) {
@@ -257,8 +256,8 @@ namespace das {
 
     void Module::promoteToBuiltin(const FileAccessPtr & access) {
         DAS_ASSERTF(!builtIn, "failed to promote. already builtin");
-        next = daScriptEnvironment::bound->modules;
-        daScriptEnvironment::bound->modules = this;
+        next = (*daScriptEnvironment::bound)->modules;
+        (*daScriptEnvironment::bound)->modules = this;
         builtIn = true;
         promoted = true;
         promotedAccess = access;
@@ -266,8 +265,8 @@ namespace das {
 
     Module::~Module() {
         if ( builtIn ) {
-            Module ** p = &daScriptEnvironment::bound->modules;
-            for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; p = &m->next, m = m->next ) {
+            Module ** p = &(*daScriptEnvironment::bound)->modules;
+            for ( auto m = (*daScriptEnvironment::bound)->modules; m != nullptr; p = &m->next, m = m->next ) {
                 if ( m == this ) {
                     *p = m->next;
                     return;
@@ -1097,7 +1096,7 @@ namespace das {
 
     void pull_all_auto_registered_modules() {
         for (module_pull_t pull : get_pullers()) {
-            das::ModuleKarma += unsigned(intptr_t(pull()));
+            *das::ModuleKarma += unsigned(intptr_t(pull()));
         }
     }
 }

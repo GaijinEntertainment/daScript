@@ -1774,7 +1774,7 @@ namespace das {
                     return true;
                 },"*");
             // always finalize annotations
-                daScriptEnvironment::bound->g_Program = program;
+                (*daScriptEnvironment::bound)->g_Program = program;
                 program->finalizeAnnotations();
 
                 if ( is_macro_module ) {

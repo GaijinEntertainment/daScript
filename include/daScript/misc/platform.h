@@ -82,6 +82,8 @@
 #include <stdint.h>
 #include <float.h>
 #include <daScript/das_config.h>
+#include <daScript/misc/hash.h>
+#include <daScript/misc/macro.h>
 
 #if _TARGET_PC_MACOSX && __SSE__
    #define DAS_EVAL_ABI [[clang::vectorcall]]
@@ -380,8 +382,33 @@ inline size_t das_aligned_memsize(void * ptr){
 #define _msc_inline_bug __forceinline
 #endif
 
+template<typename T, unsigned long long TAG>
+class DasThreadLocal final
+{
+public:
+    using SelfType = DasThreadLocal<T, TAG>;
+
+    inline DasThreadLocal()
+    {
+        if (initCounter++)
+            throw std::logic_error("Type with tag is already used, pls change tag!");
+    }
+
+    DasThreadLocal(const SelfType & other) = delete;
+    DasThreadLocal(SelfType&& other) = delete;
+    DasThreadLocal & operator=(const SelfType & other) = delete;
+    DasThreadLocal & operator=(SelfType && other) = delete;
+
+    inline T & operator *() noexcept { return value_; }
+    inline T * operator->() noexcept { return &value_; }
+
+private:
+    inline static thread_local T value_{};
+    inline static int initCounter = 0;
+};
+
 #ifndef DAS_THREAD_LOCAL
-#define DAS_THREAD_LOCAL(X)  thread_local X
+#define DAS_THREAD_LOCAL(X) DasThreadLocal<X, das::hash_tag(DAS_FILE_LINE)>
 #endif
 
 #ifndef DAS_AOT_INLINE_LAMBDA
