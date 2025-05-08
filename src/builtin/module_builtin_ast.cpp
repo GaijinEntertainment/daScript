@@ -864,7 +864,7 @@ namespace das {
 
     uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * context, LineInfoArg * at) {
         auto fn = ((Context*)pctx)->getFunction(id);
-        assert(fn->mangledName == fun->getMangledName());
+        DAS_ASSERT(fn->mangledName == fun->getMangledName());
         return getFunctionHash(fun, fn->code, ((Context*)pctx));
     }
 

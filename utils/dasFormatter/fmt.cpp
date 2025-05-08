@@ -175,7 +175,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
         std::ofstream ostream(tmp_name1);
         ostream << src.c_str();
     }
-    auto src_program = parseDaScript(tmp_name1.string(), "", access, tout, libGroup, true, true, policies);
+    auto src_program = parseDaScript(das::string(tmp_name1.string().c_str()), "", access, tout, libGroup, true, true, policies);
     while (prev != src) {
         prev = src;
 
@@ -244,7 +244,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
         ostream.flush();
     }
     policies.version_2_syntax = options.contains(format::FormatOpt::V2Syntax);
-    auto program = parseDaScript(tmp_name.string(), "", access, tout, libGroup, true, true, policies);
+    auto program = parseDaScript(das::string(tmp_name.string().c_str()), "", access, tout, libGroup, true, true, policies);
     Result res;
     if (!program->failed()) {
         res.ok = src; // designated initializers not supported in CI

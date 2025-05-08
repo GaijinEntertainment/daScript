@@ -1456,7 +1456,6 @@ namespace das
         bool aot_order_side_effects = false;
         bool no_unused_function_arguments = false;
         bool no_unused_block_arguments = false;
-        bool smart_pointer_by_value_unsafe = false;     // is passing smart_ptr by value unsafe?
         bool allow_block_variable_shadowing = false;
         bool allow_local_variable_shadowing = false;
         bool allow_shared_lambda = false;
