@@ -1757,8 +1757,8 @@ namespace das
         AstSerializer * serializer_write = nullptr;
         DebugAgentInstance g_threadLocalDebugAgent;
         uint64_t        dataWalkerStringLimit = 0;
-        static DAS_THREAD_LOCAL(daScriptEnvironment *, 0xa50e7db6) bound;
-        static DAS_THREAD_LOCAL(daScriptEnvironment *, 0x3bb4532d) owned;
+        inline static DAS_THREAD_LOCAL(daScriptEnvironment *) bound;
+        inline static DAS_THREAD_LOCAL(daScriptEnvironment *) owned;
         static void ensure();
     };
 

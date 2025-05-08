@@ -126,9 +126,6 @@ namespace das {
         return typeName.empty() ? name : (name + "<" + typeName + ">");
     }
 
-    // TODO: at some point we should share fusion engine
-    DAS_THREAD_LOCAL(unique_ptr<FusionEngine>, 0x3f71bbe0) g_fusionEngine;
-
     void resetFusionEngine() {
         g_fusionEngine->reset();
     }

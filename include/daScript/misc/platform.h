@@ -82,6 +82,8 @@
 #include <stdint.h>
 #include <float.h>
 #include <daScript/das_config.h>
+#include <daScript/misc/hash.h>
+#include <daScript/misc/macro.h>
 
 #if _TARGET_PC_MACOSX && __SSE__
    #define DAS_EVAL_ABI [[clang::vectorcall]]
@@ -406,7 +408,7 @@ private:
 };
 
 #ifndef DAS_THREAD_LOCAL
-#define DAS_THREAD_LOCAL(X, TAG) DasThreadLocal<X, TAG>
+#define DAS_THREAD_LOCAL(X) DasThreadLocal<X, das::hash_tag(DAS_FILE_LINE)>
 #endif
 
 #ifndef DAS_AOT_INLINE_LAMBDA

@@ -441,11 +441,6 @@ struct QueryEsFunctionAnnotation : FunctionAnnotation {
     }
 };
 
-DAS_THREAD_LOCAL(vector<float3>, 0x01c67c0a)          g_pos;
-DAS_THREAD_LOCAL(vector<float3>, 0x72ace5c7)          g_vel;
-DAS_THREAD_LOCAL(vector<float3 *>, 0xf81c229b)        g_velBoxed;
-DAS_THREAD_LOCAL(vector<EsComponent>, 0xc19bf781)     g_components;
-
 template <typename TT>
 void releaseVec(vector<TT>& vec) {
     vector<TT> temp;

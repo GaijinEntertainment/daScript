@@ -340,10 +340,10 @@ namespace das {
     extern "C" int get_time_usec (int64_t reft);
     extern "C" int64_t ref_time_delta_to_usec (int64_t reft);
 
-    static DAS_THREAD_LOCAL(int64_t, 0x75436fa9) totParse;
-    static DAS_THREAD_LOCAL(int64_t, 0xc4b4b1b0) totInfer;
-    static DAS_THREAD_LOCAL(int64_t, 0xdddf3f0d) totOpt;
-    static DAS_THREAD_LOCAL(int64_t, 0xc5ace515) totM;
+    static DAS_THREAD_LOCAL(int64_t) totParse;
+    static DAS_THREAD_LOCAL(int64_t) totInfer;
+    static DAS_THREAD_LOCAL(int64_t) totOpt;
+    static DAS_THREAD_LOCAL(int64_t) totM;
 
     bool trySerializeProgramModule (
             ProgramPtr          & program,
