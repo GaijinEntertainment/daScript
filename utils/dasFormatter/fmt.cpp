@@ -41,7 +41,7 @@ enum class NoCommentReason {
  */
 string remove_semicolons(string_view str, bool is_gen2) {
     string result;
-    size_t line_end = -1;
+    size_t line_end = size_t(-1);
     int par_balance = 0; // ()
     int sq_braces_balance = 0; // []
     int braces_balance = 0; // {}
@@ -49,8 +49,8 @@ string remove_semicolons(string_view str, bool is_gen2) {
     do {
         size_t offset = line_end + 1;
         line_end = str.find('\n', offset);
-        bool is_eof = str.size() <= offset;
-        bool indent_non_zero = (!is_eof && (str.at(offset) == ' ' || str.at(offset) == '\t'));
+        // bool is_eof = str.size() <= offset;
+        // bool indent_non_zero = (!is_eof && (str.at(offset) == ' ' || str.at(offset) == '\t'));
         auto last_char_idx = offset + format::find_comma_place(str.substr(offset, line_end - offset));
         auto cur_line = str.substr(offset, last_char_idx - offset + 1);
         for (size_t i = 0; i < cur_line.size(); i++) {
@@ -141,7 +141,6 @@ Result transform_syntax(const string &filename, const string content, format::Fo
 
     TextPrinter tp;
 
-    uint64_t preqT = 0;
     auto access = get_file_access(nullptr);
     TextPrinter tout;
     if (getPrerequisits(filename, access, req, missing, circular, notAllowed, chain,
@@ -214,7 +213,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
         }, "*");
 
         das_yylex_init_extra(&parserState, &scanner);
-        das_yybegin(src.c_str(), src.size(), scanner);
+        das_yybegin(src.c_str(), uint32_t(src.size()), scanner);
         auto err = fmt_yyparse(scanner);
 
         // end of parsing

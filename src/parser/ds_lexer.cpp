@@ -3633,10 +3633,10 @@ YY_RULE_SETUP
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const size_t npos = -1;
+    const size_t npos = size_t(-1);
     if (offset != npos) {
-        yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
-        yylloc_param->last_column = txt.size() - (offset + 1);
+        yylloc_param->first_line -= int(std::count(txt.begin(), txt.end(), '\n'));
+        yylloc_param->last_column = int(txt.size() - (offset + 1));
     }
     yyextra->das_nested_curly_braces -= 2;
     return SEMICOLON_CUR_CUR;
@@ -3657,10 +3657,10 @@ YY_RULE_SETUP
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const size_t npos = -1;
+    const size_t npos = size_t(-1);
     if (offset != npos) {
-        yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
-        yylloc_param->last_column = txt.size() - (offset + 1);
+        yylloc_param->first_line -= int(std::count(txt.begin(), txt.end(), '\n'));
+        yylloc_param->last_column = int(txt.size() - (offset + 1));
     }
     yyextra->das_nested_curly_braces --;
     yyextra->das_nested_square_braces --;
@@ -3682,10 +3682,10 @@ YY_RULE_SETUP
     }
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const size_t npos = -1;
+    const size_t npos = size_t(-1);
     if (offset != npos) {
-        yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
-        yylloc_param->last_column = txt.size() - (offset + 1);
+        yylloc_param->first_line -= int(std::count(txt.begin(), txt.end(), '\n'));
+        yylloc_param->last_column = int(txt.size() - (offset + 1));
     }
     yyextra->das_nested_curly_braces --;
     yyextra->das_nested_square_braces --;
@@ -3704,10 +3704,10 @@ YY_RULE_SETUP
     yyextra->das_nested_square_braces -= 2;
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const size_t npos = -1;
+    const size_t npos = size_t(-1);
     if (offset != npos) {
-        yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
-        yylloc_param->last_column = txt.size() - (offset + 1);
+        yylloc_param->first_line -= int(std::count(txt.begin(), txt.end(), '\n'));
+        yylloc_param->last_column = int(txt.size() - (offset + 1));
     }
 
     return SEMICOLON_SQR_SQR;
@@ -3725,10 +3725,10 @@ YY_RULE_SETUP
     yyextra->das_nested_square_braces -= 2;
     const auto txt = string(yytext);
     auto offset = txt.rfind('\n');
-    const size_t npos = -1;
+    const size_t npos = size_t(-1);
     if (offset != npos) {
-        yylloc_param->first_line -= std::count(txt.begin(), txt.end(), '\n');
-        yylloc_param->last_column = txt.size() - (offset + 1);
+        yylloc_param->first_line -= int(std::count(txt.begin(), txt.end(), '\n'));
+        yylloc_param->last_column = int(txt.size() - (offset + 1));
     }
     return COMMA_SQR_SQR;
 }
@@ -5018,7 +5018,7 @@ void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, 
     yyextra->g_FileAccessStack.push_back(infoPtr);
     yyextra->das_line_no.push_back(yylineno);
     yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);
-    yy_scan_bytes(seq, seqLen, yyscanner);
+    yy_scan_bytes(seq, int(seqLen), yyscanner);
     yylineno = lineNo;
     BEGIN(normal);
 }

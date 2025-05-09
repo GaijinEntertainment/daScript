@@ -435,7 +435,7 @@ namespace das
         return result;
     }
 
-    string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int LROW, int LCOL, int TAB ) {
+    string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int /*LROW*/, int LCOL, int TAB ) {
         TextWriter text;
         int col=0, row=1;
         auto it = st;

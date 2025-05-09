@@ -2442,11 +2442,11 @@ namespace das {
         func->visit(*adapter);
     }
 
-    void visitEnumeration ( ProgramPtr program, smart_ptr_raw<Enumeration> enumeration, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    void visitEnumeration ( ProgramPtr program, smart_ptr_raw<Enumeration> enumeration, smart_ptr_raw<VisitorAdapter> adapter, Context * , LineInfoArg * ) {
         program->visitEnumeration(*adapter, enumeration.get());
     }
 
-    void visitStructure ( ProgramPtr program, smart_ptr_raw<Structure> structure, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    void visitStructure ( ProgramPtr program, smart_ptr_raw<Structure> structure, smart_ptr_raw<VisitorAdapter> adapter, Context * , LineInfoArg *  ) {
         program->visitStructure(*adapter, structure.get());
     }
 

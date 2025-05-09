@@ -976,7 +976,7 @@ namespace das
         persistent = ph;
     }
 
-    void Context::setup(size_t totalVars, size_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options) {
+    void Context::setup(int totalVars, uint32_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options) {
         verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         breakOnException |= policies.debugger;
         gcEnabled = options.getBoolOption("gc", false);
@@ -997,7 +997,7 @@ namespace das
         if ( globalStringHeapSize ) {
             constStringHeap->setInitialSize(globalStringHeapSize);
         }
-        globalVariables = (GlobalVariable *) code->allocate( totalVars*sizeof(GlobalVariable) );
+        globalVariables = (GlobalVariable *) code->allocate( uint32_t(totalVars*sizeof(GlobalVariable)) );
         globalsSize = 0;
         sharedSize = 0;
     }

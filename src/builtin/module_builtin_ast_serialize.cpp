@@ -144,7 +144,7 @@ namespace das {
         try {
             cb(*this);
             return true;
-        } catch ( const std::runtime_error & e ) {
+        } catch ( const std::runtime_error & ) {
             failed = true;
             return false;
         }
@@ -264,7 +264,7 @@ namespace das {
             *this << hash << obj;
             deser.insert(hash, obj);
         }
-        box = move(deser);
+        box = das::move(deser);
         return *this;
     }
 
@@ -283,9 +283,9 @@ namespace das {
         deser.reserve(size);
         for ( uint64_t i = 0; i < size; i++ ) {
             K k; V v; *this << k << v;
-            deser.emplace(move(k), move(v));
+            deser.emplace(das::move(k),das::move(v));
         }
-        value = move(deser);
+        value = das::move(deser);
     }
 
     template <typename K, typename V>
@@ -1165,7 +1165,7 @@ namespace das {
             for ( uint64_t i = 0; i < size; i++ ) {
                 ser << result[i];
             }
-            list = move(result);
+            list = das::move(result);
         }
     }
 
@@ -1396,7 +1396,7 @@ namespace das {
             Module * module = nullptr; ser << module;
             string mangledName; ser << mangledName;
             field = ( Structure::FieldDeclaration * ) 1;
-            ser.fieldRefs.emplace_back(&field, module, std::move(mangledName), name);
+            ser.fieldRefs.emplace_back(&field, module, das::move(mangledName), name);
         }
     }
 
@@ -1982,7 +1982,7 @@ namespace das {
                 VariablePtr g; ser << g;
                 result.insert(g->name, g);
             }
-            globals = move(result);
+            globals = das::move(result);
         }
     }
 
@@ -2109,14 +2109,14 @@ namespace das {
 
         vector<Module*> getDependecyOrdered(Module * m) {
             visit(m);
-            return move(sorted);
+            return das::move(sorted);
         }
 
         vector<Module*> getDependecyOrdered() {
             for ( auto mod : input ) {
                 visit(mod);
             }
-            return move(sorted);
+            return das::move(sorted);
         }
 
         void visit( Module * mod ) {
