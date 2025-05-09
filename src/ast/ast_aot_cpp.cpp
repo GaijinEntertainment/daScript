@@ -3011,7 +3011,7 @@ namespace das {
                 ss << call->name << "(";
             }
         }
-        virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+        virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool ) override {
             if ( call->arguments.size()>=1 && call->arguments[0].get()==arg &&  call->rtti_isInvoke() ) {
                 auto * inv = (ExprInvoke *) call;
                 if ( inv->isInvokeMethod ) return false;
@@ -3566,7 +3566,6 @@ namespace das {
     }
 
     static void writeStandaloneCtor(const StandaloneContextCfg & cfg, string initFunctions, TextWriter &tw, Program &program) {
-        auto disableInit = program.options.getBoolOption("no_init", program.policies.no_init);
         vector<VariablePtr> lookupVariableTable;
         if ( program.totalVariables ) {
             for (const auto & pm : program.library.getModules() ) {
@@ -3853,7 +3852,7 @@ namespace das {
      * Adds debug info to AotDebugInfoHelper
      * @return String with initialization of all functions
      */
-    string addFunctionInfo(bool disableInit, bool rtti, const vector<Function *> &fnn, AotDebugInfoHelper& helper) {
+    string addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, AotDebugInfoHelper& helper) {
         helper.rtti = rtti;
         vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
         for (auto& pfun : fnn) {
@@ -3979,8 +3978,8 @@ namespace das {
         auto logger = TextPrinter();
         for ( const auto & [nm, out] : nameToOutput ) {
             const auto &[header_content, source_content] = out;
-            auto mod = nm.empty() ? cfg.context_name : nm;
-            const auto outputFile = cppOutputDir + '/' + mod + ".das";
+            auto modd = nm.empty() ? cfg.context_name : nm;
+            const auto outputFile = cppOutputDir + '/' + modd + ".das";
             if (nm.empty()) {
                 saveToFile(logger, outputFile + ".h", header_content);
             }

@@ -5,7 +5,7 @@ namespace das {
         auto MNH = hash_blockz64((uint8_t *)info.mangledName.c_str());
         gfun->name = ctx.code->allocateName(info.name);
         gfun->mangledName = ctx.code->allocateName(info.mangledName);
-        gfun->stackSize = info.stackSize;
+        gfun->stackSize = uint32_t(info.stackSize);
         gfun->mangledNameHash = MNH;
         gfun->aotFunction = nullptr;
         gfun->flags = 0;

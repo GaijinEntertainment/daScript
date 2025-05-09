@@ -2899,7 +2899,7 @@ namespace das
 
     int TypeDecl::findArgumentIndex( const string & name ) const {
         for (size_t index=0, indexs=argNames.size(); index!=indexs; ++index) {
-            if (argNames[index] == name) return index;
+            if (argNames[index] == name) return int(index);
         }
         return -1;
     }

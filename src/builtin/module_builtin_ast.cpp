@@ -699,11 +699,11 @@ namespace das {
         return program->updateAliasMapCallback(argType, passType);
     }
 
-    const Structure * findFieldParent( smart_ptr_raw<Structure> structure, const char *name, Context * context, LineInfoArg * at ) {
+    const Structure * findFieldParent( smart_ptr_raw<Structure> structure, const char *name, Context *, LineInfoArg * ) {
         return structure->findFieldParent(name);
     }
 
-    void aotVisitGetFieldPtr( TypeAnnotation* ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at ) {
+    void aotVisitGetFieldPtr( TypeAnnotation* ann, StringBuilderWriter *ss, const char *name, Context *, LineInfoArg * ) {
         ann->aotVisitGetFieldPtr(*ss, name);
     }
 
@@ -718,7 +718,7 @@ namespace das {
     bool isAstSameType(smart_ptr<TypeDecl> argType, smart_ptr<TypeDecl> passType, bool refMatters,
                     bool constMatters,
                     bool temporaryMatters,
-                    bool allowSubstitute, Context * context, LineInfoArg * at ) {
+                    bool allowSubstitute, Context *, LineInfoArg * ) {
         return argType->isSameType(*passType,
                                    refMatters ? RefMatters::yes : RefMatters::no,
                                    constMatters ? ConstMatters::yes : ConstMatters::no,
@@ -726,12 +726,12 @@ namespace das {
                                    allowSubstitute ? AllowSubstitute::yes : AllowSubstitute::no);
     }
 
-    void aotFuncPrefix(FunctionAnnotation* ann, StringBuilderWriter * stg, ExprCallFunc *call, Context * context, LineInfoArg * at ) {
+    void aotFuncPrefix(FunctionAnnotation* ann, StringBuilderWriter * stg, ExprCallFunc *call, Context *, LineInfoArg * ) {
         ann->aotPrefix(*stg, call);
     }
 
     void aotStructPrefix(StructureAnnotation* ann, Structure *structure, const AnnotationArgumentList &args,
-                         StringBuilderWriter * stg, Context * context, LineInfoArg * at ) {
+                         StringBuilderWriter * stg, Context *, LineInfoArg * ) {
         ann->aotPrefix(structure, args, *stg);
     }
 
@@ -739,11 +739,11 @@ namespace das {
         return context->allocateString(func->getAotName(call), at);
     }
 
-    void aotBody( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context * context, LineInfoArg * at) {
+    void aotBody( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context *, LineInfoArg *) {
         structure->aotBody(st, args, *writer);
     }
 
-    void aotSuffix( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context * context, LineInfoArg * at) {
+    void aotSuffix( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context *, LineInfoArg *) {
         structure->aotSuffix(st, args, *writer);
     }
 
@@ -755,15 +755,15 @@ namespace das {
         macro->aotPrefix(*ss, expr);
     }
 
-    void aotPreVisitGetFieldPtr(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at) {
+    void aotPreVisitGetFieldPtr(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * , LineInfoArg * ) {
         ann->aotPreVisitGetFieldPtr(*ss, name);
     }
 
-    void aotPreVisitGetField(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at) {
+    void aotPreVisitGetField(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * , LineInfoArg * ) {
         ann->aotPreVisitGetField(*ss, name);
     }
 
-    void aotVisitGetField(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at) {
+    void aotVisitGetField(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * , LineInfoArg * ) {
         ann->aotVisitGetField(*ss, name);
     }
 
@@ -862,13 +862,13 @@ namespace das {
         return program->getInitSemanticHashWithDep(semH);
     }
 
-    uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * context, LineInfoArg * at) {
+    uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * , LineInfoArg * ) {
         auto fn = ((Context*)pctx)->getFunction(id);
         DAS_ASSERT(fn->mangledName == fun->getMangledName());
         return getFunctionHash(fun, fn->code, ((Context*)pctx));
     }
 
-    bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * context, LineInfoArg * at) {
+    bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * , LineInfoArg * ) {
         return mod->aotRequire(*ss) != ModuleAotType::no_aot;
     }
 

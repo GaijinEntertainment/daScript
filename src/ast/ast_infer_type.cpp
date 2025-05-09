@@ -6963,7 +6963,7 @@ namespace das {
                                     res[outI++] = src[f];
                                 }
                             }
-                            auto vecType = swz->type->getVectorType(baseType, fields.size());
+                            auto vecType = swz->type->getVectorType(baseType, int(fields.size()));
                             return program->makeConst(expr->at, make_smart<TypeDecl>(vecType), resData);
                         }
                     }

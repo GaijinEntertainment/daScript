@@ -330,7 +330,7 @@ namespace das
         Context(const Context &) = delete;
         Context & operator = (const Context &) = delete;
         virtual ~Context();
-        void setup(size_t totalVars, size_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options);
+        void setup(int totalVars, uint32_t globalStringHeapSize, CodeOfPolicies policies, AnnotationArgumentList options);
         void strip();
         void logMemInfo(TextWriter & tw);
 
