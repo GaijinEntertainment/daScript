@@ -1605,7 +1605,7 @@ namespace das
         void visitModules(Visitor & vis, bool visitGenerics = false);
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
-        void aotCpp ( Context & context, TextWriter & logs );
+        void aotCpp ( Context & context, TextWriter & logs, bool cross_platform = false );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true, bool allModules = false );
         void validateAotCpp ( TextWriter & logs, Context & context );
         void buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs );

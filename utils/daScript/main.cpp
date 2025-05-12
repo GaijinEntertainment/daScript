@@ -25,7 +25,7 @@ static bool isAotLib = false;
 static bool version2syntax = true;
 static bool gen2MakeSyntax = false;
 
-bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
+bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_platform ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
@@ -94,7 +94,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                     {
                         NamespaceGuard anon_guard(tw, program->thisNamespace); // anonymous
                         (*daScriptEnvironment::bound)->g_Program = program;    // setting it for the AOT macros
-                        program->aotCpp(*pctx, tw);
+                        program->aotCpp(*pctx, tw, cross_platform);
                         (*daScriptEnvironment::bound)->g_Program.reset();
                         // list STUFF
                         tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
@@ -160,6 +160,7 @@ int das_aot_main ( int argc, char * argv[] ) {
         return -1;
     }
     bool dryRun = false;
+    bool cross_platform = strcmp("-aotlib", argv[1]) == 0;
     bool scriptArgs = false;
     bool standaloneContext = false;
     char * standaloneContextName = nullptr;
@@ -172,6 +173,8 @@ int das_aot_main ( int argc, char * argv[] ) {
                 paranoid_validation = true;
             } else if ( strcmp(argv[ai],"-dry-run")==0 ) {
                 dryRun = true;
+            } else if ( strcmp(argv[ai],"-cross-platform")==0 ) {
+                cross_platform = true;
             } else if ( strcmp(argv[ai],"-standalone-context")==0 ) {
                 standaloneContextName = argv[ai + 1];
                 standaloneContext = true;
@@ -255,9 +258,10 @@ int das_aot_main ( int argc, char * argv[] ) {
     bool compiled = false;
     if ( standaloneContext ) {
         StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
+        cfg.cross_platform = cross_platform;
         compiled = compileStandalone(argv[2], argv[3], cfg);
     } else {
-        compiled = compile(argv[2], argv[3], dryRun);
+        compiled = compile(argv[2], argv[3], dryRun, cross_platform);
     }
     Module::Shutdown();
     return compiled ? 0 : -1;
