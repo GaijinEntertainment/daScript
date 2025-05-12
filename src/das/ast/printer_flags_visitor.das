@@ -1,3 +1,4 @@
+options gen2
 options rtti = true
 // options log_infer_passes = true
 options strict_smart_pointers = false

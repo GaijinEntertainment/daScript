@@ -1452,6 +1452,15 @@ namespace das
         return *daScriptEnvironment::bound ? (*daScriptEnvironment::bound)->g_isInAot : false;
     }
 
+    void set_aot ( ) {
+        assert(*daScriptEnvironment::bound);
+        (*daScriptEnvironment::bound)->g_isInAot = true;
+    }
+    void reset_aot ( ) {
+        assert(*daScriptEnvironment::bound);
+        (*daScriptEnvironment::bound)->g_isInAot = false;
+    }
+
     bool is_in_completion ( ) {
         if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
             return (*daScriptEnvironment::bound)->g_Program->policies.completion;
@@ -1983,6 +1992,10 @@ namespace das
         // migrate data
         addExtern<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot",
             SideEffects::worstDefault, "is_in_aot");
+        addExtern<DAS_BIND_FUN(set_aot)>(*this, lib, "set_aot",
+            SideEffects::worstDefault, "set_aot");
+        addExtern<DAS_BIND_FUN(reset_aot)>(*this, lib, "reset_aot",
+            SideEffects::worstDefault, "reset_aot");
         // completion
         addExtern<DAS_BIND_FUN(is_in_completion)>(*this, lib, "is_in_completion",
             SideEffects::worstDefault, "is_in_completion");
