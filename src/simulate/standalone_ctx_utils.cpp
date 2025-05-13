@@ -35,7 +35,7 @@ namespace das {
     }
 
     void InitGlobalVar(Context &ctx, GlobalVariable *gvar, GlobalVarInfo info) {
-        auto sizeDiff = InitGlobalVariable(ctx, gvar, move(info));
+        auto sizeDiff = InitGlobalVariable(ctx, gvar, das::move(info));
         ctx.updateSharedGlobalSize(sizeDiff.sharedSizeDiff, sizeDiff.globalsSizeDiff);
     }
 

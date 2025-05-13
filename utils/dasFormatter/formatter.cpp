@@ -33,7 +33,7 @@ namespace das::format {
             if (c != '\n') {
                 line.push_back(c);
             } else {
-                state.content_.emplace_back(move(line));
+                state.content_.emplace_back(das::move(line));
                 line.clear();
             }
         }
@@ -41,7 +41,7 @@ namespace das::format {
         state.enabled = true;
         state.last = Pos{1, 0};
         state.program = program;
-        state.options = move(options);
+        state.options = das::move(options);
         if ((state.content_.empty() || state.content_.front().substr(0, strlen("options gen2")) != "options gen2") &&
              state.options.contains(FormatOpt::V2Syntax)) {
             *state.ss << "options gen2";
