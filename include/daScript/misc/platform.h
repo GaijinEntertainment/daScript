@@ -383,15 +383,14 @@ inline size_t das_aligned_memsize(void * ptr){
 #endif
 
 template<typename T, unsigned long long TAG>
-class DasThreadLocal final
-{
+class DasThreadLocal final {
 public:
     using SelfType = DasThreadLocal<T, TAG>;
 
-    inline DasThreadLocal()
-    {
-        if (initCounter++)
-            throw std::logic_error("Type with tag is already used, pls change tag!");
+    inline DasThreadLocal() {
+        if ( initCounter++ ) {
+            DAS_ASSERTF(false, "Type with tag is already used, pls change tag!");
+        }
     }
 
     DasThreadLocal(const SelfType & other) = delete;
@@ -399,8 +398,8 @@ public:
     DasThreadLocal & operator=(const SelfType & other) = delete;
     DasThreadLocal & operator=(SelfType && other) = delete;
 
-    inline T & operator *() noexcept { return value_; }
-    inline T * operator->() noexcept { return &value_; }
+    inline T & operator *() { return value_; }
+    inline T * operator->() { return &value_; }
 
 private:
     inline static thread_local T value_{};
@@ -408,7 +407,7 @@ private:
 };
 
 #ifndef DAS_THREAD_LOCAL
-#define DAS_THREAD_LOCAL(X) DasThreadLocal<X, das::hash_tag(DAS_FILE_LINE)>
+#define DAS_THREAD_LOCAL(X) DasThreadLocal<X, das::hash_tag_file_name(DAS_FILE_LINE)>
 #endif
 
 #ifndef DAS_AOT_INLINE_LAMBDA
