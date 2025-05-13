@@ -2762,7 +2762,7 @@ class CppAot : AstVisitor {
         }
         if (!blk.blockFlags.aotSkipMakeBlock || blk.blockFlags.aotDoNotSkipAnnotationData) {
             if (blk.annotationDataSid != uint64(0)) {
-                write(*ss, "__context__.adBySid({blk.annotationDataSid}u)");
+                write(*ss, "__context__->adBySid({blk.annotationDataSid:d}u)");
             } else {
                 write(*ss, "0");
             }
@@ -3141,7 +3141,7 @@ class CppAot : AstVisitor {
                 let fun_t_str = describeCppTypeEx(funArgType, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.no, CpptRedundantConst.yes, CpptUseAlias.yes);
                 write(*ss, "das_reinterpret<{fun_t_str}>::pass(");
             } else {
-                write(*ss, "das_alias<{funArgType.alias}>.to(");
+                write(*ss, "das_alias<{funArgType.alias}>::to(");
             }
         }
         if (!call.func.flags.noPointerCast && needPtrCast(funArgType, arg._type, arg)) {
@@ -3538,6 +3538,7 @@ def updateCOP(var cop : CodeOfPolicies) {
 }
 
 def compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {
+    set_aot();
     compile_file(input, access, mg, cop) <| $(ok, program, issues) {
         if (!ok) {
             print("failed to compile {input}\n{issues}\n")
