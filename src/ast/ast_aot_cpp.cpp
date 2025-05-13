@@ -3945,7 +3945,7 @@ namespace das {
                 program->visitModule(gen, mod);
                 {
                     das_set<string> ext_namespaces;
-                    for (const auto pfun: functions) {
+                    for (das::Function *pfun: functions) {
                         auto needInline = program->thisModule.get() == pfun->module;
                         if (!needInline && gen.used_functions.count(aotFuncName(pfun)) == 0) {
                             NamespaceGuard anon_guard(source, pfun->module->getNamespace()); // anonymous
@@ -3953,7 +3953,7 @@ namespace das {
                             ext_namespaces.emplace(pfun->module->getNamespace());
                         }
                     }
-                    for (const auto namesp: ordered(ext_namespaces)) {
+                    for (const string &namesp: ordered(ext_namespaces)) {
                         source << "using namespace " << namesp << ";\n";
                     }
                 }
