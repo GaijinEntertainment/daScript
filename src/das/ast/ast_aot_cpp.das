@@ -566,10 +566,19 @@ class AotDebugInfoHelper {
     }
 
 
-    def describeCppVarInfo(info : VarInfo?; suffix : string) {
+    def describeCppVarInfo(struct_name : string; info : VarInfo?; suffix : string) {
         return build_string() <| $(writer) {
             write(writer, "{describeCppTypeInfo(info, suffix)}, \"{info.name}\", ");
-            write(writer, "{info.offset:d}, {info.nextGcField:d}");
+            write(writer, "offsetof({struct_name},{info.name}), {info.nextGcField:d}");
+        }
+    }
+    def describeCppVarFuncInfo(struct_name : string; info : VarInfo?; suffix : string) {
+        return build_string() <| $(writer) {
+            write(writer, "{describeCppTypeInfo(info, suffix)}, \"{info.name}\", ");
+            // Note: info offset is platform dependant,
+            // however for functions it's not done yet and always zero.
+            assert(info.offset == 0u);
+            write(writer, "0, {info.nextGcField:d}");
         }
     }
     def describeCppStructInfoFields(var writer : StringBuilderWriter?; info : StructInfo?) {
@@ -580,7 +589,8 @@ class AotDebugInfoHelper {
                 writeDim(writer, info.fields[fi], suffix);
                 writeArgTypes(writer, info.fields[fi], suffix);
                 writeArgNames(writer, info.fields[fi], suffix);
-                write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(info.fields[fi],suffix)} \};\n");
+                let prefix = (info.module_name |> length() > 0) ? "{info.module_name}::" : "";
+                write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + info.name, info.fields[fi],suffix)} \};\n");
             }
         }
         let fields = (info.count |> range()
@@ -609,7 +619,7 @@ class AotDebugInfoHelper {
                 writeDim(writer, info.fields[fi], suffix);
                 writeArgTypes(writer, info.fields[fi], suffix);
                 writeArgNames(writer, info.fields[fi], suffix);
-                write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(info.fields[fi],suffix)} \};\n");
+                write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(info.name, info.fields[fi],suffix)} \};\n");
             }
         }
 
@@ -921,7 +931,7 @@ class CppAot : AstVisitor {
 
     def str() {
         let maybe_nl = type_info |> empty() ? "" : "\n";
-        return "\n" + helper.str() + join(type_info, "\n") + "{maybe_nl}" + join(aot_prefixes, "") + ss |> string_builder_str();
+        return "\n" + declarations + helper.str() + join(type_info, "\n") + "{maybe_nl}" + join(aot_prefixes, "") + ss |> string_builder_str();
     }
 
     def clear() {
@@ -930,6 +940,7 @@ class CppAot : AstVisitor {
         aot_prefixes |> clear();
     }
     ss : StringBuilderWriter ?;
+    declarations : string
     type_info : array<string>;
     aot_prefixes : array<string>;// looks like it always empty. Can we remove it?
     lastNewLine : uint64 = -1ul;
@@ -942,6 +953,7 @@ class CppAot : AstVisitor {
     @do_not_delete scopes : array<ExprBlock?>;
     prologue : bool = false;
     solidContext : bool = false;
+    cross_platform : bool = false;
     def newLine() {
         // auto nlPos = ss.tellp();
         write(*ss, "\n");
@@ -1041,7 +1053,7 @@ class CppAot : AstVisitor {
     }
     def override visitStructure(that : StructurePtr) {
         write(*ss, "};\n");   // structure
-        if (!that.fields |> empty()) {
+        if (!cross_platform && !that.fields |> empty()) {
             let s_name = aotStructName(that.get_ptr())
             write(*ss, "static_assert(sizeof({s_name})=={that.sizeOf},\"structure size mismatch with DAS\");\n");
             for (tf in that.fields) {
@@ -1062,6 +1074,8 @@ class CppAot : AstVisitor {
 // program body
     def override preVisitProgramBody(prog : ProgramPtr; mod : Module?) {
         // functions
+        declarations = ss |> string_builder_str();
+        ss |> string_builder_clear();
         write(*ss, "\n");
         prog.getThisModule |> for_each_module_function($(var fn : FunctionPtr) {
             if (!fn.flags.builtIn && !fn.flags.noAot) {
@@ -1733,10 +1747,35 @@ class CppAot : AstVisitor {
         return nc;
     }
 // is variant
+    def stringify_variadic_types(types : dasvector`smart_ptr`TypeDecl) {
+        unsafe {
+            return (types |> each()
+                                   |> map(@(t : TypeDeclPtr) : string {
+                                       return describeCppTypeEx(t,
+                                                                CpptSubstitureRef.no,
+                                                                CpptSkipRef.no,
+                                                                CpptSkipConst.no,
+                                                                CpptRedundantConst.yes,
+                                                                CpptUseAlias.no);
+                                   })
+                                   |> join(","))
+       }
+    }
+
+    def get_variant_field(field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
+        let type_str = describeCppType(field_type.argTypes[index]);
+        let maybe_ptr = is_pointer ? "_ptr" : "";
+        if (cross_platform) {
+            return "das_get_auto_variant_field{maybe_ptr}<{type_str},{index},{stringify_variadic_types(field_type.argTypes)}>";
+        } else {
+            let offset = field_type.get_variant_field_offset(index);
+            return "das_get_variant_field{maybe_ptr}<{type_str},{offset},{index}>";
+        }
+    }
+
     def override preVisitExprIsVariant(field : smart_ptr<ExprIsVariant>) {
-        let type_str = describeCppType(field.value._type.argTypes[field.fieldIndex]);
-        let offset = field.value._type.get_variant_field_offset(field.fieldIndex);
-        write(*ss, "das_get_variant_field<{type_str},{offset},{field.fieldIndex}>::is(");
+        assume var_type = field.value._type;
+        write(*ss, "{get_variant_field(var_type, field.fieldIndex)}::is(")
     }
     def override visitExprIsVariant(var field : smart_ptr<ExprIsVariant>) : ExpressionPtr {
         write(*ss, ")");
@@ -1744,12 +1783,11 @@ class CppAot : AstVisitor {
     }
 // as variant
     def override preVisitExprAsVariant(field : smart_ptr<ExprAsVariant>) {
+        assume var_type = field.value._type;
         if (field._type.flags.aotAlias) {
             write(*ss, "das_alias<{field._type.alias}>::from(");
         }
-        let type_str = describeCppType(field.value._type.argTypes[field.fieldIndex]);
-        let offset = field.value._type.get_variant_field_offset(field.fieldIndex);
-        write(*ss, "das_get_variant_field<{type_str},{offset},{field.fieldIndex}>::as(");
+        write(*ss, "{get_variant_field(var_type, field.fieldIndex)}::as(");
     }
     def override visitExprAsVariant(var field : smart_ptr<ExprAsVariant>) : ExpressionPtr {
         write(*ss, ",__context__)");
@@ -1764,9 +1802,7 @@ class CppAot : AstVisitor {
         if (fieldT.flags.aotAlias) {
             write(*ss, "das_alias<{fieldT.alias}>::from(");
         }
-        let offset = fieldT.get_variant_field_offset(field.fieldIndex);
-        let type_str = describeCppType(fieldT.argTypes[field.fieldIndex]);
-        write(*ss, "das_get_variant_field<{type_str},{offset},{field.fieldIndex}>::safe_as{(field.skipQQ ? "_ptr" : "")}(");
+        write(*ss, "{get_variant_field(fieldT, field.fieldIndex)}::safe_as{(field.skipQQ ? "_ptr" : "")}(")
     }
     def override visitExprSafeAsVariant(var field : smart_ptr<ExprSafeAsVariant>) : ExpressionPtr {
         write(*ss, ")");
@@ -1798,8 +1834,14 @@ class CppAot : AstVisitor {
         if (vtype.isHandle) {
             write(*ss, ">::get(");
         } elif (vtype.isGoodTupleType) {
+            if (cross_platform) {
+                panic("Platform independent code enabled. But field {field.name} is tuple")
+            }
             write(*ss, ", {vtype.get_tuple_field_offset(field.fieldIndex)}>::get(");
         } elif (vtype.isGoodVariantType) {
+            if (cross_platform) {
+                panic("Platform independent code enabled. But field {field.name} is tuple")
+            }
             write(*ss, ", {vtype.get_variant_field_offset(field.fieldIndex)}, {field.fieldIndex}>::get(");
         } else {
             let mod_name = (vtype.structType._module.name.empty() ? "" : string(vtype.structType._module.name) + "::");
@@ -1824,6 +1866,17 @@ class CppAot : AstVisitor {
         return field;
     }
 // field
+    def get_tuple_field(field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
+        let field_tp = describeCppType(field_type.argTypes[index]);
+        let maybe_ptr = is_pointer ? "_ptr" : "";
+        if (cross_platform) {
+            return "das_get_auto_tuple_field{maybe_ptr}<{field_tp},{index},{stringify_variadic_types(field_type.argTypes)}>";
+        } else {
+            let field_offset = field_type.get_tuple_field_offset(index);
+            return "das_get_tuple_field{maybe_ptr}<{field_tp},{field_offset}>";
+        }
+    }
+
     def override preVisitExprField(field : smart_ptr<ExprField>) {
         if (field._type.flags.aotAlias) {
             write(*ss, "das_alias<{field._type.alias}>::from(");
@@ -1832,13 +1885,9 @@ class CppAot : AstVisitor {
         if (field_type.isBitfield) {
             write(*ss, "das_get_bitfield(");
         } elif (field_type.isTuple) {
-            let field_tp = describeCppType(field_type.argTypes[field.fieldIndex]);
-            let field_offset = field_type.get_tuple_field_offset(field.fieldIndex);
-            write(*ss, "das_get_tuple_field<{field_tp},{field_offset}>::get(");
+            write(*ss, "{get_tuple_field(field_type, field.fieldIndex)}::get(")
         } elif (field_type.isVariant) {
-            let field_tp = describeCppType(field_type.argTypes[field.fieldIndex]);
-            let field_offset = field_type.get_variant_field_offset(field.fieldIndex);
-            write(*ss, "das_get_variant_field<{field_tp},{field_offset},{field.fieldIndex}>::get(");
+            write(*ss, "{get_variant_field(field_type, field.fieldIndex)}::get(")
         } elif (field_type.isHandle) {
             if (field._type.isString) {
                 write(*ss, "(({describeCppType(field._type)})(");  // c-cast const char * etc string casts to char * or char * const
@@ -1848,13 +1897,9 @@ class CppAot : AstVisitor {
             if (field_type.firstType.isHandle) {
                 aot_previsit_get_field_ptr(field_type.firstType.annotation, ss, string(field.name));
             } elif (field.value._type.firstType.isTuple) {
-                let field_type = describeCppType(field_type.firstType.argTypes[field.fieldIndex]);
-                let field_offset = field_type.firstType.get_tuple_field_offset(field.fieldIndex)
-                write(*ss, "das_get_tuple_field_ptr<{field_type},{field_offset}>::get(");
+                write(*ss, "{get_tuple_field(field_type.firstType, field.fieldIndex, true)}::get(")
             } elif (field.value._type.firstType.isVariant) {
-                let field_type = describeCppType(field_type.firstType.argTypes[field.fieldIndex]);
-                let field_offset = field_type.firstType.get_tuple_field_offset(field.fieldIndex)
-                write(*ss, "das_get_variant_field_ptr<{field_type},{field_offset},{field.fieldIndex}>::get(");
+                write(*ss, "{get_variant_field(field_type.firstType, field.fieldIndex, true)}::get(")
             }
         }
     }
@@ -2551,7 +2596,7 @@ class CppAot : AstVisitor {
         }
         let type_str = describeCppType(expr._type.argTypes[variantIndex]);
         let offset_str = expr._type.get_variant_field_offset(variantIndex);
-        write(*ss, "{tabs()}das_get_variant_field<{type_str},{offset_str},{variantIndex}>::set(");
+        write(*ss, "{tabs()}{get_variant_field(expr._type, variantIndex)}::set(");
         write(*ss, "{mkvName(expr)}");
         if (length(expr.variants) != 1) write(*ss, "({index},__context__)");
         write(*ss, ") = ");
@@ -2724,9 +2769,7 @@ class CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; init : ExpressionPtr; last : bool) {
-        let type_str = describeCppType(expr.makeType.argTypes[index]);
-        let offset_str = expr.makeType.get_tuple_field_offset(index);
-        write(*ss, "{tabs()}das_get_tuple_field<{type_str},{offset_str}>::get({mktName(expr)}) = ");
+        write(*ss, "{tabs()}{get_tuple_field(expr.makeType, index)}::get({mktName(expr)}) = ");
     }
     def override visitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; var init : ExpressionPtr; last : bool) {
         write(*ss, ";\n");
@@ -2867,7 +2910,9 @@ class CppAot : AstVisitor {
             let einv = call as ExprInvoke;
             write(*ss, "<{describeCppType(call._type)}");
             if (methodOffset != -1) {
-                write(*ss, ",{methodOffset}/*{methodName}*/");
+                assume argType = call.arguments[0]._type;
+                write(*ss, ",offsetof({describeCppType(argType.argTypes[0], CpptSubstitureRef.no,
+                                       CpptSkipRef.yes, CpptSkipConst.yes)},{methodName})");
             }
             write(*ss, ">::invoke");
             if (einv.isCopyOrMove) {
@@ -2934,7 +2979,12 @@ class CppAot : AstVisitor {
         if (call.name == "assert" || call.name == "verify" || call.name == "debug") {
             write(*ss, "))");
         } elif (call.name == "memzero") {
-            write(*ss, "), 0, {call.arguments[0]._type.sizeOf})");
+            assume cur_type = call.arguments[0]._type;
+            if (cross_platform) {
+                write(*ss, "), 0, TypeSize<{describeCppType(cur_type,CpptSubstitureRef.no,CpptSkipRef.yes)}>::size)");
+            } else {
+                write(*ss, "), 0, {cur_type.sizeOf})");
+            }
         } else {
             write(*ss, ")");
         }
@@ -3556,7 +3606,7 @@ def compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop,
 
 
 [export]
-def aot(input : string; isAotLib, paranoid_validation : bool) : string {
+def aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : bool) : string {
     var result = "";
     using <| $(var mg : ModuleGroup) {
         using <| $(var cop : CodeOfPolicies) {
@@ -3611,7 +3661,8 @@ def aot(input : string; isAotLib, paranoid_validation : bool) : string {
                                                      prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false ||
                                                                 program.getDebugger,
                                                      solidContext = program.policies.solid_context ||
-                                                                (program._options |> find_arg("solid_context") ?as tBool ?? false))
+                                                                (program._options |> find_arg("solid_context") ?as tBool ?? false),
+                                                     cross_platform = cross_platform)
                             cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
                             var inscope adapter <- make_visitor(*cpp_aot)
                             cpp_aot.adapter := adapter

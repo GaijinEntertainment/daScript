@@ -589,7 +589,7 @@ namespace das {
         void describeCppVarInfo ( TextWriter & ss, string_view structName, VarInfo * info, const string & suffix ) const {
             describeCppTypeInfo(ss, info, suffix);
             ss << ", \"" << info->name << "\", offsetof(";
-            ss << structName.data() << ", " << info->name << "), " << info->nextGcField;
+            ss << structName.data() << "," << info->name << "), " << info->nextGcField;
         }
         void describeCppVarFuncInfo ( TextWriter & ss, string_view structName, VarInfo * info, const string & suffix ) const {
             describeCppTypeInfo(ss, info, suffix);
