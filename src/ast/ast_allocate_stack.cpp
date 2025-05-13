@@ -818,7 +818,7 @@ namespace das {
                     }
                     auto elet = static_pointer_cast<ExprLet>(expr->clone());
                     elet->alwaysSafe = true;
-                    elet->variables = move(expr->variables);
+                    elet->variables = das::move(expr->variables);
                     for ( auto & evar : elet->variables ) {
                         evar->init = nullptr;
                     }

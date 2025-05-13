@@ -38,7 +38,7 @@ namespace das {
     struct GlobalVarInfo {
         GlobalVarInfo() = delete;
         GlobalVarInfo(string name, const string &mangledName, uint32_t typeSize, bool globalShared)
-            : name(move(name))
+            : name(das::move(name))
             , mangledNameHash(Variable::getMNHash(mangledName))
             , typeSize(typeSize)
             , globalShared(globalShared) {}

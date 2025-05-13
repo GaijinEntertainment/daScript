@@ -3625,7 +3625,7 @@ namespace das {
 
 
         tw << "     // start totalFunctions\n";
-        tw << move(initFunctions);
+        tw << das::move(initFunctions);
         tw << "    // end totalFunctions\n";
 
         tw << "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n";
@@ -3678,7 +3678,7 @@ namespace das {
         }
 
         writeStandaloneContextMethods(program, source, cfg.class_name + "::", false);
-        writeStandaloneCtor(cfg, move(initFunctions), source, *program);
+        writeStandaloneCtor(cfg, das::move(initFunctions), source, *program);
 
         source << "#ifdef STANDALONE_CONTEXT_TESTS\n";
         source << "static Context * registerStandaloneTest ( ) {\n";
@@ -3755,7 +3755,7 @@ namespace das {
         {
             NamespaceGuard guard1(header, cfg.context_name);
             NamespaceGuard guard2(source, cfg.context_name);
-            writeStandaloneContext(program, move(initFunctions), header, source, cfg);
+            writeStandaloneContext(program, das::move(initFunctions), header, source, cfg);
         }
     }
 
@@ -3966,7 +3966,7 @@ namespace das {
                 source << gen.str();
                 gen.clear();
             }
-            writeRegistration(header, source, move(initFunctions), program, cfg, context);
+            writeRegistration(header, source, das::move(initFunctions), program, cfg, context);
         }
         source << AOT_FOOTER;
 
