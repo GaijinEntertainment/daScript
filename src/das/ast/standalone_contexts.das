@@ -22,7 +22,8 @@ require ast_aot_cpp
 struct StandaloneContextCfg {
     context_name : string;
     class_name : string;
-    cpp_output_dir : string
+    cpp_output_dir : string;
+    cross_platform : bool
 };
 
 
@@ -43,7 +44,7 @@ def getInitSemanticHash(ctx : Context) {
     */
 }
 
-def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilderWriter; prefix : string; declare_only : bool) {
+def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilderWriter; prefix : string; declare_only : bool; cfg : StandaloneContextCfg) {
     let fnn = collectProgramUsedFunctions(prog);
 
     var coll = new BlockVariableCollector();
@@ -60,16 +61,16 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
         for (variable in fn.arguments) {
             let type_str = build_string() <| $(var wr) {
                 if (isLocalVec(variable._type)) {
-                    describeLocalCppType(unsafe(addr(wr)), variable._type);
+                    describeLocalCppType(unsafe(addr(wr)), variable._type, cfg.cross_platform);
                 } else {
-                    write(wr, describeCppType(variable._type));
+                    write(wr, describeCppType(variable._type, DescribeConfig(cross_platform = cfg.cross_platform)));
                 }
             }
             vars.push("{type_str} {variable._type.isRefType ? "& " : ""}{coll.getVarName(variable)}")
         }
         let vars_str = join(vars, ", ");
         write(logs, "{vars_str}{!fn.arguments.empty() ? " " : ""}) -> ")
-        describeLocalCppType(unsafe(addr(logs)), fn.result, CpptSubstitureRef.no, CpptSkipConst.yes);
+        describeLocalCppType(unsafe(addr(logs)), fn.result, cfg.cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
         if (declare_only) {
             write(logs, ";\n");
         } else {
@@ -179,10 +180,10 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
     write(header, "class {cfg.class_name} : public Context \{\n");
     write(header, "public:\n");
     write(header, "    {cfg.class_name}();\n");
-    writeStandaloneContextMethods(program, header, "", true);
+    writeStandaloneContextMethods(program, header, "", true, cfg);
     write(header, "\};\n");
 
-    writeStandaloneContextMethods(program, source, "{cfg.class_name}::", false);
+    writeStandaloneContextMethods(program, source, "{cfg.class_name}::", false, cfg);
     writeStandaloneCtor(cfg, initFunctions, source, program);
 
     write(source, "#ifdef STANDALONE_CONTEXT_TESTS\n");
@@ -264,7 +265,7 @@ def writeRegistration(var header : StringBuilderWriter;
                       cfg : StandaloneContextCfg;
                       var context : Context) {
     write(source, "using namespace {program.thisNamespace};\n");
-    dumpRegisterAot(unsafe(addr(source)), program, context, true);
+    dumpRegisterAot(unsafe(addr(source)), program, context, cfg.cross_platform, true);
     write(header, "namespace {cfg.context_name} \{\n");
     write(source, "namespace {cfg.context_name} \{\n");
     writeStandaloneContext(program, initFunctions, header, source, cfg);

@@ -202,6 +202,8 @@ namespace das {
         return aotSuffixNameEx(st->name,"");
     }
 
+    static bool crossPlatform = false; // It'll be better to forward this flag everywhere in describeTypeEx
+
     string describeCppTypeEx ( const TypeDeclPtr & type,
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
@@ -255,15 +257,29 @@ namespace das {
                 stream << "Table";
             }
         } else if ( baseType==Type::tTuple ) {
-            stream << "TTuple<" << int(type->getTupleSize());
+            if (crossPlatform) {
+                stream << "AutoTuple<";
+            } else {
+                stream << "TTuple<" << int(type->getTupleSize());
+            }
             for ( const auto & arg : type->argTypes ) {
-                stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                if (!crossPlatform || arg != type->argTypes.front()) {
+                    stream << ",";
+                }
+                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
             }
             stream << ">";
         } else if ( baseType==Type::tVariant ) {
-            stream << "TVariant<" << int(type->getVariantSize()) << "," << int(type->getVariantAlign());
+            if (crossPlatform) {
+                stream << "AutoVariant<";
+            } else {
+                stream << "TVariant<" << int(type->getVariantSize()) << "," << int(type->getVariantAlign());
+            }
             for ( const auto & arg : type->argTypes ) {
-                stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                if (!crossPlatform || arg != type->argTypes.front()) {
+                    stream << ",";
+                }
+                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
             }
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
@@ -4000,6 +4016,7 @@ namespace das {
     }
 
     void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
+        crossPlatform = cfg.cross_platform;
         auto printer = TextPrinter();
         auto pctx = SimulateWithErrReport(program, printer);
         if (!pctx) {
@@ -4101,6 +4118,7 @@ namespace das {
 
     void Program::aotCpp ( Context & context, TextWriter & logs, bool cross_platform ) {
         // run no-aot marker
+        crossPlatform = cross_platform;
         NoAotMarker marker;
         visit(marker);
         // mark prologue
