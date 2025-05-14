@@ -3078,7 +3078,7 @@ namespace das {
             } else if ( call->name=="invoke" || call->rtti_isInvoke() ) {
                 const auto argType = call->arguments[0]->type;
                 auto bt = argType->baseType;
-                optional<string> methodName;
+                std::optional<string> methodName;
                 if ( bt==Type::tFunction ) {
                     auto einv = static_cast<ExprInvoke *>(call);
                     if ( einv->isInvokeMethod ) {

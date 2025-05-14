@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm> // constexpr std::max
+
 #include "daScript/misc/callable.h"
 #include "daScript/misc/macro.h"
 #include "daScript/simulate/runtime_profile.h"
@@ -1005,7 +1007,7 @@ namespace das {
     };
 
     template <typename... TA>
-    constexpr int max_alignof() { return max({TypeAlign<int>::align, TypeAlign<TA>::align...}); }
+    constexpr int max_alignof() { return std::max({TypeAlign<int>::align, TypeAlign<TA>::align...}); }
 
 
     template <int tupleSize, typename... TA>
@@ -1041,10 +1043,10 @@ namespace das {
     }
 
     template <typename... TA>
-    constexpr int max_sizeof() {
+    constexpr int variant_sizeof() {
         constexpr auto align = max_alignof<TA...>();
         int ma = 0;
-        ((ma = max(round_up(TypeSize<int>::size, align) + round_up(TypeSize<TA>::size, align), ma)), ...);
+        ((ma = std::max(round_up(TypeSize<int>::size, align) + round_up(TypeSize<TA>::size, align), ma)), ...);
         return ma;
     }
 
@@ -1112,7 +1114,7 @@ namespace das {
 
     template <int variantSize, int variantAlign, typename ...TA>
     struct alignas(variantAlign) TVariant : Variant {
-        static_assert(variantSize == max_sizeof<TA...>());
+        static_assert(variantSize == variant_sizeof<TA...>());
         static_assert(variantAlign == max_alignof<TA...>());
 
         template<int N> using NthType =
@@ -1147,7 +1149,7 @@ namespace das {
     };
 
     template <typename ...TA>
-    using AutoVariant = TVariant<max_sizeof<TA...>(), max_alignof<TA...>(), TA...>;
+    using AutoVariant = TVariant<variant_sizeof<TA...>(), max_alignof<TA...>(), TA...>;
 
     template <typename TT, int offset, int variant>
     struct das_get_variant_field {

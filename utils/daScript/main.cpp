@@ -160,7 +160,7 @@ int das_aot_main ( int argc, char * argv[] ) {
         return -1;
     }
     bool dryRun = false;
-    bool cross_platform = strcmp("-aotlib", argv[1]) == 0;
+    bool cross_platform = false; // strcmp("-aotlib", argv[1]) == 0;
     bool scriptArgs = false;
     bool standaloneContext = false;
     char * standaloneContextName = nullptr;
