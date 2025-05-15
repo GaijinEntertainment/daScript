@@ -5576,15 +5576,20 @@ namespace das {
                         // note - we only report this error if verbose, i.e. if we are reporting FINAL error
                         // this is an error only if things failed to compile
                         TextWriter tw;
-                        tw << "possible candidates:\n";
-                        for ( auto en : possibleEnums ) {
-                            tw << "\tenum " << en->name << " in " << (en->module->name.empty() ? "this module" : en->module->name) << "\n";
+                        if ( possibleEnums.size() || possibleBitfields.size() ) {
+                            tw << "possible candidates:\n";
+                            for ( auto en : possibleEnums ) {
+                                tw << "\tenum " << en->name << " in " << (en->module->name.empty() ? "this module" : en->module->name) << "\n";
+                            }
+                            for ( auto bf : possibleBitfields ) {
+                                tw << "\tbitfield " << bf->alias << " in " << (bf->alias.empty() ? "this module" : bf->alias) << "\n";
+                            }
+                            error("'" + var->name + "' is ambiguous", tw.str(), "",
+                                expr->at, CompilationError::cant_get_field);
+                        } else {
+                            error("Don't know what '" + var->name + "' is", "", "",
+                                expr->at, CompilationError::cant_get_field);
                         }
-                        for ( auto bf : possibleBitfields ) {
-                            tw << "\tbitfield " << bf->alias << " in " << (bf->alias.empty() ? "this module" : bf->alias) << "\n";
-                        }
-                        error("'" + var->name + "' is ambiguous", tw.str(), "",
-                            expr->at, CompilationError::cant_get_field);
                     }
                 }
             }
@@ -7250,6 +7255,12 @@ namespace das {
                 pVar->type->temporary |= src->type->isTemp();
                 pVar->source = src;
                 pVar->can_shadow = expr->canShadow;
+                for ( auto & al : assume ) {
+                    if ( al->alias==pVar->name ) {
+                        error("can't make loop variable `" + pVar->name + "`, name already taken by alias", "", "",
+                            pVar->at, CompilationError::variable_not_found);
+                    }
+                }
                 if ( !pVar->can_shadow && !program->policies.allow_local_variable_shadowing ) {
                     if ( func ) {
                         for ( auto & fna : func->arguments ) {
@@ -7399,6 +7410,12 @@ namespace das {
             if ( var->type->isAuto() && !var->init) {
                 error("local variable type can't be inferred, it needs an initializer", "", "",
                       var->at, CompilationError::cant_infer_missing_initializer );
+            }
+            for ( auto & al : assume ) {
+                if ( al->alias==var->name ) {
+                    error("can't make local variable `" + var->name + "`, name already taken by alias", "", "",
+                        var->at, CompilationError::variable_not_found);
+                }
             }
             if ( !var->can_shadow && !program->policies.allow_local_variable_shadowing ) {
                 if ( func ) {
