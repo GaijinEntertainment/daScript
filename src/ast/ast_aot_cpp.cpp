@@ -3763,7 +3763,7 @@ namespace das {
         tw << das::move(initFunctions);
         tw << "    };\n";
         tw << "    // end totalFunctions\n";
-        tw << "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;";
+        tw << "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n";
         tw << "    for (const auto& [index, func_info, debug_info]: initFunctions) {\n";
         tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
         tw << "        context.functions[index].debugInfo = debug_info;\n";
@@ -3784,8 +3784,6 @@ namespace das {
                 tw << "    (*context.tabAdLookup)["<< HEX << s2d.first << DEC <<"] = "<< s2d.second <<";\n";
             }
         }
-
-        const auto fnn = collectUsedFunctions(program.library.getModules(), program.totalFunctions, program.getThisModule(), false, true);
 
         tw << "    FillFunction(context, getGlobalAotLibrary(), move(id_to_funcs));\n";
         // aot init
