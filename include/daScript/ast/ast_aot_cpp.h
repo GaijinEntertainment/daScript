@@ -52,6 +52,7 @@ namespace das {
     struct StandaloneContextCfg {
         string context_name;
         string class_name;
+        bool cross_platform = false;
     };
 
     /**

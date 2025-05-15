@@ -172,6 +172,14 @@ enum CpptSkipRef { no, yes };
 enum CpptSkipConst { no, yes };
 enum CpptRedundantConst { no, yes };
 
+struct DescribeConfig {
+    substitute_ref : bool = false
+    skip_ref : bool = false
+    skip_const : bool = false
+    redundant_const : bool = true
+    cross_platform : bool = false
+}
+
 def aotSuffixNameEx(funcName : das_string; suffix : string) {
     var prefix = false;
 
@@ -223,19 +231,16 @@ def aotStructName(st : Structure?) {
 
 
 def describeCppTypeEx(typeDecl : TypeDeclPtr;
-                      substituteRef : CpptSubstitureRef;
-                      skipRef : CpptSkipRef;
-                      var skipConst : CpptSkipConst;
-                      redundantConst : CpptRedundantConst;
+                      in_cfg : DescribeConfig;
                       useAlias : CpptUseAlias) {
-
-    if (isConstRedundantForCpp(typeDecl) && redundantConst == CpptRedundantConst.yes) {
-        if (substituteRef == CpptSubstitureRef.yes && typeDecl.flags.ref) {
+    var cfg := in_cfg
+    if (isConstRedundantForCpp(typeDecl) && cfg.redundant_const) {
+        if (cfg.substitute_ref && typeDecl.flags.ref) {
             // can't skip const
         } elif (typeDecl.flags.ref) {
             // can't skip const
         } else {
-            skipConst = CpptSkipConst.yes;
+            cfg.skip_const = true;
         }
     }
     let baseType = typeDecl.baseType;
@@ -259,31 +264,39 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             write(writer, "{handle_name}")
         } elif (baseType == Type.tArray) {
             if (typeDecl.firstType != null) {
-                let cpp_typeDecl = describeCppTypeEx(typeDecl.firstType, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no, CpptRedundantConst.yes, useAlias);
+                let cpp_typeDecl = describeCppTypeEx(typeDecl.firstType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
                 write(writer, "TArray<{cpp_typeDecl}>")
             } else {
                 write(writer, "Array")
             }
         } elif (baseType == Type.tTable) {
             if (typeDecl.firstType != null && typeDecl.secondType != null) {
-                let first_type = describeCppTypeEx(typeDecl.firstType, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no, CpptRedundantConst.yes, useAlias);
-                let second_type = describeCppTypeEx(typeDecl.secondType, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no, CpptRedundantConst.yes, useAlias);
+                let first_type = describeCppTypeEx(typeDecl.firstType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
+                let second_type = describeCppTypeEx(typeDecl.secondType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
                 write(writer, "TTable<{first_type},{second_type}>");
             } else {
                 write(writer, "Table");
             }
         } elif (baseType == Type.tTuple) {
             let types = join(map(each(typeDecl.argTypes), @(arg) {
-                let s : string = describeCppTypeEx(arg, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no, CpptRedundantConst.yes, useAlias);
+                let s : string = describeCppTypeEx(arg, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
                 return s;
             }), ",")
-            write(writer, "TTuple<{int(typeDecl.tupleSize)},{types}>")
+            if (cfg.cross_platform) {
+                write(writer, "AutoTuple<{types}>")
+            } else {
+                write(writer, "TTuple<{int(typeDecl.tupleSize)},{types}>")
+            }
         } elif (baseType == Type.tVariant) {
             let types = join(map(each(typeDecl.argTypes), @(arg) {
-                let s : string = describeCppTypeEx(arg, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no, CpptRedundantConst.yes, useAlias);
+                let s : string = describeCppTypeEx(arg, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
                 return s
             }), ",")
-            write(writer, "TVariant<{int(typeDecl.variantSize)},{int(typeDecl.variantAlign)},{types}>")
+            if (cfg.cross_platform) {
+                write(writer, "AutoVariant<{types}>");
+            } else {
+                write(writer, "TVariant<{int(typeDecl.variantSize)},{int(typeDecl.variantAlign)},{types}>")
+            }
         } elif (baseType == Type.tStructure) {
             if (typeDecl.structType != null) {
                 if (typeDecl.structType._module.name.empty()) {
@@ -297,7 +310,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         } elif (baseType == Type.tPointer) {
             if (!typeDecl.flags.smartPtr) {
                 if (typeDecl.firstType != null) {
-                    write(writer, "{describeCppTypeEx(typeDecl.firstType,CpptSubstitureRef.no,CpptSkipRef.no,CpptSkipConst.no,CpptRedundantConst.no,useAlias)} *");
+                    write(writer, "{describeCppTypeEx(typeDecl.firstType,DescribeConfig(redundant_const=false,cross_platform=cfg.cross_platform),useAlias)} *");
                 } else {
                     write(writer, "void *");
                 }
@@ -305,7 +318,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
                 let ptr_name = typeDecl.flags.smartPtrNative ? "smart_ptr" : "smart_ptr_raw"
                 var type_decl_name = "void"
                 if (typeDecl.firstType != null) {
-                    type_decl_name = describeCppTypeEx(typeDecl.firstType, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no, CpptRedundantConst.no, useAlias);
+                    type_decl_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = false, cross_platform = cfg.cross_platform), useAlias);
                 }
                 write(writer, "{ptr_name}<{type_decl_name}>");
             }
@@ -323,7 +336,12 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             }
         } elif (baseType == Type.tIterator) {
             if (typeDecl.firstType != null) {
-                write(writer, "Sequence DAS_COMMENT(({describeCppTypeEx(typeDecl.firstType,substituteRef,skipRef,skipConst,CpptRedundantConst.yes,useAlias)}))")
+                let new_cfg = DescribeConfig(substitute_ref = cfg.substitute_ref,
+                                         skip_ref = cfg.skip_ref,
+                                         skip_const = cfg.skip_const,
+                                         redundant_const = true,
+                                         cross_platform = cfg.cross_platform)
+                write(writer, "Sequence DAS_COMMENT(({describeCppTypeEx(typeDecl.firstType,new_cfg,useAlias)}))")
             } else {
                 write(writer, "Sequence")
             }
@@ -331,11 +349,11 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             var maybe_const = !typeDecl.flags.constant && typeDecl.baseType == Type.tBlock ? "const " : ""
             var type_name = "void"
             if (typeDecl.firstType != null) {
-                type_name = describeCppTypeEx(typeDecl.firstType, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no, CpptRedundantConst.yes, useAlias)
+                type_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias)
             }
             let extra_comma = length(typeDecl.argTypes) != 0 ? "," : "";
             let arg_types = join(map(each(typeDecl.argTypes), @(arg) {
-                let s : string = describeCppTypeEx(arg, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no, CpptRedundantConst.yes, useAlias);
+                let s : string = describeCppTypeEx(arg, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias);
                 return s
             }), ",")
             write(writer, "{maybe_const}{das_to_cppString(baseType)} DAS_COMMENT(({type_name}{extra_comma}{arg_types}))");
@@ -346,11 +364,11 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         reverse(args);
         write(writer, "{join(args, "")}")
 
-        if (skipConst == CpptSkipConst.no && typeDecl.flags.constant) {
+        if (cfg.skip_const == false && typeDecl.flags.constant) {
             write(writer, " const ");
         }
-        if (typeDecl.flags.ref && skipRef == CpptSkipRef.no) {
-            if (substituteRef == CpptSubstitureRef.no) {
+        if (typeDecl.flags.ref && cfg.skip_ref == false) {
+            if (cfg.substitute_ref == false) {
                 write(writer, " &");
             } else {
                 write(writer, " *");
@@ -360,11 +378,8 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
 }
 
 def describeCppType(typeDecl : TypeDeclPtr;
-                    substituteRef : CpptSubstitureRef = CpptSubstitureRef.no;
-                    skipRef : CpptSkipRef = CpptSkipRef.no;
-                    skipConst : CpptSkipConst = CpptSkipConst.no;
-                    redundantConst : CpptRedundantConst = CpptRedundantConst.yes) {
-    return describeCppTypeEx(typeDecl, substituteRef, skipRef, skipConst, redundantConst, CpptUseAlias.no);
+                    cfg : DescribeConfig) {
+    return describeCppTypeEx(typeDecl, cfg, CpptUseAlias.no);
 }
 
 class NoAotMarker : AstVisitor {
@@ -566,10 +581,19 @@ class AotDebugInfoHelper {
     }
 
 
-    def describeCppVarInfo(info : VarInfo?; suffix : string) {
+    def describeCppVarInfo(struct_name : string; info : VarInfo?; suffix : string) {
         return build_string() <| $(writer) {
             write(writer, "{describeCppTypeInfo(info, suffix)}, \"{info.name}\", ");
-            write(writer, "{info.offset:d}, {info.nextGcField:d}");
+            write(writer, "offsetof({struct_name},{info.name}), {info.nextGcField:d}");
+        }
+    }
+    def describeCppVarFuncInfo(struct_name : string; info : VarInfo?; suffix : string) {
+        return build_string() <| $(writer) {
+            write(writer, "{describeCppTypeInfo(info, suffix)}, \"{info.name}\", ");
+            // Note: info offset is platform dependant,
+            // however for functions it's not done yet and always zero.
+            assert(info.offset == 0u);
+            write(writer, "0, {info.nextGcField:d}");
         }
     }
     def describeCppStructInfoFields(var writer : StringBuilderWriter?; info : StructInfo?) {
@@ -580,7 +604,8 @@ class AotDebugInfoHelper {
                 writeDim(writer, info.fields[fi], suffix);
                 writeArgTypes(writer, info.fields[fi], suffix);
                 writeArgNames(writer, info.fields[fi], suffix);
-                write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(info.fields[fi],suffix)} \};\n");
+                let prefix = (info.module_name |> length() > 0) ? "{info.module_name}::" : "";
+                write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + info.name, info.fields[fi],suffix)} \};\n");
             }
         }
         let fields = (info.count |> range()
@@ -609,7 +634,7 @@ class AotDebugInfoHelper {
                 writeDim(writer, info.fields[fi], suffix);
                 writeArgTypes(writer, info.fields[fi], suffix);
                 writeArgNames(writer, info.fields[fi], suffix);
-                write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(info.fields[fi],suffix)} \};\n");
+                write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(info.name, info.fields[fi],suffix)} \};\n");
             }
         }
 
@@ -728,15 +753,23 @@ def isLocalVec(vtype : TypeDeclPtr) {
     return empty(vtype.dim) && vtype.isVectorType && !vtype.flags.ref;
 }
 
-def describeLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclPtr; substituteRef : CpptSubstitureRef = CpptSubstitureRef.yes; skipConst : CpptSkipConst = CpptSkipConst.no) {
-    write(*writer, "{describeCppType(vtype,substituteRef,CpptSkipRef.no,skipConst, CpptRedundantConst.yes)}");
+def describeLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclPtr; cross_platform : bool; substituteRef : CpptSubstitureRef = CpptSubstitureRef.yes; skipConst : CpptSkipConst = CpptSkipConst.no) {
+    let cfg = DescribeConfig(substitute_ref = substituteRef == CpptSubstitureRef.yes,
+                             skip_const = skipConst == CpptSkipConst.yes,
+                             cross_platform = cross_platform)
+    write(*writer, "{describeCppType(vtype,cfg)}");
 }
 
-def describeVarLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclPtr; substituteRef : CpptSubstitureRef = CpptSubstitureRef.yes) {
+def describeVarLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclPtr; cross_platform : bool; substituteRef : CpptSubstitureRef = CpptSubstitureRef.yes) {
+    let cfg = DescribeConfig(substitute_ref = substituteRef == CpptSubstitureRef.yes,
+                             skip_const = true,
+                             skip_ref = false,
+                             redundant_const = true,
+                             cross_platform = cross_platform)
     if (vtype.isGoodBlockType) {
         write(*writer, "auto");
     } else {
-        write(*writer, "{describeCppType(vtype,substituteRef,CpptSkipRef.no,CpptSkipConst.yes, CpptRedundantConst.yes)}");
+        write(*writer, "{describeCppType(vtype,cfg)}");
     }
 }
 
@@ -875,12 +908,12 @@ class BlockVariableCollector : AstVisitor {
 def collect_block_variables() {
 }
 
-def describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; needName : bool = true; needInline : bool = true) {
+def describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; cross_platform : bool; needName : bool = true; needInline : bool = true) {
     return build_string() <| $(writer) {
         if (needInline) {
             write(writer, "inline ");
         }
-        unsafe {describeLocalCppType(addr(writer), fn.result, CpptSubstitureRef.no, CpptSkipConst.yes); }
+        unsafe {describeLocalCppType(addr(writer), fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes); }
         write(writer, " {needName ? aotFuncName(fn.get_ptr()) : "(*)"}");
         unsafe {
             let prefix = fn.arguments |> empty() ? "" : ", "
@@ -890,9 +923,9 @@ def describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; n
                 |> map(@(arg) : string {
                     return build_string() <| $(writer2) {
                         if (isLocalVec(arg._type)) {
-                            unsafe {describeLocalCppType(addr(writer2), arg._type); }
+                            unsafe {describeLocalCppType(addr(writer2), arg._type, cross_platform); }
                         } else {
-                            write(writer2, "{describeCppType(arg._type)}");
+                            write(writer2, "{describeCppType(arg._type, DescribeConfig(cross_platform=cross_platform))}");
                         }
                         write(writer2, " {(arg._type.isRefType) ? "& " : ""}");
                         if (collector != null) {
@@ -921,7 +954,7 @@ class CppAot : AstVisitor {
 
     def str() {
         let maybe_nl = type_info |> empty() ? "" : "\n";
-        return "\n" + helper.str() + join(type_info, "\n") + "{maybe_nl}" + join(aot_prefixes, "") + ss |> string_builder_str();
+        return "\n" + declarations + helper.str() + join(type_info, "\n") + "{maybe_nl}" + join(aot_prefixes, "") + ss |> string_builder_str();
     }
 
     def clear() {
@@ -930,6 +963,7 @@ class CppAot : AstVisitor {
         aot_prefixes |> clear();
     }
     ss : StringBuilderWriter ?;
+    declarations : string
     type_info : array<string>;
     aot_prefixes : array<string>;// looks like it always empty. Can we remove it?
     lastNewLine : uint64 = -1ul;
@@ -942,6 +976,7 @@ class CppAot : AstVisitor {
     @do_not_delete scopes : array<ExprBlock?>;
     prologue : bool = false;
     solidContext : bool = false;
+    cross_platform : bool = false;
     def newLine() {
         // auto nlPos = ss.tellp();
         write(*ss, "\n");
@@ -1029,7 +1064,7 @@ class CppAot : AstVisitor {
         if (that.flags.cppLayout && from != reinterpret<Structure const?>(that.get_ptr())) {
             write(*ss, "    /* skipping {decl.name}, from {from.name} */");
         } else {
-            write(*ss, "    {describeCppType(decl._type)} {decl.name};");
+            write(*ss, "    {describeCppType(decl._type, DescribeConfig(cross_platform=cross_platform))} {decl.name};");
             if (decl.flags.parentType) {
                 write(*ss, " /* from {from.name} */");
             }
@@ -1041,7 +1076,7 @@ class CppAot : AstVisitor {
     }
     def override visitStructure(that : StructurePtr) {
         write(*ss, "};\n");   // structure
-        if (!that.fields |> empty()) {
+        if (!cross_platform && !that.fields |> empty()) {
             let s_name = aotStructName(that.get_ptr())
             write(*ss, "static_assert(sizeof({s_name})=={that.sizeOf},\"structure size mismatch with DAS\");\n");
             for (tf in that.fields) {
@@ -1062,10 +1097,12 @@ class CppAot : AstVisitor {
 // program body
     def override preVisitProgramBody(prog : ProgramPtr; mod : Module?) {
         // functions
+        declarations = ss |> string_builder_str();
+        ss |> string_builder_clear();
         write(*ss, "\n");
         prog.getThisModule |> for_each_module_function($(var fn : FunctionPtr) {
             if (!fn.flags.builtIn && !fn.flags.noAot) {
-                write(*ss, "{describeCppFunc(fn,collector)};\n");
+                write(*ss, "{describeCppFunc(fn,collector,cross_platform)};\n");
             }
         });
         write(*ss, "\n");
@@ -1078,7 +1115,7 @@ class CppAot : AstVisitor {
         assume temps = collector.localTemps[null];
         for (tmp in temps) {
             write(*ss, tabs());
-            describeVarLocalCppType(ss, tmp._type);
+            describeVarLocalCppType(ss, tmp._type, cross_platform);
             write(*ss, " {makeLocalTempName(unsafe(reinterpret<ExpressionPtr>(tmp)))};\n");
         }
     }
@@ -1100,7 +1137,8 @@ class CppAot : AstVisitor {
             write(*ss, "_solid");
         }
         let hash_val = solidContext ? "0x{variable.stackTop:x}" : "0x{variable.getMangledNameHash:x}";
-        write(*ss, "<{describeCppType(variable._type,CpptSubstitureRef.no,CpptSkipRef.yes,CpptSkipConst.yes, CpptRedundantConst.yes)},{hash_val}>(__context__)");
+        let cfg = DescribeConfig(skip_ref = true, skip_const = true, redundant_const = true, cross_platform = cross_platform);
+        write(*ss, "<{describeCppType(variable._type,cfg)},{hash_val}>(__context__)");
     }
     def override visitGlobalLetVariable(variable : VariablePtr; last : bool) {
         write(*ss, ";");
@@ -1122,7 +1160,7 @@ class CppAot : AstVisitor {
     }
     def override preVisitFunction(fn : FunctionPtr) {
         write(*ss, "\ninline ");
-        describeLocalCppType(ss, fn.result, CpptSubstitureRef.no, CpptSkipConst.yes);
+        describeLocalCppType(ss, fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
         write(*ss, " {aotFuncName(fn.get_ptr())} ( Context * __context__");
     }
     def override preVisitFunctionBody(fn : FunctionPtr; expr : ExpressionPtr) {
@@ -1136,9 +1174,9 @@ class CppAot : AstVisitor {
         // arg
         write(*ss, ", ");
         if (isLocalVec(arg._type)) {
-            describeLocalCppType(ss, arg._type);
+            describeLocalCppType(ss, arg._type, cross_platform);
         } else {
-            write(*ss, describeCppType(arg._type))
+            write(*ss, describeCppType(arg._type, DescribeConfig(cross_platform = cross_platform)))
         }
         if (arg._type.isRefType) {
             write(*ss, " & ");
@@ -1187,7 +1225,7 @@ class CppAot : AstVisitor {
         assume vars = collector.variables[blk.get_ptr()];
         for (variable in vars) {
             write(*ss, "{tabs()}");
-            describeVarLocalCppType(ss, variable._type);
+            describeVarLocalCppType(ss, variable._type, cross_platform);
             let vname = collector.getVarName(unsafe(reinterpret<VariablePtr>(variable)));
             write(*ss, " {vname}");
             if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
@@ -1199,7 +1237,7 @@ class CppAot : AstVisitor {
         collector.localTemps.get(blk.get_ptr()) <| $(temps) {
             for (tmp in temps) {
                 write(*ss, tabs());
-                describeVarLocalCppType(ss, tmp._type);
+                describeVarLocalCppType(ss, tmp._type, cross_platform);
                 let tempName = makeLocalTempName(unsafe(reinterpret<ExpressionPtr>(tmp)));
                 write(*ss, " {tempName}; {tempName};\n");
             }
@@ -1259,7 +1297,7 @@ class CppAot : AstVisitor {
             mkb.aotFunctorName := vname + "_TempFunctor";
         }
         if (!collector.isMoved(variable)) {
-            describeVarLocalCppType(ss, variable._type);
+            describeVarLocalCppType(ss, variable._type, cross_platform);
             write(*ss, " ");
         }
         var cvname = vname;
@@ -1282,7 +1320,7 @@ class CppAot : AstVisitor {
         if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
             let vname = collector.getVarName(variable);
             write(*ss, ";\n    ");
-            describeLocalCppType(ss, variable._type);
+            describeLocalCppType(ss, variable._type, cross_platform);
             write(*ss, " & {vname} = {vname}_ConstRef; ");
         }
         return variable;
@@ -1303,7 +1341,7 @@ class CppAot : AstVisitor {
         if (variable._type.flags.constant) {
             if (!variable._type.isGoodBlockType) {
                 write(*ss, "((");
-                describeVarLocalCppType(ss, variable._type);
+                describeVarLocalCppType(ss, variable._type, cross_platform);
                 write(*ss, ")");
             } else {
                 write(*ss, "(");
@@ -1311,7 +1349,8 @@ class CppAot : AstVisitor {
         }
         if (!expr._type.isPointer && !variable._type.flags.ref && expr._type.isAotAlias && !variable._type.isAotAlias) {
             if (expr._type.alias.empty()) {
-                let type_str = describeCppTypeEx(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.no, CpptRedundantConst.yes, CpptUseAlias.yes);
+                let cfg = DescribeConfig(skip_ref = true, redundant_const = true, cross_platform = cross_platform)
+                let type_str = describeCppTypeEx(expr._type, cfg, CpptUseAlias.yes);
                 write(*ss, "das_reinterpret<{type_str}>::pass(")
             } else {
                 write(*ss, "das_alias<{expr._type.alias}>::from(");
@@ -1321,7 +1360,7 @@ class CppAot : AstVisitor {
             write(*ss, "&(");
         }
         if (needPtrCast(variable._type, expr._type, expr)) {
-            write(*ss, "das_auto_cast<{describeCppType(variable._type)}>::cast(");
+            write(*ss, "das_auto_cast<{describeCppType(variable._type, DescribeConfig(cross_platform=cross_platform))}>::cast(");
         }
         if (expr._type.isString) {
             let maybeRef = variable._type.flags.ref ? " &" : "";
@@ -1394,8 +1433,10 @@ class CppAot : AstVisitor {
     }
 // clone
     def override preVisitExprClone(that : smart_ptr<ExprClone>) {
-        let left_t = describeCppType(that.left._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
-        let right_t = describeCppType(that.right._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+        let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
+        let cfg2 := cfg
+        let left_t = describeCppType(that.left._type, cfg);
+        let right_t = describeCppType(that.right._type, cfg2);
         write(*ss, "das_clone<{left_t},{right_t}>::clone(");
     }
     def override preVisitExprCloneRight(that : smart_ptr<ExprClone>; right : ExpressionPtr) {
@@ -1524,7 +1565,8 @@ class CppAot : AstVisitor {
         } elif (isOpPolicy2(that)) {
             assume pt = opPolicyBase(that);
             if (policyResultNeedCast(pt, that._type)) {
-                let type_str = describeCppType(that._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+                let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
+                let type_str = describeCppType(that._type, cfg);
                 write(*ss, "cast<{type_str}>::to(");
             }
             outPolicy(pt);
@@ -1532,7 +1574,8 @@ class CppAot : AstVisitor {
             if (isRefPolicyOp(that)) {
                 write(*ss, "(char *)&(");
             } elif (policyArgNeedCast(pt, that.left._type)) {
-                let type_str = describeCppType(that.left._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+                let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
+                let type_str = describeCppType(that.left._type, cfg);
                 if (that.left._type.isRefType) {
                     write(*ss, "cast<{type_str}*>::from(&(");
                 } else {
@@ -1566,7 +1609,8 @@ class CppAot : AstVisitor {
             }
             write(*ss, ",");
             if (policyArgNeedCast(pt, that.right._type)) {
-                let right_type = describeCppType(that.right._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+                let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
+                let right_type = describeCppType(that.right._type, cfg);
                 if (that.right._type.isRefType) {
                     write(*ss, "cast<{right_type} *>::from(&(");
                 } else {
@@ -1633,7 +1677,7 @@ class CppAot : AstVisitor {
         } else {
             write(*ss, "das_auto_cast");
         }
-        write(*ss, "<{describeCppType(that._type, CpptSubstitureRef.no, CpptSkipRef.no)}>::cast(");
+        write(*ss, "<{describeCppType(that._type, DescribeConfig(cross_platform=cross_platform))}>::cast(");
     }
     def override preVisitExprOp3Right(that : smart_ptr<ExprOp3>; right : ExpressionPtr) {
         write(*ss, ") : ");
@@ -1645,7 +1689,7 @@ class CppAot : AstVisitor {
         } else {
             write(*ss, "das_auto_cast");
         }
-        write(*ss, "<{describeCppType(that._type, CpptSubstitureRef.no, CpptSkipRef.no)}>::cast(");
+        write(*ss, "<{describeCppType(that._type, DescribeConfig(cross_platform=cross_platform))}>::cast(");
     }
     def override visitExprOp3(var that : smart_ptr<ExprOp3>) : ExpressionPtr {
         write(*ss, ")");
@@ -1671,7 +1715,7 @@ class CppAot : AstVisitor {
                     write(*ss, "das_auto_cast");
                 }
             }
-            write(*ss, "<{describeCppType(retT, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.yes)}>::cast(");
+            write(*ss, "<{describeCppType(retT, DescribeConfig(skip_const=true, cross_platform=cross_platform))}>::cast(");
         }
     }
     def override visitExprReturn(var expr : smart_ptr<ExprReturn>) : ExpressionPtr {
@@ -1702,7 +1746,7 @@ class CppAot : AstVisitor {
             write(*ss, "{collector.getVarName(variable.variable)}");
         } else {
             write(*ss, (variable.variable.flags.global_shared ? "das_shared" : "das_global"));
-            let type_str = describeCppType(variable.variable._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+            let type_str = describeCppType(variable.variable._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
             write(*ss, "<{type_str},0x{variable.variable.getMangledNameHash:x}>(__context__) /*{variable.name}*/");
         }
         if (variable._type.flags.aotAlias) {
@@ -1715,10 +1759,10 @@ class CppAot : AstVisitor {
         if (nc._type.flags.aotAlias) {
             write(*ss, "das_alias<{nc._type.alias}>::from(");
         }
-        let type_str1 = describeCppType(nc.defaultValue._type, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no);
+        let type_str1 = describeCppType(nc.defaultValue._type, DescribeConfig(cross_platform = cross_platform));
         write(*ss, "das_null_coalescing<{type_str1}>::get(");
         if (nc.subexpr._type.isAotAlias) {
-            let type_str2 = describeCppType(nc.defaultValue._type, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.no);
+            let type_str2 = describeCppType(nc.defaultValue._type, DescribeConfig(cross_platform = cross_platform));
             write(*ss, "({type_str2} *)");
         }
     }
@@ -1733,10 +1777,33 @@ class CppAot : AstVisitor {
         return nc;
     }
 // is variant
+    def stringify_variadic_types(types : dasvector`smart_ptr`TypeDecl) {
+        unsafe {
+            return (types |> each()
+                                   |> map(@(t : TypeDeclPtr) : string {
+                                       return describeCppTypeEx(t,
+                                                                DescribeConfig(redundant_const = true,
+                                                                               cross_platform = cross_platform),
+                                                                CpptUseAlias.no);
+                                   })
+                                   |> join(","))
+       }
+    }
+
+    def get_variant_field(field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
+        let type_str = describeCppType(field_type.argTypes[index], DescribeConfig(cross_platform = cross_platform));
+        let maybe_ptr = is_pointer ? "_ptr" : "";
+        if (cross_platform) {
+            return "das_get_auto_variant_field{maybe_ptr}<{type_str},{index},{stringify_variadic_types(field_type.argTypes)}>";
+        } else {
+            let offset = field_type.get_variant_field_offset(index);
+            return "das_get_variant_field{maybe_ptr}<{type_str},{offset},{index}>";
+        }
+    }
+
     def override preVisitExprIsVariant(field : smart_ptr<ExprIsVariant>) {
-        let type_str = describeCppType(field.value._type.argTypes[field.fieldIndex]);
-        let offset = field.value._type.get_variant_field_offset(field.fieldIndex);
-        write(*ss, "das_get_variant_field<{type_str},{offset},{field.fieldIndex}>::is(");
+        assume var_type = field.value._type;
+        write(*ss, "{get_variant_field(var_type, field.fieldIndex)}::is(")
     }
     def override visitExprIsVariant(var field : smart_ptr<ExprIsVariant>) : ExpressionPtr {
         write(*ss, ")");
@@ -1744,12 +1811,11 @@ class CppAot : AstVisitor {
     }
 // as variant
     def override preVisitExprAsVariant(field : smart_ptr<ExprAsVariant>) {
+        assume var_type = field.value._type;
         if (field._type.flags.aotAlias) {
             write(*ss, "das_alias<{field._type.alias}>::from(");
         }
-        let type_str = describeCppType(field.value._type.argTypes[field.fieldIndex]);
-        let offset = field.value._type.get_variant_field_offset(field.fieldIndex);
-        write(*ss, "das_get_variant_field<{type_str},{offset},{field.fieldIndex}>::as(");
+        write(*ss, "{get_variant_field(var_type, field.fieldIndex)}::as(");
     }
     def override visitExprAsVariant(var field : smart_ptr<ExprAsVariant>) : ExpressionPtr {
         write(*ss, ",__context__)");
@@ -1764,9 +1830,7 @@ class CppAot : AstVisitor {
         if (fieldT.flags.aotAlias) {
             write(*ss, "das_alias<{fieldT.alias}>::from(");
         }
-        let offset = fieldT.get_variant_field_offset(field.fieldIndex);
-        let type_str = describeCppType(fieldT.argTypes[field.fieldIndex]);
-        write(*ss, "das_get_variant_field<{type_str},{offset},{field.fieldIndex}>::safe_as{(field.skipQQ ? "_ptr" : "")}(");
+        write(*ss, "{get_variant_field(fieldT, field.fieldIndex)}::safe_as{(field.skipQQ ? "_ptr" : "")}(")
     }
     def override visitExprSafeAsVariant(var field : smart_ptr<ExprSafeAsVariant>) : ExpressionPtr {
         write(*ss, ")");
@@ -1788,18 +1852,24 @@ class CppAot : AstVisitor {
         elif (field.skipQQ) { write(*ss, "_ptr"); }
         write(*ss, "<");
         if (!vtype.isGoodTupleType && !vtype.isGoodVariantType) {
-            write(*ss, "{describeCppType(field.value._type.firstType)},");
+            write(*ss, "{describeCppType(field.value._type.firstType, DescribeConfig(cross_platform=cross_platform))},");
         }
         if (field.skipQQ) {
-            write(*ss, "{describeCppType(field._type)}");
+            write(*ss, "{describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))}");
         } else {
-            write(*ss, "{describeCppType(field._type.firstType)}");
+            write(*ss, "{describeCppType(field._type.firstType, DescribeConfig(cross_platform=cross_platform))}");
         }
         if (vtype.isHandle) {
             write(*ss, ">::get(");
         } elif (vtype.isGoodTupleType) {
+            if (cross_platform) {
+                panic("Platform independent code enabled. But field {field.name} is tuple")
+            }
             write(*ss, ", {vtype.get_tuple_field_offset(field.fieldIndex)}>::get(");
         } elif (vtype.isGoodVariantType) {
+            if (cross_platform) {
+                panic("Platform independent code enabled. But field {field.name} is tuple")
+            }
             write(*ss, ", {vtype.get_variant_field_offset(field.fieldIndex)}, {field.fieldIndex}>::get(");
         } else {
             let mod_name = (vtype.structType._module.name.empty() ? "" : string(vtype.structType._module.name) + "::");
@@ -1809,7 +1879,7 @@ class CppAot : AstVisitor {
     def override visitExprSafeField(var field : smart_ptr<ExprSafeField>) : ExpressionPtr {
         assume vtype = field.value._type.firstType;
         if (vtype.isHandle) {
-            let type_str = describeCppType(vtype, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.yes, CpptRedundantConst.yes);
+            let type_str = describeCppType(vtype, DescribeConfig(skip_const = true, redundant_const = true, cross_platform = cross_platform));
             write(*ss, ",([&](const {type_str} * __any) -> auto & \{return ");
             aot_previsit_get_field_ptr(vtype.annotation, ss, string(field.name));
             write(*ss, "__any");
@@ -1824,6 +1894,17 @@ class CppAot : AstVisitor {
         return field;
     }
 // field
+    def get_tuple_field(field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
+        let field_tp = describeCppType(field_type.argTypes[index], DescribeConfig(cross_platform = cross_platform));
+        let maybe_ptr = is_pointer ? "_ptr" : "";
+        if (cross_platform) {
+            return "das_get_auto_tuple_field{maybe_ptr}<{field_tp},{index},{stringify_variadic_types(field_type.argTypes)}>";
+        } else {
+            let field_offset = field_type.get_tuple_field_offset(index);
+            return "das_get_tuple_field{maybe_ptr}<{field_tp},{field_offset}>";
+        }
+    }
+
     def override preVisitExprField(field : smart_ptr<ExprField>) {
         if (field._type.flags.aotAlias) {
             write(*ss, "das_alias<{field._type.alias}>::from(");
@@ -1832,29 +1913,21 @@ class CppAot : AstVisitor {
         if (field_type.isBitfield) {
             write(*ss, "das_get_bitfield(");
         } elif (field_type.isTuple) {
-            let field_tp = describeCppType(field_type.argTypes[field.fieldIndex]);
-            let field_offset = field_type.get_tuple_field_offset(field.fieldIndex);
-            write(*ss, "das_get_tuple_field<{field_tp},{field_offset}>::get(");
+            write(*ss, "{get_tuple_field(field_type, field.fieldIndex)}::get(")
         } elif (field_type.isVariant) {
-            let field_tp = describeCppType(field_type.argTypes[field.fieldIndex]);
-            let field_offset = field_type.get_variant_field_offset(field.fieldIndex);
-            write(*ss, "das_get_variant_field<{field_tp},{field_offset},{field.fieldIndex}>::get(");
+            write(*ss, "{get_variant_field(field_type, field.fieldIndex)}::get(")
         } elif (field_type.isHandle) {
             if (field._type.isString) {
-                write(*ss, "(({describeCppType(field._type)})(");  // c-cast const char * etc string casts to char * or char * const
+                write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");  // c-cast const char * etc string casts to char * or char * const
             }
             aot_previsit_get_field(field_type.annotation, ss, string(field.name));
         } elif (field_type.baseType == Type.tPointer) {
             if (field_type.firstType.isHandle) {
                 aot_previsit_get_field_ptr(field_type.firstType.annotation, ss, string(field.name));
             } elif (field.value._type.firstType.isTuple) {
-                let field_type = describeCppType(field_type.firstType.argTypes[field.fieldIndex]);
-                let field_offset = field_type.firstType.get_tuple_field_offset(field.fieldIndex)
-                write(*ss, "das_get_tuple_field_ptr<{field_type},{field_offset}>::get(");
+                write(*ss, "{get_tuple_field(field_type.firstType, field.fieldIndex, true)}::get(")
             } elif (field.value._type.firstType.isVariant) {
-                let field_type = describeCppType(field_type.firstType.argTypes[field.fieldIndex]);
-                let field_offset = field_type.firstType.get_tuple_field_offset(field.fieldIndex)
-                write(*ss, "das_get_variant_field_ptr<{field_type},{field_offset},{field.fieldIndex}>::get(");
+                write(*ss, "{get_variant_field(field_type.firstType, field.fieldIndex, true)}::get(")
             }
         }
     }
@@ -1896,7 +1969,7 @@ class CppAot : AstVisitor {
             write(*ss, "das_alias<{expr._type.alias}>::from(");
         }
         if (!(!expr.subexpr._type.dim |> empty() || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType)) {
-            let type_str = describeCppType(expr.subexpr._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.no);
+            let type_str = describeCppType(expr.subexpr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
             write(*ss, "das_index<{type_str}>::at(");
         }
     }
@@ -1928,10 +2001,10 @@ class CppAot : AstVisitor {
         let isPtr : bool = expr.subexpr._type.isPointer;
         assume seT = isPtr ? expr.subexpr._type.firstType : expr.subexpr._type;
         if ((!seT.dim |> empty() || seT.isGoodArrayType || seT.isGoodTableType)) {
-            let type_str = describeCppType(seT, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes)
+            let type_str = describeCppType(seT, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform))
             write(*ss, "{type_str}::safe_index(");
         } else {
-            let type_str = describeCppType(seT, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.no)
+            let type_str = describeCppType(seT, DescribeConfig(skip_ref = true, cross_platform = cross_platform))
             write(*ss, "das_index<{type_str}>::safe_at(");
         }
         write(*ss, isPtr ? "(" : "&(");
@@ -1961,7 +2034,8 @@ class CppAot : AstVisitor {
         return c;
     }
     def override visitExprConstEnumeration(var c : smart_ptr<ExprConstEnumeration>) : ExpressionPtr {
-        let type_str = describeCppType(c._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes, CpptRedundantConst.no);
+        let cfg = DescribeConfig(skip_ref = true, skip_const = true, redundant_const = false, cross_platform = cross_platform);
+        let type_str = describeCppType(c._type, cfg);
         write(*ss, type_str);
         var ctext = string(c.value);
         for (ee in c.enumType.list) {
@@ -2208,8 +2282,8 @@ class CppAot : AstVisitor {
 // swizzle
     def override preVisitExprSwizzle(expr : smart_ptr<ExprSwizzle>) {
         if (expr._type.flags.ref) {
-            let type_str = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes);
-            let value_str = describeCppType(expr.value._type, CpptSubstitureRef.no, CpptSkipRef.yes);
+            let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
+            let value_str = describeCppType(expr.value._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
             write(*ss, "das_swizzle_ref<{type_str},{value_str},{int(expr.fields[0])}>::swizzle(");
         } else {
             if (length(expr.fields) == 1) {
@@ -2224,8 +2298,8 @@ class CppAot : AstVisitor {
                     write(*ss, "v_cast_vec4i(");
                 }
             } else {
-                let type_str = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes);
-                let value_str = describeCppType(expr.value._type, CpptSubstitureRef.no, CpptSkipRef.yes);
+                let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
+                let value_str = describeCppType(expr.value._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
                 if (isSequencialMask(expr.fields)) {
                     write(*ss, "das_swizzle_seq<{type_str},{value_str},{expr.fields[0]:d}>::swizzle(");
                 } else {
@@ -2295,7 +2369,7 @@ class CppAot : AstVisitor {
         }
     }
     def override preVisitExprStringBuilderElement(sb : smart_ptr<ExprStringBuilder>; expr : ExpressionPtr; last : bool) {
-        write(*ss, "cast<{describeCppType(expr._type)}");
+        write(*ss, "cast<{describeCppType(expr._type,DescribeConfig(cross_platform=cross_platform))}");
         if (expr._type.isRefType && !expr._type.flags.ref) {
             write(*ss, " &");
         }
@@ -2314,7 +2388,7 @@ class CppAot : AstVisitor {
     }
 // typedecl
     def override preVisitExprTypeDecl(expr : smart_ptr<ExprTypeDecl>) {
-        write(*ss, "das_typedecl_value<{describeCppType(expr.typeexpr)}>()()");
+        write(*ss, "das_typedecl_value<{describeCppType(expr.typeexpr,DescribeConfig(cross_platform=cross_platform))}>()()");
     }
 // type-info
     def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) {
@@ -2393,7 +2467,7 @@ class CppAot : AstVisitor {
     }
 // cast
     def override preVisitExprCast(expr : smart_ptr<ExprCast>) {
-        write(*ss, "{(expr.castFlags.upcastCast ? "das_upcast" : "das_cast")}<{describeCppType(expr.castType)}>::cast(");
+        write(*ss, "{(expr.castFlags.upcastCast ? "das_upcast" : "das_cast")}<{describeCppType(expr.castType,DescribeConfig(cross_platform=cross_platform))}>::cast(");
     }
     def override visitExprCast(var expr : smart_ptr<ExprCast>) : ExpressionPtr {
         write(*ss, ")");
@@ -2414,7 +2488,7 @@ class CppAot : AstVisitor {
         } else {
             write(*ss, "das_delete<");
         }
-        write(*ss, "{describeCppType(edel.subexpr._type,CpptSubstitureRef.no,CpptSkipRef.yes,CpptSkipConst.yes)}");
+        write(*ss, "{describeCppType(edel.subexpr._type,DescribeConfig(skip_ref=true,skip_const=true,cross_platform=cross_platform))}");
         write(*ss, ">::clear(__context__,");
     }
     // DELETE
@@ -2432,10 +2506,10 @@ class CppAot : AstVisitor {
                                 ? helper.helper |> make_type_info(null, expr.subexpr._type)
                                 : null);
         if (expr._type.firstType.baseType == Type.tHandle) {
-            write(*ss, "das_ascend_handle<{expr._type.flags.smartPtr},{describeCppType(expr._type,CpptSubstitureRef.no,CpptSkipRef.yes,CpptSkipConst.yes)}>::make(__context__,");
+            write(*ss, "das_ascend_handle<{expr._type.flags.smartPtr},{describeCppType(expr._type,DescribeConfig(skip_ref=true,skip_const=true,cross_platform=cross_platform))}>::make(__context__,");
         } else {
-            let type_str = describeCppType(expr._type.firstType, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
-            let subexpr_str = describeCppType(expr.subexpr._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+            let type_str = describeCppType(expr._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
+            let subexpr_str = describeCppType(expr.subexpr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
             write(*ss, "das_ascend<{type_str},{subexpr_str}>::make(__context__,");
         }
 
@@ -2453,7 +2527,7 @@ class CppAot : AstVisitor {
     def override preVisitExprNew(enew : smart_ptr<ExprNew>) {
         if (!enew._type.dim |> empty()) {
             if (enew._type.firstType.isHandle) {
-                let type_str = describeCppType(enew._type.firstType, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+                let type_str = describeCppType(enew._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
                 write(*ss, "das_new_dim_handle<{type_str},{enew._type.dim[0]},{enew._type.flags.smartPtr}");
                 if (enew.initializer) {
                     panic("internal error. initializer for enew is not supported");
@@ -2461,11 +2535,11 @@ class CppAot : AstVisitor {
                     write(*ss, ">::make(__context__");
                 }
             } else {
-                let type_str = describeCppType(enew._type.firstType, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+                let type_str = describeCppType(enew._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
                 write(*ss, "das_new_dim<{type_str},{enew._type.dim[0]}");
                 if (enew.initializer) {
                     write(*ss, ">::make_and_init(__context__,[&]() \{ return ");
-                        // << " . " << describeCppType(enew._type.firstType,CpptSubstitureRef.no,CpptSkipRef.yes,CpptSkipConst.yes)
+                        // << " . " << describeCppType(enew._type.firstType,DescribeConfig(skip_ref=true,skip_const=true,cross_platform=cross_platform))
                     CallFunc_preVisit(enew);
                 } else {
                     write(*ss, ">::make(__context__");
@@ -2473,11 +2547,11 @@ class CppAot : AstVisitor {
             }
         } else {
             if (enew._type.firstType.isHandle) {
-                let type_str = describeCppType(enew._type.firstType, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+                let type_str = describeCppType(enew._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
                 write(*ss, "das_new_handle<{type_str},{enew._type.flags.smartPtr}");
                 if (enew.initializer) {
                     write(*ss, ">::make_and_init(__context__,[&]() \{ return new ")
-                        // << " . " << describeCppType(enew._type.firstType,CpptSubstitureRef.no,CpptSkipRef.yes,CpptSkipConst.yes)
+                        // << " . " << describeCppType(enew._type.firstType,DescribeConfig(skip_ref=true,skip_const=true,cross_platform=cross_platform))
                     CallFunc_preVisit(enew);
                 } else {
                     write(*ss, ">::make(__context__");
@@ -2488,10 +2562,10 @@ class CppAot : AstVisitor {
                 } else {
                     write(*ss, "das_new<");
                 }
-                write(*ss, describeCppType(enew._type.firstType, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes));
+                write(*ss, describeCppType(enew._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)));
                 if (enew.initializer) {
                     write(*ss, ">::make_and_init(__context__,[&]() \{ return ")
-                        // << " . " << describeCppType(enew._type.firstType,CpptSubstitureRef.no,CpptSkipRef.yes,CpptSkipConst.yes)
+                        // << " . " << describeCppType(enew._type.firstType,DescribeConfig(skip_ref=true,skip_const=true,cross_platform=cross_platform))
                     CallFunc_preVisit(enew);
                 } else {
                     write(*ss, ">::make(__context__");
@@ -2534,11 +2608,11 @@ class CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeVariant(expr : smart_ptr<ExprMakeVariant>) {
-        let type_str = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+        let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
         write(*ss, "(([&]() -> {type_str}{needTempSrc(expr) ? "&" : ""} \{\n");
         tab ++;
         if (!needTempSrc(expr)) {
-            write(*ss, "{tabs()}{describeCppType(expr._type,CpptSubstitureRef.no,CpptSkipRef.yes)} {mkvName(expr)};\n");
+            write(*ss, "{tabs()}{describeCppType(expr._type,DescribeConfig(skip_ref=true,cross_platform=cross_platform))} {mkvName(expr)};\n");
         }
         if (expr.variants.empty()) {
             write(*ss, "{tabs()}das_zero({mkvName(expr)});\n");
@@ -2549,9 +2623,9 @@ class CppAot : AstVisitor {
         if (variantIndex == -1) {
             panic("should not infer otherwise");
         }
-        let type_str = describeCppType(expr._type.argTypes[variantIndex]);
+        let type_str = describeCppType(expr._type.argTypes[variantIndex], DescribeConfig(cross_platform = cross_platform));
         let offset_str = expr._type.get_variant_field_offset(variantIndex);
-        write(*ss, "{tabs()}das_get_variant_field<{type_str},{offset_str},{variantIndex}>::set(");
+        write(*ss, "{tabs()}{get_variant_field(expr._type, variantIndex)}::set(");
         write(*ss, "{mkvName(expr)}");
         if (length(expr.variants) != 1) write(*ss, "({index},__context__)");
         write(*ss, ") = ");
@@ -2577,25 +2651,25 @@ class CppAot : AstVisitor {
     def override preVisitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) {
         write(*ss, "(([&](");
         if (expr.makeStructFlags.isNewHandle) {
-            let type_str = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes);
+            let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
             write(*ss, "{type_str} & {mksName(expr)}");
         }
         write(*ss, ")");
         if (!expr.makeStructFlags.isNewHandle) {
-            let expr_type = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+            let expr_type = describeCppType(expr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
             write(*ss, " -> {expr_type}{needTempSrc(expr) ? "&" : ""}");
         }
         write(*ss, " \{\n");
         tab ++;
         if (!expr.makeStructFlags.isNewHandle) {
             if (!needTempSrc(expr)) {
-                let expr_type = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes);
+                let expr_type = describeCppType(expr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
                 write(*ss, "{tabs()}{expr_type} {mksName(expr)}");
                 if (expr.constructor != null) {
                     write(*ss, " = ");
                     let call_func = expr.constructor;
                     if (isHybridCall(call_func)) {
-                        write(*ss, "das_invoke_function<{describeCppType(call_func.result)}>::invoke_cmres");
+                        write(*ss, "das_invoke_function<{describeCppType(call_func.result,DescribeConfig(cross_platform=cross_platform))}>::invoke_cmres");
                         assume mangledName = call_func |> get_mangled_name();
                         let hash = call_func.getMangledNameHash;
                         write(*ss, "(__context__,nullptr,");
@@ -2611,7 +2685,7 @@ class CppAot : AstVisitor {
                     write(*ss, "{tabs()}{mksName(expr)} = ");
                     let call_func = expr.constructor;
                     if (isHybridCall(call_func)) {
-                        write(*ss, "das_invoke_function<{describeCppType(call_func.result)}>::invoke_cmres");
+                        write(*ss, "das_invoke_function<{describeCppType(call_func.result, DescribeConfig(cross_platform=cross_platform))}>::invoke_cmres");
                         assume mangledName = call_func |> get_mangled_name();
                         let hash = call_func.getMangledNameHash;
                         write(*ss, "(__context__,nullptr,");
@@ -2680,11 +2754,11 @@ class CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeArray(expr : smart_ptr<ExprMakeArray>) {
-        let type_str = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes);
+        let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
         write(*ss, "(([&]() -> {type_str}{(needTempSrc(expr) ? "&" : "")} \{\n");
         tab ++;
         if (!needTempSrc(expr)) {
-            write(*ss, "{tabs()}{describeCppType(expr._type,CpptSubstitureRef.no,CpptSkipRef.yes)} {mkaName(expr)};\n");
+            write(*ss, "{tabs()}{describeCppType(expr._type,DescribeConfig(skip_ref=true,cross_platform=cross_platform))} {mkaName(expr)};\n");
         }
         if (!expr.makeFlags.initAllFields) {
             write(*ss, "{tabs()}das_zero({mkaName(expr)});\n");
@@ -2712,11 +2786,11 @@ class CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeTuple(expr : smart_ptr<ExprMakeTuple>) {
-        let type_str1 = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.yes)
+        let type_str1 = describeCppType(expr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform))
         write(*ss, "(([&]() -> {type_str1}{(needTempSrc(expr) ? "&" : "")} \{\n");
         tab ++;
         if (!needTempSrc(expr)) {
-            let type_str2 = describeCppType(expr._type, CpptSubstitureRef.no, CpptSkipRef.yes);
+            let type_str2 = describeCppType(expr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
             write(*ss, "{tabs()}{type_str2} {mktName(expr)};\n");
         }
         if (!expr.makeFlags.initAllFields) {
@@ -2724,9 +2798,7 @@ class CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; init : ExpressionPtr; last : bool) {
-        let type_str = describeCppType(expr.makeType.argTypes[index]);
-        let offset_str = expr.makeType.get_tuple_field_offset(index);
-        write(*ss, "{tabs()}das_get_tuple_field<{type_str},{offset_str}>::get({mktName(expr)}) = ");
+        write(*ss, "{tabs()}{get_tuple_field(expr.makeType, index)}::get({mktName(expr)}) = ");
     }
     def override visitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; var init : ExpressionPtr; last : bool) {
         write(*ss, ";\n");
@@ -2749,11 +2821,11 @@ class CppAot : AstVisitor {
             if (blk.returnType.isRefType && !blk.returnType.flags.ref) {
                 write(*ss, "_cmres");
             }
-            let type_str = describeCppType(blk.returnType, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.yes);
+            let type_str = describeCppType(blk.returnType, DescribeConfig(skip_const = true, cross_platform = cross_platform));
             unsafe {
                 let args = (blk.arguments
                     |> each()
-                    |> map(@(arg) { return "{describeCppType(arg._type)}{arg._type.isRefType && !arg._type.flags.ref ? " &" : ""}"; })
+                    |> map(@(arg) { return "{describeCppType(arg._type,DescribeConfig(cross_platform=cross_platform))}{arg._type.isRefType && !arg._type.flags.ref ? " &" : ""}"; })
                     |> join(",")
                 )
                 let maybe_comma = args |> empty() ? "" : ",";
@@ -2780,9 +2852,9 @@ class CppAot : AstVisitor {
                     write(*ss, ", ");
                 }
                 if (isLocalVec(arg._type)) {
-                    describeLocalCppType(ss, arg._type);
+                    describeLocalCppType(ss, arg._type, cross_platform);
                 } else {
-                    write(*ss, "{describeCppType(arg._type,CpptSubstitureRef.no,CpptSkipRef.no,CpptSkipConst.no,CpptRedundantConst.no)}");
+                    write(*ss, "{describeCppType(arg._type,DescribeConfig(redundant_const=false,cross_platform=cross_platform))}");
                     if (arg._type.isRefType && !arg._type.flags.ref) {
                         write(*ss, " &");
                     }
@@ -2793,7 +2865,7 @@ class CppAot : AstVisitor {
             if (blk.blockFlags.aotSkipMakeBlock) {
                 write(*ss, "DAS_AOT_INLINE_LAMBDA ");
             }
-            write(*ss, "-> {describeCppType(blk.returnType, CpptSubstitureRef.no, CpptSkipRef.no, CpptSkipConst.yes)}");
+            write(*ss, "-> {describeCppType(blk.returnType, DescribeConfig(skip_const=true,cross_platform=cross_platform))}");
         } else {
             write(*ss, "{expr.aotFunctorName}");
         }
@@ -2815,7 +2887,7 @@ class CppAot : AstVisitor {
                 write(*ss, "das_debug(__context__,&{typeInfoName(info)},__FILE__,__LINE__,");
             }
             let maybe_ref = ((argType.isRefType && !argType.flags.ref) ? "&" : "")
-            write(*ss, "cast<{describeCppType(argType)}{maybe_ref}>::from(");
+            write(*ss, "cast<{describeCppType(argType,DescribeConfig(cross_platform=cross_platform))}{maybe_ref}>::from(");
         } elif (call.name == "assert" || call.name == "verify") {
             let ea = call as ExprAssert;
             if (length(call.arguments) == 1) {
@@ -2865,9 +2937,11 @@ class CppAot : AstVisitor {
                 write(*ss, "das_invoke /*unknown*/");
             }
             let einv = call as ExprInvoke;
-            write(*ss, "<{describeCppType(call._type)}");
+            write(*ss, "<{describeCppType(call._type,DescribeConfig(cross_platform=cross_platform))}");
             if (methodOffset != -1) {
-                write(*ss, ",{methodOffset}/*{methodName}*/");
+                assume argType = call.arguments[0]._type;
+                let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
+                write(*ss, ",offsetof({describeCppType(argType.argTypes[0], cfg)},{methodName})");
             }
             write(*ss, ">::invoke");
             if (einv.isCopyOrMove) {
@@ -2880,7 +2954,7 @@ class CppAot : AstVisitor {
                         |> map(@capture(& call) (id : int) {
                             assume arg = call.arguments[id];
                             let is_ref = (arg._type.isRefType && !arg._type.flags.ref);
-                            return "{describeCppType(arg._type)}{is_ref ? " &" : ""}";
+                            return "{describeCppType(arg._type,DescribeConfig(cross_platform=cross_platform))}{is_ref ? " &" : ""}";
                         })
                         |> join(","))
                 write(*ss, "<{args}>");
@@ -2907,7 +2981,7 @@ class CppAot : AstVisitor {
             assume argType = arg._type;
             if (arg._type.isRefType) {
                 if (needsArgPass(arg)) {
-                    write(*ss, "das_arg<{describeCppType(argType,CpptSubstitureRef.no,CpptSkipRef.yes)}>::pass(");
+                    write(*ss, "das_arg<{describeCppType(argType,DescribeConfig(skip_ref=true,cross_platform=cross_platform))}>::pass(");
                 }
             }
         }
@@ -2934,7 +3008,12 @@ class CppAot : AstVisitor {
         if (call.name == "assert" || call.name == "verify" || call.name == "debug") {
             write(*ss, "))");
         } elif (call.name == "memzero") {
-            write(*ss, "), 0, {call.arguments[0]._type.sizeOf})");
+            assume cur_type = call.arguments[0]._type;
+            if (cross_platform) {
+                write(*ss, "), 0, TypeSize<{describeCppType(cur_type,DescribeConfig(skip_ref=true,cross_platform=cross_platform))}>::size)");
+            } else {
+                write(*ss, "), 0, {cur_type.sizeOf})");
+            }
         } else {
             write(*ss, ")");
         }
@@ -3029,7 +3108,7 @@ class CppAot : AstVisitor {
                 write(*ss, "das_alias<{call.func.result.alias}>::from(");
             }
             if (call.func.result.isString) {
-                write(*ss, "(({describeCppType(call.func.result)})(");  // c-cast const char * etc string casts to char * or char * const
+                write(*ss, "(({describeCppType(call.func.result,DescribeConfig(cross_platform=cross_platform))})(");  // c-cast const char * etc string casts to char * or char * const
             }
             write(*ss, "((");
             return ;
@@ -3054,7 +3133,7 @@ class CppAot : AstVisitor {
         }
         if (call.func.flags.builtIn) {
             if (call.func.result.isString) {
-                write(*ss, "(({describeCppType(call.func.result)})(");  // c-cast const char * etc string casts to char * or char * const
+                write(*ss, "(({describeCppType(call.func.result,DescribeConfig(cross_platform=cross_platform))})(");  // c-cast const char * etc string casts to char * or char * const
             }
             let bif = call.func as BuiltInFunction;
             if (call.arguments |> empty() && call.func.result.baseType == Type.tHandle) {
@@ -3065,7 +3144,7 @@ class CppAot : AstVisitor {
                 write(*ss, "::");
             }
             if (bif.flags.interopFn) {
-                write(*ss, "das_call_interop<{describeCppType(call.func.result)}>::call(&");
+                write(*ss, "das_call_interop<{describeCppType(call.func.result,DescribeConfig(cross_platform=cross_platform))}>::call(&");
             }
             write(*ss, "{aotName}");
             if (bif.flags.interopFn) {
@@ -3079,7 +3158,7 @@ class CppAot : AstVisitor {
             }
         } else {
             if (isHybridCall(call.func)) {
-                write(*ss, "das_invoke_function<{describeCppType(call.func.result)}>::invoke");
+                write(*ss, "das_invoke_function<{describeCppType(call.func.result,DescribeConfig(cross_platform=cross_platform))}>::invoke");
                 if (call.func.result.isRefType && !call.func.result.flags.ref) {
                     write(*ss, "_cmres");
                 }
@@ -3088,7 +3167,7 @@ class CppAot : AstVisitor {
                 if (length(call.arguments) >= 1) {
                     write(*ss, "<");
                     for (arg in call.func.arguments) {
-                        write(*ss, "{describeCppType(arg._type)}");
+                        write(*ss, "{describeCppType(arg._type,DescribeConfig(cross_platform=cross_platform))}");
                         if (arg._type.isRefType && !arg._type.flags.ref) {
                             write(*ss, " &");
                         }
@@ -3138,29 +3217,29 @@ class CppAot : AstVisitor {
         assume funArgType = call.func.arguments[argIndex]._type;
         if (funArgType.isAotAlias) {
             if (funArgType.alias |> empty()) {
-                let fun_t_str = describeCppTypeEx(funArgType, CpptSubstitureRef.no, CpptSkipRef.yes, CpptSkipConst.no, CpptRedundantConst.yes, CpptUseAlias.yes);
+                let fun_t_str = describeCppTypeEx(funArgType, DescribeConfig(skip_ref = true, redundant_const = true, cross_platform = cross_platform), CpptUseAlias.yes);
                 write(*ss, "das_reinterpret<{fun_t_str}>::pass(");
             } else {
                 write(*ss, "das_alias<{funArgType.alias}>::to(");
             }
         }
         if (!call.func.flags.noPointerCast && needPtrCast(funArgType, arg._type, arg)) {
-            write(*ss, "das_auto_cast<{describeCppType(funArgType,CpptSubstitureRef.no,CpptSkipRef.no)}>::cast(");
+            write(*ss, "das_auto_cast<{describeCppType(funArgType,DescribeConfig(cross_platform=cross_platform))}>::cast(");
         }
         if (!call.func.flags.anyTemplate && (call.func.flags.interopFn || funArgType.baseType == Type.anyArgument)) {
             let maybe_ref = argType.isRefType && !argType.flags.ref ? " &" : "";
-            write(*ss, "cast<{describeCppType(argType)}{maybe_ref}>::from(");
+            write(*ss, "cast<{describeCppType(argType,DescribeConfig(cross_platform=cross_platform))}{maybe_ref}>::from(");
         }
         if (needSubstitute(funArgType, arg._type)) {
-            write(*ss, "das_reinterpret<{describeCppType(funArgType,CpptSubstitureRef.no,CpptSkipRef.yes)}>::pass(");
+            write(*ss, "das_reinterpret<{describeCppType(funArgType,DescribeConfig(skip_ref=true,cross_platform=cross_platform))}>::pass(");
         }
         if (!call.func.flags.interopFn && arg._type.isRefType) {
             if (needsArgPass(arg)) {
-                write(*ss, "das_arg<{describeCppType(argType,CpptSubstitureRef.no,CpptSkipRef.yes)}>::pass(");
+                write(*ss, "das_arg<{describeCppType(argType,DescribeConfig(skip_ref=true,cross_platform=cross_platform))}>::pass(");
             }
         }
         if (isPolicyBasedCallFunc(call) && policyArgNeedCast(call.func.result, argType)) {
-            write(*ss, "cast<{describeCppType(argType,CpptSubstitureRef.no,CpptSkipRef.yes,CpptSkipConst.yes)}>::from(");
+            write(*ss, "cast<{describeCppType(argType,DescribeConfig(skip_ref=true,skip_const=true,cross_platform=cross_platform))}>::from(");
         }
         if (needStringCast(call.func, argType)) {
             write(*ss, "(das_string_cast(");
@@ -3310,7 +3389,7 @@ class CppAot : AstVisitor {
         if (isCountOrUCount(src)) {
             write(*ss, "{tabs()}das_iterator_{(unsafe(reinterpret<smart_ptr<ExprCallFunc>>(src))).func.name} DAS_COMMENT(");
         } else {
-            let type_str = describeCppType(src._type, CpptSubstitureRef.yes, CpptSkipRef.yes, CpptSkipConst.no);
+            let type_str = describeCppType(src._type, DescribeConfig(substitute_ref = true, skip_ref = true, cross_platform = cross_platform));
             write(*ss, "{tabs()}das_iterator<{type_str}> {forSrcName(variable.name)}(");
         }
     }
@@ -3336,7 +3415,8 @@ class CppAot : AstVisitor {
 
         // source
         let skipTC : bool = variable._type.isString && !variable._type.flags.ref;
-        let type_str = describeCppType(variable._type, CpptSubstitureRef.yes, CpptSkipRef.no, skipTC ? CpptSkipConst.yes : CpptSkipConst.no);
+        let cfg = DescribeConfig(substitute_ref = true, skip_const = skipTC, cross_platform = cross_platform)
+        let type_str = describeCppType(variable._type, cfg);
         write(*ss, "{tabs()}{type_str} {collector.getVarName(variable)};\n");
         // loop
         let nl = needLoopName(ffor);
@@ -3420,7 +3500,7 @@ def collectProgramUsedFunctions(program : ProgramPtr; isAll : bool = false) : ar
     return collectUsedFunctions(all_modules, program.totalFunctions, isAll)
 }
 
-def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; headers, allModules : bool = false) {
+def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, allModules : bool = false) {
     let fnn = collectProgramUsedFunctions(program);
     if (headers) {
         write(*logs, "\nvoid registerAot ( AotLibrary & aotLib )\n\{\n");
@@ -3438,7 +3518,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         if (fn.flags.copyOnReturn || fn.flags.moveOnReturn) {
             write(*logs, "CMRES");
         }
-        write(*logs, "<{describeCppFunc(unsafe(reinterpret<FunctionPtr>(fn)),null,false,false)},&{aotFuncName(fn)}>>()");
+        write(*logs, "<{describeCppFunc(unsafe(reinterpret<FunctionPtr>(fn)),null,cross_platform,false,false)},&{aotFuncName(fn)}>>()");
         write(*logs, ";\n    \};\n");
     }
 
@@ -3478,9 +3558,9 @@ def setAotHashes(program : ProgramPtr; var ctx : Context) {
     });
 }
 
-def dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var context : Context; allModules : bool) {
+def dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var context : Context; allModules : bool; cross_platform : bool) {
     write(*tw, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
-    registerAotCpp(tw, program, context, false, allModules);
+    registerAotCpp(tw, program, context, cross_platform, false, allModules);
     write(*tw, "    resolveTypeInfoAnnotations();\n");
     write(*tw, "};\n");
     write(*tw, "\n");
@@ -3556,7 +3636,7 @@ def compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop,
 
 
 [export]
-def aot(input : string; isAotLib, paranoid_validation : bool) : string {
+def aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : bool) : string {
     var result = "";
     using <| $(var mg : ModuleGroup) {
         using <| $(var cop : CodeOfPolicies) {
@@ -3611,7 +3691,8 @@ def aot(input : string; isAotLib, paranoid_validation : bool) : string {
                                                      prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false ||
                                                                 program.getDebugger,
                                                      solidContext = program.policies.solid_context ||
-                                                                (program._options |> find_arg("solid_context") ?as tBool ?? false))
+                                                                (program._options |> find_arg("solid_context") ?as tBool ?? false),
+                                                     cross_platform = cross_platform)
                             cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
                             var inscope adapter <- make_visitor(*cpp_aot)
                             cpp_aot.adapter := adapter
@@ -3620,7 +3701,7 @@ def aot(input : string; isAotLib, paranoid_validation : bool) : string {
                             write(writer, "{cpp_aot.str()}");
                         }
                         write(writer, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
-                        registerAotCpp(unsafe(addr(writer)), program, *pctx, false);
+                        registerAotCpp(unsafe(addr(writer)), program, *pctx, cross_platform, false);
                         write(writer, "\tresolveTypeInfoAnnotations();\n");
                         write(writer, "}\n");
                         write(writer, "\n");

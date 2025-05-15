@@ -5,6 +5,15 @@ require fio
 require strings
 
 
+def find_argument_or(args : array<string>; key : string, def_val : string) {
+    for (i in range(length(args) - 1)) {
+        if (args[i] == key) {
+            return args[i + 1]
+        }
+    }
+    return def_val
+}
+
 def find_argument(args : array<string>; key : string) {
     for (i in range(length(args) - 1)) {
         if (args[i] == key) {
@@ -23,8 +32,9 @@ def main() {
     if (mode == "aot") {
         let input = find_argument(args, "--input");
         let output = find_argument(args, "--output");
+        let cross_platform = find_argument_or(args, "--cross_platform", "false") == "true";
         print("aot {input} to {output}\n")
-        let res = aot(input, false, false)
+        let res = aot(input, true, false, cross_platform)
         if (res |> length() > 0) {
             fopen(output, "wb") <| $(fw) {
                 if (fw != null) {
