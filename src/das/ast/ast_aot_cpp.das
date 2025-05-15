@@ -1226,11 +1226,11 @@ class CppAot : AstVisitor {
         for (variable in vars) {
             write(*ss, "{tabs()}");
             describeVarLocalCppType(ss, variable._type, cross_platform);
-            let vname = collector.getVarName(unsafe(reinterpret<VariablePtr>(variable)));
-            write(*ss, " {vname}");
+            var vname = collector.getVarName(unsafe(reinterpret<VariablePtr>(variable)));
             if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
-                write(*ss, "_ConstRef");
+                vname += "_ConstRef";
             }
+            write(*ss, " {vname}");
             write(*ss, "; memset(&{vname},0,sizeof({vname}));\n");
         }
         // pre-declare locals

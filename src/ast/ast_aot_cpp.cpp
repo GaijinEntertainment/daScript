@@ -1273,10 +1273,10 @@ namespace das {
                 ss << tabs();
                 describeVarLocalCppType(ss, var->type);
                 auto vname = collector.getVarName(var);
-                ss  << " " << vname;
                 if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
-                    ss << "_ConstRef";
+                    vname += "_ConstRef";
                 }
+                ss  << " " << vname;
                 ss << "; " << "memset(&" << vname << ",0,sizeof(" << vname << "));"
                     << "\n";
             }
