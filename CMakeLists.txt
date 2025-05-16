@@ -110,12 +110,15 @@ MACRO(DAS_AOT_EXT input genList mainTarget dasAotTool dasAotToolArg)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(out_dir ${out_src} DIRECTORY)
     file(MAKE_DIRECTORY ${out_dir})
+    if("${dasAotToolArg}" STREQUAL "-aotlib")
+        set(CROSS_PLATFORM "-cross-platform")
+    endif()
     ADD_CUSTOM_COMMAND(
         DEPENDS ${input_src}
         DEPENDS ${dasAotTool}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-        COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_src}
+        COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_src} ${CROSS_PLATFORM}
     )
     set(custom_name ${mainTarget}_${input_name}_aot)
     ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
@@ -151,8 +154,8 @@ MACRO(DAS_AOT_STANDALONE input genList mainTarget dasAotTool dasAotToolArg)
             DEPENDS ${input_src}
             DEPENDS ${dasAotTool}
             OUTPUT  ${out_src}
-            COMMENT "AOT precompiling ${input_src} -> ${out_src} ${dasAotTool} $<JOIN:${dasAotToolArg}, > ${input_src} ${out_dir} -standalone-context ${ctx_name} -standalone-class Standalone"
-            COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_dir} -standalone-context ${ctx_name} -standalone-class Standalone
+            COMMENT "AOT precompiling ${input_src} -> ${out_src}"
+            COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_dir} -cross-platform -standalone-context ${ctx_name} -standalone-class Standalone
     )
     set(custom_name ${mainTarget}_${input_name}_standalone)
     ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
@@ -893,19 +896,18 @@ ENDMACRO()
 SETUP_LIBDASCRIPT(libDaScriptStage0 "${AOT_GENERATED_SRC_STAGE0}" "${STANDALONE_SRC_STAGE0}")
 SETUP_LIBDASCRIPT(libDaScript "${AOT_GENERATED_SRC}" "${STANDALONE_SRC}")
 
-add_custom_target(standaloneGenerated)
+add_custom_target(standaloneGeneratedSrc)
 
 FOREACH(inF IN LISTS StandaloneFilesList)
-    DAS_AOT_STANDALONE(${inF} standaloneSrc2 standaloneGenerated daslang-stage0 "-aotlib")
+    DAS_AOT_STANDALONE(${inF} unused_standaloneSrc standaloneGeneratedSrc daslang-stage0 "-aotlib")
 ENDFOREACH()
 
 
-SET(AOT_GENERATED_SRC2)
 FOREACH(inF IN LISTS AotDaslibList)
-    DAS_AOT_LIB("${inF}" AOT_GENERATED_SRC2 dasAotStub daslang-stage0)
+    DAS_AOT_LIB("${inF}" unused_aot_src dasAotStub daslang-stage0)
 ENDFOREACH()
 
-ADD_DEPENDENCIES(libDaScript standaloneGenerated dasAotStub)
+ADD_DEPENDENCIES(libDaScript standaloneGeneratedSrc dasAotStub)
 
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
