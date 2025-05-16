@@ -16,16 +16,6 @@ require daslib/strings_boost
 //////////
 // example
 
-let {
-    function_annotation_flags = (
-        (FunctionFlags.fastCall) |
-        (FunctionFlags.exports) |
-        (FunctionFlags.privateFunction) |
-        (FunctionFlags.unsafeDeref) |
-        (FunctionFlags.unsafeOperation) |
-        (FunctionFlags._generator));
-}
-
 // TODO: fixme
 def noBracket(expr) {
     return false;
@@ -101,6 +91,15 @@ class PrintVisitor : AstVisitor {
     printCStyle : bool = true;
     tab : int = 0;
     // TODO: fixme
+
+    function_annotation_flags = (
+            (FunctionFlags.fastCall) |
+            (FunctionFlags.exports) |
+            (FunctionFlags.privateFunction) |
+            (FunctionFlags.unsafeDeref) |
+            (FunctionFlags.unsafeOperation) |
+            (FunctionFlags._generator));
+
     def newLine() {
         write(*writer, "\n");
     }
@@ -991,12 +990,10 @@ def Foo(x, y : int) {
     return <- Foo(a = x + y);
 }
 
-var {
-    add_extra = 13;
-}
-
 [sideeffects]
 def add(a, b : int) {
+    // todo make global, after globals supported in standalone ctx
+    var add_extra = 13;
     print("a={a} b={b}");
     return a + b + add_extra;
 }
