@@ -200,7 +200,7 @@ namespace das {
         static TypeDeclPtr make(const ModuleLibrary & library ) {
             auto vtype = make_smart<TypeDecl>(Type::tVariant);
             vtype->alias = "RttiValue";
-            vtype->aotAlias = true;
+            vtype->aotAlias = false;
             vtype->addVariant("tBool",   typeFactory<RttiValue::NthType<RttiBool>>::make(library));
             vtype->addVariant("tInt",    typeFactory<RttiValue::NthType<RttiInt32>>::make(library));
             vtype->addVariant("tUInt",   typeFactory<RttiValue::NthType<RttiUint32>>::make(library));

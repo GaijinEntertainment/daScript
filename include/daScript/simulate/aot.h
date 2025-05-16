@@ -1867,6 +1867,9 @@ namespace das {
         }
     };
 
+    template <auto fn>
+    using AutoSimNode_Aot = SimNode_Aot<decltype(fn), fn>;
+
     template <typename FuncT, FuncT fn>
     struct SimNode_AotCMRES : SimNode_CallBase {
         __forceinline SimNode_AotCMRES ( ) : SimNode_CallBase(LineInfo(),"") {}
@@ -1881,6 +1884,9 @@ namespace das {
             return context.abiResult();
         }
     };
+
+    template <auto fn>
+    using AutoSimNode_AotCMRES = SimNode_AotCMRES<decltype(fn), fn>;
 
 #ifdef _MSC_VER
 #pragma warning(push)

@@ -47,11 +47,8 @@ def main() {
     } elif (mode == "standalone_ctx") {
         let input = find_argument(args, "--input");
         let output = find_argument(args, "--output");
-        let cfg = StandaloneContextCfg(context_name = "context",
-                                       class_name = "Standalone",
-                                       cpp_output_dir = output)
         print("standalone ctx {input} to {output}\n")
-        let res = standalone_aot(input, cfg, false, false)
+        let res = standalone_aot(input, output, false, false)
         if (res |> length() > 0) {
             fopen(output, "wb") <| $(fw) {
                 if (fw != null) {

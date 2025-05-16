@@ -780,10 +780,12 @@ namespace das {
         }
     }
 
-    static vector<Function *> collectUsedFunctions ( const vector<Module *> & modules, int totalFunctions, bool isAll = false ) {
+    static vector<Function *> collectUsedFunctions ( const vector<Module *> & modules, int totalFunctions, Module *thisModule, bool allModules, bool isAll = false ) {
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         for (auto & pm : modules) {
             pm->functions.foreach([&](auto pfun){
+                if ( !allModules && pfun->module != thisModule )
+                    return;
                 if (pfun->index < 0 || !pfun->used)
                     return;
                 if (!isAll) {
@@ -3611,18 +3613,21 @@ namespace das {
     }
 
     static void writeStandaloneContextMethods ( ProgramPtr prog, TextWriter & logs, const string &prefix, bool declare_only ) {
-        const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions);
+        const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions, prog->getThisModule(), false);
         BlockVariableCollector collector;
 
         for ( const auto fn : fnn ) {
             if ( !fn->exports ) continue;
-            if ( fn->module != prog->thisModule.get() ) continue;
             if (declare_only) {
                 logs << "    ";
             }
             logs << "auto " << prefix + aotFunctionName(fn->getOrigin() ? fn->getOrigin()->name : fn->name) << " ( ";
         // describe arguments
             for ( const auto & var : fn->arguments ) {
+                if (var->type->baseType == Type::tStructure && declare_only) {
+                    // It doesn't cover all cases, but anyway we'll get CE.
+                    DAS_FATAL_ERROR("Structures is not allowed in standalone contexts arguments.")
+                }
                 if (isLocalVec(var->type)) {
                     describeLocalCppType(logs, var->type);
                 } else {
@@ -3640,6 +3645,10 @@ namespace das {
                 logs << " ";
             }
             logs << ") -> ";
+            if (fn->result->baseType == Type::tStructure && declare_only) {
+                // It doesn't cover all cases, but anyway we'll get CE.
+                DAS_FATAL_ERROR("Structures is not allowed in standalone contexts return types.");
+            }
             describeLocalCppType(logs,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
             if (declare_only) {
                 logs << ";\n";
@@ -3656,32 +3665,29 @@ namespace das {
     }
 
     void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers, bool allModules ) {
-        const auto fnn = collectUsedFunctions(library.modules, totalFunctions);
+        const auto fnn = collectUsedFunctions(library.modules, totalFunctions, getThisModule(), allModules);
         if ( headers ) {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
         }
         bool funInit = false;
         for ( const auto fn : fnn ) {
-            if ( !allModules && fn->module != thisModule.get() )
-                continue;
             if ( fn->init ) {
                 funInit = true;
             }
             uint64_t semH = fn->aotHash;
-            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* { // " << aotFuncName(fn) << "\n";
-            logs << "        return ctx.code->makeNode<SimNode_Aot";
+            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
+            logs << "        return ctx.code->makeNode<AutoSimNode_Aot";
             if ( fn->copyOnReturn || fn->moveOnReturn ) {
                 logs << "CMRES";
             }
-            logs << "<" << describeCppFunc(fn,nullptr,false,false) << ",";
-            logs << "&" << aotFuncName(fn) << ">>();\n    };\n";
+            logs << "<&" << aotFuncName(fn) << ">>();\n    };\n";
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
             semH = getInitSemanticHashWithDep(semH);
             logs << "    // [[ init script ]]\n";
             logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
-            logs << "        ctx.aotInitScript = ctx.code->makeNode<SimNode_Aot<void (*)(Context *, bool),&__init_script>>();\n";
+            logs << "        ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();\n";
             logs << "        return ctx.aotInitScript;\n";
             logs << "    };\n";
         }
@@ -3753,8 +3759,18 @@ namespace das {
 
 
         tw << "     // start totalFunctions\n";
+        tw << "    auto initFunctions = {\n";
         tw << das::move(initFunctions);
+        tw << "    };\n";
         tw << "    // end totalFunctions\n";
+        tw << "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n";
+        tw << "    for (const auto& [index, func_info, debug_info]: initFunctions) {\n";
+        tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
+        tw << "        context.functions[index].debugInfo = debug_info;\n";
+        tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
+        tw << "        id_to_funcs.emplace_back(index, &context.functions[index]);\n";
+        tw << "        anyPInvoke |= func_info.pinvoke;\n";
+        tw << "    }\n";
 
         tw << "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n";
         tw << "    context.tabGMnLookup->clear();\n";
@@ -3769,18 +3785,7 @@ namespace das {
             }
         }
 
-        const auto fnn = collectUsedFunctions(program.library.getModules(), program.totalFunctions, true);
-
-        tw << "    FillFunction(context, getGlobalAotLibrary(), {\n        ";
-        for ( const auto fn: fnn) {
-            tw << "make_pair(0x" << HEX << fn->aotHash << DEC << ", &context.functions[" << fn->index << "/*fni*/])";
-            if (fn != fnn.back()) {
-                tw << ",\n        ";
-            } else {
-                tw << "\n    ";
-            }
-        }
-        tw << "});\n";
+        tw << "    FillFunction(context, getGlobalAotLibrary(), move(id_to_funcs));\n";
         // aot init
         if ( program.initSemanticHashWithDep ) {
             tw << "    {\n";
@@ -3860,7 +3865,7 @@ namespace das {
             ss.clear();
             ss << "\n";
             // print forward declarations
-            const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions);
+            const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions, prog->getThisModule(), false);
             for (const auto pfun: fnn) {
                 auto needInline = that == pfun->module;
                 if (needInline) {
@@ -3877,7 +3882,7 @@ namespace das {
 
     static void writeRegistration ( TextWriter &header, TextWriter &source, string initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
         source << "using namespace " << program->thisNamespace << ";\n";
-        dumpRegisterAot(source, program, context, true);
+        dumpRegisterAot(source, program, context, false);
         {
             NamespaceGuard guard1(header, cfg.context_name);
             NamespaceGuard guard2(source, cfg.context_name);
@@ -3988,9 +3993,11 @@ namespace das {
 
         TextWriter tw;
         for (auto &[pfun, info]: lookupFunctionTable) {
-            tw << "    InitAotFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
+            tw << "        std::make_tuple(" << pfun->index << ", "
                << "FunctionInfo(\"" << pfun->name << "\", \""
                << pfun->getMangledName() << "\", "
+               << "0x" << HEX << pfun->getMangledNameHash() << DEC << ", "
+               << "0x" << HEX << pfun->aotHash << DEC << ", "
                << pfun->totalStackSize << ", "
                << pfun->unsafeOperation << ", "
                << pfun->fastCall << ", "
@@ -3998,20 +4005,8 @@ namespace das {
                << pfun->module->promoted << ", "
                << (pfun->result->isRefType() && !pfun->result->ref) << ", "
                << pfun->pinvoke
-               << ")" << ");\n";
-            tw << "    context.functions[" << pfun->index << "/*pfun->index*/].debugInfo = &" << helper.funcInfoName(info) << ";\n";
-            if (pfun->pinvoke) {
-                tw << "    anyPInvoke = true;\n\n";
-            }
+               << "), &" << helper.funcInfoName(info) << "),\n";
         }
-
-        for ( const auto &[fn, info] : lookupFunctionTable ) {
-            auto mnh = fn->getMangledNameHash();
-
-            tw << "    // " << fn->getMangledName() << "\n";
-            tw << "    (*context.tabMnLookup)[0x"<< HEX << mnh << DEC <<"/*mnh*/] = context.functions + " << fn->index << "/*fn->index*/;\n";
-        }
-
         return tw.str();
     }
 
@@ -4063,32 +4058,15 @@ namespace das {
             NamespaceGuard guard2(header, "das");
             string initFunctions;
             {
-                const auto functions = collectUsedFunctions(program->library.getModules(), program->totalFunctions);
-                {
-                    NamespaceGuard anon_guard(source, program->thisNamespace); // anonymous
-                    source << aotVisitor.ss.str();
-                }
                 StandaloneContextGen gen(program, coll, cfg.cross_platform);
                 program->visitModule(gen, mod);
-                {
-                    das_set<string> ext_namespaces;
-                    for (das::Function *pfun: functions) {
-                        auto needInline = program->thisModule.get() == pfun->module;
-                        if (!needInline && gen.used_functions.count(aotFuncName(pfun)) == 0) {
-                            NamespaceGuard anon_guard(source, pfun->module->getNamespace()); // anonymous
-                            source << describeCppFunc(pfun, &coll, true, needInline) << ";\n";
-                            ext_namespaces.emplace(pfun->module->getNamespace());
-                        }
-                    }
-                    for (const string &namesp: ordered(ext_namespaces)) {
-                        source << "using namespace " << namesp << ";\n";
-                    }
-                }
 
                 NamespaceGuard anon_guard(source, program->thisNamespace); // anonymous
+                source << aotVisitor.ss.str();
+
                 initFunctions = addFunctionInfo(program->options.getBoolOption("no_init", program->policies.no_init),
                                                 program->options.getBoolOption("rtti",program->policies.rtti),
-                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, true),
+                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, program->getThisModule(), false),
                                                 gen.GetDebugInfo());
                 source << gen.str();
                 gen.clear();

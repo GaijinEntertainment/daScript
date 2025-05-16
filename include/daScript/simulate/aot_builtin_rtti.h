@@ -28,21 +28,6 @@ namespace das {
     using RttiValue = TVariant<32,16,bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>;
     static_assert(sizeof(RttiValue)==32,"sizeof RttiValue must be 32");
 
-    template <> struct das_alias<RttiValue> {
-        static __forceinline RttiValue & from ( RttiValue & value ) {
-            return value;
-        }
-        static __forceinline const RttiValue & from ( const RttiValue & value ) {
-            return value;
-        }
-        static __forceinline RttiValue & to ( RttiValue & value ) {
-            return value;
-        }
-        static __forceinline const RttiValue & to ( const RttiValue & value ) {
-            return value;
-        }
-    };
-
     template <typename TT, typename PD>
     struct das_rtti_iterator {
         using TTA = typename std::conditional_t<std::is_const<PD>::value, const TT, TT>;
