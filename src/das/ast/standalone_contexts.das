@@ -151,7 +151,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "        InitAotFunction(context, &context.functions[index], func_info);\n");
     write(tw, "        context.functions[index].debugInfo = debug_info;\n");
     write(tw, "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n");
-    write(tw, "        id_to_funcs.emplace_back(index, &context.functions[index]);\n");
+    write(tw, "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n");
     write(tw, "        anyPInvoke |= func_info.pinvoke;\n");
     write(tw, "    \}\n");
     write(tw, "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n");

@@ -2587,11 +2587,16 @@ namespace das {
             return Visitor::visit(ref2ptr);
         }
     // addr
+
+        void queryByMNH(string_view name, uint64_t hash) {
+            ss << "Func(__context__->fnByMangledName(/*" << name.data() << "*/ 0x" << HEX << hash << DEC << "))";
+        }
+
         virtual void preVisit ( ExprAddr * expr ) override {
             if (expr->func) {
                 auto mangledName = expr->func->getMangledName();
                 uint64_t hash = expr->func->getMangledNameHash();
-                ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                queryByMNH(mangledName, hash);
             } else {
                 ss << "Func(0 /*nullptr*/)";
             }
@@ -2837,7 +2842,7 @@ namespace das {
                             auto mangledName = call_func->getMangledName();
                             uint64_t hash = call_func->getMangledNameHash();
                             ss << "(__context__,nullptr,";
-                            ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                            queryByMNH(mangledName, hash);
                             ss << ");\n";
                         } else {
                             ss << aotFuncName(call_func) << "(__context__);\n";
@@ -2852,7 +2857,7 @@ namespace das {
                             auto mangledName = call_func->getMangledName();
                             uint64_t hash = call_func->getMangledNameHash();
                             ss << "(__context__,nullptr,";
-                            ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                            queryByMNH(mangledName, hash);
                             ss << ");\n";
                         } else {
                             ss << aotFuncName(call_func) << "(__context__);\n";
@@ -3351,10 +3356,11 @@ namespace das {
                             }
                         }
                         ss << ">(__context__,nullptr,";
-                        ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u)),";
+                        queryByMNH(mangledName, hash);
+                        ss << ",";
                     } else {
                         ss << "(__context__,nullptr,";
-                        ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                        queryByMNH(mangledName, hash);
                     }
                 } else {
                     ss << aotFuncName(call->func) << "(__context__";
@@ -3780,7 +3786,7 @@ namespace das {
         tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
         tw << "        context.functions[index].debugInfo = debug_info;\n";
         tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
-        tw << "        id_to_funcs.emplace_back(index, &context.functions[index]);\n";
+        tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
         tw << "        anyPInvoke |= func_info.pinvoke;\n";
         tw << "    }\n";
 
@@ -3952,7 +3958,7 @@ namespace das {
         tw << "    resolveTypeInfoAnnotations();\n";
         tw << "};\n";
         tw << "\n";
-        tw << "AotListBase impl(registerAotFunctions);\n";
+        tw << "static AotListBase impl(registerAotFunctions);\n";
     }
 
     static void dumpDependencies(ProgramPtr program, CppAot& aotVisitor) {

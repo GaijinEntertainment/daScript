@@ -2458,11 +2458,16 @@ class CppAot : AstVisitor {
         return ref2ptr;
     }
 // addr
+
+    def queryByMNH(name: string; hash: uint64) {
+        return "Func(__context__->fnByMangledName(/*{name}*/ 0x{hash:x}))";
+    }
+
     def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
         if (expr.func != null) {
             let mangledName =  expr.func |> get_mangled_name();
             let hash = expr.func.getMangledNameHash;
-            write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u))");
+            write(*ss, queryByMNH(mangledName, hash));
         } else {
             write(*ss, "Func(0 /*nullptr*/)");
         }
@@ -2675,7 +2680,7 @@ class CppAot : AstVisitor {
                         assume mangledName = call_func |> get_mangled_name();
                         let hash = call_func.getMangledNameHash;
                         write(*ss, "(__context__,nullptr,");
-                        write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u))");
+                        write(*ss, queryByMNH(mangledName, hash));
                         write(*ss, ")");
                     } else {
                         write(*ss, "{aotFuncName(call_func)}(__context__)");
@@ -2691,7 +2696,7 @@ class CppAot : AstVisitor {
                         assume mangledName = call_func |> get_mangled_name();
                         let hash = call_func.getMangledNameHash;
                         write(*ss, "(__context__,nullptr,");
-                        write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u))");
+                        write(*ss, queryByMNH(mangledName, hash));
                         write(*ss, ")");
                     } else {
                         write(*ss, "{aotFuncName(call_func)}(__context__)");
@@ -3181,11 +3186,10 @@ class CppAot : AstVisitor {
                             write(*ss, ",");
                         }
                     }
-                    write(*ss, ">(__context__,nullptr,");
-                    write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u)),");
+                    write(*ss, ">(__context__,nullptr,{queryByMNH(mangledName, hash)},");
                 } else {
                     write(*ss, "(__context__,nullptr,");
-                    write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u))");
+                    write(*ss, queryByMNH(mangledName, hash));
                 }
             } else {
                 write(*ss, "{aotFuncName(call.func)}(__context__");
@@ -3628,12 +3632,12 @@ def updateCOP(var cop : CodeOfPolicies) {
 
 def compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {
     set_aot();
-    compile_file(input, access, mg, cop) <| $(ok, program, issues) {
+    compile_file(input, access, mg, cop) <| $(ok; var program: smart_ptr<Program>; issues) {
         if (!ok) {
             print("failed to compile {input}\n{issues}\n")
             return
         }
-        simulate(program) <| $(sok; pctx; serrors) {
+        simulate(program) <| $(sok; var pctx: smart_ptr<Context>; serrors) {
             if (!sok) {
                 panic("Failed to simulate {serrors}")
             }
@@ -3715,7 +3719,7 @@ def aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : b
                         write(writer, "\tresolveTypeInfoAnnotations();\n");
                         write(writer, "}\n");
                         write(writer, "\n");
-                        if (!isAotLib) write(writer, "AotListBase impl(registerAotFunctions);\n");
+                        if (!isAotLib) write(writer, "static AotListBase impl(registerAotFunctions);\n");
                         // validation stuff
                         if (paranoid_validation) {
                             /* todo: program->validateAotCpp(tw,*pctx);
