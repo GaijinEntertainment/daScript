@@ -740,6 +740,9 @@ add_custom_target(standaloneGenerated)
 SET(STANDALONE_SRC)
 DAS_AOT("src/das/ast/printer_flags_visitor.das" STANDALONE_SRC standaloneGenerated daslang)
 DAS_AOT_STANDALONE("src/das/ast/ast_print.das" STANDALONE_SRC standaloneGenerated daslang)
+DAS_AOT_STANDALONE("src/das/main.das" STANDALONE_SRC standaloneGenerated daslang)
+DAS_AOT_STANDALONE("src/das/ast/standalone_contexts.das" STANDALONE_SRC standaloneGenerated daslang)
+DAS_AOT_STANDALONE("src/das/ast/ast_aot_cpp.das" STANDALONE_SRC standaloneGenerated daslang)
 
 ADD_LIBRARY(libDaScriptStandalone ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
         ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
