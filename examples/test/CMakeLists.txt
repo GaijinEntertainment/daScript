@@ -41,7 +41,7 @@ list(SORT MODULE_TEST_SRC)
 SOURCE_GROUP_FILES("module" MODULE_TEST_SRC)
 
 SET(TEST_MAIN_SRC
-${CMAKE_CURRENT_SOURCE_DIR}/examples/test/main.cpp
+${PROJECT_SOURCE_DIR}/utils/daScript/main.cpp
 ${CMAKE_CURRENT_SOURCE_DIR}/examples/test/unitTest.h
 )
 list(SORT TEST_MAIN_SRC)

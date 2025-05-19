@@ -39,9 +39,9 @@ enum SomeEnum98 {
 DAS_BIND_ENUM_CAST_98(SomeEnum98);
 
 enum SomeEnum_16 : int16_t {
-    SomeEnum_16_zero = 0
-,   SomeEnum_16_one  = 1
-,   SomeEnum_16_two  = 2
+    SomeEnum_16_zero = 1 << 2
+,   SomeEnum_16_one  = 1 << 5
+,   SomeEnum_16_two  = -1
 };
 DAS_BIND_ENUM_CAST_98(SomeEnum_16);
 

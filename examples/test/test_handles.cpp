@@ -532,6 +532,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     /*
      addExtern<DAS_BIND_FUN(makeDummy)>(*this, lib, "makeDummy", SideEffects::none, "makeDummy");
      */
+    das::addEnumFlagOps<SomeEnum_16>(*this, lib, "SomeEnum_16");
     addExtern<DAS_BIND_FUN(makeDummy), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeDummy",
         SideEffects::none, "makeDummy");
     addExtern<DAS_BIND_FUN(makeDummy), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeTempDummy",
