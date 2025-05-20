@@ -183,8 +183,8 @@ namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_363_12; };
 namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_923_13; };
 namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_2307_14; };
 namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_2352_15; };
-namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_2954_16; };
-namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_2828_17; };
+namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_2959_16; };
+namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_2833_17; };
 namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_43_18; };
 namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_43_19; };
 namespace ast_aot_cpp { struct _lambda_ast_aot_cpp_43_20; };
@@ -325,8 +325,8 @@ namespace standalone_contexts { struct _lambda_standalone_contexts_43_2; };
 // unused structure _lambda_ast_aot_cpp_923_13
 // unused structure _lambda_ast_aot_cpp_2307_14
 // unused structure _lambda_ast_aot_cpp_2352_15
-// unused structure _lambda_ast_aot_cpp_2954_16
-// unused structure _lambda_ast_aot_cpp_2828_17
+// unused structure _lambda_ast_aot_cpp_2959_16
+// unused structure _lambda_ast_aot_cpp_2833_17
 // unused structure _lambda_ast_aot_cpp_43_18
 // unused structure _lambda_ast_aot_cpp_43_19
 // unused structure _lambda_ast_aot_cpp_43_20
@@ -404,17 +404,17 @@ TypeInfo * __tinfo_3[7] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe
 TypeInfo * __tinfo_4[2] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 TypeInfo * __tinfo_5[2] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 
-inline void _FuncfioTickfopenTick3937565566638487747_3225c697e37c1bfa ( Context * __context__, char * const  __name_rename_at_12_0, char * const  __mode_rename_at_12_1, Block DAS_COMMENT((void,FILE const  * const )) const  & __blk_rename_at_12_2 );
+inline void _FuncfioTickfopenTick3937565566638487747_feeb71cd63fd8eac ( Context * __context__, char * const  __name_rename_at_12_0, char * const  __mode_rename_at_12_1, Block DAS_COMMENT((void,FILE const  * const )) const  & __blk_rename_at_12_2 );
 inline TArray<char *> _FuncbuiltinTickget_command_line_argumentsTick14327939727965569528_4c51dd8b3477a086 ( Context * __context__ );
-inline char * find_argument_or_14bb48686f57685c ( Context * __context__, TArray<char *> const  & __args_rename_at_8_5, char * const  __key_rename_at_8_6, char * const  __def_val_rename_at_8_7 );
-inline char * find_argument_6e5fe233b4a580ad ( Context * __context__, TArray<char *> const  & __args_rename_at_17_9, char * const  __key_rename_at_17_10 );
-inline void main_99f7022db5f9f6d ( Context * __context__ );
+inline char * find_argument_or_b6d7b58d4c51e95b ( Context * __context__, TArray<char *> const  & __args_rename_at_8_5, char * const  __key_rename_at_8_6, char * const  __def_val_rename_at_8_7 );
+inline char * find_argument_def0d640047e4e22 ( Context * __context__, TArray<char *> const  & __args_rename_at_17_9, char * const  __key_rename_at_17_10 );
+inline void main_14111d935d1adefc ( Context * __context__ );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncfioTickfopenTick3937565566638487747_3225c697e37c1bfa ( Context * __context__, char * const  __name_rename_at_12_0, char * const  __mode_rename_at_12_1, Block DAS_COMMENT((void,FILE const  * const )) const  &  __blk_rename_at_12_2 )
+inline void _FuncfioTickfopenTick3937565566638487747_feeb71cd63fd8eac ( Context * __context__, char * const  __name_rename_at_12_0, char * const  __mode_rename_at_12_1, Block DAS_COMMENT((void,FILE const  * const )) const  &  __blk_rename_at_12_2 )
 {
     FILE const  * __f_rename_at_13_3 = ((FILE const  *)builtin_fopen(__name_rename_at_12_0,__mode_rename_at_12_1));
     das_invoke<void>::invoke<FILE const  * const >(__context__,nullptr,__blk_rename_at_12_2,__f_rename_at_13_3);
@@ -431,7 +431,7 @@ inline TArray<char *> _FuncbuiltinTickget_command_line_argumentsTick143279397279
     return /* <- */ das_auto_cast_move<TArray<char *>>::cast(__args_rename_at_1753_4);
 }
 
-inline char * find_argument_or_14bb48686f57685c ( Context * __context__, TArray<char *> const  &  __args_rename_at_8_5, char * const  __key_rename_at_8_6, char * const  __def_val_rename_at_8_7 )
+inline char * find_argument_or_b6d7b58d4c51e95b ( Context * __context__, TArray<char *> const  &  __args_rename_at_8_5, char * const  __key_rename_at_8_6, char * const  __def_val_rename_at_8_7 )
 {
     {
         bool __need_loop_9 = true;
@@ -451,7 +451,7 @@ inline char * find_argument_or_14bb48686f57685c ( Context * __context__, TArray<
     return das_auto_cast<char *>::cast(__def_val_rename_at_8_7);
 }
 
-inline char * find_argument_6e5fe233b4a580ad ( Context * __context__, TArray<char *> const  &  __args_rename_at_17_9, char * const  __key_rename_at_17_10 )
+inline char * find_argument_def0d640047e4e22 ( Context * __context__, TArray<char *> const  &  __args_rename_at_17_9, char * const  __key_rename_at_17_10 )
 {
     {
         bool __need_loop_18 = true;
@@ -472,21 +472,21 @@ inline char * find_argument_6e5fe233b4a580ad ( Context * __context__, TArray<cha
     return das_auto_cast<char *>::cast(nullptr);
 }
 
-inline void main_99f7022db5f9f6d ( Context * __context__ ) { das_stack_prologue __prologue(__context__,336,"main " DAS_FILE_LINE);
+inline void main_14111d935d1adefc ( Context * __context__ ) { das_stack_prologue __prologue(__context__,336,"main " DAS_FILE_LINE);
 {
     TArray<char *> __args_rename_at_29_12_ConstRef; das_zero(__args_rename_at_29_12_ConstRef); das_move(__args_rename_at_29_12_ConstRef, ((TArray<char *>)_FuncbuiltinTickget_command_line_argumentsTick14327939727965569528_4c51dd8b3477a086(__context__)));
     TArray<char *> const  & __args_rename_at_29_12 = __args_rename_at_29_12_ConstRef; ;
-    char * __mode_rename_at_31_13 = ((char *)(char *)(find_argument_6e5fe233b4a580ad(__context__,__args_rename_at_29_12,((char *) "--mode"))));
+    char * __mode_rename_at_31_13 = ((char *)(char *)(find_argument_def0d640047e4e22(__context__,__args_rename_at_29_12,((char *) "--mode"))));
     if ( SimPolicy<char *>::Equ(cast<char *>::from(__mode_rename_at_31_13),cast<char *>::from(((char *) "aot")),*__context__,nullptr) )
     {
-        char * __input_rename_at_33_14 = ((char *)(char *)(find_argument_6e5fe233b4a580ad(__context__,__args_rename_at_29_12,((char *) "--input"))));
-        char * __output_rename_at_34_15 = ((char *)(char *)(find_argument_6e5fe233b4a580ad(__context__,__args_rename_at_29_12,((char *) "--output"))));
-        bool __cross_platform_rename_at_35_16 = ((bool)(SimPolicy<char *>::Equ(cast<char *>::from(find_argument_or_14bb48686f57685c(__context__,__args_rename_at_29_12,((char *) "--cross_platform"),((char *) "false"))),cast<char *>::from(((char *) "true")),*__context__,nullptr)));
+        char * __input_rename_at_33_14 = ((char *)(char *)(find_argument_def0d640047e4e22(__context__,__args_rename_at_29_12,((char *) "--input"))));
+        char * __output_rename_at_34_15 = ((char *)(char *)(find_argument_def0d640047e4e22(__context__,__args_rename_at_29_12,((char *) "--output"))));
+        bool __cross_platform_rename_at_35_16 = ((bool)(SimPolicy<char *>::Equ(cast<char *>::from(find_argument_or_b6d7b58d4c51e95b(__context__,__args_rename_at_29_12,((char *) "--cross_platform"),((char *) "false"))),cast<char *>::from(((char *) "true")),*__context__,nullptr)));
         builtin_print(das_string_builder_temp(__context__,SimNode_AotInterop<5>(__tinfo_1, cast<char * const >::from(((char *) "aot ")), cast<char * const >::from(__input_rename_at_33_14), cast<char * const >::from(((char *) " to ")), cast<char * const >::from(__output_rename_at_34_15), cast<char * const >::from(((char *) "\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-        char * __res_rename_at_37_17 = ((char *)(char *)(das_invoke_function<char * const >::invoke<char * const ,bool,bool,bool>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_aot_cpp::aot Cs Cb Cb Cb*/ 18133740268605143206u)),__input_rename_at_33_14,true,false,__cross_platform_rename_at_35_16)));
+        char * __res_rename_at_37_17 = ((char *)(char *)(das_invoke_function<char * const >::invoke<char * const ,bool,bool,bool>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_aot_cpp::aot Cs Cb Cb Cb*/ 0xfba7fcb29767f8a6)),__input_rename_at_33_14,true,false,__cross_platform_rename_at_35_16)));
         if ( builtin_string_length(__res_rename_at_37_17,__context__) > 0 )
         {
-            _FuncfioTickfopenTick3937565566638487747_3225c697e37c1bfa(__context__,__output_rename_at_34_15,((char *) "wb"),das_make_block<void,FILE const  * const >(__context__,192,0,&__func_info__793c57c1b60ae74a,[&](FILE const  * const  __fw_rename_at_39_18) -> void{
+            _FuncfioTickfopenTick3937565566638487747_feeb71cd63fd8eac(__context__,__output_rename_at_34_15,((char *) "wb"),das_make_block<void,FILE const  * const >(__context__,192,0,&__func_info__793c57c1b60ae74a,[&](FILE const  * const  __fw_rename_at_39_18) -> void{
                 if ( __fw_rename_at_39_18 != nullptr )
                 {
                     builtin_fwrite(__fw_rename_at_39_18,__res_rename_at_37_17,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
@@ -497,14 +497,14 @@ inline void main_99f7022db5f9f6d ( Context * __context__ ) { das_stack_prologue 
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__mode_rename_at_31_13),cast<char *>::from(((char *) "standalone_ctx")),*__context__,nullptr) )
     {
-        char * __input_rename_at_48_19 = ((char *)(char *)(find_argument_6e5fe233b4a580ad(__context__,__args_rename_at_29_12,((char *) "--input"))));
-        char * __output_rename_at_49_20 = ((char *)(char *)(find_argument_6e5fe233b4a580ad(__context__,__args_rename_at_29_12,((char *) "--output"))));
-        bool __cross_platform_rename_at_50_21 = ((bool)(SimPolicy<char *>::Equ(cast<char *>::from(find_argument_or_14bb48686f57685c(__context__,__args_rename_at_29_12,((char *) "--cross_platform"),((char *) "false"))),cast<char *>::from(((char *) "true")),*__context__,nullptr)));
+        char * __input_rename_at_48_19 = ((char *)(char *)(find_argument_def0d640047e4e22(__context__,__args_rename_at_29_12,((char *) "--input"))));
+        char * __output_rename_at_49_20 = ((char *)(char *)(find_argument_def0d640047e4e22(__context__,__args_rename_at_29_12,((char *) "--output"))));
+        bool __cross_platform_rename_at_50_21 = ((bool)(SimPolicy<char *>::Equ(cast<char *>::from(find_argument_or_b6d7b58d4c51e95b(__context__,__args_rename_at_29_12,((char *) "--cross_platform"),((char *) "false"))),cast<char *>::from(((char *) "true")),*__context__,nullptr)));
         builtin_print(das_string_builder_temp(__context__,SimNode_AotInterop<7>(__tinfo_3, cast<char * const >::from(((char *) "standalone ctx ")), cast<char * const >::from(__input_rename_at_48_19), cast<char * const >::from(((char *) " to ")), cast<char * const >::from(__output_rename_at_49_20), cast<char * const >::from(((char *) " cross_platform=")), cast<bool>::from(__cross_platform_rename_at_50_21), cast<char * const >::from(((char *) "\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-        char * __res_rename_at_52_22 = ((char *)(char *)(das_invoke_function<char * const >::invoke<char * const ,char * const ,bool,bool,bool>(__context__,nullptr,Func(__context__->fnByMangledName(/*@standalone_contexts::standalone_aot Cs Cs Cb Cb Cb*/ 3447988833651899129u)),__input_rename_at_48_19,__output_rename_at_49_20,false,__cross_platform_rename_at_50_21,false)));
+        char * __res_rename_at_52_22 = ((char *)(char *)(das_invoke_function<char * const >::invoke<char * const ,char * const ,bool,bool,bool>(__context__,nullptr,Func(__context__->fnByMangledName(/*@standalone_contexts::standalone_aot Cs Cs Cb Cb Cb*/ 0x2fd9b7937355baf9)),__input_rename_at_48_19,__output_rename_at_49_20,false,__cross_platform_rename_at_50_21,false)));
         if ( builtin_string_length(__res_rename_at_52_22,__context__) > 0 )
         {
-            _FuncfioTickfopenTick3937565566638487747_3225c697e37c1bfa(__context__,__output_rename_at_49_20,((char *) "wb"),das_make_block<void,FILE const  * const >(__context__,320,0,&__func_info__793c57c1b60ae74a,[&](FILE const  * const  __fw_rename_at_54_23) -> void{
+            _FuncfioTickfopenTick3937565566638487747_feeb71cd63fd8eac(__context__,__output_rename_at_49_20,((char *) "wb"),das_make_block<void,FILE const  * const >(__context__,320,0,&__func_info__793c57c1b60ae74a,[&](FILE const  * const  __fw_rename_at_54_23) -> void{
                 if ( __fw_rename_at_54_23 != nullptr )
                 {
                     builtin_fwrite(__fw_rename_at_54_23,__res_rename_at_52_22,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
@@ -524,28 +524,28 @@ inline void main_99f7022db5f9f6d ( Context * __context__ ) { das_stack_prologue 
 using namespace _anon_6563252783937865275;
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xdef39bed9b8754ea] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncfioTickfopenTick3937565566638487747_3225c697e37c1bfa>>();
+    aotLib[0x7c2e30b4091b7513] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncfioTickfopenTick3937565566638487747_feeb71cd63fd8eac>>();
     };
     aotLib[0x62afc600b58de125] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickget_command_line_argumentsTick14327939727965569528_4c51dd8b3477a086>>();
     };
-    aotLib[0x1e916c0972089f0c] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&find_argument_or_14bb48686f57685c>>();
+    aotLib[0xd3ae02464a5dc6e8] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&find_argument_or_b6d7b58d4c51e95b>>();
     };
-    aotLib[0x9dac7ab38b2daadd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&find_argument_6e5fe233b4a580ad>>();
+    aotLib[0xc121ed496e5aa7e9] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&find_argument_def0d640047e4e22>>();
     };
-    aotLib[0xf81d59e2085cb407] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&main_99f7022db5f9f6d>>();
+    aotLib[0x4ee47163c4024ba0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&main_14111d935d1adefc>>();
     };
     resolveTypeInfoAnnotations();
 };
 
-AotListBase impl(registerAotFunctions);
+static AotListBase impl(registerAotFunctions);
 namespace main {
 auto Standalone::main ( ) -> void {
-    return main_99f7022db5f9f6d(this);
+    return main_14111d935d1adefc(this);
 }
 
 Standalone::Standalone() {
@@ -554,7 +554,7 @@ Standalone::Standalone() {
     policies.persistent_heap = false;
     policies.heap_size_hint = 65536;
     policies.string_heap_size_hint = 65536;
-    context.setup(0/*totalVariables*/, 14508 /*globalStringHeapSize*/, policies, {});
+    context.setup(0/*totalVariables*/, 14560 /*globalStringHeapSize*/, policies, {});
      // start totalVariables
      // end totalVariables
 
@@ -562,8 +562,8 @@ Standalone::Standalone() {
     context.shared = (char *) das_aligned_alloc16(context.sharedSize);
     context.sharedOwner = true;
     context.totalVariables = 0/*totalVariables*/;
-    context.functions = (SimFunction *) context.code->allocate( 592/*totalFunctions*/*sizeof(SimFunction) );
-    context.totalFunctions = 592/*totalFunctions*/;
+    context.functions = (SimFunction *) context.code->allocate( 593/*totalFunctions*/*sizeof(SimFunction) );
+    context.totalFunctions = 593/*totalFunctions*/;
     bool anyPInvoke = false;
     if ( anyPInvoke || false/*(policies.threadlock_context || policies.debugger)*/ ) {
         context.contextMutex = new recursive_mutex;
@@ -572,11 +572,11 @@ Standalone::Standalone() {
     context.tabMnLookup->clear();
      // start totalFunctions
     auto initFunctions = {
-        std::make_tuple(0, FunctionInfo("fio`fopen`3937565566638487747", "fio`fopen`3937565566638487747 Cs Cs CN<f>0<CY<file>1<CH<fio::FILE>>?>1<v>$", 0xaec066351adb341f, 0xdef39bed9b8754ea, 48, false, false, false, false, false, false), &__func_info__aec066351adb341f),
+        std::make_tuple(0, FunctionInfo("fio`fopen`3937565566638487747", "fio`fopen`3937565566638487747 Cs Cs CN<f>0<CY<file>1<CH<fio::FILE>>?>1<v>$", 0xaec066351adb341f, 0x7c2e30b4091b7513, 48, false, false, false, false, false, false), &__func_info__aec066351adb341f),
         std::make_tuple(1, FunctionInfo("builtin`get_command_line_arguments`14327939727965569528", "builtin`get_command_line_arguments`14327939727965569528", 0xc508c4a3fccd2cca, 0x62afc600b58de125, 32, false, false, false, false, true, false), &__func_info__c508c4a3fccd2cca),
-        std::make_tuple(2, FunctionInfo("find_argument_or", "find_argument_or C1<s>A Cs Cs", 0x9edf2eff375e5b54, 0x1e916c0972089f0c, 48, false, false, false, false, false, false), &__func_info__9edf2eff375e5b54),
-        std::make_tuple(3, FunctionInfo("find_argument", "find_argument C1<s>A Cs", 0x1474780a87ee3908, 0x9dac7ab38b2daadd, 48, false, false, false, false, false, false), &__func_info__1474780a87ee3908),
-        std::make_tuple(4, FunctionInfo("main", "main", 0x723153080f205d43, 0xf81d59e2085cb407, 336, false, false, false, false, false, false), &__func_info__723153080f205d43),
+        std::make_tuple(2, FunctionInfo("find_argument_or", "find_argument_or C1<s>A Cs Cs", 0x9edf2eff375e5b54, 0xd3ae02464a5dc6e8, 48, false, false, false, false, false, false), &__func_info__9edf2eff375e5b54),
+        std::make_tuple(3, FunctionInfo("find_argument", "find_argument C1<s>A Cs", 0x1474780a87ee3908, 0xc121ed496e5aa7e9, 48, false, false, false, false, false, false), &__func_info__1474780a87ee3908),
+        std::make_tuple(4, FunctionInfo("main", "main", 0x723153080f205d43, 0x4ee47163c4024ba0, 336, false, false, false, false, false, false), &__func_info__723153080f205d43),
     };
     // end totalFunctions
     vector<pair<uint64_t, SimFunction*>> id_to_funcs;
@@ -584,7 +584,7 @@ Standalone::Standalone() {
         InitAotFunction(context, &context.functions[index], func_info);
         context.functions[index].debugInfo = debug_info;
         (*context.tabMnLookup)[func_info.mnh] = context.functions + index;
-        id_to_funcs.emplace_back(index, &context.functions[index]);
+        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);
         anyPInvoke |= func_info.pinvoke;
     }
     context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
