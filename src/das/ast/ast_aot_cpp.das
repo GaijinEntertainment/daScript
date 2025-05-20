@@ -1474,8 +1474,7 @@ class CppAot : AstVisitor {
     def override preVisitExprOp1(var that : smart_ptr<ExprOp1>) {
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
-            var l_clone <- unsafe(reinterpret<ExpressionPtr>(that.subexpr.get_ptr())); // todo: is there a better way
-            that.arguments |> emplace(l_clone);
+            that.arguments |> emplace(that.subexpr);
             CallFunc_preVisit(that);
             CallFunc_preVisitCallArg(that, that.subexpr, true);
         } elif (isOpPolicy1(that)) {
@@ -1556,10 +1555,8 @@ class CppAot : AstVisitor {
         if (!noBracket(that)) write(*ss, "(");
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
-            var l_clone <- unsafe(reinterpret<ExpressionPtr>(that.left.get_ptr())); // todo: is there a better way
-            var r_clone <- unsafe(reinterpret<ExpressionPtr>(that.right.get_ptr()));
-            that.arguments |> emplace(l_clone);
-            that.arguments |> emplace(r_clone);
+            that.arguments |> emplace(that.left);
+            that.arguments |> emplace(that.right);
             CallFunc_preVisit(that);
             CallFunc_preVisitCallArg(that, that.left, false);
         } elif (isOpPolicy2(that)) {
