@@ -8,6 +8,13 @@
 #include <atomic>
 #endif
 
+// when enabled, smart_ptr will keep allocated memory after delete
+// that way ID of the broken object does not get overwritten
+// this is useful for debugging, but it is not a good idea to use it in production
+#ifndef DAS_SMART_PTR_BROKEN
+#define DAS_SMART_PTR_BROKEN 0
+#endif
+
 void os_debug_break();
 
 namespace das {
@@ -416,7 +423,11 @@ namespace das {
 #endif
             if ( --ref_count==0 ) {
                 DAS_TRACK_SMART_PTR_ID_DTOR
+#if DAS_SMART_PTR_BROKEN
+                this->~ptr_ref_count(); // call destructor, but don't release memory
+#else
                 delete this;
+#endif~
                 return true;
             } else {
                 return false;
