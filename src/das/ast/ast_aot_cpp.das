@@ -501,6 +501,7 @@ def typeInfoName(info : TypeInfo?) {
 
 class AotDebugInfoHelper {
     helper : smart_ptr<DebugInfoHelper> <- new DebugInfoHelper(uninitialized);
+    cross_platform : bool = false
 
     def writeDim(var writer : StringBuilderWriter?; info : TypeInfo?; suffix : string = "") {
         if (info.dimSize > 0u) {
@@ -584,7 +585,11 @@ class AotDebugInfoHelper {
     def describeCppVarInfo(struct_name : string; info : VarInfo?; suffix : string) {
         return build_string() <| $(writer) {
             write(writer, "{describeCppTypeInfo(info, suffix)}, \"{info.name}\", ");
-            write(writer, "offsetof({struct_name},{info.name}), {info.nextGcField:d}");
+            if (cross_platform) {
+                write(writer, "offsetof({struct_name},{info.name}), {info.nextGcField:d}");
+            } else {
+                write(writer, "{info.offset}, {info.nextGcField:d}")
+            }
         }
     }
     def describeCppVarFuncInfo(struct_name : string; info : VarInfo?; suffix : string) {
@@ -2937,8 +2942,12 @@ class CppAot : AstVisitor {
             write(*ss, "<{describeCppType(call._type,DescribeConfig(cross_platform=cross_platform))}");
             if (methodOffset != -1) {
                 assume argType = call.arguments[0]._type;
-                let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
-                write(*ss, ",offsetof({describeCppType(argType.argTypes[0], cfg)},{methodName})");
+                if (cross_platform) {
+                    let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
+                    write(*ss, ",offsetof({describeCppType(argType.argTypes[0], cfg)},{methodName})");
+                } else {
+                    write(*ss, ",{methodOffset}/*{methodName}*/");
+                }
             }
             write(*ss, ">::invoke");
             if (einv.isCopyOrMove) {
@@ -3691,6 +3700,7 @@ def aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : b
                                                                 (program._options |> find_arg("solid_context") ?as tBool ?? false),
                                                      cross_platform = cross_platform)
                             cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
+                            cpp_aot.helper.cross_platform = cross_platform;
                             var inscope adapter <- make_visitor(*cpp_aot)
                             cpp_aot.adapter := adapter
                             dumpDependencies(program, cpp_aot);

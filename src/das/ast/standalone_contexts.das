@@ -197,13 +197,14 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
 
 class StandaloneContextGen : CppAot {
 
-    def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector ?) {
+    def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector ?, cross_platform : bool) {
         ss <- ss_;
         collector <- coll;
         program <- program_;
         prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false;
         solidContext = program.policies.solid_context || (program._options |> find_arg("solid_context") ?as tBool ?? false);
         helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
+        helper.cross_platform = cross_platform;
     }
 
     used_functions : table<string>;
@@ -333,7 +334,7 @@ def genStandaloneSrc(var program : ProgramPtr;
     var initFunctions : string;
     let ctx_generated = build_string() <| $(tw) {
         build_string() <| $(tmp_writer) {
-            var gen = new StandaloneContextGen(program, unsafe(addr(tmp_writer)), coll);
+            var gen = new StandaloneContextGen(program, unsafe(addr(tmp_writer)), coll, cfg.cross_platform);
             var inscope adapter <- make_visitor(*gen)
             gen.adapter := adapter
             program |> visit_module(adapter, program.getThisModule);

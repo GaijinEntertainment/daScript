@@ -604,8 +604,14 @@ namespace das {
     protected:
         void describeCppVarInfo ( TextWriter & ss, string_view structName, VarInfo * info, const string & suffix ) const {
             describeCppTypeInfo(ss, info, suffix);
-            ss << ", \"" << info->name << "\", offsetof(";
-            ss << structName.data() << "," << info->name << "), " << info->nextGcField;
+            ss << ", \"" << info->name << "\", ";
+            if (crossPlatform) {
+                ss << "offsetof(";
+                ss << structName.data() << "," << info->name << ")";
+            } else {
+                ss << info->offset;
+            }
+            ss << ", " << info->nextGcField;
         }
         void describeCppVarFuncInfo ( TextWriter & ss, string_view structName, VarInfo * info, const string & suffix ) const {
             describeCppTypeInfo(ss, info, suffix);
@@ -3078,12 +3084,14 @@ namespace das {
             } else if ( call->name=="invoke" || call->rtti_isInvoke() ) {
                 const auto argType = call->arguments[0]->type;
                 auto bt = argType->baseType;
+                int methodOffset = -1;
                 std::optional<string> methodName;
                 if ( bt==Type::tFunction ) {
                     auto einv = static_cast<ExprInvoke *>(call);
                     if ( einv->isInvokeMethod ) {
                         if ( call->arguments[0]->rtti_isField() ) {
                             auto field = static_pointer_cast<ExprField>(call->arguments[0]);
+                            methodOffset = field->field->offset;
                             methodName = field->field->name;
                         } else {
                             DAS_FATAL_ERROR("internal error. expected field");
@@ -3099,10 +3107,14 @@ namespace das {
                 ExprInvoke * einv = static_cast<ExprInvoke *>(call);
                 ss << "<" << describeCppType(call->type);
                 if ( methodName ) {
-                    ss << ",offsetof(" << describeCppType(argType->argTypes.at(0),
-                                                          CpptSubstitureRef::no,
-                                                          CpptSkipRef::yes,
-                                                          CpptSkipConst::yes) << "," << methodName.value() << ")";
+                    if (crossPlatform) {
+                        ss << ",offsetof(" << describeCppType(argType->argTypes.at(0),
+                                                              CpptSubstitureRef::no,
+                                                              CpptSkipRef::yes,
+                                                              CpptSkipConst::yes) << "," << methodName.value() << ")";
+                    } else {
+                        ss << "," << methodOffset << "/*" << methodName.value() << "*/";
+                    }
                 }
                 ss << ">::invoke";
                 if ( einv->isCopyOrMove() ) ss << "_cmres";
