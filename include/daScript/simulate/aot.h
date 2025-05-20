@@ -1007,12 +1007,22 @@ namespace das {
     };
 
     template <typename... TA>
-    constexpr int max_alignof() { return std::max({TypeAlign<int>::align, TypeAlign<TA>::align...}); }
+    constexpr int max_alignof() { return std::max({TypeAlign<TA>::align...}); }
 
+    template <typename... TA>
+    constexpr int variant_align() {
+        return max_alignof<int, TA...>();
+    }
+
+
+    template <typename... TA>
+    constexpr int tuple_align() {
+        return max_alignof<TA...>();
+    }
 
     template <int tupleSize, typename... TA>
     struct TypeAlign<TTuple<tupleSize, TA...>> {
-        static constexpr int align = max_alignof<TA...>();
+        static constexpr int align = tuple_align<TA...>();
     };
 
     template <int tupleSize, int alignment, typename... TA>
@@ -1039,12 +1049,12 @@ namespace das {
     constexpr int tuple_size() {
         int ma = 0;
         (..., (ma = round_up(ma, TypeAlign<TA>::align) + TypeSize<TA>::size));
-        return round_up(ma, max_alignof<TA...>());
+        return round_up(ma, tuple_align<TA...>());
     }
 
     template <typename... TA>
     constexpr int variant_sizeof() {
-        constexpr auto align = max_alignof<TA...>();
+        constexpr auto align = variant_align<TA...>();
         int ma = 0;
         ((ma = std::max(round_up(TypeSize<int>::size, align) + round_up(TypeSize<TA>::size, align), ma)), ...);
         return ma;
@@ -1115,7 +1125,7 @@ namespace das {
     template <int variantSize, int variantAlign, typename ...TA>
     struct alignas(variantAlign) TVariant : Variant {
         static_assert(variantSize == variant_sizeof<TA...>());
-        static_assert(variantAlign == max_alignof<TA...>());
+        static_assert(variantAlign == variant_align<TA...>());
 
         template<int N> using NthType =
             typename std::tuple_element<N, std::tuple<TA...>>::type;
@@ -1149,7 +1159,7 @@ namespace das {
     };
 
     template <typename ...TA>
-    using AutoVariant = TVariant<variant_sizeof<TA...>(), max_alignof<TA...>(), TA...>;
+    using AutoVariant = TVariant<variant_sizeof<TA...>(), variant_align<TA...>(), TA...>;
 
     template <typename TT, int offset, int variant>
     struct das_get_variant_field {
