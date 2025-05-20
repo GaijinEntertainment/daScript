@@ -70,8 +70,6 @@ def each_token(st : string) {
     }
 }
 
-let INVALID_VALUE = LONG_MIN
-
 struct public Result {
     tinfo : TypeInfo
     value : float4
@@ -167,13 +165,13 @@ def getPD(var st : TokenStream; result : Result; offset : int = 0) : void? {
 def getI(var st : TokenStream; result : Result) : int64 {
     if (result.tinfo.dimSize != 0u) {
         st |> error("can't get value of [{result.tinfo.dimSize}]")
-        return INVALID_VALUE
+        return LONG_MIN
     }
     let bt = result.tinfo.basicType
     let data = st |> getPD(result)
     if (data == null) {
         st |> error("null pointer dereference for {result.tinfo.basicType}")
-        return INVALID_VALUE
+        return LONG_MIN
     }
     return loadI(data, type<int64>) if (bt == Type.tInt64 || bt == Type.tUInt64)
     return int64(loadI(data, type<int>)) if (bt == Type.tInt || bt == Type.tUInt)
@@ -181,7 +179,7 @@ def getI(var st : TokenStream; result : Result) : int64 {
     return int64(loadI(data, type<int8>)) if (bt == Type.tInt8 || bt == Type.tUInt8)
     return int64(loadI(data, type<bool>) ? 1l : 0l) if (bt == Type.tBool)
     st |> error("can't get value of {result.tinfo.basicType}")
-    return INVALID_VALUE
+    return LONG_MIN
 }
 
 def getT(var st : TokenStream; result : Result) : string {

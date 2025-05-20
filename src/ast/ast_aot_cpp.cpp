@@ -10,7 +10,7 @@
 
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/hash.h"
-
+#include <iostream>
 
 namespace das {
 
@@ -3714,7 +3714,7 @@ namespace das {
         }
     }
 
-    static void writeStandaloneCtor(const StandaloneContextCfg & cfg, string initFunctions, TextWriter &tw, Program &program) {
+    static void writeStandaloneCtor(const StandaloneContextCfg & cfg, pair<string, string> initFunctions, TextWriter &tw, Program &program) {
         vector<VariablePtr> lookupVariableTable;
         if ( program.totalVariables && cfg.cross_platform ) {
             DAS_FATAL_ERROR("Global variables is not supported yet in platform independent code");
@@ -3778,7 +3778,10 @@ namespace das {
 
         tw << "     // start totalFunctions\n";
         tw << "    auto initFunctions = {\n";
-        tw << das::move(initFunctions);
+        tw << das::move(initFunctions.first);
+        tw << "    };\n";
+        tw << "    auto extFunctions = {\n";
+        tw << das::move(initFunctions.second);
         tw << "    };\n";
         tw << "    // end totalFunctions\n";
         tw << "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n";
@@ -3788,6 +3791,9 @@ namespace das {
         tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
         tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
         tw << "        anyPInvoke |= func_info.pinvoke;\n";
+        tw << "    }\n";
+        tw << "    for (const auto& [index, func_info]: extFunctions) {\n";
+        tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
         tw << "    }\n";
 
         tw << "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n";
@@ -3803,22 +3809,17 @@ namespace das {
             }
         }
 
-        tw << "    FillFunction(context, getGlobalAotLibrary(), move(id_to_funcs));\n";
         // aot init
-        if ( program.initSemanticHashWithDep ) {
-            tw << "    {\n";
-            tw << "        auto it = getGlobalAotLibrary().find(0x" << HEX << program.initSemanticHashWithDep << DEC << "/*initSemanticHashWithDep*/);\n";
-            tw << "        if ( it != getGlobalAotLibrary().end() ) {\n";
-            tw << "            (it->second)(context);\n";
-            tw << "        }\n";
-            tw << "    }\n";
-        }
+        tw << "    for (const auto &[k, v] : getGlobalAotLibrary()) {\n";
+        tw << "        v(context);\n";
+        tw << "    }\n";
 
+        tw << "    FillFunction(context, getGlobalAotLibrary(), move(id_to_funcs));\n";
         tw << "    context.runInitScript();\n";
         tw << "}\n";
     }
 
-    static void writeStandaloneContext ( ProgramPtr program, string initFunctions, TextWriter & header, TextWriter & source, const StandaloneContextCfg & cfg ) {
+    static void writeStandaloneContext ( ProgramPtr program, pair<string, string> initFunctions, TextWriter & header, TextWriter & source, const StandaloneContextCfg & cfg ) {
 
         header << "\n\n";
         {
@@ -3898,7 +3899,7 @@ namespace das {
     };
 
 
-    static void writeRegistration ( TextWriter &header, TextWriter &source, string initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
+    static void writeRegistration ( TextWriter &header, TextWriter &source, pair<string, string> initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
         source << "using namespace " << program->thisNamespace << ";\n";
         dumpRegisterAot(source, program, context, false);
         {
@@ -4001,31 +4002,50 @@ namespace das {
      * Adds debug info to AotDebugInfoHelper
      * @return String with initialization of all functions
      */
-    string addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, AotDebugInfoHelper& helper) {
+    string GetFunctionInfo(FunctionPtr pfun, std::optional<string> info = std::nullopt) {
+        TextWriter tw;
+        tw << "        std::make_tuple(" << pfun->index << ", "
+           << "FunctionInfo(\"" << pfun->name << "\", \""
+           << pfun->getMangledName() << "\", "
+           << "0x" << HEX << pfun->getMangledNameHash() << DEC << ", "
+           << "0x" << HEX << pfun->aotHash << DEC << ", "
+           << pfun->totalStackSize << ", "
+           << pfun->unsafeOperation << ", "
+           << pfun->fastCall << ", "
+           << pfun->module->builtIn << ", "
+           << pfun->module->promoted << ", "
+           << (pfun->result->isRefType() && !pfun->result->ref) << ", "
+           << pfun->pinvoke
+           << ")";
+        if (info) {
+            tw << ", &" << info.value();
+        }
+        tw << "),\n";
+        return tw.str();
+    }
+
+    std::pair<string, string> addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, Module* module, AotDebugInfoHelper& helper) {
         helper.rtti = rtti;
         vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
+        vector<FunctionPtr> externalFunctions;
         for (auto& pfun : fnn) {
-            auto info = helper.makeFunctionDebugInfo(*pfun);
-            lookupFunctionTable.emplace_back(pfun, info);
+            if (module == pfun->module) {
+                auto info = helper.makeFunctionDebugInfo(*pfun);
+                lookupFunctionTable.emplace_back(pfun, info);
+            } else {
+                externalFunctions.emplace_back(pfun);
+            }
         }
 
         TextWriter tw;
+        TextWriter tw2;
         for (auto &[pfun, info]: lookupFunctionTable) {
-            tw << "        std::make_tuple(" << pfun->index << ", "
-               << "FunctionInfo(\"" << pfun->name << "\", \""
-               << pfun->getMangledName() << "\", "
-               << "0x" << HEX << pfun->getMangledNameHash() << DEC << ", "
-               << "0x" << HEX << pfun->aotHash << DEC << ", "
-               << pfun->totalStackSize << ", "
-               << pfun->unsafeOperation << ", "
-               << pfun->fastCall << ", "
-               << pfun->module->builtIn << ", "
-               << pfun->module->promoted << ", "
-               << (pfun->result->isRefType() && !pfun->result->ref) << ", "
-               << pfun->pinvoke
-               << "), &" << helper.funcInfoName(info) << "),\n";
+            tw << GetFunctionInfo(pfun, helper.funcInfoName(info));
         }
-        return tw.str();
+        for (auto pfun: externalFunctions) {
+            tw2 << GetFunctionInfo(pfun);
+        }
+        return {tw.str(), tw2.str()};
     }
 
     void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
@@ -4074,7 +4094,7 @@ namespace das {
         {
             NamespaceGuard guard1(source, "das");
             NamespaceGuard guard2(header, "das");
-            string initFunctions;
+            pair<string, string> initFunctions;
             {
                 StandaloneContextGen gen(program, coll, cfg.cross_platform);
                 program->visitModule(gen, mod);
@@ -4084,7 +4104,8 @@ namespace das {
 
                 initFunctions = addFunctionInfo(program->options.getBoolOption("no_init", program->policies.no_init),
                                                 program->options.getBoolOption("rtti",program->policies.rtti),
-                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, program->getThisModule(), false),
+                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, program->getThisModule(), true),
+                                                program->getThisModule(),
                                                 gen.GetDebugInfo());
                 source << gen.str();
                 gen.clear();

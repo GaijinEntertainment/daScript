@@ -1,4 +1,5 @@
 #include <daScript/simulate/standalone_ctx_utils.h>
+#include <iostream>
 
 namespace das {
     MangledNameHash InitAotFunction(const Context &ctx, SimFunction* gfun, FunctionInfo info) {
@@ -47,6 +48,7 @@ namespace das {
                 fn->aot = true;
                 auto fcb = (SimNode_CallBase *) fn->code;
                 fn->aotFunction = fcb->aotFunction;
+                (*ctx.tabMnLookup)[fn->mangledNameHash] = fn;
             } else {
                 // Can't fill noAot functions.
                 DAS_ASSERT(false);
