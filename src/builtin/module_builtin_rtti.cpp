@@ -855,9 +855,9 @@ namespace das {
                 issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             string istr = issues.str();
-            das_invoke<void>::invoke<bool,smart_ptr<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
         } else {
-            das_invoke<void>::invoke<bool,smart_ptr<Context>,const string &>(context,lineinfo,block,true,ctx,"");
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
         }
     }
 
