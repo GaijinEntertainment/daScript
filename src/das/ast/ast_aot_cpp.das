@@ -1,5 +1,7 @@
 options gen2
 
+module ast_aot_cpp
+
 require fio
 require rtti
 require strings
@@ -396,7 +398,7 @@ class NoAotMarker : AstVisitor {
         func = get_ptr(f);
     }
     def override visitFunction(var that : FunctionPtr) : FunctionPtr {
-        var tmp = func
+        var tmp := func
         func = null;
         return <- unsafe(reinterpret<FunctionPtr>(tmp));
     }

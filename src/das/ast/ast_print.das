@@ -1,5 +1,7 @@
 options gen2
 
+module ast_print
+
 options rtti = true
 // options log_infer_passes = true
 options strict_smart_pointers = false

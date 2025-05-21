@@ -3777,10 +3777,10 @@ namespace das {
 
 
         tw << "     // start totalFunctions\n";
-        tw << "    auto initFunctions = {\n";
+        tw << "    initializer_list<tuple<int, FunctionInfo, FuncInfo*>> initFunctions = {\n";
         tw << das::move(initFunctions.first);
         tw << "    };\n";
-        tw << "    auto extFunctions = {\n";
+        tw << "    initializer_list<tuple<int, FunctionInfo>> extFunctions = {\n";
         tw << das::move(initFunctions.second);
         tw << "    };\n";
         tw << "    // end totalFunctions\n";
@@ -3793,6 +3793,8 @@ namespace das {
         tw << "        anyPInvoke |= func_info.pinvoke;\n";
         tw << "    }\n";
         tw << "    for (const auto& [index, func_info]: extFunctions) {\n";
+        tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
+        tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
         tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
         tw << "    }\n";
 
@@ -3959,7 +3961,7 @@ namespace das {
         tw << "    resolveTypeInfoAnnotations();\n";
         tw << "};\n";
         tw << "\n";
-        tw << "static AotListBase impl(registerAotFunctions);\n";
+        tw << "__attribute__((__used__)) static AotListBase impl(registerAotFunctions);\n";
     }
 
     static void dumpDependencies(ProgramPtr program, CppAot& aotVisitor) {
@@ -4075,16 +4077,15 @@ namespace das {
         auto mod = program->thisModule.get();
         // if ( mod->isProperBuiltin() ) return true;
         const auto mod_name = (mod->promoted ? "" : mod->name);
-        TextWriter header;
-        if (!mod_name.empty()) {
-            header << "// Module " << mod_name << "\n";
-        }
-        header << AOT_INCLUDES;
 
+        TextWriter header;
         TextWriter source;
 
-        if (!mod_name.empty()) {
+        if (mod_name.empty()) {
+            header << AOT_INCLUDES;
+        } else {
             source << "// Module " << mod_name << "\n";
+            source << AOT_INCLUDES;
         }
 
         source << "#include \"daScript/simulate/standalone_ctx_utils.h\"\n";

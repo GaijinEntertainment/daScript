@@ -1,5 +1,7 @@
 options gen2
 
+module standalone_contexts
+
 require fio
 require rtti
 require strings
