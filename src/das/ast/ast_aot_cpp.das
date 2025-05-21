@@ -927,7 +927,7 @@ def describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; c
             let args_str = (
                 fn.arguments
                 |> each()
-                |> map(@(arg) : string {
+                |> map(@(arg: smart_ptr<Variable>) : string {
                     return build_string() <| $(writer2) {
                         if (isLocalVec(arg._type)) {
                             unsafe {describeLocalCppType(addr(writer2), arg._type, cross_platform); }
