@@ -567,7 +567,7 @@ namespace das
                         SideEffects::modifyArgument, "das_vector_push_back")->generated = true;
                 }
             }
-            if ( das::is_default_constructible<typename TT::value_type>::value ) {
+            if constexpr ( das::is_default_constructible<typename TT::value_type>::value ) {
                 addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
                     SideEffects::modifyArgument, "das_vector_push_empty")->generated = true;
                 addExtern<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
@@ -619,13 +619,19 @@ namespace das
                             ->args({"vec","value"})->generated = true;
                 }
             }
-            if ( das::is_default_constructible<typename TT::value_type>::value ) {
+            if constexpr ( das::is_default_constructible<typename TT::value_type>::value ) {
               addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
                   SideEffects::modifyArgument, "das_vector_push_empty")
                       ->args({"vec","at","context"})->generated = true;
               addExtern<DAS_BIND_FUN((das_vector_push_back_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
                     SideEffects::modifyArgument, "das_vector_push_back_empty")
                         ->args({"vec"})->generated = true;
+            }
+            if constexpr (das::is_smart_ptr<typename TT::value_type>::value) {
+                addExtern<DAS_BIND_FUN((das_vector_push_value<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_clone",
+                    SideEffects::modifyArgument, "das_vector_push_value")->generated = true;
+                addExtern<DAS_BIND_FUN((das_vector_push_back_value<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_clone",
+                    SideEffects::modifyArgument, "das_vector_push_back_value")->generated = true;
             }
             addExtern<DAS_BIND_FUN(das_vector_pop<TT>)>(*mod, lib, "pop",
                 SideEffects::modifyArgument, "das_vector_pop")
