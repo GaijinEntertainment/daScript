@@ -362,7 +362,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         } else {
             write(writer, das_to_cppString(baseType));
         }
-        var args <- to_array(map(each(typeDecl.dim), @(itd: int) { return ",{itd}>"; }))
+        var args <- to_array(map(each(typeDecl.dim), @(itd : int) { return ",{itd}>"; }))
         reverse(args);
         write(writer, "{join(args, "")}")
 
@@ -927,7 +927,7 @@ def describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; c
             let prefix = "";
             var args_str = "";
             for (arg1 in fn.arguments) {
-                let arg: smart_ptr<Variable> := arg1;
+                let arg : smart_ptr<Variable> := arg1;
                 args_str += ", ";
                 args_str += build_string() <| $(writer2) {
                                                     if (isLocalVec(arg._type)) {
@@ -2495,7 +2495,7 @@ class CppAot : AstVisitor {
     }
 // addr
 
-    def queryByMNH(name: string; hash: uint64) {
+    def queryByMNH(name : string; hash : uint64) {
         return "Func(__context__->fnByMangledName(/*{name}*/ 0x{hash:x}))";
     }
 
@@ -3668,12 +3668,12 @@ def updateCOP(var cop : CodeOfPolicies) {
 
 def compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {
     set_aot();
-    compile_file(input, access, mg, cop) <| $(ok; var program: smart_ptr<Program>; issues) {
+    compile_file(input, access, mg, cop) <| $(ok; var program : smart_ptr<Program>; issues) {
         if (!ok) {
             print("failed to compile {input}\n{issues}\n")
             return
         }
-        simulate(program) <| $(sok; var pctx: smart_ptr<Context>; serrors) {
+        simulate(program) <| $(sok; var pctx : smart_ptr<Context>; serrors) {
             if (!sok) {
                 panic("Failed to simulate {serrors}")
             }

@@ -3717,9 +3717,6 @@ namespace das {
 
     static void writeStandaloneCtor(const StandaloneContextCfg & cfg, pair<string, string> initFunctions, TextWriter &tw, Program &program) {
         vector<VariablePtr> lookupVariableTable;
-        if ( program.totalVariables && cfg.cross_platform ) {
-            DAS_FATAL_ERROR("Global variables is not supported yet in platform independent code");
-        }
         if ( program.totalVariables ) {
             for (const auto & pm : program.library.getModules() ) {
                 pm->globals.foreach([&](auto pvar) {
@@ -3754,9 +3751,13 @@ namespace das {
         for (const auto& pvar: lookupVariableTable) {
             tw << "    InitGlobalVar(context, &context.globalVariables[" << pvar->index << "/*pvar->index*/], GlobalVarInfo(\""
                << pvar->name << "\", \""
-               << pvar->getMangledName() << "\", "
-               << pvar->type->getSizeOf() << ", "
-               << pvar->global_shared << ")"
+               << pvar->getMangledName() << "\", ";
+            if (crossPlatform) {
+                tw << "TypeSize<" << describeCppType(pvar->type) << ">::size, ";
+            } else {
+                tw << pvar->type->getSizeOf() << ", ";
+            }
+            tw << pvar->global_shared << ")"
                << ");\n";
         }
         tw << "     // end totalVariables\n\n";
@@ -3813,9 +3814,14 @@ namespace das {
         }
 
         // aot init
-        tw << "    for (const auto &[k, v] : getGlobalAotLibrary()) {\n";
-        tw << "        v(context);\n";
-        tw << "    }\n";
+        if ( program.initSemanticHashWithDep ) {
+            tw << "    {\n";
+            tw << "        auto it = getGlobalAotLibrary().find(0x" << HEX << program.initSemanticHashWithDep << DEC << "/*initSemanticHashWithDep*/);\n";
+            tw << "        if ( it != getGlobalAotLibrary().end() ) {\n";
+            tw << "            (it->second)(context);\n";
+            tw << "        }\n";
+            tw << "    }\n";
+        }
 
         tw << "    FillFunction(context, getGlobalAotLibrary(), move(id_to_funcs));\n";
         tw << "    context.runInitScript();\n";
@@ -3962,7 +3968,7 @@ namespace das {
         tw << "    resolveTypeInfoAnnotations();\n";
         tw << "};\n";
         tw << "\n";
-        tw << "__attribute__((__used__)) static AotListBase impl(registerAotFunctions);\n";
+        tw << "static AotListBase impl(registerAotFunctions);\n";
     }
 
     static void dumpDependencies(ProgramPtr program, CppAot& aotVisitor) {
