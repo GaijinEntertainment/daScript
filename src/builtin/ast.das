@@ -54,22 +54,27 @@ def describe(expr : smart_ptr<Function>) {
     return describe_function(expr)
 }
 
+[generic]
 def clone_function(fn : Function?) : FunctionPtr {
     return <- clone_function(unsafe(reinterpret<FunctionPtr> fn))
 }
 
+[generic]
 def get_mangled_name(fn : Function?) {
     return get_mangled_name(unsafe(reinterpret<FunctionPtr> fn))
 }
 
+[generic]
 def get_mangled_name(decl : TypeDecl?) {
     return get_mangled_name(unsafe(reinterpret<TypeDeclPtr> decl))
 }
 
+[generic]
 def get_mangled_name(decl : Variable?) {
     return get_mangled_name(unsafe(reinterpret<VariablePtr> decl))
 }
 
+[generic]
 def get_mangled_name(decl : ExprBlock?) {
     return get_mangled_name(unsafe(reinterpret<smart_ptr<ExprBlock>> decl))
 }
