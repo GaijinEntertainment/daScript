@@ -209,7 +209,8 @@ namespace das {
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
                             CpptRedundantConst redundantConst,
-                            CpptUseAlias useAlias ) {
+                            CpptUseAlias useAlias,
+                            bool choose_smart_ptr) {
 
         TextWriter stream;
         auto baseType = type->baseType;
@@ -245,14 +246,14 @@ namespace das {
             }
         } else if ( baseType==Type::tArray ) {
             if ( type->firstType ) {
-                stream << "TArray<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias) << ">";
+                stream << "TArray<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr) << ">";
             } else {
                 stream << "Array";
             }
         } else if ( baseType==Type::tTable ) {
             if ( type->firstType && type->secondType ) {
-                stream << "TTable<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias)
-                << "," << describeCppTypeEx(type->secondType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias) << ">";
+                stream << "TTable<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr)
+                << "," << describeCppTypeEx(type->secondType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr) << ">";
             } else {
                 stream << "Table";
             }
@@ -266,7 +267,7 @@ namespace das {
                 if (!crossPlatform || arg != type->argTypes.front()) {
                     stream << ",";
                 }
-                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr);
             }
             stream << ">";
         } else if ( baseType==Type::tVariant ) {
@@ -279,7 +280,7 @@ namespace das {
                 if (!crossPlatform || arg != type->argTypes.front()) {
                     stream << ",";
                 }
-                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr);
             }
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
@@ -295,17 +296,17 @@ namespace das {
         } else if ( baseType==Type::tPointer ) {
             if ( !type->smartPtr ) {
                 if ( type->firstType ) {
-                    stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias) << " *";
+                    stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias, choose_smart_ptr) << " *";
                 } else {
                     stream << "void *";
                 }
             } else {
                 if ( type->firstType ) {
-                    stream  << (type->smartPtrNative ? "smart_ptr<" : "smart_ptr_raw<")
-                            <<  describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias)
+                    stream  << (type->smartPtrNative && choose_smart_ptr ? "smart_ptr<" : "smart_ptr_raw<")
+                            <<  describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias, choose_smart_ptr)
                             << ">";
                 } else {
-                    stream  << (type->smartPtrNative ? "smart_ptr<" : "smart_ptr_raw<") << "void>";
+                    stream  << (type->smartPtrNative && choose_smart_ptr ? "smart_ptr<" : "smart_ptr_raw<") << "void>";
                 }
             }
         } else if ( type->isEnumT() ) {
@@ -322,7 +323,7 @@ namespace das {
             }
         } else if ( baseType==Type::tIterator ) {
             if ( type->firstType ) {
-                stream << "Sequence DAS_COMMENT((" << describeCppTypeEx(type->firstType,substituteRef,skipRef,skipConst,CpptRedundantConst::yes,useAlias) << "))";
+                stream << "Sequence DAS_COMMENT((" << describeCppTypeEx(type->firstType,substituteRef,skipRef,skipConst,CpptRedundantConst::yes,useAlias, choose_smart_ptr) << "))";
             } else {
                 stream << "Sequence";
             }
@@ -332,13 +333,13 @@ namespace das {
             }
             stream << das_to_cppString(baseType) << " DAS_COMMENT((";
             if ( type->firstType ) {
-                stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr);
             } else {
                 stream << "void";
             }
             if ( type->argTypes.size() ) {
                 for ( const auto & arg : type->argTypes ) {
-                    stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                    stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr);
                 }
             }
             stream << "))";
@@ -369,8 +370,8 @@ namespace das {
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
-                            CpptRedundantConst redundantConst ) {
-        return describeCppTypeEx(type, substituteRef, skipRef, skipConst, redundantConst, CpptUseAlias::no);
+                            CpptRedundantConst redundantConst, bool choose_smart_ptr ) {
+        return describeCppTypeEx(type, substituteRef, skipRef, skipConst, redundantConst, CpptUseAlias::no, choose_smart_ptr);
     }
 
 
@@ -792,6 +793,7 @@ namespace das {
             pm->functions.foreach([&](auto pfun){
                 if ( !allModules && pfun->module != thisModule )
                     return;
+                DAS_ASSERT(pfun->index < 0 == !pfun->used);
                 if (pfun->index < 0 || !pfun->used)
                     return;
                 if (!isAll) {
@@ -1411,7 +1413,7 @@ namespace das {
             if ( !expr->type->isPointer() && !var->type->ref && expr->type->isAotAlias() && !var->type->isAotAlias() ) {
                 if ( expr->type->alias.empty() ) {
                     ss << "das_reinterpret<"
-                    << describeCppTypeEx(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes) << ">::pass(";
+                    << describeCppTypeEx(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes, false) << ">::pass(";
                 } else {
                     ss << "das_alias<" << expr->type->alias << ">::from(";
                 }
@@ -1829,7 +1831,7 @@ namespace das {
 
         void dumpVariadicTypes(const vector<TypeDeclPtr>& types) {
             for ( const auto & arg : types ) {
-                ss << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::no);
+                ss << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::no, false);
             }
         }
 
@@ -3395,8 +3397,7 @@ namespace das {
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
             if ( funArgType->isAotAlias() ) {
                 if ( funArgType->alias.empty() ) {
-                    ss << "das_reinterpret<"
-                    << describeCppTypeEx(funArgType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes) << ">::pass(";
+                    ss << "das_reinterpret<" << describeCppTypeEx(funArgType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes, false) << ">::pass(";
                 } else {
                     ss << "das_alias<" << funArgType->alias << ">::to(";
                 }
@@ -4031,12 +4032,12 @@ namespace das {
         vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
         vector<FunctionPtr> externalFunctions;
         for (auto& pfun : fnn) {
-            if (module == pfun->module) {
+//            if (module == pfun->module) {
                 auto info = helper.makeFunctionDebugInfo(*pfun);
                 lookupFunctionTable.emplace_back(pfun, info);
-            } else {
-                externalFunctions.emplace_back(pfun);
-            }
+//            } else {
+//                externalFunctions.emplace_back(pfun);
+//            }
         }
 
         TextWriter tw;
@@ -4105,7 +4106,7 @@ namespace das {
 
                 initFunctions = addFunctionInfo(program->options.getBoolOption("no_init", program->policies.no_init),
                                                 program->options.getBoolOption("rtti",program->policies.rtti),
-                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, program->getThisModule(), true),
+                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, program->getThisModule(), true, false),
                                                 program->getThisModule(),
                                                 gen.GetDebugInfo());
                 source << gen.str();

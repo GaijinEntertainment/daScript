@@ -274,6 +274,7 @@ int das_aot_main ( int argc, char * argv[] ) {
         auto res = st.aot(argv[2], isAotLib, paranoid_validation, cross_platform);
         TextPrinter printer;
         saveToFile(printer, argv[3], res);
+        compiled = true;
 #else
         compiled = compile(argv[2], argv[3], dryRun, cross_platform);
 #endif

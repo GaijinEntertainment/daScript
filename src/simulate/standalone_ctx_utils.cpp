@@ -49,7 +49,7 @@ namespace das {
                 auto fcb = (SimNode_CallBase *) fn->code;
                 fn->aotFunction = fcb->aotFunction;
                 (*ctx.tabMnLookup)[fn->mangledNameHash] = fn;
-            } else {
+            } else if (!fn->builtin) {
                 // Can't fill noAot functions.
                 DAS_ASSERT(false);
             }

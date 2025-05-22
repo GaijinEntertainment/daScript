@@ -317,7 +317,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
                     write(writer, "void *");
                 }
             } else {
-                let ptr_name = typeDecl.flags.smartPtrNative ? "smart_ptr" : "smart_ptr_raw"
+                let ptr_name = typeDecl.flags.smartPtrNative ? "smart_ptr_raw" : "smart_ptr_raw"
                 var type_decl_name = "void"
                 if (typeDecl.firstType != null) {
                     type_decl_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = false, cross_platform = cfg.cross_platform), useAlias);
@@ -362,7 +362,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         } else {
             write(writer, das_to_cppString(baseType));
         }
-        var args <- to_array(map(each(typeDecl.dim), @(itd) { return ",{itd}>"; }))
+        var args <- to_array(map(each(typeDecl.dim), @(itd: int) { return ",{itd}>"; }))
         reverse(args);
         write(writer, "{join(args, "")}")
 
@@ -590,7 +590,7 @@ class AotDebugInfoHelper {
             if (cross_platform) {
                 write(writer, "offsetof({struct_name},{info.name}), {info.nextGcField:d}");
             } else {
-                write(writer, "{info.offset}, {info.nextGcField:d}")
+                write(writer, "{info.offset:d}, {info.nextGcField:d}")
             }
         }
     }
@@ -923,7 +923,25 @@ def describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; c
         unsafe {describeLocalCppType(addr(writer), fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes); }
         write(writer, " {needName ? aotFuncName(fn.get_ptr()) : "(*)"}");
         unsafe {
-            let prefix = fn.arguments |> empty() ? "" : ", "
+            // let prefix = fn.arguments |> empty() ? "" : ", "
+            let prefix = "";
+            var args_str = "";
+            for (arg1 in fn.arguments) {
+                let arg: smart_ptr<Variable> := arg1;
+                args_str += ", ";
+                args_str += build_string() <| $(writer2) {
+                                                    if (isLocalVec(arg._type)) {
+                                                        unsafe {describeLocalCppType(addr(writer2), arg._type, cross_platform); }
+                                                    } else {
+                                                        write(writer2, "{describeCppType(arg._type, DescribeConfig(cross_platform=cross_platform))}");
+                                                    }
+                                                    write(writer2, " {(arg._type.isRefType) ? "& " : ""}");
+                                                    if (collector != null) {
+                                                        write(writer2, "{collector.getVarName(arg)}");
+                                                    }
+                                                }
+            }
+            /*
             let args_str = (
                 fn.arguments
                 |> each()
@@ -942,6 +960,7 @@ def describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; c
                 })
                 |> join(", ")
             )
+            */
             write(writer, " ( Context * __context__{prefix}{args_str} )");
         }
     }
@@ -1210,8 +1229,20 @@ class CppAot : AstVisitor {
 // blk
     def makeLocalTempName(expr : ExpressionPtr) {
         var stackTop : uint = 0u;
-        if (isMakeLocal(expr)) {
-            stackTop = unsafe(reinterpret<ExprMakeLocal>(expr)).stackTop;
+        // todo: fix casts to parents A -> B -> C (from A to B)
+        /*if (isMakeLocal(expr)) {
+            stackTop = (expr as ExprMakeLocal).stackTop;
+        }*/
+        if (expr is ExprMakeLocal) {
+            stackTop = (expr as ExprMakeLocal).stackTop;
+        } elif (expr is ExprMakeStruct) {
+            stackTop = (expr as ExprMakeStruct).stackTop;
+        } elif (expr is ExprMakeVariant) {
+            stackTop = (expr as ExprMakeVariant).stackTop;
+        } elif (expr is ExprMakeArray) {
+            stackTop = (expr as ExprMakeArray).stackTop;
+        } elif (expr is ExprMakeTuple) {
+            stackTop = (expr as ExprMakeTuple).stackTop;
         } elif (expr is ExprCall) {
             stackTop = (expr as ExprCall).stackTop;
         } else {
@@ -1481,7 +1512,8 @@ class CppAot : AstVisitor {
     def override preVisitExprOp1(var that : smart_ptr<ExprOp1>) {
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
-            that.arguments |> emplace(that.subexpr);
+            var subexpr := that.subexpr
+            that.arguments |> emplace(subexpr);
             CallFunc_preVisit(that);
             CallFunc_preVisitCallArg(that, that.subexpr, true);
         } elif (isOpPolicy1(that)) {
@@ -1562,8 +1594,10 @@ class CppAot : AstVisitor {
         if (!noBracket(that)) write(*ss, "(");
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
-            that.arguments |> emplace(that.left);
-            that.arguments |> emplace(that.right);
+            var left := that.left;
+            var right := that.right;
+            that.arguments |> emplace(left);
+            that.arguments |> emplace(right);
             CallFunc_preVisit(that);
             CallFunc_preVisitCallArg(that, that.left, false);
         } elif (isOpPolicy2(that)) {
