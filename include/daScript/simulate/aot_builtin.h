@@ -2,6 +2,8 @@
 
 namespace das {
     bool is_in_aot();
+    void set_aot();
+    void reset_aot();
     bool is_in_completion();
     bool is_folding();
     const char * compiling_file_name ( );
