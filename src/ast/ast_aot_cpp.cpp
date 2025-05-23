@@ -2585,11 +2585,17 @@ namespace das {
             return Visitor::visit(ref2ptr);
         }
     // addr
+        string queryByMNH(string_view name, uint64_t hash) {
+            TextWriter tw;
+            tw << "Func(__context__->fnByMangledName(/*" << name.data() << "*/ 0x" << HEX << hash << DEC << "))";
+            return tw.str();
+        }
+
         virtual void preVisit ( ExprAddr * expr ) override {
             if (expr->func) {
                 auto mangledName = expr->func->getMangledName();
                 uint64_t hash = expr->func->getMangledNameHash();
-                ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                ss << queryByMNH(mangledName, hash);
             } else {
                 ss << "Func(0 /*nullptr*/)";
             }
@@ -2835,7 +2841,7 @@ namespace das {
                             auto mangledName = call_func->getMangledName();
                             uint64_t hash = call_func->getMangledNameHash();
                             ss << "(__context__,nullptr,";
-                            ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                            ss << queryByMNH(mangledName, hash);
                             ss << ");\n";
                         } else {
                             ss << aotFuncName(call_func) << "(__context__);\n";
@@ -2850,7 +2856,7 @@ namespace das {
                             auto mangledName = call_func->getMangledName();
                             uint64_t hash = call_func->getMangledNameHash();
                             ss << "(__context__,nullptr,";
-                            ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                            ss << queryByMNH(mangledName, hash);
                             ss << ");\n";
                         } else {
                             ss << aotFuncName(call_func) << "(__context__);\n";
@@ -3349,10 +3355,10 @@ namespace das {
                             }
                         }
                         ss << ">(__context__,nullptr,";
-                        ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u)),";
+                        ss << queryByMNH(mangledName, hash) << ",";
                     } else {
                         ss << "(__context__,nullptr,";
-                        ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                        ss << queryByMNH(mangledName, hash);
                     }
                 } else {
                     ss << aotFuncName(call->func) << "(__context__";

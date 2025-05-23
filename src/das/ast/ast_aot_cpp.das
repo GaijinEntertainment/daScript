@@ -2458,11 +2458,15 @@ class CppAot : AstVisitor {
         return ref2ptr;
     }
 // addr
+    def queryByMNH(name : string; hash : uint64) {
+        return "Func(__context__->fnByMangledName(/*{name}*/ 0x{hash:x}))";
+    }
+
     def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
         if (expr.func != null) {
             let mangledName =  expr.func |> get_mangled_name();
             let hash = expr.func.getMangledNameHash;
-            write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u))");
+            write(*ss, queryByMNH(mangledName, hash));
         } else {
             write(*ss, "Func(0 /*nullptr*/)");
         }
@@ -2675,7 +2679,7 @@ class CppAot : AstVisitor {
                         assume mangledName = call_func |> get_mangled_name();
                         let hash = call_func.getMangledNameHash;
                         write(*ss, "(__context__,nullptr,");
-                        write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u))");
+                        write(*ss, queryByMNH(mangledName, hash));
                         write(*ss, ")");
                     } else {
                         write(*ss, "{aotFuncName(call_func)}(__context__)");
@@ -2691,7 +2695,7 @@ class CppAot : AstVisitor {
                         assume mangledName = call_func |> get_mangled_name();
                         let hash = call_func.getMangledNameHash;
                         write(*ss, "(__context__,nullptr,");
-                        write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u))");
+                        write(*ss, queryByMNH(mangledName, hash));
                         write(*ss, ")");
                     } else {
                         write(*ss, "{aotFuncName(call_func)}(__context__)");
@@ -3182,10 +3186,10 @@ class CppAot : AstVisitor {
                         }
                     }
                     write(*ss, ">(__context__,nullptr,");
-                    write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u)),");
+                    write(*ss, "{queryByMNH(mangledName, hash)},");
                 } else {
                     write(*ss, "(__context__,nullptr,");
-                    write(*ss, "Func(__context__->fnByMangledName(/*{mangledName}*/ {hash:d}u))");
+                    write(*ss, queryByMNH(mangledName, hash));
                 }
             } else {
                 write(*ss, "{aotFuncName(call.func)}(__context__");
