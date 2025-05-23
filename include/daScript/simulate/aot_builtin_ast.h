@@ -521,11 +521,11 @@ namespace das {
     smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info );
     void for_each_module ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at );
     void for_each_module_no_order ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at );
-    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context, LineInfoArg * at );
-    void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context, LineInfoArg * at );
-    void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context, LineInfoArg * at );
-    void for_each_generic ( Module * mod, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at );
-    void for_each_global ( Module * mod, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at );
+    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,smart_ptr_raw<TypeDecl>> & block, Context * context, LineInfoArg * at );
+    void for_each_enumeration ( Module * mod, const TBlock<void,smart_ptr_raw<Enumeration>> & block, Context * context, LineInfoArg * at );
+    void for_each_structure ( Module * mod, const TBlock<void,smart_ptr_raw<Structure>> & block, Context * context, LineInfoArg * at );
+    void for_each_generic ( Module * mod, const TBlock<void,smart_ptr_raw<Function>> & block, Context * context, LineInfoArg * at );
+    void for_each_global ( Module * mod, const TBlock<void,smart_ptr_raw<Variable>> & block, Context * context, LineInfoArg * at );
     void for_each_annotation_ordered ( Module * mod, const TBlock<void,uint64_t, uint64_t> & block, Context * context, LineInfoArg * at );
     void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
     void for_each_reader_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
@@ -542,17 +542,17 @@ namespace das {
     TypeInfo * das_make_type_info_structure ( Context & ctx, TypeDeclPtr ptr, Context * context, LineInfoArg * at );
     bool isSameAstType ( TypeDeclPtr THIS, TypeDeclPtr decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, Context * context, LineInfoArg * at );
     void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
-                                            const TBlock<void,char *,char*,TypeDeclPtr,uint32_t> & block, Context * context, LineInfoArg * at );
+                                            const TBlock<void,char *,char*,smart_ptr_raw<TypeDecl>,uint32_t> & block, Context * context, LineInfoArg * at );
     void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at );
     TypeDeclPtr getUnderlyingValueType ( smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at );
     uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> type, char * name, Context * context, LineInfoArg * at );
     void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
-                                        const TBlock<void,char *,char*,TypeDeclPtr,uint32_t> & block, Context * context, LineInfoArg * at );
+                                        const TBlock<void,char *,char*,smart_ptr_raw<TypeDecl>,uint32_t> & block, Context * context, LineInfoArg * at );
     TypeInfo * getHandledTypeFieldType ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at );
     TypeDeclPtr getHandledTypeFieldTypeDecl ( smart_ptr_raw<TypeAnnotation> annotation, char * name, bool isConst, Context * context, LineInfoArg * at );
     bool addModuleRequire ( Module * module, Module * reqModule, bool publ );
     void findMatchingVariable ( Program * program, Function * func, const char * _name, bool seePrivate,
-        const TBlock<void,TTemporary<TArray<VariablePtr>>> & block, Context * context, LineInfoArg * arg );
+        const TBlock<void,TTemporary<TArray<smart_ptr_raw<Variable>>>> & block, Context * context, LineInfoArg * arg );
     Module * getCurrentSearchModule(Program * program, Function * func, const char * _moduleName);
     bool canAccessGlobalVariable ( const VariablePtr & pVar, Module * mod, Module * thisMod );
     TypeDeclPtr inferGenericTypeEx ( smart_ptr_raw<TypeDecl> type, smart_ptr_raw<TypeDecl> passType, bool topLevel, bool isPassType );

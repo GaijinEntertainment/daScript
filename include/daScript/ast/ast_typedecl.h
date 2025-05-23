@@ -674,7 +674,8 @@ namespace das {
                            CpptSubstitureRef substituteRef = CpptSubstitureRef::no,
                            CpptSkipRef skipRef = CpptSkipRef::no,
                            CpptSkipConst skipConst = CpptSkipConst::no,
-                           CpptRedundantConst redundantConst = CpptRedundantConst::yes );
+                           CpptRedundantConst redundantConst = CpptRedundantConst::yes,
+                           bool chooseRawSmartPtr = false );
 
     class MangledNameParser {
     protected:
