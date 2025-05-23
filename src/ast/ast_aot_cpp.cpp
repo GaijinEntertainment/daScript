@@ -3680,20 +3680,19 @@ namespace das {
                 funInit = true;
             }
             uint64_t semH = fn->aotHash;
-            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* { // " << aotFuncName(fn) << "\n";
-            logs << "        return ctx.code->makeNode<SimNode_Aot";
+            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
+            logs << "        return ctx.code->makeNode<AutoSimNode_Aot";
             if ( fn->copyOnReturn || fn->moveOnReturn ) {
                 logs << "CMRES";
             }
-            logs << "<" << describeCppFunc(fn,nullptr,false,false) << ",";
-            logs << "&" << aotFuncName(fn) << ">>();\n    };\n";
+            logs << "<&" << aotFuncName(fn) << ">>();\n    };\n";
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
             semH = getInitSemanticHashWithDep(semH);
             logs << "    // [[ init script ]]\n";
             logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
-            logs << "        ctx.aotInitScript = ctx.code->makeNode<SimNode_Aot<void (*)(Context *, bool),&__init_script>>();\n";
+            logs << "        ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();\n";
             logs << "        return ctx.aotInitScript;\n";
             logs << "    };\n";
         }
