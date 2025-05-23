@@ -1,3 +1,5 @@
+options gen2
+
 let AOT_INCLUDES = "#include \"daScript/misc/platform.h\"
 
 #include \"daScript/simulate/simulate.h\"

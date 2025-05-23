@@ -74,6 +74,7 @@ namespace das {
     uint32_t fast_to_uint ( const char *str, bool hex );
     int64_t fast_to_int64 ( const char *str, bool hex );
     uint64_t fast_to_uint64 ( const char *str, bool hex );
+    const char * das_to_cpp_float ( float val, Context * context, LineInfoArg * at );
     void builtin_append_char_to_string(string & str, int32_t Ch);
     bool builtin_string_ends_with(const string &str, char * substr, Context * context);
     int32_t builtin_ext_string_length(const string & str);
