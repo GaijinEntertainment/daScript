@@ -10,7 +10,7 @@
 
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/hash.h"
-
+#include <iostream>
 
 namespace das {
 
@@ -209,7 +209,8 @@ namespace das {
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
                             CpptRedundantConst redundantConst,
-                            CpptUseAlias useAlias ) {
+                            CpptUseAlias useAlias,
+                            bool choose_smart_ptr) {
 
         TextWriter stream;
         auto baseType = type->baseType;
@@ -245,14 +246,14 @@ namespace das {
             }
         } else if ( baseType==Type::tArray ) {
             if ( type->firstType ) {
-                stream << "TArray<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias) << ">";
+                stream << "TArray<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr) << ">";
             } else {
                 stream << "Array";
             }
         } else if ( baseType==Type::tTable ) {
             if ( type->firstType && type->secondType ) {
-                stream << "TTable<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias)
-                << "," << describeCppTypeEx(type->secondType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias) << ">";
+                stream << "TTable<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr)
+                << "," << describeCppTypeEx(type->secondType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr) << ">";
             } else {
                 stream << "Table";
             }
@@ -266,7 +267,7 @@ namespace das {
                 if (!crossPlatform || arg != type->argTypes.front()) {
                     stream << ",";
                 }
-                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr);
             }
             stream << ">";
         } else if ( baseType==Type::tVariant ) {
@@ -279,7 +280,7 @@ namespace das {
                 if (!crossPlatform || arg != type->argTypes.front()) {
                     stream << ",";
                 }
-                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr);
             }
             stream << ">";
         } else if ( baseType==Type::tStructure ) {
@@ -295,17 +296,17 @@ namespace das {
         } else if ( baseType==Type::tPointer ) {
             if ( !type->smartPtr ) {
                 if ( type->firstType ) {
-                    stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias) << " *";
+                    stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias, choose_smart_ptr) << " *";
                 } else {
                     stream << "void *";
                 }
             } else {
                 if ( type->firstType ) {
-                    stream  << (type->smartPtrNative ? "smart_ptr<" : "smart_ptr_raw<")
-                            <<  describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias)
+                    stream  << (type->smartPtrNative && choose_smart_ptr ? "smart_ptr<" : "smart_ptr_raw<")
+                            <<  describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no,useAlias, choose_smart_ptr)
                             << ">";
                 } else {
-                    stream  << (type->smartPtrNative ? "smart_ptr<" : "smart_ptr_raw<") << "void>";
+                    stream  << (type->smartPtrNative && choose_smart_ptr ? "smart_ptr<" : "smart_ptr_raw<") << "void>";
                 }
             }
         } else if ( type->isEnumT() ) {
@@ -322,7 +323,7 @@ namespace das {
             }
         } else if ( baseType==Type::tIterator ) {
             if ( type->firstType ) {
-                stream << "Sequence DAS_COMMENT((" << describeCppTypeEx(type->firstType,substituteRef,skipRef,skipConst,CpptRedundantConst::yes,useAlias) << "))";
+                stream << "Sequence DAS_COMMENT((" << describeCppTypeEx(type->firstType,substituteRef,skipRef,skipConst,CpptRedundantConst::yes,useAlias, choose_smart_ptr) << "))";
             } else {
                 stream << "Sequence";
             }
@@ -332,13 +333,13 @@ namespace das {
             }
             stream << das_to_cppString(baseType) << " DAS_COMMENT((";
             if ( type->firstType ) {
-                stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr);
             } else {
                 stream << "void";
             }
             if ( type->argTypes.size() ) {
                 for ( const auto & arg : type->argTypes ) {
-                    stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
+                    stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, choose_smart_ptr);
                 }
             }
             stream << "))";
@@ -369,8 +370,8 @@ namespace das {
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
-                            CpptRedundantConst redundantConst ) {
-        return describeCppTypeEx(type, substituteRef, skipRef, skipConst, redundantConst, CpptUseAlias::no);
+                            CpptRedundantConst redundantConst, bool choose_smart_ptr ) {
+        return describeCppTypeEx(type, substituteRef, skipRef, skipConst, redundantConst, CpptUseAlias::no, choose_smart_ptr);
     }
 
 
@@ -786,10 +787,13 @@ namespace das {
         }
     }
 
-    static vector<Function *> collectUsedFunctions ( const vector<Module *> & modules, int totalFunctions, bool isAll = false ) {
+    static vector<Function *> collectUsedFunctions ( const vector<Module *> & modules, int totalFunctions, Module *thisModule, bool allModules, bool isAll = false ) {
         vector<Function *> fnn; fnn.reserve(totalFunctions);
         for (auto & pm : modules) {
             pm->functions.foreach([&](auto pfun){
+                if ( !allModules && pfun->module != thisModule )
+                    return;
+                DAS_ASSERT(pfun->index < 0 == !pfun->used);
                 if (pfun->index < 0 || !pfun->used)
                     return;
                 if (!isAll) {
@@ -1409,7 +1413,7 @@ namespace das {
             if ( !expr->type->isPointer() && !var->type->ref && expr->type->isAotAlias() && !var->type->isAotAlias() ) {
                 if ( expr->type->alias.empty() ) {
                     ss << "das_reinterpret<"
-                    << describeCppTypeEx(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes) << ">::pass(";
+                    << describeCppTypeEx(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes, false) << ">::pass(";
                 } else {
                     ss << "das_alias<" << expr->type->alias << ">::from(";
                 }
@@ -1827,7 +1831,7 @@ namespace das {
 
         void dumpVariadicTypes(const vector<TypeDeclPtr>& types) {
             for ( const auto & arg : types ) {
-                ss << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::no);
+                ss << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::no, false);
             }
         }
 
@@ -2585,11 +2589,16 @@ namespace das {
             return Visitor::visit(ref2ptr);
         }
     // addr
+
+        void queryByMNH(string_view name, uint64_t hash) {
+            ss << "Func(__context__->fnByMangledName(/*" << name.data() << "*/ 0x" << HEX << hash << DEC << "))";
+        }
+
         virtual void preVisit ( ExprAddr * expr ) override {
             if (expr->func) {
                 auto mangledName = expr->func->getMangledName();
                 uint64_t hash = expr->func->getMangledNameHash();
-                ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                queryByMNH(mangledName, hash);
             } else {
                 ss << "Func(0 /*nullptr*/)";
             }
@@ -2835,7 +2844,7 @@ namespace das {
                             auto mangledName = call_func->getMangledName();
                             uint64_t hash = call_func->getMangledNameHash();
                             ss << "(__context__,nullptr,";
-                            ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                            queryByMNH(mangledName, hash);
                             ss << ");\n";
                         } else {
                             ss << aotFuncName(call_func) << "(__context__);\n";
@@ -2850,7 +2859,7 @@ namespace das {
                             auto mangledName = call_func->getMangledName();
                             uint64_t hash = call_func->getMangledNameHash();
                             ss << "(__context__,nullptr,";
-                            ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                            queryByMNH(mangledName, hash);
                             ss << ");\n";
                         } else {
                             ss << aotFuncName(call_func) << "(__context__);\n";
@@ -3349,10 +3358,11 @@ namespace das {
                             }
                         }
                         ss << ">(__context__,nullptr,";
-                        ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u)),";
+                        queryByMNH(mangledName, hash);
+                        ss << ",";
                     } else {
                         ss << "(__context__,nullptr,";
-                        ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                        queryByMNH(mangledName, hash);
                     }
                 } else {
                     ss << aotFuncName(call->func) << "(__context__";
@@ -3387,8 +3397,7 @@ namespace das {
             auto funArgType = call->func->arguments[it-call->arguments.begin()]->type;
             if ( funArgType->isAotAlias() ) {
                 if ( funArgType->alias.empty() ) {
-                    ss << "das_reinterpret<"
-                    << describeCppTypeEx(funArgType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes) << ">::pass(";
+                    ss << "das_reinterpret<" << describeCppTypeEx(funArgType,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no,CpptRedundantConst::yes,CpptUseAlias::yes, false) << ">::pass(";
                 } else {
                     ss << "das_alias<" << funArgType->alias << ">::to(";
                 }
@@ -3623,18 +3632,21 @@ namespace das {
     }
 
     static void writeStandaloneContextMethods ( ProgramPtr prog, TextWriter & logs, const string &prefix, bool declare_only ) {
-        const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions);
+        const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions, prog->getThisModule(), false);
         BlockVariableCollector collector;
 
         for ( const auto fn : fnn ) {
             if ( !fn->exports ) continue;
-            if ( fn->module != prog->thisModule.get() ) continue;
             if (declare_only) {
                 logs << "    ";
             }
             logs << "auto " << prefix + aotFunctionName(fn->getOrigin() ? fn->getOrigin()->name : fn->name) << " ( ";
         // describe arguments
             for ( const auto & var : fn->arguments ) {
+                if (var->type->baseType == Type::tStructure && declare_only) {
+                    // It doesn't cover all cases, but anyway we'll get CE.
+                    DAS_FATAL_ERROR("Structures is not allowed in standalone contexts arguments.")
+                }
                 if (isLocalVec(var->type)) {
                     describeLocalCppType(logs, var->type);
                 } else {
@@ -3652,6 +3664,10 @@ namespace das {
                 logs << " ";
             }
             logs << ") -> ";
+            if (fn->result->baseType == Type::tStructure && declare_only) {
+                // It doesn't cover all cases, but anyway we'll get CE.
+                DAS_FATAL_ERROR("Structures is not allowed in standalone contexts return types.");
+            }
             describeLocalCppType(logs,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
             if (declare_only) {
                 logs << ";\n";
@@ -3668,32 +3684,29 @@ namespace das {
     }
 
     void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers, bool allModules ) {
-        const auto fnn = collectUsedFunctions(library.modules, totalFunctions);
+        const auto fnn = collectUsedFunctions(library.modules, totalFunctions, getThisModule(), allModules);
         if ( headers ) {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
         }
         bool funInit = false;
         for ( const auto fn : fnn ) {
-            if ( !allModules && fn->module != thisModule.get() )
-                continue;
             if ( fn->init ) {
                 funInit = true;
             }
             uint64_t semH = fn->aotHash;
-            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* { // " << aotFuncName(fn) << "\n";
-            logs << "        return ctx.code->makeNode<SimNode_Aot";
+            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
+            logs << "        return ctx.code->makeNode<AutoSimNode_Aot";
             if ( fn->copyOnReturn || fn->moveOnReturn ) {
                 logs << "CMRES";
             }
-            logs << "<" << describeCppFunc(fn,nullptr,false,false) << ",";
-            logs << "&" << aotFuncName(fn) << ">>();\n    };\n";
+            logs << "<&" << aotFuncName(fn) << ">>();\n    };\n";
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
             semH = getInitSemanticHashWithDep(semH);
             logs << "    // [[ init script ]]\n";
             logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
-            logs << "        ctx.aotInitScript = ctx.code->makeNode<SimNode_Aot<void (*)(Context *, bool),&__init_script>>();\n";
+            logs << "        ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();\n";
             logs << "        return ctx.aotInitScript;\n";
             logs << "    };\n";
         }
@@ -3702,11 +3715,8 @@ namespace das {
         }
     }
 
-    static void writeStandaloneCtor(const StandaloneContextCfg & cfg, string initFunctions, TextWriter &tw, Program &program) {
+    static void writeStandaloneCtor(const StandaloneContextCfg & cfg, pair<string, string> initFunctions, TextWriter &tw, Program &program) {
         vector<VariablePtr> lookupVariableTable;
-        if ( program.totalVariables && cfg.cross_platform ) {
-            DAS_FATAL_ERROR("Global variables is not supported yet in platform independent code");
-        }
         if ( program.totalVariables ) {
             for (const auto & pm : program.library.getModules() ) {
                 pm->globals.foreach([&](auto pvar) {
@@ -3741,9 +3751,13 @@ namespace das {
         for (const auto& pvar: lookupVariableTable) {
             tw << "    InitGlobalVar(context, &context.globalVariables[" << pvar->index << "/*pvar->index*/], GlobalVarInfo(\""
                << pvar->name << "\", \""
-               << pvar->getMangledName() << "\", "
-               << pvar->type->getSizeOf() << ", "
-               << pvar->global_shared << ")"
+               << pvar->getMangledName() << "\", ";
+            if (crossPlatform) {
+                tw << "TypeSize<" << describeCppType(pvar->type) << ">::size, ";
+            } else {
+                tw << pvar->type->getSizeOf() << ", ";
+            }
+            tw << pvar->global_shared << ")"
                << ");\n";
         }
         tw << "     // end totalVariables\n\n";
@@ -3765,8 +3779,26 @@ namespace das {
 
 
         tw << "     // start totalFunctions\n";
-        tw << das::move(initFunctions);
+        tw << "    initializer_list<tuple<int, FunctionInfo, FuncInfo*>> initFunctions = {\n";
+        tw << das::move(initFunctions.first);
+        tw << "    };\n";
+        tw << "    initializer_list<tuple<int, FunctionInfo>> extFunctions = {\n";
+        tw << das::move(initFunctions.second);
+        tw << "    };\n";
         tw << "    // end totalFunctions\n";
+        tw << "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n";
+        tw << "    for (const auto& [index, func_info, debug_info]: initFunctions) {\n";
+        tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
+        tw << "        context.functions[index].debugInfo = debug_info;\n";
+        tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
+        tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
+        tw << "        anyPInvoke |= func_info.pinvoke;\n";
+        tw << "    }\n";
+        tw << "    for (const auto& [index, func_info]: extFunctions) {\n";
+        tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
+        tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
+        tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
+        tw << "    }\n";
 
         tw << "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n";
         tw << "    context.tabGMnLookup->clear();\n";
@@ -3781,18 +3813,6 @@ namespace das {
             }
         }
 
-        const auto fnn = collectUsedFunctions(program.library.getModules(), program.totalFunctions, true);
-
-        tw << "    FillFunction(context, getGlobalAotLibrary(), {\n        ";
-        for ( const auto fn: fnn) {
-            tw << "make_pair(0x" << HEX << fn->aotHash << DEC << ", &context.functions[" << fn->index << "/*fni*/])";
-            if (fn != fnn.back()) {
-                tw << ",\n        ";
-            } else {
-                tw << "\n    ";
-            }
-        }
-        tw << "});\n";
         // aot init
         if ( program.initSemanticHashWithDep ) {
             tw << "    {\n";
@@ -3803,11 +3823,12 @@ namespace das {
             tw << "    }\n";
         }
 
+        tw << "    FillFunction(context, getGlobalAotLibrary(), move(id_to_funcs));\n";
         tw << "    context.runInitScript();\n";
         tw << "}\n";
     }
 
-    static void writeStandaloneContext ( ProgramPtr program, string initFunctions, TextWriter & header, TextWriter & source, const StandaloneContextCfg & cfg ) {
+    static void writeStandaloneContext ( ProgramPtr program, pair<string, string> initFunctions, TextWriter & header, TextWriter & source, const StandaloneContextCfg & cfg ) {
 
         header << "\n\n";
         {
@@ -3872,7 +3893,7 @@ namespace das {
             ss.clear();
             ss << "\n";
             // print forward declarations
-            const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions);
+            const auto fnn = collectUsedFunctions(prog->library.getModules(), prog->totalFunctions, prog->getThisModule(), false);
             for (const auto pfun: fnn) {
                 auto needInline = that == pfun->module;
                 if (needInline) {
@@ -3887,9 +3908,9 @@ namespace das {
     };
 
 
-    static void writeRegistration ( TextWriter &header, TextWriter &source, string initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
+    static void writeRegistration ( TextWriter &header, TextWriter &source, pair<string, string> initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
         source << "using namespace " << program->thisNamespace << ";\n";
-        dumpRegisterAot(source, program, context, true);
+        dumpRegisterAot(source, program, context, false);
         {
             NamespaceGuard guard1(header, cfg.context_name);
             NamespaceGuard guard2(source, cfg.context_name);
@@ -3947,7 +3968,7 @@ namespace das {
         tw << "    resolveTypeInfoAnnotations();\n";
         tw << "};\n";
         tw << "\n";
-        tw << "AotListBase impl(registerAotFunctions);\n";
+        tw << "static AotListBase impl(registerAotFunctions);\n";
     }
 
     static void dumpDependencies(ProgramPtr program, CppAot& aotVisitor) {
@@ -3990,41 +4011,50 @@ namespace das {
      * Adds debug info to AotDebugInfoHelper
      * @return String with initialization of all functions
      */
-    string addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, AotDebugInfoHelper& helper) {
+    string GetFunctionInfo(FunctionPtr pfun, std::optional<string> info = std::nullopt) {
+        TextWriter tw;
+        tw << "        std::make_tuple(" << pfun->index << ", "
+           << "FunctionInfo(\"" << pfun->name << "\", \""
+           << pfun->getMangledName() << "\", "
+           << "0x" << HEX << pfun->getMangledNameHash() << DEC << ", "
+           << "0x" << HEX << pfun->aotHash << DEC << ", "
+           << pfun->totalStackSize << ", "
+           << pfun->unsafeOperation << ", "
+           << pfun->fastCall << ", "
+           << pfun->module->builtIn << ", "
+           << pfun->module->promoted << ", "
+           << (pfun->result->isRefType() && !pfun->result->ref) << ", "
+           << pfun->pinvoke
+           << ")";
+        if (info) {
+            tw << ", &" << info.value();
+        }
+        tw << "),\n";
+        return tw.str();
+    }
+
+    std::pair<string, string> addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, Module* module, AotDebugInfoHelper& helper) {
         helper.rtti = rtti;
         vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
+        vector<FunctionPtr> externalFunctions;
         for (auto& pfun : fnn) {
-            auto info = helper.makeFunctionDebugInfo(*pfun);
-            lookupFunctionTable.emplace_back(pfun, info);
+//            if (module == pfun->module) {
+                auto info = helper.makeFunctionDebugInfo(*pfun);
+                lookupFunctionTable.emplace_back(pfun, info);
+//            } else {
+//                externalFunctions.emplace_back(pfun);
+//            }
         }
 
         TextWriter tw;
+        TextWriter tw2;
         for (auto &[pfun, info]: lookupFunctionTable) {
-            tw << "    InitAotFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
-               << "FunctionInfo(\"" << pfun->name << "\", \""
-               << pfun->getMangledName() << "\", "
-               << pfun->totalStackSize << ", "
-               << pfun->unsafeOperation << ", "
-               << pfun->fastCall << ", "
-               << pfun->module->builtIn << ", "
-               << pfun->module->promoted << ", "
-               << (pfun->result->isRefType() && !pfun->result->ref) << ", "
-               << pfun->pinvoke
-               << ")" << ");\n";
-            tw << "    context.functions[" << pfun->index << "/*pfun->index*/].debugInfo = &" << helper.funcInfoName(info) << ";\n";
-            if (pfun->pinvoke) {
-                tw << "    anyPInvoke = true;\n\n";
-            }
+            tw << GetFunctionInfo(pfun, helper.funcInfoName(info));
         }
-
-        for ( const auto &[fn, info] : lookupFunctionTable ) {
-            auto mnh = fn->getMangledNameHash();
-
-            tw << "    // " << fn->getMangledName() << "\n";
-            tw << "    (*context.tabMnLookup)[0x"<< HEX << mnh << DEC <<"/*mnh*/] = context.functions + " << fn->index << "/*fn->index*/;\n";
+        for (auto pfun: externalFunctions) {
+            tw2 << GetFunctionInfo(pfun);
         }
-
-        return tw.str();
+        return {tw.str(), tw2.str()};
     }
 
     void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
@@ -4054,16 +4084,15 @@ namespace das {
         auto mod = program->thisModule.get();
         // if ( mod->isProperBuiltin() ) return true;
         const auto mod_name = (mod->promoted ? "" : mod->name);
-        TextWriter header;
-        if (!mod_name.empty()) {
-            header << "// Module " << mod_name << "\n";
-        }
-        header << AOT_INCLUDES;
 
+        TextWriter header;
         TextWriter source;
 
-        if (!mod_name.empty()) {
+        if (mod_name.empty()) {
+            header << AOT_INCLUDES;
+        } else {
             source << "// Module " << mod_name << "\n";
+            source << AOT_INCLUDES;
         }
 
         source << "#include \"daScript/simulate/standalone_ctx_utils.h\"\n";
@@ -4073,34 +4102,18 @@ namespace das {
         {
             NamespaceGuard guard1(source, "das");
             NamespaceGuard guard2(header, "das");
-            string initFunctions;
+            pair<string, string> initFunctions;
             {
-                const auto functions = collectUsedFunctions(program->library.getModules(), program->totalFunctions);
-                {
-                    NamespaceGuard anon_guard(source, program->thisNamespace); // anonymous
-                    source << aotVisitor.ss.str();
-                }
                 StandaloneContextGen gen(program, coll, cfg.cross_platform);
                 program->visitModule(gen, mod);
-                {
-                    das_set<string> ext_namespaces;
-                    for (das::Function *pfun: functions) {
-                        auto needInline = program->thisModule.get() == pfun->module;
-                        if (!needInline && gen.used_functions.count(aotFuncName(pfun)) == 0) {
-                            NamespaceGuard anon_guard(source, pfun->module->getNamespace()); // anonymous
-                            source << describeCppFunc(pfun, &coll, true, needInline) << ";\n";
-                            ext_namespaces.emplace(pfun->module->getNamespace());
-                        }
-                    }
-                    for (const string &namesp: ordered(ext_namespaces)) {
-                        source << "using namespace " << namesp << ";\n";
-                    }
-                }
 
                 NamespaceGuard anon_guard(source, program->thisNamespace); // anonymous
+                source << aotVisitor.ss.str();
+
                 initFunctions = addFunctionInfo(program->options.getBoolOption("no_init", program->policies.no_init),
                                                 program->options.getBoolOption("rtti",program->policies.rtti),
-                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, true),
+                                                collectUsedFunctions(program->library.getModules(), program->totalFunctions, program->getThisModule(), true, false),
+                                                program->getThisModule(),
                                                 gen.GetDebugInfo());
                 source << gen.str();
                 gen.clear();

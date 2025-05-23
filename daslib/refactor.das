@@ -13,7 +13,7 @@ require daslib/json_boost
 require daslib/defer
 require strings
 
-let LOG_REFACTOR = 100500
+/*let LOG_REFACTOR = 100500*/
 
 [tag_function(extract_method_tag), sideeffects]
 def public extract_method(method_name : string; blk : block) {

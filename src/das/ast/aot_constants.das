@@ -1,5 +1,7 @@
 options gen2
 
+module aot_constants
+
 let AOT_INCLUDES = "#include \"daScript/misc/platform.h\"
 
 #include \"daScript/simulate/simulate.h\"

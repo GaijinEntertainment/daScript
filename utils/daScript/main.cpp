@@ -5,6 +5,9 @@
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
 
+#include "../../src/das/ast/_standalone_ctx_generated/ast_aot_cpp.das.h"
+#include "../../src/das/ast/_standalone_ctx_generated/standalone_contexts.das.h"
+
 using namespace das;
 
 void use_utf8();
@@ -257,11 +260,24 @@ int das_aot_main ( int argc, char * argv[] ) {
     (*daScriptEnvironment::bound)->g_isInAot = true;
     bool compiled = false;
     if ( standaloneContext ) {
+#if defined(STANDALONE_MODE)
+        standalone_contexts::Standalone st;
+        st.standalone_aot(argv[2], argv[3], isAotLib, cross_platform, paranoid_validation);
+#else
         StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
         cfg.cross_platform = cross_platform;
         compiled = compileStandalone(argv[2], argv[3], cfg);
+#endif
     } else {
+#if defined(STANDALONE_MODE)
+        ast_aot_cpp::Standalone st;
+        auto res = st.aot(argv[2], isAotLib, paranoid_validation, cross_platform);
+        TextPrinter printer;
+        saveToFile(printer, argv[3], res);
+        compiled = true;
+#else
         compiled = compile(argv[2], argv[3], dryRun, cross_platform);
+#endif
     }
     Module::Shutdown();
     return compiled ? 0 : -1;

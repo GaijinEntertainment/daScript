@@ -101,7 +101,7 @@ MACRO(DAS_AOT_EXT input genList mainTarget dasAotTool dasAotToolArg)
     set(out_src "${out_dir}/${mainTarget}_${input_name}.cpp")
     file(MAKE_DIRECTORY ${out_dir})
 	  ADD_CUSTOM_COMMAND(
-		    DEPENDS ${input_src}
+        DEPENDS ${input_src}
         DEPENDS ${dasAotTool}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
@@ -738,7 +738,13 @@ SETUP_CPP11(libDaScript)
 
 add_custom_target(standaloneGenerated)
 SET(STANDALONE_SRC)
+DAS_AOT("src/das/ast/printer_flags_visitor.das" STANDALONE_SRC standaloneGenerated daslang)
+message("Standalone sources ${STANDALONE_SRC}")
 DAS_AOT_STANDALONE("src/das/ast/ast_print.das" STANDALONE_SRC standaloneGenerated daslang)
+DAS_AOT_STANDALONE("src/das/main.das" STANDALONE_SRC standaloneGenerated daslang)
+DAS_AOT_STANDALONE("src/das/ast/standalone_contexts.das" STANDALONE_SRC standaloneGenerated daslang)
+DAS_AOT_STANDALONE("src/das/ast/ast_aot_cpp.das" STANDALONE_SRC standaloneGenerated daslang)
+message("Standalone sources ${STANDALONE_SRC}")
 
 ADD_LIBRARY(libDaScriptStandalone ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
         ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
@@ -894,7 +900,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
     SET(SRC_LIBRARIES libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
     SET(SRC_LIBRARIES_BOOTSTRAPPED libDaScriptStandalone libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
 
-    add_executable(daslang-boostrapped ${DAS_DASCRIPT_MAIN_SRC} ${AOT_GENERATED_SRC})
+    add_executable(daslang-boostrapped ${DAS_DASCRIPT_MAIN_SRC} ${AOT_GENERATED_SRC} ${STANDALONE_SRC})
     TARGET_LINK_LIBRARIES(daslang-boostrapped ${SRC_LIBRARIES_BOOTSTRAPPED})
 
 

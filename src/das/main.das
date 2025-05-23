@@ -47,11 +47,9 @@ def main() {
     } elif (mode == "standalone_ctx") {
         let input = find_argument(args, "--input");
         let output = find_argument(args, "--output");
-        let cfg = StandaloneContextCfg(context_name = "context",
-                                       class_name = "Standalone",
-                                       cpp_output_dir = output)
-        print("standalone ctx {input} to {output}\n")
-        let res = standalone_aot(input, cfg, false, false)
+        let cross_platform = find_argument_or(args, "--cross_platform", "false") == "true";
+        print("standalone ctx {input} to {output} cross_platform={cross_platform}\n")
+        let res = standalone_aot(input, output, false, cross_platform, false)
         if (res |> length() > 0) {
             fopen(output, "wb") <| $(fw) {
                 if (fw != null) {
