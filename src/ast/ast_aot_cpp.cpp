@@ -3764,8 +3764,19 @@ namespace das {
 
 
         tw << "     // start totalFunctions\n";
+        tw << "    initializer_list<tuple<int, FunctionInfo, FuncInfo*>> initFunctions = {\n";
         tw << das::move(initFunctions);
+        tw << "    };\n";
         tw << "    // end totalFunctions\n";
+
+        tw << "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n";
+        tw << "    for (const auto& [index, func_info, debug_info]: initFunctions) {\n";
+        tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
+        tw << "        context.functions[index].debugInfo = debug_info;\n";
+        tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
+        tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
+        tw << "        anyPInvoke |= func_info.pinvoke;\n";
+        tw << "    }\n";
 
         tw << "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n";
         tw << "    context.tabGMnLookup->clear();\n";
@@ -3782,16 +3793,6 @@ namespace das {
 
         const auto fnn = collectUsedFunctions(program.library.getModules(), program.totalFunctions, true);
 
-        tw << "    FillFunction(context, getGlobalAotLibrary(), {\n        ";
-        for ( const auto fn: fnn) {
-            tw << "make_pair(0x" << HEX << fn->aotHash << DEC << ", &context.functions[" << fn->index << "/*fni*/])";
-            if (fn != fnn.back()) {
-                tw << ",\n        ";
-            } else {
-                tw << "\n    ";
-            }
-        }
-        tw << "});\n";
         // aot init
         if ( program.initSemanticHashWithDep ) {
             tw << "    {\n";
@@ -3802,6 +3803,7 @@ namespace das {
             tw << "    }\n";
         }
 
+        tw << "    FillFunction(context, getGlobalAotLibrary(), das::move(id_to_funcs));\n";
         tw << "    context.runInitScript();\n";
         tw << "}\n";
     }
@@ -3989,6 +3991,28 @@ namespace das {
      * Adds debug info to AotDebugInfoHelper
      * @return String with initialization of all functions
      */
+    string GetFunctionInfo(FunctionPtr pfun, std::optional<string> info = std::nullopt) {
+        TextWriter tw;
+        tw << "        std::make_tuple(" << pfun->index << ", "
+           << "FunctionInfo(\"" << pfun->name << "\", \""
+           << pfun->getMangledName() << "\", "
+           << "0x" << HEX << pfun->getMangledNameHash() << DEC << ", "
+           << "0x" << HEX << pfun->aotHash << DEC << ", "
+           << pfun->totalStackSize << ", "
+           << pfun->unsafeOperation << ", "
+           << pfun->fastCall << ", "
+           << pfun->module->builtIn << ", "
+           << pfun->module->promoted << ", "
+           << (pfun->result->isRefType() && !pfun->result->ref) << ", "
+           << pfun->pinvoke
+           << ")";
+        if (info) {
+            tw << ", &" << info.value();
+        }
+        tw << "),\n";
+        return tw.str();
+    }
+
     string addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, AotDebugInfoHelper& helper) {
         helper.rtti = rtti;
         vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
@@ -3999,28 +4023,7 @@ namespace das {
 
         TextWriter tw;
         for (auto &[pfun, info]: lookupFunctionTable) {
-            tw << "    InitAotFunction(context, &context.functions[" << pfun->index << "/*pfun->index*/], "
-               << "FunctionInfo(\"" << pfun->name << "\", \""
-               << pfun->getMangledName() << "\", "
-               << pfun->totalStackSize << ", "
-               << pfun->unsafeOperation << ", "
-               << pfun->fastCall << ", "
-               << pfun->module->builtIn << ", "
-               << pfun->module->promoted << ", "
-               << (pfun->result->isRefType() && !pfun->result->ref) << ", "
-               << pfun->pinvoke
-               << ")" << ");\n";
-            tw << "    context.functions[" << pfun->index << "/*pfun->index*/].debugInfo = &" << helper.funcInfoName(info) << ";\n";
-            if (pfun->pinvoke) {
-                tw << "    anyPInvoke = true;\n\n";
-            }
-        }
-
-        for ( const auto &[fn, info] : lookupFunctionTable ) {
-            auto mnh = fn->getMangledNameHash();
-
-            tw << "    // " << fn->getMangledName() << "\n";
-            tw << "    (*context.tabMnLookup)[0x"<< HEX << mnh << DEC <<"/*mnh*/] = context.functions + " << fn->index << "/*fn->index*/;\n";
+            tw << GetFunctionInfo(pfun, helper.funcInfoName(info));
         }
 
         return tw.str();
