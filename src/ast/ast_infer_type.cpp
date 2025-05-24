@@ -2841,7 +2841,25 @@ namespace das {
                     expr->at, CompilationError::function_not_found);
             }
             if (expr->func && expr->func->builtIn) {
-                error("can't get address of builtin function " + describeFunction(expr->func),  "", "",
+                TextWriter tw;
+                if ( verbose ) {
+                    tw << "@@ ( ";
+                    for ( size_t i=0; i<expr->type->argTypes.size(); ++i ) {
+                        if ( i ) tw << ", ";
+                        tw << "arg" << i << " : " << describeType(expr->type->argTypes[i]);
+                    }
+                    tw << " ) : " << describeType(expr->type->firstType) << " { ";
+                    if ( !expr->func->result->isVoid() ) {
+                        tw << "return ";
+                    }
+                    tw << expr->func->name << "(";
+                    for ( size_t i=0; i<expr->func->arguments.size(); ++i ) {
+                        if ( i ) tw << ",";
+                        tw << "arg" << i;
+                    }
+                    tw << "); }";
+                }
+                error("can't get address of builtin function " + describeFunction(expr->func), "wrap local function instead", tw.str(),
                     expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
