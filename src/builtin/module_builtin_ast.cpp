@@ -160,12 +160,12 @@ namespace das {
     }
 
     void findMatchingVariable ( Program * program, Function * func, const char * _name, bool seePrivate,
-            const TBlock<void,TTemporary<TArray<VariablePtr>>> & block, Context * context, LineInfoArg * arg ) {
+            const TBlock<void,TTemporary<TArray<smart_ptr_raw<Variable>>>> & block, Context * context, LineInfoArg * arg ) {
         if ( !program ) context->throw_error_at(arg, "expecting program");
         if ( !_name ) context->throw_error_at(arg, "expecting name");
         string moduleName, varName;
         splitTypeName(_name, moduleName, varName);
-        vector<VariablePtr> result;
+        vector<smart_ptr_raw<Variable>> result;
         auto inWhichModule = getCurrentSearchModule(program, func, moduleName.c_str());
         program->library.foreach([&](Module * mod) -> bool {
             if ( auto var = mod->findVariable(varName) ) {
@@ -350,13 +350,13 @@ namespace das {
         },nullptr);
     }
 
-    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context, LineInfoArg * at ) {
+    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,smart_ptr_raw<TypeDecl>> & block, Context * context, LineInfoArg * at ) {
         mod->aliasTypes.foreach([&](auto aliasType){
             das_invoke<void>::invoke<const char *,TypeDeclPtr>(context,at,block,aliasType->alias.c_str(),aliasType);
         });
     }
 
-    void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context, LineInfoArg * at ) {
+    void for_each_enumeration ( Module * mod, const TBlock<void,smart_ptr_raw<Enumeration>> & block, Context * context, LineInfoArg * at ) {
         das_hash_map<string, EnumerationPtr> enums;
         mod->enumerations.foreach([&](auto penum){
             enums.emplace(penum->name, penum);
@@ -366,19 +366,19 @@ namespace das {
         }
     }
 
-    void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context, LineInfoArg * at ) {
+    void for_each_structure ( Module * mod, const TBlock<void,smart_ptr_raw<Structure>> & block, Context * context, LineInfoArg * at ) {
         mod->structures.foreach([&](auto pst){
             das_invoke<void>::invoke<StructurePtr>(context,at,block,pst);
         });
     }
 
-    void for_each_generic ( Module * mod, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {
+    void for_each_generic ( Module * mod, const TBlock<void,smart_ptr_raw<Function>> & block, Context * context, LineInfoArg * at ) {
         mod->generics.foreach([&](auto fn){
             das_invoke<void>::invoke<FunctionPtr>(context,at,block,fn);
         });
     }
 
-    void for_each_global ( Module * mod, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
+    void for_each_global ( Module * mod, const TBlock<void,smart_ptr_raw<Variable>> & block, Context * context, LineInfoArg * at ) {
         mod->globals.foreach([&](auto var){
             das_invoke<void>::invoke<VariablePtr>(context,at,block,var);
         });
@@ -432,10 +432,10 @@ namespace das {
     }
 
     void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
-        const TBlock<void,char *,char*,TypeDeclPtr,uint32_t> & block, Context * context, LineInfoArg * at ) {
+        const TBlock<void,char *,char*,smart_ptr_raw<TypeDecl>,uint32_t> & block, Context * context, LineInfoArg * at ) {
         for ( auto & it : ann.fields ) {
             const auto & fld = it.second;
-            das_invoke<void>::invoke<const char *,const char *,TypeDeclPtr,uint32_t>(context,at,block,
+            das_invoke<void>::invoke<const char *,const char *,smart_ptr_raw<TypeDecl>,uint32_t>(context,at,block,
                 it.first.c_str(), fld.cppName.c_str(),fld.decl,fld.offset);
         }
     }
