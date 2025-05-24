@@ -12,11 +12,13 @@ namespace das {
 
     struct FunctionInfo {
         FunctionInfo() = delete;
-        FunctionInfo(string name, string mangledName, uint32_t stackSize,
+        FunctionInfo(string name, string mangledName, uint64_t mnh, uint64_t aotHash, uint32_t stackSize,
                      bool unsafeOperation, bool fastCall, bool builtin,
                      bool promoted, bool isResRef, bool pinvoke)
-            : name(name)
-            , mangledName(mangledName)
+            : name(das::move(name))
+            , mnh(mnh)
+            , aotHash(aotHash)
+            , mangledName(das::move(mangledName))
             , stackSize(stackSize)
             , unsafeOperation(unsafeOperation)
             , fastCall(fastCall)
@@ -25,6 +27,8 @@ namespace das {
             , res_ref(isResRef)
             , pinvoke(pinvoke) {}
         string name;
+        uint64_t mnh;
+        uint64_t aotHash;
         string mangledName;
         uint32_t stackSize;
         bool unsafeOperation;

@@ -134,8 +134,20 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "    context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();\n");
     write(tw, "    context.tabMnLookup->clear();\n");
     write(tw, "     // start totalFunctions\n");
+    write(tw, "    initializer_list<tuple<int, FunctionInfo, FuncInfo*>> initFunctions = \{\n");
     write(tw, "{initFunctions}");
+    write(tw, "    \};\n");
     write(tw, "    // end totalFunctions\n");
+
+    write(tw, " vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n");
+    write(tw, "    for (const auto& [index, func_info, debug_info]: initFunctions) \{\n");
+    write(tw, "        InitAotFunction(context, &context.functions[index], func_info);\n");
+    write(tw, "        context.functions[index].debugInfo = debug_info;\n");
+    write(tw, "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n");
+    write(tw, "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n");
+    write(tw, "        anyPInvoke |= func_info.pinvoke;\n");
+    write(tw, "    \}\n");
+
     write(tw, "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n");
     write(tw, "    context.tabGMnLookup->clear();\n");
     write(tw, "    for ( int i=0, is=context.totalVariables; i!=is; ++i ) \{\n");
@@ -150,16 +162,6 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     });
     let fnn = collectProgramUsedFunctions(program, true);
 
-    write(tw, "    FillFunction(context, getGlobalAotLibrary(), \{\n        ");
-    for (fn in fnn) {
-        write(tw, "make_pair(0x{fn.aotHash:x}, &context.functions[{fn.index}/*fni*/])");
-        if (fn != fnn.back()) {
-            write(tw, ",\n        ");
-        } else {
-            write(tw, "\n    ");
-        }
-    }
-    write(tw, "});\n");
     // aot init
     if (program.initSemanticHashWithDep != uint64(0)) {
         write(tw, "    \{\n");
@@ -170,6 +172,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         write(tw, "    \}\n");
     }
 
+    write(tw, " FillFunction(context, getGlobalAotLibrary(), das::move(id_to_funcs));\n");
     write(tw, "    context.runInitScript();\n");
     write(tw, "\}\n");
 }
@@ -278,6 +281,23 @@ def writeRegistration(var header : StringBuilderWriter;
  * Adds debug info to AotDebugInfoHelper
  * @return String with initialization of all functions
  */
+def GetFunctionInfo(pfun : Function?, info : string) {
+    return build_string() <| $(tw) {
+        let args = ["\"{pfun.name}\"",
+                    "\"{pfun |> get_mangled_name()}\"",
+                    "0x{pfun.getMangledNameHash:x}",
+                    "0x{pfun.aotHash:x}",
+                    "{pfun.totalStackSize:d}",
+                    "{pfun.flags.unsafeOperation}",
+                    "{pfun.flags.fastCall}",
+                    "{pfun._module.moduleFlags.builtIn}",
+                    "{pfun._module.moduleFlags.promoted}",
+                    "{pfun.result.isRefType && !pfun.result.flags.ref}",
+                    "{pfun.moreFlags.pinvoke}"]
+        write(tw, "        std::make_tuple({pfun.index}, FunctionInfo({args|>join(", ")})), &{info}),\n");
+    }
+}
+
 def addFunctionInfo(disableInit : bool; rtti : bool, fnn : array<Function?>, var helper : AotDebugInfoHelper ?) {
     helper.helper.rtti = rtti;
     var lookupFunctionTable : array<tuple<Function?, FuncInfo?>>;
@@ -287,30 +307,8 @@ def addFunctionInfo(disableInit : bool; rtti : bool, fnn : array<Function?>, var
     }
 
     return build_string() <| $(tw) {
-        for (fun_info in lookupFunctionTable) {
-            let (pfun, info) = fun_info
-            let args = ["\"{pfun.name}\"",
-                        "\"{pfun |> get_mangled_name()}\"",
-                        "{pfun.totalStackSize:d}",
-                        "{pfun.flags.unsafeOperation}",
-                        "{pfun.flags.fastCall}",
-                        "{pfun._module.moduleFlags.builtIn}",
-                        "{pfun._module.moduleFlags.promoted}",
-                        "{pfun.result.isRefType && !pfun.result.flags.ref}",
-                        "{pfun.moreFlags.pinvoke}"]
-            write(tw, "    InitAotFunction(context, &context.functions[{pfun.index}/*pfun->index*/], FunctionInfo({args|>join(", ")}));\n");
-            write(tw, "    context.functions[{pfun.index}/*pfun->index*/].debugInfo = &{funcInfoName(info)};\n");
-            if (pfun.moreFlags.pinvoke) {
-                write(tw, "    anyPInvoke = true;\n\n");
-            }
-        }
-
-        for (fun_info in lookupFunctionTable) {
-            let (pfun, info) = fun_info
-            let mnh = pfun.getMangledNameHash;
-
-            write(tw, "    // {pfun |> get_mangled_name()}\n");
-            write(tw, "    (*context.tabMnLookup)[0x{mnh:x}/*mnh*/] = context.functions + {pfun.index}/*fn->index*/;\n");
+        for ((fun_info, info) in lookupFunctionTable) {
+            write(tw, GetFunctionInfo(fun_info, funcInfoName(info)));
         }
     }
 }

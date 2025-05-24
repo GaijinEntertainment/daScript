@@ -3523,12 +3523,12 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
             funInit = true;
         }
         let semH = fn.aotHash;
-        write(*logs, "    aotLib[0x{semH:x}] = +[](Context & ctx) -> SimNode* \{ // {aotFuncName(fn)}\n");
-        write(*logs, "        return ctx.code->makeNode<SimNode_Aot");
+        write(*logs, "    aotLib[0x{semH:x}] = +[](Context & ctx) -> SimNode* \{\n");
+        write(*logs, "        return ctx.code->makeNode<AutoSimNode_Aot");
         if (fn.flags.copyOnReturn || fn.flags.moveOnReturn) {
             write(*logs, "CMRES");
         }
-        write(*logs, "<{describeCppFunc(unsafe(reinterpret<FunctionPtr>(fn)),null,cross_platform,false,false)},&{aotFuncName(fn)}>>()");
+        write(*logs, "<&{aotFuncName(fn)}>>()");
         write(*logs, ";\n    \};\n");
     }
 
@@ -3536,7 +3536,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         let semH = program |> getInitSemanticHashWithDep(context.getInitSemanticHash);
         write(*logs, "    // [[ init script ]]\n");
         write(*logs, "    aotLib[0x{semH:x}] = +[](Context & ctx) -> SimNode* \{\n");
-        write(*logs, "        ctx.aotInitScript = ctx.code->makeNode<SimNode_Aot<void (*)(Context *, bool),&__init_script>>();\n");
+        write(*logs, "        ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();\n");
         write(*logs, "        return ctx.aotInitScript;\n");
         write(*logs, "    \};\n");
     }
