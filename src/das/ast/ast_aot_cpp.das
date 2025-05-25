@@ -178,6 +178,7 @@ struct DescribeConfig {
     skip_const : bool = false
     redundant_const : bool = true
     cross_platform : bool = false
+    use_smart_ptr : bool = false
 }
 
 def aotSuffixNameEx(funcName : das_string; suffix : string) {
@@ -315,7 +316,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
                     write(writer, "void *");
                 }
             } else {
-                let ptr_name = typeDecl.flags.smartPtrNative ? "smart_ptr" : "smart_ptr_raw"
+                let ptr_name = typeDecl.flags.smartPtrNative && cfg.use_smart_ptr ? "smart_ptr" : "smart_ptr_raw"
                 var type_decl_name = "void"
                 if (typeDecl.firstType != null) {
                     type_decl_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = false, cross_platform = cfg.cross_platform), useAlias);
