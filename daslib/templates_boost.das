@@ -927,10 +927,7 @@ class private AstQCallMacro : AstCallMacro {
         var inscope acall <- new ExprCall(at = call.at,
             name := apply_call,
             arguments := array<ExpressionPtr>(
-                new ExprQuote(
-                    at = call.at,
-                    arguments := array<ExpressionPtr>(qclone)
-                ),
+                convert_quote_to_expression(qclone, call.at),
                 new ExprMakeBlock(_block <- qblk, at = call.at)
             )
         )
@@ -1023,10 +1020,7 @@ class private AstQNamedMacro : AstCallMacro {
             name := apply_call,
             arguments := array<ExpressionPtr>(
                 clone_expression(call.arguments[0]),
-                new ExprQuote(
-                    at = call.at,
-                    arguments := array<ExpressionPtr>(qclone)
-                ),
+                convert_quote_to_expression(qclone, call.at),
                 new ExprMakeBlock(_block <- qblk, at = call.at)
             )
         )
@@ -1068,10 +1062,7 @@ class private AstQNamedClassMacro : AstCallMacro {
             arguments := array<ExpressionPtr>(
                 clone_expression(call.arguments[0]),
                 clone_expression(call.arguments[1]),
-                new ExprQuote(
-                    at = call.at,
-                    arguments := array<ExpressionPtr>(qclone)
-                ),
+                convert_quote_to_expression(qclone, call.at),
                 new ExprMakeBlock(_block <- qblk, at = call.at)
             )
         )

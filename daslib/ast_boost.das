@@ -259,6 +259,11 @@ def find_unique_function(mod : Module?; name : string; canfail : bool = false) {
     return <- res
 }
 
+def find_unique_function_ptr(mod : Module?; name : string; canfail : bool = false) {
+    var inscope fn = find_unique_function(mod, name, canfail);
+    return <- fn.get_ptr()
+}
+
 def find_unique_generic(mod : Module?; name : string; canfail : bool = false) {
     var inscope res : FunctionPtr
     var count = 0
@@ -796,7 +801,6 @@ def private walk_and_convert_enumeration(data : uint8 const?; info : TypeDeclPtr
 }
 
 def private walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
-    // print("0x{intptr(data)} {describe(info)}\n")
     if (info.dim |> length != 0) {
         return <- walk_and_convert_dim(data, info, at)
     } elif (info.baseType == Type.tArray) {
@@ -832,6 +836,242 @@ def convert_to_expression(var value : auto& ==const; at : LineInfo) {
         let pval = addr(value)
         return walk_and_convert(reinterpret<uint8 const?> pval, info, at)
     }
+}
+
+/*
+ * We need this wrappers for initialization of Handle types
+ */
+struct CaptureEntryInitData {
+    name : string
+    mode : CaptureMode
+}
+
+struct AnnotationArgumentInitData {
+    basicType : Type
+    name : string
+    sValue : string
+    bValue : bool
+    iValue : int
+    fValue : float
+    // @safe_when_uninitialized at: LineInfo // todo: add if needed
+}
+
+def clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>) {
+    a |> resize(length(b))
+    for (e, i in b, count()) {
+        a[i].name := e.name
+        a[i].mode = e.mode
+    }
+}
+
+let blacklist = [
+    ("ast::Function", "inferStack"),
+    ("ast::Function", "annotations"),
+    ("ast::Function", "at"),
+    ("ast::Function", "atDecl"),
+    ("ast::Function", "module"),
+    ("ast::Function", "useGlobalVariables"),
+    ("ast::Function", "useFunctions"),
+    ("ast::Function", "resultAliasesGlobals"),
+    ("ast::Function", "fromGeneric"),
+    ("ast::Function", "classParent"),
+    ("ast::ExprMakeStruct", "structs"),
+    ("ast::ExprReturn", "_block"), // loop
+    ("ast::ExprVar", "pBlock"), // loop
+    ("rtti::AnnotationArgument", "at"), // ignore it for now
+    ("rtti::LineInfo", "fileInfo"),
+]
+
+def clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentInitData>) {
+    a |> resize(length(b))
+    for (e, i in b, count()) {
+        a[i].name := e.name
+        if (e.basicType == Type.tString) {
+            a[i].sValue := e.sValue
+        } elif (e.basicType == Type.tBool) {
+            a[i].bValue := e.bValue
+        } elif (e.basicType == Type.tInt) {
+            a[i].iValue := e.iValue
+        } elif (e.basicType == Type.tFloat) {
+            a[i].fValue := e.fValue
+        }
+        // a[i].at := e.at
+        a[i].basicType = e.basicType
+    }
+}
+
+def private convert_vec(mod : Module?; field_values : uint8 const?; xtype, at) : ExpressionPtr {
+    var inscope src_tp <- get_handled_type_index_type_declaration(xtype.annotation,
+                                                         default<Expression?>,
+                                                         default<Expression?>);
+    let tstr = describe(src_tp);
+    src_tp.flags &= ~TypeDeclFlags.ref; // vec type has ref, we don't need it
+    var inscope dst_tp <- clone(src_tp);
+    if (tstr |> starts_with("$::das_string&")) {
+        move_new(dst_tp) <| new TypeDecl(baseType = Type.tString);
+    } elif (tstr |> starts_with("ast::CaptureEntry")) {
+        var strct = get_module("ast_boost") |> module_find_structure("CaptureEntryInitData");
+        move_new(dst_tp) <| new TypeDecl(baseType = Type.tStructure, structType = strct);
+    } elif (tstr |> starts_with("rtti::AnnotationArgument")) {
+        var strct = get_module("ast_boost") |> module_find_structure("AnnotationArgumentInitData");
+        move_new(dst_tp) <| new TypeDecl(baseType = Type.tStructure, structType = strct);
+    }
+    let fields_num = get_vector_length(field_values, src_tp);
+    if (fields_num == 0) {
+        return <- new ExprMakeStruct(at = at, makeType <- new TypeDecl(baseType = Type.tArray, firstType <- clone_type(dst_tp)));
+    }
+    var inscope args : array<ExpressionPtr>;
+    for (idx in range(fields_num)) {
+        if (true) {
+            var inscope arg_expr <- up_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp.get_ptr(), idx))), src_tp, at);
+            if (dst_tp.baseType != Type.tString && dst_tp != src_tp) {
+                var inscope make_str <- unsafe(reinterpret<smart_ptr<ExprMakeStruct>>(arg_expr));
+                move_new(make_str.makeType) <| clone_type(dst_tp);
+                args |> emplace(make_str);
+            } else {
+                args |> emplace(arg_expr);
+            }
+        }
+    }
+    return <- new ExprCall(
+        at = at,
+        name := "to_array_move",
+        arguments := array<ExpressionPtr>(
+            new ExprMakeArray(
+                values := args,
+                gen2 = true,
+                makeType <- clone_type(dst_tp),
+                at = at
+            )
+        )
+    );
+}
+
+def private find_module_expr(name, at) {
+     return <- new ExprCall(at = at, name := "get_module",
+                            arguments := array<ExpressionPtr>(new ExprConstString(value := name)))
+}
+
+def private get_find_in_module_expr(fn_name; module_name; obj_name; at) {
+     return <- new ExprCall(at = at, name := fn_name,
+         arguments := array<ExpressionPtr>(
+            find_module_expr(module_name, at),
+            new ExprConstString(value := obj_name)
+         )
+     )
+}
+
+def private up_expr(mod : Module?; var data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+    if (data == null) {
+        return <- null;
+    }
+    if (info.baseType != Type.tHandle && info.baseType != Type.tPointer) {
+        return <- walk_and_convert(data, info, at);
+    }
+    let tstr = describe(info);
+
+    if (tstr == "rtti::Annotation") {
+        assume pdata = unsafe(reinterpret<rtti::Annotation>(data));
+        return <- get_find_in_module_expr("module_find_annotation", pdata._module.name, pdata.name, at);
+    } elif (tstr == "rtti::TypeAnnotation") {
+         assume pdata = unsafe(reinterpret<rtti::TypeAnnotation>(data));
+         return <- get_find_in_module_expr("module_find_type_annotation", pdata._module.name, pdata.name, at)
+    } elif (tstr == "ast::CallMacro") {
+         assume pdata = unsafe(reinterpret<CallMacro?>(data));
+         return <- get_find_in_module_expr("find_call_macro", pdata._module.name, pdata.name, at)
+    } elif (tstr == "ast::Structure") {
+         assume pdata = unsafe(reinterpret<Structure?>(data));
+         return <- get_find_in_module_expr("module_find_structure", pdata._module.name, pdata.name, at);
+    } elif (tstr == "ast::Function") {
+         assume pdata = unsafe(reinterpret<Function?>(data));
+         return <- get_find_in_module_expr("find_unique_function_ptr", pdata._module.name, pdata.name, at);
+    } elif (tstr == "rtti::Module") {
+         assume cur_mod = unsafe(reinterpret<Module?>(data));
+         return <- find_module_expr(cur_mod.name, at);
+    } elif (tstr == "$::das_string") {
+        return <- new ExprConstString(at = at, value := *unsafe(reinterpret<das_string?>(data)));
+    } elif (info.baseType == Type.tPointer) {
+        var pdata = *unsafe(reinterpret<uint8 const ??> data);
+        if (pdata == null) {
+            return <- null;
+        }
+        let first_tstr = describe(info.firstType);
+        var inscope final_type <- clone(info.firstType);
+        if (first_tstr == "ast::Expression") {
+            var annotation = unsafe(mod |> module_find_annotation(unsafe(reinterpret<ExpressionPtr>(pdata)).__rtti)).get_ptr();
+            move_new(final_type) <| new TypeDecl(baseType = Type.tHandle,
+                annotation = unsafe(reinterpret<TypeAnnotation?> annotation))
+        }
+        var inscope subexpr <- up_expr(mod, pdata, final_type, at);
+
+        // This types are created on cpp side by managed functions.
+        // We already got pointer, no need to ascend.
+        let managed_types = [
+            "rtti::Module",
+            "rtti::Annotation",
+            "rtti::TypeAnnotation",
+            "ast::Structure",
+            "ast::CallMacro",
+            "ast::Function",
+        ];
+
+        for (t in managed_types) {
+            if (t == first_tstr) {
+                return <- subexpr
+            }
+        }
+        return <- new ExprAscend(subexpr <- subexpr);
+    }
+    var ann = info.annotation;
+    if (ann != null && ann.isBasicStructureAnnotation) {
+        var inscope mkS1 <- new default<MakeStruct>;
+        var unique_loc = at.column;
+        for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(ann))) <| $(name, cppName, xtype, offset) {
+            for ((cl, fld) in blacklist) {
+                if (fld == name && (tstr == cl ||
+                                   (tstr == "ast::Expression" &&
+                                    unsafe(reinterpret<Expression>(data)).__rtti == cl))) {
+                    return ;
+                }
+            }
+            var fdata = unsafe(data + int(offset));
+            let xtype_str = describe(xtype)
+
+            unique_loc++;
+            let loc = LineInfo(column = uint(unique_loc), line = uint(at.line));
+            let is_vector = (xtype_str |> starts_with("$::dasvector`") ||
+                             xtype_str |> starts_with("rtti::AnnotationList") ||
+                             xtype_str |> starts_with("rtti::AnnotationArgumentList"));
+            var inscope res_field <- is_vector ? convert_vec(mod, fdata, xtype, loc) : up_expr(mod, fdata, xtype, loc);
+            if (res_field == null) { return ; }
+
+            var flags : MakeFieldDeclFlags = MakeFieldDeclFlags.moveSemantics;
+            if (xtype_str == "$::das_string" || is_vector) {
+                flags = MakeFieldDeclFlags.cloneSemantics
+            }
+            let res_at = res_field.at;
+            var inscope mkFld <- new MakeFieldDecl(name := name, value <- res_field, at := res_at);
+            if (!xtype.canCopy) {
+                mkFld.flags = flags;
+            }
+            emplace(*mkS1, mkFld);
+        }
+        var inscope mkStr <- new ExprMakeStruct(makeType <- clone_type(info), at = at)
+        emplace(mkStr.structs, mkS1)
+        mkStr.makeStructFlags |= ExprMakeStructFlags.useInitializer;
+        return <- mkStr;
+    } else {
+        panic("Unexpected type {tstr}!");
+        return <- null;
+    }
+}
+
+def convert_quote_to_expression(var arg_expr : ExpressionPtr; at : LineInfo) {
+    let mod = get_module("ast");
+    assume annotation = mod |> module_find_annotation(arg_expr.__rtti);
+    var inscope tp <- new TypeDecl(baseType = Type.tHandle, annotation = unsafe(reinterpret<TypeAnnotation?> annotation));
+    tp.flags |= TypeDeclFlags.smartPtr;
+    return <- new ExprAscend(subexpr <- up_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr.get_ptr())), tp, at));
 }
 
 def convert_to_expression(value : auto ==const; at : LineInfo) {
