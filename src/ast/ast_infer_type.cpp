@@ -6872,18 +6872,20 @@ namespace das {
             }
             if ( expr->moveSemantics && expr->subexpr && expr->subexpr->type && expr->subexpr->type->lockCheck() ) {
                 if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
-                    bool checkIt = true;
-                    if ( expr->subexpr->rtti_isCall() ) {
-                        auto ccall = static_pointer_cast<ExprCall>(expr->subexpr);
-                        if ( ccall->name=="_return_with_lockcheck" || starts_with(ccall->name,"__::builtin`_return_with_lockcheck`") ) checkIt = false;
-                    }
-                    if ( checkIt && !expr->skipLockCheck && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
-                        reportAstChanged();
-                        auto pCall = make_smart<ExprCall>(expr->at,"_return_with_lockcheck");
-                        pCall->arguments.push_back(expr->subexpr->clone());
-                        auto pRet = expr->clone();
-                        static_pointer_cast<ExprReturn>(pRet)->subexpr = pCall;
-                        return pRet;
+                    if ( !expr->skipLockCheck && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
+                        bool checkIt = true;
+                        if ( expr->subexpr->rtti_isCall() ) {
+                            auto ccall = static_pointer_cast<ExprCall>(expr->subexpr);
+                            if ( ccall->name=="_return_with_lockcheck" || starts_with(ccall->name,"__::builtin`_return_with_lockcheck`") ) checkIt = false;
+                        }
+                        if ( checkIt ) {
+                            reportAstChanged();
+                            auto pCall = make_smart<ExprCall>(expr->at,"_return_with_lockcheck");
+                            pCall->arguments.push_back(expr->subexpr->clone());
+                            auto pRet = expr->clone();
+                            static_pointer_cast<ExprReturn>(pRet)->subexpr = pCall;
+                            return pRet;
+                        }
                     }
                 }
             }
