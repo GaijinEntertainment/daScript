@@ -3,4 +3,4 @@ src/das/**/*.cpp binary
 src/das/**/*.h binary
 utils/dasFormatter/ds_parser.cpp binary
 utils/dasFormatter/ds_parser.output binary
-
+daslib/_aot_generated/*.cpp binary
