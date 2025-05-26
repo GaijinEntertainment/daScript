@@ -400,7 +400,7 @@ namespace das {
         }
     };
 
-    struct TypeAnnotationAnnotation : ManagedStructureAnnotation <TypeAnnotation,false> {
+    struct TypeAnnotationAnnotation : ManagedStructureAnnotation <TypeAnnotation> {
         TypeAnnotationAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TypeAnnotation", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
@@ -427,6 +427,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(avoidNullPtr)>("avoidNullPtr");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf", "getSizeOf");
             addProperty<DAS_BIND_MANAGED_PROP(getAlignOf)>("alignOf", "getAlignOf");
+            from("Annotation");
         }
     };
 
@@ -435,6 +436,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addProperty<DAS_BIND_MANAGED_PROP(fieldCount)>("fieldCount");
+            from("TypeAnnotation");
         }
     };
 
@@ -1630,6 +1632,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(das_get_SimFunction_by_MNH)>(*this, lib, "get_function_address",
                 SideEffects::none, "das_get_SimFunction_by_MNH")
                     ->args({"MNH","at"});
+            addExtern<DAS_BIND_FUN(contentByLineInfo)>(*this, lib, "content_by_line_info",
+                SideEffects::modifyExternal, "contentByLineInfo")
+                    ->args({"info","block", "context", "at"});
             // table key index
             addExtern<DAS_BIND_FUN(rtti_getTablePtr)>(*this, lib, "get_table_key_index",
                 SideEffects::none, "rtti_getTablePtr")

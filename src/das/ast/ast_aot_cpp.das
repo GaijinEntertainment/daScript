@@ -3055,6 +3055,7 @@ class CppAot : AstVisitor {
         }
         return call;
     }
+
 // call
     def policyArgNeedCast(polType : TypeDeclPtr; argType : TypeDeclPtr) {
         if (argType.isVectorType) {
