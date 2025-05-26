@@ -982,6 +982,58 @@ namespace das {
         return ss.str();
     }
 
+    std::optional<string> getContentAt(const LineInfo& info) {
+        if (!info.fileInfo) return std::nullopt;
+
+        const char* src = nullptr;
+        uint32_t len = 0;
+        info.fileInfo->getSourceAndLength(src, len);
+        if (!src || len == 0) return std::nullopt;
+
+        size_t currentLine = 1;
+        const char* startPtr = nullptr;
+        const char* endPtr = src + len;
+        const char* ptr = src;
+
+        // Find start position
+        while (ptr < endPtr && currentLine < info.line) {
+            if (*ptr == '\n') {
+                currentLine++;
+            }
+            ptr++;
+        }
+
+        // Now find first column
+        size_t currentCol = 0;
+        while (ptr < endPtr && currentCol < info.column &&
+               currentLine == info.line) {
+            ptr++;
+            currentCol++;
+        }
+        if (ptr == endPtr) {
+            return std::nullopt;
+        }
+        startPtr = ptr;
+
+        // Find end position
+        while (ptr < endPtr && currentLine < info.last_line) {
+            if (*ptr == '\n') {
+                currentLine++;
+            }
+            ptr++;
+        }
+
+        currentCol = 0;
+        while (ptr < endPtr && currentCol < info.last_column &&
+               currentLine == info.last_line) {
+            ptr++;
+            currentCol++;
+        }
+        endPtr = ptr;
+
+        return string(startPtr, endPtr - startPtr);
+    }
+
     class CppAot : public Visitor {
     public:
         CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl, bool cross_platform )
@@ -3200,6 +3252,16 @@ namespace das {
             } else {
                 ss << ")";
             }
+            return Visitor::visit(call);
+        }
+
+        virtual ExpressionPtr visit ( ExprQuote * call ) override {
+            auto arg = call->arguments.front();
+            auto start = arg->at;
+            start.line = call->at.line;
+            start.column = call->at.column;
+            auto str = getContentAt(start);
+            ss << "static_pointer_cast<ExprCall>(parseExpression(R\"(" << str.value() << ")\", true))->arguments.front()";
             return Visitor::visit(call);
         }
     // call

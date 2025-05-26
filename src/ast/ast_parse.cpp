@@ -450,6 +450,51 @@ namespace das {
         return false;
     }
 
+    ExpressionPtr parseExpression(string_view str, bool gen2, bool gen2_make) {
+        yyscan_t scanner = nullptr;
+        ProgramPtr program = make_smart<Program>();
+        DasParserState parserState {};
+        parserState.g_Access = nullptr;
+        parserState.g_Program = program;
+        parserState.das_def_tab_size = (*daScriptEnvironment::bound)->das_def_tab_size;
+        parserState.das_gen2_make_syntax = gen2_make;
+        parserState.g_FileAccessStack.push_back(nullptr);
+
+        if ( gen2 ) {
+            das2_yylex_init_extra(&parserState, &scanner);
+        } else {
+            das_yylex_init_extra(&parserState, &scanner);
+        }
+
+        // wrap into parentheses to avoid vulnerabilities (like "; require ..." etc)
+        auto programExpr = string("let unused_variable = (") + str.data() + ");";
+        const auto [src, len] = std::make_pair(programExpr.data(), programExpr.length());
+        if ( isUtf8Text(src, len) ) {
+            if ( gen2 ) {
+                das2_yybegin(src + 3, len-3, scanner);
+            } else {
+                das_yybegin(src + 3, len-3, scanner);
+            }
+        } else {
+            if ( gen2 ) {
+                das2_yybegin(src, len, scanner);
+            } else {
+                das_yybegin(src, len, scanner);
+            }
+        }
+        int err;
+        if ( gen2 ) {
+            err = das2_yyparse(scanner);
+            das2_yylex_destroy(scanner);
+        } else {
+            err = das_yyparse(scanner);
+            das_yylex_destroy(scanner);
+        }
+        VariablePtr first;
+        program->thisModule->globals.find_first([&first](auto var) { first = var; return true; });
+        return first->init;
+    }
+
     ProgramPtr parseDaScript ( const string & fileName,
                                const string & moduleName,
                               const FileAccessPtr & access,

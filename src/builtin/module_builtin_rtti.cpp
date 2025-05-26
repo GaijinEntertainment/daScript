@@ -1331,6 +1331,64 @@ namespace das {
         return (uint64_t) context.fnByMangledName(MNH);
     }
 
+    void contentByLineInfo(const LineInfo& info, const TBlock<void,string> & block, Context * context, LineInfoArg * at) {
+        if (!info.fileInfo) context->throw_error_at(at, "Accessing content of invalid file");
+
+        const char* src = nullptr;
+        uint32_t len = 0;
+        info.fileInfo->getSourceAndLength(src, len);
+        if (!src || len == 0) context->throw_error_at(at, "Accessing content of empty file");
+
+        size_t currentLine = 1;
+        const char* startPtr = nullptr;
+        const char* endPtr = src + len;
+        const char* ptr = src;
+
+        // Find start position
+        while (ptr < endPtr && currentLine < info.line) {
+            if (*ptr == '\n') {
+                currentLine++;
+            }
+            ptr++;
+        }
+
+        // Now find first column
+        size_t currentCol = 0;
+        while (ptr < endPtr && currentCol < info.column) {
+            if (*ptr == '\n') {
+                context->throw_error_at(at, "Incorrect column in LineInfo. This line contains '\\n' character.");
+            }
+            ptr++;
+            currentCol++;
+        }
+        if (ptr == endPtr) {
+            context->throw_error_at(at, "Out of bounds access in file.");
+        }
+        startPtr = ptr;
+
+        // Find end position
+        while (ptr < endPtr && currentLine < info.last_line) {
+            if (*ptr == '\n') {
+                currentLine++;
+            }
+            ptr++;
+        }
+
+        currentCol = 0;
+        while (ptr < endPtr && currentCol < info.last_column) {
+            if (*ptr == '\n') {
+                context->throw_error_at(at, "Incorrect column in LineInfo. This line contains '\\n' character.");
+            }
+            ptr++;
+            currentCol++;
+        }
+        endPtr = ptr;
+
+        auto content = string(startPtr, endPtr - startPtr);
+        das_invoke<void>::invoke<const string &>(context, at, block, content);
+    }
+
+
     template <typename KeyType>
     int32_t tableFindValue ( Table * tab, vec4f _key, int32_t valueTypeSize, Context * context ) {
         auto key = cast<KeyType>::to(_key);
@@ -1628,6 +1686,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(das_get_SimFunction_by_MNH)>(*this, lib, "get_function_address",
                 SideEffects::none, "das_get_SimFunction_by_MNH")
                     ->args({"MNH","at"});
+            addExtern<DAS_BIND_FUN(contentByLineInfo)>(*this, lib, "content_by_line_info",
+                SideEffects::modifyExternal, "contentByLineInfo")
+                    ->args({"info","block", "context", "at"});
             // table key index
             addExtern<DAS_BIND_FUN(rtti_getTablePtr)>(*this, lib, "get_table_key_index",
                 SideEffects::none, "rtti_getTablePtr")

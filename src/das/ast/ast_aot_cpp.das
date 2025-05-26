@@ -3030,6 +3030,18 @@ class CppAot : AstVisitor {
         }
         return call;
     }
+
+    def override visitExprQuote(var call : smart_ptr<ExprQuote>) : ExpressionPtr {
+        assume arg = call.arguments[0];
+        var start = arg.at;
+        start.line = call.at.line;
+        start.column = call.at.column;
+        start |> content_by_line_info() <| $(s) {
+            write(*ss, "static_pointer_cast<ExprCall>(parseExpression(R\"({s})\", true))->arguments.front()");
+        };
+        return call;
+    }
+
 // call
     def policyArgNeedCast(polType : TypeDeclPtr; argType : TypeDeclPtr) {
         if (argType.isVectorType) {
