@@ -1428,7 +1428,7 @@ namespace das
     // infer passes
         int32_t     max_infer_passes = 50;              // maximum number of infer passes
     // memory
-        uint32_t    stack = 16*1024;                    // 0 for unique stack
+        uint32_t    stack = 64*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
         bool        persistent_heap = false;
         bool        multiple_contexts = false;          // code supports context safety

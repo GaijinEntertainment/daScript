@@ -215,6 +215,15 @@ namespace das {
         return found ? found : Module::require(name);
     }
 
+    smart_ptr_raw<Annotation> module_find_annotation ( const Module* module, const char *name ) {
+        return module->findAnnotation(name);
+    }
+
+    TypeAnnotation* module_find_type_annotation ( const Module* module, const char *name ) {
+        auto ann = module->findAnnotation(name);
+        return static_cast<TypeAnnotation*>(ann.get());
+    }
+
     smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
         if ( !func.PTR ) context->throw_error_at(line_info, "function not found");
         if ( !mod ) context->throw_error_at(line_info, "module not found");
@@ -580,6 +589,11 @@ namespace das {
         return st.back().get();
     }
 
+    Structure * module_find_structure ( const Module* module, const char * name, Context * context, LineInfoArg * at ) {
+        if ( !module ) context->throw_error_at(at, "expecting program");
+        return module->findStructure(name).get();
+    }
+
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at ) {
         if ( !fn ) context->throw_error_at(at, "expecting function");
         if ( !fn->builtIn ) context->throw_error_at(at, "expecting built-in interop function");
@@ -669,6 +683,54 @@ namespace das {
         if ( !name ) context->throw_error_at(at, "expecting field name");
         if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
         return annotation->makeFieldType(name,isConst);
+    }
+
+    TypeDeclPtr getHandledTypeIndexTypeDecl ( TypeAnnotation *annotation, Expression *src, Expression *idx, Context * context, LineInfoArg * at ) {
+        if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
+        return annotation->makeIndexType(src,idx);
+    }
+
+    template <typename F>
+    static auto apply_to_vec(void* vec, string_view tstr, F apply) {
+        if (tstr == "smart_ptr<ast::Expression>") {
+            return apply(static_cast<vector<smart_ptr_raw<Expression>>*>(vec));
+        } else if (tstr == "smart_ptr<ast::Variable>") {
+            return apply(static_cast<vector<smart_ptr_raw<Variable>>*>(vec));
+        } else if (tstr == "smart_ptr<ast::TypeDecl>") {
+            return apply(static_cast<vector<smart_ptr_raw<TypeDecl>>*>(vec));
+        } else if (tstr == "string") {
+            return apply(static_cast<vector<const char *>*>(vec));
+        } else if (tstr == "$::das_string") {
+            return apply(static_cast<vector<string>*>(vec));
+        } else if (tstr == "ast::CaptureEntry") {
+            return apply(static_cast<vector<CaptureEntry>*>(vec));
+        } else if (tstr == "int") {
+            return apply(static_cast<vector<int>*>(vec));
+        } else if (tstr == "tuple<uint;uint>") {
+            return apply(static_cast<vector<std::pair<unsigned int, unsigned int>>*>(vec));
+        } else if (tstr == "smart_ptr<rtti::AnnotationDeclaration>") {
+            return apply(static_cast<vector<smart_ptr<AnnotationDeclaration>>*>(vec));
+        } else if (tstr == "rtti::AnnotationArgument") {
+            return apply(static_cast<vector<AnnotationArgument>*>(vec));
+        }
+        printf("vec length/index for %s is not implemented!\n", tstr.data());
+        std::abort();
+    }
+
+    void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * context, LineInfoArg * at) {
+        const auto sz = type->getSizeOf();
+        auto tstr = type->describe();
+        auto get_at = [idx](auto *vec) {
+            return static_cast<void*>(&vec->at(idx));
+        };
+        return apply_to_vec(vec, tstr, get_at);
+    }
+
+    int getVectorLength(void* vec, smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at) {
+        auto get_size = [](auto *vec) {
+            return vec->size();
+        };
+        return apply_to_vec(vec, type->describe(), get_size);
     }
 
     uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
@@ -913,6 +975,12 @@ namespace das {
         addExtern<DAS_BIND_FUN(findRttiModule)>(*this, lib,  "find_module_via_rtti",
             SideEffects::accessExternal, "findRttiModule")
                 ->args({"program","name","context","lineinfo"});
+        addExtern<DAS_BIND_FUN(module_find_annotation)>(*this, lib,  "module_find_annotation",
+            SideEffects::none, "module_find_annotation")
+                ->args({"module","name"});
+        addExtern<DAS_BIND_FUN(module_find_type_annotation)>(*this, lib, "module_find_type_annotation",
+            SideEffects::none, "module_find_type_annotation")
+                ->args({"module","name"});
         addExtern<DAS_BIND_FUN(findRttiFunction)>(*this, lib,  "find_module_function_via_rtti",
             SideEffects::accessExternal, "findRttiFunction")
                 ->args({"module","function","context","lineinfo"});
@@ -1081,6 +1149,15 @@ namespace das {
         addExtern<DAS_BIND_FUN(getHandledTypeFieldTypeDecl)>(*this, lib,  "get_handled_type_field_type_declaration",
             SideEffects::none, "getHandledTypeFieldTypeDecl")
                 ->args({"type","field","isConst","context","line"});
+        addExtern<DAS_BIND_FUN(getHandledTypeIndexTypeDecl)>(*this, lib,  "get_handled_type_index_type_declaration",
+            SideEffects::none, "getHandledTypeIndexTypeDecl")
+                ->args({"type","src","idx","context","line"});
+        addExtern<DAS_BIND_FUN(getVectorPtrAtIndex)>(*this, lib,  "get_vector_ptr_at_index",
+            SideEffects::none, "getVectorPtrAtIndex")
+                ->args({"vec", "type","idx","context","line"});
+        addExtern<DAS_BIND_FUN(getVectorLength)>(*this, lib,  "get_vector_length",
+            SideEffects::none, "getVectorLength")
+                ->args({"vec", "type","context","line"});
         // module
         addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",
             SideEffects::modifyExternal, "for_each_typedef")
@@ -1171,6 +1248,9 @@ namespace das {
                 ->args({"func","baseClass","isExplicit","isConstant"})->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(find_unique_structure)>(*this, lib,  "find_unique_structure",
             SideEffects::accessExternal, "find_unique_structure")
+                ->args({"program","name","context","at"});
+        addExtern<DAS_BIND_FUN(module_find_structure)>(*this, lib,  "module_find_structure",
+            SideEffects::accessExternal, "module_find_structure")
                 ->args({"program","name","context","at"});
         // used variables and functions
         addExtern<DAS_BIND_FUN(get_use_global_variables)>(*this, lib,  "get_use_global_variables",
