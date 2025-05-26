@@ -427,7 +427,7 @@ namespace das {
                 this->~ptr_ref_count(); // call destructor, but don't release memory
 #else
                 delete this;
-#endif~
+#endif
                 return true;
             } else {
                 return false;

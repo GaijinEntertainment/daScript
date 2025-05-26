@@ -13,12 +13,18 @@ variant Moo {
 
 struct Bar {
     arr_int : array<int>
+    @optional v_bool_opt : bool
+    @optional v_float_opt : float
 }
 
 struct Foo {
     v_int : int
-    bar : Bar
+    bars : array<Bar>
     v_float : float
+    @optional v_float_opt : float
+    v_bool : bool
+    @optional v_bool_opt : bool
+    @optional v_bool_opt2 : bool
     en1 : AnyThing
     @enum_as_int en2 : AnyThing
     @rename _type : uint64
@@ -34,13 +40,16 @@ struct Foo {
     @optional empty_tab : table<string; int>
 }
 
+
 [export]
 def main {
     var a <- Foo(uninitialized
         v_int = 1,
-        bar <- Bar(
-            arr_int <- [ 1, 2, 3]
-        ),
+        bars = [Bar(
+            arr_int = [ 1, 2, 3]
+        )],
+        v_bool = true,
+        v_bool_opt = true,
         v_float = 2.34,
         en1 = AnyThing.any,
         en2 = AnyThing.thing,
