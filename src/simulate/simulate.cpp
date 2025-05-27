@@ -1374,37 +1374,6 @@ namespace das
         virtual void beforeTable ( Table * pa, TypeInfo * ) override {
             pa->shared = true;
         }
-    public: // this is to avoid loops
-        using loop_point = pair<void *,uint64_t>;
-        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
-            auto it = find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
-                return t.first==ps && t.second==info->hash;
-            });
-            return it==visited.end();
-        }
-        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
-            auto it = find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
-                return t.first==ps && t.second==info->hash;
-            });
-            return it==visited.end();
-        }
-        virtual void beforeStructure ( char * ps, StructInfo * info ) override {
-            visited.emplace_back(make_pair(ps,info->hash));
-        }
-        virtual void afterStructure ( char *, StructInfo * ) override {
-            visited.pop_back();
-        }
-        virtual void afterStructureCancel ( char *, StructInfo * ) override {
-            visited.pop_back();
-        }
-        virtual void beforeHandle ( char * ps, TypeInfo * ti ) override {
-            visited_handles.emplace_back(make_pair(ps,ti->hash));
-        }
-        virtual void afterHandle ( char *, TypeInfo * ) override {
-            visited_handles.pop_back();
-        }
-        vector<loop_point> visited;
-        vector<loop_point> visited_handles;
     };
 
     void Context::runInitScript ( ) {

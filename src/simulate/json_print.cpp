@@ -29,7 +29,7 @@ namespace das {
                 anyStructFields.pop_back();
             }
         }
-        virtual void beforeStructureField ( char * ps, StructInfo *, char * pf, VarInfo * vi, bool ) override {
+        virtual void beforeStructureField ( char * ps, StructInfo *si, char * pf, VarInfo * vi, bool ) override {
             enumAsInt = false;
             unescape = false;
             embed = false;
@@ -52,7 +52,12 @@ namespace das {
                 }
             }
             bool ignoreNextField = false;
-            if ( optional ) {
+            if ( si->flags & StructInfo::flag_class ) {
+                if (name == "__rtti" || name == "__finalize") {
+                    ignoreNextField = true;
+                }
+            }
+            if ( optional && !ignoreNextField ) {
                 if ( vi->type==Type::tInt || vi->type==Type::tUInt ) {
                     auto val = *((uint32_t *)pf);
                     ignoreNextField = val == 0;
@@ -87,7 +92,7 @@ namespace das {
                     auto tab = (Table *) pf;
                     ignoreNextField = tab->size==0;
                 }
-            } 
+            }
             if ( !ignoreNextField ) {
                 if ( anyStructFields.back() ) ss << ",";
                 ss << "\"" << name << "\":";
@@ -263,6 +268,7 @@ namespace das {
             ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "]";
         }
         virtual void VoidPtr ( void * & ) override {
+            if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
             ss << "null";
         }
         void Enum ( int64_t value, EnumInfo * info ) {
@@ -292,6 +298,15 @@ namespace das {
         }
         virtual void WalkEnumeration64 ( int64_t & value, EnumInfo * info ) override {
             Enum(value,info);
+        }
+
+        virtual bool revisitStructure ( char * ps, StructInfo * si ) override {
+            ss << "null";
+            return false;
+        }
+        virtual bool revisitHandle ( char * ps, TypeInfo * ti ) override {
+            ss << "null";
+            return false;
         }
     };
 

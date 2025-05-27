@@ -126,6 +126,52 @@ namespace das {
         virtual void walk_table ( Table * tab, TypeInfo * info );
     // invalid data
         virtual void invalidData () {}
+
+    // this is to avoid loops
+        virtual bool revisitStructure ( char * ps, StructInfo * si ) { return false; }
+        virtual bool revisitHandle ( char * ps, TypeInfo * ti ) { return false; }
+
+        using loop_point = pair<void *,uint64_t>;
+        bool canVisitStructure_ ( char * ps, StructInfo * info ) {
+            auto it = find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                return t.first==ps && t.second==info->hash;
+            });
+            if (it!=visited.end()) {
+                return revisitStructure(ps, info);
+            }
+            return canVisitStructure(ps, info);
+        }
+        bool canVisitHandle_ ( char * ps, TypeInfo * info ) {
+            auto it = find_if(visited_handles.begin(),visited_handles.end(),[&]( const loop_point & t ){
+                return t.first==ps && t.second==info->hash;
+            });
+            if (it!=visited_handles.end()) {
+                return revisitHandle(ps, info);
+            }
+            return canVisitHandle(ps, info);
+        }
+        void beforeStructure_ ( char * ps, StructInfo * info ) {
+            visited.emplace_back(make_pair(ps,info->hash));
+            beforeStructure(ps, info);
+        }
+        void afterStructure_ ( char * ps, StructInfo * info ) {
+            visited.pop_back();
+            afterStructure(ps, info);
+        }
+        void afterStructureCancel_ ( char * ps, StructInfo * info ) {
+            visited.pop_back();
+            afterStructureCancel(ps, info);
+        }
+        void beforeHandle_ ( char * ps, TypeInfo * ti ) {
+            visited_handles.emplace_back(make_pair(ps,ti->hash));
+            beforeHandle(ps, ti);
+        }
+        void afterHandle_ ( char * ps, TypeInfo * ti ) {
+            visited_handles.pop_back();
+            afterHandle(ps, ti);
+        }
+        vector<loop_point> visited;
+        vector<loop_point> visited_handles;
     };
 
     typedef smart_ptr<DataWalker> DataWalkerPtr;

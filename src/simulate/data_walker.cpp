@@ -27,10 +27,10 @@ namespace das {
             if ( ti!=nullptr ) si = ti->structType;
             else invalidData(); // we are walking uninitialized class here
         }
-        if ( canVisitStructure(ps, si) ) {
-            beforeStructure(ps, si);
+        if ( canVisitStructure_(ps, si) ) {
+            beforeStructure_(ps, si);
             if ( cancel() ) {
-                afterStructureCancel(ps, si);
+                afterStructureCancel_(ps, si);
                 return;
             }
             for ( uint32_t i=0, is=si->count; i!=is; ++i ) {
@@ -39,21 +39,21 @@ namespace das {
                 char * pf = ps + vi->offset;
                 beforeStructureField(ps, si, pf, vi, last);
                 if ( cancel() ) {
-                    afterStructureCancel(ps, si);
+                    afterStructureCancel_(ps, si);
                     return;
                 }
                 walk(pf, vi);
                 if ( cancel() ) {
-                    afterStructureCancel(ps, si);
+                    afterStructureCancel_(ps, si);
                     return;
                 }
                 afterStructureField(ps, si, pf, vi, last);
                 if ( cancel() ) {
-                    afterStructureCancel(ps, si);
+                    afterStructureCancel_(ps, si);
                     return;
                 }
             }
-            afterStructure(ps, si);
+            afterStructure_(ps, si);
         }
     }
 
@@ -281,12 +281,12 @@ namespace das {
                     }
                     break;
                 case Type::tHandle:
-                    if ( canVisitHandle(pa, info) ) {
-                        beforeHandle(pa, info);
+                    if ( canVisitHandle_(pa, info) ) {
+                        beforeHandle_(pa, info);
                         if ( cancel() ) return;
                         info->getAnnotation()->walk(*this, pa);
                         if ( cancel() ) return;
-                        afterHandle(pa, info);
+                        afterHandle_(pa, info);
                     }
                     break;
                 case Type::tVoid:       break;  // skip void
