@@ -315,6 +315,7 @@ namespace das {
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto returnDecl = make_smart<ExprReturn>(str->at,makeT);
         returnDecl->moveSemantics = true;
+        returnDecl->skipLockCheck = true;
         block->list.push_back(returnDecl);
         fn->body = block;
         verifyGenerated(fn->body);
@@ -1768,6 +1769,7 @@ namespace das {
         auto returnDecl = make_smart<ExprReturn>(baseClass->at,selfV);
         returnDecl->at = func->at;
         returnDecl->moveSemantics = true;
+        returnDecl->skipLockCheck = true; // this is a constructor, there is no need lock-check
         block->list.push_back(returnDecl);
         // and done
         func->body = block;
