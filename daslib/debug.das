@@ -177,7 +177,6 @@ class DAWalker : DapiDataWalker {
 
     varsStack : array<DAVariable?>
     @do_not_delete frame : DAStackFrame?
-    visited : array<tuple<ps : void const?; hash : uint64>>
     inlinePreviewLimit : int = 100
 
     def startWalk(var f : DAStackFrame; var v : DAVariable; cb : block<() : void>) {
@@ -188,7 +187,6 @@ class DAWalker : DapiDataWalker {
         cb |> invoke()
         frame = null
         varsStack |> clear()
-        delete visited
     }
 
     def popStack() {
@@ -213,19 +211,6 @@ class DAWalker : DapiDataWalker {
                 v.value = v._type
             }
         }
-    }
-
-    def override canVisitStructure(ps : void?; si : StructInfo) : bool {
-        for (vis in visited) {
-            if (vis.ps == ps && vis.hash == si.hash) {
-                return false
-            }
-        }
-        return true
-    }
-
-    def override beforeStructure(ps : void const?; si : StructInfo) : void {
-        visited |> emplace((ps, si.hash))
     }
 
     def override beforeStructureField(ps : void?; si : StructInfo; pv : void?; vi : VarInfo; last : bool) : void {
@@ -257,7 +242,6 @@ class DAWalker : DapiDataWalker {
     }
 
     def override afterStructure(ps : void?; si : StructInfo) : void {
-        visited |> erase(length(visited) - 1)
         self->closeCont()
         let n = length(varsStack)
         if (n > 0) {
@@ -272,7 +256,6 @@ class DAWalker : DapiDataWalker {
     }
 
     def override afterStructureCancel(ps : void?; si : StructInfo) : void {
-        visited |> erase(length(visited) - 1)
         self->closeCont()
         let n = length(varsStack)
         if (n > 0) {

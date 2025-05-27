@@ -17,6 +17,11 @@ struct Bar {
     @optional v_float_opt : float
 }
 
+class CFoo {
+    @optional v_int : int
+    @optional foo : CFoo?
+}
+
 struct Foo {
     v_int : int
     bars : array<Bar>
@@ -38,6 +43,7 @@ struct Foo {
     @optional empty_str : string
     @optional empty_arr : array<int>
     @optional empty_tab : table<string; int>
+    @optional cfoo : CFoo?
 }
 
 
@@ -60,8 +66,12 @@ def main {
         tab <- { "hello" => 1, "world" => 2 },
         tup = (3, .141592),
         v_var = Moo(uninitialized f = 3.141592),
-        ptr = null
+        ptr = null,
+        cfoo = new CFoo(
+            v_int = 42
+        )
     )
+    a.cfoo.foo = a.cfoo // self-reference
     let t = sprint_json(a, true)
     print("t = {t}\n")
 }

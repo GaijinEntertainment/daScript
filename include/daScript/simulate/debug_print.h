@@ -19,8 +19,6 @@ namespace das {
         using loop_point = pair<void *,uint64_t>;
         Writer & ss;
         PrintFlags flags;
-        vector<loop_point> visited;
-        vector<loop_point> visited_handles;
         DebugDataWalker() = delete;
         DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f), limit(getCancelLimit()) {}
         uint64_t limit = 0;
@@ -42,30 +40,16 @@ namespace das {
                 }
             }
         }
-        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
-            auto it = find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
-                return t.first==ps && t.second==info->hash;
-            });
-            if ( it==visited.end() ) {
-                return true;
-            } else {
-                ss << "~loop at 0x" << HEX << intptr_t(ps) << DEC << " " << info->name << "~";
-                return false;
-            }
-        }
-        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
-            auto it = find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
-                return t.first==ps && t.second==info->hash;
-            });
-            if ( it==visited.end() ) {
-                return true;
-            } else {
-                ss  << "~handle loop at 0x" << HEX << intptr_t(ps) << DEC << "~";
-                return false;
-            }
-        }
+
+        virtual bool revisitStructure ( char * ps, StructInfo * info ) override {
+            ss << "~loop at 0x" << HEX << intptr_t(ps) << DEC << " " << info->name << "~";
+            return false;
+         }
+        virtual bool revisitHandle ( char * ps, TypeInfo * ) override {
+            ss  << "~handle loop at 0x" << HEX << intptr_t(ps) << DEC << "~";
+            return false;
+         }
         virtual void beforeStructure ( char * ps, StructInfo * info ) override {
-            visited.emplace_back(make_pair(ps,info->hash));
             ss << "[[";
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << info->name;
@@ -78,10 +62,6 @@ namespace das {
         virtual void afterStructure ( char *, StructInfo * ) override {
             ss << "]]";
             br();
-            visited.pop_back();
-        }
-        virtual void afterStructureCancel ( char *, StructInfo * ) override {
-            visited.pop_back();
         }
         virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
             ss << " ";
@@ -242,7 +222,6 @@ namespace das {
             }
         }
         virtual void beforeHandle ( char * ps, TypeInfo * ti ) override {
-            visited_handles.emplace_back(make_pair(ps,ti->hash));
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << "[[" << debug_type(ti) << " ";
             }
@@ -253,7 +232,6 @@ namespace das {
                 ss << "]]";
             }
             br();
-            visited_handles.pop_back();
         }
         virtual void beforeLambda ( Lambda *, TypeInfo * ti ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
