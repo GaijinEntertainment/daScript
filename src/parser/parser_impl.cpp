@@ -690,8 +690,12 @@ namespace das {
                     auto vars = new vector<VariableNameAndPosition>();
                     vars->emplace_back(VariableNameAndPosition(varName,"",func->at));
                     Expression * finit = new ExprAddr(func->at, inThisModule(func->name));
-                    if ( ovr == OVERRIDE_OVERRIDE || ovr == OVERRIDE_SEALED ) {
+                    if ( ovr == OVERRIDE_OVERRIDE ) {
                         finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                    } else if ( ovr == OVERRIDE_SEALED ) {
+                        if ( yyextra->g_thisStructure->findField(varName) ) { // only if we are actually overriding a field
+                            finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                        }
                     }
                     VariableDeclaration * decl = new VariableDeclaration(
                         vars,
