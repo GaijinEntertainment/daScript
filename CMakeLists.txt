@@ -114,7 +114,7 @@ MACRO(DAS_AOT_EXT input genList mainTarget dasAotTool dasAotToolArg)
         set(CROSS_PLATFORM "-cross-platform")
     endif()
     ADD_CUSTOM_COMMAND(
-        DEPENDS ${input_src} ${dasAotTool}
+        DEPENDS ${input_src}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
         COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_src} ${CROSS_PLATFORM}
@@ -148,7 +148,7 @@ MACRO(DAS_AOT_STANDALONE input genList mainTarget dasAotTool dasAotToolArg)
     get_filename_component(out_dir ${out_src} DIRECTORY)
     file(MAKE_DIRECTORY ${out_dir})
     ADD_CUSTOM_COMMAND(
-            DEPENDS ${input_src} ${dasAotTool}
+            DEPENDS ${input_src}
             OUTPUT  ${out_src}
             COMMENT "AOT precompiling ${input_src} -> ${out_src}"
             COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_dir} -cross-platform -standalone-context ${ctx_name} -standalone-class Standalone
@@ -825,13 +825,15 @@ set(AOT_STAGE0_PATH ${CMAKE_CURRENT_BINARY_DIR}/_daslib_gen_stage0)
 foreach(FILE ${AOT_GENERATED_SRC})
     get_filename_component(FILENAME ${FILE} NAME)
     set(DST_FILE ${AOT_STAGE0_PATH}/${FILENAME})
-    add_custom_command(
-            OUTPUT ${DST_FILE}
-            COMMAND ${CMAKE_COMMAND} -E copy
-            ${FILE}
-            ${DST_FILE}
-    )
-    list(APPEND AOT_GENERATED_SRC_STAGE0 "${DST_FILE}")
+    if (EXISTS ${FILE}) # if file doesn't exist - ignore it. It will be generated on next iteration
+        add_custom_command(
+                OUTPUT ${DST_FILE}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${FILE}
+                ${DST_FILE}
+        )
+        list(APPEND AOT_GENERATED_SRC_STAGE0 "${DST_FILE}")
+    endif()
 endforeach()
 
 add_custom_target(dasAotStub)
@@ -853,7 +855,7 @@ foreach(FILE ${STANDALONE_SRC})
         set(DST_FILE ${STANDALONE_STAGE0_PATH}/${FILENAME})
         add_custom_command(
                 OUTPUT ${DST_FILE}
-                COMMAND ${CMAKE_COMMAND} -E copy
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${FILE}
                 ${DST_FILE}
         )
@@ -892,15 +894,20 @@ ENDMACRO()
 SETUP_LIBDASCRIPT(libDaScriptStage0 "${AOT_GENERATED_SRC_STAGE0}" "${STANDALONE_SRC_STAGE0}")
 SETUP_LIBDASCRIPT(libDaScript "${AOT_GENERATED_SRC}" "${STANDALONE_SRC}")
 
+if(WIN32 AND CMAKE_CONFIGURATION_TYPES)
+    set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/$<CONFIG>/$<TARGET_FILE_NAME:daslang-stage0>")
+else()
+    set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/$<TARGET_FILE_NAME:daslang-stage0>")
+endif()
 add_custom_target(standaloneGeneratedSrc)
 
 FOREACH(inF IN LISTS StandaloneFilesList)
-    DAS_AOT_STANDALONE(${inF} unused_standaloneSrc standaloneGeneratedSrc daslang-stage0 "-aotlib")
+    DAS_AOT_STANDALONE(${inF} unused_standaloneSrc standaloneGeneratedSrc ${DASLANG_STAGE0_PATH} "-aotlib")
 ENDFOREACH()
 
 
 FOREACH(inF IN LISTS AotDaslibList)
-    DAS_AOT_LIB("${inF}" unused_aot_src dasAotStub daslang-stage0)
+    DAS_AOT_LIB("${inF}" unused_aot_src dasAotStub ${DASLANG_STAGE0_PATH})
 ENDFOREACH()
 
 ADD_DEPENDENCIES(libDaScript standaloneGeneratedSrc dasAotStub)

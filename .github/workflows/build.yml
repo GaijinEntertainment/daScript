@@ -163,19 +163,23 @@ jobs:
               linux64)
                 cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G "${{ matrix.cmake_generator }}"
                 cd build
+                ninja daslang-stage0
                 ninja
                 ;;
               windows32)
                 cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang-stage0
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               windows64)
                 cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }}
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang-stage0
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               *)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
                 cd build
+                ninja daslang-stage0
                 ninja
                 ;;
             esac
