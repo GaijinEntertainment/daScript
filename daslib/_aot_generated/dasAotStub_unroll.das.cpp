@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_9136052639975051342 {
+namespace _anon_9236909344651662891 {
 
 namespace unroll { struct UnrollMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -337,8 +337,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_9136052639975051342
-AotListBase impl_aot_unroll(_anon_9136052639975051342::registerAotFunctions);
+} // namespace _anon_9236909344651662891
+AotListBase impl_aot_unroll(_anon_9236909344651662891::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

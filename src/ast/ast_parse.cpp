@@ -950,7 +950,15 @@ namespace das {
                 logs << "module dependency graph:\n" << tw.str();
             }
             if ( !res->failed() ) {
-                auto hf = hash_blockz64((uint8_t *)fileName.c_str());
+                const uint64_t fnv_prime = 1099511628211ul;
+
+                const char *name = fileName.c_str();
+
+                size_t lastSlash = fileName.rfind('/');
+                if (lastSlash != -1) {
+                    name = fileName.c_str() + lastSlash + 1;
+                }
+                auto hf = res->getInitSemanticHashWithDep(fnv_prime) ^ hash_blockz64(reinterpret_cast<const uint8_t *>(name));
                 res->thisNamespace = "_anon_" + to_string(hf);
             }
             if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {

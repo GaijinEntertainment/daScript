@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_3449413918838651110 {
+namespace _anon_3287071679046918670 {
 
 namespace lint { struct LintEverything; };
 namespace lint { struct LintVisitor; };
@@ -849,7 +849,6 @@ struct LintVisitor {
 }
 extern StructInfo __struct_info__1e8db4ddc1444e12;
 extern StructInfo __struct_info__9a6c40d2ef34a474;
-extern TypeInfo __type_info__11eccd9ce0242695;
 extern TypeInfo __type_info__3c61146b2bdfb90;
 extern TypeInfo __type_info__7c61f7ae88617bb2;
 extern TypeInfo __type_info__c2f4bc15903e1610;
@@ -3554,7 +3553,6 @@ const char * __type_info__a1f9f6d18fd4d7d5_arg_names_var_11127340054026167412[3]
 VarInfo __struct_info__9a6c40d2ef34a474_field_311 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__a1f9f6d18fd4d7d5_arg_types_var_11127340054026167412, __type_info__a1f9f6d18fd4d7d5_arg_names_var_11127340054026167412, 3, 0, nullptr, 12, 8, UINT64_C(0xa1f9f6d18fd4d7d5), "validate_var", offsetof(lint::LintVisitor,validate_var), 0 };
 VarInfo * __struct_info__9a6c40d2ef34a474_fields[312] =  { &__struct_info__9a6c40d2ef34a474_field_0, &__struct_info__9a6c40d2ef34a474_field_1, &__struct_info__9a6c40d2ef34a474_field_2, &__struct_info__9a6c40d2ef34a474_field_3, &__struct_info__9a6c40d2ef34a474_field_4, &__struct_info__9a6c40d2ef34a474_field_5, &__struct_info__9a6c40d2ef34a474_field_6, &__struct_info__9a6c40d2ef34a474_field_7, &__struct_info__9a6c40d2ef34a474_field_8, &__struct_info__9a6c40d2ef34a474_field_9, &__struct_info__9a6c40d2ef34a474_field_10, &__struct_info__9a6c40d2ef34a474_field_11, &__struct_info__9a6c40d2ef34a474_field_12, &__struct_info__9a6c40d2ef34a474_field_13, &__struct_info__9a6c40d2ef34a474_field_14, &__struct_info__9a6c40d2ef34a474_field_15, &__struct_info__9a6c40d2ef34a474_field_16, &__struct_info__9a6c40d2ef34a474_field_17, &__struct_info__9a6c40d2ef34a474_field_18, &__struct_info__9a6c40d2ef34a474_field_19, &__struct_info__9a6c40d2ef34a474_field_20, &__struct_info__9a6c40d2ef34a474_field_21, &__struct_info__9a6c40d2ef34a474_field_22, &__struct_info__9a6c40d2ef34a474_field_23, &__struct_info__9a6c40d2ef34a474_field_24, &__struct_info__9a6c40d2ef34a474_field_25, &__struct_info__9a6c40d2ef34a474_field_26, &__struct_info__9a6c40d2ef34a474_field_27, &__struct_info__9a6c40d2ef34a474_field_28, &__struct_info__9a6c40d2ef34a474_field_29, &__struct_info__9a6c40d2ef34a474_field_30, &__struct_info__9a6c40d2ef34a474_field_31, &__struct_info__9a6c40d2ef34a474_field_32, &__struct_info__9a6c40d2ef34a474_field_33, &__struct_info__9a6c40d2ef34a474_field_34, &__struct_info__9a6c40d2ef34a474_field_35, &__struct_info__9a6c40d2ef34a474_field_36, &__struct_info__9a6c40d2ef34a474_field_37, &__struct_info__9a6c40d2ef34a474_field_38, &__struct_info__9a6c40d2ef34a474_field_39, &__struct_info__9a6c40d2ef34a474_field_40, &__struct_info__9a6c40d2ef34a474_field_41, &__struct_info__9a6c40d2ef34a474_field_42, &__struct_info__9a6c40d2ef34a474_field_43, &__struct_info__9a6c40d2ef34a474_field_44, &__struct_info__9a6c40d2ef34a474_field_45, &__struct_info__9a6c40d2ef34a474_field_46, &__struct_info__9a6c40d2ef34a474_field_47, &__struct_info__9a6c40d2ef34a474_field_48, &__struct_info__9a6c40d2ef34a474_field_49, &__struct_info__9a6c40d2ef34a474_field_50, &__struct_info__9a6c40d2ef34a474_field_51, &__struct_info__9a6c40d2ef34a474_field_52, &__struct_info__9a6c40d2ef34a474_field_53, &__struct_info__9a6c40d2ef34a474_field_54, &__struct_info__9a6c40d2ef34a474_field_55, &__struct_info__9a6c40d2ef34a474_field_56, &__struct_info__9a6c40d2ef34a474_field_57, &__struct_info__9a6c40d2ef34a474_field_58, &__struct_info__9a6c40d2ef34a474_field_59, &__struct_info__9a6c40d2ef34a474_field_60, &__struct_info__9a6c40d2ef34a474_field_61, &__struct_info__9a6c40d2ef34a474_field_62, &__struct_info__9a6c40d2ef34a474_field_63, &__struct_info__9a6c40d2ef34a474_field_64, &__struct_info__9a6c40d2ef34a474_field_65, &__struct_info__9a6c40d2ef34a474_field_66, &__struct_info__9a6c40d2ef34a474_field_67, &__struct_info__9a6c40d2ef34a474_field_68, &__struct_info__9a6c40d2ef34a474_field_69, &__struct_info__9a6c40d2ef34a474_field_70, &__struct_info__9a6c40d2ef34a474_field_71, &__struct_info__9a6c40d2ef34a474_field_72, &__struct_info__9a6c40d2ef34a474_field_73, &__struct_info__9a6c40d2ef34a474_field_74, &__struct_info__9a6c40d2ef34a474_field_75, &__struct_info__9a6c40d2ef34a474_field_76, &__struct_info__9a6c40d2ef34a474_field_77, &__struct_info__9a6c40d2ef34a474_field_78, &__struct_info__9a6c40d2ef34a474_field_79, &__struct_info__9a6c40d2ef34a474_field_80, &__struct_info__9a6c40d2ef34a474_field_81, &__struct_info__9a6c40d2ef34a474_field_82, &__struct_info__9a6c40d2ef34a474_field_83, &__struct_info__9a6c40d2ef34a474_field_84, &__struct_info__9a6c40d2ef34a474_field_85, &__struct_info__9a6c40d2ef34a474_field_86, &__struct_info__9a6c40d2ef34a474_field_87, &__struct_info__9a6c40d2ef34a474_field_88, &__struct_info__9a6c40d2ef34a474_field_89, &__struct_info__9a6c40d2ef34a474_field_90, &__struct_info__9a6c40d2ef34a474_field_91, &__struct_info__9a6c40d2ef34a474_field_92, &__struct_info__9a6c40d2ef34a474_field_93, &__struct_info__9a6c40d2ef34a474_field_94, &__struct_info__9a6c40d2ef34a474_field_95, &__struct_info__9a6c40d2ef34a474_field_96, &__struct_info__9a6c40d2ef34a474_field_97, &__struct_info__9a6c40d2ef34a474_field_98, &__struct_info__9a6c40d2ef34a474_field_99, &__struct_info__9a6c40d2ef34a474_field_100, &__struct_info__9a6c40d2ef34a474_field_101, &__struct_info__9a6c40d2ef34a474_field_102, &__struct_info__9a6c40d2ef34a474_field_103, &__struct_info__9a6c40d2ef34a474_field_104, &__struct_info__9a6c40d2ef34a474_field_105, &__struct_info__9a6c40d2ef34a474_field_106, &__struct_info__9a6c40d2ef34a474_field_107, &__struct_info__9a6c40d2ef34a474_field_108, &__struct_info__9a6c40d2ef34a474_field_109, &__struct_info__9a6c40d2ef34a474_field_110, &__struct_info__9a6c40d2ef34a474_field_111, &__struct_info__9a6c40d2ef34a474_field_112, &__struct_info__9a6c40d2ef34a474_field_113, &__struct_info__9a6c40d2ef34a474_field_114, &__struct_info__9a6c40d2ef34a474_field_115, &__struct_info__9a6c40d2ef34a474_field_116, &__struct_info__9a6c40d2ef34a474_field_117, &__struct_info__9a6c40d2ef34a474_field_118, &__struct_info__9a6c40d2ef34a474_field_119, &__struct_info__9a6c40d2ef34a474_field_120, &__struct_info__9a6c40d2ef34a474_field_121, &__struct_info__9a6c40d2ef34a474_field_122, &__struct_info__9a6c40d2ef34a474_field_123, &__struct_info__9a6c40d2ef34a474_field_124, &__struct_info__9a6c40d2ef34a474_field_125, &__struct_info__9a6c40d2ef34a474_field_126, &__struct_info__9a6c40d2ef34a474_field_127, &__struct_info__9a6c40d2ef34a474_field_128, &__struct_info__9a6c40d2ef34a474_field_129, &__struct_info__9a6c40d2ef34a474_field_130, &__struct_info__9a6c40d2ef34a474_field_131, &__struct_info__9a6c40d2ef34a474_field_132, &__struct_info__9a6c40d2ef34a474_field_133, &__struct_info__9a6c40d2ef34a474_field_134, &__struct_info__9a6c40d2ef34a474_field_135, &__struct_info__9a6c40d2ef34a474_field_136, &__struct_info__9a6c40d2ef34a474_field_137, &__struct_info__9a6c40d2ef34a474_field_138, &__struct_info__9a6c40d2ef34a474_field_139, &__struct_info__9a6c40d2ef34a474_field_140, &__struct_info__9a6c40d2ef34a474_field_141, &__struct_info__9a6c40d2ef34a474_field_142, &__struct_info__9a6c40d2ef34a474_field_143, &__struct_info__9a6c40d2ef34a474_field_144, &__struct_info__9a6c40d2ef34a474_field_145, &__struct_info__9a6c40d2ef34a474_field_146, &__struct_info__9a6c40d2ef34a474_field_147, &__struct_info__9a6c40d2ef34a474_field_148, &__struct_info__9a6c40d2ef34a474_field_149, &__struct_info__9a6c40d2ef34a474_field_150, &__struct_info__9a6c40d2ef34a474_field_151, &__struct_info__9a6c40d2ef34a474_field_152, &__struct_info__9a6c40d2ef34a474_field_153, &__struct_info__9a6c40d2ef34a474_field_154, &__struct_info__9a6c40d2ef34a474_field_155, &__struct_info__9a6c40d2ef34a474_field_156, &__struct_info__9a6c40d2ef34a474_field_157, &__struct_info__9a6c40d2ef34a474_field_158, &__struct_info__9a6c40d2ef34a474_field_159, &__struct_info__9a6c40d2ef34a474_field_160, &__struct_info__9a6c40d2ef34a474_field_161, &__struct_info__9a6c40d2ef34a474_field_162, &__struct_info__9a6c40d2ef34a474_field_163, &__struct_info__9a6c40d2ef34a474_field_164, &__struct_info__9a6c40d2ef34a474_field_165, &__struct_info__9a6c40d2ef34a474_field_166, &__struct_info__9a6c40d2ef34a474_field_167, &__struct_info__9a6c40d2ef34a474_field_168, &__struct_info__9a6c40d2ef34a474_field_169, &__struct_info__9a6c40d2ef34a474_field_170, &__struct_info__9a6c40d2ef34a474_field_171, &__struct_info__9a6c40d2ef34a474_field_172, &__struct_info__9a6c40d2ef34a474_field_173, &__struct_info__9a6c40d2ef34a474_field_174, &__struct_info__9a6c40d2ef34a474_field_175, &__struct_info__9a6c40d2ef34a474_field_176, &__struct_info__9a6c40d2ef34a474_field_177, &__struct_info__9a6c40d2ef34a474_field_178, &__struct_info__9a6c40d2ef34a474_field_179, &__struct_info__9a6c40d2ef34a474_field_180, &__struct_info__9a6c40d2ef34a474_field_181, &__struct_info__9a6c40d2ef34a474_field_182, &__struct_info__9a6c40d2ef34a474_field_183, &__struct_info__9a6c40d2ef34a474_field_184, &__struct_info__9a6c40d2ef34a474_field_185, &__struct_info__9a6c40d2ef34a474_field_186, &__struct_info__9a6c40d2ef34a474_field_187, &__struct_info__9a6c40d2ef34a474_field_188, &__struct_info__9a6c40d2ef34a474_field_189, &__struct_info__9a6c40d2ef34a474_field_190, &__struct_info__9a6c40d2ef34a474_field_191, &__struct_info__9a6c40d2ef34a474_field_192, &__struct_info__9a6c40d2ef34a474_field_193, &__struct_info__9a6c40d2ef34a474_field_194, &__struct_info__9a6c40d2ef34a474_field_195, &__struct_info__9a6c40d2ef34a474_field_196, &__struct_info__9a6c40d2ef34a474_field_197, &__struct_info__9a6c40d2ef34a474_field_198, &__struct_info__9a6c40d2ef34a474_field_199, &__struct_info__9a6c40d2ef34a474_field_200, &__struct_info__9a6c40d2ef34a474_field_201, &__struct_info__9a6c40d2ef34a474_field_202, &__struct_info__9a6c40d2ef34a474_field_203, &__struct_info__9a6c40d2ef34a474_field_204, &__struct_info__9a6c40d2ef34a474_field_205, &__struct_info__9a6c40d2ef34a474_field_206, &__struct_info__9a6c40d2ef34a474_field_207, &__struct_info__9a6c40d2ef34a474_field_208, &__struct_info__9a6c40d2ef34a474_field_209, &__struct_info__9a6c40d2ef34a474_field_210, &__struct_info__9a6c40d2ef34a474_field_211, &__struct_info__9a6c40d2ef34a474_field_212, &__struct_info__9a6c40d2ef34a474_field_213, &__struct_info__9a6c40d2ef34a474_field_214, &__struct_info__9a6c40d2ef34a474_field_215, &__struct_info__9a6c40d2ef34a474_field_216, &__struct_info__9a6c40d2ef34a474_field_217, &__struct_info__9a6c40d2ef34a474_field_218, &__struct_info__9a6c40d2ef34a474_field_219, &__struct_info__9a6c40d2ef34a474_field_220, &__struct_info__9a6c40d2ef34a474_field_221, &__struct_info__9a6c40d2ef34a474_field_222, &__struct_info__9a6c40d2ef34a474_field_223, &__struct_info__9a6c40d2ef34a474_field_224, &__struct_info__9a6c40d2ef34a474_field_225, &__struct_info__9a6c40d2ef34a474_field_226, &__struct_info__9a6c40d2ef34a474_field_227, &__struct_info__9a6c40d2ef34a474_field_228, &__struct_info__9a6c40d2ef34a474_field_229, &__struct_info__9a6c40d2ef34a474_field_230, &__struct_info__9a6c40d2ef34a474_field_231, &__struct_info__9a6c40d2ef34a474_field_232, &__struct_info__9a6c40d2ef34a474_field_233, &__struct_info__9a6c40d2ef34a474_field_234, &__struct_info__9a6c40d2ef34a474_field_235, &__struct_info__9a6c40d2ef34a474_field_236, &__struct_info__9a6c40d2ef34a474_field_237, &__struct_info__9a6c40d2ef34a474_field_238, &__struct_info__9a6c40d2ef34a474_field_239, &__struct_info__9a6c40d2ef34a474_field_240, &__struct_info__9a6c40d2ef34a474_field_241, &__struct_info__9a6c40d2ef34a474_field_242, &__struct_info__9a6c40d2ef34a474_field_243, &__struct_info__9a6c40d2ef34a474_field_244, &__struct_info__9a6c40d2ef34a474_field_245, &__struct_info__9a6c40d2ef34a474_field_246, &__struct_info__9a6c40d2ef34a474_field_247, &__struct_info__9a6c40d2ef34a474_field_248, &__struct_info__9a6c40d2ef34a474_field_249, &__struct_info__9a6c40d2ef34a474_field_250, &__struct_info__9a6c40d2ef34a474_field_251, &__struct_info__9a6c40d2ef34a474_field_252, &__struct_info__9a6c40d2ef34a474_field_253, &__struct_info__9a6c40d2ef34a474_field_254, &__struct_info__9a6c40d2ef34a474_field_255, &__struct_info__9a6c40d2ef34a474_field_256, &__struct_info__9a6c40d2ef34a474_field_257, &__struct_info__9a6c40d2ef34a474_field_258, &__struct_info__9a6c40d2ef34a474_field_259, &__struct_info__9a6c40d2ef34a474_field_260, &__struct_info__9a6c40d2ef34a474_field_261, &__struct_info__9a6c40d2ef34a474_field_262, &__struct_info__9a6c40d2ef34a474_field_263, &__struct_info__9a6c40d2ef34a474_field_264, &__struct_info__9a6c40d2ef34a474_field_265, &__struct_info__9a6c40d2ef34a474_field_266, &__struct_info__9a6c40d2ef34a474_field_267, &__struct_info__9a6c40d2ef34a474_field_268, &__struct_info__9a6c40d2ef34a474_field_269, &__struct_info__9a6c40d2ef34a474_field_270, &__struct_info__9a6c40d2ef34a474_field_271, &__struct_info__9a6c40d2ef34a474_field_272, &__struct_info__9a6c40d2ef34a474_field_273, &__struct_info__9a6c40d2ef34a474_field_274, &__struct_info__9a6c40d2ef34a474_field_275, &__struct_info__9a6c40d2ef34a474_field_276, &__struct_info__9a6c40d2ef34a474_field_277, &__struct_info__9a6c40d2ef34a474_field_278, &__struct_info__9a6c40d2ef34a474_field_279, &__struct_info__9a6c40d2ef34a474_field_280, &__struct_info__9a6c40d2ef34a474_field_281, &__struct_info__9a6c40d2ef34a474_field_282, &__struct_info__9a6c40d2ef34a474_field_283, &__struct_info__9a6c40d2ef34a474_field_284, &__struct_info__9a6c40d2ef34a474_field_285, &__struct_info__9a6c40d2ef34a474_field_286, &__struct_info__9a6c40d2ef34a474_field_287, &__struct_info__9a6c40d2ef34a474_field_288, &__struct_info__9a6c40d2ef34a474_field_289, &__struct_info__9a6c40d2ef34a474_field_290, &__struct_info__9a6c40d2ef34a474_field_291, &__struct_info__9a6c40d2ef34a474_field_292, &__struct_info__9a6c40d2ef34a474_field_293, &__struct_info__9a6c40d2ef34a474_field_294, &__struct_info__9a6c40d2ef34a474_field_295, &__struct_info__9a6c40d2ef34a474_field_296, &__struct_info__9a6c40d2ef34a474_field_297, &__struct_info__9a6c40d2ef34a474_field_298, &__struct_info__9a6c40d2ef34a474_field_299, &__struct_info__9a6c40d2ef34a474_field_300, &__struct_info__9a6c40d2ef34a474_field_301, &__struct_info__9a6c40d2ef34a474_field_302, &__struct_info__9a6c40d2ef34a474_field_303, &__struct_info__9a6c40d2ef34a474_field_304, &__struct_info__9a6c40d2ef34a474_field_305, &__struct_info__9a6c40d2ef34a474_field_306, &__struct_info__9a6c40d2ef34a474_field_307, &__struct_info__9a6c40d2ef34a474_field_308, &__struct_info__9a6c40d2ef34a474_field_309, &__struct_info__9a6c40d2ef34a474_field_310, &__struct_info__9a6c40d2ef34a474_field_311 };
 StructInfo __struct_info__9a6c40d2ef34a474 = {"LintVisitor", "lint", 29, __struct_info__9a6c40d2ef34a474_fields, 312, 2504, UINT64_C(0x0), nullptr, UINT64_C(0x9a6c40d2ef34a474), 0 };
-TypeInfo __type_info__11eccd9ce0242695 = { Type::tStructure, &__struct_info__9a6c40d2ef34a474, nullptr, nullptr, &__type_info__21586ce84f433a21, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 2504, UINT64_C(0x11eccd9ce0242695) };
 TypeInfo __type_info__3c61146b2bdfb90 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 290, 32, UINT64_C(0x3c61146b2bdfb90) };
 TypeInfo __type_info__7c61f7ae88617bb2 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__cd505ad3b1c59cc6, nullptr, nullptr, nullptr, 0, 0, nullptr, 24620, 8, UINT64_C(0x7c61f7ae88617bb2) };
 TypeInfo __type_info__c2f4bc15903e1610 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__7329fadda4ca251c, nullptr, nullptr, nullptr, 0, 0, nullptr, 25632, 8, UINT64_C(0xc2f4bc15903e1610) };
@@ -3804,16 +3802,15 @@ static void resolveTypeInfoAnnotations()
     }
 }
 
-TypeInfo * __tinfo_0[1] = { &__type_info__11eccd9ce0242695 };
-TypeInfo * __tinfo_1[4] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_2[3] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_3[5] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_4[6] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__6c2b5208df908cfa };
+TypeInfo * __tinfo_0[4] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_1[3] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_2[5] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_3[6] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__6c2b5208df908cfa };
+TypeInfo * __tinfo_4[5] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 TypeInfo * __tinfo_5[5] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 TypeInfo * __tinfo_6[5] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 TypeInfo * __tinfo_7[5] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 TypeInfo * __tinfo_8[5] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_9[5] = { &__type_info__af90fe4c864e9d52, &__type_info__3c61146b2bdfb90, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_74d38f94ce648db7 ( Context * __context__, lint::LintVisitor const  & __cl_rename_at_116_0 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_47fa9682c7c262ea ( Context * __context__, TArray<ast::AstPassMacro *> & __Arr_rename_at_181_1, ast::AstPassMacro * __value_rename_at_181_2 );
@@ -3823,32 +3820,31 @@ inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( 
 inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_722f1ecbe925046c ( Context * __context__, lint::LintVisitor const  & __someClass_rename_at_684_7 );
 inline void clone_ff0636ad6d384e7b ( Context * __context__, smart_ptr_raw<VisitorAdapter> & __dest_rename_at_154_10, void * const  __src_rename_at_154_11 );
 inline void finalize_b7033f1d07fdbc41 ( Context * __context__, lint::LintVisitor * & ____this_rename_at_156_12 );
-inline lint::LintVisitor & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_e8728e1dafbd5358 ( Context * __context__, lint::LintVisitor & __a_rename_at_50_14 );
-inline void _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f ( Context * __context__, TArray<uint64_t> & __Arr_rename_at_165_15, uint64_t __value_rename_at_165_16 );
-inline void _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2 ( Context * __context__, TArray<uint64_t> & __Arr_rename_at_132_17 );
-inline uint64_t & _FuncbuiltinTickbackTick18296309835877697278_e492987e0a1f2c26 ( Context * __context__, TArray<uint64_t> & __a_rename_at_473_18 );
-inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65 ( Context * __context__, void * const  __p_rename_at_15_20 );
-inline Expression * _FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c ( Context * __context__, smart_ptr_raw<Expression> __src_rename_at_1732_21 );
-inline ExprReturn * _FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5 ( Context * __context__, smart_ptr_raw<ExprReturn> const  __src_rename_at_1726_22 );
-inline bool _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46 ( Context * __context__, das::string const  & __b_rename_at_127_23, char * const  __a_rename_at_127_24 );
-inline ExprCall * _FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51 ( Context * __context__, smart_ptr_raw<ExprCall> const  __src_rename_at_1726_25 );
-inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_26, bool __extra_rename_at_38_27, bool __contracts_rename_at_38_28, bool __modules_rename_at_38_29 );
-inline void finalize_3f8d01f91be17b8d ( Context * __context__, lint::LintVisitor & ____this_rename_at_21_30 );
-inline lint::LintVisitor LintVisitor_5055dc0e315810f0 ( Context * __context__ );
-inline void _FuncLintVisitorTicklint_error_2949d58435a7e874 ( Context * __context__, lint::LintVisitor & __self_rename_at_29_32, char * const  __text_rename_at_29_33, LineInfo const  & __at_rename_at_29_34 );
-inline void _FuncLintVisitorTickpreVisitFunction_3e6910647f75d12f ( Context * __context__, lint::LintVisitor & __self_rename_at_39_35, smart_ptr_raw<Function> const  __fun_rename_at_39_36 );
-inline smart_ptr_raw<Function> _FuncLintVisitorTickvisitFunction_8b19c382c133080f ( Context * __context__, lint::LintVisitor & __self_rename_at_48_38, smart_ptr_raw<Function> __fun_rename_at_48_39 );
-inline void _FuncLintVisitorTickpreVisitExprBlock_f6c6b43759e2b936 ( Context * __context__, lint::LintVisitor & __self_rename_at_52_40, smart_ptr_raw<ExprBlock> const  __blk_rename_at_52_41 );
-inline smart_ptr_raw<Expression> _FuncLintVisitorTickvisitExprBlock_1f8b5b8d30780083 ( Context * __context__, lint::LintVisitor & __self_rename_at_55_42, smart_ptr_raw<ExprBlock> __blk_rename_at_55_43 );
-inline smart_ptr_raw<Expression> _FuncLintVisitorTickvisitExprBlockExpression_5f4f8c1513781397 ( Context * __context__, lint::LintVisitor & __self_rename_at_61_44, smart_ptr_raw<ExprBlock> const  __blk_rename_at_61_45, smart_ptr_raw<Expression> __expr_rename_at_61_46 );
-inline void _FuncLintVisitorTickpreVisitExprLabel_475c435b773f8e6e ( Context * __context__, lint::LintVisitor & __self_rename_at_71_49, smart_ptr_raw<ExprLabel> const  __expr_rename_at_71_50 );
-inline void _FuncLintVisitorTickpreVisitExprReturn_23cd3528a285e7b0 ( Context * __context__, lint::LintVisitor & __self_rename_at_77_51, smart_ptr_raw<ExprReturn> const  __expr_rename_at_77_52 );
-inline void _FuncLintVisitorTickpreVisitExprCall_bbd6bfe2b730cec5 ( Context * __context__, lint::LintVisitor & __self_rename_at_83_53, smart_ptr_raw<ExprCall> const  __expr_rename_at_83_54 );
-inline void _FuncLintVisitorTickpreVisitExprForVariable_fec14db786c8442a ( Context * __context__, lint::LintVisitor & __self_rename_at_91_55, smart_ptr_raw<ExprFor> const  __expr_rename_at_91_56, smart_ptr_raw<Variable> const  __v_rename_at_91_57, bool __last_rename_at_91_58 );
-inline void _FuncLintVisitorTickvalidate_var_add3a79c2c0d82fb ( Context * __context__, lint::LintVisitor & __self_rename_at_95_59, smart_ptr_raw<Variable> const  __v_rename_at_95_60, bool __can_make_const_rename_at_95_61 );
-inline void _FuncLintVisitorTickpreVisitExprLet_343f1e05144a6e7e ( Context * __context__, lint::LintVisitor & __self_rename_at_141_64, smart_ptr_raw<ExprLet> const  __expr_rename_at_141_65 );
-inline void _FuncLintVisitor_0x27___finalize_a535faf9c284defe ( Context * __context__, lint::LintVisitor & __self_rename_at_21_67 );
-inline void paranoid_49b3332f4816b96a ( Context * __context__, smart_ptr_raw<Program> const  __prog_rename_at_148_68, bool __compile_time_errors_rename_at_148_69 );
+inline void _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f ( Context * __context__, TArray<uint64_t> & __Arr_rename_at_165_14, uint64_t __value_rename_at_165_15 );
+inline void _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2 ( Context * __context__, TArray<uint64_t> & __Arr_rename_at_132_16 );
+inline uint64_t & _FuncbuiltinTickbackTick18296309835877697278_e492987e0a1f2c26 ( Context * __context__, TArray<uint64_t> & __a_rename_at_473_17 );
+inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65 ( Context * __context__, void * const  __p_rename_at_15_19 );
+inline Expression * _FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c ( Context * __context__, smart_ptr_raw<Expression> __src_rename_at_1732_20 );
+inline ExprReturn * _FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5 ( Context * __context__, smart_ptr_raw<ExprReturn> const  __src_rename_at_1726_21 );
+inline bool _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46 ( Context * __context__, das::string const  & __b_rename_at_127_22, char * const  __a_rename_at_127_23 );
+inline ExprCall * _FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51 ( Context * __context__, smart_ptr_raw<ExprCall> const  __src_rename_at_1726_24 );
+inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_25, bool __extra_rename_at_38_26, bool __contracts_rename_at_38_27, bool __modules_rename_at_38_28 );
+inline void finalize_3f8d01f91be17b8d ( Context * __context__, lint::LintVisitor & ____this_rename_at_21_29 );
+inline lint::LintVisitor LintVisitor_2e5c4a5ed90aae0f ( Context * __context__ );
+inline void _FuncLintVisitorTicklint_error_2949d58435a7e874 ( Context * __context__, lint::LintVisitor & __self_rename_at_29_31, char * const  __text_rename_at_29_32, LineInfo const  & __at_rename_at_29_33 );
+inline void _FuncLintVisitorTickpreVisitFunction_3e6910647f75d12f ( Context * __context__, lint::LintVisitor & __self_rename_at_39_34, smart_ptr_raw<Function> const  __fun_rename_at_39_35 );
+inline smart_ptr_raw<Function> _FuncLintVisitorTickvisitFunction_8b19c382c133080f ( Context * __context__, lint::LintVisitor & __self_rename_at_48_37, smart_ptr_raw<Function> __fun_rename_at_48_38 );
+inline void _FuncLintVisitorTickpreVisitExprBlock_f6c6b43759e2b936 ( Context * __context__, lint::LintVisitor & __self_rename_at_52_39, smart_ptr_raw<ExprBlock> const  __blk_rename_at_52_40 );
+inline smart_ptr_raw<Expression> _FuncLintVisitorTickvisitExprBlock_1f8b5b8d30780083 ( Context * __context__, lint::LintVisitor & __self_rename_at_55_41, smart_ptr_raw<ExprBlock> __blk_rename_at_55_42 );
+inline smart_ptr_raw<Expression> _FuncLintVisitorTickvisitExprBlockExpression_5f4f8c1513781397 ( Context * __context__, lint::LintVisitor & __self_rename_at_61_43, smart_ptr_raw<ExprBlock> const  __blk_rename_at_61_44, smart_ptr_raw<Expression> __expr_rename_at_61_45 );
+inline void _FuncLintVisitorTickpreVisitExprLabel_475c435b773f8e6e ( Context * __context__, lint::LintVisitor & __self_rename_at_71_48, smart_ptr_raw<ExprLabel> const  __expr_rename_at_71_49 );
+inline void _FuncLintVisitorTickpreVisitExprReturn_23cd3528a285e7b0 ( Context * __context__, lint::LintVisitor & __self_rename_at_77_50, smart_ptr_raw<ExprReturn> const  __expr_rename_at_77_51 );
+inline void _FuncLintVisitorTickpreVisitExprCall_bbd6bfe2b730cec5 ( Context * __context__, lint::LintVisitor & __self_rename_at_83_52, smart_ptr_raw<ExprCall> const  __expr_rename_at_83_53 );
+inline void _FuncLintVisitorTickpreVisitExprForVariable_fec14db786c8442a ( Context * __context__, lint::LintVisitor & __self_rename_at_91_54, smart_ptr_raw<ExprFor> const  __expr_rename_at_91_55, smart_ptr_raw<Variable> const  __v_rename_at_91_56, bool __last_rename_at_91_57 );
+inline void _FuncLintVisitorTickvalidate_var_add3a79c2c0d82fb ( Context * __context__, lint::LintVisitor & __self_rename_at_95_58, smart_ptr_raw<Variable> const  __v_rename_at_95_59, bool __can_make_const_rename_at_95_60 );
+inline void _FuncLintVisitorTickpreVisitExprLet_343f1e05144a6e7e ( Context * __context__, lint::LintVisitor & __self_rename_at_141_63, smart_ptr_raw<ExprLet> const  __expr_rename_at_141_64 );
+inline void _FuncLintVisitor_0x27___finalize_a535faf9c284defe ( Context * __context__, lint::LintVisitor & __self_rename_at_21_66 );
+inline void paranoid_49b3332f4816b96a ( Context * __context__, smart_ptr_raw<Program> const  __prog_rename_at_148_67, bool __compile_time_errors_rename_at_148_68 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -3902,72 +3898,66 @@ inline void finalize_b7033f1d07fdbc41 ( Context * __context__, lint::LintVisitor
     };
 }
 
-inline lint::LintVisitor & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_e8728e1dafbd5358 ( Context * __context__, lint::LintVisitor &  __a_rename_at_50_14 )
+inline void _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f ( Context * __context__, TArray<uint64_t> &  __Arr_rename_at_165_14, uint64_t __value_rename_at_165_15 )
 {
-    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_0,cast<lint::LintVisitor &>::from(__a_rename_at_50_14)));
-    return das_auto_cast_ref<lint::LintVisitor &>::cast(__a_rename_at_50_14);
+    das_copy(__Arr_rename_at_165_14(builtin_array_push_back(das_arg<TArray<uint64_t>>::pass(__Arr_rename_at_165_14),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_15);
 }
 
-inline void _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f ( Context * __context__, TArray<uint64_t> &  __Arr_rename_at_165_15, uint64_t __value_rename_at_165_16 )
+inline void _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2 ( Context * __context__, TArray<uint64_t> &  __Arr_rename_at_132_16 )
 {
-    das_copy(__Arr_rename_at_165_15(builtin_array_push_back(das_arg<TArray<uint64_t>>::pass(__Arr_rename_at_165_15),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_16);
+    _FuncbuiltinTickresizeTick4811697762258667383_392d8a8f7dc627ae(__context__,das_arg<TArray<uint64_t>>::pass(__Arr_rename_at_132_16),builtin_array_size(das_arg<TArray<uint64_t>>::pass(__Arr_rename_at_132_16)) - 1);
 }
 
-inline void _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2 ( Context * __context__, TArray<uint64_t> &  __Arr_rename_at_132_17 )
+inline uint64_t & _FuncbuiltinTickbackTick18296309835877697278_e492987e0a1f2c26 ( Context * __context__, TArray<uint64_t> &  __a_rename_at_473_17 )
 {
-    _FuncbuiltinTickresizeTick4811697762258667383_392d8a8f7dc627ae(__context__,das_arg<TArray<uint64_t>>::pass(__Arr_rename_at_132_17),builtin_array_size(das_arg<TArray<uint64_t>>::pass(__Arr_rename_at_132_17)) - 1);
-}
-
-inline uint64_t & _FuncbuiltinTickbackTick18296309835877697278_e492987e0a1f2c26 ( Context * __context__, TArray<uint64_t> &  __a_rename_at_473_18 )
-{
-    int32_t __l_rename_at_474_19 = ((int32_t)builtin_array_size(das_arg<TArray<uint64_t>>::pass(__a_rename_at_473_18)));
-    if ( __l_rename_at_474_19 == 0 )
+    int32_t __l_rename_at_474_18 = ((int32_t)builtin_array_size(das_arg<TArray<uint64_t>>::pass(__a_rename_at_473_17)));
+    if ( __l_rename_at_474_18 == 0 )
     {
         builtin_throw(((char *) "back empty array"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     };
-    return das_auto_cast_ref<uint64_t &>::cast(__a_rename_at_473_18((__l_rename_at_474_19 - 1),__context__));
+    return das_auto_cast_ref<uint64_t &>::cast(__a_rename_at_473_17((__l_rename_at_474_18 - 1),__context__));
 }
 
-inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65 ( Context * __context__, void * const  __p_rename_at_15_20 )
+inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65 ( Context * __context__, void * const  __p_rename_at_15_19 )
 {
-    return das_auto_cast<uint64_t>::cast(das_cast<uint64_t>::cast(__p_rename_at_15_20));
+    return das_auto_cast<uint64_t>::cast(das_cast<uint64_t>::cast(__p_rename_at_15_19));
 }
 
-inline Expression * _FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c ( Context * __context__, smart_ptr_raw<Expression> __src_rename_at_1732_21 )
+inline Expression * _FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c ( Context * __context__, smart_ptr_raw<Expression> __src_rename_at_1732_20 )
 {
-    return das_auto_cast<Expression *>::cast(das_cast<Expression *>::cast(__src_rename_at_1732_21));
+    return das_auto_cast<Expression *>::cast(das_cast<Expression *>::cast(__src_rename_at_1732_20));
 }
 
-inline ExprReturn * _FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5 ( Context * __context__, smart_ptr_raw<ExprReturn> const  __src_rename_at_1726_22 )
+inline ExprReturn * _FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5 ( Context * __context__, smart_ptr_raw<ExprReturn> const  __src_rename_at_1726_21 )
 {
-    return das_auto_cast<ExprReturn *>::cast(das_cast<ExprReturn *>::cast(__src_rename_at_1726_22));
+    return das_auto_cast<ExprReturn *>::cast(das_cast<ExprReturn *>::cast(__src_rename_at_1726_21));
 }
 
-inline bool _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46 ( Context * __context__, das::string const  &  __b_rename_at_127_23, char * const  __a_rename_at_127_24 )
+inline bool _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46 ( Context * __context__, das::string const  &  __b_rename_at_127_22, char * const  __a_rename_at_127_23 )
 {
-    return das_auto_cast<bool>::cast(eq_dstr_str(__b_rename_at_127_23,__a_rename_at_127_24));
+    return das_auto_cast<bool>::cast(eq_dstr_str(__b_rename_at_127_22,__a_rename_at_127_23));
 }
 
-inline ExprCall * _FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51 ( Context * __context__, smart_ptr_raw<ExprCall> const  __src_rename_at_1726_25 )
+inline ExprCall * _FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51 ( Context * __context__, smart_ptr_raw<ExprCall> const  __src_rename_at_1726_24 )
 {
-    return das_auto_cast<ExprCall *>::cast(das_cast<ExprCall *>::cast(__src_rename_at_1726_25));
+    return das_auto_cast<ExprCall *>::cast(das_cast<ExprCall *>::cast(__src_rename_at_1726_24));
 }
 
-inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_26, bool __extra_rename_at_38_27, bool __contracts_rename_at_38_28, bool __modules_rename_at_38_29 )
+inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_25, bool __extra_rename_at_38_26, bool __contracts_rename_at_38_27, bool __modules_rename_at_38_28 )
 {
-    return das_auto_cast<char *>::cast(((char * const )(ast_describe_typedecl(__decl_rename_at_38_26,__extra_rename_at_38_27,__contracts_rename_at_38_28,__modules_rename_at_38_29,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
+    return das_auto_cast<char *>::cast(((char * const )(ast_describe_typedecl(__decl_rename_at_38_25,__extra_rename_at_38_26,__contracts_rename_at_38_27,__modules_rename_at_38_28,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }
 
-inline void finalize_3f8d01f91be17b8d ( Context * __context__, lint::LintVisitor &  ____this_rename_at_21_30 )
+inline void finalize_3f8d01f91be17b8d ( Context * __context__, lint::LintVisitor &  ____this_rename_at_21_29 )
 {
-    das_delete_handle<smart_ptr_raw<VisitorAdapter>>::clear(__context__,____this_rename_at_21_30.astVisitorAdapter);
-    _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573(__context__,das_arg<TArray<uint64_t>>::pass(____this_rename_at_21_30.exprForTerminator));
-    memset(&(____this_rename_at_21_30), 0, TypeSize<lint::LintVisitor>::size);
+    das_delete_handle<smart_ptr_raw<VisitorAdapter>>::clear(__context__,____this_rename_at_21_29.astVisitorAdapter);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573(__context__,das_arg<TArray<uint64_t>>::pass(____this_rename_at_21_29.exprForTerminator));
+    memset(&(____this_rename_at_21_29), 0, TypeSize<lint::LintVisitor>::size);
 }
 
-inline lint::LintVisitor LintVisitor_5055dc0e315810f0 ( Context * __context__ )
+inline lint::LintVisitor LintVisitor_2e5c4a5ed90aae0f ( Context * __context__ )
 {
-    lint::LintVisitor __self_rename_at_26_31; das_zero(__self_rename_at_26_31); das_move(__self_rename_at_26_31, (([&]() -> lint::LintVisitor {
+    lint::LintVisitor __self_rename_at_26_30; das_zero(__self_rename_at_26_30); das_move(__self_rename_at_26_30, (([&]() -> lint::LintVisitor {
         lint::LintVisitor __mks_26;
         das_zero(__mks_26);
         das_copy((__mks_26.__rtti),(((void *)(&__type_info__f5340b6734d7b2c1))));
@@ -3987,170 +3977,170 @@ inline lint::LintVisitor LintVisitor_5055dc0e315810f0 ( Context * __context__ )
         das_copy((__mks_26.validate_var),(Func(__context__->fnByMangledName(/*@lint::LintVisitor`validate_var S<lint::LintVisitor> CY<VariablePtr>1<H<ast::Variable>>?M Cb*/ 0xa5f533cb9cbf1dbd))));
         return __mks_26;
     })()));
-    return /* <- */ das_auto_cast_move<lint::LintVisitor>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_e8728e1dafbd5358(__context__,das_arg<lint::LintVisitor>::pass(__self_rename_at_26_31)));
+    return /* <- */ das_auto_cast_move<lint::LintVisitor>::cast(__self_rename_at_26_30);
 }
 
-inline void _FuncLintVisitorTicklint_error_2949d58435a7e874 ( Context * __context__, lint::LintVisitor &  __self_rename_at_29_32, char * const  __text_rename_at_29_33, LineInfo const  &  __at_rename_at_29_34 )
+inline void _FuncLintVisitorTicklint_error_2949d58435a7e874 ( Context * __context__, lint::LintVisitor &  __self_rename_at_29_31, char * const  __text_rename_at_29_32, LineInfo const  &  __at_rename_at_29_33 )
 {
-    if ( __self_rename_at_29_32.noLint )
+    if ( __self_rename_at_29_31.noLint )
     {
         return ;
     } else {
-        if ( __self_rename_at_29_32.compile_time_errors )
+        if ( __self_rename_at_29_31.compile_time_errors )
         {
-            ast_error(compileProgram(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__at_rename_at_29_34,__text_rename_at_29_33,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+            ast_error(compileProgram(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__at_rename_at_29_33,__text_rename_at_29_32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
         } else {
-            builtin_error(das_string_builder_temp(__context__,SimNode_AotInterop<4>(__tinfo_1, cast<char * const >::from(__text_rename_at_29_33), cast<char * const >::from(((char *) " at ")), cast<char * const >::from(((char * const )(builtin_debug_line(__at_rename_at_29_34,false,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))), cast<char * const >::from(((char *) "\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+            builtin_error(das_string_builder_temp(__context__,SimNode_AotInterop<4>(__tinfo_0, cast<char * const >::from(__text_rename_at_29_32), cast<char * const >::from(((char *) " at ")), cast<char * const >::from(((char * const )(builtin_debug_line(__at_rename_at_29_33,false,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))), cast<char * const >::from(((char *) "\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
         };
     };
 }
 
-inline void _FuncLintVisitorTickpreVisitFunction_3e6910647f75d12f ( Context * __context__, lint::LintVisitor &  __self_rename_at_39_35, smart_ptr_raw<Function> const  __fun_rename_at_39_36 )
+inline void _FuncLintVisitorTickpreVisitFunction_3e6910647f75d12f ( Context * __context__, lint::LintVisitor &  __self_rename_at_39_34, smart_ptr_raw<Function> const  __fun_rename_at_39_35 )
 {
-    das_copy(__self_rename_at_39_35.noLint,false);
+    das_copy(__self_rename_at_39_34.noLint,false);
     {
         bool __need_loop_41 = true;
         // ann: smart_ptr<rtti::AnnotationDeclaration> const&
-        das_iterator<AnnotationList const > __ann_iterator(__fun_rename_at_39_36->annotations /*annotations*/);
-        smart_ptr_raw<AnnotationDeclaration> const  * __ann_rename_at_41_37;
-        __need_loop_41 = __ann_iterator.first(__context__,(__ann_rename_at_41_37)) && __need_loop_41;
-        for ( ; __need_loop_41 ; __need_loop_41 = __ann_iterator.next(__context__,(__ann_rename_at_41_37)) )
+        das_iterator<AnnotationList const > __ann_iterator(__fun_rename_at_39_35->annotations /*annotations*/);
+        smart_ptr_raw<AnnotationDeclaration> const  * __ann_rename_at_41_36;
+        __need_loop_41 = __ann_iterator.first(__context__,(__ann_rename_at_41_36)) && __need_loop_41;
+        for ( ; __need_loop_41 ; __need_loop_41 = __ann_iterator.next(__context__,(__ann_rename_at_41_36)) )
         {
-            if ( eq_dstr_str((*__ann_rename_at_41_37)->annotation /*annotation*/->name /*name*/,((char *) "no_lint")) )
+            if ( eq_dstr_str((*__ann_rename_at_41_36)->annotation /*annotation*/->name /*name*/,((char *) "no_lint")) )
             {
-                das_copy(__self_rename_at_39_35.noLint,true);
+                das_copy(__self_rename_at_39_34.noLint,true);
                 break;
             };
         }
-        __ann_iterator.close(__context__,(__ann_rename_at_41_37));
+        __ann_iterator.close(__context__,(__ann_rename_at_41_36));
     };
 }
 
-inline smart_ptr_raw<Function> _FuncLintVisitorTickvisitFunction_8b19c382c133080f ( Context * __context__, lint::LintVisitor &  __self_rename_at_48_38, smart_ptr_raw<Function> __fun_rename_at_48_39 )
+inline smart_ptr_raw<Function> _FuncLintVisitorTickvisitFunction_8b19c382c133080f ( Context * __context__, lint::LintVisitor &  __self_rename_at_48_37, smart_ptr_raw<Function> __fun_rename_at_48_38 )
 {
-    das_copy(__self_rename_at_48_38.noLint,false);
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Function>>::cast(__fun_rename_at_48_39);
+    das_copy(__self_rename_at_48_37.noLint,false);
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Function>>::cast(__fun_rename_at_48_38);
 }
 
-inline void _FuncLintVisitorTickpreVisitExprBlock_f6c6b43759e2b936 ( Context * __context__, lint::LintVisitor &  __self_rename_at_52_40, smart_ptr_raw<ExprBlock> const  __blk_rename_at_52_41 )
+inline void _FuncLintVisitorTickpreVisitExprBlock_f6c6b43759e2b936 ( Context * __context__, lint::LintVisitor &  __self_rename_at_52_39, smart_ptr_raw<ExprBlock> const  __blk_rename_at_52_40 )
 {
-    _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_52_40.exprForTerminator),UINT64_C(0x0));
+    _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_52_39.exprForTerminator),UINT64_C(0x0));
 }
 
-inline smart_ptr_raw<Expression> _FuncLintVisitorTickvisitExprBlock_1f8b5b8d30780083 ( Context * __context__, lint::LintVisitor &  __self_rename_at_55_42, smart_ptr_raw<ExprBlock> __blk_rename_at_55_43 )
+inline smart_ptr_raw<Expression> _FuncLintVisitorTickvisitExprBlock_1f8b5b8d30780083 ( Context * __context__, lint::LintVisitor &  __self_rename_at_55_41, smart_ptr_raw<ExprBlock> __blk_rename_at_55_42 )
 {
-    if ( builtin_array_size(das_arg<TArray<uint64_t>>::pass(__self_rename_at_55_42.exprForTerminator)) > 0 )
+    if ( builtin_array_size(das_arg<TArray<uint64_t>>::pass(__self_rename_at_55_41.exprForTerminator)) > 0 )
     {
-        _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_55_42.exprForTerminator));
+        _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_55_41.exprForTerminator));
     };
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__blk_rename_at_55_43);
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__blk_rename_at_55_42);
 }
 
-inline smart_ptr_raw<Expression> _FuncLintVisitorTickvisitExprBlockExpression_5f4f8c1513781397 ( Context * __context__, lint::LintVisitor &  __self_rename_at_61_44, smart_ptr_raw<ExprBlock> const  __blk_rename_at_61_45, smart_ptr_raw<Expression> __expr_rename_at_61_46 )
+inline smart_ptr_raw<Expression> _FuncLintVisitorTickvisitExprBlockExpression_5f4f8c1513781397 ( Context * __context__, lint::LintVisitor &  __self_rename_at_61_43, smart_ptr_raw<ExprBlock> const  __blk_rename_at_61_44, smart_ptr_raw<Expression> __expr_rename_at_61_45 )
 {
-    uint64_t __lb_rename_at_62_47 = ((uint64_t)_FuncbuiltinTickbackTick18296309835877697278_e492987e0a1f2c26(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_61_44.exprForTerminator)));
-    if ( __lb_rename_at_62_47 != UINT64_C(0x0) )
+    uint64_t __lb_rename_at_62_46 = ((uint64_t)_FuncbuiltinTickbackTick18296309835877697278_e492987e0a1f2c26(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_61_43.exprForTerminator)));
+    if ( __lb_rename_at_62_46 != UINT64_C(0x0) )
     {
-        uint64_t __eb_rename_at_64_48 = ((uint64_t)_FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65(__context__,das_auto_cast<void * const >::cast(_FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c(__context__,__expr_rename_at_61_46))));
-        if ( __lb_rename_at_62_47 != __eb_rename_at_64_48 )
+        uint64_t __eb_rename_at_64_47 = ((uint64_t)_FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65(__context__,das_auto_cast<void * const >::cast(_FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c(__context__,__expr_rename_at_61_45))));
+        if ( __lb_rename_at_62_46 != __eb_rename_at_64_47 )
         {
-            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char * const ,LineInfo &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_61_44),((char *) "unreachable code"),das_arg<LineInfo>::pass(__expr_rename_at_61_46->at /*at*/));
+            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char * const ,LineInfo &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_61_43),((char *) "unreachable code"),das_arg<LineInfo>::pass(__expr_rename_at_61_45->at /*at*/));
         };
     };
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__expr_rename_at_61_46);
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__expr_rename_at_61_45);
 }
 
-inline void _FuncLintVisitorTickpreVisitExprLabel_475c435b773f8e6e ( Context * __context__, lint::LintVisitor &  __self_rename_at_71_49, smart_ptr_raw<ExprLabel> const  __expr_rename_at_71_50 )
+inline void _FuncLintVisitorTickpreVisitExprLabel_475c435b773f8e6e ( Context * __context__, lint::LintVisitor &  __self_rename_at_71_48, smart_ptr_raw<ExprLabel> const  __expr_rename_at_71_49 )
 {
-    if ( builtin_array_size(das_arg<TArray<uint64_t>>::pass(__self_rename_at_71_49.exprForTerminator)) > 0 )
+    if ( builtin_array_size(das_arg<TArray<uint64_t>>::pass(__self_rename_at_71_48.exprForTerminator)) > 0 )
     {
-        _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_71_49.exprForTerminator));
+        _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_71_48.exprForTerminator));
     };
-    _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_71_49.exprForTerminator),UINT64_C(0x0));
+    _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_71_48.exprForTerminator),UINT64_C(0x0));
 }
 
-inline void _FuncLintVisitorTickpreVisitExprReturn_23cd3528a285e7b0 ( Context * __context__, lint::LintVisitor &  __self_rename_at_77_51, smart_ptr_raw<ExprReturn> const  __expr_rename_at_77_52 )
+inline void _FuncLintVisitorTickpreVisitExprReturn_23cd3528a285e7b0 ( Context * __context__, lint::LintVisitor &  __self_rename_at_77_50, smart_ptr_raw<ExprReturn> const  __expr_rename_at_77_51 )
 {
-    if ( builtin_array_size(das_arg<TArray<uint64_t>>::pass(__self_rename_at_77_51.exprForTerminator)) > 0 )
+    if ( builtin_array_size(das_arg<TArray<uint64_t>>::pass(__self_rename_at_77_50.exprForTerminator)) > 0 )
     {
-        _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_77_51.exprForTerminator));
+        _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_77_50.exprForTerminator));
     };
-    _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_77_51.exprForTerminator),_FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65(__context__,das_auto_cast<void * const >::cast(_FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5(__context__,__expr_rename_at_77_52))));
+    _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_77_50.exprForTerminator),_FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65(__context__,das_auto_cast<void * const >::cast(_FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5(__context__,__expr_rename_at_77_51))));
 }
 
-inline void _FuncLintVisitorTickpreVisitExprCall_bbd6bfe2b730cec5 ( Context * __context__, lint::LintVisitor &  __self_rename_at_83_53, smart_ptr_raw<ExprCall> const  __expr_rename_at_83_54 )
+inline void _FuncLintVisitorTickpreVisitExprCall_bbd6bfe2b730cec5 ( Context * __context__, lint::LintVisitor &  __self_rename_at_83_52, smart_ptr_raw<ExprCall> const  __expr_rename_at_83_53 )
 {
-    if ( _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46(__context__,__expr_rename_at_83_54->name /*name*/,((char *) "panic")) && _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46(__context__,__expr_rename_at_83_54->func /*func*/->module /*_module*/->name /*name*/,((char *) "$")) )
+    if ( _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46(__context__,__expr_rename_at_83_53->name /*name*/,((char *) "panic")) && _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46(__context__,__expr_rename_at_83_53->func /*func*/->module /*_module*/->name /*name*/,((char *) "$")) )
     {
-        if ( builtin_array_size(das_arg<TArray<uint64_t>>::pass(__self_rename_at_83_53.exprForTerminator)) > 0 )
+        if ( builtin_array_size(das_arg<TArray<uint64_t>>::pass(__self_rename_at_83_52.exprForTerminator)) > 0 )
         {
-            _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_83_53.exprForTerminator));
+            _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_83_52.exprForTerminator));
         };
-        _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_83_53.exprForTerminator),_FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65(__context__,das_auto_cast<void * const >::cast(_FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51(__context__,__expr_rename_at_83_54))));
+        _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f(__context__,das_arg<TArray<uint64_t>>::pass(__self_rename_at_83_52.exprForTerminator),_FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65(__context__,das_auto_cast<void * const >::cast(_FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51(__context__,__expr_rename_at_83_53))));
     };
 }
 
-inline void _FuncLintVisitorTickpreVisitExprForVariable_fec14db786c8442a ( Context * __context__, lint::LintVisitor &  __self_rename_at_91_55, smart_ptr_raw<ExprFor> const  __expr_rename_at_91_56, smart_ptr_raw<Variable> const  __v_rename_at_91_57, bool __last_rename_at_91_58 )
+inline void _FuncLintVisitorTickpreVisitExprForVariable_fec14db786c8442a ( Context * __context__, lint::LintVisitor &  __self_rename_at_91_54, smart_ptr_raw<ExprFor> const  __expr_rename_at_91_55, smart_ptr_raw<Variable> const  __v_rename_at_91_56, bool __last_rename_at_91_57 )
 {
-    das_invoke_method<void,offsetof(lint::LintVisitor,validate_var)>::invoke<lint::LintVisitor &,smart_ptr_raw<Variable> const ,bool>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_91_55),__v_rename_at_91_57,false);
+    das_invoke_method<void,offsetof(lint::LintVisitor,validate_var)>::invoke<lint::LintVisitor &,smart_ptr_raw<Variable> const ,bool>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_91_54),__v_rename_at_91_56,false);
 }
 
-inline void _FuncLintVisitorTickvalidate_var_add3a79c2c0d82fb ( Context * __context__, lint::LintVisitor &  __self_rename_at_95_59, smart_ptr_raw<Variable> const  __v_rename_at_95_60, bool __can_make_const_rename_at_95_61 )
+inline void _FuncLintVisitorTickvalidate_var_add3a79c2c0d82fb ( Context * __context__, lint::LintVisitor &  __self_rename_at_95_58, smart_ptr_raw<Variable> const  __v_rename_at_95_59, bool __can_make_const_rename_at_95_60 )
 {
-    char * __name_rename_at_96_62 = ((char *)(char *)(((char * const )(to_das_string(__v_rename_at_95_60->name /*name*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
-    if ( builtin_string_startswith(__name_rename_at_96_62,((char *) "__"),__context__) )
+    char * __name_rename_at_96_61 = ((char *)(char *)(((char * const )(to_das_string(__v_rename_at_95_59->name /*name*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
+    if ( builtin_string_startswith(__name_rename_at_96_61,((char *) "__"),__context__) )
     {
         return ;
     } else {
-        if ( builtin_string_startswith(__name_rename_at_96_62,((char *) "_"),__context__) )
+        if ( builtin_string_startswith(__name_rename_at_96_61,((char *) "_"),__context__) )
         {
-            if ( builtin_string_endswith(__name_rename_at_96_62,((char *) "_"),__context__) )
+            if ( builtin_string_endswith(__name_rename_at_96_61,((char *) "_"),__context__) )
             {
                 return ;
             } else {
-                if ( ((das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 2) || das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 4)) || das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 1)) || (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_60->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) )
+                if ( ((das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 2) || das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 4)) || das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 1)) || (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_59->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) )
                 {
-                    das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_59),das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_2, cast<char * const >::from(((char *) "variable '")), cast<das::string const  &>::from(__v_rename_at_95_60->name /*name*/), cast<char * const >::from(((char *) "' is used and should be named without underscode prefix")))),__v_rename_at_95_60->at /*at*/);
+                    das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_58),das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_1, cast<char * const >::from(((char *) "variable '")), cast<das::string const  &>::from(__v_rename_at_95_59->name /*name*/), cast<char * const >::from(((char *) "' is used and should be named without underscode prefix")))),__v_rename_at_95_59->at /*at*/);
                     return ;
                 } else {
                     return ;
                 };
             };
         };
-        if ( ((das_deref(__context__,__v_rename_at_95_60)).isAccessUnused()) )
+        if ( ((das_deref(__context__,__v_rename_at_95_59)).isAccessUnused()) )
         {
-            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_59),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_3, cast<char * const >::from(((char *) "unused variable ")), cast<das::string const  &>::from(__v_rename_at_95_60->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_60->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " (add an underscore prefix if you really need it)")))),__v_rename_at_95_60->at /*at*/);
+            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_58),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_2, cast<char * const >::from(((char *) "unused variable ")), cast<das::string const  &>::from(__v_rename_at_95_59->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_59->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " (add an underscore prefix if you really need it)")))),__v_rename_at_95_59->at /*at*/);
             return ;
         } else {
-            if ( (((!(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 2)) && !(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 4))) && (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_60->init /*init*/),das_auto_cast<void * const >::cast(nullptr)))) && isExprConst(__v_rename_at_95_60->init /*init*/)) && !(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 5)) )
+            if ( (((!(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 2)) && !(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 4))) && (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_59->init /*init*/),das_auto_cast<void * const >::cast(nullptr)))) && isExprConst(__v_rename_at_95_59->init /*init*/)) && !(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 5)) )
             {
-                das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_59),das_string_builder(__context__,SimNode_AotInterop<6>(__tinfo_4, cast<char * const >::from(((char *) "unused variable ")), cast<das::string const  &>::from(__v_rename_at_95_60->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_60->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " (add an underscore prefix if you really need it) ")), cast<Bitfield>::from(__v_rename_at_95_60->access_flags /*access_flags*/))),__v_rename_at_95_60->at /*at*/);
+                das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_58),das_string_builder(__context__,SimNode_AotInterop<6>(__tinfo_3, cast<char * const >::from(((char *) "unused variable ")), cast<das::string const  &>::from(__v_rename_at_95_59->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_59->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " (add an underscore prefix if you really need it) ")), cast<Bitfield>::from(__v_rename_at_95_59->access_flags /*access_flags*/))),__v_rename_at_95_59->at /*at*/);
                 return ;
             } else {
-                if ( (((!(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 2)) && !(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 4))) && !(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 1))) && ((equ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_60->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) || das_get_bitfield(__v_rename_at_95_60->init /*init*/->flags /*flags*/,1u << 1))) && !(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 5)) )
+                if ( (((!(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 2)) && !(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 4))) && !(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 1))) && ((equ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_59->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) || das_get_bitfield(__v_rename_at_95_59->init /*init*/->flags /*flags*/,1u << 1))) && !(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 5)) )
                 {
-                    das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_59),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_5, cast<char * const >::from(((char *) "unused variable ")), cast<das::string const  &>::from(__v_rename_at_95_60->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_60->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " (add an underscore prefix if you really need it)")))),__v_rename_at_95_60->at /*at*/);
+                    das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_58),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_4, cast<char * const >::from(((char *) "unused variable ")), cast<das::string const  &>::from(__v_rename_at_95_59->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_59->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " (add an underscore prefix if you really need it)")))),__v_rename_at_95_59->at /*at*/);
                     return ;
                 } else {
-                    if ( (!(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 1)) && !(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 2))) && (equ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_60->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) )
+                    if ( (!(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 1)) && !(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 2))) && (equ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_59->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) )
                     {
-                        bool __sideEffects_rename_at_123_63 = ((bool)((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_60->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) && !(das_get_bitfield(__v_rename_at_95_60->init /*init*/->flags /*flags*/,1u << 1))));
-                        if ( !__sideEffects_rename_at_123_63 )
+                        bool __sideEffects_rename_at_123_62 = ((bool)((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__v_rename_at_95_59->init /*init*/),das_auto_cast<void * const >::cast(nullptr))) && !(das_get_bitfield(__v_rename_at_95_59->init /*init*/->flags /*flags*/,1u << 1))));
+                        if ( !__sideEffects_rename_at_123_62 )
                         {
-                            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_59),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_6, cast<char * const >::from(((char *) "variable ")), cast<das::string const  &>::from(__v_rename_at_95_60->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_60->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " is never used")))),__v_rename_at_95_60->at /*at*/);
+                            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_58),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_5, cast<char * const >::from(((char *) "variable ")), cast<das::string const  &>::from(__v_rename_at_95_59->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_59->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " is never used")))),__v_rename_at_95_59->at /*at*/);
                         } else {
-                            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_59),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_7, cast<char * const >::from(((char *) "variable ")), cast<das::string const  &>::from(__v_rename_at_95_60->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_60->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " is never used (be careful, initializer has side effects)")))),__v_rename_at_95_60->at /*at*/);
+                            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_58),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_6, cast<char * const >::from(((char *) "variable ")), cast<das::string const  &>::from(__v_rename_at_95_59->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_59->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " is never used (be careful, initializer has side effects)")))),__v_rename_at_95_59->at /*at*/);
                         };
                         return ;
                     } else {
-                        if ( (((__can_make_const_rename_at_95_61 && (__v_rename_at_95_60->type /*_type*/->baseType /*baseType*/ != DAS_COMMENT(bound_enum) das::Type::tPointer)) && !(das_get_bitfield(__v_rename_at_95_60->type /*_type*/->flags /*flags*/,1u << 1))) && !(das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 2))) && ((das_deref(__context__,__v_rename_at_95_60->type /*_type*/)).canCloneFromConst()) )
+                        if ( (((__can_make_const_rename_at_95_60 && (__v_rename_at_95_59->type /*_type*/->baseType /*baseType*/ != DAS_COMMENT(bound_enum) das::Type::tPointer)) && !(das_get_bitfield(__v_rename_at_95_59->type /*_type*/->flags /*flags*/,1u << 1))) && !(das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 2))) && ((das_deref(__context__,__v_rename_at_95_59->type /*_type*/)).canCloneFromConst()) )
                         {
-                            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_59),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_8, cast<char * const >::from(((char *) "variable ")), cast<das::string const  &>::from(__v_rename_at_95_60->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_60->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " can be made const (declare with 'let')")))),__v_rename_at_95_60->at /*at*/);
+                            das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_58),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_7, cast<char * const >::from(((char *) "variable ")), cast<das::string const  &>::from(__v_rename_at_95_59->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_59->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " can be made const (declare with 'let')")))),__v_rename_at_95_59->at /*at*/);
                             return ;
                         } else {
-                            if ( (((__can_make_const_rename_at_95_61 && (__v_rename_at_95_60->type /*_type*/->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tPointer)) && !(das_get_bitfield(__v_rename_at_95_60->type /*_type*/->flags /*flags*/,1u << 1))) && !((das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 2) || das_get_bitfield(__v_rename_at_95_60->access_flags /*access_flags*/,1u << 4)))) && ((das_deref(__context__,__v_rename_at_95_60->type /*_type*/)).canCloneFromConst()) )
+                            if ( (((__can_make_const_rename_at_95_60 && (__v_rename_at_95_59->type /*_type*/->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tPointer)) && !(das_get_bitfield(__v_rename_at_95_59->type /*_type*/->flags /*flags*/,1u << 1))) && !((das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 2) || das_get_bitfield(__v_rename_at_95_59->access_flags /*access_flags*/,1u << 4)))) && ((das_deref(__context__,__v_rename_at_95_59->type /*_type*/)).canCloneFromConst()) )
                             {
-                                das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_59),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_9, cast<char * const >::from(((char *) "variable ")), cast<das::string const  &>::from(__v_rename_at_95_60->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_60->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " can be made const (declare with 'let')")))),__v_rename_at_95_60->at /*at*/);
+                                das_invoke_method<void,offsetof(lint::LintVisitor,lint_error)>::invoke<lint::LintVisitor &,char *,LineInfo const  &>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_95_58),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_8, cast<char * const >::from(((char *) "variable ")), cast<das::string const  &>::from(__v_rename_at_95_59->name /*name*/), cast<char * const >::from(((char *) ": ")), cast<char * const >::from(_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,__v_rename_at_95_59->type /*_type*/,true,true,true)), cast<char * const >::from(((char *) " can be made const (declare with 'let')")))),__v_rename_at_95_59->at /*at*/);
                                 return ;
                             };
                         };
@@ -4161,38 +4151,38 @@ inline void _FuncLintVisitorTickvalidate_var_add3a79c2c0d82fb ( Context * __cont
     };
 }
 
-inline void _FuncLintVisitorTickpreVisitExprLet_343f1e05144a6e7e ( Context * __context__, lint::LintVisitor &  __self_rename_at_141_64, smart_ptr_raw<ExprLet> const  __expr_rename_at_141_65 )
+inline void _FuncLintVisitorTickpreVisitExprLet_343f1e05144a6e7e ( Context * __context__, lint::LintVisitor &  __self_rename_at_141_63, smart_ptr_raw<ExprLet> const  __expr_rename_at_141_64 )
 {
     {
         bool __need_loop_142 = true;
         // v: smart_ptr<ast::Variable> const&
-        das_iterator<das::vector<smart_ptr<Variable>> const > __v_iterator(__expr_rename_at_141_65->variables /*variables*/);
-        smart_ptr_raw<Variable> const  * __v_rename_at_142_66;
-        __need_loop_142 = __v_iterator.first(__context__,(__v_rename_at_142_66)) && __need_loop_142;
-        for ( ; __need_loop_142 ; __need_loop_142 = __v_iterator.next(__context__,(__v_rename_at_142_66)) )
+        das_iterator<das::vector<smart_ptr<Variable>> const > __v_iterator(__expr_rename_at_141_64->variables /*variables*/);
+        smart_ptr_raw<Variable> const  * __v_rename_at_142_65;
+        __need_loop_142 = __v_iterator.first(__context__,(__v_rename_at_142_65)) && __need_loop_142;
+        for ( ; __need_loop_142 ; __need_loop_142 = __v_iterator.next(__context__,(__v_rename_at_142_65)) )
         {
-            das_invoke_method<void,offsetof(lint::LintVisitor,validate_var)>::invoke<lint::LintVisitor &,smart_ptr_raw<Variable> const ,bool>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_141_64),(*__v_rename_at_142_66),true);
+            das_invoke_method<void,offsetof(lint::LintVisitor,validate_var)>::invoke<lint::LintVisitor &,smart_ptr_raw<Variable> const ,bool>(__context__,nullptr,das_arg<lint::LintVisitor>::pass(__self_rename_at_141_63),(*__v_rename_at_142_65),true);
         }
-        __v_iterator.close(__context__,(__v_rename_at_142_66));
+        __v_iterator.close(__context__,(__v_rename_at_142_65));
     };
 }
 
-inline void _FuncLintVisitor_0x27___finalize_a535faf9c284defe ( Context * __context__, lint::LintVisitor &  __self_rename_at_21_67 )
+inline void _FuncLintVisitor_0x27___finalize_a535faf9c284defe ( Context * __context__, lint::LintVisitor &  __self_rename_at_21_66 )
 {
-    finalize_3f8d01f91be17b8d(__context__,das_arg<lint::LintVisitor>::pass(__self_rename_at_21_67));
+    finalize_3f8d01f91be17b8d(__context__,das_arg<lint::LintVisitor>::pass(__self_rename_at_21_66));
 }
 
-inline void paranoid_49b3332f4816b96a ( Context * __context__, smart_ptr_raw<Program> const  __prog_rename_at_148_68, bool __compile_time_errors_rename_at_148_69 )
+inline void paranoid_49b3332f4816b96a ( Context * __context__, smart_ptr_raw<Program> const  __prog_rename_at_148_67, bool __compile_time_errors_rename_at_148_68 )
 {
-    lint::LintVisitor * __astVisitor_rename_at_149_70 = das_ascend<lint::LintVisitor,lint::LintVisitor>::make(__context__,nullptr,(([&]() -> lint::LintVisitor {
-        lint::LintVisitor __mks_149 = LintVisitor_5055dc0e315810f0(__context__);
-        das_copy((__mks_149.compile_time_errors),(__compile_time_errors_rename_at_148_69));
+    lint::LintVisitor * __astVisitor_rename_at_149_69 = das_ascend<lint::LintVisitor,lint::LintVisitor>::make(__context__,nullptr,(([&]() -> lint::LintVisitor {
+        lint::LintVisitor __mks_149 = LintVisitor_2e5c4a5ed90aae0f(__context__);
+        das_copy((__mks_149.compile_time_errors),(__compile_time_errors_rename_at_148_68));
         return __mks_149;
     })()));
-    das_move(__astVisitor_rename_at_149_70->astVisitorAdapter,_FuncastTickmake_visitorTick897644165917210720_722f1ecbe925046c(__context__,das_arg<lint::LintVisitor>::pass(das_deref(__context__,__astVisitor_rename_at_149_70))));
-    astVisit(__prog_rename_at_148_68,__astVisitor_rename_at_149_70->astVisitorAdapter,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    clone_ff0636ad6d384e7b(__context__,__astVisitor_rename_at_149_70->astVisitorAdapter,das_auto_cast<void * const >::cast(nullptr));
-    finalize_b7033f1d07fdbc41(__context__,__astVisitor_rename_at_149_70);
+    das_move(__astVisitor_rename_at_149_69->astVisitorAdapter,_FuncastTickmake_visitorTick897644165917210720_722f1ecbe925046c(__context__,das_arg<lint::LintVisitor>::pass(das_deref(__context__,__astVisitor_rename_at_149_69))));
+    astVisit(__prog_rename_at_148_67,__astVisitor_rename_at_149_69->astVisitorAdapter,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    clone_ff0636ad6d384e7b(__context__,__astVisitor_rename_at_149_69->astVisitorAdapter,das_auto_cast<void * const >::cast(nullptr));
+    finalize_b7033f1d07fdbc41(__context__,__astVisitor_rename_at_149_69);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
@@ -4219,9 +4209,6 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     };
     aotLib[0x6fb50850780b3b9d] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&finalize_b7033f1d07fdbc41>>();
-    };
-    aotLib[0x4548c254b2d2efc2] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_e8728e1dafbd5358>>();
     };
     aotLib[0x67ce2defedffe616] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f>>();
@@ -4253,8 +4240,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x670ec574a43c0e9c] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&finalize_3f8d01f91be17b8d>>();
     };
-    aotLib[0x5943ad05f6a3b36a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&LintVisitor_5055dc0e315810f0>>();
+    aotLib[0x694ce89e11de0786] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&LintVisitor_2e5c4a5ed90aae0f>>();
     };
     aotLib[0x721317d6ff982ed9] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncLintVisitorTicklint_error_2949d58435a7e874>>();
@@ -4295,14 +4282,14 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x9e27ba50c8683f74] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncLintVisitor_0x27___finalize_a535faf9c284defe>>();
     };
-    aotLib[0x6e7eadf9135cf166] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x604e8d1882ae321f] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&paranoid_49b3332f4816b96a>>();
     };
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_3449413918838651110
-AotListBase impl_aot_lint(_anon_3449413918838651110::registerAotFunctions);
+} // namespace _anon_3287071679046918670
+AotListBase impl_aot_lint(_anon_3287071679046918670::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

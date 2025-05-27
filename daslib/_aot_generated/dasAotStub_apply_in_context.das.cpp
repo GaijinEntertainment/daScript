@@ -65,7 +65,7 @@
 #endif
 
 namespace das {
-namespace _anon_5412148317180618798 {
+namespace _anon_15032391473648868061 {
 
 namespace apply_in_context { struct AppendCondAnnotation; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -405,8 +405,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_5412148317180618798
-AotListBase impl_aot_apply_in_context(_anon_5412148317180618798::registerAotFunctions);
+} // namespace _anon_15032391473648868061
+AotListBase impl_aot_apply_in_context(_anon_15032391473648868061::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

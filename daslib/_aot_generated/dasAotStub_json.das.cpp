@@ -47,7 +47,7 @@
 #endif
 
 namespace das {
-namespace _anon_6672431805922263486 {
+namespace _anon_3530357344214824067 {
 
 namespace json { struct JsonValue; };
 namespace json { struct TokenAt; };
@@ -1430,8 +1430,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6672431805922263486
-AotListBase impl_aot_json(_anon_6672431805922263486::registerAotFunctions);
+} // namespace _anon_3530357344214824067
+AotListBase impl_aot_json(_anon_3530357344214824067::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

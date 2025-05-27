@@ -71,7 +71,7 @@
 #endif
 
 namespace das {
-namespace _anon_2894164163263108711 {
+namespace _anon_7594886034964418406 {
 
 namespace cpp_gen { struct ExEnum; };
 namespace cpp_gen { struct Scope; };
@@ -298,8 +298,8 @@ enum class ReOp : int32_t {
 };
 }
 }
-template <> struct cast< das::_anon_2894164163263108711::regex::ReOp > : cast_enum < das::_anon_2894164163263108711::regex::ReOp > {};
-namespace _anon_2894164163263108711 {
+template <> struct cast< das::_anon_7594886034964418406::regex::ReOp > : cast_enum < das::_anon_7594886034964418406::regex::ReOp > {};
+namespace _anon_7594886034964418406 {
 namespace regex {
 
 struct ReNode {
@@ -339,8 +339,8 @@ enum class ScopeKind : int32_t {
 };
 }
 }
-template <> struct cast< das::_anon_2894164163263108711::cpp_gen::ScopeKind > : cast_enum < das::_anon_2894164163263108711::cpp_gen::ScopeKind > {};
-namespace _anon_2894164163263108711 {
+template <> struct cast< das::_anon_7594886034964418406::cpp_gen::ScopeKind > : cast_enum < das::_anon_7594886034964418406::cpp_gen::ScopeKind > {};
+namespace _anon_7594886034964418406 {
 namespace cpp_gen {
 
 enum class AccessKind : int32_t {
@@ -350,8 +350,8 @@ enum class AccessKind : int32_t {
 };
 }
 }
-template <> struct cast< das::_anon_2894164163263108711::cpp_gen::AccessKind > : cast_enum < das::_anon_2894164163263108711::cpp_gen::AccessKind > {};
-namespace _anon_2894164163263108711 {
+template <> struct cast< das::_anon_7594886034964418406::cpp_gen::AccessKind > : cast_enum < das::_anon_7594886034964418406::cpp_gen::AccessKind > {};
+namespace _anon_7594886034964418406 {
 namespace cpp_gen {
 
 struct ExEnum {
@@ -8308,8 +8308,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_2894164163263108711
-AotListBase impl_aot_cpp_gen(_anon_2894164163263108711::registerAotFunctions);
+} // namespace _anon_7594886034964418406
+AotListBase impl_aot_cpp_gen(_anon_7594886034964418406::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

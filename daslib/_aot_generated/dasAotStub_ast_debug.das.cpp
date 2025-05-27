@@ -58,7 +58,7 @@
 #endif
 
 namespace das {
-namespace _anon_6306407552194153647 {
+namespace _anon_13117299046523879150 {
 
 namespace ast_debug { struct SampleStackWalker; };
 namespace ast_debug { struct ContextStateAgent; };
@@ -1175,8 +1175,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6306407552194153647
-AotListBase impl_aot_ast_debug(_anon_6306407552194153647::registerAotFunctions);
+} // namespace _anon_13117299046523879150
+AotListBase impl_aot_ast_debug(_anon_13117299046523879150::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

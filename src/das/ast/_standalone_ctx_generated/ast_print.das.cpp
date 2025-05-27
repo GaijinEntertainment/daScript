@@ -51,7 +51,7 @@
 #endif
 
 namespace das {
-namespace _anon_17708654806632471084 {
+namespace _anon_11569707912173886504 {
 namespace  { struct SetPrinterFlags; };
 namespace  { struct PrintVisitor; };
 namespace  { struct Foo; };
@@ -511,27 +511,27 @@ struct AstVisitor {
 // unused structure SetupOptimizationMacro
 // unused structure TagFunctionMacro
 // unused structure BetterRttiVisitor
-} // namespace _anon_17708654806632471084
-namespace _anon_2307684379922914619 {
+} // namespace _anon_11569707912173886504
+namespace _anon_13584973763909986449 {
 void _FuncbuiltinTickpushTick10769833213962245646_5a77afdd4cbd09e1 ( Context * __context__, TArray<char *> & Arr, char * value );
-} // namespace _anon_2307684379922914619
-namespace _anon_2307684379922914619 {
+} // namespace _anon_13584973763909986449
+namespace _anon_13584973763909986449 {
 char * _Funcstrings_boostTickjoinTick16475640899284277631_97cbd29033d05835 ( Context * __context__, TArray<char *> const  & it, char * const  separator );
-} // namespace _anon_2307684379922914619
-namespace _anon_2307684379922914619 {
+} // namespace _anon_13584973763909986449
+namespace _anon_13584973763909986449 {
 void _FuncbuiltinTickpushTick14133213201864676143_d626258b591934af ( Context * __context__, TArray<char *> & Arr, char * const  value );
-} // namespace _anon_2307684379922914619
-namespace _anon_2307684379922914619 {
+} // namespace _anon_13584973763909986449
+namespace _anon_13584973763909986449 {
 char * describe_f8955cd58aaa956c ( Context * __context__, AnnotationArgumentList const  & list );
-} // namespace _anon_2307684379922914619
-namespace _anon_2307684379922914619 {
+} // namespace _anon_13584973763909986449
+namespace _anon_13584973763909986449 {
 char * describe_16a184ebde2f5850 ( Context * __context__, AnnotationDeclaration const  & ann );
-} // namespace _anon_2307684379922914619
-namespace _anon_2307684379922914619 {
+} // namespace _anon_13584973763909986449
+namespace _anon_13584973763909986449 {
 char * describe_5703109ec79a52b4 ( Context * __context__, AnnotationList const  & list );
-} // namespace _anon_2307684379922914619
-using namespace _anon_2307684379922914619;
-namespace _anon_17708654806632471084 {
+} // namespace _anon_13584973763909986449
+using namespace _anon_13584973763909986449;
+namespace _anon_11569707912173886504 {
 
 namespace  {
 
@@ -541,8 +541,8 @@ enum class FooBar : int32_t {
 };
 }
 }
-template <> struct cast< das::_anon_17708654806632471084::FooBar > : cast_enum < das::_anon_17708654806632471084::FooBar > {};
-namespace _anon_17708654806632471084 {
+template <> struct cast< das::_anon_11569707912173886504::FooBar > : cast_enum < das::_anon_11569707912173886504::FooBar > {};
+namespace _anon_11569707912173886504 {
 namespace  {
 
 struct SetPrinterFlags {
@@ -5710,7 +5710,7 @@ VarInfo __func_info__534b4e32dc7d7dc9_field_0 =  { Type::tArray, nullptr, nullpt
 VarInfo __func_info__534b4e32dc7d7dc9_field_1 =  { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16548, 8, UINT64_C(0x86f37c321f6f16c), "separator", 0, 0 };
 VarInfo * __func_info__534b4e32dc7d7dc9_fields[2] =  { &__func_info__534b4e32dc7d7dc9_field_0, &__func_info__534b4e32dc7d7dc9_field_1 };
 FuncInfo __func_info__534b4e32dc7d7dc9 = {"strings_boost`join`16475640899284277631", "", __func_info__534b4e32dc7d7dc9_fields, 2, 144, &__type_info__af90fe4c864e9d52, nullptr,0,UINT64_C(0x534b4e32dc7d7dc9), 0x4 };
-FuncInfo __func_info__945b59082c003622 = {"Foo", "", nullptr, 0, 64, &__type_info__bc69a005531fe739, nullptr,0,UINT64_C(0x945b59082c003622), 0x0 };
+FuncInfo __func_info__945b59082c003622 = {"Foo", "", nullptr, 0, 48, &__type_info__bc69a005531fe739, nullptr,0,UINT64_C(0x945b59082c003622), 0x0 };
 VarInfo __func_info__8497a9e32173f1d3_field_0 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 4, UINT64_C(0x9c581507596aad8c), "x", 0, 0 };
 VarInfo * __func_info__8497a9e32173f1d3_fields[1] =  { &__func_info__8497a9e32173f1d3_field_0 };
 FuncInfo __func_info__8497a9e32173f1d3 = {"Foo", "", __func_info__8497a9e32173f1d3_fields, 1, 64, &__type_info__bc69a005531fe739, nullptr,0,UINT64_C(0x8497a9e32173f1d3), 0x0 };
@@ -7468,7 +7468,7 @@ inline void printFunc_1528860686d76d16 ( Context * __context__, smart_ptr_raw<Fu
 inline void setFlags_6d42c5f65250e688 ( Context * __context__, smart_ptr_raw<Program> __prog_rename_at_1200_551 );
 inline SetPrinterFlags SetPrinterFlags_a8c5205670097e1e ( Context * __context__ );
 inline PrintVisitor PrintVisitor_f4941ed1852fc82c ( Context * __context__ );
-inline Foo Foo_46f8336e7cdf367e ( Context * __context__ );
+inline Foo Foo_cb55144cd897dffb ( Context * __context__ );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -8963,7 +8963,7 @@ inline Foo Foo_f7d0c28771d4b253 ( Context * __context__, int32_t __x_rename_at_9
 {
     Foo _temp_make_local_987_14_32; _temp_make_local_987_14_32;
     return /* <- */ das_auto_cast_move<Foo>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_b80ddaf6e4d8edc6(__context__,das_arg<Foo>::pass((([&]() -> Foo& {
-        _temp_make_local_987_14_32 = Foo_46f8336e7cdf367e(__context__);
+        _temp_make_local_987_14_32 = Foo_cb55144cd897dffb(__context__);
         das_copy((_temp_make_local_987_14_32.a),(__x_rename_at_986_497));
         return _temp_make_local_987_14_32;
     })()))));
@@ -8973,7 +8973,7 @@ inline Foo Foo_7936047765ec8299 ( Context * __context__, int32_t __x_rename_at_9
 {
     Foo _temp_make_local_991_14_32; _temp_make_local_991_14_32;
     return /* <- */ das_auto_cast_move<Foo>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_b80ddaf6e4d8edc6(__context__,das_arg<Foo>::pass((([&]() -> Foo& {
-        _temp_make_local_991_14_32 = Foo_46f8336e7cdf367e(__context__);
+        _temp_make_local_991_14_32 = Foo_cb55144cd897dffb(__context__);
         das_copy((_temp_make_local_991_14_32.a),((__x_rename_at_990_498 + __y_rename_at_990_499)));
         return _temp_make_local_991_14_32;
     })()))));
@@ -9002,12 +9002,12 @@ inline void allExpr_33248941f80a307e ( Context * __context__, int32_t __arg_rena
     Foo * __pFoo3_rename_at_1013_506 = das_new<Foo>::make_and_init(__context__,[&]() { return Foo_7936047765ec8299(__context__,1,2); });
     add_e36a69d05988160f(__context__,1,2);
     Foo __exprAt_rename_at_1017_507; das_zero(__exprAt_rename_at_1017_507); das_move(__exprAt_rename_at_1017_507, das_null_coalescing<Foo>::get(__pFoo1_rename_at_1011_504,(([&]() -> Foo& {
-        _temp_make_local_1017_27_128 = Foo_46f8336e7cdf367e(__context__);
+        _temp_make_local_1017_27_128 = Foo_cb55144cd897dffb(__context__);
         das_copy((_temp_make_local_1017_27_128.a),(1));
         return _temp_make_local_1017_27_128;
     })())));
     _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_ae54841743012c6c(__context__,das_arg<Foo>::pass(__exprAt_rename_at_1017_507),das_arg<Foo>::pass((([&]() -> Foo& {
-        _temp_make_local_1018_14_160 = Foo_46f8336e7cdf367e(__context__);
+        _temp_make_local_1018_14_160 = Foo_cb55144cd897dffb(__context__);
         das_copy((_temp_make_local_1018_14_160.a),(2));
         return _temp_make_local_1018_14_160;
     })())));
@@ -9064,7 +9064,7 @@ inline void allExpr_33248941f80a307e ( Context * __context__, int32_t __arg_rena
     TArray<Foo> __mks_rename_at_1070_513; das_zero(__mks_rename_at_1070_513); das_move(__mks_rename_at_1070_513, _FuncbuiltinTickto_array_moveTick3185538323411982277_e6029ec2a5ce35b9(__context__,das_arg<TDim<Foo,2>>::pass((([&]() -> TDim<Foo,2>& {
         das_zero(_temp_make_local_1070_15_320);
         _temp_make_local_1070_15_320(0,__context__) = (([&]() -> Foo {
-            Foo __mks_1070 = Foo_46f8336e7cdf367e(__context__);
+            Foo __mks_1070 = Foo_cb55144cd897dffb(__context__);
             das_copy((__mks_1070.a),(5));
             das_move((__mks_1070.b),(_FuncbuiltinTickto_array_moveTick3185538323411982277_b0a60e24e297ac39(__context__,das_arg<TDim<Foo *,1>>::pass((([&]() -> TDim<Foo *,1>& {
                 _temp_make_local_1070_30_384(0,__context__) = nullptr;
@@ -9073,14 +9073,14 @@ inline void allExpr_33248941f80a307e ( Context * __context__, int32_t __arg_rena
             return __mks_1070;
         })());
         _temp_make_local_1070_15_320(1,__context__) = (([&]() -> Foo {
-            Foo __mks_1070 = Foo_46f8336e7cdf367e(__context__);
+            Foo __mks_1070 = Foo_cb55144cd897dffb(__context__);
             das_copy((__mks_1070.a),(6));
             return __mks_1070;
         })());
         return _temp_make_local_1070_15_320;
     })()))));
     _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_ae54841743012c6c(__context__,das_arg<Foo>::pass(__mks_rename_at_1070_513(1,__context__)),das_arg<Foo>::pass((([&]() -> Foo& {
-        _temp_make_local_1071_14_400 = Foo_46f8336e7cdf367e(__context__);
+        _temp_make_local_1071_14_400 = Foo_cb55144cd897dffb(__context__);
         das_copy((_temp_make_local_1071_14_400.a),(5));
         return _temp_make_local_1071_14_400;
     })())));
@@ -9484,17 +9484,17 @@ inline PrintVisitor PrintVisitor_f4941ed1852fc82c ( Context * __context__ )
     })()));
 }
 
-inline Foo Foo_46f8336e7cdf367e ( Context * __context__ )
+inline Foo Foo_cb55144cd897dffb ( Context * __context__ )
 {
-    Foo _temp_make_local_981_6_32; _temp_make_local_981_6_32;
-    return /* <- */ das_auto_cast_move<Foo>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_b80ddaf6e4d8edc6(__context__,das_arg<Foo>::pass((([&]() -> Foo& {
-        das_zero(_temp_make_local_981_6_32);
-        das_copy((_temp_make_local_981_6_32.a),(11));
-        return _temp_make_local_981_6_32;
-    })()))));
+    return /* <- */ das_auto_cast_move<Foo>::cast((([&]() -> Foo {
+        Foo __mks_981;
+        das_zero(__mks_981);
+        das_copy((__mks_981.a),(11));
+        return __mks_981;
+    })()));
 }
-} // namespace _anon_17708654806632471084
-using namespace _anon_17708654806632471084;
+} // namespace _anon_11569707912173886504
+using namespace _anon_11569707912173886504;
 namespace ast_print {
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
@@ -10092,16 +10092,16 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x922ec16d8c615f7a] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncPrintVisitor_0x27___finalize_54601e5e925b5d66>>();
     };
-    aotLib[0xb9e61e863babccc0] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xf7570e641e77d1f9] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&Foo_f7d0c28771d4b253>>();
     };
-    aotLib[0xc7d66167f6578d2e] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xb48d450592f274f8] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&Foo_7936047765ec8299>>();
     };
     aotLib[0xfa8e7f13910bad6f] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&add_e36a69d05988160f>>();
     };
-    aotLib[0xe1bd58ffea50c711] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x9181d1309713bd1b] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&allExpr_33248941f80a307e>>();
     };
     aotLib[0xf31729310d0fbe1a] = +[](Context & ctx) -> SimNode* {
@@ -10125,8 +10125,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xf4c20480f82503b2] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&PrintVisitor_f4941ed1852fc82c>>();
     };
-    aotLib[0x3ea60335d1617c79] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&Foo_46f8336e7cdf367e>>();
+    aotLib[0x531b816887b2e0ad] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&Foo_cb55144cd897dffb>>();
     };
     aotLib[0xde6e54abcc6b70c2] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_5a77afdd4cbd09e1>>();
@@ -10396,10 +10396,10 @@ Standalone::Standalone() {
         std::make_tuple(195, FunctionInfo("PrintVisitor`preVisitExprConstEnumeration", "PrintVisitor`preVisitExprConstEnumeration S<PrintVisitor> C1<H<ast::ExprConstEnumeration>>?M", 0x57055b946a50fa45, 0x39fe778852c07c02, 48, false, false, false, false, false, false), &__func_info__57055b946a50fa45),
         std::make_tuple(196, FunctionInfo("PrintVisitor`preVisitExprConstBitfield", "PrintVisitor`preVisitExprConstBitfield S<PrintVisitor> C1<H<ast::ExprConstBitfield>>?M", 0x2beda771e9f1ee30, 0xbb0525fbdc696a1d, 48, false, false, false, false, false, false), &__func_info__2beda771e9f1ee30),
         std::make_tuple(197, FunctionInfo("PrintVisitor'__finalize", "PrintVisitor'__finalize S<PrintVisitor>", 0x5f61d23c15a1b0ba, 0x922ec16d8c615f7a, 32, false, false, false, false, false, false), &__func_info__5f61d23c15a1b0ba),
-        std::make_tuple(198, FunctionInfo("Foo", "Foo Ci", 0x8497a9e32173f1d3, 0xb9e61e863babccc0, 64, false, false, false, false, true, false), &__func_info__8497a9e32173f1d3),
-        std::make_tuple(199, FunctionInfo("Foo", "Foo Ci Ci", 0x3dda47f1591a6f80, 0xc7d66167f6578d2e, 64, false, false, false, false, true, false), &__func_info__3dda47f1591a6f80),
+        std::make_tuple(198, FunctionInfo("Foo", "Foo Ci", 0x8497a9e32173f1d3, 0xf7570e641e77d1f9, 64, false, false, false, false, true, false), &__func_info__8497a9e32173f1d3),
+        std::make_tuple(199, FunctionInfo("Foo", "Foo Ci Ci", 0x3dda47f1591a6f80, 0xb48d450592f274f8, 64, false, false, false, false, true, false), &__func_info__3dda47f1591a6f80),
         std::make_tuple(200, FunctionInfo("add", "add Ci Ci", 0x6608022ce4d2504e, 0xfa8e7f13910bad6f, 32, false, false, false, false, false, false), &__func_info__6608022ce4d2504e),
-        std::make_tuple(201, FunctionInfo("allExpr", "allExpr Ci", 0x6d50e432f48df817, 0xe1bd58ffea50c711, 1040, false, false, false, false, false, false), &__func_info__6d50e432f48df817),
+        std::make_tuple(201, FunctionInfo("allExpr", "allExpr Ci", 0x6d50e432f48df817, 0x9181d1309713bd1b, 1040, false, false, false, false, false, false), &__func_info__6d50e432f48df817),
         std::make_tuple(202, FunctionInfo("test", "test", 0x7f4e3d0819c1de70, 0xf31729310d0fbe1a, 64, false, false, false, false, false, false), &__func_info__7f4e3d0819c1de70),
         std::make_tuple(203, FunctionInfo("printAst", "printAst Y<ProgramPtr>1<H<rtti::Program>>?M 1<H<strings::StringBuilderWriter>>?", 0x59725e2c0ccb8f94, 0x9bba4dfdfb3386bf, 80, false, false, false, false, false, false), &__func_info__59725e2c0ccb8f94),
         std::make_tuple(204, FunctionInfo("printExpr", "printExpr Y<ExpressionPtr>1<H<ast::Expression>>?M 1<H<strings::StringBuilderWriter>>?", 0x8db1c0f194f54d6b, 0xf8a20823e03ec671, 80, false, false, false, false, false, false), &__func_info__8db1c0f194f54d6b),
@@ -10407,7 +10407,7 @@ Standalone::Standalone() {
         std::make_tuple(206, FunctionInfo("setFlags", "setFlags Y<ProgramPtr>1<H<rtti::Program>>?M", 0x4f8c084f662fde0d, 0x6c428a0daddb94f4, 64, false, false, false, false, false, false), &__func_info__4f8c084f662fde0d),
         std::make_tuple(207, FunctionInfo("SetPrinterFlags", "SetPrinterFlags", 0x16d3a723dce0fbd9, 0xed2ed09e0d599454, 48, false, false, false, false, true, false), &__func_info__16d3a723dce0fbd9),
         std::make_tuple(208, FunctionInfo("PrintVisitor", "PrintVisitor", 0xfd8a0ec7320bcc95, 0xf4c20480f82503b2, 48, false, false, false, false, true, false), &__func_info__fd8a0ec7320bcc95),
-        std::make_tuple(209, FunctionInfo("Foo", "Foo", 0x945b59082c003622, 0x3ea60335d1617c79, 64, false, false, false, false, true, false), &__func_info__945b59082c003622),
+        std::make_tuple(209, FunctionInfo("Foo", "Foo", 0x945b59082c003622, 0x531b816887b2e0ad, 48, false, false, false, false, true, false), &__func_info__945b59082c003622),
         std::make_tuple(210, FunctionInfo("builtin`push`10769833213962245646", "@ast_boost::builtin`push`10769833213962245646 X1<Y<numT>s>A =s", 0x64bc68a3ca0e52d8, 0xde6e54abcc6b70c2, 32, false, true, false, false, false, false), &__func_info__64bc68a3ca0e52d8),
         std::make_tuple(211, FunctionInfo("strings_boost`join`16475640899284277631", "@ast_boost::strings_boost`join`16475640899284277631 CX1<s>A CIs", 0x534b4e32dc7d7dc9, 0x17c076c38e276651, 144, false, false, false, false, false, false), &__func_info__534b4e32dc7d7dc9),
         std::make_tuple(212, FunctionInfo("builtin`push`14133213201864676143", "@ast_boost::builtin`push`14133213201864676143 X1<Y<numT>s>A C=s", 0xd926835da6d86fab, 0x3c395992954dd60d, 32, false, true, false, false, false, false), &__func_info__d926835da6d86fab),
@@ -10431,6 +10431,12 @@ Standalone::Standalone() {
         (*context.tabGMnLookup)[mnh] = context.globalVariables[i].offset;
     }
     context.tabAdLookup = make_shared<das_hash_map<uint64_t,uint64_t>>();
+    {
+        auto it = getGlobalAotLibrary().find(0x88803074d3a12548/*initSemanticHashWithDep*/);
+        if ( it != getGlobalAotLibrary().end() ) {
+            (it->second)(context);
+        }
+    }
     FillFunction(context, getGlobalAotLibrary(), das::move(id_to_funcs));
     context.runInitScript();
 }

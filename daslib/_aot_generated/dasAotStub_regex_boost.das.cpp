@@ -57,7 +57,7 @@
 #endif
 
 namespace das {
-namespace _anon_16694443867222988614 {
+namespace _anon_5092117997168752122 {
 
 namespace regex_boost { struct RegexReader; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -175,8 +175,8 @@ enum class ReOp : int32_t {
 };
 }
 }
-template <> struct cast< das::_anon_16694443867222988614::regex::ReOp > : cast_enum < das::_anon_16694443867222988614::regex::ReOp > {};
-namespace _anon_16694443867222988614 {
+template <> struct cast< das::_anon_5092117997168752122::regex::ReOp > : cast_enum < das::_anon_5092117997168752122::regex::ReOp > {};
+namespace _anon_5092117997168752122 {
 namespace regex {
 
 struct ReNode {
@@ -344,8 +344,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_16694443867222988614
-AotListBase impl_aot_regex_boost(_anon_16694443867222988614::registerAotFunctions);
+} // namespace _anon_5092117997168752122
+AotListBase impl_aot_regex_boost(_anon_5092117997168752122::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

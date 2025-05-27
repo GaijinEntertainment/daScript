@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_17275503207427487378 {
+namespace _anon_8904537178737950522 {
 
 namespace rst { struct DocGroup; };
 namespace rst { struct _lambda_rst_1216_1; };
@@ -255,8 +255,8 @@ enum class ReOp : int32_t {
 };
 }
 }
-template <> struct cast< das::_anon_17275503207427487378::regex::ReOp > : cast_enum < das::_anon_17275503207427487378::regex::ReOp > {};
-namespace _anon_17275503207427487378 {
+template <> struct cast< das::_anon_8904537178737950522::regex::ReOp > : cast_enum < das::_anon_8904537178737950522::regex::ReOp > {};
+namespace _anon_8904537178737950522 {
 namespace regex {
 
 struct ReNode {
@@ -3580,8 +3580,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_17275503207427487378
-AotListBase impl_aot_rst(_anon_17275503207427487378::registerAotFunctions);
+} // namespace _anon_8904537178737950522
+AotListBase impl_aot_rst(_anon_8904537178737950522::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

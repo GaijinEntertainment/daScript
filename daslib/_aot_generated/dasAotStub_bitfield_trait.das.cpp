@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_4926585650747666216 {
+namespace _anon_13078710109920667427 {
 
 namespace bitfield_trait { struct EachBitfieldMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -359,8 +359,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_4926585650747666216
-AotListBase impl_aot_bitfield_trait(_anon_4926585650747666216::registerAotFunctions);
+} // namespace _anon_13078710109920667427
+AotListBase impl_aot_bitfield_trait(_anon_13078710109920667427::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

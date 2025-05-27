@@ -46,7 +46,7 @@
 #endif
 
 namespace das {
-namespace _anon_17517716020909677364 {
+namespace _anon_3861862664889125085 {
 
 // unused enumeration ConversionResult
 extern TypeInfo __type_info__5673b06bfec20c2c;
@@ -425,8 +425,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_17517716020909677364
-AotListBase impl_aot_strings_boost(_anon_17517716020909677364::registerAotFunctions);
+} // namespace _anon_3861862664889125085
+AotListBase impl_aot_strings_boost(_anon_3861862664889125085::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

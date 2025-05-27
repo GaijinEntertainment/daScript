@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_202891116060457173 {
+namespace _anon_12709899057463756966 {
 
 namespace assert_once { struct AssertOnceMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -366,8 +366,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_202891116060457173
-AotListBase impl_aot_assert_once(_anon_202891116060457173::registerAotFunctions);
+} // namespace _anon_12709899057463756966
+AotListBase impl_aot_assert_once(_anon_12709899057463756966::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

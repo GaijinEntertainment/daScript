@@ -64,7 +64,7 @@
 #endif
 
 namespace das {
-namespace _anon_13184248888064695127 {
+namespace _anon_15754215596584572946 {
 
 namespace archive { struct Serializer; };
 namespace archive { struct MemSerializer; };
@@ -285,7 +285,6 @@ extern StructInfo __struct_info__14f90bc296d98088;
 extern StructInfo __struct_info__2ea4c52d3e792fcf;
 extern TypeInfo __type_info__264a3f04ea74314f;
 extern TypeInfo __type_info__4ac1d999a882997b;
-extern TypeInfo __type_info__8e776352818d5715;
 extern TypeInfo __type_info__3a95295ead7e9066;
 extern TypeInfo __type_info__af8afe4c86446b52;
 extern TypeInfo __type_info__af90fe4c864e9d52;
@@ -363,7 +362,6 @@ VarInfo * __struct_info__2ea4c52d3e792fcf_fields[6] =  { &__struct_info__2ea4c52
 StructInfo __struct_info__2ea4c52d3e792fcf = {"Serializer", "archive", 13, __struct_info__2ea4c52d3e792fcf_fields, 6, 48, UINT64_C(0x0), nullptr, UINT64_C(0x2ea4c52d3e792fcf), 0 };
 TypeInfo __type_info__264a3f04ea74314f = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0x264a3f04ea74314f) };
 TypeInfo __type_info__4ac1d999a882997b = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0x4ac1d999a882997b) };
-TypeInfo __type_info__8e776352818d5715 = { Type::tStructure, &__struct_info__14f90bc296d98088, nullptr, nullptr, &__type_info__d400c4922cb4cfd0, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 112, UINT64_C(0x8e776352818d5715) };
 TypeInfo __type_info__3a95295ead7e9066 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8364, 8, UINT64_C(0x3a95295ead7e9066) };
 TypeInfo __type_info__af8afe4c86446b52 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 4, UINT64_C(0xaf8afe4c86446b52) };
 TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, 8, UINT64_C(0xaf90fe4c864e9d52) };
@@ -382,39 +380,37 @@ static void resolveTypeInfoAnnotations()
 }
 
 TypeInfo * __tinfo_0[1] = { &__type_info__4ac1d999a882997b };
-TypeInfo * __tinfo_1[1] = { &__type_info__8e776352818d5715 };
 
 inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_0, int32_t __newSize_rename_at_68_1 );
 inline TArray<uint8_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_5374efae61d17e26 ( Context * __context__, TArray<uint8_t> const  & __clone_src_rename_at_1056_2 );
 inline void _FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce ( Context * __context__, TArray<uint8_t> & __a_rename_at_1080_4, TArray<uint8_t> const  & __b_rename_at_1080_5 );
 inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e ( Context * __context__, TArray<uint8_t> & __a_rename_at_50_7 );
-inline archive::MemSerializer & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_d4c9c59da6d9e4b3 ( Context * __context__, archive::MemSerializer & __a_rename_at_50_8 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1182_9 );
-inline void finalize_c806b47786a4f1c9 ( Context * __context__, archive::Serializer & ____this_rename_at_16_10 );
-inline void finalize_85ad7a5b2a02d95a ( Context * __context__, archive::MemSerializer & ____this_rename_at_24_11 );
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb ( Context * __context__, archive::Archive & __arch_rename_at_90_12, float3x3 & __value_rename_at_90_13 );
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07 ( Context * __context__, archive::Archive & __arch_rename_at_90_14, float3x4 & __value_rename_at_90_15 );
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5 ( Context * __context__, archive::Archive & __arch_rename_at_90_16, float4x4 & __value_rename_at_90_17 );
-inline void _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654 ( Context * __context__, archive::Archive & __arch_rename_at_99_18, int32_t & __value_rename_at_99_19 );
-inline void _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_114_20, int32_t __newSize_rename_at_114_21 );
-inline void _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44 ( Context * __context__, archive::Archive & __arch_rename_at_105_22, int32_t & __value_rename_at_105_23 );
-inline void _FuncSerializer_0x27___finalize_9fd945918e1827c2 ( Context * __context__, archive::Serializer & __self_rename_at_16_24 );
-inline archive::MemSerializer MemSerializer_61e9509e2d784369 ( Context * __context__ );
-inline void _FuncMemSerializerTickMemSerializer_59fa6e4b02ed33fb ( Context * __context__, archive::MemSerializer & __self_rename_at_26_26 );
-inline archive::MemSerializer MemSerializer_b33baca071b78385 ( Context * __context__, TArray<uint8_t> const  & __from_rename_at_30_27 );
-inline void _FuncMemSerializerTickMemSerializer_161b88126e8c4555 ( Context * __context__, archive::MemSerializer & __self_rename_at_30_29, TArray<uint8_t> const  & __from_rename_at_30_30 );
-inline TArray<uint8_t> _FuncMemSerializerTickextractData_e2917c6b6b7b6ec4 ( Context * __context__, archive::MemSerializer & __self_rename_at_33_31 );
-inline TArray<uint8_t> _FuncMemSerializerTickgetCopyOfData_682f289aa33320f2 ( Context * __context__, archive::MemSerializer & __self_rename_at_37_32 );
-inline char * _FuncMemSerializerTickgetLastError_b94e4e8380cef718 ( Context * __context__, archive::MemSerializer & __self_rename_at_42_34 );
-inline bool _FuncMemSerializerTickOK_a40cae5e96176170 ( Context * __context__, archive::MemSerializer & __self_rename_at_46_35 );
-inline bool _FuncMemSerializerTickwrite_42010d5d4d37e6b4 ( Context * __context__, archive::MemSerializer & __self_rename_at_50_36, void * const  __bytes_rename_at_50_37, int32_t __size_rename_at_50_38 );
-inline bool _FuncMemSerializerTickread_e5e9e0c17fa011c0 ( Context * __context__, archive::MemSerializer & __self_rename_at_59_40, void * const  __bytes_rename_at_59_41, int32_t __size_rename_at_59_42 );
-inline void _FuncMemSerializerTickerror_408f6b66809c6221 ( Context * __context__, archive::MemSerializer & __self_rename_at_74_45, char * const  __code_rename_at_74_46 );
-inline void _FuncMemSerializer_0x27___finalize_eb63259fd4b06d18 ( Context * __context__, archive::MemSerializer & __self_rename_at_24_47 );
-inline void serialize_864aec01f72813a5 ( Context * __context__, archive::Archive & __arch_rename_at_133_48, float3x3 & __value_rename_at_133_49 );
-inline void serialize_2bdd95a82ea20a0e ( Context * __context__, archive::Archive & __arch_rename_at_137_50, float3x4 & __value_rename_at_137_51 );
-inline void serialize_a10311ab5d84440e ( Context * __context__, archive::Archive & __arch_rename_at_141_52, float4x4 & __value_rename_at_141_53 );
-inline void serialize_e472b981aa88a5bc ( Context * __context__, archive::Archive & __arch_rename_at_230_54, char * & __value_rename_at_230_55 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1182_8 );
+inline void finalize_c806b47786a4f1c9 ( Context * __context__, archive::Serializer & ____this_rename_at_16_9 );
+inline void finalize_85ad7a5b2a02d95a ( Context * __context__, archive::MemSerializer & ____this_rename_at_24_10 );
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb ( Context * __context__, archive::Archive & __arch_rename_at_90_11, float3x3 & __value_rename_at_90_12 );
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07 ( Context * __context__, archive::Archive & __arch_rename_at_90_13, float3x4 & __value_rename_at_90_14 );
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5 ( Context * __context__, archive::Archive & __arch_rename_at_90_15, float4x4 & __value_rename_at_90_16 );
+inline void _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654 ( Context * __context__, archive::Archive & __arch_rename_at_99_17, int32_t & __value_rename_at_99_18 );
+inline void _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_114_19, int32_t __newSize_rename_at_114_20 );
+inline void _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44 ( Context * __context__, archive::Archive & __arch_rename_at_105_21, int32_t & __value_rename_at_105_22 );
+inline void _FuncSerializer_0x27___finalize_9fd945918e1827c2 ( Context * __context__, archive::Serializer & __self_rename_at_16_23 );
+inline archive::MemSerializer MemSerializer_7ed03e14b8aa4fb4 ( Context * __context__ );
+inline void _FuncMemSerializerTickMemSerializer_59fa6e4b02ed33fb ( Context * __context__, archive::MemSerializer & __self_rename_at_26_25 );
+inline archive::MemSerializer MemSerializer_2a5138b36b6cb644 ( Context * __context__, TArray<uint8_t> const  & __from_rename_at_30_26 );
+inline void _FuncMemSerializerTickMemSerializer_161b88126e8c4555 ( Context * __context__, archive::MemSerializer & __self_rename_at_30_28, TArray<uint8_t> const  & __from_rename_at_30_29 );
+inline TArray<uint8_t> _FuncMemSerializerTickextractData_e2917c6b6b7b6ec4 ( Context * __context__, archive::MemSerializer & __self_rename_at_33_30 );
+inline TArray<uint8_t> _FuncMemSerializerTickgetCopyOfData_682f289aa33320f2 ( Context * __context__, archive::MemSerializer & __self_rename_at_37_31 );
+inline char * _FuncMemSerializerTickgetLastError_b94e4e8380cef718 ( Context * __context__, archive::MemSerializer & __self_rename_at_42_33 );
+inline bool _FuncMemSerializerTickOK_a40cae5e96176170 ( Context * __context__, archive::MemSerializer & __self_rename_at_46_34 );
+inline bool _FuncMemSerializerTickwrite_42010d5d4d37e6b4 ( Context * __context__, archive::MemSerializer & __self_rename_at_50_35, void * const  __bytes_rename_at_50_36, int32_t __size_rename_at_50_37 );
+inline bool _FuncMemSerializerTickread_e5e9e0c17fa011c0 ( Context * __context__, archive::MemSerializer & __self_rename_at_59_39, void * const  __bytes_rename_at_59_40, int32_t __size_rename_at_59_41 );
+inline void _FuncMemSerializerTickerror_408f6b66809c6221 ( Context * __context__, archive::MemSerializer & __self_rename_at_74_44, char * const  __code_rename_at_74_45 );
+inline void _FuncMemSerializer_0x27___finalize_eb63259fd4b06d18 ( Context * __context__, archive::MemSerializer & __self_rename_at_24_46 );
+inline void serialize_864aec01f72813a5 ( Context * __context__, archive::Archive & __arch_rename_at_133_47, float3x3 & __value_rename_at_133_48 );
+inline void serialize_2bdd95a82ea20a0e ( Context * __context__, archive::Archive & __arch_rename_at_137_49, float3x4 & __value_rename_at_137_50 );
+inline void serialize_a10311ab5d84440e ( Context * __context__, archive::Archive & __arch_rename_at_141_51, float4x4 & __value_rename_at_141_52 );
+inline void serialize_e472b981aa88a5bc ( Context * __context__, archive::Archive & __arch_rename_at_230_53, char * & __value_rename_at_230_54 );
 inline archive::Serializer Serializer_3a8e571f3a055b73 ( Context * __context__ );
 
 void __init_script ( Context * __context__, bool __init_shared )
@@ -451,83 +447,77 @@ inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839
     return das_auto_cast_ref<TArray<uint8_t> &>::cast(__a_rename_at_50_7);
 }
 
-inline archive::MemSerializer & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_d4c9c59da6d9e4b3 ( Context * __context__, archive::MemSerializer &  __a_rename_at_50_8 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1182_8 )
 {
-    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_1,cast<archive::MemSerializer &>::from(__a_rename_at_50_8)));
-    return das_auto_cast_ref<archive::MemSerializer &>::cast(__a_rename_at_50_8);
+    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1182_8),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1182_9 )
+inline void finalize_c806b47786a4f1c9 ( Context * __context__, archive::Serializer &  ____this_rename_at_16_9 )
 {
-    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1182_9),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    memset(&(____this_rename_at_16_9), 0, TypeSize<archive::Serializer>::size);
 }
 
-inline void finalize_c806b47786a4f1c9 ( Context * __context__, archive::Serializer &  ____this_rename_at_16_10 )
+inline void finalize_85ad7a5b2a02d95a ( Context * __context__, archive::MemSerializer &  ____this_rename_at_24_10 )
 {
-    memset(&(____this_rename_at_16_10), 0, TypeSize<archive::Serializer>::size);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_24_10.data));
+    memset(&(____this_rename_at_24_10), 0, TypeSize<archive::MemSerializer>::size);
 }
 
-inline void finalize_85ad7a5b2a02d95a ( Context * __context__, archive::MemSerializer &  ____this_rename_at_24_11 )
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb ( Context * __context__, archive::Archive &  __arch_rename_at_90_11, float3x3 &  __value_rename_at_90_12 )
 {
-    _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_24_11.data));
-    memset(&(____this_rename_at_24_11), 0, TypeSize<archive::MemSerializer>::size);
-}
-
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb ( Context * __context__, archive::Archive &  __arch_rename_at_90_12, float3x3 &  __value_rename_at_90_13 )
-{
-    if ( __arch_rename_at_90_12.reading )
+    if ( __arch_rename_at_90_11.reading )
     {
-        das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,float3x3 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_12.stream))),das_ref(__context__,__value_rename_at_90_13),36);
+        das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,float3x3 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_11.stream))),das_ref(__context__,__value_rename_at_90_12),36);
     } else {
-        das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,float3x3 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_12.stream))),das_ref(__context__,__value_rename_at_90_13),36);
+        das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,float3x3 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_11.stream))),das_ref(__context__,__value_rename_at_90_12),36);
     };
 }
 
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07 ( Context * __context__, archive::Archive &  __arch_rename_at_90_14, float3x4 &  __value_rename_at_90_15 )
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07 ( Context * __context__, archive::Archive &  __arch_rename_at_90_13, float3x4 &  __value_rename_at_90_14 )
 {
-    if ( __arch_rename_at_90_14.reading )
+    if ( __arch_rename_at_90_13.reading )
     {
-        das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,float3x4 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_14.stream))),das_ref(__context__,__value_rename_at_90_15),48);
+        das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,float3x4 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_13.stream))),das_ref(__context__,__value_rename_at_90_14),48);
     } else {
-        das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,float3x4 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_14.stream))),das_ref(__context__,__value_rename_at_90_15),48);
+        das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,float3x4 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_13.stream))),das_ref(__context__,__value_rename_at_90_14),48);
     };
 }
 
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5 ( Context * __context__, archive::Archive &  __arch_rename_at_90_16, float4x4 &  __value_rename_at_90_17 )
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5 ( Context * __context__, archive::Archive &  __arch_rename_at_90_15, float4x4 &  __value_rename_at_90_16 )
 {
-    if ( __arch_rename_at_90_16.reading )
+    if ( __arch_rename_at_90_15.reading )
     {
-        das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,float4x4 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_16.stream))),das_ref(__context__,__value_rename_at_90_17),64);
+        das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,float4x4 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_15.stream))),das_ref(__context__,__value_rename_at_90_16),64);
     } else {
-        das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,float4x4 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_16.stream))),das_ref(__context__,__value_rename_at_90_17),64);
+        das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,float4x4 *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_90_15.stream))),das_ref(__context__,__value_rename_at_90_16),64);
     };
 }
 
-inline void _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654 ( Context * __context__, archive::Archive &  __arch_rename_at_99_18, int32_t & __value_rename_at_99_19 )
+inline void _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654 ( Context * __context__, archive::Archive &  __arch_rename_at_99_17, int32_t & __value_rename_at_99_18 )
 {
-    DAS_ASSERT((__arch_rename_at_99_18.reading));
-    das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,int32_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_99_18.stream))),das_ref(__context__,__value_rename_at_99_19),4);
+    DAS_ASSERT((__arch_rename_at_99_17.reading));
+    das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,int32_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_99_17.stream))),das_ref(__context__,__value_rename_at_99_18),4);
 }
 
-inline void _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_114_20, int32_t __newSize_rename_at_114_21 )
+inline void _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_114_19, int32_t __newSize_rename_at_114_20 )
 {
-    builtin_array_resize_no_init(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_114_20),__newSize_rename_at_114_21,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_resize_no_init(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_114_19),__newSize_rename_at_114_20,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44 ( Context * __context__, archive::Archive &  __arch_rename_at_105_22, int32_t & __value_rename_at_105_23 )
+inline void _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44 ( Context * __context__, archive::Archive &  __arch_rename_at_105_21, int32_t & __value_rename_at_105_22 )
 {
-    DAS_ASSERT((!__arch_rename_at_105_22.reading));
-    das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,int32_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_105_22.stream))),das_ref(__context__,__value_rename_at_105_23),4);
+    DAS_ASSERT((!__arch_rename_at_105_21.reading));
+    das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,int32_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_105_21.stream))),das_ref(__context__,__value_rename_at_105_22),4);
 }
 
-inline void _FuncSerializer_0x27___finalize_9fd945918e1827c2 ( Context * __context__, archive::Serializer &  __self_rename_at_16_24 )
+inline void _FuncSerializer_0x27___finalize_9fd945918e1827c2 ( Context * __context__, archive::Serializer &  __self_rename_at_16_23 )
 {
-    finalize_c806b47786a4f1c9(__context__,das_arg<archive::Serializer>::pass(__self_rename_at_16_24));
+    finalize_c806b47786a4f1c9(__context__,das_arg<archive::Serializer>::pass(__self_rename_at_16_23));
 }
 
-inline archive::MemSerializer MemSerializer_61e9509e2d784369 ( Context * __context__ )
+inline archive::MemSerializer MemSerializer_7ed03e14b8aa4fb4 ( Context * __context__ )
 {
-    archive::MemSerializer __self_rename_at_26_25; das_zero(__self_rename_at_26_25); das_move(__self_rename_at_26_25, (([&]() -> archive::MemSerializer {
+    archive::MemSerializer __self_rename_at_26_24; das_zero(__self_rename_at_26_24); das_move(__self_rename_at_26_24, (([&]() -> archive::MemSerializer {
         archive::MemSerializer __mks_26;
         das_zero(__mks_26);
         das_copy((__mks_26.__rtti),(((void *)(&__type_info__e6261f7908d89619))));
@@ -541,16 +531,16 @@ inline archive::MemSerializer MemSerializer_61e9509e2d784369 ( Context * __conte
         das_copy((__mks_26.getLastError),(Func(__context__->fnByMangledName(/*@archive::MemSerializer`getLastError S<archive::MemSerializer>*/ 0x5903e37131c8374))));
         return __mks_26;
     })()));
-    return /* <- */ das_auto_cast_move<archive::MemSerializer>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_d4c9c59da6d9e4b3(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_26_25)));
+    return /* <- */ das_auto_cast_move<archive::MemSerializer>::cast(__self_rename_at_26_24);
 }
 
-inline void _FuncMemSerializerTickMemSerializer_59fa6e4b02ed33fb ( Context * __context__, archive::MemSerializer &  __self_rename_at_26_26 )
+inline void _FuncMemSerializerTickMemSerializer_59fa6e4b02ed33fb ( Context * __context__, archive::MemSerializer &  __self_rename_at_26_25 )
 {
 }
 
-inline archive::MemSerializer MemSerializer_b33baca071b78385 ( Context * __context__, TArray<uint8_t> const  &  __from_rename_at_30_27 )
+inline archive::MemSerializer MemSerializer_2a5138b36b6cb644 ( Context * __context__, TArray<uint8_t> const  &  __from_rename_at_30_26 )
 {
-    archive::MemSerializer __self_rename_at_30_28; das_zero(__self_rename_at_30_28); das_move(__self_rename_at_30_28, (([&]() -> archive::MemSerializer {
+    archive::MemSerializer __self_rename_at_30_27; das_zero(__self_rename_at_30_27); das_move(__self_rename_at_30_27, (([&]() -> archive::MemSerializer {
         archive::MemSerializer __mks_30;
         das_zero(__mks_30);
         das_copy((__mks_30.__rtti),(((void *)(&__type_info__e6261f7908d89619))));
@@ -564,108 +554,108 @@ inline archive::MemSerializer MemSerializer_b33baca071b78385 ( Context * __conte
         das_copy((__mks_30.getLastError),(Func(__context__->fnByMangledName(/*@archive::MemSerializer`getLastError S<archive::MemSerializer>*/ 0x5903e37131c8374))));
         return __mks_30;
     })()));
-    _FuncMemSerializerTickMemSerializer_161b88126e8c4555(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_30_28),__from_rename_at_30_27);
-    return /* <- */ das_auto_cast_move<archive::MemSerializer>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_d4c9c59da6d9e4b3(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_30_28)));
+    _FuncMemSerializerTickMemSerializer_161b88126e8c4555(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_30_27),__from_rename_at_30_26);
+    return /* <- */ das_auto_cast_move<archive::MemSerializer>::cast(__self_rename_at_30_27);
 }
 
-inline void _FuncMemSerializerTickMemSerializer_161b88126e8c4555 ( Context * __context__, archive::MemSerializer &  __self_rename_at_30_29, TArray<uint8_t> const  &  __from_rename_at_30_30 )
+inline void _FuncMemSerializerTickMemSerializer_161b88126e8c4555 ( Context * __context__, archive::MemSerializer &  __self_rename_at_30_28, TArray<uint8_t> const  &  __from_rename_at_30_29 )
 {
-    _FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_30_29.data),__from_rename_at_30_30);
+    _FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_30_28.data),__from_rename_at_30_29);
 }
 
-inline TArray<uint8_t> _FuncMemSerializerTickextractData_e2917c6b6b7b6ec4 ( Context * __context__, archive::MemSerializer &  __self_rename_at_33_31 )
+inline TArray<uint8_t> _FuncMemSerializerTickextractData_e2917c6b6b7b6ec4 ( Context * __context__, archive::MemSerializer &  __self_rename_at_33_30 )
 {
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_33_31.data)));
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_33_30.data)));
 }
 
-inline TArray<uint8_t> _FuncMemSerializerTickgetCopyOfData_682f289aa33320f2 ( Context * __context__, archive::MemSerializer &  __self_rename_at_37_32 )
+inline TArray<uint8_t> _FuncMemSerializerTickgetCopyOfData_682f289aa33320f2 ( Context * __context__, archive::MemSerializer &  __self_rename_at_37_31 )
 {
-    TArray<uint8_t> __cdata_rename_at_39_33; das_zero(__cdata_rename_at_39_33); das_move(__cdata_rename_at_39_33, _FuncbuiltinTickclone_to_moveTick2007252383599261567_5374efae61d17e26(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_37_32.data)));
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(__cdata_rename_at_39_33)));
+    TArray<uint8_t> __cdata_rename_at_39_32; das_zero(__cdata_rename_at_39_32); das_move(__cdata_rename_at_39_32, _FuncbuiltinTickclone_to_moveTick2007252383599261567_5374efae61d17e26(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_37_31.data)));
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(__cdata_rename_at_39_32)));
 }
 
-inline char * _FuncMemSerializerTickgetLastError_b94e4e8380cef718 ( Context * __context__, archive::MemSerializer &  __self_rename_at_42_34 )
+inline char * _FuncMemSerializerTickgetLastError_b94e4e8380cef718 ( Context * __context__, archive::MemSerializer &  __self_rename_at_42_33 )
 {
-    return das_auto_cast<char *>::cast(__self_rename_at_42_34.lastError);
+    return das_auto_cast<char *>::cast(__self_rename_at_42_33.lastError);
 }
 
-inline bool _FuncMemSerializerTickOK_a40cae5e96176170 ( Context * __context__, archive::MemSerializer &  __self_rename_at_46_35 )
+inline bool _FuncMemSerializerTickOK_a40cae5e96176170 ( Context * __context__, archive::MemSerializer &  __self_rename_at_46_34 )
 {
-    return das_auto_cast<bool>::cast(SimPolicy<char *>::Equ(cast<char *>::from(__self_rename_at_46_35.lastError),cast<char *>::from(nullptr),*__context__,nullptr));
+    return das_auto_cast<bool>::cast(SimPolicy<char *>::Equ(cast<char *>::from(__self_rename_at_46_34.lastError),cast<char *>::from(nullptr),*__context__,nullptr));
 }
 
-inline bool _FuncMemSerializerTickwrite_42010d5d4d37e6b4 ( Context * __context__, archive::MemSerializer &  __self_rename_at_50_36, void * const  __bytes_rename_at_50_37, int32_t __size_rename_at_50_38 )
+inline bool _FuncMemSerializerTickwrite_42010d5d4d37e6b4 ( Context * __context__, archive::MemSerializer &  __self_rename_at_50_35, void * const  __bytes_rename_at_50_36, int32_t __size_rename_at_50_37 )
 {
-    int32_t __pos_rename_at_52_39 = ((int32_t)builtin_array_size(das_arg<TArray<uint8_t>>::pass(__self_rename_at_50_36.data)));
-    _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_50_36.data),__pos_rename_at_52_39 + __size_rename_at_50_38);
-    das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__self_rename_at_50_36.data(__pos_rename_at_52_39,__context__))),__bytes_rename_at_50_37,__size_rename_at_50_38);
+    int32_t __pos_rename_at_52_38 = ((int32_t)builtin_array_size(das_arg<TArray<uint8_t>>::pass(__self_rename_at_50_35.data)));
+    _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_50_35.data),__pos_rename_at_52_38 + __size_rename_at_50_37);
+    das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__self_rename_at_50_35.data(__pos_rename_at_52_38,__context__))),__bytes_rename_at_50_36,__size_rename_at_50_37);
     return das_auto_cast<bool>::cast(true);
 }
 
-inline bool _FuncMemSerializerTickread_e5e9e0c17fa011c0 ( Context * __context__, archive::MemSerializer &  __self_rename_at_59_40, void * const  __bytes_rename_at_59_41, int32_t __size_rename_at_59_42 )
+inline bool _FuncMemSerializerTickread_e5e9e0c17fa011c0 ( Context * __context__, archive::MemSerializer &  __self_rename_at_59_39, void * const  __bytes_rename_at_59_40, int32_t __size_rename_at_59_41 )
 {
-    int32_t __newOffset_rename_at_61_43 = ((int32_t)(__self_rename_at_59_40.readOffset + __size_rename_at_59_42));
-    int32_t __maxOffset_rename_at_62_44 = ((int32_t)builtin_array_size(das_arg<TArray<uint8_t>>::pass(__self_rename_at_59_40.data)));
-    if ( __newOffset_rename_at_61_43 > __maxOffset_rename_at_62_44 )
+    int32_t __newOffset_rename_at_61_42 = ((int32_t)(__self_rename_at_59_39.readOffset + __size_rename_at_59_41));
+    int32_t __maxOffset_rename_at_62_43 = ((int32_t)builtin_array_size(das_arg<TArray<uint8_t>>::pass(__self_rename_at_59_39.data)));
+    if ( __newOffset_rename_at_61_42 > __maxOffset_rename_at_62_43 )
     {
         builtin_error(((char *) "reading past the end of stream"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-        das_copy(__self_rename_at_59_40.readOffset,__maxOffset_rename_at_62_44);
+        das_copy(__self_rename_at_59_39.readOffset,__maxOffset_rename_at_62_43);
         return das_auto_cast<bool>::cast(false);
     } else {
-        das_memcpy(__bytes_rename_at_59_41,das_auto_cast<void * const >::cast(das_ref(__context__,__self_rename_at_59_40.data(__self_rename_at_59_40.readOffset,__context__))),__size_rename_at_59_42);
-        das_copy(__self_rename_at_59_40.readOffset,__newOffset_rename_at_61_43);
+        das_memcpy(__bytes_rename_at_59_40,das_auto_cast<void * const >::cast(das_ref(__context__,__self_rename_at_59_39.data(__self_rename_at_59_39.readOffset,__context__))),__size_rename_at_59_41);
+        das_copy(__self_rename_at_59_39.readOffset,__newOffset_rename_at_61_42);
         return das_auto_cast<bool>::cast(true);
     };
 }
 
-inline void _FuncMemSerializerTickerror_408f6b66809c6221 ( Context * __context__, archive::MemSerializer &  __self_rename_at_74_45, char * const  __code_rename_at_74_46 )
+inline void _FuncMemSerializerTickerror_408f6b66809c6221 ( Context * __context__, archive::MemSerializer &  __self_rename_at_74_44, char * const  __code_rename_at_74_45 )
 {
-    das_copy(__self_rename_at_74_45.lastError,__code_rename_at_74_46);
+    das_copy(__self_rename_at_74_44.lastError,__code_rename_at_74_45);
 }
 
-inline void _FuncMemSerializer_0x27___finalize_eb63259fd4b06d18 ( Context * __context__, archive::MemSerializer &  __self_rename_at_24_47 )
+inline void _FuncMemSerializer_0x27___finalize_eb63259fd4b06d18 ( Context * __context__, archive::MemSerializer &  __self_rename_at_24_46 )
 {
-    finalize_85ad7a5b2a02d95a(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_24_47));
+    finalize_85ad7a5b2a02d95a(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_24_46));
 }
 
-inline void serialize_864aec01f72813a5 ( Context * __context__, archive::Archive &  __arch_rename_at_133_48, float3x3 &  __value_rename_at_133_49 )
+inline void serialize_864aec01f72813a5 ( Context * __context__, archive::Archive &  __arch_rename_at_133_47, float3x3 &  __value_rename_at_133_48 )
 {
-    _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_133_48),das_arg<float3x3>::pass(__value_rename_at_133_49));
+    _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_133_47),das_arg<float3x3>::pass(__value_rename_at_133_48));
 }
 
-inline void serialize_2bdd95a82ea20a0e ( Context * __context__, archive::Archive &  __arch_rename_at_137_50, float3x4 &  __value_rename_at_137_51 )
+inline void serialize_2bdd95a82ea20a0e ( Context * __context__, archive::Archive &  __arch_rename_at_137_49, float3x4 &  __value_rename_at_137_50 )
 {
-    _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_137_50),das_arg<float3x4>::pass(__value_rename_at_137_51));
+    _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_137_49),das_arg<float3x4>::pass(__value_rename_at_137_50));
 }
 
-inline void serialize_a10311ab5d84440e ( Context * __context__, archive::Archive &  __arch_rename_at_141_52, float4x4 &  __value_rename_at_141_53 )
+inline void serialize_a10311ab5d84440e ( Context * __context__, archive::Archive &  __arch_rename_at_141_51, float4x4 &  __value_rename_at_141_52 )
 {
-    _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_141_52),das_arg<float4x4>::pass(__value_rename_at_141_53));
+    _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_141_51),das_arg<float4x4>::pass(__value_rename_at_141_52));
 }
 
-inline void serialize_e472b981aa88a5bc ( Context * __context__, archive::Archive &  __arch_rename_at_230_54, char * & __value_rename_at_230_55 )
+inline void serialize_e472b981aa88a5bc ( Context * __context__, archive::Archive &  __arch_rename_at_230_53, char * & __value_rename_at_230_54 )
 {
-    if ( __arch_rename_at_230_54.reading )
+    if ( __arch_rename_at_230_53.reading )
     {
-        int32_t __len_rename_at_233_56 = 0;
-        _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_54),__len_rename_at_233_56);
-        if ( __len_rename_at_233_56 > 0 )
+        int32_t __len_rename_at_233_55 = 0;
+        _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_53),__len_rename_at_233_55);
+        if ( __len_rename_at_233_55 > 0 )
         {
-            TArray<uint8_t> __tbuf_rename_at_236_57; das_zero(__tbuf_rename_at_236_57);
-            _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_57),__len_rename_at_233_56 + 1);
-            das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,uint8_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_230_54.stream))),das_ref(__context__,__tbuf_rename_at_236_57(0,__context__)),__len_rename_at_233_56);
-            das_copy(__tbuf_rename_at_236_57(__len_rename_at_233_56,__context__),0x0);
-            das_copy(__value_rename_at_230_55,((char * const )(builtin_string_clone(das_cast<char *>::cast(das_ref(__context__,__tbuf_rename_at_236_57(0,__context__))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
-            _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_57));
+            TArray<uint8_t> __tbuf_rename_at_236_56; das_zero(__tbuf_rename_at_236_56);
+            _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_56),__len_rename_at_233_55 + 1);
+            das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,uint8_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_230_53.stream))),das_ref(__context__,__tbuf_rename_at_236_56(0,__context__)),__len_rename_at_233_55);
+            das_copy(__tbuf_rename_at_236_56(__len_rename_at_233_55,__context__),0x0);
+            das_copy(__value_rename_at_230_54,((char * const )(builtin_string_clone(das_cast<char *>::cast(das_ref(__context__,__tbuf_rename_at_236_56(0,__context__))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
+            _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_56));
         } else {
-            das_copy(__value_rename_at_230_55,nullptr);
+            das_copy(__value_rename_at_230_54,nullptr);
         };
     } else {
-        int32_t __len_rename_at_246_58 = builtin_string_length(__value_rename_at_230_55,__context__);
-        _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_54),__len_rename_at_246_58);
-        if ( __len_rename_at_246_58 > 0 )
+        int32_t __len_rename_at_246_57 = builtin_string_length(__value_rename_at_230_54,__context__);
+        _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_53),__len_rename_at_246_57);
+        if ( __len_rename_at_246_57 > 0 )
         {
-            das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,void *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_230_54.stream))),das_cast<void *>::cast(__value_rename_at_230_55),__len_rename_at_246_58);
+            das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,void *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_230_53.stream))),das_cast<void *>::cast(__value_rename_at_230_54),__len_rename_at_246_57);
         };
     };
 }
@@ -693,9 +683,6 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     };
     aotLib[0xa8f929474bbb24c7] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e>>();
-    };
-    aotLib[0x3439bb3602e683e5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_d4c9c59da6d9e4b3>>();
     };
     aotLib[0x1f8eb5798352d074] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb>>();
@@ -727,14 +714,14 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xfaab756b0f2d55a8] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSerializer_0x27___finalize_9fd945918e1827c2>>();
     };
-    aotLib[0xdabc50ec882fef0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&MemSerializer_61e9509e2d784369>>();
+    aotLib[0x2c6479bddcd2c0cb] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&MemSerializer_7ed03e14b8aa4fb4>>();
     };
     aotLib[0xe895d28e29c9a4c4] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickMemSerializer_59fa6e4b02ed33fb>>();
     };
-    aotLib[0x3d3a1066fc2bc2be] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&MemSerializer_b33baca071b78385>>();
+    aotLib[0x7cdaf9182b9afc3b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&MemSerializer_2a5138b36b6cb644>>();
     };
     aotLib[0xc5353c3949580f0b] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickMemSerializer_161b88126e8c4555>>();
@@ -781,8 +768,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_13184248888064695127
-AotListBase impl_aot_archive(_anon_13184248888064695127::registerAotFunctions);
+} // namespace _anon_15754215596584572946
+AotListBase impl_aot_archive(_anon_15754215596584572946::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

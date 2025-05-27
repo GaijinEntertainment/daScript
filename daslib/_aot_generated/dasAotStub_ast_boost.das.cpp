@@ -55,7 +55,7 @@
 #endif
 
 namespace das {
-namespace _anon_2307684379922914619 {
+namespace _anon_5985562682135410200 {
 
 namespace ast_boost { struct MacroMacro; };
 namespace ast_boost { struct TagFunctionAnnotation; };
@@ -3606,8 +3606,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_2307684379922914619
-AotListBase impl_aot_ast_boost(_anon_2307684379922914619::registerAotFunctions);
+} // namespace _anon_5985562682135410200
+AotListBase impl_aot_ast_boost(_anon_5985562682135410200::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

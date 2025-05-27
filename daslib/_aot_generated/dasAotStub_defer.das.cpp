@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_1776566935523873409 {
+namespace _anon_7939451368259187062 {
 
 namespace defer { struct DeferMacro; };
 namespace defer { struct DeferDeleteMacro; };
@@ -397,8 +397,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_1776566935523873409
-AotListBase impl_aot_defer(_anon_1776566935523873409::registerAotFunctions);
+} // namespace _anon_7939451368259187062
+AotListBase impl_aot_defer(_anon_7939451368259187062::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

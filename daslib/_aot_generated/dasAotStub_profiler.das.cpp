@@ -59,7 +59,7 @@
 #endif
 
 namespace das {
-namespace _anon_6796323685014359173 {
+namespace _anon_24307200680844639 {
 
 namespace profiler { struct PerfNode; };
 namespace profiler { struct PerfEvent; };
@@ -244,7 +244,6 @@ extern StructInfo __struct_info__574b31acc906991f;
 extern TypeInfo __type_info__6b1c7db4b71a781f;
 extern TypeInfo __type_info__831390c0482e333b;
 extern TypeInfo __type_info__9ef92bcca2cb528b;
-extern TypeInfo __type_info__615095147e2c98c2;
 extern TypeInfo __type_info__921d3d0750982f13;
 extern TypeInfo __type_info__a9e212d4f301a82c;
 extern TypeInfo __type_info__209f9e4a9562d5c2;
@@ -588,7 +587,6 @@ StructInfo __struct_info__574b31acc906991f = {"ProfilerDebugAgent", "profiler", 
 TypeInfo __type_info__6b1c7db4b71a781f = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 258, 32, UINT64_C(0x6b1c7db4b71a781f) };
 TypeInfo __type_info__831390c0482e333b = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__5ac778689ccf4816, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0x831390c0482e333b) };
 TypeInfo __type_info__9ef92bcca2cb528b = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__786ea93274f6826d, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0x9ef92bcca2cb528b) };
-TypeInfo __type_info__615095147e2c98c2 = { Type::tStructure, &__struct_info__574b31acc906991f, nullptr, nullptr, &__type_info__4e03c6707d012d5b, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 488, UINT64_C(0x615095147e2c98c2) };
 TypeInfo __type_info__921d3d0750982f13 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16484, 8, UINT64_C(0x921d3d0750982f13) };
 TypeInfo __type_info__a9e212d4f301a82c = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__246dda13a8a4b104, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, 8, UINT64_C(0xa9e212d4f301a82c) };
 TypeInfo __type_info__209f9e4a9562d5c2 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__44ca287faf79178, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, 8, UINT64_C(0x209f9e4a9562d5c2) };
@@ -632,69 +630,67 @@ static void resolveTypeInfoAnnotations()
     }
 }
 
-TypeInfo * __tinfo_0[1] = { &__type_info__615095147e2c98c2 };
-TypeInfo * __tinfo_1[3] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_2[9] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_3[12] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af63ee4c86020b22, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_4[8] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af63ee4c86020b22, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_5[3] = { &__type_info__af90fe4c864e9d52, &__type_info__6b1c7db4b71a781f, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_6[4] = { &__type_info__b68d800849332aec, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__326921ccb9993fde };
-TypeInfo * __tinfo_7[5] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_0[3] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_1[9] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_2[12] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af63ee4c86020b22, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_3[8] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af63ee4c86020b22, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_4[3] = { &__type_info__af90fe4c864e9d52, &__type_info__6b1c7db4b71a781f, &__type_info__af90fe4c864e9d52 };
+TypeInfo * __tinfo_5[4] = { &__type_info__b68d800849332aec, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__326921ccb9993fde };
+TypeInfo * __tinfo_6[5] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52 };
 
 inline Sequence DAS_COMMENT((profiler::PerfNode * &)) _FuncbuiltinTickvaluesTick1351216622833168869_a3e598199cd32e36 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> & __a_rename_at_1150_0 );
 inline Sequence DAS_COMMENT((profiler::PerfContext &)) _FuncbuiltinTickvaluesTick1351216622833168869_ba9de0362fdc9aa9 ( Context * __context__, TTable<uint64_t,profiler::PerfContext> & __a_rename_at_1150_2 );
 inline void finalize_bf607c77b39d2bb9 ( Context * __context__, profiler::PerfEvent & ____this_rename_at_29_4 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_5faf74312cbe5451 ( Context * __context__, profiler::ProfilerDebugAgent const  & __cl_rename_at_116_5 );
-inline profiler::ProfilerDebugAgent & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_875f1de9d5688f73 ( Context * __context__, profiler::ProfilerDebugAgent & __a_rename_at_50_6 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_9ef6894feb95542 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> & __a_rename_at_1193_7 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_cc32169f37ab997f ( Context * __context__, TTable<uint64_t,profiler::PerfContext> & __a_rename_at_1193_9 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_fe6693aead4ea8af ( Context * __context__, TTable<uint64_t,void> & __a_rename_at_1193_11 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_b6b4a3184a7eff35 ( Context * __context__, TTable<char *,int64_t> & __a_rename_at_1193_12 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94c6752d6462171a ( Context * __context__, TArray<profiler::PerfEvent> & __a_rename_at_1182_13 );
-inline void _FuncbuiltinTickresizeTick4811697762258667383_614e3a9c4293636c ( Context * __context__, TArray<profiler::PerfNode *> & __Arr_rename_at_68_15, int32_t __newSize_rename_at_68_16 );
-inline void finalize_eb44cbf3fa3f22db ( Context * __context__, profiler::PerfNode & ____this_rename_at_17_17 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_be8785a2beb772fc ( Context * __context__, TTable<char *,int64_t> const  & __Tab_rename_at_1014_18, char * const  __at_rename_at_1014_19 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_36aa3c8aa43a72c8 ( Context * __context__, TTable<uint64_t,void> const  & __Tab_rename_at_1014_20, uint64_t __at_rename_at_1014_21 );
-inline void _FuncbuiltinTickinsertTick10959621454228962049_6f6b7a0a1ee99e7f ( Context * __context__, TTable<uint64_t,void> & __Tab_rename_at_895_22, uint64_t __at_rename_at_895_23 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_c8e6e12e4804697f ( Context * __context__, TTable<uint64_t,profiler::PerfContext> const  & __Tab_rename_at_1014_24, uint64_t __at_rename_at_1014_25 );
-inline void finalize_132a04503ddcd675 ( Context * __context__, profiler::PerfContext & ____this_rename_at_38_26 );
-inline bool _FuncbuiltinTickeraseTick5639988512056021548_c8721438e20bfbc9 ( Context * __context__, TTable<uint64_t,void> & __Tab_rename_at_888_27, uint64_t __at_rename_at_888_28 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_d9c98e89be6f3aa9 ( Context * __context__, TArray<profiler::PerfEvent> & __Arr_rename_at_181_29, profiler::PerfEvent & __value_rename_at_181_30 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_9ddf16f8e9a725e2 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> const  & __Tab_rename_at_1014_31, SimFunction * const  __at_rename_at_1014_32 );
-inline bool _FuncbuiltinTickeraseTick5639988512056021548_9a1bcb3ea71b8522 ( Context * __context__, TTable<uint64_t,profiler::PerfContext> & __Tab_rename_at_888_33, uint64_t __at_rename_at_888_34 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_9ef6894feb95542 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> & __a_rename_at_1193_6 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_cc32169f37ab997f ( Context * __context__, TTable<uint64_t,profiler::PerfContext> & __a_rename_at_1193_8 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_fe6693aead4ea8af ( Context * __context__, TTable<uint64_t,void> & __a_rename_at_1193_10 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_b6b4a3184a7eff35 ( Context * __context__, TTable<char *,int64_t> & __a_rename_at_1193_11 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94c6752d6462171a ( Context * __context__, TArray<profiler::PerfEvent> & __a_rename_at_1182_12 );
+inline void _FuncbuiltinTickresizeTick4811697762258667383_614e3a9c4293636c ( Context * __context__, TArray<profiler::PerfNode *> & __Arr_rename_at_68_14, int32_t __newSize_rename_at_68_15 );
+inline void finalize_eb44cbf3fa3f22db ( Context * __context__, profiler::PerfNode & ____this_rename_at_17_16 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_be8785a2beb772fc ( Context * __context__, TTable<char *,int64_t> const  & __Tab_rename_at_1014_17, char * const  __at_rename_at_1014_18 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_36aa3c8aa43a72c8 ( Context * __context__, TTable<uint64_t,void> const  & __Tab_rename_at_1014_19, uint64_t __at_rename_at_1014_20 );
+inline void _FuncbuiltinTickinsertTick10959621454228962049_6f6b7a0a1ee99e7f ( Context * __context__, TTable<uint64_t,void> & __Tab_rename_at_895_21, uint64_t __at_rename_at_895_22 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_c8e6e12e4804697f ( Context * __context__, TTable<uint64_t,profiler::PerfContext> const  & __Tab_rename_at_1014_23, uint64_t __at_rename_at_1014_24 );
+inline void finalize_132a04503ddcd675 ( Context * __context__, profiler::PerfContext & ____this_rename_at_38_25 );
+inline bool _FuncbuiltinTickeraseTick5639988512056021548_c8721438e20bfbc9 ( Context * __context__, TTable<uint64_t,void> & __Tab_rename_at_888_26, uint64_t __at_rename_at_888_27 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_d9c98e89be6f3aa9 ( Context * __context__, TArray<profiler::PerfEvent> & __Arr_rename_at_181_28, profiler::PerfEvent & __value_rename_at_181_29 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_9ddf16f8e9a725e2 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> const  & __Tab_rename_at_1014_30, SimFunction * const  __at_rename_at_1014_31 );
+inline bool _FuncbuiltinTickeraseTick5639988512056021548_9a1bcb3ea71b8522 ( Context * __context__, TTable<uint64_t,profiler::PerfContext> & __Tab_rename_at_888_32, uint64_t __at_rename_at_888_33 );
 inline TArray<char *> _FuncbuiltinTickget_command_line_argumentsTick14327939727965569528_264d199bf50df373 ( Context * __context__ );
-inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9 ( Context * __context__, void * const  __p_rename_at_15_36 );
-inline Sequence DAS_COMMENT((profiler::PerfNode * &)) _FuncbuiltinTickvaluesTick1935193042646774172_589e57754e0170bc ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> const  & __a_rename_at_1143_37 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_ce8f6e379fcfea44 ( Context * __context__, TArray<profiler::PerfNode *> & __Arr_rename_at_181_39, profiler::PerfNode * __value_rename_at_181_40 );
-inline profiler::PerfNode * & _FuncbuiltinTickbackTick18296309835877697278_d85bb617e8ef4b7a ( Context * __context__, TArray<profiler::PerfNode *> & __a_rename_at_473_41 );
-inline void _FuncbuiltinTickpopTick1161079256290593740_82d3f3b2cf4e69b4 ( Context * __context__, TArray<profiler::PerfNode *> & __Arr_rename_at_132_43 );
-inline void finalize_8e28ab4c5bbc2920 ( Context * __context__, profiler::PerfNode * & ____this_rename_at_233_44 );
-inline void finalize_a22df4460ed06c09 ( Context * __context__, profiler::ProfilerDebugAgent & ____this_rename_at_51_45 );
-inline void _FuncdebugapiTickinstall_new_thread_local_debug_agentTick15124441463860820031_df029e5126654686 ( Context * __context__, profiler::ProfilerDebugAgent * __agentPtr_rename_at_51_46 );
-inline void set_enable_profiler_9f0d36b33d964003 ( Context * __context__, uint64_t __ctxId_rename_at_45_49, bool __enabled_rename_at_45_50 );
-inline Func DAS_COMMENT((void,uint64_t,bool)) _FuncProfilerDebugAgentTickdependency_9d6d5d73e8b06c23 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_62_51 );
-inline bool _FuncProfilerDebugAgentTickis_time_unit_correct_25f9d2ab7f2d98f3 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_66_52, char * const  __unit_rename_at_66_53 );
-inline int64_t _FuncProfilerDebugAgentTickconvert_ns_to_unit_36a018949c3810e0 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_70_54, int64_t __time_rename_at_70_55, char * const  __to_rename_at_70_56 );
-inline void _FuncProfilerDebugAgentTickonInstall_79884d0439618d6e ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_74_57, DebugAgent * const  __agent_rename_at_74_58 );
-inline void _FuncProfilerDebugAgentTickonUninstall_df0cd7115237983e ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_100_65, DebugAgent * const  __agent_rename_at_100_66 );
-inline bool _FuncProfilerDebugAgentTickisProfileable_f648883be6e14b15 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_107_67, Context & __ctx_rename_at_107_68 );
-inline void _FuncProfilerDebugAgentTickonCreateContext_b8c4d2ec382a1344 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_111_69, Context & __ctx_rename_at_111_70 );
-inline void _FuncProfilerDebugAgentTickenable_profiler_c7c60c2ea3b8eb35 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_119_71, uint64_t __ctxId_rename_at_119_72, bool __enabled_rename_at_119_73 );
-inline void _FuncProfilerDebugAgentTickonDestroyContext_f7495d404e4bfba0 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_122_74, Context & __ctx_rename_at_122_75 );
-inline void _FuncProfilerDebugAgentTickonInstrumentFunctionWithMemory_78db28e3bbcd17 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_133_77, Context & __ctx_rename_at_133_78, SimFunction * __fun_rename_at_133_79, bool __entering_rename_at_133_80, uint64_t __userData_rename_at_133_81 );
-inline void _FuncProfilerDebugAgentTickonInstrumentFunction_96f578b90a66923b ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_149_85, Context & __ctx_rename_at_149_86, SimFunction * __fun_rename_at_149_87, bool __entering_rename_at_149_88, uint64_t __userData_rename_at_149_89 );
-inline void _FuncProfilerDebugAgentTickdump_16cbdda4b0c6973 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_161_92, char * const  __text_rename_at_161_93 );
-inline void _FuncProfilerDebugAgentTickwrite_aaa4a549c5db2470 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_169_94, char * const  __text_rename_at_169_95 );
-inline void _FuncProfilerDebugAgentTickdump_event_f4e3cf1303495263 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_174_96, profiler::PerfEvent const  & __ev_rename_at_174_97, uint64_t __tid_rename_at_174_98 );
-inline void _FuncProfilerDebugAgentTickdump_node_e61d95bf2dd83ed2 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_179_101, profiler::PerfNode * const  __node_rename_at_179_102, int32_t __tab_rename_at_179_103 );
-inline void _FuncProfilerDebugAgentTickdump_context_stack_75a85cd6d05aaa94 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_202_110, uint64_t __tid_rename_at_202_111 );
-inline void _FuncProfilerDebugAgentTickdump_meta_e2086c649a7ec17d ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_236_116, Context & __ctx_rename_at_236_117, uint64_t __tid_rename_at_236_118 );
-inline void _FuncProfilerDebugAgentTickdump_events_a9ca4927f18757f9 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_245_122, uint64_t __tid_rename_at_245_123 );
-inline void _FuncProfilerDebugAgentTickdump_context_fd27b073a7187d7d ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_250_125, Context & __ctx_rename_at_250_126, uint64_t __tid_rename_at_250_127 );
-inline void _FuncProfilerDebugAgent_0x27___finalize_55718825a6cacc65 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_51_128 );
-inline void debug_agent_d95b879260e75c8e ( Context * __context__, Context const  & __ctx_rename_at_261_129 );
-inline profiler::ProfilerDebugAgent ProfilerDebugAgent_bd056e97854e0b75 ( Context * __context__ );
-inline TTable<char *,int64_t> _FuncbuiltinTickto_table_moveTick5858896087460481804_18e39d2b0245aff4 ( Context * __context__, TDim<AutoTuple<char *,int64_t>,4> & __a_rename_at_1455_130 );
+inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9 ( Context * __context__, void * const  __p_rename_at_15_35 );
+inline Sequence DAS_COMMENT((profiler::PerfNode * &)) _FuncbuiltinTickvaluesTick1935193042646774172_589e57754e0170bc ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> const  & __a_rename_at_1143_36 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_ce8f6e379fcfea44 ( Context * __context__, TArray<profiler::PerfNode *> & __Arr_rename_at_181_38, profiler::PerfNode * __value_rename_at_181_39 );
+inline profiler::PerfNode * & _FuncbuiltinTickbackTick18296309835877697278_d85bb617e8ef4b7a ( Context * __context__, TArray<profiler::PerfNode *> & __a_rename_at_473_40 );
+inline void _FuncbuiltinTickpopTick1161079256290593740_82d3f3b2cf4e69b4 ( Context * __context__, TArray<profiler::PerfNode *> & __Arr_rename_at_132_42 );
+inline void finalize_8e28ab4c5bbc2920 ( Context * __context__, profiler::PerfNode * & ____this_rename_at_233_43 );
+inline void finalize_a22df4460ed06c09 ( Context * __context__, profiler::ProfilerDebugAgent & ____this_rename_at_51_44 );
+inline void _FuncdebugapiTickinstall_new_thread_local_debug_agentTick15124441463860820031_df029e5126654686 ( Context * __context__, profiler::ProfilerDebugAgent * __agentPtr_rename_at_51_45 );
+inline void set_enable_profiler_9f0d36b33d964003 ( Context * __context__, uint64_t __ctxId_rename_at_45_48, bool __enabled_rename_at_45_49 );
+inline Func DAS_COMMENT((void,uint64_t,bool)) _FuncProfilerDebugAgentTickdependency_9d6d5d73e8b06c23 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_62_50 );
+inline bool _FuncProfilerDebugAgentTickis_time_unit_correct_25f9d2ab7f2d98f3 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_66_51, char * const  __unit_rename_at_66_52 );
+inline int64_t _FuncProfilerDebugAgentTickconvert_ns_to_unit_36a018949c3810e0 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_70_53, int64_t __time_rename_at_70_54, char * const  __to_rename_at_70_55 );
+inline void _FuncProfilerDebugAgentTickonInstall_79884d0439618d6e ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_74_56, DebugAgent * const  __agent_rename_at_74_57 );
+inline void _FuncProfilerDebugAgentTickonUninstall_df0cd7115237983e ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_100_64, DebugAgent * const  __agent_rename_at_100_65 );
+inline bool _FuncProfilerDebugAgentTickisProfileable_f648883be6e14b15 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_107_66, Context & __ctx_rename_at_107_67 );
+inline void _FuncProfilerDebugAgentTickonCreateContext_b8c4d2ec382a1344 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_111_68, Context & __ctx_rename_at_111_69 );
+inline void _FuncProfilerDebugAgentTickenable_profiler_c7c60c2ea3b8eb35 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_119_70, uint64_t __ctxId_rename_at_119_71, bool __enabled_rename_at_119_72 );
+inline void _FuncProfilerDebugAgentTickonDestroyContext_f7495d404e4bfba0 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_122_73, Context & __ctx_rename_at_122_74 );
+inline void _FuncProfilerDebugAgentTickonInstrumentFunctionWithMemory_78db28e3bbcd17 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_133_76, Context & __ctx_rename_at_133_77, SimFunction * __fun_rename_at_133_78, bool __entering_rename_at_133_79, uint64_t __userData_rename_at_133_80 );
+inline void _FuncProfilerDebugAgentTickonInstrumentFunction_96f578b90a66923b ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_149_84, Context & __ctx_rename_at_149_85, SimFunction * __fun_rename_at_149_86, bool __entering_rename_at_149_87, uint64_t __userData_rename_at_149_88 );
+inline void _FuncProfilerDebugAgentTickdump_16cbdda4b0c6973 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_161_91, char * const  __text_rename_at_161_92 );
+inline void _FuncProfilerDebugAgentTickwrite_aaa4a549c5db2470 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_169_93, char * const  __text_rename_at_169_94 );
+inline void _FuncProfilerDebugAgentTickdump_event_f4e3cf1303495263 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_174_95, profiler::PerfEvent const  & __ev_rename_at_174_96, uint64_t __tid_rename_at_174_97 );
+inline void _FuncProfilerDebugAgentTickdump_node_e61d95bf2dd83ed2 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_179_100, profiler::PerfNode * const  __node_rename_at_179_101, int32_t __tab_rename_at_179_102 );
+inline void _FuncProfilerDebugAgentTickdump_context_stack_75a85cd6d05aaa94 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_202_109, uint64_t __tid_rename_at_202_110 );
+inline void _FuncProfilerDebugAgentTickdump_meta_e2086c649a7ec17d ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_236_115, Context & __ctx_rename_at_236_116, uint64_t __tid_rename_at_236_117 );
+inline void _FuncProfilerDebugAgentTickdump_events_a9ca4927f18757f9 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_245_121, uint64_t __tid_rename_at_245_122 );
+inline void _FuncProfilerDebugAgentTickdump_context_fd27b073a7187d7d ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_250_124, Context & __ctx_rename_at_250_125, uint64_t __tid_rename_at_250_126 );
+inline void _FuncProfilerDebugAgent_0x27___finalize_55718825a6cacc65 ( Context * __context__, profiler::ProfilerDebugAgent & __self_rename_at_51_127 );
+inline void debug_agent_d95b879260e75c8e ( Context * __context__, Context const  & __ctx_rename_at_261_128 );
+inline profiler::ProfilerDebugAgent ProfilerDebugAgent_1de59fe30ce53589 ( Context * __context__ );
+inline TTable<char *,int64_t> _FuncbuiltinTickto_table_moveTick5858896087460481804_18e39d2b0245aff4 ( Context * __context__, TDim<AutoTuple<char *,int64_t>,4> & __a_rename_at_1455_129 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -725,614 +721,608 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_5faf7
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti))).getStructType())));
 }
 
-inline profiler::ProfilerDebugAgent & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_875f1de9d5688f73 ( Context * __context__, profiler::ProfilerDebugAgent &  __a_rename_at_50_6 )
-{
-    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_0,cast<profiler::ProfilerDebugAgent &>::from(__a_rename_at_50_6)));
-    return das_auto_cast_ref<profiler::ProfilerDebugAgent &>::cast(__a_rename_at_50_6);
-}
-
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_9ef6894feb95542 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> &  __a_rename_at_1193_7 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_9ef6894feb95542 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> &  __a_rename_at_1193_6 )
 {
     Sequence DAS_COMMENT((profiler::PerfNode * *)) _temp_make_local_1195_19_32; _temp_make_local_1195_19_32;
     {
         bool __need_loop_1195 = true;
         // aV: profiler::PerfNode?&
-        das_iterator<Sequence DAS_COMMENT((profiler::PerfNode *))> __aV_iterator((_temp_make_local_1195_19_32 = (_FuncbuiltinTickvaluesTick1351216622833168869_a3e598199cd32e36(__context__,das_arg<TTable<SimFunction *,profiler::PerfNode *>>::pass(__a_rename_at_1193_7)))));
-        profiler::PerfNode * * __aV_rename_at_1195_8;
-        __need_loop_1195 = __aV_iterator.first(__context__,(__aV_rename_at_1195_8)) && __need_loop_1195;
-        for ( ; __need_loop_1195 ; __need_loop_1195 = __aV_iterator.next(__context__,(__aV_rename_at_1195_8)) )
+        das_iterator<Sequence DAS_COMMENT((profiler::PerfNode *))> __aV_iterator((_temp_make_local_1195_19_32 = (_FuncbuiltinTickvaluesTick1351216622833168869_a3e598199cd32e36(__context__,das_arg<TTable<SimFunction *,profiler::PerfNode *>>::pass(__a_rename_at_1193_6)))));
+        profiler::PerfNode * * __aV_rename_at_1195_7;
+        __need_loop_1195 = __aV_iterator.first(__context__,(__aV_rename_at_1195_7)) && __need_loop_1195;
+        for ( ; __need_loop_1195 ; __need_loop_1195 = __aV_iterator.next(__context__,(__aV_rename_at_1195_7)) )
         {
-            finalize_8e28ab4c5bbc2920(__context__,(*__aV_rename_at_1195_8));
+            finalize_8e28ab4c5bbc2920(__context__,(*__aV_rename_at_1195_7));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1195_8));
+        __aV_iterator.close(__context__,(__aV_rename_at_1195_7));
     };
-    builtin_table_free(das_arg<TTable<SimFunction *,profiler::PerfNode *>>::pass(__a_rename_at_1193_7),8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<SimFunction *,profiler::PerfNode *>>::pass(__a_rename_at_1193_6),8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_cc32169f37ab997f ( Context * __context__, TTable<uint64_t,profiler::PerfContext> &  __a_rename_at_1193_9 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_cc32169f37ab997f ( Context * __context__, TTable<uint64_t,profiler::PerfContext> &  __a_rename_at_1193_8 )
 {
     Sequence DAS_COMMENT((profiler::PerfContext *)) _temp_make_local_1195_19_32; _temp_make_local_1195_19_32;
     {
         bool __need_loop_1195 = true;
         // aV: profiler::PerfContext&
-        das_iterator<Sequence DAS_COMMENT((profiler::PerfContext))> __aV_iterator((_temp_make_local_1195_19_32 = (_FuncbuiltinTickvaluesTick1351216622833168869_ba9de0362fdc9aa9(__context__,das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(__a_rename_at_1193_9)))));
-        profiler::PerfContext * __aV_rename_at_1195_10;
-        __need_loop_1195 = __aV_iterator.first(__context__,(__aV_rename_at_1195_10)) && __need_loop_1195;
-        for ( ; __need_loop_1195 ; __need_loop_1195 = __aV_iterator.next(__context__,(__aV_rename_at_1195_10)) )
+        das_iterator<Sequence DAS_COMMENT((profiler::PerfContext))> __aV_iterator((_temp_make_local_1195_19_32 = (_FuncbuiltinTickvaluesTick1351216622833168869_ba9de0362fdc9aa9(__context__,das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(__a_rename_at_1193_8)))));
+        profiler::PerfContext * __aV_rename_at_1195_9;
+        __need_loop_1195 = __aV_iterator.first(__context__,(__aV_rename_at_1195_9)) && __need_loop_1195;
+        for ( ; __need_loop_1195 ; __need_loop_1195 = __aV_iterator.next(__context__,(__aV_rename_at_1195_9)) )
         {
-            finalize_132a04503ddcd675(__context__,das_arg<profiler::PerfContext>::pass((*__aV_rename_at_1195_10)));
+            finalize_132a04503ddcd675(__context__,das_arg<profiler::PerfContext>::pass((*__aV_rename_at_1195_9)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1195_10));
+        __aV_iterator.close(__context__,(__aV_rename_at_1195_9));
     };
-    builtin_table_free(das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(__a_rename_at_1193_9),8,32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(__a_rename_at_1193_8),8,32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_fe6693aead4ea8af ( Context * __context__, TTable<uint64_t,void> &  __a_rename_at_1193_11 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_fe6693aead4ea8af ( Context * __context__, TTable<uint64_t,void> &  __a_rename_at_1193_10 )
 {
-    builtin_table_free(das_arg<TTable<uint64_t,void>>::pass(__a_rename_at_1193_11),8,0,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<uint64_t,void>>::pass(__a_rename_at_1193_10),8,0,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_b6b4a3184a7eff35 ( Context * __context__, TTable<char *,int64_t> &  __a_rename_at_1193_12 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_b6b4a3184a7eff35 ( Context * __context__, TTable<char *,int64_t> &  __a_rename_at_1193_11 )
 {
-    builtin_table_free(das_arg<TTable<char *,int64_t>>::pass(__a_rename_at_1193_12),8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<char *,int64_t>>::pass(__a_rename_at_1193_11),8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94c6752d6462171a ( Context * __context__, TArray<profiler::PerfEvent> &  __a_rename_at_1182_13 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94c6752d6462171a ( Context * __context__, TArray<profiler::PerfEvent> &  __a_rename_at_1182_12 )
 {
     {
         bool __need_loop_1184 = true;
         // aV: profiler::PerfEvent aka TT&
-        das_iterator<TArray<profiler::PerfEvent>> __aV_iterator(__a_rename_at_1182_13);
-        profiler::PerfEvent * __aV_rename_at_1184_14;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_14)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_14)) )
+        das_iterator<TArray<profiler::PerfEvent>> __aV_iterator(__a_rename_at_1182_12);
+        profiler::PerfEvent * __aV_rename_at_1184_13;
+        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_13)) && __need_loop_1184;
+        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_13)) )
         {
-            finalize_bf607c77b39d2bb9(__context__,das_arg<profiler::PerfEvent>::pass((*__aV_rename_at_1184_14)));
+            finalize_bf607c77b39d2bb9(__context__,das_arg<profiler::PerfEvent>::pass((*__aV_rename_at_1184_13)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_14));
+        __aV_iterator.close(__context__,(__aV_rename_at_1184_13));
     };
-    builtin_array_free(das_arg<TArray<profiler::PerfEvent>>::pass(__a_rename_at_1182_13),40,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<profiler::PerfEvent>>::pass(__a_rename_at_1182_12),40,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickresizeTick4811697762258667383_614e3a9c4293636c ( Context * __context__, TArray<profiler::PerfNode *> &  __Arr_rename_at_68_15, int32_t __newSize_rename_at_68_16 )
+inline void _FuncbuiltinTickresizeTick4811697762258667383_614e3a9c4293636c ( Context * __context__, TArray<profiler::PerfNode *> &  __Arr_rename_at_68_14, int32_t __newSize_rename_at_68_15 )
 {
-    builtin_array_resize(das_arg<TArray<profiler::PerfNode *>>::pass(__Arr_rename_at_68_15),__newSize_rename_at_68_16,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_resize(das_arg<TArray<profiler::PerfNode *>>::pass(__Arr_rename_at_68_14),__newSize_rename_at_68_15,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void finalize_eb44cbf3fa3f22db ( Context * __context__, profiler::PerfNode &  ____this_rename_at_17_17 )
+inline void finalize_eb44cbf3fa3f22db ( Context * __context__, profiler::PerfNode &  ____this_rename_at_17_16 )
 {
-    _FuncbuiltinTickfinalizeTick5454204887383796109_9ef6894feb95542(__context__,das_arg<TTable<SimFunction *,profiler::PerfNode *>>::pass(____this_rename_at_17_17.children));
-    memset(&(____this_rename_at_17_17), 0, TypeSize<profiler::PerfNode>::size);
+    _FuncbuiltinTickfinalizeTick5454204887383796109_9ef6894feb95542(__context__,das_arg<TTable<SimFunction *,profiler::PerfNode *>>::pass(____this_rename_at_17_16.children));
+    memset(&(____this_rename_at_17_16), 0, TypeSize<profiler::PerfNode>::size);
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_be8785a2beb772fc ( Context * __context__, TTable<char *,int64_t> const  &  __Tab_rename_at_1014_18, char * const  __at_rename_at_1014_19 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_be8785a2beb772fc ( Context * __context__, TTable<char *,int64_t> const  &  __Tab_rename_at_1014_17, char * const  __at_rename_at_1014_18 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_18,__at_rename_at_1014_19));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_17,__at_rename_at_1014_18));
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_36aa3c8aa43a72c8 ( Context * __context__, TTable<uint64_t,void> const  &  __Tab_rename_at_1014_20, uint64_t __at_rename_at_1014_21 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_36aa3c8aa43a72c8 ( Context * __context__, TTable<uint64_t,void> const  &  __Tab_rename_at_1014_19, uint64_t __at_rename_at_1014_20 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_20,__at_rename_at_1014_21));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_19,__at_rename_at_1014_20));
 }
 
-inline void _FuncbuiltinTickinsertTick10959621454228962049_6f6b7a0a1ee99e7f ( Context * __context__, TTable<uint64_t,void> &  __Tab_rename_at_895_22, uint64_t __at_rename_at_895_23 )
+inline void _FuncbuiltinTickinsertTick10959621454228962049_6f6b7a0a1ee99e7f ( Context * __context__, TTable<uint64_t,void> &  __Tab_rename_at_895_21, uint64_t __at_rename_at_895_22 )
 {
-    __builtin_table_set_insert(__context__,__Tab_rename_at_895_22,__at_rename_at_895_23);
+    __builtin_table_set_insert(__context__,__Tab_rename_at_895_21,__at_rename_at_895_22);
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_c8e6e12e4804697f ( Context * __context__, TTable<uint64_t,profiler::PerfContext> const  &  __Tab_rename_at_1014_24, uint64_t __at_rename_at_1014_25 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_c8e6e12e4804697f ( Context * __context__, TTable<uint64_t,profiler::PerfContext> const  &  __Tab_rename_at_1014_23, uint64_t __at_rename_at_1014_24 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_24,__at_rename_at_1014_25));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_23,__at_rename_at_1014_24));
 }
 
-inline void finalize_132a04503ddcd675 ( Context * __context__, profiler::PerfContext &  ____this_rename_at_38_26 )
+inline void finalize_132a04503ddcd675 ( Context * __context__, profiler::PerfContext &  ____this_rename_at_38_25 )
 {
-    _FuncbuiltinTickfinalizeTick13836114024949725080_94c6752d6462171a(__context__,das_arg<TArray<profiler::PerfEvent>>::pass(____this_rename_at_38_26.events));
-    memset(&(____this_rename_at_38_26), 0, TypeSize<profiler::PerfContext>::size);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_94c6752d6462171a(__context__,das_arg<TArray<profiler::PerfEvent>>::pass(____this_rename_at_38_25.events));
+    memset(&(____this_rename_at_38_25), 0, TypeSize<profiler::PerfContext>::size);
 }
 
-inline bool _FuncbuiltinTickeraseTick5639988512056021548_c8721438e20bfbc9 ( Context * __context__, TTable<uint64_t,void> &  __Tab_rename_at_888_27, uint64_t __at_rename_at_888_28 )
+inline bool _FuncbuiltinTickeraseTick5639988512056021548_c8721438e20bfbc9 ( Context * __context__, TTable<uint64_t,void> &  __Tab_rename_at_888_26, uint64_t __at_rename_at_888_27 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_erase(__context__,__Tab_rename_at_888_27,__at_rename_at_888_28));
+    return das_auto_cast<bool>::cast(__builtin_table_erase(__context__,__Tab_rename_at_888_26,__at_rename_at_888_27));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_d9c98e89be6f3aa9 ( Context * __context__, TArray<profiler::PerfEvent> &  __Arr_rename_at_181_29, profiler::PerfEvent &  __value_rename_at_181_30 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_d9c98e89be6f3aa9 ( Context * __context__, TArray<profiler::PerfEvent> &  __Arr_rename_at_181_28, profiler::PerfEvent &  __value_rename_at_181_29 )
 {
-    das_copy(__Arr_rename_at_181_29(builtin_array_push_back(das_arg<TArray<profiler::PerfEvent>>::pass(__Arr_rename_at_181_29),40,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_30);
+    das_copy(__Arr_rename_at_181_28(builtin_array_push_back(das_arg<TArray<profiler::PerfEvent>>::pass(__Arr_rename_at_181_28),40,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_29);
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_9ddf16f8e9a725e2 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> const  &  __Tab_rename_at_1014_31, SimFunction * const  __at_rename_at_1014_32 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_9ddf16f8e9a725e2 ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> const  &  __Tab_rename_at_1014_30, SimFunction * const  __at_rename_at_1014_31 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_31,__at_rename_at_1014_32));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_30,__at_rename_at_1014_31));
 }
 
-inline bool _FuncbuiltinTickeraseTick5639988512056021548_9a1bcb3ea71b8522 ( Context * __context__, TTable<uint64_t,profiler::PerfContext> &  __Tab_rename_at_888_33, uint64_t __at_rename_at_888_34 )
+inline bool _FuncbuiltinTickeraseTick5639988512056021548_9a1bcb3ea71b8522 ( Context * __context__, TTable<uint64_t,profiler::PerfContext> &  __Tab_rename_at_888_32, uint64_t __at_rename_at_888_33 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_erase(__context__,__Tab_rename_at_888_33,__at_rename_at_888_34));
+    return das_auto_cast<bool>::cast(__builtin_table_erase(__context__,__Tab_rename_at_888_32,__at_rename_at_888_33));
 }
 
 inline TArray<char *> _FuncbuiltinTickget_command_line_argumentsTick14327939727965569528_264d199bf50df373 ( Context * __context__ )
 {
-    TArray<char *> __args_rename_at_1753_35; das_zero(__args_rename_at_1753_35);
-    getCommandLineArguments(das_arg<TArray<char *>>::pass(__args_rename_at_1753_35));
-    return /* <- */ das_auto_cast_move<TArray<char *>>::cast(__args_rename_at_1753_35);
+    TArray<char *> __args_rename_at_1753_34; das_zero(__args_rename_at_1753_34);
+    getCommandLineArguments(das_arg<TArray<char *>>::pass(__args_rename_at_1753_34));
+    return /* <- */ das_auto_cast_move<TArray<char *>>::cast(__args_rename_at_1753_34);
 }
 
-inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9 ( Context * __context__, void * const  __p_rename_at_15_36 )
+inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9 ( Context * __context__, void * const  __p_rename_at_15_35 )
 {
-    return das_auto_cast<uint64_t>::cast(das_cast<uint64_t>::cast(__p_rename_at_15_36));
+    return das_auto_cast<uint64_t>::cast(das_cast<uint64_t>::cast(__p_rename_at_15_35));
 }
 
-inline Sequence DAS_COMMENT((profiler::PerfNode * &)) _FuncbuiltinTickvaluesTick1935193042646774172_589e57754e0170bc ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> const  &  __a_rename_at_1143_37 )
+inline Sequence DAS_COMMENT((profiler::PerfNode * &)) _FuncbuiltinTickvaluesTick1935193042646774172_589e57754e0170bc ( Context * __context__, TTable<SimFunction *,profiler::PerfNode *> const  &  __a_rename_at_1143_36 )
 {
-    Sequence DAS_COMMENT((profiler::PerfNode * *)) __it_rename_at_1144_38; das_zero(__it_rename_at_1144_38);
-    builtin_table_values(das_arg<Sequence DAS_COMMENT((profiler::PerfNode * const ))>::pass(__it_rename_at_1144_38),__a_rename_at_1143_37,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((profiler::PerfNode * &))>::cast(__it_rename_at_1144_38);
+    Sequence DAS_COMMENT((profiler::PerfNode * *)) __it_rename_at_1144_37; das_zero(__it_rename_at_1144_37);
+    builtin_table_values(das_arg<Sequence DAS_COMMENT((profiler::PerfNode * const ))>::pass(__it_rename_at_1144_37),__a_rename_at_1143_36,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((profiler::PerfNode * &))>::cast(__it_rename_at_1144_37);
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_ce8f6e379fcfea44 ( Context * __context__, TArray<profiler::PerfNode *> &  __Arr_rename_at_181_39, profiler::PerfNode * __value_rename_at_181_40 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_ce8f6e379fcfea44 ( Context * __context__, TArray<profiler::PerfNode *> &  __Arr_rename_at_181_38, profiler::PerfNode * __value_rename_at_181_39 )
 {
-    das_copy(__Arr_rename_at_181_39(builtin_array_push_back(das_arg<TArray<profiler::PerfNode *>>::pass(__Arr_rename_at_181_39),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_40);
+    das_copy(__Arr_rename_at_181_38(builtin_array_push_back(das_arg<TArray<profiler::PerfNode *>>::pass(__Arr_rename_at_181_38),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_39);
 }
 
-inline profiler::PerfNode * & _FuncbuiltinTickbackTick18296309835877697278_d85bb617e8ef4b7a ( Context * __context__, TArray<profiler::PerfNode *> &  __a_rename_at_473_41 )
+inline profiler::PerfNode * & _FuncbuiltinTickbackTick18296309835877697278_d85bb617e8ef4b7a ( Context * __context__, TArray<profiler::PerfNode *> &  __a_rename_at_473_40 )
 {
-    int32_t __l_rename_at_474_42 = ((int32_t)builtin_array_size(das_arg<TArray<profiler::PerfNode *>>::pass(__a_rename_at_473_41)));
-    if ( __l_rename_at_474_42 == 0 )
+    int32_t __l_rename_at_474_41 = ((int32_t)builtin_array_size(das_arg<TArray<profiler::PerfNode *>>::pass(__a_rename_at_473_40)));
+    if ( __l_rename_at_474_41 == 0 )
     {
         builtin_throw(((char *) "back empty array"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     };
-    return das_auto_cast_ref<profiler::PerfNode * &>::cast(__a_rename_at_473_41((__l_rename_at_474_42 - 1),__context__));
+    return das_auto_cast_ref<profiler::PerfNode * &>::cast(__a_rename_at_473_40((__l_rename_at_474_41 - 1),__context__));
 }
 
-inline void _FuncbuiltinTickpopTick1161079256290593740_82d3f3b2cf4e69b4 ( Context * __context__, TArray<profiler::PerfNode *> &  __Arr_rename_at_132_43 )
+inline void _FuncbuiltinTickpopTick1161079256290593740_82d3f3b2cf4e69b4 ( Context * __context__, TArray<profiler::PerfNode *> &  __Arr_rename_at_132_42 )
 {
-    _FuncbuiltinTickresizeTick4811697762258667383_614e3a9c4293636c(__context__,das_arg<TArray<profiler::PerfNode *>>::pass(__Arr_rename_at_132_43),builtin_array_size(das_arg<TArray<profiler::PerfNode *>>::pass(__Arr_rename_at_132_43)) - 1);
+    _FuncbuiltinTickresizeTick4811697762258667383_614e3a9c4293636c(__context__,das_arg<TArray<profiler::PerfNode *>>::pass(__Arr_rename_at_132_42),builtin_array_size(das_arg<TArray<profiler::PerfNode *>>::pass(__Arr_rename_at_132_42)) - 1);
 }
 
-inline void finalize_8e28ab4c5bbc2920 ( Context * __context__, profiler::PerfNode * & ____this_rename_at_233_44 )
+inline void finalize_8e28ab4c5bbc2920 ( Context * __context__, profiler::PerfNode * & ____this_rename_at_233_43 )
 {
-    if ( ____this_rename_at_233_44 != nullptr )
+    if ( ____this_rename_at_233_43 != nullptr )
     {
-        finalize_eb44cbf3fa3f22db(__context__,das_arg<profiler::PerfNode>::pass(das_deref(__context__,____this_rename_at_233_44)));
-        das_delete<profiler::PerfNode *>::clear(__context__,____this_rename_at_233_44);
-        das_copy(____this_rename_at_233_44,nullptr);
+        finalize_eb44cbf3fa3f22db(__context__,das_arg<profiler::PerfNode>::pass(das_deref(__context__,____this_rename_at_233_43)));
+        das_delete<profiler::PerfNode *>::clear(__context__,____this_rename_at_233_43);
+        das_copy(____this_rename_at_233_43,nullptr);
     };
 }
 
-inline void finalize_a22df4460ed06c09 ( Context * __context__, profiler::ProfilerDebugAgent &  ____this_rename_at_51_45 )
+inline void finalize_a22df4460ed06c09 ( Context * __context__, profiler::ProfilerDebugAgent &  ____this_rename_at_51_44 )
 {
-    _FuncbuiltinTickfinalizeTick5454204887383796109_cc32169f37ab997f(__context__,das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(____this_rename_at_51_45.events));
-    _FuncbuiltinTickfinalizeTick5454204887383796109_fe6693aead4ea8af(__context__,das_arg<TTable<uint64_t,void>>::pass(____this_rename_at_51_45.instrumented));
-    _FuncbuiltinTickfinalizeTick5454204887383796109_b6b4a3184a7eff35(__context__,das_arg<TTable<char *,int64_t>>::pass(____this_rename_at_51_45.map_time_units));
-    memset(&(____this_rename_at_51_45), 0, TypeSize<profiler::ProfilerDebugAgent>::size);
+    _FuncbuiltinTickfinalizeTick5454204887383796109_cc32169f37ab997f(__context__,das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(____this_rename_at_51_44.events));
+    _FuncbuiltinTickfinalizeTick5454204887383796109_fe6693aead4ea8af(__context__,das_arg<TTable<uint64_t,void>>::pass(____this_rename_at_51_44.instrumented));
+    _FuncbuiltinTickfinalizeTick5454204887383796109_b6b4a3184a7eff35(__context__,das_arg<TTable<char *,int64_t>>::pass(____this_rename_at_51_44.map_time_units));
+    memset(&(____this_rename_at_51_44), 0, TypeSize<profiler::ProfilerDebugAgent>::size);
 }
 
-inline void _FuncdebugapiTickinstall_new_thread_local_debug_agentTick15124441463860820031_df029e5126654686 ( Context * __context__, profiler::ProfilerDebugAgent * __agentPtr_rename_at_51_46 )
+inline void _FuncdebugapiTickinstall_new_thread_local_debug_agentTick15124441463860820031_df029e5126654686 ( Context * __context__, profiler::ProfilerDebugAgent * __agentPtr_rename_at_51_45 )
 {
-    StructInfo const  * __agentInfo_rename_at_53_47; memset(&__agentInfo_rename_at_53_47,0,sizeof(__agentInfo_rename_at_53_47));
-    smart_ptr_raw<DebugAgent> __agentAdapter_rename_at_54_48; memset(&__agentAdapter_rename_at_54_48,0,sizeof(__agentAdapter_rename_at_54_48));
+    StructInfo const  * __agentInfo_rename_at_53_46; memset(&__agentInfo_rename_at_53_46,0,sizeof(__agentInfo_rename_at_53_46));
+    smart_ptr_raw<DebugAgent> __agentAdapter_rename_at_54_47; memset(&__agentAdapter_rename_at_54_47,0,sizeof(__agentAdapter_rename_at_54_47));
     {
         /* finally */ auto __finally_52= das_finally([&](){
-        das_delete_handle<smart_ptr_raw<DebugAgent>>::clear(__context__,__agentAdapter_rename_at_54_48);
+        das_delete_handle<smart_ptr_raw<DebugAgent>>::clear(__context__,__agentAdapter_rename_at_54_47);
         /* end finally */ });
-        __agentInfo_rename_at_53_47 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_5faf74312cbe5451(__context__,das_arg<profiler::ProfilerDebugAgent>::pass(das_deref(__context__,__agentPtr_rename_at_51_46))));
-        __agentAdapter_rename_at_54_48; das_zero(__agentAdapter_rename_at_54_48); das_move(__agentAdapter_rename_at_54_48, makeDebugAgent(das_auto_cast<void * const >::cast(__agentPtr_rename_at_51_46),__agentInfo_rename_at_53_47,__context__));
-        das_copy(__agentPtr_rename_at_51_46->thisAgent,das_cast<DebugAgent *>::cast(__agentAdapter_rename_at_54_48));
-        installThreadLocalDebugAgent(__agentAdapter_rename_at_54_48,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)),__context__);
+        __agentInfo_rename_at_53_46 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_5faf74312cbe5451(__context__,das_arg<profiler::ProfilerDebugAgent>::pass(das_deref(__context__,__agentPtr_rename_at_51_45))));
+        __agentAdapter_rename_at_54_47; das_zero(__agentAdapter_rename_at_54_47); das_move(__agentAdapter_rename_at_54_47, makeDebugAgent(das_auto_cast<void * const >::cast(__agentPtr_rename_at_51_45),__agentInfo_rename_at_53_46,__context__));
+        das_copy(__agentPtr_rename_at_51_45->thisAgent,das_cast<DebugAgent *>::cast(__agentAdapter_rename_at_54_47));
+        installThreadLocalDebugAgent(__agentAdapter_rename_at_54_47,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)),__context__);
         set_das_string(das_arg<das::string>::pass(thisContext(__context__).name /*name*/),((char *) "thread local debug agent"));
     };
 }
 
-inline void set_enable_profiler_9f0d36b33d964003 ( Context * __context__, uint64_t __ctxId_rename_at_45_49, bool __enabled_rename_at_45_50 )
+inline void set_enable_profiler_9f0d36b33d964003 ( Context * __context__, uint64_t __ctxId_rename_at_45_48, bool __enabled_rename_at_45_49 )
 {
     if ( das_global<profiler::ProfilerDebugAgent *,0x971ce3908ca8e1fe>(__context__) /*g_d_agent*/ != nullptr )
     {
-        das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,enable_profiler)>::invoke<profiler::ProfilerDebugAgent &,uint64_t,bool>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(das_cast<profiler::ProfilerDebugAgent>::cast(das_deref(__context__,das_global<profiler::ProfilerDebugAgent *,0x971ce3908ca8e1fe>(__context__) /*g_d_agent*/))),__ctxId_rename_at_45_49,__enabled_rename_at_45_50);
+        das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,enable_profiler)>::invoke<profiler::ProfilerDebugAgent &,uint64_t,bool>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(das_cast<profiler::ProfilerDebugAgent>::cast(das_deref(__context__,das_global<profiler::ProfilerDebugAgent *,0x971ce3908ca8e1fe>(__context__) /*g_d_agent*/))),__ctxId_rename_at_45_48,__enabled_rename_at_45_49);
     };
 }
 
-inline Func DAS_COMMENT((void,uint64_t,bool)) _FuncProfilerDebugAgentTickdependency_9d6d5d73e8b06c23 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_62_51 )
+inline Func DAS_COMMENT((void,uint64_t,bool)) _FuncProfilerDebugAgentTickdependency_9d6d5d73e8b06c23 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_62_50 )
 {
     return das_auto_cast<Func DAS_COMMENT((void,uint64_t,bool))>::cast(Func(__context__->fnByMangledName(/*@profiler::set_enable_profiler u64 Cb*/ 0x141fa5e0c4b2e16b)));
 }
 
-inline bool _FuncProfilerDebugAgentTickis_time_unit_correct_25f9d2ab7f2d98f3 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_66_52, char * const  __unit_rename_at_66_53 )
+inline bool _FuncProfilerDebugAgentTickis_time_unit_correct_25f9d2ab7f2d98f3 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_66_51, char * const  __unit_rename_at_66_52 )
 {
-    return das_auto_cast<bool>::cast(_FuncbuiltinTickkey_existsTick16808803843923989214_be8785a2beb772fc(__context__,das_arg<TTable<char *,int64_t>>::pass(__self_rename_at_66_52.map_time_units),__unit_rename_at_66_53));
+    return das_auto_cast<bool>::cast(_FuncbuiltinTickkey_existsTick16808803843923989214_be8785a2beb772fc(__context__,das_arg<TTable<char *,int64_t>>::pass(__self_rename_at_66_51.map_time_units),__unit_rename_at_66_52));
 }
 
-inline int64_t _FuncProfilerDebugAgentTickconvert_ns_to_unit_36a018949c3810e0 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_70_54, int64_t __time_rename_at_70_55, char * const  __to_rename_at_70_56 )
+inline int64_t _FuncProfilerDebugAgentTickconvert_ns_to_unit_36a018949c3810e0 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_70_53, int64_t __time_rename_at_70_54, char * const  __to_rename_at_70_55 )
 {
-    return das_auto_cast<int64_t>::cast(SimPolicy<int64_t>::Div(__time_rename_at_70_55,__self_rename_at_70_54.map_time_units(__to_rename_at_70_56,__context__),*__context__,nullptr));
+    return das_auto_cast<int64_t>::cast(SimPolicy<int64_t>::Div(__time_rename_at_70_54,__self_rename_at_70_53.map_time_units(__to_rename_at_70_55,__context__),*__context__,nullptr));
 }
 
-inline void _FuncProfilerDebugAgentTickonInstall_79884d0439618d6e ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_74_57, DebugAgent * const  __agent_rename_at_74_58 )
+inline void _FuncProfilerDebugAgentTickonInstall_79884d0439618d6e ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_74_56, DebugAgent * const  __agent_rename_at_74_57 )
 {
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_77_30_64; _temp_make_local_77_30_64;
     set_das_string(das_arg<das::string>::pass(thisContext(__context__).name /*name*/),((char *) "__PROFILER__"));
-    TArray<char *> __args_rename_at_76_59; das_zero(__args_rename_at_76_59); das_move(__args_rename_at_76_59, _FuncbuiltinTickget_command_line_argumentsTick14327939727965569528_264d199bf50df373(__context__));
+    TArray<char *> __args_rename_at_76_58; das_zero(__args_rename_at_76_58); das_move(__args_rename_at_76_58, _FuncbuiltinTickget_command_line_argumentsTick14327939727965569528_264d199bf50df373(__context__));
     {
         bool __need_loop_77 = true;
         // argv: string&
-        das_iterator<TArray<char *>> __argv_iterator(__args_rename_at_76_59);
-        char * * __argv_rename_at_77_62;
-        __need_loop_77 = __argv_iterator.first(__context__,(__argv_rename_at_77_62)) && __need_loop_77;
+        das_iterator<TArray<char *>> __argv_iterator(__args_rename_at_76_58);
+        char * * __argv_rename_at_77_61;
+        __need_loop_77 = __argv_iterator.first(__context__,(__argv_rename_at_77_61)) && __need_loop_77;
         // i: int
         das_iterator_count DAS_COMMENT((_temp_make_local_77_30_64 = (builtin_count(0,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))) __i_iterator(0,1);
-        int32_t __i_rename_at_77_63;
-        __need_loop_77 = __i_iterator.first(__context__,(__i_rename_at_77_63)) && __need_loop_77;
-        for ( ; __need_loop_77 ; __need_loop_77 = __argv_iterator.next(__context__,(__argv_rename_at_77_62)) && __i_iterator.next(__context__,(__i_rename_at_77_63)) )
+        int32_t __i_rename_at_77_62;
+        __need_loop_77 = __i_iterator.first(__context__,(__i_rename_at_77_62)) && __need_loop_77;
+        for ( ; __need_loop_77 ; __need_loop_77 = __argv_iterator.next(__context__,(__argv_rename_at_77_61)) && __i_iterator.next(__context__,(__i_rename_at_77_62)) )
         {
-            if ( ((SimPolicy<char *>::Equ(cast<char *>::from((*__argv_rename_at_77_62)),cast<char *>::from(((char *) "--das-profiler-log-file")),*__context__,nullptr)) && (__self_rename_at_74_57.out == nullptr)) && ((__i_rename_at_77_63 + 1) < builtin_array_size(das_arg<TArray<char *>>::pass(__args_rename_at_76_59))) )
+            if ( ((SimPolicy<char *>::Equ(cast<char *>::from((*__argv_rename_at_77_61)),cast<char *>::from(((char *) "--das-profiler-log-file")),*__context__,nullptr)) && (__self_rename_at_74_56.out == nullptr)) && ((__i_rename_at_77_62 + 1) < builtin_array_size(das_arg<TArray<char *>>::pass(__args_rename_at_76_58))) )
             {
-                das_copy(__self_rename_at_74_57.out,builtin_fopen(__args_rename_at_76_59((__i_rename_at_77_63 + 1),__context__),((char *) "wb")));
-            } else if ( SimPolicy<char *>::Equ(cast<char *>::from((*__argv_rename_at_77_62)),cast<char *>::from(((char *) "--das-profiler-manual")),*__context__,nullptr) )
+                das_copy(__self_rename_at_74_56.out,builtin_fopen(__args_rename_at_76_58((__i_rename_at_77_62 + 1),__context__),((char *) "wb")));
+            } else if ( SimPolicy<char *>::Equ(cast<char *>::from((*__argv_rename_at_77_61)),cast<char *>::from(((char *) "--das-profiler-manual")),*__context__,nullptr) )
             {
-                das_copy(__self_rename_at_74_57.manual,true);
-            } else if ( SimPolicy<char *>::Equ(cast<char *>::from((*__argv_rename_at_77_62)),cast<char *>::from(((char *) "--das-profiler-memory")),*__context__,nullptr) )
+                das_copy(__self_rename_at_74_56.manual,true);
+            } else if ( SimPolicy<char *>::Equ(cast<char *>::from((*__argv_rename_at_77_61)),cast<char *>::from(((char *) "--das-profiler-memory")),*__context__,nullptr) )
             {
-                das_copy(__self_rename_at_74_57.report_memory,true);
-                das_copy(__self_rename_at_74_57.onInstrumentFunction,das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,SimFunction * const ,bool,uint64_t))>::cast(__self_rename_at_74_57.onInstrumentFunctionWithMemory));
-            } else if ( (SimPolicy<char *>::Equ(cast<char *>::from((*__argv_rename_at_77_62)),cast<char *>::from(((char *) "--das-profiler-time-unit")),*__context__,nullptr)) && ((__i_rename_at_77_63 + 1) < builtin_array_size(das_arg<TArray<char *>>::pass(__args_rename_at_76_59))) )
+                das_copy(__self_rename_at_74_56.report_memory,true);
+                das_copy(__self_rename_at_74_56.onInstrumentFunction,das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,SimFunction * const ,bool,uint64_t))>::cast(__self_rename_at_74_56.onInstrumentFunctionWithMemory));
+            } else if ( (SimPolicy<char *>::Equ(cast<char *>::from((*__argv_rename_at_77_61)),cast<char *>::from(((char *) "--das-profiler-time-unit")),*__context__,nullptr)) && ((__i_rename_at_77_62 + 1) < builtin_array_size(das_arg<TArray<char *>>::pass(__args_rename_at_76_58))) )
             {
-                char * __unit_rename_at_88_64 = ((char *)(char *)(__args_rename_at_76_59((__i_rename_at_77_63 + 1),__context__)));
-                if ( !das_invoke_method<bool,offsetof(profiler::ProfilerDebugAgent,is_time_unit_correct)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_74_57),__unit_rename_at_88_64) )
+                char * __unit_rename_at_88_63 = ((char *)(char *)(__args_rename_at_76_58((__i_rename_at_77_62 + 1),__context__)));
+                if ( !das_invoke_method<bool,offsetof(profiler::ProfilerDebugAgent,is_time_unit_correct)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_74_56),__unit_rename_at_88_63) )
                 {
-                    toLog(40000,das_string_builder_temp(__context__,SimNode_AotInterop<3>(__tinfo_1, cast<char * const >::from(((char *) "Time unit '")), cast<char * const >::from(__unit_rename_at_88_64), cast<char * const >::from(((char *) "' is not defined!")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+                    toLog(40000,das_string_builder_temp(__context__,SimNode_AotInterop<3>(__tinfo_0, cast<char * const >::from(((char *) "Time unit '")), cast<char * const >::from(__unit_rename_at_88_63), cast<char * const >::from(((char *) "' is not defined!")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
                 } else {
-                    das_copy(__self_rename_at_74_57.time_unit,__unit_rename_at_88_64);
+                    das_copy(__self_rename_at_74_56.time_unit,__unit_rename_at_88_63);
                 };
             };
         }
-        __argv_iterator.close(__context__,(__argv_rename_at_77_62));
-        __i_iterator.close(__context__,(__i_rename_at_77_63));
+        __argv_iterator.close(__context__,(__argv_rename_at_77_61));
+        __i_iterator.close(__context__,(__i_rename_at_77_62));
     };
-    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,write)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_74_57),((char *) "["));
-    das_copy(das_global<profiler::ProfilerDebugAgent *,0x971ce3908ca8e1fe>(__context__) /*g_d_agent*/,das_ref(__context__,__self_rename_at_74_57));
-    das_copy(__self_rename_at_74_57.us0,ref_time_ticks());
+    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,write)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_74_56),((char *) "["));
+    das_copy(das_global<profiler::ProfilerDebugAgent *,0x971ce3908ca8e1fe>(__context__) /*g_d_agent*/,das_ref(__context__,__self_rename_at_74_56));
+    das_copy(__self_rename_at_74_56.us0,ref_time_ticks());
 }
 
-inline void _FuncProfilerDebugAgentTickonUninstall_df0cd7115237983e ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_100_65, DebugAgent * const  __agent_rename_at_100_66 )
+inline void _FuncProfilerDebugAgentTickonUninstall_df0cd7115237983e ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_100_64, DebugAgent * const  __agent_rename_at_100_65 )
 {
-    if ( __self_rename_at_100_65.out != nullptr )
+    if ( __self_rename_at_100_64.out != nullptr )
     {
-        das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,write)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_100_65),((char *) "]"));
-        builtin_fclose(__self_rename_at_100_65.out,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-        das_copy(__self_rename_at_100_65.out,nullptr);
+        das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,write)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_100_64),((char *) "]"));
+        builtin_fclose(__self_rename_at_100_64.out,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+        das_copy(__self_rename_at_100_64.out,nullptr);
     };
 }
 
-inline bool _FuncProfilerDebugAgentTickisProfileable_f648883be6e14b15 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_107_67, Context &  __ctx_rename_at_107_68 )
+inline bool _FuncProfilerDebugAgentTickisProfileable_f648883be6e14b15 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_107_66, Context &  __ctx_rename_at_107_67 )
 {
-    return das_auto_cast<bool>::cast(!((((das_get_bitfield(__ctx_rename_at_107_68.category /*category*/,1u << 1) || das_get_bitfield(__ctx_rename_at_107_68.category /*category*/,1u << 7)) || das_get_bitfield(__ctx_rename_at_107_68.category /*category*/,1u << 8)) || das_get_bitfield(__ctx_rename_at_107_68.category /*category*/,1u << 5)) || das_get_bitfield(__ctx_rename_at_107_68.category /*category*/,1u << 6)));
+    return das_auto_cast<bool>::cast(!((((das_get_bitfield(__ctx_rename_at_107_67.category /*category*/,1u << 1) || das_get_bitfield(__ctx_rename_at_107_67.category /*category*/,1u << 7)) || das_get_bitfield(__ctx_rename_at_107_67.category /*category*/,1u << 8)) || das_get_bitfield(__ctx_rename_at_107_67.category /*category*/,1u << 5)) || das_get_bitfield(__ctx_rename_at_107_67.category /*category*/,1u << 6)));
 }
 
-inline void _FuncProfilerDebugAgentTickonCreateContext_b8c4d2ec382a1344 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_111_69, Context &  __ctx_rename_at_111_70 )
+inline void _FuncProfilerDebugAgentTickonCreateContext_b8c4d2ec382a1344 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_111_68, Context &  __ctx_rename_at_111_69 )
 {
-    if ( !(das_invoke_method<bool,offsetof(profiler::ProfilerDebugAgent,isProfileable)>::invoke<profiler::ProfilerDebugAgent &,Context &>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_111_69),das_arg<Context>::pass(__ctx_rename_at_111_70))) || _FuncbuiltinTickkey_existsTick16808803843923989214_36aa3c8aa43a72c8(__context__,das_arg<TTable<uint64_t,void>>::pass(__self_rename_at_111_69.instrumented),((__ctx_rename_at_111_70).getCodeAllocatorId())) )
-    {
-        return ;
-    } else {
-        _FuncbuiltinTickinsertTick10959621454228962049_6f6b7a0a1ee99e7f(__context__,das_arg<TTable<uint64_t,void>>::pass(__self_rename_at_111_69.instrumented),((__ctx_rename_at_111_70).getCodeAllocatorId()));
-        das_copy(__self_rename_at_111_69.events(_FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_111_70))),__context__).enabled,!__self_rename_at_111_69.manual);
-        instrument_all_functions_thread_local(das_arg<Context>::pass(__ctx_rename_at_111_70));
-    };
-}
-
-inline void _FuncProfilerDebugAgentTickenable_profiler_c7c60c2ea3b8eb35 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_119_71, uint64_t __ctxId_rename_at_119_72, bool __enabled_rename_at_119_73 )
-{
-    das_copy(__self_rename_at_119_71.events(__ctxId_rename_at_119_72,__context__).enabled,__enabled_rename_at_119_73);
-}
-
-inline void _FuncProfilerDebugAgentTickonDestroyContext_f7495d404e4bfba0 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_122_74, Context &  __ctx_rename_at_122_75 )
-{
-    if ( !das_invoke_method<bool,offsetof(profiler::ProfilerDebugAgent,isProfileable)>::invoke<profiler::ProfilerDebugAgent &,Context &>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_122_74),das_arg<Context>::pass(__ctx_rename_at_122_75)) )
+    if ( !(das_invoke_method<bool,offsetof(profiler::ProfilerDebugAgent,isProfileable)>::invoke<profiler::ProfilerDebugAgent &,Context &>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_111_68),das_arg<Context>::pass(__ctx_rename_at_111_69))) || _FuncbuiltinTickkey_existsTick16808803843923989214_36aa3c8aa43a72c8(__context__,das_arg<TTable<uint64_t,void>>::pass(__self_rename_at_111_68.instrumented),((__ctx_rename_at_111_69).getCodeAllocatorId())) )
     {
         return ;
     } else {
-        uint64_t __tid_rename_at_126_76 = ((uint64_t)_FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_122_75))));
-        if ( _FuncbuiltinTickkey_existsTick16808803843923989214_c8e6e12e4804697f(__context__,das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(__self_rename_at_122_74.events),__tid_rename_at_126_76) )
+        _FuncbuiltinTickinsertTick10959621454228962049_6f6b7a0a1ee99e7f(__context__,das_arg<TTable<uint64_t,void>>::pass(__self_rename_at_111_68.instrumented),((__ctx_rename_at_111_69).getCodeAllocatorId()));
+        das_copy(__self_rename_at_111_68.events(_FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_111_69))),__context__).enabled,!__self_rename_at_111_68.manual);
+        instrument_all_functions_thread_local(das_arg<Context>::pass(__ctx_rename_at_111_69));
+    };
+}
+
+inline void _FuncProfilerDebugAgentTickenable_profiler_c7c60c2ea3b8eb35 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_119_70, uint64_t __ctxId_rename_at_119_71, bool __enabled_rename_at_119_72 )
+{
+    das_copy(__self_rename_at_119_70.events(__ctxId_rename_at_119_71,__context__).enabled,__enabled_rename_at_119_72);
+}
+
+inline void _FuncProfilerDebugAgentTickonDestroyContext_f7495d404e4bfba0 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_122_73, Context &  __ctx_rename_at_122_74 )
+{
+    if ( !das_invoke_method<bool,offsetof(profiler::ProfilerDebugAgent,isProfileable)>::invoke<profiler::ProfilerDebugAgent &,Context &>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_122_73),das_arg<Context>::pass(__ctx_rename_at_122_74)) )
+    {
+        return ;
+    } else {
+        uint64_t __tid_rename_at_126_75 = ((uint64_t)_FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_122_74))));
+        if ( _FuncbuiltinTickkey_existsTick16808803843923989214_c8e6e12e4804697f(__context__,das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(__self_rename_at_122_73.events),__tid_rename_at_126_75) )
         {
-            das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_context)>::invoke<profiler::ProfilerDebugAgent &,Context &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_122_74),das_arg<Context>::pass(__ctx_rename_at_122_75),__tid_rename_at_126_76);
-            finalize_132a04503ddcd675(__context__,das_arg<profiler::PerfContext>::pass(__self_rename_at_122_74.events(__tid_rename_at_126_76,__context__)));
+            das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_context)>::invoke<profiler::ProfilerDebugAgent &,Context &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_122_73),das_arg<Context>::pass(__ctx_rename_at_122_74),__tid_rename_at_126_75);
+            finalize_132a04503ddcd675(__context__,das_arg<profiler::PerfContext>::pass(__self_rename_at_122_73.events(__tid_rename_at_126_75,__context__)));
         };
-        _FuncbuiltinTickeraseTick5639988512056021548_c8721438e20bfbc9(__context__,das_arg<TTable<uint64_t,void>>::pass(__self_rename_at_122_74.instrumented),((__ctx_rename_at_122_75).getCodeAllocatorId()));
+        _FuncbuiltinTickeraseTick5639988512056021548_c8721438e20bfbc9(__context__,das_arg<TTable<uint64_t,void>>::pass(__self_rename_at_122_73.instrumented),((__ctx_rename_at_122_74).getCodeAllocatorId()));
     };
 }
 
-inline void _FuncProfilerDebugAgentTickonInstrumentFunctionWithMemory_78db28e3bbcd17 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_133_77, Context &  __ctx_rename_at_133_78, SimFunction * __fun_rename_at_133_79, bool __entering_rename_at_133_80, uint64_t __userData_rename_at_133_81 )
+inline void _FuncProfilerDebugAgentTickonInstrumentFunctionWithMemory_78db28e3bbcd17 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_133_76, Context &  __ctx_rename_at_133_77, SimFunction * __fun_rename_at_133_78, bool __entering_rename_at_133_79, uint64_t __userData_rename_at_133_80 )
 {
-    uint64_t __tid_rename_at_135_82 = ((uint64_t)_FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_133_78))));
-    profiler::PerfContext * __ev_rename_at_136_83 = &(__self_rename_at_133_77.events(__tid_rename_at_135_82,__context__));
-    if ( (*__ev_rename_at_136_83).enabled )
+    uint64_t __tid_rename_at_135_81 = ((uint64_t)_FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_133_77))));
+    profiler::PerfContext * __ev_rename_at_136_82 = &(__self_rename_at_133_76.events(__tid_rename_at_135_81,__context__));
+    if ( (*__ev_rename_at_136_82).enabled )
     {
         profiler::PerfEvent _temp_make_local_140_34_80; _temp_make_local_140_34_80;
-        TDim<uint64_t,2> __hb_shb_rename_at_138_84; das_zero(__hb_shb_rename_at_138_84);
-        heap_stats(das_arg<Context>::pass(__ctx_rename_at_133_78),das_ref(__context__,__hb_shb_rename_at_138_84(0,__context__)));
-        _FuncbuiltinTickpushTick10769833213962245646_d9c98e89be6f3aa9(__context__,das_arg<TArray<profiler::PerfEvent>>::pass((*__ev_rename_at_136_83).events),das_arg<profiler::PerfEvent>::pass((([&]() -> profiler::PerfEvent& {
-            das_copy((_temp_make_local_140_34_80.fun),(__fun_rename_at_133_79));
-            das_copy((_temp_make_local_140_34_80.entering),(__entering_rename_at_133_80));
-            das_copy((_temp_make_local_140_34_80.ts),(get_time_nsec(__self_rename_at_133_77.us0)));
-            das_copy((_temp_make_local_140_34_80.heapBytes),(__hb_shb_rename_at_138_84(0,__context__)));
-            das_copy((_temp_make_local_140_34_80.stringHeapBytes),(__hb_shb_rename_at_138_84(1,__context__)));
+        TDim<uint64_t,2> __hb_shb_rename_at_138_83; das_zero(__hb_shb_rename_at_138_83);
+        heap_stats(das_arg<Context>::pass(__ctx_rename_at_133_77),das_ref(__context__,__hb_shb_rename_at_138_83(0,__context__)));
+        _FuncbuiltinTickpushTick10769833213962245646_d9c98e89be6f3aa9(__context__,das_arg<TArray<profiler::PerfEvent>>::pass((*__ev_rename_at_136_82).events),das_arg<profiler::PerfEvent>::pass((([&]() -> profiler::PerfEvent& {
+            das_copy((_temp_make_local_140_34_80.fun),(__fun_rename_at_133_78));
+            das_copy((_temp_make_local_140_34_80.entering),(__entering_rename_at_133_79));
+            das_copy((_temp_make_local_140_34_80.ts),(get_time_nsec(__self_rename_at_133_76.us0)));
+            das_copy((_temp_make_local_140_34_80.heapBytes),(__hb_shb_rename_at_138_83(0,__context__)));
+            das_copy((_temp_make_local_140_34_80.stringHeapBytes),(__hb_shb_rename_at_138_83(1,__context__)));
             return _temp_make_local_140_34_80;
         })())));
     };
 }
 
-inline void _FuncProfilerDebugAgentTickonInstrumentFunction_96f578b90a66923b ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_149_85, Context &  __ctx_rename_at_149_86, SimFunction * __fun_rename_at_149_87, bool __entering_rename_at_149_88, uint64_t __userData_rename_at_149_89 )
+inline void _FuncProfilerDebugAgentTickonInstrumentFunction_96f578b90a66923b ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_149_84, Context &  __ctx_rename_at_149_85, SimFunction * __fun_rename_at_149_86, bool __entering_rename_at_149_87, uint64_t __userData_rename_at_149_88 )
 {
-    uint64_t __tid_rename_at_151_90 = ((uint64_t)_FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_149_86))));
-    profiler::PerfContext * __ev_rename_at_152_91 = &(__self_rename_at_149_85.events(__tid_rename_at_151_90,__context__));
-    if ( (*__ev_rename_at_152_91).enabled )
+    uint64_t __tid_rename_at_151_89 = ((uint64_t)_FuncbuiltinTickintptrTick11320822648609276562_90728d7b9aa4d0b9(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_149_85))));
+    profiler::PerfContext * __ev_rename_at_152_90 = &(__self_rename_at_149_84.events(__tid_rename_at_151_89,__context__));
+    if ( (*__ev_rename_at_152_90).enabled )
     {
         profiler::PerfEvent _temp_make_local_154_34_64; _temp_make_local_154_34_64;
-        _FuncbuiltinTickpushTick10769833213962245646_d9c98e89be6f3aa9(__context__,das_arg<TArray<profiler::PerfEvent>>::pass((*__ev_rename_at_152_91).events),das_arg<profiler::PerfEvent>::pass((([&]() -> profiler::PerfEvent& {
+        _FuncbuiltinTickpushTick10769833213962245646_d9c98e89be6f3aa9(__context__,das_arg<TArray<profiler::PerfEvent>>::pass((*__ev_rename_at_152_90).events),das_arg<profiler::PerfEvent>::pass((([&]() -> profiler::PerfEvent& {
             das_zero(_temp_make_local_154_34_64);
-            das_copy((_temp_make_local_154_34_64.fun),(__fun_rename_at_149_87));
-            das_copy((_temp_make_local_154_34_64.entering),(__entering_rename_at_149_88));
-            das_copy((_temp_make_local_154_34_64.ts),(get_time_nsec(__self_rename_at_149_85.us0)));
+            das_copy((_temp_make_local_154_34_64.fun),(__fun_rename_at_149_86));
+            das_copy((_temp_make_local_154_34_64.entering),(__entering_rename_at_149_87));
+            das_copy((_temp_make_local_154_34_64.ts),(get_time_nsec(__self_rename_at_149_84.us0)));
             return _temp_make_local_154_34_64;
         })())));
     };
 }
 
-inline void _FuncProfilerDebugAgentTickdump_16cbdda4b0c6973 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_161_92, char * const  __text_rename_at_161_93 )
+inline void _FuncProfilerDebugAgentTickdump_16cbdda4b0c6973 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_161_91, char * const  __text_rename_at_161_92 )
 {
-    if ( __self_rename_at_161_92.firstRecord )
+    if ( __self_rename_at_161_91.firstRecord )
     {
-        das_copy(__self_rename_at_161_92.firstRecord,false);
+        das_copy(__self_rename_at_161_91.firstRecord,false);
     } else {
-        das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,write)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_161_92),((char *) ",\n"));
+        das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,write)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_161_91),((char *) ",\n"));
     };
-    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,write)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_161_92),__text_rename_at_161_93);
+    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,write)>::invoke<profiler::ProfilerDebugAgent &,char * const >(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_161_91),__text_rename_at_161_92);
 }
 
-inline void _FuncProfilerDebugAgentTickwrite_aaa4a549c5db2470 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_169_94, char * const  __text_rename_at_169_95 )
+inline void _FuncProfilerDebugAgentTickwrite_aaa4a549c5db2470 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_169_93, char * const  __text_rename_at_169_94 )
 {
-    if ( __self_rename_at_169_94.out != nullptr )
+    if ( __self_rename_at_169_93.out != nullptr )
     {
-        builtin_fprint(__self_rename_at_169_94.out,__text_rename_at_169_95,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+        builtin_fprint(__self_rename_at_169_93.out,__text_rename_at_169_94,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     };
 }
 
-inline void _FuncProfilerDebugAgentTickdump_event_f4e3cf1303495263 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_174_96, profiler::PerfEvent const  &  __ev_rename_at_174_97, uint64_t __tid_rename_at_174_98 )
+inline void _FuncProfilerDebugAgentTickdump_event_f4e3cf1303495263 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_174_95, profiler::PerfEvent const  &  __ev_rename_at_174_96, uint64_t __tid_rename_at_174_97 )
 {
-    char * __phase_rename_at_175_99 = ((char *)(char *)((__ev_rename_at_174_97.entering ? das_auto_cast<char * const >::cast(((char *) "B")) : das_auto_cast<char * const >::cast(((char *) "E")))));
-    char * __fnName_rename_at_176_100 = ((char *)(char *)(((char * const )(builtin_string_escape(__ev_rename_at_174_97.fun->mangledName /*mangledName*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
-    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump)>::invoke<profiler::ProfilerDebugAgent &,char *>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_174_96),das_string_builder(__context__,SimNode_AotInterop<9>(__tinfo_2, cast<char * const >::from(((char *) "{\"name\":\"")), cast<char * const >::from(__fnName_rename_at_176_100), cast<char * const >::from(((char *) "\",\"cat\": \"PERF\",\"ph\":\"")), cast<char * const >::from(__phase_rename_at_175_99), cast<char * const >::from(((char *) "\",\"pid\": 0,\"tid\":")), cast<int64_t>::from(int64_t(__tid_rename_at_174_98)), cast<char * const >::from(((char *) ",\"ts\":")), cast<int64_t>::from((SimPolicy<int64_t>::Div(__ev_rename_at_174_97.ts,INT64_C(1000),*__context__,nullptr))), cast<char * const >::from(((char *) "}")))));
+    char * __phase_rename_at_175_98 = ((char *)(char *)((__ev_rename_at_174_96.entering ? das_auto_cast<char * const >::cast(((char *) "B")) : das_auto_cast<char * const >::cast(((char *) "E")))));
+    char * __fnName_rename_at_176_99 = ((char *)(char *)(((char * const )(builtin_string_escape(__ev_rename_at_174_96.fun->mangledName /*mangledName*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
+    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump)>::invoke<profiler::ProfilerDebugAgent &,char *>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_174_95),das_string_builder(__context__,SimNode_AotInterop<9>(__tinfo_1, cast<char * const >::from(((char *) "{\"name\":\"")), cast<char * const >::from(__fnName_rename_at_176_99), cast<char * const >::from(((char *) "\",\"cat\": \"PERF\",\"ph\":\"")), cast<char * const >::from(__phase_rename_at_175_98), cast<char * const >::from(((char *) "\",\"pid\": 0,\"tid\":")), cast<int64_t>::from(int64_t(__tid_rename_at_174_97)), cast<char * const >::from(((char *) ",\"ts\":")), cast<int64_t>::from((SimPolicy<int64_t>::Div(__ev_rename_at_174_96.ts,INT64_C(1000),*__context__,nullptr))), cast<char * const >::from(((char *) "}")))));
 }
 
-inline void _FuncProfilerDebugAgentTickdump_node_e61d95bf2dd83ed2 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_179_101, profiler::PerfNode * const  __node_rename_at_179_102, int32_t __tab_rename_at_179_103 )
+inline void _FuncProfilerDebugAgentTickdump_node_e61d95bf2dd83ed2 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_179_100, profiler::PerfNode * const  __node_rename_at_179_101, int32_t __tab_rename_at_179_102 )
 {
-    if ( __node_rename_at_179_102 == nullptr )
+    if ( __node_rename_at_179_101 == nullptr )
     {
         return ;
     } else {
         Sequence DAS_COMMENT((profiler::PerfNode * *)) _temp_make_local_198_19_128; _temp_make_local_198_19_128;
-        if ( __node_rename_at_179_102->fun != nullptr )
+        if ( __node_rename_at_179_101->fun != nullptr )
         {
-            int64_t __total_time_rename_at_184_104 = ((int64_t)das_invoke_method<int64_t,offsetof(profiler::ProfilerDebugAgent,convert_ns_to_unit)>::invoke<profiler::ProfilerDebugAgent &,int64_t,char *>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_179_101),__node_rename_at_179_102->total_time,__self_rename_at_179_101.time_unit));
-            char * __tabs_rename_at_185_105 = ((char *)(char *)(((char * const )(string_repeat(((char *) "  "),__tab_rename_at_179_103,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
-            if ( __self_rename_at_179_101.report_memory )
+            int64_t __total_time_rename_at_184_103 = ((int64_t)das_invoke_method<int64_t,offsetof(profiler::ProfilerDebugAgent,convert_ns_to_unit)>::invoke<profiler::ProfilerDebugAgent &,int64_t,char *>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_179_100),__node_rename_at_179_101->total_time,__self_rename_at_179_100.time_unit));
+            char * __tabs_rename_at_185_104 = ((char *)(char *)(((char * const )(string_repeat(((char *) "  "),__tab_rename_at_179_102,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
+            if ( __self_rename_at_179_100.report_memory )
             {
                 Sequence DAS_COMMENT((profiler::PerfNode * *)) _temp_make_local_189_27_96; _temp_make_local_189_27_96;
-                uint64_t __hb_rename_at_187_106 = __node_rename_at_179_102->total_heap_bytes;
-                uint64_t __shb_rename_at_188_107 = __node_rename_at_179_102->total_string_heap_bytes;
+                uint64_t __hb_rename_at_187_105 = __node_rename_at_179_101->total_heap_bytes;
+                uint64_t __shb_rename_at_188_106 = __node_rename_at_179_101->total_string_heap_bytes;
                 {
                     bool __need_loop_189 = true;
                     // ch: profiler::PerfNode? const&
-                    das_iterator<Sequence DAS_COMMENT((profiler::PerfNode * const ))> __ch_iterator((_temp_make_local_189_27_96 = (_FuncbuiltinTickvaluesTick1935193042646774172_589e57754e0170bc(__context__,__node_rename_at_179_102->children))));
-                    profiler::PerfNode * const  * __ch_rename_at_189_108;
-                    __need_loop_189 = __ch_iterator.first(__context__,(__ch_rename_at_189_108)) && __need_loop_189;
-                    for ( ; __need_loop_189 ; __need_loop_189 = __ch_iterator.next(__context__,(__ch_rename_at_189_108)) )
+                    das_iterator<Sequence DAS_COMMENT((profiler::PerfNode * const ))> __ch_iterator((_temp_make_local_189_27_96 = (_FuncbuiltinTickvaluesTick1935193042646774172_589e57754e0170bc(__context__,__node_rename_at_179_101->children))));
+                    profiler::PerfNode * const  * __ch_rename_at_189_107;
+                    __need_loop_189 = __ch_iterator.first(__context__,(__ch_rename_at_189_107)) && __need_loop_189;
+                    for ( ; __need_loop_189 ; __need_loop_189 = __ch_iterator.next(__context__,(__ch_rename_at_189_107)) )
                     {
-                        __hb_rename_at_187_106 -= (*__ch_rename_at_189_108)->total_heap_bytes;
-                        __shb_rename_at_188_107 -= (*__ch_rename_at_189_108)->total_string_heap_bytes;
+                        __hb_rename_at_187_105 -= (*__ch_rename_at_189_107)->total_heap_bytes;
+                        __shb_rename_at_188_106 -= (*__ch_rename_at_189_107)->total_string_heap_bytes;
                     }
-                    __ch_iterator.close(__context__,(__ch_rename_at_189_108));
+                    __ch_iterator.close(__context__,(__ch_rename_at_189_107));
                 };
-                toLog(20000,das_string_builder_temp(__context__,SimNode_AotInterop<12>(__tinfo_3, cast<char * const >::from(__tabs_rename_at_185_105), cast<char * const >::from(__node_rename_at_179_102->fun->mangledName /*mangledName*/), cast<char * const >::from(((char *) " ")), cast<int64_t>::from(int64_t(__node_rename_at_179_102->count)), cast<char * const >::from(((char *) " ")), cast<int64_t>::from(__total_time_rename_at_184_104), cast<char *>::from(__self_rename_at_179_101.time_unit), cast<char * const >::from(((char *) " heap=")), cast<int64_t>::from(int64_t(__hb_rename_at_187_106)), cast<char * const >::from(((char *) " string_heap=")), cast<int64_t>::from(int64_t(__shb_rename_at_188_107)), cast<char * const >::from(((char *) "\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+                toLog(20000,das_string_builder_temp(__context__,SimNode_AotInterop<12>(__tinfo_2, cast<char * const >::from(__tabs_rename_at_185_104), cast<char * const >::from(__node_rename_at_179_101->fun->mangledName /*mangledName*/), cast<char * const >::from(((char *) " ")), cast<int64_t>::from(int64_t(__node_rename_at_179_101->count)), cast<char * const >::from(((char *) " ")), cast<int64_t>::from(__total_time_rename_at_184_103), cast<char *>::from(__self_rename_at_179_100.time_unit), cast<char * const >::from(((char *) " heap=")), cast<int64_t>::from(int64_t(__hb_rename_at_187_105)), cast<char * const >::from(((char *) " string_heap=")), cast<int64_t>::from(int64_t(__shb_rename_at_188_106)), cast<char * const >::from(((char *) "\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             } else {
-                toLog(20000,das_string_builder_temp(__context__,SimNode_AotInterop<8>(__tinfo_4, cast<char * const >::from(__tabs_rename_at_185_105), cast<char * const >::from(__node_rename_at_179_102->fun->mangledName /*mangledName*/), cast<char * const >::from(((char *) " ")), cast<int64_t>::from(int64_t(__node_rename_at_179_102->count)), cast<char * const >::from(((char *) " ")), cast<int64_t>::from(__total_time_rename_at_184_104), cast<char *>::from(__self_rename_at_179_101.time_unit), cast<char * const >::from(((char *) "\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+                toLog(20000,das_string_builder_temp(__context__,SimNode_AotInterop<8>(__tinfo_3, cast<char * const >::from(__tabs_rename_at_185_104), cast<char * const >::from(__node_rename_at_179_101->fun->mangledName /*mangledName*/), cast<char * const >::from(((char *) " ")), cast<int64_t>::from(int64_t(__node_rename_at_179_101->count)), cast<char * const >::from(((char *) " ")), cast<int64_t>::from(__total_time_rename_at_184_103), cast<char *>::from(__self_rename_at_179_100.time_unit), cast<char * const >::from(((char *) "\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             };
         };
         {
             bool __need_loop_198 = true;
             // ch: profiler::PerfNode? const&
-            das_iterator<Sequence DAS_COMMENT((profiler::PerfNode * const ))> __ch_iterator((_temp_make_local_198_19_128 = (_FuncbuiltinTickvaluesTick1935193042646774172_589e57754e0170bc(__context__,__node_rename_at_179_102->children))));
-            profiler::PerfNode * const  * __ch_rename_at_198_109;
-            __need_loop_198 = __ch_iterator.first(__context__,(__ch_rename_at_198_109)) && __need_loop_198;
-            for ( ; __need_loop_198 ; __need_loop_198 = __ch_iterator.next(__context__,(__ch_rename_at_198_109)) )
+            das_iterator<Sequence DAS_COMMENT((profiler::PerfNode * const ))> __ch_iterator((_temp_make_local_198_19_128 = (_FuncbuiltinTickvaluesTick1935193042646774172_589e57754e0170bc(__context__,__node_rename_at_179_101->children))));
+            profiler::PerfNode * const  * __ch_rename_at_198_108;
+            __need_loop_198 = __ch_iterator.first(__context__,(__ch_rename_at_198_108)) && __need_loop_198;
+            for ( ; __need_loop_198 ; __need_loop_198 = __ch_iterator.next(__context__,(__ch_rename_at_198_108)) )
             {
-                das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_node)>::invoke<profiler::ProfilerDebugAgent &,profiler::PerfNode * const ,int32_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_179_101),(*__ch_rename_at_198_109),__tab_rename_at_179_103 + 1);
+                das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_node)>::invoke<profiler::ProfilerDebugAgent &,profiler::PerfNode * const ,int32_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_179_100),(*__ch_rename_at_198_108),__tab_rename_at_179_102 + 1);
             }
-            __ch_iterator.close(__context__,(__ch_rename_at_198_109));
+            __ch_iterator.close(__context__,(__ch_rename_at_198_108));
         };
     };
 }
 
-inline void _FuncProfilerDebugAgentTickdump_context_stack_75a85cd6d05aaa94 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_202_110, uint64_t __tid_rename_at_202_111 )
+inline void _FuncProfilerDebugAgentTickdump_context_stack_75a85cd6d05aaa94 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_202_109, uint64_t __tid_rename_at_202_110 )
 {
-    profiler::PerfNode * __root_rename_at_204_112 = das_new<profiler::PerfNode>::make(__context__);
-    TArray<profiler::PerfNode *> __stack_rename_at_205_113; das_zero(__stack_rename_at_205_113);
-    profiler::PerfNode * __sp_rename_at_206_114 = __root_rename_at_204_112;
+    profiler::PerfNode * __root_rename_at_204_111 = das_new<profiler::PerfNode>::make(__context__);
+    TArray<profiler::PerfNode *> __stack_rename_at_205_112; das_zero(__stack_rename_at_205_112);
+    profiler::PerfNode * __sp_rename_at_206_113 = __root_rename_at_204_111;
     {
         bool __need_loop_207 = true;
         // ev: profiler::PerfEvent&
-        das_iterator<TArray<profiler::PerfEvent>> __ev_iterator(__self_rename_at_202_110.events(__tid_rename_at_202_111,__context__).events);
-        profiler::PerfEvent * __ev_rename_at_207_115;
-        __need_loop_207 = __ev_iterator.first(__context__,(__ev_rename_at_207_115)) && __need_loop_207;
-        for ( ; __need_loop_207 ; __need_loop_207 = __ev_iterator.next(__context__,(__ev_rename_at_207_115)) )
+        das_iterator<TArray<profiler::PerfEvent>> __ev_iterator(__self_rename_at_202_109.events(__tid_rename_at_202_110,__context__).events);
+        profiler::PerfEvent * __ev_rename_at_207_114;
+        __need_loop_207 = __ev_iterator.first(__context__,(__ev_rename_at_207_114)) && __need_loop_207;
+        for ( ; __need_loop_207 ; __need_loop_207 = __ev_iterator.next(__context__,(__ev_rename_at_207_114)) )
         {
-            if ( __self_rename_at_202_110.manual && builtin_string_startswith((*__ev_rename_at_207_115).fun->mangledName /*mangledName*/,((char *) "@profiler_boost::"),__context__) )
+            if ( __self_rename_at_202_109.manual && builtin_string_startswith((*__ev_rename_at_207_114).fun->mangledName /*mangledName*/,((char *) "@profiler_boost::"),__context__) )
             {
                 continue;
             } else {
-                if ( (*__ev_rename_at_207_115).entering )
+                if ( (*__ev_rename_at_207_114).entering )
                 {
-                    _FuncbuiltinTickpushTick10769833213962245646_ce8f6e379fcfea44(__context__,das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_113),__sp_rename_at_206_114);
-                    if ( !_FuncbuiltinTickkey_existsTick16808803843923989214_9ddf16f8e9a725e2(__context__,das_arg<TTable<SimFunction *,profiler::PerfNode *>>::pass(__sp_rename_at_206_114->children),(*__ev_rename_at_207_115).fun) )
+                    _FuncbuiltinTickpushTick10769833213962245646_ce8f6e379fcfea44(__context__,das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_112),__sp_rename_at_206_113);
+                    if ( !_FuncbuiltinTickkey_existsTick16808803843923989214_9ddf16f8e9a725e2(__context__,das_arg<TTable<SimFunction *,profiler::PerfNode *>>::pass(__sp_rename_at_206_113->children),(*__ev_rename_at_207_114).fun) )
                     {
-                        das_copy(__sp_rename_at_206_114->children((*__ev_rename_at_207_115).fun,__context__),das_ascend<profiler::PerfNode,profiler::PerfNode>::make(__context__,nullptr,(([&]() -> profiler::PerfNode {
+                        das_copy(__sp_rename_at_206_113->children((*__ev_rename_at_207_114).fun,__context__),das_ascend<profiler::PerfNode,profiler::PerfNode>::make(__context__,nullptr,(([&]() -> profiler::PerfNode {
                             profiler::PerfNode __mks_214;
                             das_zero(__mks_214);
-                            das_copy((__mks_214.fun),((*__ev_rename_at_207_115).fun));
+                            das_copy((__mks_214.fun),((*__ev_rename_at_207_114).fun));
                             return __mks_214;
                         })())));
                     };
-                    das_copy(__sp_rename_at_206_114,__sp_rename_at_206_114->children((*__ev_rename_at_207_115).fun,__context__));
-                    ++__sp_rename_at_206_114->count;
-                    das_copy(__sp_rename_at_206_114->enter_time,(*__ev_rename_at_207_115).ts);
-                    das_copy(__sp_rename_at_206_114->enter_heap_bytes,(*__ev_rename_at_207_115).heapBytes);
-                    das_copy(__sp_rename_at_206_114->enter_string_heap_bytes,(*__ev_rename_at_207_115).stringHeapBytes);
+                    das_copy(__sp_rename_at_206_113,__sp_rename_at_206_113->children((*__ev_rename_at_207_114).fun,__context__));
+                    ++__sp_rename_at_206_113->count;
+                    das_copy(__sp_rename_at_206_113->enter_time,(*__ev_rename_at_207_114).ts);
+                    das_copy(__sp_rename_at_206_113->enter_heap_bytes,(*__ev_rename_at_207_114).heapBytes);
+                    das_copy(__sp_rename_at_206_113->enter_string_heap_bytes,(*__ev_rename_at_207_114).stringHeapBytes);
                 } else {
-                    __sp_rename_at_206_114->total_time += ((*__ev_rename_at_207_115).ts - __sp_rename_at_206_114->enter_time);
-                    __sp_rename_at_206_114->total_heap_bytes += ((*__ev_rename_at_207_115).heapBytes - __sp_rename_at_206_114->enter_heap_bytes);
-                    __sp_rename_at_206_114->total_string_heap_bytes += ((*__ev_rename_at_207_115).stringHeapBytes - __sp_rename_at_206_114->enter_string_heap_bytes);
-                    das_copy(__sp_rename_at_206_114,(builtin_array_size(das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_113)) != 0) ? das_auto_cast_ref<profiler::PerfNode * &>::cast(_FuncbuiltinTickbackTick18296309835877697278_d85bb617e8ef4b7a(__context__,das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_113))) : das_auto_cast_ref<profiler::PerfNode * &>::cast(__root_rename_at_204_112));
-                    if ( builtin_array_size(das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_113)) > 0 )
+                    __sp_rename_at_206_113->total_time += ((*__ev_rename_at_207_114).ts - __sp_rename_at_206_113->enter_time);
+                    __sp_rename_at_206_113->total_heap_bytes += ((*__ev_rename_at_207_114).heapBytes - __sp_rename_at_206_113->enter_heap_bytes);
+                    __sp_rename_at_206_113->total_string_heap_bytes += ((*__ev_rename_at_207_114).stringHeapBytes - __sp_rename_at_206_113->enter_string_heap_bytes);
+                    das_copy(__sp_rename_at_206_113,(builtin_array_size(das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_112)) != 0) ? das_auto_cast_ref<profiler::PerfNode * &>::cast(_FuncbuiltinTickbackTick18296309835877697278_d85bb617e8ef4b7a(__context__,das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_112))) : das_auto_cast_ref<profiler::PerfNode * &>::cast(__root_rename_at_204_111));
+                    if ( builtin_array_size(das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_112)) > 0 )
                     {
-                        _FuncbuiltinTickpopTick1161079256290593740_82d3f3b2cf4e69b4(__context__,das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_113));
+                        _FuncbuiltinTickpopTick1161079256290593740_82d3f3b2cf4e69b4(__context__,das_arg<TArray<profiler::PerfNode *>>::pass(__stack_rename_at_205_112));
                     };
                 };
             };
         }
-        __ev_iterator.close(__context__,(__ev_rename_at_207_115));
+        __ev_iterator.close(__context__,(__ev_rename_at_207_114));
     };
-    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_node)>::invoke<profiler::ProfilerDebugAgent &,profiler::PerfNode *,int32_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_202_110),__root_rename_at_204_112,-1);
-    finalize_8e28ab4c5bbc2920(__context__,__root_rename_at_204_112);
+    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_node)>::invoke<profiler::ProfilerDebugAgent &,profiler::PerfNode *,int32_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_202_109),__root_rename_at_204_111,-1);
+    finalize_8e28ab4c5bbc2920(__context__,__root_rename_at_204_111);
 }
 
-inline void _FuncProfilerDebugAgentTickdump_meta_e2086c649a7ec17d ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_236_116, Context &  __ctx_rename_at_236_117, uint64_t __tid_rename_at_236_118 )
+inline void _FuncProfilerDebugAgentTickdump_meta_e2086c649a7ec17d ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_236_115, Context &  __ctx_rename_at_236_116, uint64_t __tid_rename_at_236_117 )
 {
-    char * __ctxName_rename_at_237_119 = ((char *)(char *)((builtin_empty_das_string(das_arg<das::string>::pass(__ctx_rename_at_236_117.name /*name*/)) ? das_auto_cast<char * const >::cast(nullptr) : das_auto_cast<char * const >::cast(das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_5, cast<char * const >::from(((char *) " '")), cast<das::string &>::from(__ctx_rename_at_236_117.name /*name*/), cast<char * const >::from(((char *) "'"))))))));
-    bool __wasDead_rename_at_238_120 = ((bool)((__ctx_rename_at_236_117.category /*category*/ & 0x1u) == 0x1u));
-    __ctx_rename_at_236_117.category /*category*/ &= 0xfffffffeu;
-    char * __ctxDesc_rename_at_240_121 = ((char *)(char *)(((char * const )(builtin_string_escape(das_string_builder_temp(__context__,SimNode_AotInterop<4>(__tinfo_6, cast<uint64_t>::from(__tid_rename_at_236_118), cast<char * const >::from(__ctxName_rename_at_237_119), cast<char * const >::from(((char *) " cat:")), cast<Bitfield>::from(__ctx_rename_at_236_117.category /*category*/))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
-    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump)>::invoke<profiler::ProfilerDebugAgent &,char *>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_236_116),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_7, cast<char * const >::from(((char *) "{\"args\": { \"name\": \"")), cast<char * const >::from(__ctxDesc_rename_at_240_121), cast<char * const >::from(((char *) "\" }, \"name\": \"thread_name\", \"cat\": \"__metadata\", \"ph\": \"M\", \"pid\": 0, \"tid\": ")), cast<int64_t>::from(int64_t(__tid_rename_at_236_118)), cast<char * const >::from(((char *) ", \"ts\": 0 }")))));
-    if ( __wasDead_rename_at_238_120 )
+    char * __ctxName_rename_at_237_118 = ((char *)(char *)((builtin_empty_das_string(das_arg<das::string>::pass(__ctx_rename_at_236_116.name /*name*/)) ? das_auto_cast<char * const >::cast(nullptr) : das_auto_cast<char * const >::cast(das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_4, cast<char * const >::from(((char *) " '")), cast<das::string &>::from(__ctx_rename_at_236_116.name /*name*/), cast<char * const >::from(((char *) "'"))))))));
+    bool __wasDead_rename_at_238_119 = ((bool)((__ctx_rename_at_236_116.category /*category*/ & 0x1u) == 0x1u));
+    __ctx_rename_at_236_116.category /*category*/ &= 0xfffffffeu;
+    char * __ctxDesc_rename_at_240_120 = ((char *)(char *)(((char * const )(builtin_string_escape(das_string_builder_temp(__context__,SimNode_AotInterop<4>(__tinfo_5, cast<uint64_t>::from(__tid_rename_at_236_117), cast<char * const >::from(__ctxName_rename_at_237_118), cast<char * const >::from(((char *) " cat:")), cast<Bitfield>::from(__ctx_rename_at_236_116.category /*category*/))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
+    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump)>::invoke<profiler::ProfilerDebugAgent &,char *>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_236_115),das_string_builder(__context__,SimNode_AotInterop<5>(__tinfo_6, cast<char * const >::from(((char *) "{\"args\": { \"name\": \"")), cast<char * const >::from(__ctxDesc_rename_at_240_120), cast<char * const >::from(((char *) "\" }, \"name\": \"thread_name\", \"cat\": \"__metadata\", \"ph\": \"M\", \"pid\": 0, \"tid\": ")), cast<int64_t>::from(int64_t(__tid_rename_at_236_117)), cast<char * const >::from(((char *) ", \"ts\": 0 }")))));
+    if ( __wasDead_rename_at_238_119 )
     {
-        __ctx_rename_at_236_117.category /*category*/ |= 0x1u;
+        __ctx_rename_at_236_116.category /*category*/ |= 0x1u;
     };
 }
 
-inline void _FuncProfilerDebugAgentTickdump_events_a9ca4927f18757f9 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_245_122, uint64_t __tid_rename_at_245_123 )
+inline void _FuncProfilerDebugAgentTickdump_events_a9ca4927f18757f9 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_245_121, uint64_t __tid_rename_at_245_122 )
 {
     {
         bool __need_loop_246 = true;
         // ev: profiler::PerfEvent&
-        das_iterator<TArray<profiler::PerfEvent>> __ev_iterator(__self_rename_at_245_122.events(__tid_rename_at_245_123,__context__).events);
-        profiler::PerfEvent * __ev_rename_at_246_124;
-        __need_loop_246 = __ev_iterator.first(__context__,(__ev_rename_at_246_124)) && __need_loop_246;
-        for ( ; __need_loop_246 ; __need_loop_246 = __ev_iterator.next(__context__,(__ev_rename_at_246_124)) )
+        das_iterator<TArray<profiler::PerfEvent>> __ev_iterator(__self_rename_at_245_121.events(__tid_rename_at_245_122,__context__).events);
+        profiler::PerfEvent * __ev_rename_at_246_123;
+        __need_loop_246 = __ev_iterator.first(__context__,(__ev_rename_at_246_123)) && __need_loop_246;
+        for ( ; __need_loop_246 ; __need_loop_246 = __ev_iterator.next(__context__,(__ev_rename_at_246_123)) )
         {
-            das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_event)>::invoke<profiler::ProfilerDebugAgent &,profiler::PerfEvent &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_245_122),das_arg<profiler::PerfEvent>::pass((*__ev_rename_at_246_124)),__tid_rename_at_245_123);
+            das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_event)>::invoke<profiler::ProfilerDebugAgent &,profiler::PerfEvent &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_245_121),das_arg<profiler::PerfEvent>::pass((*__ev_rename_at_246_123)),__tid_rename_at_245_122);
         }
-        __ev_iterator.close(__context__,(__ev_rename_at_246_124));
+        __ev_iterator.close(__context__,(__ev_rename_at_246_123));
     };
 }
 
-inline void _FuncProfilerDebugAgentTickdump_context_fd27b073a7187d7d ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_250_125, Context &  __ctx_rename_at_250_126, uint64_t __tid_rename_at_250_127 )
+inline void _FuncProfilerDebugAgentTickdump_context_fd27b073a7187d7d ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_250_124, Context &  __ctx_rename_at_250_125, uint64_t __tid_rename_at_250_126 )
 {
-    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_context_stack)>::invoke<profiler::ProfilerDebugAgent &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_250_125),__tid_rename_at_250_127);
-    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_meta)>::invoke<profiler::ProfilerDebugAgent &,Context &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_250_125),das_arg<Context>::pass(__ctx_rename_at_250_126),__tid_rename_at_250_127);
-    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_events)>::invoke<profiler::ProfilerDebugAgent &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_250_125),__tid_rename_at_250_127);
-    _FuncbuiltinTickfinalizeTick13836114024949725080_94c6752d6462171a(__context__,das_arg<TArray<profiler::PerfEvent>>::pass(__self_rename_at_250_125.events(__tid_rename_at_250_127,__context__).events));
-    _FuncbuiltinTickeraseTick5639988512056021548_9a1bcb3ea71b8522(__context__,das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(__self_rename_at_250_125.events),__tid_rename_at_250_127);
+    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_context_stack)>::invoke<profiler::ProfilerDebugAgent &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_250_124),__tid_rename_at_250_126);
+    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_meta)>::invoke<profiler::ProfilerDebugAgent &,Context &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_250_124),das_arg<Context>::pass(__ctx_rename_at_250_125),__tid_rename_at_250_126);
+    das_invoke_method<void,offsetof(profiler::ProfilerDebugAgent,dump_events)>::invoke<profiler::ProfilerDebugAgent &,uint64_t>(__context__,nullptr,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_250_124),__tid_rename_at_250_126);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_94c6752d6462171a(__context__,das_arg<TArray<profiler::PerfEvent>>::pass(__self_rename_at_250_124.events(__tid_rename_at_250_126,__context__).events));
+    _FuncbuiltinTickeraseTick5639988512056021548_9a1bcb3ea71b8522(__context__,das_arg<TTable<uint64_t,profiler::PerfContext>>::pass(__self_rename_at_250_124.events),__tid_rename_at_250_126);
 }
 
-inline void _FuncProfilerDebugAgent_0x27___finalize_55718825a6cacc65 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_51_128 )
+inline void _FuncProfilerDebugAgent_0x27___finalize_55718825a6cacc65 ( Context * __context__, profiler::ProfilerDebugAgent &  __self_rename_at_51_127 )
 {
-    finalize_a22df4460ed06c09(__context__,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_51_128));
+    finalize_a22df4460ed06c09(__context__,das_arg<profiler::ProfilerDebugAgent>::pass(__self_rename_at_51_127));
 }
 
-inline void debug_agent_d95b879260e75c8e ( Context * __context__, Context const  &  __ctx_rename_at_261_129 )
+inline void debug_agent_d95b879260e75c8e ( Context * __context__, Context const  &  __ctx_rename_at_261_128 )
 {
     DAS_ASSERT((das_get_bitfield(thisContext(__context__).category /*category*/,1u << 1)));
-    _FuncdebugapiTickinstall_new_thread_local_debug_agentTick15124441463860820031_df029e5126654686(__context__,das_new<profiler::ProfilerDebugAgent>::make_and_init(__context__,[&]() { return ProfilerDebugAgent_bd056e97854e0b75(__context__); }));
+    _FuncdebugapiTickinstall_new_thread_local_debug_agentTick15124441463860820031_df029e5126654686(__context__,das_new<profiler::ProfilerDebugAgent>::make_and_init(__context__,[&]() { return ProfilerDebugAgent_1de59fe30ce53589(__context__); }));
 }
 
-inline profiler::ProfilerDebugAgent ProfilerDebugAgent_bd056e97854e0b75 ( Context * __context__ )
+inline profiler::ProfilerDebugAgent ProfilerDebugAgent_1de59fe30ce53589 ( Context * __context__ )
 {
-    profiler::ProfilerDebugAgent _temp_make_local_51_5_32; _temp_make_local_51_5_32;
-    TDim<AutoTuple<char *,int64_t>,4> _temp_make_local_59_45_528; _temp_make_local_59_45_528;
-    return /* <- */ das_auto_cast_move<profiler::ProfilerDebugAgent>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_875f1de9d5688f73(__context__,das_arg<profiler::ProfilerDebugAgent>::pass((([&]() -> profiler::ProfilerDebugAgent& {
-        das_zero(_temp_make_local_51_5_32);
-        das_copy((_temp_make_local_51_5_32.__rtti),(((void *)(&__type_info__216e8f5cf53cc8a6))));
-        das_copy((_temp_make_local_51_5_32.__finalize),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent'__finalize S<profiler::ProfilerDebugAgent>*/ 0xf09ee7130a694ec2)))));
-        das_copy((_temp_make_local_51_5_32.onInstall),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const ))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onInstall S<profiler::ProfilerDebugAgent> C1<H<debugapi::DebugAgent>>?*/ 0x39a91423d92da437)))));
-        das_copy((_temp_make_local_51_5_32.onUninstall),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const ))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onUninstall S<profiler::ProfilerDebugAgent> C1<H<debugapi::DebugAgent>>?*/ 0x636ff0e8b7bf5db8)))));
-        das_copy((_temp_make_local_51_5_32.onCreateContext),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onCreateContext S<profiler::ProfilerDebugAgent> H<rtti::Context>*/ 0xaa7ffa2efe654cc5)))));
-        das_copy((_temp_make_local_51_5_32.onDestroyContext),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onDestroyContext S<profiler::ProfilerDebugAgent> H<rtti::Context>*/ 0x3fa80de30376a415)))));
-        das_copy((_temp_make_local_51_5_32.onInstrumentFunction),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,SimFunction * const ,bool,uint64_t))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onInstrumentFunction S<profiler::ProfilerDebugAgent> H<rtti::Context> 1<H<rtti::SimFunction>>? Cb Cu64*/ 0x9c564c07fa802db3)))));
-        das_copy((_temp_make_local_51_5_32.us0),(INT64_C(0)));
-        das_copy((_temp_make_local_51_5_32.firstRecord),(true));
-        das_copy((_temp_make_local_51_5_32.manual),(false));
-        das_copy((_temp_make_local_51_5_32.report_memory),(false));
-        das_move((_temp_make_local_51_5_32.map_time_units),(_FuncbuiltinTickto_table_moveTick5858896087460481804_18e39d2b0245aff4(__context__,das_arg<TDim<AutoTuple<char *,int64_t>,4>>::pass((([&]() -> TDim<AutoTuple<char *,int64_t>,4>& {
-            _temp_make_local_59_45_528(0,__context__) = (([&]() -> AutoTuple<char *,int64_t> {
+    TDim<AutoTuple<char *,int64_t>,4> _temp_make_local_59_45_48; _temp_make_local_59_45_48;
+    return /* <- */ das_auto_cast_move<profiler::ProfilerDebugAgent>::cast((([&]() -> profiler::ProfilerDebugAgent {
+        profiler::ProfilerDebugAgent __mks_51;
+        das_zero(__mks_51);
+        das_copy((__mks_51.__rtti),(((void *)(&__type_info__216e8f5cf53cc8a6))));
+        das_copy((__mks_51.__finalize),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent'__finalize S<profiler::ProfilerDebugAgent>*/ 0xf09ee7130a694ec2)))));
+        das_copy((__mks_51.onInstall),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const ))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onInstall S<profiler::ProfilerDebugAgent> C1<H<debugapi::DebugAgent>>?*/ 0x39a91423d92da437)))));
+        das_copy((__mks_51.onUninstall),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const ))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onUninstall S<profiler::ProfilerDebugAgent> C1<H<debugapi::DebugAgent>>?*/ 0x636ff0e8b7bf5db8)))));
+        das_copy((__mks_51.onCreateContext),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onCreateContext S<profiler::ProfilerDebugAgent> H<rtti::Context>*/ 0xaa7ffa2efe654cc5)))));
+        das_copy((__mks_51.onDestroyContext),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onDestroyContext S<profiler::ProfilerDebugAgent> H<rtti::Context>*/ 0x3fa80de30376a415)))));
+        das_copy((__mks_51.onInstrumentFunction),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,SimFunction * const ,bool,uint64_t))>::cast(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onInstrumentFunction S<profiler::ProfilerDebugAgent> H<rtti::Context> 1<H<rtti::SimFunction>>? Cb Cu64*/ 0x9c564c07fa802db3)))));
+        das_copy((__mks_51.us0),(INT64_C(0)));
+        das_copy((__mks_51.firstRecord),(true));
+        das_copy((__mks_51.manual),(false));
+        das_copy((__mks_51.report_memory),(false));
+        das_move((__mks_51.map_time_units),(_FuncbuiltinTickto_table_moveTick5858896087460481804_18e39d2b0245aff4(__context__,das_arg<TDim<AutoTuple<char *,int64_t>,4>>::pass((([&]() -> TDim<AutoTuple<char *,int64_t>,4>& {
+            _temp_make_local_59_45_48(0,__context__) = (([&]() -> AutoTuple<char *,int64_t> {
                 AutoTuple<char *,int64_t> __mkt_59;
                 das_get_auto_tuple_field<char *,0,char *,int64_t>::get(__mkt_59) = ((char *) "ns");
                 das_get_auto_tuple_field<int64_t,1,char *,int64_t>::get(__mkt_59) = INT64_C(1);
                 return __mkt_59;
             })());
-            _temp_make_local_59_45_528(1,__context__) = (([&]() -> AutoTuple<char *,int64_t> {
+            _temp_make_local_59_45_48(1,__context__) = (([&]() -> AutoTuple<char *,int64_t> {
                 AutoTuple<char *,int64_t> __mkt_59;
                 das_get_auto_tuple_field<char *,0,char *,int64_t>::get(__mkt_59) = ((char *) "us");
                 das_get_auto_tuple_field<int64_t,1,char *,int64_t>::get(__mkt_59) = INT64_C(1000);
                 return __mkt_59;
             })());
-            _temp_make_local_59_45_528(2,__context__) = (([&]() -> AutoTuple<char *,int64_t> {
+            _temp_make_local_59_45_48(2,__context__) = (([&]() -> AutoTuple<char *,int64_t> {
                 AutoTuple<char *,int64_t> __mkt_59;
                 das_get_auto_tuple_field<char *,0,char *,int64_t>::get(__mkt_59) = ((char *) "ms");
                 das_get_auto_tuple_field<int64_t,1,char *,int64_t>::get(__mkt_59) = INT64_C(1000000);
                 return __mkt_59;
             })());
-            _temp_make_local_59_45_528(3,__context__) = (([&]() -> AutoTuple<char *,int64_t> {
+            _temp_make_local_59_45_48(3,__context__) = (([&]() -> AutoTuple<char *,int64_t> {
                 AutoTuple<char *,int64_t> __mkt_59;
                 das_get_auto_tuple_field<char *,0,char *,int64_t>::get(__mkt_59) = ((char *) "s");
                 das_get_auto_tuple_field<int64_t,1,char *,int64_t>::get(__mkt_59) = INT64_C(1000000000);
                 return __mkt_59;
             })());
-            return _temp_make_local_59_45_528;
+            return _temp_make_local_59_45_48;
         })())))));
-        das_copy((_temp_make_local_51_5_32.time_unit),(((char *) "ns")));
-        das_copy((_temp_make_local_51_5_32.dependency),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dependency S<profiler::ProfilerDebugAgent>*/ 0xec69536cf8555d37))));
-        das_copy((_temp_make_local_51_5_32.is_time_unit_correct),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`is_time_unit_correct S<profiler::ProfilerDebugAgent> Cs*/ 0x3b9a63160073f617))));
-        das_copy((_temp_make_local_51_5_32.convert_ns_to_unit),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`convert_ns_to_unit S<profiler::ProfilerDebugAgent> Ci64 Cs*/ 0xa5315b19f725f395))));
-        das_copy((_temp_make_local_51_5_32.isProfileable),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`isProfileable S<profiler::ProfilerDebugAgent> H<rtti::Context>*/ 0xc27ca255a42c3b91))));
-        das_copy((_temp_make_local_51_5_32.enable_profiler),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`enable_profiler S<profiler::ProfilerDebugAgent> Cu64 Cb*/ 0xf9e0a3a350220fd0))));
-        das_copy((_temp_make_local_51_5_32.onInstrumentFunctionWithMemory),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onInstrumentFunctionWithMemory S<profiler::ProfilerDebugAgent> H<rtti::Context> 1<H<rtti::SimFunction>>? Cb Cu64*/ 0xad5eebba40785914))));
-        das_copy((_temp_make_local_51_5_32.dump),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump S<profiler::ProfilerDebugAgent> Cs*/ 0x800cbe3c04e9e4a1))));
-        das_copy((_temp_make_local_51_5_32.write),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`write S<profiler::ProfilerDebugAgent> Cs*/ 0x4be9753ec91f8f10))));
-        das_copy((_temp_make_local_51_5_32.dump_event),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_event S<profiler::ProfilerDebugAgent> CS<profiler::PerfEvent> Cu64*/ 0xd9e69d3ecb7a5c6e))));
-        das_copy((_temp_make_local_51_5_32.dump_node),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_node S<profiler::ProfilerDebugAgent> C1<S<profiler::PerfNode>>? Ci*/ 0x76e5a372a94353c9))));
-        das_copy((_temp_make_local_51_5_32.dump_context_stack),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_context_stack S<profiler::ProfilerDebugAgent> Cu64*/ 0x3d15cdb2a17919eb))));
-        das_copy((_temp_make_local_51_5_32.dump_meta),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_meta S<profiler::ProfilerDebugAgent> H<rtti::Context> Cu64*/ 0xc801da724efb043f))));
-        das_copy((_temp_make_local_51_5_32.dump_events),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_events S<profiler::ProfilerDebugAgent> Cu64*/ 0xafce747c04dc4e))));
-        das_copy((_temp_make_local_51_5_32.dump_context),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_context S<profiler::ProfilerDebugAgent> H<rtti::Context> Cu64*/ 0xa3057690bae3c56d))));
-        return _temp_make_local_51_5_32;
-    })()))));
+        das_copy((__mks_51.time_unit),(((char *) "ns")));
+        das_copy((__mks_51.dependency),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dependency S<profiler::ProfilerDebugAgent>*/ 0xec69536cf8555d37))));
+        das_copy((__mks_51.is_time_unit_correct),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`is_time_unit_correct S<profiler::ProfilerDebugAgent> Cs*/ 0x3b9a63160073f617))));
+        das_copy((__mks_51.convert_ns_to_unit),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`convert_ns_to_unit S<profiler::ProfilerDebugAgent> Ci64 Cs*/ 0xa5315b19f725f395))));
+        das_copy((__mks_51.isProfileable),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`isProfileable S<profiler::ProfilerDebugAgent> H<rtti::Context>*/ 0xc27ca255a42c3b91))));
+        das_copy((__mks_51.enable_profiler),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`enable_profiler S<profiler::ProfilerDebugAgent> Cu64 Cb*/ 0xf9e0a3a350220fd0))));
+        das_copy((__mks_51.onInstrumentFunctionWithMemory),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`onInstrumentFunctionWithMemory S<profiler::ProfilerDebugAgent> H<rtti::Context> 1<H<rtti::SimFunction>>? Cb Cu64*/ 0xad5eebba40785914))));
+        das_copy((__mks_51.dump),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump S<profiler::ProfilerDebugAgent> Cs*/ 0x800cbe3c04e9e4a1))));
+        das_copy((__mks_51.write),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`write S<profiler::ProfilerDebugAgent> Cs*/ 0x4be9753ec91f8f10))));
+        das_copy((__mks_51.dump_event),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_event S<profiler::ProfilerDebugAgent> CS<profiler::PerfEvent> Cu64*/ 0xd9e69d3ecb7a5c6e))));
+        das_copy((__mks_51.dump_node),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_node S<profiler::ProfilerDebugAgent> C1<S<profiler::PerfNode>>? Ci*/ 0x76e5a372a94353c9))));
+        das_copy((__mks_51.dump_context_stack),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_context_stack S<profiler::ProfilerDebugAgent> Cu64*/ 0x3d15cdb2a17919eb))));
+        das_copy((__mks_51.dump_meta),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_meta S<profiler::ProfilerDebugAgent> H<rtti::Context> Cu64*/ 0xc801da724efb043f))));
+        das_copy((__mks_51.dump_events),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_events S<profiler::ProfilerDebugAgent> Cu64*/ 0xafce747c04dc4e))));
+        das_copy((__mks_51.dump_context),(Func(__context__->fnByMangledName(/*@profiler::ProfilerDebugAgent`dump_context S<profiler::ProfilerDebugAgent> H<rtti::Context> Cu64*/ 0xa3057690bae3c56d))));
+        return __mks_51;
+    })()));
 }
 
-inline TTable<char *,int64_t> _FuncbuiltinTickto_table_moveTick5858896087460481804_18e39d2b0245aff4 ( Context * __context__, TDim<AutoTuple<char *,int64_t>,4> &  __a_rename_at_1455_130 )
+inline TTable<char *,int64_t> _FuncbuiltinTickto_table_moveTick5858896087460481804_18e39d2b0245aff4 ( Context * __context__, TDim<AutoTuple<char *,int64_t>,4> &  __a_rename_at_1455_129 )
 {
-    TTable<char *,int64_t> __tab_rename_at_1456_131; das_zero(__tab_rename_at_1456_131);
+    TTable<char *,int64_t> __tab_rename_at_1456_130; das_zero(__tab_rename_at_1456_130);
     {
         bool __need_loop_1458 = true;
         // x: tuple<string aka keyT;int64 aka valT>&
-        das_iterator<TDim<AutoTuple<char *,int64_t>,4>> __x_iterator(__a_rename_at_1455_130);
-        AutoTuple<char *,int64_t> * __x_rename_at_1458_132;
-        __need_loop_1458 = __x_iterator.first(__context__,(__x_rename_at_1458_132)) && __need_loop_1458;
-        for ( ; __need_loop_1458 ; __need_loop_1458 = __x_iterator.next(__context__,(__x_rename_at_1458_132)) )
+        das_iterator<TDim<AutoTuple<char *,int64_t>,4>> __x_iterator(__a_rename_at_1455_129);
+        AutoTuple<char *,int64_t> * __x_rename_at_1458_131;
+        __need_loop_1458 = __x_iterator.first(__context__,(__x_rename_at_1458_131)) && __need_loop_1458;
+        for ( ; __need_loop_1458 ; __need_loop_1458 = __x_iterator.next(__context__,(__x_rename_at_1458_131)) )
         {
-            das_copy(__tab_rename_at_1456_131(das_get_auto_tuple_field<char *,0,char *,int64_t>::get((*__x_rename_at_1458_132)),__context__),das_get_auto_tuple_field<int64_t,1,char *,int64_t>::get((*__x_rename_at_1458_132)));
+            das_copy(__tab_rename_at_1456_130(das_get_auto_tuple_field<char *,0,char *,int64_t>::get((*__x_rename_at_1458_131)),__context__),das_get_auto_tuple_field<int64_t,1,char *,int64_t>::get((*__x_rename_at_1458_131)));
         }
-        __x_iterator.close(__context__,(__x_rename_at_1458_132));
+        __x_iterator.close(__context__,(__x_rename_at_1458_131));
     };
-    return /* <- */ das_auto_cast_move<TTable<char *,int64_t>>::cast(__tab_rename_at_1456_131);
+    return /* <- */ das_auto_cast_move<TTable<char *,int64_t>>::cast(__tab_rename_at_1456_130);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
@@ -1347,9 +1337,6 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     };
     aotLib[0x913076c65272dc08] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_5faf74312cbe5451>>();
-    };
-    aotLib[0x7f4f652fb3aaca74] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_875f1de9d5688f73>>();
     };
     aotLib[0xb220f54168293a43] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick5454204887383796109_9ef6894feb95542>>();
@@ -1489,11 +1476,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xfb67d2f2ad9705fc] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncProfilerDebugAgent_0x27___finalize_55718825a6cacc65>>();
     };
-    aotLib[0xc88839b02c3837c0] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x4cf3d61501026d22] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&debug_agent_d95b879260e75c8e>>();
     };
-    aotLib[0x112e2f107086f2d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&ProfilerDebugAgent_bd056e97854e0b75>>();
+    aotLib[0xf6964df37ea1fd46] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&ProfilerDebugAgent_1de59fe30ce53589>>();
     };
     aotLib[0x2b232266aaa5b9e1] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickto_table_moveTick5858896087460481804_18e39d2b0245aff4>>();
@@ -1506,8 +1493,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6796323685014359173
-AotListBase impl_aot_profiler(_anon_6796323685014359173::registerAotFunctions);
+} // namespace _anon_24307200680844639
+AotListBase impl_aot_profiler(_anon_24307200680844639::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

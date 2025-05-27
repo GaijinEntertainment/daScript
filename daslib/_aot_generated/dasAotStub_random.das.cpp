@@ -44,7 +44,7 @@
 #endif
 
 namespace das {
-namespace _anon_1008323586284647383 {
+namespace _anon_2421549459041438271 {
 
 namespace random { struct _lambda_random_111_1; };
 namespace random {
@@ -203,8 +203,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_1008323586284647383
-AotListBase impl_aot_random(_anon_1008323586284647383::registerAotFunctions);
+} // namespace _anon_2421549459041438271
+AotListBase impl_aot_random(_anon_2421549459041438271::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

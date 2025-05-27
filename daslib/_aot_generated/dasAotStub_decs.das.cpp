@@ -66,7 +66,7 @@
 #endif
 
 namespace das {
-namespace _anon_17494795018472672579 {
+namespace _anon_16286561896510742313 {
 
 namespace decs { struct CTypeInfo; };
 namespace decs { struct Component; };
@@ -12607,8 +12607,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_17494795018472672579
-AotListBase impl_aot_decs(_anon_17494795018472672579::registerAotFunctions);
+} // namespace _anon_16286561896510742313
+AotListBase impl_aot_decs(_anon_16286561896510742313::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)
