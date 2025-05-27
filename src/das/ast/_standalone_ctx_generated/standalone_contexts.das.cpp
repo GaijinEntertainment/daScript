@@ -18549,7 +18549,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xa6446645be64f5d5] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&writeStandaloneContext_b279e8068d9e5db5>>();
     };
-    aotLib[0x843ae19fdaa906b7] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xac22fd9b800194dd] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&StandaloneContextGen_76f266fec5829109>>();
     };
     aotLib[0x68f588c3da460043] = +[](Context & ctx) -> SimNode* {
@@ -18576,13 +18576,13 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x28131a19a71c1cf8] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&addFunctionInfo_55ceabaa4909b0d3>>();
     };
-    aotLib[0x3af47f086792a565] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xf7b1b75b6a632930] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&genStandaloneSrc_91328d44d9903eb5>>();
     };
-    aotLib[0x26c93e88caafb106] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x1421755104882ce4] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&runStandaloneVisitor_8a0f5bca94beb10b>>();
     };
-    aotLib[0x58c9bd5f783aaad8] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xd147f1bc7aa9167] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&standalone_aot_fcd4fd8036c2e616>>();
     };
     resolveTypeInfoAnnotations();
@@ -18599,7 +18599,7 @@ Standalone::Standalone() {
     policies.persistent_heap = false;
     policies.heap_size_hint = 65536;
     policies.string_heap_size_hint = 65536;
-    context.setup(0/*totalVariables*/, 13832 /*globalStringHeapSize*/, policies, {});
+    context.setup(0/*totalVariables*/, 13848 /*globalStringHeapSize*/, policies, {});
      // start totalVariables
      // end totalVariables
 
@@ -18663,7 +18663,7 @@ Standalone::Standalone() {
         std::make_tuple(45, FunctionInfo("writeStandaloneContextMethods", "@standalone_contexts::writeStandaloneContextMethods Y<ProgramPtr>1<H<rtti::Program>>?M H<strings::StringBuilderWriter> Cs Cb CS<standalone_contexts::StandaloneContextCfg>", 0xa4665700a6ade709, 0xb9c37f7438ac3eaf, 336, false, false, false, false, false, false), &__func_info__a4665700a6ade709),
         std::make_tuple(46, FunctionInfo("writeStandaloneCtor", "@standalone_contexts::writeStandaloneCtor CS<standalone_contexts::StandaloneContextCfg> Cs H<strings::StringBuilderWriter> CY<ProgramPtr>1<H<rtti::Program>>?M", 0x9c4847ad01122f10, 0xee2a113abce202c6, 432, false, false, false, false, false, false), &__func_info__9c4847ad01122f10),
         std::make_tuple(47, FunctionInfo("writeStandaloneContext", "@standalone_contexts::writeStandaloneContext Y<ProgramPtr>1<H<rtti::Program>>?M Cs H<strings::StringBuilderWriter> H<strings::StringBuilderWriter> CS<standalone_contexts::StandaloneContextCfg>", 0xfbbd289ed113c68c, 0xa6446645be64f5d5, 32, false, false, false, false, false, false), &__func_info__fbbd289ed113c68c),
-        std::make_tuple(48, FunctionInfo("StandaloneContextGen", "@standalone_contexts::StandaloneContextGen Y<ProgramPtr>1<H<rtti::Program>>?M 1<H<strings::StringBuilderWriter>>? 1<S<ast_aot_cpp::BlockVariableCollector>>? Cb", 0x13a955bae2ce082f, 0x843ae19fdaa906b7, 32, false, false, false, false, true, false), &__func_info__13a955bae2ce082f),
+        std::make_tuple(48, FunctionInfo("StandaloneContextGen", "@standalone_contexts::StandaloneContextGen Y<ProgramPtr>1<H<rtti::Program>>?M 1<H<strings::StringBuilderWriter>>? 1<S<ast_aot_cpp::BlockVariableCollector>>? Cb", 0x13a955bae2ce082f, 0xac22fd9b800194dd, 32, false, false, false, false, true, false), &__func_info__13a955bae2ce082f),
         std::make_tuple(49, FunctionInfo("StandaloneContextGen`StandaloneContextGen", "@standalone_contexts::StandaloneContextGen`StandaloneContextGen S<standalone_contexts::StandaloneContextGen> Y<ProgramPtr>1<H<rtti::Program>>?M 1<H<strings::StringBuilderWriter>>? 1<S<ast_aot_cpp::BlockVariableCollector>>? Cb", 0xaf7ec7293be89e33, 0x68f588c3da460043, 128, false, false, false, false, false, false), &__func_info__af7ec7293be89e33),
         std::make_tuple(50, FunctionInfo("StandaloneContextGen`visitGlobalLetVariableInit", "@standalone_contexts::StandaloneContextGen`visitGlobalLetVariableInit S<standalone_contexts::StandaloneContextGen> CY<VariablePtr>1<H<ast::Variable>>?M Y<ExpressionPtr>1<H<ast::Expression>>?M", 0x5a46ef992a0e019e, 0x97af3369864d47b8, 32, false, false, false, false, false, false), &__func_info__5a46ef992a0e019e),
         std::make_tuple(51, FunctionInfo("StandaloneContextGen`visitGlobalLet", "@standalone_contexts::StandaloneContextGen`visitGlobalLet S<standalone_contexts::StandaloneContextGen> CY<ProgramPtr>1<H<rtti::Program>>?M", 0x6160cac39dfd732c, 0x4129202f34780168, 224, false, false, false, false, false, false), &__func_info__6160cac39dfd732c),
@@ -18672,9 +18672,9 @@ Standalone::Standalone() {
         std::make_tuple(54, FunctionInfo("writeRegistration", "@standalone_contexts::writeRegistration H<strings::StringBuilderWriter> H<strings::StringBuilderWriter> Cs Y<ProgramPtr>1<H<rtti::Program>>?M CS<standalone_contexts::StandaloneContextCfg> H<rtti::Context>", 0xdef1e2f906f70d4e, 0x9d72edb5e5e42e24, 32, false, false, false, false, false, false), &__func_info__def1e2f906f70d4e),
         std::make_tuple(55, FunctionInfo("GetFunctionInfo", "@standalone_contexts::GetFunctionInfo C1<H<ast::Function>>? Cs", 0x15d4edadc09bfd0e, 0xa638e8c4f1202700, 224, false, false, false, false, false, false), &__func_info__15d4edadc09bfd0e),
         std::make_tuple(56, FunctionInfo("addFunctionInfo", "@standalone_contexts::addFunctionInfo Cb Cb C1<1<H<ast::Function>>?>A 1<S<ast_aot_cpp::AotDebugInfoHelper>>?", 0xacec2c4ba2e01316, 0x28131a19a71c1cf8, 192, false, false, false, false, false, false), &__func_info__acec2c4ba2e01316),
-        std::make_tuple(57, FunctionInfo("genStandaloneSrc", "@standalone_contexts::genStandaloneSrc Y<ProgramPtr>1<H<rtti::Program>>?M H<strings::StringBuilderWriter> CS<standalone_contexts::StandaloneContextCfg> 1<S<ast_aot_cpp::BlockVariableCollector>>?", 0x11dc13b91fffc482, 0x3af47f086792a565, 512, false, false, false, false, false, false), &__func_info__11dc13b91fffc482),
-        std::make_tuple(58, FunctionInfo("runStandaloneVisitor", "@standalone_contexts::runStandaloneVisitor Y<ProgramPtr>1<H<rtti::Program>>?M C1<s>A 1<H<rtti::Context>>?M CS<standalone_contexts::StandaloneContextCfg>", 0x73e644d519bfdf6c, 0x26c93e88caafb106, 496, false, false, false, false, false, false), &__func_info__73e644d519bfdf6c),
-        std::make_tuple(59, FunctionInfo("standalone_aot", "@standalone_contexts::standalone_aot Cs Cs Cb Cb Cb CH<rtti::CodeOfPolicies>", 0xb9bc655ffdb20de5, 0x58c9bd5f783aaad8, 352, false, false, false, false, false, false), &__func_info__b9bc655ffdb20de5),
+        std::make_tuple(57, FunctionInfo("genStandaloneSrc", "@standalone_contexts::genStandaloneSrc Y<ProgramPtr>1<H<rtti::Program>>?M H<strings::StringBuilderWriter> CS<standalone_contexts::StandaloneContextCfg> 1<S<ast_aot_cpp::BlockVariableCollector>>?", 0x11dc13b91fffc482, 0xf7b1b75b6a632930, 512, false, false, false, false, false, false), &__func_info__11dc13b91fffc482),
+        std::make_tuple(58, FunctionInfo("runStandaloneVisitor", "@standalone_contexts::runStandaloneVisitor Y<ProgramPtr>1<H<rtti::Program>>?M C1<s>A 1<H<rtti::Context>>?M CS<standalone_contexts::StandaloneContextCfg>", 0x73e644d519bfdf6c, 0x1421755104882ce4, 496, false, false, false, false, false, false), &__func_info__73e644d519bfdf6c),
+        std::make_tuple(59, FunctionInfo("standalone_aot", "@standalone_contexts::standalone_aot Cs Cs Cb Cb Cb CH<rtti::CodeOfPolicies>", 0xb9bc655ffdb20de5, 0xd147f1bc7aa9167, 352, false, false, false, false, false, false), &__func_info__b9bc655ffdb20de5),
         std::make_tuple(60, FunctionInfo("rtti`RttiValue_nothing`4715542659269841615", "@ast_boost::rtti`RttiValue_nothing`4715542659269841615", 0xd4a73918b71a372b, 0x6a6a8acedd776000, 32, false, false, false, false, true, false), &__func_info__d4a73918b71a372b),
         std::make_tuple(61, FunctionInfo("builtin`get_ptr`8468476673553620226", "@ast_boost::builtin`get_ptr`8468476673553620226 C=X1<Y<TT>H<rtti::Annotation>>?M", 0x8b4fbf624c1eb1e8, 0xaf014f870de3fcc6, 32, false, true, false, false, false, false), &__func_info__8b4fbf624c1eb1e8),
         std::make_tuple(62, FunctionInfo("find_arg", "@ast_boost::find_arg CH<rtti::AnnotationArgumentList> Cs", 0x40c7502c822ab8eb, 0xca8ab2c17fa91cef, 144, false, false, false, false, true, false), &__func_info__40c7502c822ab8eb),
@@ -18965,7 +18965,7 @@ Standalone::Standalone() {
         std::make_tuple(347, FunctionInfo("CppAot`visitFunctionArgument", "@ast_aot_cpp::CppAot`visitFunctionArgument S<ast_aot_cpp::CppAot> CY<FunctionPtr>1<H<ast::Function>>?M CY<VariablePtr>1<H<ast::Variable>>?M Cb", 0x6913f1cd561dbf81, 0x84ea79d867f39906, 32, false, false, false, false, false, false), &__func_info__6913f1cd561dbf81),
         std::make_tuple(348, FunctionInfo("CppAot`visitFunction", "@ast_aot_cpp::CppAot`visitFunction S<ast_aot_cpp::CppAot> CY<FunctionPtr>1<H<ast::Function>>?M", 0x6b254fd3233e7643, 0x102c4f7ccfc42b5f, 32, false, false, false, false, false, false), &__func_info__6b254fd3233e7643),
         std::make_tuple(349, FunctionInfo("CppAot`makeLocalTempName", "@ast_aot_cpp::CppAot`makeLocalTempName S<ast_aot_cpp::CppAot> CY<ExpressionPtr>1<H<ast::Expression>>?M", 0xd19de5b1ca360c76, 0x51a0361a45746eda, 48, false, false, false, false, false, false), &__func_info__d19de5b1ca360c76),
-        std::make_tuple(350, FunctionInfo("CppAot`preVisitExprBlock", "@ast_aot_cpp::CppAot`preVisitExprBlock S<ast_aot_cpp::CppAot> 1<H<ast::ExprBlock>>?M", 0x9f210b928f02d719, 0xa694926d68b16fd5, 160, false, false, false, false, false, false), &__func_info__9f210b928f02d719),
+        std::make_tuple(350, FunctionInfo("CppAot`preVisitExprBlock", "@ast_aot_cpp::CppAot`preVisitExprBlock S<ast_aot_cpp::CppAot> 1<H<ast::ExprBlock>>?M", 0x9f210b928f02d719, 0x96775cd350200b34, 160, false, false, false, false, false, false), &__func_info__9f210b928f02d719),
         std::make_tuple(351, FunctionInfo("CppAot`preVisitExprBlockArgumentInit", "@ast_aot_cpp::CppAot`preVisitExprBlockArgumentInit S<ast_aot_cpp::CppAot> C1<H<ast::ExprBlock>>?M CY<VariablePtr>1<H<ast::Variable>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M", 0x67ed1d18ec641cef, 0x883fb43975296d5b, 32, false, false, false, false, false, false), &__func_info__67ed1d18ec641cef),
         std::make_tuple(352, FunctionInfo("CppAot`visitExprBlockArgumentInit", "@ast_aot_cpp::CppAot`visitExprBlockArgumentInit S<ast_aot_cpp::CppAot> C1<H<ast::ExprBlock>>?M CY<VariablePtr>1<H<ast::Variable>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M", 0x864e9ce01bc375c2, 0x601300e1ab9c4203, 32, false, false, false, false, false, false), &__func_info__864e9ce01bc375c2),
         std::make_tuple(353, FunctionInfo("CppAot`preVisitExprBlockExpression", "@ast_aot_cpp::CppAot`preVisitExprBlockExpression S<ast_aot_cpp::CppAot> C1<H<ast::ExprBlock>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M", 0x477810d6fcfa3114, 0xfdb56dd26a0845c5, 32, false, false, false, false, false, false), &__func_info__477810d6fcfa3114),
@@ -19135,7 +19135,7 @@ Standalone::Standalone() {
         std::make_tuple(517, FunctionInfo("CppAot`canVisitMakeBlockBody", "@ast_aot_cpp::CppAot`canVisitMakeBlockBody S<ast_aot_cpp::CppAot> CY<ExprMakeBlockPtr>1<H<ast::ExprMakeBlock>>?M", 0x7befcb036f50d800, 0x5418cef95423f9e4, 32, false, false, false, false, false, false), &__func_info__7befcb036f50d800),
         std::make_tuple(518, FunctionInfo("CppAot`preVisitExprMakeBlock", "@ast_aot_cpp::CppAot`preVisitExprMakeBlock S<ast_aot_cpp::CppAot> CY<ExprMakeBlockPtr>1<H<ast::ExprMakeBlock>>?M", 0x35b42fb6e5e8dfc1, 0xd5a36d7d2a9ef62, 240, false, false, false, false, false, false), &__func_info__35b42fb6e5e8dfc1),
         std::make_tuple(519, FunctionInfo("CppAot`visitExprMakeBlock", "@ast_aot_cpp::CppAot`visitExprMakeBlock S<ast_aot_cpp::CppAot> Y<ExprMakeBlockPtr>1<H<ast::ExprMakeBlock>>?M", 0x545cf240b52afc08, 0xed580d81bab8136d, 48, false, false, false, false, false, false), &__func_info__545cf240b52afc08),
-        std::make_tuple(520, FunctionInfo("CppAot`preVisitExprLooksLikeCall", "@ast_aot_cpp::CppAot`preVisitExprLooksLikeCall S<ast_aot_cpp::CppAot> 1<H<ast::ExprLooksLikeCall>>?M", 0xf3354dff4b7dab3, 0x3670fe9dd2bf851a, 288, false, false, false, false, false, false), &__func_info__f3354dff4b7dab3),
+        std::make_tuple(520, FunctionInfo("CppAot`preVisitExprLooksLikeCall", "@ast_aot_cpp::CppAot`preVisitExprLooksLikeCall S<ast_aot_cpp::CppAot> 1<H<ast::ExprLooksLikeCall>>?M", 0xf3354dff4b7dab3, 0x6e154b9f9f21b24d, 288, false, false, false, false, false, false), &__func_info__f3354dff4b7dab3),
         std::make_tuple(521, FunctionInfo("CppAot`canVisitExprLooksLikeCallArgument", "@ast_aot_cpp::CppAot`canVisitExprLooksLikeCallArgument S<ast_aot_cpp::CppAot> C1<H<ast::ExprLooksLikeCall>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M Cb", 0x660fb64519d31a12, 0x32cd2a5e41d04793, 48, false, false, false, false, false, false), &__func_info__660fb64519d31a12),
         std::make_tuple(522, FunctionInfo("CppAot`preVisitExprLooksLikeCallArgument", "@ast_aot_cpp::CppAot`preVisitExprLooksLikeCallArgument S<ast_aot_cpp::CppAot> C1<H<ast::ExprLooksLikeCall>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M Cb", 0xef7c09e521156275, 0x3fb5ff38eb99b53f, 48, false, false, false, false, false, false), &__func_info__ef7c09e521156275),
         std::make_tuple(523, FunctionInfo("CppAot`visitExprLooksLikeCallArgument", "@ast_aot_cpp::CppAot`visitExprLooksLikeCallArgument S<ast_aot_cpp::CppAot> C1<H<ast::ExprLooksLikeCall>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M Cb", 0xf79afd1c499d8584, 0x6441d3018ddc46ff, 32, false, false, false, false, false, false), &__func_info__f79afd1c499d8584),
@@ -19179,7 +19179,7 @@ Standalone::Standalone() {
         std::make_tuple(561, FunctionInfo("UseTypeMarker", "@ast_aot_cpp::UseTypeMarker", 0xd698eea8f0325645, 0x5e5c554d9bb18aaa, 48, false, false, false, false, true, false), &__func_info__d698eea8f0325645),
         std::make_tuple(562, FunctionInfo("AotDebugInfoHelper", "@ast_aot_cpp::AotDebugInfoHelper", 0x8ed4b1e86307c6b0, 0x6351e637719a0c31, 48, false, false, false, false, true, false), &__func_info__8ed4b1e86307c6b0),
         std::make_tuple(563, FunctionInfo("BlockVariableCollector", "@ast_aot_cpp::BlockVariableCollector", 0x171dad96047b0ba1, 0xc8d28c0453dd9e9e, 48, false, false, false, false, true, false), &__func_info__171dad96047b0ba1),
-        std::make_tuple(564, FunctionInfo("CppAot", "@ast_aot_cpp::CppAot", 0x400c9815d2b9485b, 0x23e19a3af9e38f1e, 48, false, false, false, false, true, false), &__func_info__400c9815d2b9485b),
+        std::make_tuple(564, FunctionInfo("CppAot", "@ast_aot_cpp::CppAot", 0x400c9815d2b9485b, 0xab2dc4ec9fcf043f, 48, false, false, false, false, true, false), &__func_info__400c9815d2b9485b),
     };
     initializer_list<tuple<int, FunctionInfo>> extFunctions = {
     };

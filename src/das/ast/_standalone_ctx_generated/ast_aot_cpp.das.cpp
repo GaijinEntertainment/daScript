@@ -17861,7 +17861,7 @@ inline void _FuncCppAotTickpreVisitFunctionArgumentInit_8116889e5f40e8e9 ( Conte
 inline smart_ptr_raw<Variable> _FuncCppAotTickvisitFunctionArgument_cc6e6722745a9405 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_1207_652, smart_ptr_raw<Function> const  __fn_rename_at_1207_653, smart_ptr_raw<Variable> const  __that_rename_at_1207_654, bool __last_rename_at_1207_655 );
 inline smart_ptr_raw<Function> _FuncCppAotTickvisitFunction_a71693ca111c1754 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_1210_656, smart_ptr_raw<Function> const  __fn_rename_at_1210_657 );
 inline char * _FuncCppAotTickmakeLocalTempName_f5fc087deb90277a ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_1219_658, smart_ptr_raw<Expression> const  __expr_rename_at_1219_659 );
-inline void _FuncCppAotTickpreVisitExprBlock_f93792fdd5118c49 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_1243_661, smart_ptr_raw<ExprBlock> __blk_rename_at_1243_662 );
+inline void _FuncCppAotTickpreVisitExprBlock_3dc00ed367715a90 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_1243_661, smart_ptr_raw<ExprBlock> __blk_rename_at_1243_662 );
 inline void _FuncCppAotTickpreVisitExprBlockArgumentInit_f33962eb2add5dec ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_1273_668, smart_ptr_raw<ExprBlock> const  __blk_rename_at_1273_669, smart_ptr_raw<Variable> const  __variable_rename_at_1273_670, smart_ptr_raw<Expression> const  __init_rename_at_1273_671 );
 inline smart_ptr_raw<Expression> _FuncCppAotTickvisitExprBlockArgumentInit_956a340e7c3107c5 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_1276_672, smart_ptr_raw<ExprBlock> const  __blk_rename_at_1276_673, smart_ptr_raw<Variable> const  __variable_rename_at_1276_674, smart_ptr_raw<Expression> const  __init_rename_at_1276_675 );
 inline void _FuncCppAotTickpreVisitExprBlockExpression_a0e829bcb92d7c7d ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_1280_676, smart_ptr_raw<ExprBlock> const  __blk_rename_at_1280_677, smart_ptr_raw<Expression> const  __expr_rename_at_1280_678 );
@@ -18031,7 +18031,7 @@ inline smart_ptr_raw<Expression> _FuncCppAotTickvisitExprMakeTuple_3950a0fe0f8d1
 inline bool _FuncCppAotTickcanVisitMakeBlockBody_d0a4a432c04046c4 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_2846_1170, smart_ptr_raw<ExprMakeBlock> const  __blk_rename_at_2846_1171 );
 inline void _FuncCppAotTickpreVisitExprMakeBlock_fc485c48b1a3d23a ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_2849_1172, smart_ptr_raw<ExprMakeBlock> const  __expr_rename_at_2849_1173 );
 inline smart_ptr_raw<Expression> _FuncCppAotTickvisitExprMakeBlock_c1636a849f4ce496 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_2905_1181, smart_ptr_raw<ExprMakeBlock> __expr_rename_at_2905_1182 );
-inline void _FuncCppAotTickpreVisitExprLooksLikeCall_bd91d4583b0ef0f1 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_2914_1184, smart_ptr_raw<ExprLooksLikeCall> __call_rename_at_2914_1185 );
+inline void _FuncCppAotTickpreVisitExprLooksLikeCall_a69d9aeb5be24992 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_2914_1184, smart_ptr_raw<ExprLooksLikeCall> __call_rename_at_2914_1185 );
 inline bool _FuncCppAotTickcanVisitExprLooksLikeCallArgument_339b79c75d2cf2ff ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_3008_1197, smart_ptr_raw<ExprLooksLikeCall> const  __call_rename_at_3008_1198, smart_ptr_raw<Expression> const  __arg_rename_at_3008_1199, bool __last_rename_at_3008_1200 );
 inline void _FuncCppAotTickpreVisitExprLooksLikeCallArgument_557c88cea78c838 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_3015_1202, smart_ptr_raw<ExprLooksLikeCall> const  __call_rename_at_3015_1203, smart_ptr_raw<Expression> const  __arg_rename_at_3015_1204, bool __last_rename_at_3015_1205 );
 inline smart_ptr_raw<Expression> _FuncCppAotTickvisitExprLooksLikeCallArgument_214a1ee7abefab20 ( Context * __context__, ast_aot_cpp::CppAot & __self_rename_at_3025_1206, smart_ptr_raw<ExprLooksLikeCall> const  __call_rename_at_3025_1207, smart_ptr_raw<Expression> const  __arg_rename_at_3025_1208, bool __last_rename_at_3025_1209 );
@@ -21403,7 +21403,7 @@ inline char * _FuncCppAotTickmakeLocalTempName_f5fc087deb90277a ( Context * __co
     return das_auto_cast<char *>::cast(das_string_builder(__context__,SimNode_AotInterop<6>(__tinfo_303, cast<char * const >::from(((char *) "_temp_make_local_")), cast<char * const >::from(((char * const )(fmt_u32(((char *) ":d"),__expr_rename_at_1219_659->at /*at*/.line /*line*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))), cast<char * const >::from(((char *) "_")), cast<char * const >::from(((char * const )(fmt_u32(((char *) ":d"),__expr_rename_at_1219_659->at /*at*/.column /*column*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))), cast<char * const >::from(((char *) "_")), cast<char * const >::from(((char * const )(fmt_u32(((char *) ":d"),__stackTop_rename_at_1220_660,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))))));
 }
 
-inline void _FuncCppAotTickpreVisitExprBlock_f93792fdd5118c49 ( Context * __context__, ast_aot_cpp::CppAot &  __self_rename_at_1243_661, smart_ptr_raw<ExprBlock> __blk_rename_at_1243_662 ) { das_stack_prologue __prologue(__context__,160,"CppAot`preVisitExprBlock " DAS_FILE_LINE);
+inline void _FuncCppAotTickpreVisitExprBlock_3dc00ed367715a90 ( Context * __context__, ast_aot_cpp::CppAot &  __self_rename_at_1243_661, smart_ptr_raw<ExprBlock> __blk_rename_at_1243_662 ) { das_stack_prologue __prologue(__context__,160,"CppAot`preVisitExprBlock " DAS_FILE_LINE);
 {
     _FuncbuiltinTickpushTick10769833213962245646_f815a1708f9fc21b(__context__,das_arg<TArray<ExprBlock *>>::pass(__self_rename_at_1243_661.scopes),((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__blk_rename_at_1243_662),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__blk_rename_at_1243_662->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprBlock")),*__context__,nullptr))) ? das_auto_cast<ExprBlock *>::cast(das_cast<ExprBlock *>::cast(__blk_rename_at_1243_662)) : das_auto_cast<ExprBlock *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))));
     __blk_rename_at_1243_662->blockFlags /*blockFlags*/ |= 0x20u;
@@ -21429,7 +21429,7 @@ inline void _FuncCppAotTickpreVisitExprBlock_f93792fdd5118c49 ( Context * __cont
                 SimPolicy<char *>::SetAdd((char *)&(__vname_rename_at_1256_664),cast<char *>::from(((char *) "_ConstRef")),*__context__,nullptr);
             };
             das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_307,cast<StringBuilderWriter &>::from(das_deref(__context__,__self_rename_at_1243_661.ss)),cast<char *>::from(das_string_builder_temp(__context__,SimNode_AotInterop<2>(__tinfo_308, cast<char * const >::from(((char *) " ")), cast<char *>::from(__vname_rename_at_1256_664))))));
-            das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_309,cast<StringBuilderWriter &>::from(das_deref(__context__,__self_rename_at_1243_661.ss)),cast<char *>::from(das_string_builder_temp(__context__,SimNode_AotInterop<5>(__tinfo_310, cast<char * const >::from(((char *) "; memset(&")), cast<char *>::from(__vname_rename_at_1256_664), cast<char * const >::from(((char *) ",0,sizeof(")), cast<char *>::from(__vname_rename_at_1256_664), cast<char * const >::from(((char *) "));\n")))))));
+            das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_309,cast<StringBuilderWriter &>::from(das_deref(__context__,__self_rename_at_1243_661.ss)),cast<char *>::from(das_string_builder_temp(__context__,SimNode_AotInterop<5>(__tinfo_310, cast<char * const >::from(((char *) "; memset((void*)&")), cast<char *>::from(__vname_rename_at_1256_664), cast<char * const >::from(((char *) ",0,sizeof(")), cast<char *>::from(__vname_rename_at_1256_664), cast<char * const >::from(((char *) "));\n")))))));
         }
         __variable_iterator.close(__context__,(__variable_rename_at_1253_663));
     };
@@ -23958,7 +23958,7 @@ inline smart_ptr_raw<Expression> _FuncCppAotTickvisitExprMakeBlock_c1636a849f4ce
     return das_auto_cast<smart_ptr_raw<Expression>>::cast(__expr_rename_at_2905_1182);
 }
 
-inline void _FuncCppAotTickpreVisitExprLooksLikeCall_bd91d4583b0ef0f1 ( Context * __context__, ast_aot_cpp::CppAot &  __self_rename_at_2914_1184, smart_ptr_raw<ExprLooksLikeCall> __call_rename_at_2914_1185 )
+inline void _FuncCppAotTickpreVisitExprLooksLikeCall_a69d9aeb5be24992 ( Context * __context__, ast_aot_cpp::CppAot &  __self_rename_at_2914_1184, smart_ptr_raw<ExprLooksLikeCall> __call_rename_at_2914_1185 )
 {
     if ( eq_dstr_str(das_arg<das::string>::pass(__call_rename_at_2914_1185->name /*name*/),((char *) "debug")) )
     {
@@ -24082,7 +24082,7 @@ inline void _FuncCppAotTickpreVisitExprLooksLikeCall_bd91d4583b0ef0f1 ( Context 
         das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_914,cast<StringBuilderWriter &>::from(das_deref(__context__,__self_rename_at_2914_1184.ss)),cast<char * const >::from(((char *) "(__context__,nullptr,"))));
     } else if ( eq_dstr_str(das_arg<das::string>::pass(__call_rename_at_2914_1185->name /*name*/),((char *) "memzero")) )
     {
-        das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_915,cast<StringBuilderWriter &>::from(das_deref(__context__,__self_rename_at_2914_1184.ss)),cast<char * const >::from(((char *) "memset(&("))));
+        das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_915,cast<StringBuilderWriter &>::from(das_deref(__context__,__self_rename_at_2914_1184.ss)),cast<char * const >::from(((char *) "memset((void*)&("))));
     } else if ( eq_dstr_str(das_arg<das::string>::pass(__call_rename_at_2914_1185->name /*name*/),((char *) "static_assert")) )
     {
         das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_916,cast<StringBuilderWriter &>::from(das_deref(__context__,__self_rename_at_2914_1184.ss)),cast<char * const >::from(((char *) "das_static_assert("))));
@@ -26332,8 +26332,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x51a0361a45746eda] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCppAotTickmakeLocalTempName_f5fc087deb90277a>>();
     };
-    aotLib[0xa694926d68b16fd5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCppAotTickpreVisitExprBlock_f93792fdd5118c49>>();
+    aotLib[0x96775cd350200b34] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCppAotTickpreVisitExprBlock_3dc00ed367715a90>>();
     };
     aotLib[0x883fb43975296d5b] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCppAotTickpreVisitExprBlockArgumentInit_f33962eb2add5dec>>();
@@ -26842,8 +26842,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xed580d81bab8136d] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCppAotTickvisitExprMakeBlock_c1636a849f4ce496>>();
     };
-    aotLib[0x3670fe9dd2bf851a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCppAotTickpreVisitExprLooksLikeCall_bd91d4583b0ef0f1>>();
+    aotLib[0x6e154b9f9f21b24d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCppAotTickpreVisitExprLooksLikeCall_a69d9aeb5be24992>>();
     };
     aotLib[0x32cd2a5e41d04793] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCppAotTickcanVisitExprLooksLikeCallArgument_339b79c75d2cf2ff>>();
@@ -26944,7 +26944,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x2b1ef937fc2b9930] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&dumpDependencies_21dce68f2c8af657>>();
     };
-    aotLib[0x8d44efed382e94f9] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x8a144a0e5be3953e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&new_cpp_aot_976a83dbd4e92937>>();
     };
     aotLib[0x7490dccfeab97764] = +[](Context & ctx) -> SimNode* {
@@ -26962,7 +26962,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x5181ea006709f2ea] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&getRequiredModulesFor_e910862854b9bc54>>();
     };
-    aotLib[0xa08210c887db4780] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xb115cf6291e1d948] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&aot_1388e671d7caecfe>>();
     };
     aotLib[0xf75fa12d48e9263f] = +[](Context & ctx) -> SimNode* {
@@ -26983,7 +26983,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xc8d28c0453dd9e9e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&BlockVariableCollector_8d1ce625d7f99495>>();
     };
-    aotLib[0x23e19a3af9e38f1e] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xab2dc4ec9fcf043f] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&CppAot_c9f247b4ec64a264>>();
     };
     resolveTypeInfoAnnotations();
@@ -27000,7 +27000,7 @@ Standalone::Standalone() {
     policies.persistent_heap = false;
     policies.heap_size_hint = 65536;
     policies.string_heap_size_hint = 65536;
-    context.setup(0/*totalVariables*/, 10936 /*globalStringHeapSize*/, policies, {});
+    context.setup(0/*totalVariables*/, 10952 /*globalStringHeapSize*/, policies, {});
      // start totalVariables
      // end totalVariables
 
@@ -27296,7 +27296,7 @@ Standalone::Standalone() {
         std::make_tuple(277, FunctionInfo("CppAot`visitFunctionArgument", "@ast_aot_cpp::CppAot`visitFunctionArgument S<ast_aot_cpp::CppAot> CY<FunctionPtr>1<H<ast::Function>>?M CY<VariablePtr>1<H<ast::Variable>>?M Cb", 0x6913f1cd561dbf81, 0x84ea79d867f39906, 32, false, false, false, false, false, false), &__func_info__6913f1cd561dbf81),
         std::make_tuple(278, FunctionInfo("CppAot`visitFunction", "@ast_aot_cpp::CppAot`visitFunction S<ast_aot_cpp::CppAot> CY<FunctionPtr>1<H<ast::Function>>?M", 0x6b254fd3233e7643, 0x102c4f7ccfc42b5f, 32, false, false, false, false, false, false), &__func_info__6b254fd3233e7643),
         std::make_tuple(279, FunctionInfo("CppAot`makeLocalTempName", "@ast_aot_cpp::CppAot`makeLocalTempName S<ast_aot_cpp::CppAot> CY<ExpressionPtr>1<H<ast::Expression>>?M", 0xd19de5b1ca360c76, 0x51a0361a45746eda, 48, false, false, false, false, false, false), &__func_info__d19de5b1ca360c76),
-        std::make_tuple(280, FunctionInfo("CppAot`preVisitExprBlock", "@ast_aot_cpp::CppAot`preVisitExprBlock S<ast_aot_cpp::CppAot> 1<H<ast::ExprBlock>>?M", 0x9f210b928f02d719, 0xa694926d68b16fd5, 160, false, false, false, false, false, false), &__func_info__9f210b928f02d719),
+        std::make_tuple(280, FunctionInfo("CppAot`preVisitExprBlock", "@ast_aot_cpp::CppAot`preVisitExprBlock S<ast_aot_cpp::CppAot> 1<H<ast::ExprBlock>>?M", 0x9f210b928f02d719, 0x96775cd350200b34, 160, false, false, false, false, false, false), &__func_info__9f210b928f02d719),
         std::make_tuple(281, FunctionInfo("CppAot`preVisitExprBlockArgumentInit", "@ast_aot_cpp::CppAot`preVisitExprBlockArgumentInit S<ast_aot_cpp::CppAot> C1<H<ast::ExprBlock>>?M CY<VariablePtr>1<H<ast::Variable>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M", 0x67ed1d18ec641cef, 0x883fb43975296d5b, 32, false, false, false, false, false, false), &__func_info__67ed1d18ec641cef),
         std::make_tuple(282, FunctionInfo("CppAot`visitExprBlockArgumentInit", "@ast_aot_cpp::CppAot`visitExprBlockArgumentInit S<ast_aot_cpp::CppAot> C1<H<ast::ExprBlock>>?M CY<VariablePtr>1<H<ast::Variable>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M", 0x864e9ce01bc375c2, 0x601300e1ab9c4203, 32, false, false, false, false, false, false), &__func_info__864e9ce01bc375c2),
         std::make_tuple(283, FunctionInfo("CppAot`preVisitExprBlockExpression", "@ast_aot_cpp::CppAot`preVisitExprBlockExpression S<ast_aot_cpp::CppAot> C1<H<ast::ExprBlock>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M", 0x477810d6fcfa3114, 0xfdb56dd26a0845c5, 32, false, false, false, false, false, false), &__func_info__477810d6fcfa3114),
@@ -27466,7 +27466,7 @@ Standalone::Standalone() {
         std::make_tuple(447, FunctionInfo("CppAot`canVisitMakeBlockBody", "@ast_aot_cpp::CppAot`canVisitMakeBlockBody S<ast_aot_cpp::CppAot> CY<ExprMakeBlockPtr>1<H<ast::ExprMakeBlock>>?M", 0x7befcb036f50d800, 0x5418cef95423f9e4, 32, false, false, false, false, false, false), &__func_info__7befcb036f50d800),
         std::make_tuple(448, FunctionInfo("CppAot`preVisitExprMakeBlock", "@ast_aot_cpp::CppAot`preVisitExprMakeBlock S<ast_aot_cpp::CppAot> CY<ExprMakeBlockPtr>1<H<ast::ExprMakeBlock>>?M", 0x35b42fb6e5e8dfc1, 0xd5a36d7d2a9ef62, 240, false, false, false, false, false, false), &__func_info__35b42fb6e5e8dfc1),
         std::make_tuple(449, FunctionInfo("CppAot`visitExprMakeBlock", "@ast_aot_cpp::CppAot`visitExprMakeBlock S<ast_aot_cpp::CppAot> Y<ExprMakeBlockPtr>1<H<ast::ExprMakeBlock>>?M", 0x545cf240b52afc08, 0xed580d81bab8136d, 48, false, false, false, false, false, false), &__func_info__545cf240b52afc08),
-        std::make_tuple(450, FunctionInfo("CppAot`preVisitExprLooksLikeCall", "@ast_aot_cpp::CppAot`preVisitExprLooksLikeCall S<ast_aot_cpp::CppAot> 1<H<ast::ExprLooksLikeCall>>?M", 0xf3354dff4b7dab3, 0x3670fe9dd2bf851a, 288, false, false, false, false, false, false), &__func_info__f3354dff4b7dab3),
+        std::make_tuple(450, FunctionInfo("CppAot`preVisitExprLooksLikeCall", "@ast_aot_cpp::CppAot`preVisitExprLooksLikeCall S<ast_aot_cpp::CppAot> 1<H<ast::ExprLooksLikeCall>>?M", 0xf3354dff4b7dab3, 0x6e154b9f9f21b24d, 288, false, false, false, false, false, false), &__func_info__f3354dff4b7dab3),
         std::make_tuple(451, FunctionInfo("CppAot`canVisitExprLooksLikeCallArgument", "@ast_aot_cpp::CppAot`canVisitExprLooksLikeCallArgument S<ast_aot_cpp::CppAot> C1<H<ast::ExprLooksLikeCall>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M Cb", 0x660fb64519d31a12, 0x32cd2a5e41d04793, 48, false, false, false, false, false, false), &__func_info__660fb64519d31a12),
         std::make_tuple(452, FunctionInfo("CppAot`preVisitExprLooksLikeCallArgument", "@ast_aot_cpp::CppAot`preVisitExprLooksLikeCallArgument S<ast_aot_cpp::CppAot> C1<H<ast::ExprLooksLikeCall>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M Cb", 0xef7c09e521156275, 0x3fb5ff38eb99b53f, 48, false, false, false, false, false, false), &__func_info__ef7c09e521156275),
         std::make_tuple(453, FunctionInfo("CppAot`visitExprLooksLikeCallArgument", "@ast_aot_cpp::CppAot`visitExprLooksLikeCallArgument S<ast_aot_cpp::CppAot> C1<H<ast::ExprLooksLikeCall>>?M CY<ExpressionPtr>1<H<ast::Expression>>?M Cb", 0xf79afd1c499d8584, 0x6441d3018ddc46ff, 32, false, false, false, false, false, false), &__func_info__f79afd1c499d8584),
@@ -27500,20 +27500,20 @@ Standalone::Standalone() {
         std::make_tuple(481, FunctionInfo("CppAot`visitExprFor", "@ast_aot_cpp::CppAot`visitExprFor S<ast_aot_cpp::CppAot> 1<H<ast::ExprFor>>?M", 0xdba79799652b184, 0x9df63b4883683ea5, 48, false, false, false, false, false, false), &__func_info__dba79799652b184),
         std::make_tuple(482, FunctionInfo("CppAot'__finalize", "@ast_aot_cpp::CppAot'__finalize S<ast_aot_cpp::CppAot>", 0xeb96fdcf7ceeb72, 0x954f2be44f1ef845, 32, false, false, false, false, false, false), &__func_info__eb96fdcf7ceeb72),
         std::make_tuple(483, FunctionInfo("dumpDependencies", "@ast_aot_cpp::dumpDependencies CY<ProgramPtr>1<H<rtti::Program>>?M 1<S<ast_aot_cpp::CppAot>>?", 0xf3b7d86551f98a4b, 0x2b1ef937fc2b9930, 496, false, false, false, false, false, false), &__func_info__f3b7d86551f98a4b),
-        std::make_tuple(484, FunctionInfo("new_cpp_aot", "@ast_aot_cpp::new_cpp_aot 1<H<strings::StringBuilderWriter>>? CY<ProgramPtr>1<H<rtti::Program>>?M", 0xe1132e8ff4cd6adc, 0x8d44efed382e94f9, 128, false, false, false, false, false, false), &__func_info__e1132e8ff4cd6adc),
+        std::make_tuple(484, FunctionInfo("new_cpp_aot", "@ast_aot_cpp::new_cpp_aot 1<H<strings::StringBuilderWriter>>? CY<ProgramPtr>1<H<rtti::Program>>?M", 0xe1132e8ff4cd6adc, 0x8a144a0e5be3953e, 128, false, false, false, false, false, false), &__func_info__e1132e8ff4cd6adc),
         std::make_tuple(485, FunctionInfo("collectUsedFunctions", "@ast_aot_cpp::collectUsedFunctions C1<1<H<rtti::Module>>?>A Ci C1<H<rtti::Module>>? Cb Cb", 0xb4a52cb1f64646f1, 0x7490dccfeab97764, 144, false, false, false, false, true, false), &__func_info__b4a52cb1f64646f1),
         std::make_tuple(486, FunctionInfo("collectProgramUsedFunctions", "@ast_aot_cpp::collectProgramUsedFunctions CY<ProgramPtr>1<H<rtti::Program>>?M Cb Cb", 0xd6f4c20c117ce2f, 0x91c1e879a47b2bb9, 160, false, false, false, false, true, false), &__func_info__d6f4c20c117ce2f),
         std::make_tuple(487, FunctionInfo("setAotHashes", "@ast_aot_cpp::setAotHashes CY<ProgramPtr>1<H<rtti::Program>>?M H<rtti::Context>", 0xa0ed7fe4dc97505e, 0xa69a8ae6d514cd7d, 304, false, false, false, false, false, false), &__func_info__a0ed7fe4dc97505e),
         std::make_tuple(488, FunctionInfo("dumpRegisterAot", "@ast_aot_cpp::dumpRegisterAot 1<H<strings::StringBuilderWriter>>? CY<ProgramPtr>1<H<rtti::Program>>?M H<rtti::Context> Cb Cb", 0x54b1c2518a6dfddf, 0x21d3341d04008e88, 32, false, false, false, false, false, false), &__func_info__54b1c2518a6dfddf),
         std::make_tuple(489, FunctionInfo("getRequiredModulesFor", "@ast_aot_cpp::getRequiredModulesFor CY<ProgramPtr>1<H<rtti::Program>>?M", 0x63fb3735236cf18, 0x5181ea006709f2ea, 240, false, false, false, false, true, false), &__func_info__63fb3735236cf18),
-        std::make_tuple(490, FunctionInfo("aot", "@ast_aot_cpp::aot Cs Cb Cb Cb CH<rtti::CodeOfPolicies>", 0x775476b7fdec13e6, 0xa08210c887db4780, 720, false, false, false, false, false, false), &__func_info__775476b7fdec13e6),
+        std::make_tuple(490, FunctionInfo("aot", "@ast_aot_cpp::aot Cs Cb Cb Cb CH<rtti::CodeOfPolicies>", 0x775476b7fdec13e6, 0xb115cf6291e1d948, 720, false, false, false, false, false, false), &__func_info__775476b7fdec13e6),
         std::make_tuple(491, FunctionInfo("DescribeConfig", "@ast_aot_cpp::DescribeConfig", 0x99e223915f99b760, 0xf75fa12d48e9263f, 48, false, false, false, false, true, false), &__func_info__99e223915f99b760),
         std::make_tuple(492, FunctionInfo("NoAotMarker", "@ast_aot_cpp::NoAotMarker", 0xc543b3faa0287582, 0xe334fb9387560cc0, 48, false, false, false, false, true, false), &__func_info__c543b3faa0287582),
         std::make_tuple(493, FunctionInfo("PrologueMarker", "@ast_aot_cpp::PrologueMarker", 0xf1de25f41dec576, 0x8de874f111929b6a, 48, false, false, false, false, true, false), &__func_info__f1de25f41dec576),
         std::make_tuple(494, FunctionInfo("UseTypeMarker", "@ast_aot_cpp::UseTypeMarker", 0xd698eea8f0325645, 0x5e5c554d9bb18aaa, 48, false, false, false, false, true, false), &__func_info__d698eea8f0325645),
         std::make_tuple(495, FunctionInfo("AotDebugInfoHelper", "@ast_aot_cpp::AotDebugInfoHelper", 0x8ed4b1e86307c6b0, 0x6351e637719a0c31, 48, false, false, false, false, true, false), &__func_info__8ed4b1e86307c6b0),
         std::make_tuple(496, FunctionInfo("BlockVariableCollector", "@ast_aot_cpp::BlockVariableCollector", 0x171dad96047b0ba1, 0xc8d28c0453dd9e9e, 48, false, false, false, false, true, false), &__func_info__171dad96047b0ba1),
-        std::make_tuple(497, FunctionInfo("CppAot", "@ast_aot_cpp::CppAot", 0x400c9815d2b9485b, 0x23e19a3af9e38f1e, 48, false, false, false, false, true, false), &__func_info__400c9815d2b9485b),
+        std::make_tuple(497, FunctionInfo("CppAot", "@ast_aot_cpp::CppAot", 0x400c9815d2b9485b, 0xab2dc4ec9fcf043f, 48, false, false, false, false, true, false), &__func_info__400c9815d2b9485b),
         std::make_tuple(498, FunctionInfo("rtti`RttiValue_nothing`4715542659269841615", "@ast_boost::rtti`RttiValue_nothing`4715542659269841615", 0xd4a73918b71a372b, 0x6a6a8acedd776000, 32, false, false, false, false, true, false), &__func_info__d4a73918b71a372b),
         std::make_tuple(499, FunctionInfo("builtin`get_ptr`8468476673553620226", "@ast_boost::builtin`get_ptr`8468476673553620226 C=X1<Y<TT>H<rtti::Annotation>>?M", 0x8b4fbf624c1eb1e8, 0xaf014f870de3fcc6, 32, false, true, false, false, false, false), &__func_info__8b4fbf624c1eb1e8),
         std::make_tuple(500, FunctionInfo("find_arg", "@ast_boost::find_arg CH<rtti::AnnotationArgumentList> Cs", 0x40c7502c822ab8eb, 0xca8ab2c17fa91cef, 144, false, false, false, false, true, false), &__func_info__40c7502c822ab8eb),

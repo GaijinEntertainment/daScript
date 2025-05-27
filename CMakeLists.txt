@@ -934,9 +934,6 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
-    SET(AOT_STUB_SRC
-        utils/daScript/aot_stub.cpp
-    )
     add_library(libDaScriptAot STATIC ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
     ADD_DEPENDENCIES(libDaScriptAot dasAotStub libDaScript)
     TARGET_LINK_LIBRARIES(libDaScriptAot libDaScript)

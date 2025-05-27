@@ -1258,7 +1258,7 @@ class CppAot : AstVisitor {
                 vname += "_ConstRef";
             }
             write(*ss, " {vname}");
-            write(*ss, "; memset(&{vname},0,sizeof({vname}));\n");
+            write(*ss, "; memset((void*)&{vname},0,sizeof({vname}));\n");
         }
         // pre-declare locals
         collector.localTemps.get(blk.get_ptr()) <| $(temps) {
@@ -2998,7 +2998,7 @@ class CppAot : AstVisitor {
             }
             write(*ss, "(__context__,nullptr,");
         } elif (call.name == "memzero") {
-            write(*ss, "memset(&(");
+            write(*ss, "memset((void*)&(");
         } elif (call.name == "static_assert") {
             write(*ss, "das_static_assert(");
         } else {

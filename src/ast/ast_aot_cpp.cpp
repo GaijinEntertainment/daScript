@@ -1273,7 +1273,7 @@ namespace das {
                     vname += "_ConstRef";
                 }
                 ss  << " " << vname;
-                ss << "; " << "memset(&" << vname << ",0,sizeof(" << vname << "));"
+                ss << "; " << "memset((void*)&" << vname << ",0,sizeof(" << vname << "));"
                     << "\n";
             }
             // pre-declare locals
@@ -3136,7 +3136,7 @@ namespace das {
                 }
                 ss << "(__context__,nullptr,";
             } else if ( call->name=="memzero" ) {
-                ss << "memset(&(";
+                ss << "memset((void*)&(";
             } else if ( call->name=="static_assert" ) {
                 ss << "das_static_assert(";
             } else {
