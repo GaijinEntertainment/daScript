@@ -1137,6 +1137,24 @@ namespace das
         skipLockChecks = ctx.skipLockChecks;
     }
 
+    void Context::freeGlobalsAndShared() {
+        if ( globals && globalsOwner ) {
+            das_aligned_free16(globals);
+            globals = nullptr;
+        }
+        if ( shared && sharedOwner ) {
+            das_aligned_free16(shared);
+            shared = nullptr;
+        }
+    }
+
+    void Context::allocateGlobalsAndShared() {
+        freeGlobalsAndShared();
+        globals = globalsSize ? (char *) das_aligned_alloc16(globalsSize) : nullptr;
+        shared = sharedOwner ? (char *) das_aligned_alloc16(sharedSize) : nullptr;
+        globalsOwner = true;
+        sharedOwner = true;
+    }
     uint64_t Context::getSharedMemorySize() const {
         uint64_t mem = 0;
         mem += code ? code->totalAlignedMemoryAllocated() : 0;

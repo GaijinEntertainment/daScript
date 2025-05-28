@@ -744,6 +744,8 @@ namespace das
         void clearInstruments();
         void runVisitor ( SimVisitor * vis ) const;
 
+        void freeGlobalsAndShared();
+        void allocateGlobalsAndShared();
         uint64_t getSharedMemorySize() const;
         uint64_t getUniqueMemorySize() const;
 

@@ -119,9 +119,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         write(tw, "{pvar.name}\", \"{pvar |> get_mangled_name()}\", {pvar._type.sizeOf}, {pvar.flags.global_shared}));\n");
     }
     write(tw, "     // end totalVariables\n\n");
-    write(tw, "    context.globals = (char *) das_aligned_alloc16(context.globalsSize);\n");
-    write(tw, "    context.shared = (char *) das_aligned_alloc16(context.sharedSize);\n");
-    write(tw, "    context.sharedOwner = true;\n");
+    write(tw, "    context.allocateGlobalsAndShared();\n");
     write(tw, "    context.totalVariables = {program.totalVariables}/*totalVariables*/;\n");
     write(tw, "    context.functions = (SimFunction *) context.code->allocate( {program.totalFunctions}/*totalFunctions*/*sizeof(SimFunction) );\n");
     write(tw, "    context.totalFunctions = {program.totalFunctions}/*totalFunctions*/;\n");

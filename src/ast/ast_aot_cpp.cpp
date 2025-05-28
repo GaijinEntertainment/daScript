@@ -3754,9 +3754,7 @@ namespace das {
                << ");\n";
         }
         tw << "     // end totalVariables\n\n";
-        tw << "    context.globals = (char *) das_aligned_alloc16(context.globalsSize);\n";
-        tw << "    context.shared = (char *) das_aligned_alloc16(context.sharedSize);\n";
-        tw << "    context.sharedOwner = true;\n";
+        tw << "    context.allocateGlobalsAndShared();\n";
         tw << "    context.totalVariables = " << program.totalVariables << "/*totalVariables*/;\n";
         tw << "    context.functions = (SimFunction *) context.code->allocate( " << program.totalFunctions << "/*totalFunctions*/*sizeof(SimFunction) );\n";
         tw << "    context.totalFunctions = " << program.totalFunctions << "/*totalFunctions*/;\n";
