@@ -3297,6 +3297,12 @@ namespace das
             error("Shared variables size exceeds " + to_string(policies.max_static_variables_size), "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo());
             canAllocateVariables = false;
         }
+        if ( context.globals && context.globalsOwner ) {
+            das_aligned_free16(context.globals);
+        }
+        if ( context.shared && context.sharedOwner ) {
+            das_aligned_free16(context.shared);
+        }
         context.globals = (char *) das_aligned_alloc16(context.globalsSize);
         context.shared = (char *) das_aligned_alloc16(context.sharedSize);
         if ( context.globalsSize && !context.globals ) {
