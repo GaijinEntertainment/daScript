@@ -10184,9 +10184,7 @@ Standalone::Standalone() {
      // start totalVariables
      // end totalVariables
 
-    context.globals = (char *) das_aligned_alloc16(context.globalsSize);
-    context.shared = (char *) das_aligned_alloc16(context.sharedSize);
-    context.sharedOwner = true;
+    context.allocateGlobalsAndShared();
     context.totalVariables = 0/*totalVariables*/;
     context.functions = (SimFunction *) context.code->allocate( 216/*totalFunctions*/*sizeof(SimFunction) );
     context.totalFunctions = 216/*totalFunctions*/;

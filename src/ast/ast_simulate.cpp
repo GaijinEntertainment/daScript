@@ -3297,23 +3297,24 @@ namespace das
             error("Shared variables size exceeds " + to_string(policies.max_static_variables_size), "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo());
             canAllocateVariables = false;
         }
-        context.globals = (char *) das_aligned_alloc16(context.globalsSize);
-        context.shared = (char *) das_aligned_alloc16(context.sharedSize);
-        if ( context.globalsSize && !context.globals ) {
-            error("Failed to allocate memory for global variables", "Global variables size is " + to_string(context.globalsSize) + " bytes", "", LineInfo());
-            canAllocateVariables = false;
-        }
-        if ( context.sharedSize && !context.shared ) {
-            error("Failed to allocate memory for shared variables", "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo());
-            canAllocateVariables = false;
-        }
+        if ( canAllocateVariables ) {
+            context.allocateGlobalsAndShared();
+            if ( context.globalsSize && !context.globals ) {
+                error("Failed to allocate memory for global variables", "Global variables size is " + to_string(context.globalsSize) + " bytes", "", LineInfo());
+                canAllocateVariables = false;
+            }
+            if ( context.sharedSize && !context.shared ) {
+                error("Failed to allocate memory for shared variables", "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo());
+                canAllocateVariables = false;
+            }
+            context.totalVariables = totalVariables;
+        } 
         if ( !canAllocateVariables ) {
+            context.freeGlobalsAndShared();
             context.globalsSize = 0;
             context.sharedSize = 0;
             context.totalVariables = 0;
         }
-        context.sharedOwner = true;
-        context.totalVariables = totalVariables;
         context.functions = (SimFunction *) context.code->allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
         auto debuggerOrGC = getDebugger()  || context.thisProgram->options.getBoolOption("gc",false);
