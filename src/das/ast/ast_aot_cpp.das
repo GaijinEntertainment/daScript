@@ -1020,18 +1020,6 @@ class CppAot : AstVisitor {
         if (enu.external) {
             write(*ss, "#endif // external enum\n");
         } else {
-            var enuName : string;
-            if (!enu.cppName.empty()) {
-                enuName = string(enu.cppName);
-            } elif (enu._module != null && !enu._module.name.empty()) {
-                enuName = "{aotModuleName(enu._module)}::{enu.name}";
-            } else {
-                enuName = string(enu.name);
-            }
-            let castType = das_to_cppString(enu.baseType);
-            write(*ss, "}\n")
-            write(*ss, "template <> struct cast< das::{program.thisNamespace}::{enuName} > : cast_enum < das::{program.thisNamespace}::{enuName} > \{\};\n")
-            write(*ss, "namespace {program.thisNamespace} \{\n");
         }
         return enu;
     }
@@ -1310,15 +1298,16 @@ class CppAot : AstVisitor {
         if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
             cvname += "_ConstRef";
         }
-        write(*ss, cvname);
-        if (variable.init == null && variable._type.canInitWithZero) {
-            if (isLocalVec(variable._type)) {
-                write(*ss, " = v_zero()");
-            } else {
-                write(*ss, " = 0");
+        if (variable.init != null) {
+            write(*ss, cvname);
+        } elif (variable._type.canInitWithZero) {
+            let init_val = isLocalVec(variable._type) ? "v_zero()" : "0";
+            write(*ss, "{cvname} = {init_val}");
+        } else {
+            if (!collector.isMoved(variable)) {
+                write(*ss, "{cvname};");
             }
-        } elif (variable.init == null && !variable._type.canInitWithZero) {
-            write(*ss, "; das_zero({cvname})");
+            write(*ss, "das_zero({cvname})");
         }
     }
     def override visitExprLetVariable(let_ : smart_ptr<ExprLet>; variable : VariablePtr; last : bool) {

@@ -1056,19 +1056,6 @@ namespace das {
             if ( enu->external ) {
                 ss << "#endif // external enum\n";
             } else {
-                string enuName;
-                if ( !enu->cppName.empty() ) {
-                    enuName = enu->cppName;
-                } else if ( enu->module && !enu->module->name.empty() ) {
-                    enuName = aotModuleName(enu->module) + "::" + enu->name;
-                } else {
-                    enuName = enu->name;
-                }
-                auto castType = das_to_cppString(enu->baseType);
-                ss  << "}\n"
-                    << "template <> struct cast< das::" << program->thisNamespace << "::" << enuName
-                    << " > : cast_enum < das::" << program->thisNamespace << "::" << enuName << " > {};\n"
-                    << "namespace " << program->thisNamespace << " {\n";
             }
             return Visitor::visit(enu);
         }
@@ -1362,15 +1349,20 @@ namespace das {
             if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
                 cvname += "_ConstRef";
             }
-            ss << cvname;
-            if ( !var->init && var->type->canInitWithZero() ) {
+            if (var->init) {
+                ss << cvname;
+            } else if (var->type->canInitWithZero() ) {
+                ss << cvname;
                 if ( isLocalVec(var->type) ) {
                     ss << " = v_zero()";
                 } else {
                     ss << " = 0";
                 }
-            } else if ( !var->init && !var->type->canInitWithZero() ) {
-                ss << "; das_zero(" << cvname;
+            } else {
+                if (!collector.isMoved(var)) {
+                    ss << cvname << ";";
+                }
+                ss << "das_zero(" << cvname;
                 ss << ")";
             }
         }
