@@ -1056,19 +1056,6 @@ namespace das {
             if ( enu->external ) {
                 ss << "#endif // external enum\n";
             } else {
-                string enuName;
-                if ( !enu->cppName.empty() ) {
-                    enuName = enu->cppName;
-                } else if ( enu->module && !enu->module->name.empty() ) {
-                    enuName = aotModuleName(enu->module) + "::" + enu->name;
-                } else {
-                    enuName = enu->name;
-                }
-                auto castType = das_to_cppString(enu->baseType);
-                ss  << "}\n"
-                    << "template <> struct cast< das::" << program->thisNamespace << "::" << enuName
-                    << " > : cast_enum < das::" << program->thisNamespace << "::" << enuName << " > {};\n"
-                    << "namespace " << program->thisNamespace << " {\n";
             }
             return Visitor::visit(enu);
         }

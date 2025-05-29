@@ -1020,18 +1020,6 @@ class CppAot : AstVisitor {
         if (enu.external) {
             write(*ss, "#endif // external enum\n");
         } else {
-            var enuName : string;
-            if (!enu.cppName.empty()) {
-                enuName = string(enu.cppName);
-            } elif (enu._module != null && !enu._module.name.empty()) {
-                enuName = "{aotModuleName(enu._module)}::{enu.name}";
-            } else {
-                enuName = string(enu.name);
-            }
-            let castType = das_to_cppString(enu.baseType);
-            write(*ss, "}\n")
-            write(*ss, "template <> struct cast< das::{program.thisNamespace}::{enuName} > : cast_enum < das::{program.thisNamespace}::{enuName} > \{\};\n")
-            write(*ss, "namespace {program.thisNamespace} \{\n");
         }
         return enu;
     }
