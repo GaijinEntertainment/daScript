@@ -849,6 +849,7 @@ namespace das {
             const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
         TextWriter issues;
         auto ctx = get_context(program->getContextStackSize());
+        ctx->addRef();
         bool failed = !program->simulate(*ctx, issues);
         if ( failed ) {
             for ( auto & err : program->errors ) {
@@ -859,6 +860,7 @@ namespace das {
         } else {
             das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
         }
+        ctx->delRef();
     }
 
     void rtti_builtin_compile ( char * modName, char * str, const CodeOfPolicies & cop,
