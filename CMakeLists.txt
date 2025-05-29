@@ -846,7 +846,6 @@ set(StandaloneFilesList
     src/das/ast/ast_aot_cpp.das
     src/das/ast/aot_constants.das
     src/das/ast/standalone_contexts.das
-    src/das/ast/printer_flags_visitor.das
 )
 
 SET(STANDALONE_SRC)
@@ -870,7 +869,7 @@ foreach(FILE ${STANDALONE_SRC})
 endforeach()
 
 SET(AOT_STUB_SRC
-        utils/daScript/aot_stub.cpp
+        src/misc/aot_stub.cpp
 )
 
 MACRO(SETUP_LIBDASCRIPT library aotFiles standaloneFiles)

@@ -553,7 +553,7 @@ CACHE INTERNAL "DAS_DASCRIPT_FMT_SRC"
 )
 
 SET(AOT_STUB_SRC
-../utils/daScript/aot_stub.cpp
+../src/misc/aot_stub.cpp
 )
 
 
