@@ -221,7 +221,7 @@ namespace das {
                 ss << ")";
             }
         }
-        virtual void beforeHandle ( char * ps, TypeInfo * ti ) override {
+        virtual void beforeHandle ( char *, TypeInfo * ti ) override {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
                 ss << "[[" << debug_type(ti) << " ";
             }
