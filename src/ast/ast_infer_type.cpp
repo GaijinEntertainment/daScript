@@ -3422,6 +3422,23 @@ namespace das {
                                 value = eField->value;
                                 valueType = eField->value->type;
                                 methodName = eField->name;
+                            } else if ( func && func->isClassMethod && eField->value->rtti_isVar() ) {
+                                auto eVar = static_pointer_cast<ExprVar>(eField->value);
+                                if ( eVar->name=="super" ) {
+                                    if ( auto baseClass = func->classParent->parent ) {
+                                        reportAstChanged();
+                                        auto callName = "_::" + baseClass->name + "`" + eField->name;
+                                        auto newCall = make_smart<ExprCall>(expr->at, callName);
+                                        newCall->arguments.push_back(make_smart<ExprVar>(expr->at, "self"));
+                                        for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
+                                            newCall->arguments.push_back(expr->arguments[i]);
+                                        }
+                                        return newCall;
+                                    } else {
+                                        error("call to super in " + func->name + " is not allowed, no base class for " + func->classParent->name, "", "",
+                                            expr->at, CompilationError::function_not_found);
+                                    }
+                                }
                             }
                         } else if ( expr->arguments[0]->rtti_isSwizzle() ) {
                             auto eSwizzle = static_pointer_cast<ExprSwizzle>(expr->arguments[0]);
@@ -8091,6 +8108,7 @@ namespace das {
             if ( func && func->isClassMethod && func->classParent && call->name=="super" ) {
                 if ( auto baseClass = func->classParent->parent ) {
                     call->name = baseClass->name + "`" + baseClass->name;
+                    call->arguments.insert(call->arguments.begin(), make_smart<ExprVar>(call->at, "self"));
                     reportAstChanged();
                 } else {
                     error("call to super in " + func->name + " is not allowed, no base class for " + func->classParent->name, "", "",
