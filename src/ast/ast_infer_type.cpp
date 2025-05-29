@@ -8088,6 +8088,15 @@ namespace das {
                     "use let _ = " + call->name + "(...)", "",
                         call->at, CompilationError::result_discarded);
             }
+            if ( func && func->isClassMethod && func->classParent && call->name=="super" ) {
+                if ( auto baseClass = func->classParent->parent ) {
+                    call->name = baseClass->name + "`" + baseClass->name;
+                    reportAstChanged();
+                } else {
+                    error("call to super in " + func->name + " is not allowed, no base class for " + func->classParent->name, "", "",
+                        call->at, CompilationError::function_not_found);
+                }
+            }
         }
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitCallArg(call, arg, last);

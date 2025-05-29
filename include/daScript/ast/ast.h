@@ -1473,6 +1473,7 @@ namespace das
         bool no_unsafe_uninitialized_structures = true; // if true, then unsafe uninitialized structures are not allowed
         bool strict_properties = false;                 // if true, then properties are strict, i.e. a.prop = b does not get promoted to a.prop := b
         bool no_writing_to_nameless = true;             // if true, then writing to nameless variables (intermediate on the stack) is not allowed
+        bool always_call_super = false;                  // if true, then super() needs to be called from every class constructor
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
