@@ -1693,6 +1693,7 @@ namespace das
     // this one works for single module only
     ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, bool isDep = false, CodeOfPolicies policies = CodeOfPolicies() );
+    ExpressionPtr parseExpression ( string_view file, bool gen2, bool gen2_make = true);
 
     // this one collectes dependencies and compiles with modules
     ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
