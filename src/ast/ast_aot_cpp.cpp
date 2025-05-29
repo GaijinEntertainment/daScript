@@ -1349,15 +1349,20 @@ namespace das {
             if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
                 cvname += "_ConstRef";
             }
-            ss << cvname;
-            if ( !var->init && var->type->canInitWithZero() ) {
+            if (var->init) {
+                ss << cvname;
+            } else if (var->type->canInitWithZero() ) {
+                ss << cvname;
                 if ( isLocalVec(var->type) ) {
                     ss << " = v_zero()";
                 } else {
                     ss << " = 0";
                 }
-            } else if ( !var->init && !var->type->canInitWithZero() ) {
-                ss << "; das_zero(" << cvname;
+            } else {
+                if (!collector.isMoved(var)) {
+                    ss << cvname << ";";
+                }
+                ss << "das_zero(" << cvname;
                 ss << ")";
             }
         }

@@ -1298,15 +1298,16 @@ class CppAot : AstVisitor {
         if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
             cvname += "_ConstRef";
         }
-        write(*ss, cvname);
-        if (variable.init == null && variable._type.canInitWithZero) {
-            if (isLocalVec(variable._type)) {
-                write(*ss, " = v_zero()");
-            } else {
-                write(*ss, " = 0");
+        if (variable.init != null) {
+            write(*ss, cvname);
+        } elif (variable._type.canInitWithZero) {
+            let init_val = isLocalVec(variable._type) ? "v_zero()" : "0";
+            write(*ss, "{cvname} = {init_val}");
+        } else {
+            if (!collector.isMoved(variable)) {
+                write(*ss, "{cvname};");
             }
-        } elif (variable.init == null && !variable._type.canInitWithZero) {
-            write(*ss, "; das_zero({cvname})");
+            write(*ss, "das_zero({cvname})");
         }
     }
     def override visitExprLetVariable(let_ : smart_ptr<ExprLet>; variable : VariablePtr; last : bool) {
