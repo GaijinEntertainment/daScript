@@ -47,7 +47,7 @@ namespace das {
         ,"thread_local","throw","true","try","typedef","typeid","typename","union","unsigned","using"
         ,"virtual","void","volatile","wchar_t","while","xor","xor_eq"
         /* extra */
-        ,"override","final","import","module","transaction_safe","transaction_safe_dynamic"
+        ,"override","final","import","module","transaction_safe","transaction_safe_dynamic","super"
     };
 
     bool isCppKeyword(const string & str) {
@@ -169,6 +169,7 @@ namespace das {
         bool disableInit;
         bool noLocalClassMembers;
         bool noWritingToNameless;
+        bool alwaysCallSuper;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -183,6 +184,7 @@ namespace das {
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
             noLocalClassMembers = prog->options.getBoolOption("no_local_class_members", prog->policies.no_local_class_members);
             noWritingToNameless = prog->options.getBoolOption("no_writing_to_nameless", prog->policies.no_writing_to_nameless);
+            alwaysCallSuper = prog->options.getBoolOption("always_call_super", prog->policies.always_call_super);
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -545,6 +547,12 @@ namespace das {
             if ( starts_with(expr->func->name,"builtin`to_table_move`") && expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
                 verifyToTableMove(expr);
             }
+            if ( isClassCtor ) {
+                auto baseClass = func->classParent->parent;
+                if ( expr->func->name==(baseClass->name+"`"+baseClass->name) ) {
+                    anySuperCalls = true;
+                }
+            }
         }
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
@@ -664,6 +672,8 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->isTemplate;    // we don't do a thing with templates
         }
+        bool isClassCtor = false;
+        bool anySuperCalls = false;
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
             func = fn;
@@ -705,8 +715,17 @@ namespace das {
                 program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
                     fn->at, CompilationError::no_init);
             }
+            if ( alwaysCallSuper && fn->isClassMethod && fn->classParent && fn->classParent->parent && fn->name==(fn->classParent->name+"`"+fn->classParent->name)) {
+                isClassCtor = true; // detect class constructor, but only if we always call super
+            }
         }
         virtual FunctionPtr visit ( Function * fn ) override {
+            if ( isClassCtor && !anySuperCalls ) {
+                program->error("class constructor " + fn->name + " does not call super initializer", "",
+                    "", fn->at, CompilationError::invalid_member_function);
+            }
+            anySuperCalls = false;
+            isClassCtor = false;
             func = nullptr;
             return Visitor::visit(fn);
         }
@@ -804,6 +823,7 @@ namespace das {
         "strict_properties",            Type::tBool,
         "very_safe_context",            Type::tBool,
         "no_writing_to_nameless",       Type::tBool,
+        "always_call_super",            Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
