@@ -3308,7 +3308,7 @@ namespace das
                 canAllocateVariables = false;
             }
             context.totalVariables = totalVariables;
-        } 
+        }
         if ( !canAllocateVariables ) {
             context.freeGlobalsAndShared();
             context.globalsSize = 0;
