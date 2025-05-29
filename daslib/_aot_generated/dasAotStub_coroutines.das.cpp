@@ -63,7 +63,7 @@
 #endif
 
 namespace das {
-namespace _anon_15530702915337158574 {
+namespace _anon_17532613325701800776 {
 
 namespace coroutines { struct YieldFrom; };
 namespace coroutines { struct CoContinue; };
@@ -492,8 +492,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_15530702915337158574
-AotListBase impl_aot_coroutines(_anon_15530702915337158574::registerAotFunctions);
+} // namespace _anon_17532613325701800776
+AotListBase impl_aot_coroutines(_anon_17532613325701800776::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

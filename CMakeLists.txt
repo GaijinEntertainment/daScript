@@ -813,6 +813,8 @@ set(AotDaslibList
         daslib/uriparser_boost.das
         daslib/utf8_utils.das
         daslib/validate_code.das
+
+        src/das/ast/printer_flags_visitor.das
 )
 
 SET(AOT_GENERATED_SRC)

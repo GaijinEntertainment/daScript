@@ -57,7 +57,7 @@
 #endif
 
 namespace das {
-namespace _anon_6541284229524661428 {
+namespace _anon_13810765436593272350 {
 
 namespace safe_addr { struct SafeAddrMacro; };
 namespace safe_addr { struct SharedAddrMacro; };
@@ -373,8 +373,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6541284229524661428
-AotListBase impl_aot_safe_addr(_anon_6541284229524661428::registerAotFunctions);
+} // namespace _anon_13810765436593272350
+AotListBase impl_aot_safe_addr(_anon_13810765436593272350::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

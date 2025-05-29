@@ -68,7 +68,7 @@
 #endif
 
 namespace das {
-namespace _anon_2428681945911040973 {
+namespace _anon_12350235091001437762 {
 
 namespace faker { struct MonthNameAndDay; };
 namespace faker { struct Faker; };
@@ -224,8 +224,8 @@ enum class ReOp : int32_t {
 };
 }
 }
-template <> struct cast< das::_anon_2428681945911040973::regex::ReOp > : cast_enum < das::_anon_2428681945911040973::regex::ReOp > {};
-namespace _anon_2428681945911040973 {
+template <> struct cast< das::_anon_12350235091001437762::regex::ReOp > : cast_enum < das::_anon_12350235091001437762::regex::ReOp > {};
+namespace _anon_12350235091001437762 {
 namespace regex {
 
 struct ReNode {
@@ -2930,8 +2930,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_2428681945911040973
-AotListBase impl_aot_faker(_anon_2428681945911040973::registerAotFunctions);
+} // namespace _anon_12350235091001437762
+AotListBase impl_aot_faker(_anon_12350235091001437762::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

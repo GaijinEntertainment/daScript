@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_9217370953664855549 {
+namespace _anon_11321835919814610152 {
 
 namespace stub { struct TemplateMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -297,8 +297,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_9217370953664855549
-AotListBase impl_aot_stub(_anon_9217370953664855549::registerAotFunctions);
+} // namespace _anon_11321835919814610152
+AotListBase impl_aot_stub(_anon_11321835919814610152::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

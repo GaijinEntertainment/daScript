@@ -67,7 +67,7 @@
 #endif
 
 namespace das {
-namespace _anon_2611991765220838030 {
+namespace _anon_10652823101843338475 {
 
 namespace debug_eval { struct Result; };
 namespace debug_eval { struct TokenStream; };
@@ -1921,8 +1921,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_2611991765220838030
-AotListBase impl_aot_debug_eval(_anon_2611991765220838030::registerAotFunctions);
+} // namespace _anon_10652823101843338475
+AotListBase impl_aot_debug_eval(_anon_10652823101843338475::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

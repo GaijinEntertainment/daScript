@@ -66,7 +66,7 @@
 #endif
 
 namespace das {
-namespace _anon_8840095415379932743 {
+namespace _anon_2955400538734925514 {
 
 namespace refactor { struct ExtractMethodDesc; };
 namespace refactor { struct ExtractMethodMacro; };
@@ -870,8 +870,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_8840095415379932743
-AotListBase impl_aot_refactor(_anon_8840095415379932743::registerAotFunctions);
+} // namespace _anon_2955400538734925514
+AotListBase impl_aot_refactor(_anon_2955400538734925514::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

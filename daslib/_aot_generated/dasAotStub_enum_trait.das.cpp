@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_14201850851446243949 {
+namespace _anon_4389962189540919024 {
 
 namespace enum_trait { struct TypeInfoGetEnumLength; };
 namespace enum_trait { struct TypeInfoGetEnumNames; };
@@ -230,8 +230,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_14201850851446243949
-AotListBase impl_aot_enum_trait(_anon_14201850851446243949::registerAotFunctions);
+} // namespace _anon_4389962189540919024
+AotListBase impl_aot_enum_trait(_anon_4389962189540919024::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

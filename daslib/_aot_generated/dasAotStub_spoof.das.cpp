@@ -74,7 +74,7 @@
 #endif
 
 namespace das {
-namespace _anon_3089611819996209946 {
+namespace _anon_13437656370492431882 {
 
 namespace spoof { struct SpoofTemplateReader; };
 namespace spoof { struct SpoofInvocation; };
@@ -6229,8 +6229,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_3089611819996209946
-AotListBase impl_aot_spoof(_anon_3089611819996209946::registerAotFunctions);
+} // namespace _anon_13437656370492431882
+AotListBase impl_aot_spoof(_anon_13437656370492431882::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

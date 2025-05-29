@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_4904187250472566570 {
+namespace _anon_1157222075336833057 {
 
 namespace static_let { struct StaticLetMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -486,8 +486,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_4904187250472566570
-AotListBase impl_aot_static_let(_anon_4904187250472566570::registerAotFunctions);
+} // namespace _anon_1157222075336833057
+AotListBase impl_aot_static_let(_anon_1157222075336833057::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

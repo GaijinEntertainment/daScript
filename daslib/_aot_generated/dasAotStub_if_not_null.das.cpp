@@ -63,7 +63,7 @@
 #endif
 
 namespace das {
-namespace _anon_3445090180333249461 {
+namespace _anon_14885611273535804871 {
 
 namespace if_not_null { struct ApplyMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -330,8 +330,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_3445090180333249461
-AotListBase impl_aot_if_not_null(_anon_3445090180333249461::registerAotFunctions);
+} // namespace _anon_14885611273535804871
+AotListBase impl_aot_if_not_null(_anon_14885611273535804871::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

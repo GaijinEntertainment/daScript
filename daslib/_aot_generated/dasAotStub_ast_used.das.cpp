@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_14593784331740813474 {
+namespace _anon_4104645709522213235 {
 
 namespace ast_used { struct OnlyUsedTypes; };
 namespace ast_used { struct TypeVisitor; };
@@ -840,7 +840,6 @@ extern StructInfo __struct_info__5d21741014583922;
 extern StructInfo __struct_info__7fa8fc038d0aaf5;
 extern TypeInfo __type_info__8c50c75d9405ab88;
 extern TypeInfo __type_info__34d41367d560cabb;
-extern TypeInfo __type_info__1d3b8b96c8d74378;
 extern TypeInfo __type_info__7c61f7ae88617bb2;
 extern TypeInfo __type_info__c2f4bc15903e1610;
 extern TypeInfo __type_info__defdb920e82da0f4;
@@ -3537,7 +3536,6 @@ VarInfo * __struct_info__7fa8fc038d0aaf5_fields[308] =  { &__struct_info__7fa8fc
 StructInfo __struct_info__7fa8fc038d0aaf5 = {"TypeVisitor", "ast_used", 29, __struct_info__7fa8fc038d0aaf5_fields, 308, 2552, UINT64_C(0x0), nullptr, UINT64_C(0x7fa8fc038d0aaf5), 0 };
 TypeInfo __type_info__8c50c75d9405ab88 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__cd505ad3b1c59cc6, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0x8c50c75d9405ab88) };
 TypeInfo __type_info__34d41367d560cabb = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__60d16a2d23420951, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0x34d41367d560cabb) };
-TypeInfo __type_info__1d3b8b96c8d74378 = { Type::tStructure, &__struct_info__7fa8fc038d0aaf5, nullptr, nullptr, &__type_info__21586ce84f433a21, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 2552, UINT64_C(0x1d3b8b96c8d74378) };
 TypeInfo __type_info__7c61f7ae88617bb2 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__cd505ad3b1c59cc6, nullptr, nullptr, nullptr, 0, 0, nullptr, 24620, 8, UINT64_C(0x7c61f7ae88617bb2) };
 TypeInfo __type_info__c2f4bc15903e1610 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__7329fadda4ca251c, nullptr, nullptr, nullptr, 0, 0, nullptr, 25632, 8, UINT64_C(0xc2f4bc15903e1610) };
 TypeInfo __type_info__defdb920e82da0f4 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__3693bdfd1150bb56, nullptr, nullptr, nullptr, 0, 0, nullptr, 25632, 8, UINT64_C(0xdefdb920e82da0f4) };
@@ -3780,22 +3778,20 @@ static void resolveTypeInfoAnnotations()
     }
 }
 
-TypeInfo * __tinfo_0[1] = { &__type_info__1d3b8b96c8d74378 };
 
 inline void _FuncbuiltinTickfinalizeTick5454204887383796109_e50fe2294158f686 ( Context * __context__, TTable<Structure *,bool> & __a_rename_at_1193_0 );
 inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5e1308c9d727ed08 ( Context * __context__, TTable<Enumeration *,bool> & __a_rename_at_1193_1 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_16d68ffb35e45824 ( Context * __context__, ast_used::TypeVisitor const  & __cl_rename_at_116_2 );
 inline void finalize_50a044337ee23495 ( Context * __context__, ast_used::OnlyUsedTypes & ____this_rename_at_11_3 );
-inline ast_used::TypeVisitor & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_bffcca1c81e1cfee ( Context * __context__, ast_used::TypeVisitor & __a_rename_at_50_4 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff ( Context * __context__, TTable<Structure *,bool> const  & __Tab_rename_at_1014_5, Structure * const  __at_rename_at_1014_6 );
-inline void finalize_defb3dbd55c7b2b ( Context * __context__, ast_used::TypeVisitor & ____this_rename_at_17_7 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_acc656d87d79f580 ( Context * __context__, ast_used::TypeVisitor const  & __someClass_rename_at_684_8 );
-inline void finalize_9d272f2733bca863 ( Context * __context__, ast_used::TypeVisitor * & ____this_rename_at_69_11 );
-inline ast_used::TypeVisitor TypeVisitor_6eb2479a82db1b37 ( Context * __context__ );
-inline void _FuncTypeVisitorTickcollect_8a41c96a4111ef50 ( Context * __context__, ast_used::TypeVisitor & __self_rename_at_22_14, smart_ptr_raw<TypeDecl> const  __typ_rename_at_22_15 );
-inline void _FuncTypeVisitorTickpreVisitTypeDecl_a787aa2eb7fd9d31 ( Context * __context__, ast_used::TypeVisitor & __self_rename_at_49_18, smart_ptr_raw<TypeDecl> const  __typ_rename_at_49_19 );
-inline void _FuncTypeVisitor_0x27___finalize_49c5b62eed295d96 ( Context * __context__, ast_used::TypeVisitor & __self_rename_at_17_20 );
-inline void collect_used_types_ee0b1843e2a7dbbb ( Context * __context__, TArray<Function *> const  & __vfun_rename_at_54_21, TArray<Variable *> const  & __vvar_rename_at_54_22, Block DAS_COMMENT((void,ast_used::OnlyUsedTypes const )) const  & __blk_rename_at_54_23 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff ( Context * __context__, TTable<Structure *,bool> const  & __Tab_rename_at_1014_4, Structure * const  __at_rename_at_1014_5 );
+inline void finalize_defb3dbd55c7b2b ( Context * __context__, ast_used::TypeVisitor & ____this_rename_at_17_6 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_acc656d87d79f580 ( Context * __context__, ast_used::TypeVisitor const  & __someClass_rename_at_684_7 );
+inline void finalize_9d272f2733bca863 ( Context * __context__, ast_used::TypeVisitor * & ____this_rename_at_69_10 );
+inline ast_used::TypeVisitor TypeVisitor_c620693777895585 ( Context * __context__ );
+inline void _FuncTypeVisitorTickcollect_8a41c96a4111ef50 ( Context * __context__, ast_used::TypeVisitor & __self_rename_at_22_13, smart_ptr_raw<TypeDecl> const  __typ_rename_at_22_14 );
+inline void _FuncTypeVisitorTickpreVisitTypeDecl_a787aa2eb7fd9d31 ( Context * __context__, ast_used::TypeVisitor & __self_rename_at_49_17, smart_ptr_raw<TypeDecl> const  __typ_rename_at_49_18 );
+inline void _FuncTypeVisitor_0x27___finalize_49c5b62eed295d96 ( Context * __context__, ast_used::TypeVisitor & __self_rename_at_17_19 );
+inline void collect_used_types_ee0b1843e2a7dbbb ( Context * __context__, TArray<Function *> const  & __vfun_rename_at_54_20, TArray<Variable *> const  & __vvar_rename_at_54_21, Block DAS_COMMENT((void,ast_used::OnlyUsedTypes const )) const  & __blk_rename_at_54_22 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -3823,44 +3819,38 @@ inline void finalize_50a044337ee23495 ( Context * __context__, ast_used::OnlyUse
     memset(&(____this_rename_at_11_3), 0, TypeSize<ast_used::OnlyUsedTypes>::size);
 }
 
-inline ast_used::TypeVisitor & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_bffcca1c81e1cfee ( Context * __context__, ast_used::TypeVisitor &  __a_rename_at_50_4 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff ( Context * __context__, TTable<Structure *,bool> const  &  __Tab_rename_at_1014_4, Structure * const  __at_rename_at_1014_5 )
 {
-    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_0,cast<ast_used::TypeVisitor &>::from(__a_rename_at_50_4)));
-    return das_auto_cast_ref<ast_used::TypeVisitor &>::cast(__a_rename_at_50_4);
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_4,__at_rename_at_1014_5));
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff ( Context * __context__, TTable<Structure *,bool> const  &  __Tab_rename_at_1014_5, Structure * const  __at_rename_at_1014_6 )
+inline void finalize_defb3dbd55c7b2b ( Context * __context__, ast_used::TypeVisitor &  ____this_rename_at_17_6 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_5,__at_rename_at_1014_6));
+    finalize_50a044337ee23495(__context__,das_arg<ast_used::OnlyUsedTypes>::pass(____this_rename_at_17_6.usedTypes));
+    memset(&(____this_rename_at_17_6), 0, TypeSize<ast_used::TypeVisitor>::size);
 }
 
-inline void finalize_defb3dbd55c7b2b ( Context * __context__, ast_used::TypeVisitor &  ____this_rename_at_17_7 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_acc656d87d79f580 ( Context * __context__, ast_used::TypeVisitor const  &  __someClass_rename_at_684_7 )
 {
-    finalize_50a044337ee23495(__context__,das_arg<ast_used::OnlyUsedTypes>::pass(____this_rename_at_17_7.usedTypes));
-    memset(&(____this_rename_at_17_7), 0, TypeSize<ast_used::TypeVisitor>::size);
+    ast_used::TypeVisitor const  * __classPtr_rename_at_687_8 = ((ast_used::TypeVisitor const  *)das_ref(__context__,__someClass_rename_at_684_7));
+    StructInfo const  * __classInfo_rename_at_688_9 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_16d68ffb35e45824(__context__,__someClass_rename_at_684_7));
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_8),__classInfo_rename_at_688_9,__context__));
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_acc656d87d79f580 ( Context * __context__, ast_used::TypeVisitor const  &  __someClass_rename_at_684_8 )
+inline void finalize_9d272f2733bca863 ( Context * __context__, ast_used::TypeVisitor * & ____this_rename_at_69_10 )
 {
-    ast_used::TypeVisitor const  * __classPtr_rename_at_687_9 = ((ast_used::TypeVisitor const  *)das_ref(__context__,__someClass_rename_at_684_8));
-    StructInfo const  * __classInfo_rename_at_688_10 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_16d68ffb35e45824(__context__,__someClass_rename_at_684_8));
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_9),__classInfo_rename_at_688_10,__context__));
-}
-
-inline void finalize_9d272f2733bca863 ( Context * __context__, ast_used::TypeVisitor * & ____this_rename_at_69_11 )
-{
-    if ( ____this_rename_at_69_11 != nullptr )
+    if ( ____this_rename_at_69_10 != nullptr )
     {
-        int32_t ____size_rename_at_69_12 = ((int32_t)class_rtti_size(das_auto_cast<void * const >::cast(____this_rename_at_69_11)));
-        das_invoke_function<void>::invoke<ast::AstVisitor &>(__context__,nullptr,____this_rename_at_69_11->__finalize,das_arg<ast::AstVisitor>::pass(das_cast<ast::AstVisitor>::cast(das_deref(__context__,____this_rename_at_69_11))));
-        das_delete<ast_used::TypeVisitor *>::clear(__context__,____this_rename_at_69_11,____size_rename_at_69_12);
-        das_copy(____this_rename_at_69_11,nullptr);
+        int32_t ____size_rename_at_69_11 = ((int32_t)class_rtti_size(das_auto_cast<void * const >::cast(____this_rename_at_69_10)));
+        das_invoke_function<void>::invoke<ast::AstVisitor &>(__context__,nullptr,____this_rename_at_69_10->__finalize,das_arg<ast::AstVisitor>::pass(das_cast<ast::AstVisitor>::cast(das_deref(__context__,____this_rename_at_69_10))));
+        das_delete<ast_used::TypeVisitor *>::clear(__context__,____this_rename_at_69_10,____size_rename_at_69_11);
+        das_copy(____this_rename_at_69_10,nullptr);
     };
 }
 
-inline ast_used::TypeVisitor TypeVisitor_6eb2479a82db1b37 ( Context * __context__ )
+inline ast_used::TypeVisitor TypeVisitor_c620693777895585 ( Context * __context__ )
 {
-    ast_used::TypeVisitor __self_rename_at_19_13; das_zero(__self_rename_at_19_13); das_move(__self_rename_at_19_13, (([&]() -> ast_used::TypeVisitor {
+    ast_used::TypeVisitor __self_rename_at_19_12; das_zero(__self_rename_at_19_12); das_move(__self_rename_at_19_12, (([&]() -> ast_used::TypeVisitor {
         ast_used::TypeVisitor __mks_19;
         das_zero(__mks_19);
         das_copy((__mks_19.__rtti),(((void *)(&__type_info__9dd771578c884734))));
@@ -3869,105 +3859,105 @@ inline ast_used::TypeVisitor TypeVisitor_6eb2479a82db1b37 ( Context * __context_
         das_copy((__mks_19.collect),(Func(__context__->fnByMangledName(/*@ast_used::TypeVisitor`collect S<ast_used::TypeVisitor> CY<TypeDeclPtr>1<H<ast::TypeDecl>>?M*/ 0xc9baa2858b268992))));
         return __mks_19;
     })()));
-    return /* <- */ das_auto_cast_move<ast_used::TypeVisitor>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_bffcca1c81e1cfee(__context__,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_19_13)));
+    return /* <- */ das_auto_cast_move<ast_used::TypeVisitor>::cast(__self_rename_at_19_12);
 }
 
-inline void _FuncTypeVisitorTickcollect_8a41c96a4111ef50 ( Context * __context__, ast_used::TypeVisitor &  __self_rename_at_22_14, smart_ptr_raw<TypeDecl> const  __typ_rename_at_22_15 )
+inline void _FuncTypeVisitorTickcollect_8a41c96a4111ef50 ( Context * __context__, ast_used::TypeVisitor &  __self_rename_at_22_13, smart_ptr_raw<TypeDecl> const  __typ_rename_at_22_14 )
 {
-    if ( __typ_rename_at_22_15->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tStructure )
+    if ( __typ_rename_at_22_14->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tStructure )
     {
-        if ( _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff(__context__,das_arg<TTable<Structure *,bool>>::pass(__self_rename_at_22_14.usedTypes.st),das_cast<Structure *>::cast(__typ_rename_at_22_15->structType /*structType*/)) )
+        if ( _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff(__context__,das_arg<TTable<Structure *,bool>>::pass(__self_rename_at_22_13.usedTypes.st),das_cast<Structure *>::cast(__typ_rename_at_22_14->structType /*structType*/)) )
         {
             return ;
         };
     };
-    if ( __typ_rename_at_22_15->structType /*structType*/ != nullptr )
+    if ( __typ_rename_at_22_14->structType /*structType*/ != nullptr )
     {
-        das_copy(__self_rename_at_22_14.usedTypes.st(das_cast<Structure *>::cast(__typ_rename_at_22_15->structType /*structType*/),__context__),true);
+        das_copy(__self_rename_at_22_13.usedTypes.st(das_cast<Structure *>::cast(__typ_rename_at_22_14->structType /*structType*/),__context__),true);
         {
             bool __need_loop_31 = true;
             // fld: ast::FieldDeclaration const&
-            das_iterator<das::vector<Structure::FieldDeclaration> const > __fld_iterator(__typ_rename_at_22_15->structType /*structType*/->fields /*fields*/);
-            Structure::FieldDeclaration const  * __fld_rename_at_31_16;
-            __need_loop_31 = __fld_iterator.first(__context__,(__fld_rename_at_31_16)) && __need_loop_31;
-            for ( ; __need_loop_31 ; __need_loop_31 = __fld_iterator.next(__context__,(__fld_rename_at_31_16)) )
+            das_iterator<das::vector<Structure::FieldDeclaration> const > __fld_iterator(__typ_rename_at_22_14->structType /*structType*/->fields /*fields*/);
+            Structure::FieldDeclaration const  * __fld_rename_at_31_15;
+            __need_loop_31 = __fld_iterator.first(__context__,(__fld_rename_at_31_15)) && __need_loop_31;
+            for ( ; __need_loop_31 ; __need_loop_31 = __fld_iterator.next(__context__,(__fld_rename_at_31_15)) )
             {
-                das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_22_14),(*__fld_rename_at_31_16).type /*_type*/);
+                das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_22_13),(*__fld_rename_at_31_15).type /*_type*/);
             }
-            __fld_iterator.close(__context__,(__fld_rename_at_31_16));
+            __fld_iterator.close(__context__,(__fld_rename_at_31_15));
         };
     };
-    if ( __typ_rename_at_22_15->enumType /*enumType*/ != nullptr )
+    if ( __typ_rename_at_22_14->enumType /*enumType*/ != nullptr )
     {
-        das_copy(__self_rename_at_22_14.usedTypes.en(das_cast<Enumeration *>::cast(__typ_rename_at_22_15->enumType /*enumType*/),__context__),true);
+        das_copy(__self_rename_at_22_13.usedTypes.en(das_cast<Enumeration *>::cast(__typ_rename_at_22_14->enumType /*enumType*/),__context__),true);
     };
-    if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__typ_rename_at_22_15->firstType /*firstType*/),das_auto_cast<void * const >::cast(nullptr)) )
+    if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__typ_rename_at_22_14->firstType /*firstType*/),das_auto_cast<void * const >::cast(nullptr)) )
     {
-        das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_22_14),__typ_rename_at_22_15->firstType /*firstType*/);
+        das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_22_13),__typ_rename_at_22_14->firstType /*firstType*/);
     };
-    if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__typ_rename_at_22_15->secondType /*secondType*/),das_auto_cast<void * const >::cast(nullptr)) )
+    if ( nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__typ_rename_at_22_14->secondType /*secondType*/),das_auto_cast<void * const >::cast(nullptr)) )
     {
-        das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_22_14),__typ_rename_at_22_15->secondType /*secondType*/);
+        das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_22_13),__typ_rename_at_22_14->secondType /*secondType*/);
     };
     {
         bool __need_loop_45 = true;
         // arg: smart_ptr<ast::TypeDecl> const&
-        das_iterator<das::vector<smart_ptr<TypeDecl>> const > __arg_iterator(__typ_rename_at_22_15->argTypes /*argTypes*/);
-        smart_ptr_raw<TypeDecl> const  * __arg_rename_at_45_17;
-        __need_loop_45 = __arg_iterator.first(__context__,(__arg_rename_at_45_17)) && __need_loop_45;
-        for ( ; __need_loop_45 ; __need_loop_45 = __arg_iterator.next(__context__,(__arg_rename_at_45_17)) )
+        das_iterator<das::vector<smart_ptr<TypeDecl>> const > __arg_iterator(__typ_rename_at_22_14->argTypes /*argTypes*/);
+        smart_ptr_raw<TypeDecl> const  * __arg_rename_at_45_16;
+        __need_loop_45 = __arg_iterator.first(__context__,(__arg_rename_at_45_16)) && __need_loop_45;
+        for ( ; __need_loop_45 ; __need_loop_45 = __arg_iterator.next(__context__,(__arg_rename_at_45_16)) )
         {
-            das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_22_14),(*__arg_rename_at_45_17));
+            das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_22_13),(*__arg_rename_at_45_16));
         }
-        __arg_iterator.close(__context__,(__arg_rename_at_45_17));
+        __arg_iterator.close(__context__,(__arg_rename_at_45_16));
     };
 }
 
-inline void _FuncTypeVisitorTickpreVisitTypeDecl_a787aa2eb7fd9d31 ( Context * __context__, ast_used::TypeVisitor &  __self_rename_at_49_18, smart_ptr_raw<TypeDecl> const  __typ_rename_at_49_19 )
+inline void _FuncTypeVisitorTickpreVisitTypeDecl_a787aa2eb7fd9d31 ( Context * __context__, ast_used::TypeVisitor &  __self_rename_at_49_17, smart_ptr_raw<TypeDecl> const  __typ_rename_at_49_18 )
 {
-    das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_49_18),__typ_rename_at_49_19);
+    das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_49_17),__typ_rename_at_49_18);
 }
 
-inline void _FuncTypeVisitor_0x27___finalize_49c5b62eed295d96 ( Context * __context__, ast_used::TypeVisitor &  __self_rename_at_17_20 )
+inline void _FuncTypeVisitor_0x27___finalize_49c5b62eed295d96 ( Context * __context__, ast_used::TypeVisitor &  __self_rename_at_17_19 )
 {
-    finalize_defb3dbd55c7b2b(__context__,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_17_20));
+    finalize_defb3dbd55c7b2b(__context__,das_arg<ast_used::TypeVisitor>::pass(__self_rename_at_17_19));
 }
 
-inline void collect_used_types_ee0b1843e2a7dbbb ( Context * __context__, TArray<Function *> const  &  __vfun_rename_at_54_21, TArray<Variable *> const  &  __vvar_rename_at_54_22, Block DAS_COMMENT((void,ast_used::OnlyUsedTypes const )) const  &  __blk_rename_at_54_23 )
+inline void collect_used_types_ee0b1843e2a7dbbb ( Context * __context__, TArray<Function *> const  &  __vfun_rename_at_54_20, TArray<Variable *> const  &  __vvar_rename_at_54_21, Block DAS_COMMENT((void,ast_used::OnlyUsedTypes const )) const  &  __blk_rename_at_54_22 )
 {
-    ast_used::TypeVisitor * __astVisitor_rename_at_57_24; memset(&__astVisitor_rename_at_57_24,0,sizeof(__astVisitor_rename_at_57_24));
-    smart_ptr_raw<VisitorAdapter> __astVisitorAdapter_rename_at_58_25; memset(&__astVisitorAdapter_rename_at_58_25,0,sizeof(__astVisitorAdapter_rename_at_58_25));
+    ast_used::TypeVisitor * __astVisitor_rename_at_57_23; memset(&__astVisitor_rename_at_57_23,0,sizeof(__astVisitor_rename_at_57_23));
+    smart_ptr_raw<VisitorAdapter> __astVisitorAdapter_rename_at_58_24; memset(&__astVisitorAdapter_rename_at_58_24,0,sizeof(__astVisitorAdapter_rename_at_58_24));
     /* finally */ auto __finally_54= das_finally([&](){
-    das_delete_handle<smart_ptr_raw<VisitorAdapter>>::clear(__context__,__astVisitorAdapter_rename_at_58_25);
+    das_delete_handle<smart_ptr_raw<VisitorAdapter>>::clear(__context__,__astVisitorAdapter_rename_at_58_24);
     /* end finally */ });
-    __astVisitor_rename_at_57_24 = das_new<ast_used::TypeVisitor>::make_and_init(__context__,[&]() { return TypeVisitor_6eb2479a82db1b37(__context__); });
-    __astVisitorAdapter_rename_at_58_25; das_zero(__astVisitorAdapter_rename_at_58_25); das_move(__astVisitorAdapter_rename_at_58_25, _FuncastTickmake_visitorTick897644165917210720_acc656d87d79f580(__context__,das_arg<ast_used::TypeVisitor>::pass(das_deref(__context__,__astVisitor_rename_at_57_24))));
+    __astVisitor_rename_at_57_23 = das_new<ast_used::TypeVisitor>::make_and_init(__context__,[&]() { return TypeVisitor_c620693777895585(__context__); });
+    __astVisitorAdapter_rename_at_58_24; das_zero(__astVisitorAdapter_rename_at_58_24); das_move(__astVisitorAdapter_rename_at_58_24, _FuncastTickmake_visitorTick897644165917210720_acc656d87d79f580(__context__,das_arg<ast_used::TypeVisitor>::pass(das_deref(__context__,__astVisitor_rename_at_57_23))));
     {
         bool __need_loop_59 = true;
         // f: ast::Function? const&
-        das_iterator<TArray<Function *> const > __f_iterator(__vfun_rename_at_54_21);
-        Function * const  * __f_rename_at_59_26;
-        __need_loop_59 = __f_iterator.first(__context__,(__f_rename_at_59_26)) && __need_loop_59;
-        for ( ; __need_loop_59 ; __need_loop_59 = __f_iterator.next(__context__,(__f_rename_at_59_26)) )
+        das_iterator<TArray<Function *> const > __f_iterator(__vfun_rename_at_54_20);
+        Function * const  * __f_rename_at_59_25;
+        __need_loop_59 = __f_iterator.first(__context__,(__f_rename_at_59_25)) && __need_loop_59;
+        for ( ; __need_loop_59 ; __need_loop_59 = __f_iterator.next(__context__,(__f_rename_at_59_25)) )
         {
-            astVisitFunction(das_cast<smart_ptr_raw<Function>>::cast((*__f_rename_at_59_26)),__astVisitorAdapter_rename_at_58_25,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+            astVisitFunction(das_cast<smart_ptr_raw<Function>>::cast((*__f_rename_at_59_25)),__astVisitorAdapter_rename_at_58_24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
         }
-        __f_iterator.close(__context__,(__f_rename_at_59_26));
+        __f_iterator.close(__context__,(__f_rename_at_59_25));
     };
     {
         bool __need_loop_64 = true;
         // v: ast::Variable? const&
-        das_iterator<TArray<Variable *> const > __v_iterator(__vvar_rename_at_54_22);
-        Variable * const  * __v_rename_at_64_27;
-        __need_loop_64 = __v_iterator.first(__context__,(__v_rename_at_64_27)) && __need_loop_64;
-        for ( ; __need_loop_64 ; __need_loop_64 = __v_iterator.next(__context__,(__v_rename_at_64_27)) )
+        das_iterator<TArray<Variable *> const > __v_iterator(__vvar_rename_at_54_21);
+        Variable * const  * __v_rename_at_64_26;
+        __need_loop_64 = __v_iterator.first(__context__,(__v_rename_at_64_26)) && __need_loop_64;
+        for ( ; __need_loop_64 ; __need_loop_64 = __v_iterator.next(__context__,(__v_rename_at_64_26)) )
         {
-            das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(das_cast<ast_used::TypeVisitor>::cast(das_deref(__context__,__astVisitor_rename_at_57_24))),(*__v_rename_at_64_27)->type /*_type*/);
+            das_invoke_method<void,offsetof(ast_used::TypeVisitor,collect)>::invoke<ast_used::TypeVisitor &,smart_ptr_raw<TypeDecl> const >(__context__,nullptr,das_arg<ast_used::TypeVisitor>::pass(das_cast<ast_used::TypeVisitor>::cast(das_deref(__context__,__astVisitor_rename_at_57_23))),(*__v_rename_at_64_26)->type /*_type*/);
         }
-        __v_iterator.close(__context__,(__v_rename_at_64_27));
+        __v_iterator.close(__context__,(__v_rename_at_64_26));
     };
-    das_invoke<void>::invoke<ast_used::OnlyUsedTypes &>(__context__,nullptr,__blk_rename_at_54_23,das_arg<ast_used::OnlyUsedTypes>::pass(__astVisitor_rename_at_57_24->usedTypes));
-    finalize_9d272f2733bca863(__context__,__astVisitor_rename_at_57_24);
+    das_invoke<void>::invoke<ast_used::OnlyUsedTypes &>(__context__,nullptr,__blk_rename_at_54_22,das_arg<ast_used::OnlyUsedTypes>::pass(__astVisitor_rename_at_57_23->usedTypes));
+    finalize_9d272f2733bca863(__context__,__astVisitor_rename_at_57_23);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
@@ -3983,9 +3973,6 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xee3bfb9665f03028] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&finalize_50a044337ee23495>>();
     };
-    aotLib[0x5513186d504d9402] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_bffcca1c81e1cfee>>();
-    };
     aotLib[0x5023638cc93536aa] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff>>();
     };
@@ -3998,8 +3985,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x73bb76bffb53d3a5] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&finalize_9d272f2733bca863>>();
     };
-    aotLib[0xbd2bd793f36df6e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&TypeVisitor_6eb2479a82db1b37>>();
+    aotLib[0x889fdbf027f7d33b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&TypeVisitor_c620693777895585>>();
     };
     aotLib[0x24ef9e84395675b3] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncTypeVisitorTickcollect_8a41c96a4111ef50>>();
@@ -4010,14 +3997,14 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x3863c286a976ddc4] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncTypeVisitor_0x27___finalize_49c5b62eed295d96>>();
     };
-    aotLib[0xc32a54687bdd7db2] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xd9cf8864dd6ffcac] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&collect_used_types_ee0b1843e2a7dbbb>>();
     };
 	resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_14593784331740813474
-AotListBase impl_aot_ast_used(_anon_14593784331740813474::registerAotFunctions);
+} // namespace _anon_4104645709522213235
+AotListBase impl_aot_ast_used(_anon_4104645709522213235::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)
