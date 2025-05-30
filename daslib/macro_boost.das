@@ -149,3 +149,38 @@ class private ReturnSkipLockcheck : AstCallMacro {
         )
     }
 }
+
+[call_macro(name="quote2")]
+class private Quote2 : AstCallMacro {
+    //! this is similar to regular return <-, but it does not check for locks
+    def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        // return <- new ExprAscend(subexpr <- new ExprConstBool(value := true))
+        unsafe {
+            assume arg_expr = call.arguments[0];
+
+            var rtti_module: Module?;
+            prog.get_ptr() |> for_each_module_no_order() <| $(cur_mod) {
+                if (mod.name == "rtti") {
+                    rtti_module = cur_mod;
+                }
+            }
+            assert(rtti_module != null);
+            var annotation = rtti_module |> module_find_annotation(arg_expr.__rtti);
+            var inscope annT <- new TypeDecl(baseType = Type.tHandle,
+                annotation = unsafe(reinterpret<TypeAnnotation?> annotation))
+
+            // var inscope expr: ExpressionPtr <- new ExprConstBool(value := true)
+            var inscope mkS1 <- new MakeStruct(uninitialized)
+            var inscope mkS2 <- new MakeStruct(uninitialized)
+            var inscope mkF1 <- new MakeFieldDecl(name := "left", value <- new ExprConstInt(value=123))
+            var inscope mkF2 <- new MakeFieldDecl(name := "right", value <- new ExprConstInt(value=123))
+            emplace(*mkS1, mkF1)
+            emplace(*mkS2, mkF2)
+            var inscope mkStr <- new ExprMakeStruct(uninitialized/*makeType<-clone_type(annotation)*/)
+            emplace(mkStr.structs, mkS1)
+            emplace(mkStr.structs, mkS2)
+            return <- new ExprAscend(subexpr<-mkStr)
+        }
+    }
+}
+

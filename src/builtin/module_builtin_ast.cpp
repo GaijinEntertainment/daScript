@@ -215,6 +215,10 @@ namespace das {
         return found ? found : Module::require(name);
     }
 
+    smart_ptr_raw<Annotation> module_find_annotation ( Module* &module, const char *name ) {
+        return module->findAnnotation(name);
+    }
+
     smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
         if ( !func.PTR ) context->throw_error_at(line_info, "function not found");
         if ( !mod ) context->throw_error_at(line_info, "module not found");
@@ -906,6 +910,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(findRttiModule)>(*this, lib,  "find_module_via_rtti",
             SideEffects::accessExternal, "findRttiModule")
                 ->args({"program","name","context","lineinfo"});
+        addExtern<DAS_BIND_FUN(module_find_annotation)>(*this, lib,  "module_find_annotation",
+            SideEffects::none, "module_find_annotation")
+                ->args({"module","name"});
         addExtern<DAS_BIND_FUN(findRttiFunction)>(*this, lib,  "find_module_function_via_rtti",
             SideEffects::accessExternal, "findRttiFunction")
                 ->args({"module","function","context","lineinfo"});
