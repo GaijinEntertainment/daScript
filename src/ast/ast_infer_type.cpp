@@ -2895,7 +2895,7 @@ namespace das {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             // infer
             if ( !expr->subexpr->type->isRef() ) {
-                error("can only make a pointer of of a reference",  "", "",
+                error("can only make a pointer of a reference",  "", "",
                     expr->at, CompilationError::cant_dereference);
             } else {
                 if ( !safeExpression(expr) ) {
