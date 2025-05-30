@@ -1714,6 +1714,8 @@ namespace das
                           int tab,
                           bool allowPromoted );
 
+    void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected );
+
 
     // note: this has sifnificant performance implications
     //      i.e. this is ok for the load time \ map time
