@@ -177,7 +177,36 @@ namespace apply_in_context { struct AppendCondAnnotation; };
 // unused enumeration RefMatters
 // unused enumeration TemporaryMatters
 // unused enumeration Type
-// unused structure DapiDebugAgent
+namespace debugapi {
+
+struct DapiDebugAgent {
+    void * __rtti;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent)) __finalize;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const )) onInstall;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const )) onUninstall;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onCreateContext;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onDestroyContext;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onSimulateContext;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const )) onSingleStep;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const )) onInstrument;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,SimFunction * const ,bool,uint64_t)) onInstrumentFunction;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ,char * const ,char * const )) onBreakpoint;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,char * const ,char * const ,TypeInfo const ,void * const )) onVariable;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,char * const ,int32_t)) onBreakpointsReset;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent)) onTick;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const )) onCollect;
+    Func DAS_COMMENT((bool,debugapi::DapiDebugAgent,Context * const ,LineInfo const  * const ,int32_t,char * const )) onLog;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onBeforeGC;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onAfterGC;
+    Func DAS_COMMENT((bool,debugapi::DapiDebugAgent,char * const )) onUserCommand;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocate;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,void * const ,uint64_t,LineInfo const )) onReallocate;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFree;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocateString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFreeString;
+    DebugAgent * thisAgent;
+};
+}
 // unused structure DapiArray
 // unused structure DapiTable
 // unused structure DapiBlock
@@ -205,10 +234,90 @@ namespace apply_in_context { struct AppendCondAnnotation; };
 // unused structure AstTypeInfoMacro
 // unused structure AstEnumerationAnnotation
 // unused structure AstVisitor
-// unused structure PerfNode
-// unused structure PerfEvent
-// unused structure PerfContext
-// unused structure ProfilerDebugAgent
+namespace profiler {
+
+struct PerfNode {
+    SimFunction * fun;
+    uint64_t count;
+    int64_t total_time;
+    int64_t enter_time;
+    uint64_t total_heap_bytes;
+    uint64_t enter_heap_bytes;
+    uint64_t total_string_heap_bytes;
+    uint64_t enter_string_heap_bytes;
+    TTable<SimFunction *,profiler::PerfNode *> children;
+};
+}
+namespace profiler {
+
+struct PerfEvent {
+    SimFunction * fun;
+    int64_t ts;
+    bool entering;
+    uint64_t heapBytes;
+    uint64_t stringHeapBytes;
+};
+}
+namespace profiler {
+
+struct PerfContext {
+    TArray<profiler::PerfEvent> events;
+    bool enabled;
+};
+}
+namespace profiler {
+
+struct ProfilerDebugAgent {
+    void * __rtti;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent)) __finalize;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const )) onInstall;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const )) onUninstall;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onCreateContext;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onDestroyContext;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onSimulateContext;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const )) onSingleStep;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const )) onInstrument;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,SimFunction * const ,bool,uint64_t)) onInstrumentFunction;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ,char * const ,char * const )) onBreakpoint;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,char * const ,char * const ,TypeInfo const ,void * const )) onVariable;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,char * const ,int32_t)) onBreakpointsReset;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent)) onTick;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const )) onCollect;
+    Func DAS_COMMENT((bool,debugapi::DapiDebugAgent,Context * const ,LineInfo const  * const ,int32_t,char * const )) onLog;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onBeforeGC;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context)) onAfterGC;
+    Func DAS_COMMENT((bool,debugapi::DapiDebugAgent,char * const )) onUserCommand;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocate;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,void * const ,uint64_t,LineInfo const )) onReallocate;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFree;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocateString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFreeString;
+    DebugAgent * thisAgent;
+    int64_t us0;
+    TTable<uint64_t,profiler::PerfContext> events;
+    FILE const  * out;
+    bool firstRecord;
+    bool manual;
+    bool report_memory;
+    TTable<uint64_t,void> instrumented;
+    TTable<char *,int64_t> map_time_units;
+    char * time_unit;
+    Func DAS_COMMENT((Func DAS_COMMENT((void,uint64_t,bool)),profiler::ProfilerDebugAgent)) dependency;
+    Func DAS_COMMENT((bool,profiler::ProfilerDebugAgent,char * const )) is_time_unit_correct;
+    Func DAS_COMMENT((int64_t,profiler::ProfilerDebugAgent,int64_t,char * const )) convert_ns_to_unit;
+    Func DAS_COMMENT((bool,profiler::ProfilerDebugAgent,Context)) isProfileable;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,uint64_t,bool)) enable_profiler;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,Context,SimFunction *,bool,uint64_t)) onInstrumentFunctionWithMemory;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,char * const )) dump;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,char * const )) write;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,profiler::PerfEvent const ,uint64_t)) dump_event;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,profiler::PerfNode * const ,int32_t)) dump_node;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,uint64_t)) dump_context_stack;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,Context,uint64_t)) dump_meta;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,uint64_t)) dump_events;
+    Func DAS_COMMENT((void,profiler::ProfilerDebugAgent,Context,uint64_t)) dump_context;
+};
+}
 // unused structure MacroMacro
 // unused structure TagFunctionAnnotation
 // unused structure TagStructureAnnotation

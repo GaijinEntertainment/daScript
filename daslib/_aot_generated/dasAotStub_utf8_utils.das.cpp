@@ -516,7 +516,7 @@ inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_1e99f990a58976cb (
 
 inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_ba90b9e0923e6277 ( Context * __context__, TDim<uint8_t,2> &  __a_rename_at_1342_4 )
 {
-    TArray<uint8_t> __arr_rename_at_1344_5; das_zero(__arr_rename_at_1344_5);
+    TArray<uint8_t> __arr_rename_at_1344_5;das_zero(__arr_rename_at_1344_5);
     _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1344_5),2);
     das_copy(das_cast<TDim<uint8_t,2>>::cast(das_ref(__context__,__arr_rename_at_1344_5(0,__context__))),__a_rename_at_1342_4);
     return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1344_5);
@@ -524,7 +524,7 @@ inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_ba90
 
 inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_1a0ad6f653eeb2ac ( Context * __context__, TDim<uint8_t,3> &  __a_rename_at_1342_6 )
 {
-    TArray<uint8_t> __arr_rename_at_1344_7; das_zero(__arr_rename_at_1344_7);
+    TArray<uint8_t> __arr_rename_at_1344_7;das_zero(__arr_rename_at_1344_7);
     _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1344_7),3);
     das_copy(das_cast<TDim<uint8_t,3>>::cast(das_ref(__context__,__arr_rename_at_1344_7(0,__context__))),__a_rename_at_1342_6);
     return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1344_7);
@@ -532,7 +532,7 @@ inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_1a0a
 
 inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_21b6a0bab5d7baaa ( Context * __context__, TDim<uint8_t,4> &  __a_rename_at_1342_8 )
 {
-    TArray<uint8_t> __arr_rename_at_1344_9; das_zero(__arr_rename_at_1344_9);
+    TArray<uint8_t> __arr_rename_at_1344_9;das_zero(__arr_rename_at_1344_9);
     _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1344_9),4);
     das_copy(das_cast<TDim<uint8_t,4>>::cast(das_ref(__context__,__arr_rename_at_1344_9(0,__context__))),__a_rename_at_1342_8);
     return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1344_9);
@@ -540,7 +540,7 @@ inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_21b6
 
 inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_d728636f5ab2a3f8 ( Context * __context__, TDim<uint8_t,1> &  __a_rename_at_1342_10 )
 {
-    TArray<uint8_t> __arr_rename_at_1344_11; das_zero(__arr_rename_at_1344_11);
+    TArray<uint8_t> __arr_rename_at_1344_11;das_zero(__arr_rename_at_1344_11);
     _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1344_11),1);
     das_copy(das_cast<TDim<uint8_t,1>>::cast(das_ref(__context__,__arr_rename_at_1344_11(0,__context__))),__a_rename_at_1342_10);
     return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1344_11);
@@ -665,7 +665,7 @@ inline void utf8_encode_889398f5ff1395f8 ( Context * __context__, TArray<uint8_t
 
 inline TArray<uint8_t> utf8_encode_bb86a30e653769b3 ( Context * __context__, TArray<uint32_t> const  &  __source_utf32_string_rename_at_69_30 )
 {
-    TArray<uint8_t> __dest_array_rename_at_71_31; das_zero(__dest_array_rename_at_71_31);
+    TArray<uint8_t> __dest_array_rename_at_71_31;das_zero(__dest_array_rename_at_71_31);
     _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_71_31),builtin_array_size(__source_utf32_string_rename_at_69_30));
     {
         bool __need_loop_73 = true;
@@ -805,14 +805,14 @@ inline void utf8_decode_52e084b93ad4506a ( Context * __context__, TArray<uint32_
 
 inline TArray<uint32_t> utf8_decode_51ff5fd68ff03ae1 ( Context * __context__, TArray<uint8_t> const  &  __source_utf8_string_rename_at_199_63 )
 {
-    TArray<uint32_t> __dest_utf32_string_rename_at_201_64; das_zero(__dest_utf32_string_rename_at_201_64);
+    TArray<uint32_t> __dest_utf32_string_rename_at_201_64;das_zero(__dest_utf32_string_rename_at_201_64);
     utf8_decode_52e084b93ad4506a(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_201_64),__source_utf8_string_rename_at_199_63);
     return /* <- */ das_auto_cast_move<TArray<uint32_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_1a59b191ca6010ed(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_201_64)));
 }
 
 inline TArray<uint32_t> utf8_decode_3fd2d37cfb73e2d ( Context * __context__, char * const  __source_utf8_string_rename_at_207_65 ) { das_stack_prologue __prologue(__context__,128,"utf8_decode " DAS_FILE_LINE);
 {
-    TArray<uint32_t> __dest_utf32_string_rename_at_209_66; das_zero(__dest_utf32_string_rename_at_209_66);
+    TArray<uint32_t> __dest_utf32_string_rename_at_209_66;das_zero(__dest_utf32_string_rename_at_209_66);
     builtin_string_peek(__source_utf8_string_rename_at_207_65,das_make_block<void,TArray<uint8_t> const  &>(__context__,112,0,&__func_info__5f4b6da70ca496e2,[&](TArray<uint8_t> const  & __arr_rename_at_210_67) -> void{
         utf8_decode_52e084b93ad4506a(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_209_66),__arr_rename_at_210_67);
     }),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
@@ -832,7 +832,7 @@ inline char * decode_unicode_escape_df0808a06ace62b0 ( Context * __context__, ch
         builtin_string_peek(__str_rename_at_224_71,das_make_block<void,TArray<uint8_t> const  &>(__context__,144,0,&__func_info__2f76c7f7dd4f0b27,[&](TArray<uint8_t> const  & __p_rename_at_226_73) -> void{
             int32_t __i_rename_at_227_74 = 0;
             int32_t __llen_rename_at_228_75 = ((int32_t)builtin_array_size(__p_rename_at_226_73));
-            TArray<uint8_t> __bang_rename_at_229_76; das_zero(__bang_rename_at_229_76);
+            TArray<uint8_t> __bang_rename_at_229_76;das_zero(__bang_rename_at_229_76);
             _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6(__context__,das_arg<TArray<uint8_t>>::pass(__bang_rename_at_229_76),8);
             uint32_t __high_surrogate_rename_at_231_77 = 0x0u;
             while ( __i_rename_at_227_74 < __llen_rename_at_228_75 )

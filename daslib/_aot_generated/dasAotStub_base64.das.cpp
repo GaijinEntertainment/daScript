@@ -320,7 +320,7 @@ inline char * _Funcbase64Tickbase64_encodeTick16780245076805804220_3d161b0536e07
 {
     int32_t __inlen_rename_at_133_12 = builtin_array_size(__inp_rename_at_132_11);
     int32_t __j_rename_at_134_13 = 0;
-    TArray<uint8_t> __out_rename_at_135_14; das_zero(__out_rename_at_135_14);
+    TArray<uint8_t> __out_rename_at_135_14;das_zero(__out_rename_at_135_14);
     _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__out_rename_at_135_14),BASE64_ENCODE_OUT_SIZE_5f651cc9c2907b91(__context__,__inlen_rename_at_133_12));
     {
         bool __need_loop_137 = true;
@@ -373,12 +373,12 @@ inline int32_t BASE64_ENCODE_OUT_SIZE_5f651cc9c2907b91 ( Context * __context__, 
 
 inline AutoTuple<char *,int32_t> base64_decode_3d5513d573c262f1 ( Context * __context__, char * const  ___in_rename_at_59_20 ) { das_stack_prologue __prologue(__context__,160,"base64_decode " DAS_FILE_LINE);
 {
-    TArray<uint8_t> __out_rename_at_61_21; memset(&__out_rename_at_61_21,0,sizeof(__out_rename_at_61_21));
-    int32_t __outlen_rename_at_62_22; memset(&__outlen_rename_at_62_22,0,sizeof(__outlen_rename_at_62_22));
+    TArray<uint8_t> __out_rename_at_61_21; memset((void*)&__out_rename_at_61_21,0,sizeof(__out_rename_at_61_21));
+    int32_t __outlen_rename_at_62_22; memset((void*)&__outlen_rename_at_62_22,0,sizeof(__outlen_rename_at_62_22));
     /* finally */ auto __finally_59= das_finally([&](){
     _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(__out_rename_at_61_21));
     /* end finally */ });
-    __out_rename_at_61_21; das_zero(__out_rename_at_61_21);
+    das_zero(__out_rename_at_61_21);
     __outlen_rename_at_62_22 = 0;
     builtin_string_peek(___in_rename_at_59_20,das_make_block<void,TArray<uint8_t> const  &>(__context__,128,0,&__func_info__920fb1be533a8af4,[&](TArray<uint8_t> const  & __inp_rename_at_63_23) -> void{
         das_copy(__outlen_rename_at_62_22,_Funcbase64Tickbase64_decodeTick6318730225425972510_f3ca55d5d6b47398(__context__,__inp_rename_at_63_23,das_arg<TArray<uint8_t>>::pass(__out_rename_at_61_21)));

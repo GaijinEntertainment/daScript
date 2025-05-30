@@ -843,6 +843,9 @@ SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 
 set(StandaloneFilesList
     src/das/ast/ast_print.das
+    src/das/ast/ast_aot_cpp.das
+    src/das/ast/aot_constants.das
+    src/das/ast/standalone_contexts.das
 )
 
 SET(STANDALONE_SRC)
@@ -865,6 +868,9 @@ foreach(FILE ${STANDALONE_SRC})
     endif()
 endforeach()
 
+SET(AOT_STUB_SRC
+        src/misc/aot_stub.cpp
+)
 
 MACRO(SETUP_LIBDASCRIPT library aotFiles standaloneFiles)
     ADD_LIBRARY(${library} STATIC ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
@@ -927,9 +933,6 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
-    SET(AOT_STUB_SRC
-        utils/daScript/aot_stub.cpp
-    )
     add_library(libDaScriptAot STATIC ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
     ADD_DEPENDENCIES(libDaScriptAot dasAotStub libDaScript)
     TARGET_LINK_LIBRARIES(libDaScriptAot libDaScript)

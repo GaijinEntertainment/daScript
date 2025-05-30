@@ -55,72 +55,27 @@ SETUP_COMPILER()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-MACRO(DAS_AOT input genList mainTarget dasAotTool)
+MACRO(ADD_STANDALONE_FILE genList input)
+    get_filename_component(input_src ${input} ABSOLUTE)
+    get_filename_component(input_dir ${input_src} DIRECTORY)
+    get_filename_component(input_name ${input} NAME)
+    set(out_dir ${input_dir}/_standalone_ctx_generated)
+    set(out_inc ${out_dir}/${input_name}.h)
+    set(out_src ${out_dir}/${input_name}.cpp)
+    set_source_files_properties(${out_inc} ${out_src} PROPERTIES GENERATED TRUE)
+    list(APPEND ${genList} ${out_inc} ${out_src})
+ENDMACRO()
+
+MACRO (ADD_AOT_EXT_FILE genList mainTarget input)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
     set(out_dir ${input_dir}/_aot_generated)
     set(out_src "${out_dir}/${mainTarget}_${input_name}.cpp")
-    file(MAKE_DIRECTORY ${out_dir})
-	  ADD_CUSTOM_COMMAND(
-		    DEPENDS ${input_src}
-        DEPENDS ${dasAotTool}
-        OUTPUT  ${out_src}
-        COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-        COMMAND ${dasAotTool} -aot ${input_src} ${out_src}
-    )
-    list(APPEND ${genList} ${out_src})
-    set(custom_name ${mainTarget}_${input_name}_aot)
-    ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
-    SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
-    ADD_DEPENDENCIES(${mainTarget} ${custom_name})
-ENDMACRO()
-
-MACRO(DAS_AOT_D input genList mainTarget dasAotTool)
-    get_filename_component(input_src ${input} ABSOLUTE)
-    get_filename_component(input_dir ${input_src} DIRECTORY)
-    get_filename_component(input_name ${input} NAME)
-    set(out_dir ${input_dir}/_aot_generated)
-    set(out_src ${out_dir}/${input_name}.cpp)
-    file(MAKE_DIRECTORY ${out_dir})
-	ADD_CUSTOM_COMMAND(
-		DEPENDS ${input_src}
-        DEPENDS ${dasAotTool}
-        OUTPUT  ${out_src}
-        COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-        COMMAND ${dasAotTool} -aot ${input_src} ${out_src}
-    )
+    set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
     list(APPEND ${genList} ${out_src})
 ENDMACRO()
 
-SET(AOT_BATCH_SIZE 10)
-
-MACRO(DAS_AOT_DIR inFiles genList mainTarget dasAotTool)
-    set(file_index 0)
-    set(batch_index 0)
-    set(batch_list)
-    FOREACH(inF ${inFiles})
-        DAS_AOT_D(${inF} batch_list ${mainTarget} ${dasAotTool})
-        math(EXPR file_index "${file_index} + 1")
-        if(file_index EQUAL ${AOT_BATCH_SIZE})
-            set(custom_name ${mainTarget}_${batch_index}_aot)
-            ADD_CUSTOM_TARGET(${custom_name} ALL DEPENDS ${batch_list})
-            ADD_DEPENDENCIES(${mainTarget} ${custom_name})
-            list(APPEND ${genList} ${batch_list})
-            set(file_index 0)
-            math(EXPR batch_index "${batch_index} + 1")
-            set(batch_list)
-        endif()
-    ENDFOREACH()
-    if(NOT(file_index EQUAL "0"))
-        set(custom_name ${mainTarget}_${batch_index}_aot)
-        ADD_CUSTOM_TARGET(${custom_name} ALL DEPENDS ${batch_list})
-        ADD_DEPENDENCIES(${mainTarget} ${custom_name})
-        list(APPEND ${genList} ${batch_list})
-    endif()
-ENDMACRO()
-
-SET(UNITZE_BUILD_BATCH_SIZE 10)
 
 MACRO(UNITIZE_BUILD input_dir genList)
     set(unitList)
@@ -530,6 +485,7 @@ SET(SIMULATE_SRC
 ../src/simulate/runtime_array.cpp
 ../src/simulate/runtime_table.cpp
 ../src/simulate/runtime_profile.cpp
+../src/simulate/standalone_ctx_utils.cpp
 ../src/simulate/simulate.cpp
 ../src/simulate/simulate_exceptions.cpp
 ../src/simulate/simulate_gc.cpp
@@ -596,6 +552,11 @@ SET(DASCRIPT_FMT_SRC
 CACHE INTERNAL "DAS_DASCRIPT_FMT_SRC"
 )
 
+SET(AOT_STUB_SRC
+../src/misc/aot_stub.cpp
+)
+
+
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
@@ -625,11 +586,49 @@ list(SORT DAS_LIB_SRC)
 SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
 
+add_custom_target(dasAotStub)
+SET(AOT_GENERATED_SRC)
+set(AotDaslibList
+        ../daslib/functional.das
+        ../daslib/json.das
+        ../daslib/json_boost.das
+        ../daslib/ast_boost.das
+        ../daslib/templates_boost.das
+        ../daslib/utf8_utils.das
+        ../daslib/regex.das
+        ../daslib/regex_boost.das
+        ../daslib/strings_boost.das
+        ../daslib/random.das
+        ../daslib/math_boost.das
+
+        ../src/das/ast/printer_flags_visitor.das
+)
+SET(AOT_GENERATED_SRC)
+FOREACH(inF IN LISTS AotDaslibList)
+    ADD_AOT_EXT_FILE(AOT_GENERATED_SRC dasAotStub ${inF}) # No need to do aot, since these files already aot'ed
+ENDFOREACH()
+
+set(StandaloneFilesList
+        ../src/das/ast/ast_print.das
+        ../src/das/ast/ast_aot_cpp.das
+        ../src/das/ast/aot_constants.das
+        ../src/das/ast/standalone_contexts.das
+)
+
+FOREACH(inF IN LISTS StandaloneFilesList)
+    ADD_STANDALONE_FILE(AOT_GENERATED_SRC ${inF})
+ENDFOREACH()
+
+
+SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
+#UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
+
+
 include_directories(../include)
 include_directories(${PROJECT_SOURCE_DIR}/../3rdparty/fmt/include)
 ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
-	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${DASCRIPT_FMT_SRC})
+	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${DASCRIPT_FMT_SRC} ${AOT_STUB_SRC} ${AOT_GENERATED_SRC})
 ADD_DEPENDENCIES(libDaScript need_and_resolve)
 ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC
@@ -646,18 +645,6 @@ ENDIF()
 SETUP_CPP11(libDaScript)
 #target_precompile_headers(libDaScript PUBLIC ../include/daScript/misc/platform.h)
 
-add_custom_target(dasAotStub)
-SET(AOT_GENERATED_SRC)
-DAS_AOT("../daslib/functional.das" AOT_GENERATED_SRC dasAotStub daslang)
-DAS_AOT("../daslib/json.das" AOT_GENERATED_SRC dasAotStub daslang)
-DAS_AOT("../daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-DAS_AOT("../daslib/regex.das" AOT_GENERATED_SRC dasAotStub daslang)
-DAS_AOT("../daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-DAS_AOT("../daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-DAS_AOT("../daslib/random.das" AOT_GENERATED_SRC dasAotStub daslang)
-DAS_AOT("../daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
-#UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
 if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
 # Stand alone command line compiler

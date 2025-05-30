@@ -4,16 +4,16 @@
 #include "daScript/daScript.h"
 
 namespace das {
-    inline bool saveToFile ( TextPrinter &tout, const string & fname, const string & str, bool quiet = false ) {
+    inline bool saveToFile ( TextPrinter &tout, const string_view & fname, const string_view & str, bool quiet = false ) {
         if ( !quiet )  {
-            tout << "saving to " << fname << "\n";
+            tout << "saving to " << fname.data() << "\n";
         }
-        FILE * f = fopen ( fname.c_str(), "w" );
+        FILE * f = fopen ( fname.data(), "w" );
         if ( !f ) {
-            tout << "can't open " << fname << "\n";
+            tout << "can't open " << fname.data() << "\n";
             return false;
         }
-        fwrite ( str.c_str(), str.length(), 1, f );
+        fwrite ( str.data(), str.length(), 1, f );
         fclose ( f );
         return true;
     }

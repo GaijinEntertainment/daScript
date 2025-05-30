@@ -619,7 +619,7 @@ extern VarInfo __var_info__6ed86c478b9e1349;
 extern VarInfo __var_info__d3b4679945da3d7d;
 extern VarInfo __var_info__4ba92686dc92032b;
 extern VarInfo __var_info__2f90929bfe0e523d;
-extern VarInfo __var_info__991b098814c694e3;
+extern VarInfo __var_info__991b038814c68ab1;
 extern VarInfo __var_info__7627c88541b6ee9a;
 extern VarInfo __var_info__64592ca1dee9371a;
 extern VarInfo __var_info__6735754341b3daeb;
@@ -714,7 +714,7 @@ extern FuncInfo __func_info__e43d9eedb8768372;
 extern FuncInfo __func_info__e5601d0b9c7536bc;
 extern FuncInfo __func_info__214fcb6dd261a4ee;
 extern FuncInfo __func_info__fe02a5da011a6cb4;
-extern FuncInfo __func_info__8eb7d9f42d992591;
+extern FuncInfo __func_info__263a766a82d5c791;
 extern EnumInfo __enum_info__c897fe55afe7f727;
 
 EnumValueInfo __enum_info__c897fe55afe7f727_value_0 = { "none", 0 };
@@ -960,11 +960,11 @@ VarInfo __func_info__fe02a5da011a6cb4_field_1 =  { Type::tPointer, nullptr, null
 VarInfo __func_info__fe02a5da011a6cb4_field_2 =  { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 34, 32, UINT64_C(0xe632c403d42f243a), "issues", 0, 0 };
 VarInfo * __func_info__fe02a5da011a6cb4_fields[3] =  { &__func_info__fe02a5da011a6cb4_field_0, &__func_info__fe02a5da011a6cb4_field_1, &__func_info__fe02a5da011a6cb4_field_2 };
 FuncInfo __func_info__fe02a5da011a6cb4 = {"invoke block<(var ok:bool;var program:smart_ptr<rtti::Program>;issues:$::das_string const):void> const", "", __func_info__fe02a5da011a6cb4_fields, 3, 32, &__type_info__af63eb4c86020609, nullptr,0,UINT64_C(0xfe02a5da011a6cb4), 0x0 };
-VarInfo __func_info__8eb7d9f42d992591_field_0 =  { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 1, UINT64_C(0x3a3585e2284c6c6b), "sok", 0, 0 };
-VarInfo __func_info__8eb7d9f42d992591_field_1 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__767637ee1a337419, nullptr, nullptr, nullptr, 0, 0, nullptr, 27648, 8, UINT64_C(0x991b098814c694e3), "context", 0, 0 };
-VarInfo __func_info__8eb7d9f42d992591_field_2 =  { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 2, 32, UINT64_C(0x7c5077e54e2863f8), "serrors", 0, 0 };
-VarInfo * __func_info__8eb7d9f42d992591_fields[3] =  { &__func_info__8eb7d9f42d992591_field_0, &__func_info__8eb7d9f42d992591_field_1, &__func_info__8eb7d9f42d992591_field_2 };
-FuncInfo __func_info__8eb7d9f42d992591 = {"invoke block<(var sok:bool;var context:smart_ptr<rtti::Context>;var serrors:$::das_string):void> const", "", __func_info__8eb7d9f42d992591_fields, 3, 32, &__type_info__af63eb4c86020609, nullptr,0,UINT64_C(0x8eb7d9f42d992591), 0x0 };
+VarInfo __func_info__263a766a82d5c791_field_0 =  { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 1, UINT64_C(0x3a3585e2284c6c6b), "sok", 0, 0 };
+VarInfo __func_info__263a766a82d5c791_field_1 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__767637ee1a337419, nullptr, nullptr, nullptr, 0, 0, nullptr, 25600, 8, UINT64_C(0x991b038814c68ab1), "context", 0, 0 };
+VarInfo __func_info__263a766a82d5c791_field_2 =  { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 2, 32, UINT64_C(0x7c5077e54e2863f8), "serrors", 0, 0 };
+VarInfo * __func_info__263a766a82d5c791_fields[3] =  { &__func_info__263a766a82d5c791_field_0, &__func_info__263a766a82d5c791_field_1, &__func_info__263a766a82d5c791_field_2 };
+FuncInfo __func_info__263a766a82d5c791 = {"invoke block<(var sok:bool;var context:smart_ptr<rtti::Context>;var serrors:$::das_string):void> const", "", __func_info__263a766a82d5c791_fields, 3, 32, &__type_info__af63eb4c86020609, nullptr,0,UINT64_C(0x263a766a82d5c791), 0x0 };
 TypeInfo __type_info__86304441d7b56b0c = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 41218, 24, UINT64_C(0x86304441d7b56b0c) };
 TypeInfo __type_info__b5c5f09960a9d827 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__bc67beb4aa160fd4, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0xb5c5f09960a9d827) };
 TypeInfo __type_info__f4b9fc3e25a5c7c1 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__767637ee1a337419, nullptr, nullptr, nullptr, 0, 0, nullptr, 25600, 8, UINT64_C(0xf4b9fc3e25a5c7c1) };
@@ -1525,7 +1525,7 @@ inline void _FuncarchiveTickserializeTick8013964856239694639_cac39795b36f7c56 ( 
 
 inline void finalize_9a888ca44a018013 ( Context * __context__, decs::EcsRequestPos &  ____this_rename_at_81_71 )
 {
-    memset(&(____this_rename_at_81_71), 0, TypeSize<decs::EcsRequestPos>::size);
+    memset((void*)&(____this_rename_at_81_71), 0, TypeSize<decs::EcsRequestPos>::size);
 }
 
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_83ff526b8b4a3feb ( Context * __context__, archive::Archive &  __arch_rename_at_90_72, uint64_t & __value_rename_at_90_73 )
@@ -1551,7 +1551,7 @@ inline void _FuncarchiveTickserialize_rawTick346513482259279339_344032bd32dfc282
 inline void finalize_37451350471f63d7 ( Context * __context__, decs::Archetype &  ____this_rename_at_57_76 )
 {
     _FuncbuiltinTickfinalizeTick13836114024949725080_345f02cc82623620(__context__,das_arg<TArray<decs::Component>>::pass(____this_rename_at_57_76.components));
-    memset(&(____this_rename_at_57_76), 0, TypeSize<decs::Archetype>::size);
+    memset((void*)&(____this_rename_at_57_76), 0, TypeSize<decs::Archetype>::size);
 }
 
 inline void _FuncapplyTickstructTickArchetypeTick0x96Tick0Tick4_86443a66f85f8e05 ( Context * __context__, decs::Archetype &  ___Var_Tick_self_rename_at_62_77, Block DAS_COMMENT((void,uint64_t &)) const  &  ____arg_hash_rename_at_62_78, Block DAS_COMMENT((void,TArray<decs::Component>)) const  &  ____arg_components_rename_at_62_79, Block DAS_COMMENT((void,int32_t &)) const  &  ____arg_size_rename_at_62_80, Block DAS_COMMENT((void,int32_t &)) const  &  ____arg_eidIndex_rename_at_62_81 )
@@ -1564,7 +1564,7 @@ inline void _FuncapplyTickstructTickArchetypeTick0x96Tick0Tick4_86443a66f85f8e05
 
 inline void finalize_aed1eae423063a73 ( Context * __context__, decs::EntityId &  ____this_rename_at_51_82 )
 {
-    memset(&(____this_rename_at_51_82), 0, TypeSize<decs::EntityId>::size);
+    memset((void*)&(____this_rename_at_51_82), 0, TypeSize<decs::EntityId>::size);
 }
 
 inline void _FuncapplyTickstructTickEntityIdTick0x96Tick0Tick2_ceabfe323854d15e ( Context * __context__, decs::EntityId &  ___Var_Tick_self_rename_at_62_83, Block DAS_COMMENT((void,uint32_t &)) const  &  ____arg_id_rename_at_62_84, Block DAS_COMMENT((void,int32_t &)) const  &  ____arg_generation_rename_at_62_85 )
@@ -1575,7 +1575,7 @@ inline void _FuncapplyTickstructTickEntityIdTick0x96Tick0Tick2_ceabfe323854d15e 
 
 inline void finalize_f87ddce7a3ad05ec ( Context * __context__, AutoTuple<int32_t,uint64_t,int32_t> &  ____this_rename_at_158_86 )
 {
-    memset(&(____this_rename_at_158_86), 0, TypeSize<AutoTuple<int32_t,uint64_t,int32_t>>::size);
+    memset((void*)&(____this_rename_at_158_86), 0, TypeSize<AutoTuple<int32_t,uint64_t,int32_t>>::size);
 }
 
 inline void _FuncapplyTicktupleTick0x6f4dd0adfbe8abacTick0xa0Tick0Tick3_69d210316d1d7319 ( Context * __context__, AutoTuple<int32_t,uint64_t,int32_t> &  ___Var_Tick_self_rename_at_112_87, Block DAS_COMMENT((void,int32_t &)) const  &  ____arg_generation_rename_at_112_88, Block DAS_COMMENT((void,uint64_t &)) const  &  ____arg_archetype_rename_at_112_89, Block DAS_COMMENT((void,int32_t &)) const  &  ____arg_index_rename_at_112_90 )
@@ -1587,7 +1587,7 @@ inline void _FuncapplyTicktupleTick0x6f4dd0adfbe8abacTick0xa0Tick0Tick3_69d21031
 
 inline void finalize_c2cf16c62ac9b1f5 ( Context * __context__, decs::CTypeInfo &  ____this_rename_at_25_91 )
 {
-    memset(&(____this_rename_at_25_91), 0, TypeSize<decs::CTypeInfo>::size);
+    memset((void*)&(____this_rename_at_25_91), 0, TypeSize<decs::CTypeInfo>::size);
 }
 
 inline void _FuncapplyTickstructTickCTypeInfoTick0x96Tick0Tick11_50e2ea000b6a5668 ( Context * __context__, decs::CTypeInfo &  ___Var_Tick_self_rename_at_62_92, Block DAS_COMMENT((void,DAS_COMMENT(bound_enum) das::Type &)) const  &  ____arg_basicType_rename_at_62_93, Block DAS_COMMENT((void,char * &)) const  &  ____arg_mangledName_rename_at_62_94, Block DAS_COMMENT((void,char * &)) const  &  ____arg_fullName_rename_at_62_95, Block DAS_COMMENT((void,uint64_t &)) const  &  ____arg_hash_rename_at_62_96, Block DAS_COMMENT((void,uint32_t &)) const  &  ____arg_size_rename_at_62_97, Block DAS_COMMENT((void,Func DAS_COMMENT((void,TArray<uint8_t>)) &)) const  &  ____arg_eraser_rename_at_62_98, Block DAS_COMMENT((void,Func DAS_COMMENT((void,TArray<uint8_t>,TArray<uint8_t> const )) &)) const  &  ____arg_clonner_rename_at_62_99, Block DAS_COMMENT((void,Func DAS_COMMENT((void,archive::Archive,TArray<uint8_t>,char * const )) &)) const  &  ____arg_serializer_rename_at_62_100, Block DAS_COMMENT((void,Func DAS_COMMENT((char *,void * const )) &)) const  &  ____arg_dumper_rename_at_62_101, Block DAS_COMMENT((void,Func DAS_COMMENT((TypeInfo const  *)) &)) const  &  ____arg_mkTypeInfo_rename_at_62_102, Block DAS_COMMENT((void,Func DAS_COMMENT((Lambda DAS_COMMENT((void)),TArray<uint8_t>)) &)) const  &  ____arg_gc_rename_at_62_103 )
@@ -1611,7 +1611,7 @@ inline void finalize_723506a070851f1e ( Context * __context__, decs::EcsRequest 
     _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8(__context__,das_arg<TArray<char *>>::pass(____this_rename_at_92_104.reqn));
     _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8(__context__,das_arg<TArray<int32_t>>::pass(____this_rename_at_92_104.archetypes));
     finalize_9a888ca44a018013(__context__,das_arg<decs::EcsRequestPos>::pass(____this_rename_at_92_104.at));
-    memset(&(____this_rename_at_92_104), 0, TypeSize<decs::EcsRequest>::size);
+    memset((void*)&(____this_rename_at_92_104), 0, TypeSize<decs::EcsRequest>::size);
 }
 
 inline void _FuncapplyTickstructTickEcsRequestTick0x96Tick0Tick5_1da32bb85bdaa226 ( Context * __context__, decs::EcsRequest &  ___Var_Tick_self_rename_at_62_105, Block DAS_COMMENT((void,uint64_t &)) const  &  ____arg_hash_rename_at_62_106, Block DAS_COMMENT((void,TArray<char *>)) const  &  ____arg_req_rename_at_62_107, Block DAS_COMMENT((void,TArray<char *>)) const  &  ____arg_reqn_rename_at_62_108, Block DAS_COMMENT((void,TArray<int32_t>)) const  &  ____arg_archetypes_rename_at_62_109, Block DAS_COMMENT((void,decs::EcsRequestPos)) const  &  ____arg_at_rename_at_62_110 )
@@ -1647,14 +1647,14 @@ inline void _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44 ( 
 
 inline Sequence DAS_COMMENT((uint64_t)) _FuncbuiltinTickkeysTick2205854368403803976_137bf91714c0645e ( Context * __context__, TTable<uint64_t,int32_t> const  &  __a_rename_at_1128_119 )
 {
-    Sequence DAS_COMMENT((uint64_t)) __it_rename_at_1129_120; das_zero(__it_rename_at_1129_120);
+    Sequence DAS_COMMENT((uint64_t)) __it_rename_at_1129_120;das_zero(__it_rename_at_1129_120);
     builtin_table_keys(das_arg<Sequence DAS_COMMENT((uint64_t))>::pass(__it_rename_at_1129_120),__a_rename_at_1128_119,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((uint64_t))>::cast(__it_rename_at_1129_120);
 }
 
 inline Sequence DAS_COMMENT((int32_t &)) _FuncbuiltinTickvaluesTick1351216622833168869_38542bdf50c4ab32 ( Context * __context__, TTable<uint64_t,int32_t> &  __a_rename_at_1150_121 )
 {
-    Sequence DAS_COMMENT((int32_t *)) __it_rename_at_1151_122; das_zero(__it_rename_at_1151_122);
+    Sequence DAS_COMMENT((int32_t *)) __it_rename_at_1151_122;das_zero(__it_rename_at_1151_122);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1151_122),das_arg<TTable<uint64_t,int32_t>>::pass(__a_rename_at_1150_121),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((int32_t &))>::cast(__it_rename_at_1151_122);
 }
@@ -1753,14 +1753,14 @@ inline void _FuncarchiveTickserializeTick8013964856239694639_a8ff9e2247269964 ( 
 
 inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_23a113e85e5887ab ( Context * __context__, TTable<char *,decs::CTypeInfo> const  &  __a_rename_at_1128_157 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_158; das_zero(__it_rename_at_1129_158);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_158;das_zero(__it_rename_at_1129_158);
     builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_158),__a_rename_at_1128_157,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_158);
 }
 
 inline Sequence DAS_COMMENT((decs::CTypeInfo &)) _FuncbuiltinTickvaluesTick1351216622833168869_61c0f20a0f69d8bd ( Context * __context__, TTable<char *,decs::CTypeInfo> &  __a_rename_at_1150_159 )
 {
-    Sequence DAS_COMMENT((decs::CTypeInfo *)) __it_rename_at_1151_160; das_zero(__it_rename_at_1151_160);
+    Sequence DAS_COMMENT((decs::CTypeInfo *)) __it_rename_at_1151_160;das_zero(__it_rename_at_1151_160);
     builtin_table_values(das_arg<Sequence DAS_COMMENT((decs::CTypeInfo))>::pass(__it_rename_at_1151_160),das_arg<TTable<char *,decs::CTypeInfo>>::pass(__a_rename_at_1150_159),88,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((decs::CTypeInfo &))>::cast(__it_rename_at_1151_160);
 }
@@ -2151,7 +2151,7 @@ inline void finalize_81b0d19e466110c8 ( Context * __context__, decs::DecsState &
     _FuncbuiltinTickfinalizeTick5454204887383796109_1f7f0c3546fa051e(__context__,das_arg<TTable<char *,decs::CTypeInfo>>::pass(____this_rename_at_102_230.componentTypeCheck));
     _FuncbuiltinTickfinalizeTick13836114024949725080_9a747408a2a6d0ff(__context__,das_arg<TArray<decs::EcsRequest>>::pass(____this_rename_at_102_230.ecsQueries));
     _FuncbuiltinTickfinalizeTick5454204887383796109_7b1c641088884a8c(__context__,das_arg<TTable<uint64_t,int32_t>>::pass(____this_rename_at_102_230.queryLookup));
-    memset(&(____this_rename_at_102_230), 0, TypeSize<decs::DecsState>::size);
+    memset((void*)&(____this_rename_at_102_230), 0, TypeSize<decs::DecsState>::size);
 }
 
 inline void _FuncapplyTickstructTickDecsStateTick0x96Tick0Tick7_84c01a5244f15f9e ( Context * __context__, decs::DecsState &  ___Var_Tick_self_rename_at_62_231, Block DAS_COMMENT((void,TTable<uint64_t,int32_t>)) const  &  ____arg_archetypeLookup_rename_at_62_232, Block DAS_COMMENT((void,TArray<decs::Archetype>)) const  &  ____arg_allArchetypes_rename_at_62_233, Block DAS_COMMENT((void,TArray<decs::EntityId>)) const  &  ____arg_entityFreeList_rename_at_62_234, Block DAS_COMMENT((void,TArray<AutoTuple<int32_t,uint64_t,int32_t>>)) const  &  ____arg_entityLookup_rename_at_62_235, Block DAS_COMMENT((void,TTable<char *,decs::CTypeInfo>)) const  &  ____arg_componentTypeCheck_rename_at_62_236, Block DAS_COMMENT((void,TArray<decs::EcsRequest>)) const  &  ____arg_ecsQueries_rename_at_62_237, Block DAS_COMMENT((void,TTable<uint64_t,int32_t>)) const  &  ____arg_queryLookup_rename_at_62_238 )
@@ -2225,7 +2225,7 @@ inline bool _FuncbuiltinTickget_valueTick6803070933163225147_c79cd68da0d29c45 ( 
 
 inline void finalize_801ffbcd37fa63c8 ( Context * __context__, live::_lambda_live_205_1 &  ____this_rename_at_205_264 )
 {
-    memset(&(____this_rename_at_205_264), 0, TypeSize<live::_lambda_live_205_1>::size);
+    memset((void*)&(____this_rename_at_205_264), 0, TypeSize<live::_lambda_live_205_1>::size);
 }
 
 inline void _FuncbuiltinTickcloneTick3038771811667655495_1107976c81aa121a ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1080_265, TArray<uint8_t> const  &  __b_rename_at_1080_266 )
@@ -2247,12 +2247,12 @@ inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( 
 
 inline void finalize_3e056b096d7418b6 ( Context * __context__, live::_lambda_live_225_2 &  ____this_rename_at_225_269 )
 {
-    memset(&(____this_rename_at_225_269), 0, TypeSize<live::_lambda_live_225_2>::size);
+    memset((void*)&(____this_rename_at_225_269), 0, TypeSize<live::_lambda_live_225_2>::size);
 }
 
 inline void finalize_82b0f923cb1a5c28 ( Context * __context__, live::_lambda_live_237_3 &  ____this_rename_at_237_270 )
 {
-    memset(&(____this_rename_at_237_270), 0, TypeSize<live::_lambda_live_237_3>::size);
+    memset((void*)&(____this_rename_at_237_270), 0, TypeSize<live::_lambda_live_237_3>::size);
 }
 
 inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65 ( Context * __context__, void * const  __p_rename_at_15_271 )
@@ -2566,7 +2566,7 @@ inline bool watch_files_cfe33bf10ac8df9b ( Context * __context__ ) { das_stack_p
                 return ;
             };
             char * __fileName_rename_at_178_325 = ((char *)(char *)(das_string_builder(__context__,SimNode_AotInterop<3>(__tinfo_21, cast<char *>::from(das_global<char *,0xb0f39eaf391fc167>(__context__) /*appDir*/), cast<char * const >::from(((char *) "/")), cast<char * const >::from(__fname_rename_at_174_324)))));
-            FStat __st_rename_at_179_326; das_zero(__st_rename_at_179_326);
+            FStat __st_rename_at_179_326;das_zero(__st_rename_at_179_326);
             if ( builtin_stat(__fileName_rename_at_178_325,das_arg<FStat>::pass(__st_rename_at_179_326)) )
             {
                 if ( ((__st_rename_at_179_326).is_reg()) )
@@ -2648,7 +2648,7 @@ inline void set_new_context_a7a4593ab51c9d0c ( Context * __context__, smart_ptr_
 
 inline void recompile_18a8bac272d4f62d ( Context * __context__, bool __full_restart_rename_at_250_338 ) { das_stack_prologue __prologue(__context__,304,"recompile " DAS_FILE_LINE);
 {
-    smart_ptr_raw<FileAccess> __access_rename_at_252_339; memset(&__access_rename_at_252_339,0,sizeof(__access_rename_at_252_339));
+    smart_ptr_raw<FileAccess> __access_rename_at_252_339; memset((void*)&__access_rename_at_252_339,0,sizeof(__access_rename_at_252_339));
     /* finally */ auto __finally_250= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FileAccess>>::clear(__context__,__access_rename_at_252_339);
     /* end finally */ });
@@ -2660,7 +2660,7 @@ inline void recompile_18a8bac272d4f62d ( Context * __context__, bool __full_rest
             rtti_builtin_compile_file(das_string_builder_temp(__context__,SimNode_AotInterop<3>(__tinfo_32, cast<char *>::from(das_global<char *,0xb0f39eaf391fc167>(__context__) /*appDir*/), cast<char * const >::from(((char *) "/")), cast<char *>::from(das_global<char *,0x86e5ae912531f3a1>(__context__) /*appFile*/))),__access_rename_at_252_339,das_ref(__context__,__mg_rename_at_253_340),das_arg<CodeOfPolicies>::pass(__cop_rename_at_254_341),das_make_block<void,bool,smart_ptr_raw<Program>,das::string const  &>(__context__,224,0,&__func_info__fe02a5da011a6cb4,[&](bool __ok_rename_at_256_342, smart_ptr_raw<Program> __program_rename_at_256_343, das::string const  & __issues_rename_at_256_344) -> void{
                 if ( __ok_rename_at_256_342 )
                 {
-                    rtti_builtin_simulate(__program_rename_at_256_343,das_make_block<void,bool,smart_ptr_raw<Context>,das::string &>(__context__,288,0,&__func_info__8eb7d9f42d992591,[&](bool __sok_rename_at_258_345, smart_ptr_raw<Context> __context_rename_at_258_346, das::string & __serrors_rename_at_258_347) -> void{
+                    rtti_builtin_simulate(__program_rename_at_256_343,das_make_block<void,bool,smart_ptr_raw<Context>,das::string &>(__context__,288,0,&__func_info__263a766a82d5c791,[&](bool __sok_rename_at_258_345, smart_ptr_raw<Context> __context_rename_at_258_346, das::string & __serrors_rename_at_258_347) -> void{
                         if ( __sok_rename_at_258_345 )
                         {
                             toLog(0,((char *) "LIVE: reloaded\n"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));

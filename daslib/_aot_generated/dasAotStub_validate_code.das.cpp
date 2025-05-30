@@ -1186,10 +1186,10 @@ static void resolveTypeInfoAnnotations()
 
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_0, ast::AstFunctionAnnotation * __value_rename_at_181_1 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9990f2b58ccee9f4 ( Context * __context__, validate_code::VerifyCompletion const  & __cl_rename_at_116_2 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_a9f2bb178dac7e3e ( Context * __context__, TArray<ast::AstSimulateMacro *> & __Arr_rename_at_181_3, ast::AstSimulateMacro * __value_rename_at_181_4 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4499f4ec7753e2d3 ( Context * __context__, validate_code::JIT_LLVM const  & __cl_rename_at_116_5 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d53a2c00ed5e4a08 ( Context * __context__, validate_code::ValidateCompletionVisitor const  & __cl_rename_at_116_6 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7c124e9ddeaa9ce4 ( Context * __context__, validate_code::ValidateShaderVisitor const  & __cl_rename_at_116_7 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_4e5e9fd06373e0ff ( Context * __context__, TArray<ast::AstSimulateMacro *> & __Arr_rename_at_181_3, ast::AstSimulateMacro * __value_rename_at_181_4 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_5d400ac66978c79b ( Context * __context__, validate_code::JIT_LLVM const  & __cl_rename_at_116_5 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4192c702adfcd42d ( Context * __context__, validate_code::ValidateCompletionVisitor const  & __cl_rename_at_116_6 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_6222efabd2962aeb ( Context * __context__, validate_code::ValidateShaderVisitor const  & __cl_rename_at_116_7 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_f84c987f8921e410 ( Context * __context__, TArray<Function *> & __Arr_rename_at_68_8, int32_t __newSize_rename_at_68_9 );
 inline int32_t _FuncbuiltinTickfind_indexTick791716935952699529_91bcfa77f44fc12a ( Context * __context__, TArray<Function *> const  & __arr_rename_at_1649_10, Function * const  __key_rename_at_1649_11 );
 inline void _FuncbuiltinTickinsertTick10959621454228962049_c11818675b11b85 ( Context * __context__, TTable<Function *,void> & __Tab_rename_at_895_13, Function * const  __at_rename_at_895_14 );
@@ -1197,10 +1197,10 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_8dc00978e9428d50 ( Cont
 inline void _FuncbuiltinTickpopTick1161079256290593740_65c208b40850450a ( Context * __context__, TArray<Function *> & __Arr_rename_at_132_17 );
 inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_b33d375e46ad04f4 ( Context * __context__, TTable<Function *,void> const  & __Tab_rename_at_1014_18, Function * const  __at_rename_at_1014_19 );
 inline Function * _FuncbuiltinTickget_ptrTick5807679485210906136_4bc3bbefec247e32 ( Context * __context__, smart_ptr_raw<Function> __src_rename_at_1732_20 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_d70357c1dd42de06 ( Context * __context__, validate_code::ValidateCompletionVisitor const  & __someClass_rename_at_684_21 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_8b4d0b3e0d264737 ( Context * __context__, validate_code::ValidateCompletionVisitor const  & __someClass_rename_at_684_21 );
 inline Sequence DAS_COMMENT((Function *)) _FuncbuiltinTickkeysTick2205854368403803976_fc2951f6f9734e1f ( Context * __context__, TTable<Function *,void> const  & __a_rename_at_1128_24 );
 inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_26, bool __extra_rename_at_38_27, bool __contracts_rename_at_38_28, bool __modules_rename_at_38_29 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_3d9ff75024a57ebd ( Context * __context__, validate_code::ValidateShaderVisitor const  & __someClass_rename_at_684_30 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_bc2bec89bac43d06 ( Context * __context__, validate_code::ValidateShaderVisitor const  & __someClass_rename_at_684_30 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -1216,22 +1216,22 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9990f
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_a9f2bb178dac7e3e ( Context * __context__, TArray<ast::AstSimulateMacro *> &  __Arr_rename_at_181_3, ast::AstSimulateMacro * __value_rename_at_181_4 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_4e5e9fd06373e0ff ( Context * __context__, TArray<ast::AstSimulateMacro *> &  __Arr_rename_at_181_3, ast::AstSimulateMacro * __value_rename_at_181_4 )
 {
     das_copy(__Arr_rename_at_181_3(builtin_array_push_back(das_arg<TArray<ast::AstSimulateMacro *>>::pass(__Arr_rename_at_181_3),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_4);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4499f4ec7753e2d3 ( Context * __context__, validate_code::JIT_LLVM const  &  __cl_rename_at_116_5 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_5d400ac66978c79b ( Context * __context__, validate_code::JIT_LLVM const  &  __cl_rename_at_116_5 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti))).getStructType())));
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d53a2c00ed5e4a08 ( Context * __context__, validate_code::ValidateCompletionVisitor const  &  __cl_rename_at_116_6 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4192c702adfcd42d ( Context * __context__, validate_code::ValidateCompletionVisitor const  &  __cl_rename_at_116_6 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_6.__rtti))).getStructType())));
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7c124e9ddeaa9ce4 ( Context * __context__, validate_code::ValidateShaderVisitor const  &  __cl_rename_at_116_7 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_6222efabd2962aeb ( Context * __context__, validate_code::ValidateShaderVisitor const  &  __cl_rename_at_116_7 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_7.__rtti))).getStructType())));
 }
@@ -1286,16 +1286,16 @@ inline Function * _FuncbuiltinTickget_ptrTick5807679485210906136_4bc3bbefec247e3
     return das_auto_cast<Function *>::cast(das_cast<Function *>::cast(__src_rename_at_1732_20));
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_d70357c1dd42de06 ( Context * __context__, validate_code::ValidateCompletionVisitor const  &  __someClass_rename_at_684_21 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_8b4d0b3e0d264737 ( Context * __context__, validate_code::ValidateCompletionVisitor const  &  __someClass_rename_at_684_21 )
 {
     validate_code::ValidateCompletionVisitor const  * __classPtr_rename_at_687_22 = ((validate_code::ValidateCompletionVisitor const  *)das_ref(__context__,__someClass_rename_at_684_21));
-    StructInfo const  * __classInfo_rename_at_688_23 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_d53a2c00ed5e4a08(__context__,__someClass_rename_at_684_21));
+    StructInfo const  * __classInfo_rename_at_688_23 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_4192c702adfcd42d(__context__,__someClass_rename_at_684_21));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_22),__classInfo_rename_at_688_23,__context__));
 }
 
 inline Sequence DAS_COMMENT((Function *)) _FuncbuiltinTickkeysTick2205854368403803976_fc2951f6f9734e1f ( Context * __context__, TTable<Function *,void> const  &  __a_rename_at_1128_24 )
 {
-    Sequence DAS_COMMENT((Function *)) __it_rename_at_1129_25; das_zero(__it_rename_at_1129_25);
+    Sequence DAS_COMMENT((Function *)) __it_rename_at_1129_25;das_zero(__it_rename_at_1129_25);
     builtin_table_keys(das_arg<Sequence DAS_COMMENT((Function *))>::pass(__it_rename_at_1129_25),__a_rename_at_1128_24,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((Function *))>::cast(__it_rename_at_1129_25);
 }
@@ -1305,10 +1305,10 @@ inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Con
     return das_auto_cast<char *>::cast(((char * const )(ast_describe_typedecl(__decl_rename_at_38_26,__extra_rename_at_38_27,__contracts_rename_at_38_28,__modules_rename_at_38_29,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_3d9ff75024a57ebd ( Context * __context__, validate_code::ValidateShaderVisitor const  &  __someClass_rename_at_684_30 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_bc2bec89bac43d06 ( Context * __context__, validate_code::ValidateShaderVisitor const  &  __someClass_rename_at_684_30 )
 {
     validate_code::ValidateShaderVisitor const  * __classPtr_rename_at_687_31 = ((validate_code::ValidateShaderVisitor const  *)das_ref(__context__,__someClass_rename_at_684_30));
-    StructInfo const  * __classInfo_rename_at_688_32 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_7c124e9ddeaa9ce4(__context__,__someClass_rename_at_684_30));
+    StructInfo const  * __classInfo_rename_at_688_32 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_6222efabd2962aeb(__context__,__someClass_rename_at_684_30));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_31),__classInfo_rename_at_688_32,__context__));
 }
 
@@ -1319,17 +1319,17 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x681250fc6b9726a3] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_9990f2b58ccee9f4>>();
     };
-    aotLib[0xfd385aeef09d8560] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_a9f2bb178dac7e3e>>();
+    aotLib[0xb9ebac7ce7a65d36] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_4e5e9fd06373e0ff>>();
     };
-    aotLib[0xceecccdda592c52f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_4499f4ec7753e2d3>>();
+    aotLib[0xf7efe3a30e6dd8fe] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_5d400ac66978c79b>>();
     };
-    aotLib[0x9fa727acd66fd598] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_d53a2c00ed5e4a08>>();
+    aotLib[0x741a9e8f8cdbf208] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_4192c702adfcd42d>>();
     };
-    aotLib[0xd96b9071f2799e8e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_7c124e9ddeaa9ce4>>();
+    aotLib[0xd04838ae9216166f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_6222efabd2962aeb>>();
     };
     aotLib[0x207d22df43522200] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_f84c987f8921e410>>();
@@ -1352,8 +1352,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x2581bc46befbbcd0] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick5807679485210906136_4bc3bbefec247e32>>();
     };
-    aotLib[0xe676f42b437511fd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_d70357c1dd42de06>>();
+    aotLib[0x2209eba53bd5939f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_8b4d0b3e0d264737>>();
     };
     aotLib[0x73c98109c6352aa1] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickkeysTick2205854368403803976_fc2951f6f9734e1f>>();
@@ -1361,8 +1361,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xb9c50cbd3f619a9d] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89>>();
     };
-    aotLib[0xe3718d62db748068] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_3d9ff75024a57ebd>>();
+    aotLib[0x4910b7a8b6df7e72] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_bc2bec89bac43d06>>();
     };
 	resolveTypeInfoAnnotations();
 }

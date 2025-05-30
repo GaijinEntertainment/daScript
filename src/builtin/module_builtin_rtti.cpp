@@ -846,19 +846,21 @@ namespace das {
     }
 
     void rtti_builtin_simulate ( const smart_ptr<Program> & program,
-            const TBlock<void,bool,smart_ptr<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
+            const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
         TextWriter issues;
         auto ctx = get_context(program->getContextStackSize());
+        ctx->addRef();
         bool failed = !program->simulate(*ctx, issues);
         if ( failed ) {
             for ( auto & err : program->errors ) {
                 issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
             }
             string istr = issues.str();
-            das_invoke<void>::invoke<bool,smart_ptr<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
         } else {
-            das_invoke<void>::invoke<bool,smart_ptr<Context>,const string &>(context,lineinfo,block,true,ctx,"");
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
         }
+        ctx->delRef();
     }
 
     void rtti_builtin_compile ( char * modName, char * str, const CodeOfPolicies & cop,

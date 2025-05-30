@@ -5,6 +5,9 @@
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
 
+#include "../../src/das/ast/_standalone_ctx_generated/ast_aot_cpp.das.h"
+#include "../../src/das/ast/_standalone_ctx_generated/standalone_contexts.das.h"
+
 using namespace das;
 
 void use_utf8();
@@ -25,16 +28,20 @@ static bool isAotLib = false;
 static bool version2syntax = true;
 static bool gen2MakeSyntax = false;
 
-bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_platform ) {
-    auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
-    ModuleGroup dummyGroup;
+static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
     policies.aot = false;
     policies.aot_module = true;
     policies.fail_on_lack_of_aot_export = true;
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
+    return policies;
+}
+
+bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_platform ) {
+    auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
+    ModuleGroup dummyGroup;
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,getPolicies()) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -102,7 +109,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_
                         tw << "\tresolveTypeInfoAnnotations();\n";
                         tw << "}\n";
                         tw << "\n";
-                        if ( !isAotLib ) tw << "AotListBase impl(registerAotFunctions);\n";
+                        if ( !isAotLib ) tw << "static AotListBase impl(registerAotFunctions);\n";
                         // validation stuff
                         if ( paranoid_validation ) {
                             program->validateAotCpp(tw,*pctx);
@@ -125,12 +132,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_
 bool compileStandalone ( const string & inputFile, const string & outDir, const StandaloneContextCfg &cfg ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     ModuleGroup dummyGroup;
-    CodeOfPolicies policies;
-    policies.aot = false;
-    policies.aot_module = true;
-    policies.fail_on_lack_of_aot_export = true;
-    policies.version_2_syntax = version2syntax;
-    policies.gen2_make_syntax = gen2MakeSyntax;
+    auto policies = getPolicies();
     policies.ignore_shared_modules = true;
     if ( auto program = compileDaScript(inputFile,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
@@ -163,6 +165,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     bool cross_platform = false; // strcmp("-aotlib", argv[1]) == 0;
     bool scriptArgs = false;
     bool standaloneContext = false;
+    bool das_mode = false;
     char * standaloneContextName = nullptr;
     char * standaloneClassName = nullptr;
     if ( argc>3  ) {
@@ -173,6 +176,8 @@ int das_aot_main ( int argc, char * argv[] ) {
                 paranoid_validation = true;
             } else if ( strcmp(argv[ai],"-dry-run")==0 ) {
                 dryRun = true;
+            } else if ( strcmp(argv[ai],"-das-mode")==0 ) {
+                das_mode = true;
             } else if ( strcmp(argv[ai],"-cross-platform")==0 ) {
                 cross_platform = true;
             } else if ( strcmp(argv[ai],"-standalone-context")==0 ) {
@@ -257,11 +262,24 @@ int das_aot_main ( int argc, char * argv[] ) {
     (*daScriptEnvironment::bound)->g_isInAot = true;
     bool compiled = false;
     if ( standaloneContext ) {
-        StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
-        cfg.cross_platform = cross_platform;
-        compiled = compileStandalone(argv[2], argv[3], cfg);
+        if (das_mode) {
+            standalone_contexts::Standalone st;
+            st.standalone_aot(argv[2], argv[3], isAotLib, cross_platform, paranoid_validation, getPolicies());
+        } else {
+            StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
+            cfg.cross_platform = cross_platform;
+            compiled = compileStandalone(argv[2], argv[3], cfg);
+        }
     } else {
-        compiled = compile(argv[2], argv[3], dryRun, cross_platform);
+        if (das_mode) {
+            ast_aot_cpp::Standalone st;
+            auto res = st.aot(argv[2], isAotLib, paranoid_validation, cross_platform, getPolicies());
+            TextPrinter printer;
+            saveToFile(printer, argv[3], res);
+            compiled = true;
+        } else {
+            compiled = compile(argv[2], argv[3], dryRun, cross_platform);
+        }
     }
     Module::Shutdown();
     return compiled ? 0 : -1;
@@ -390,8 +408,31 @@ void print_help() {
 #include <inttypes.h>
 #endif
 
+namespace das {
+    extern AotListBase impl_aot_ast_boost;
+    extern AotListBase impl_aot_printer_flags_visitor;
+    extern AotListBase impl_aot_functional;
+    extern AotListBase impl_aot_math_boost;
+    extern AotListBase impl_aot_utf8_utils;
+    extern AotListBase impl_aot_templates_boost;
+
+}
+
+vector<void *> force_aot_stub() {
+    vector<void *> stubs = {
+        &impl_aot_ast_boost,
+        &impl_aot_functional,
+        &impl_aot_math_boost,
+        &impl_aot_utf8_utils,
+        &impl_aot_templates_boost,
+        &impl_aot_printer_flags_visitor,
+    };
+    return stubs;
+}
+
 int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool isArgAot = false;
+    force_aot_stub();
     if (argc > 1) {
         isArgAot = strcmp(argv[1],"-aot")==0;
         isAotLib = !isArgAot && strcmp(argv[1],"-aotlib")==0;

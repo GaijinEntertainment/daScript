@@ -114,7 +114,7 @@ namespace das {
         const TBlock<void, bool, smart_ptr<Program>, const string> & block, Context * context, LineInfoArg * lineinfo);
 
     void rtti_builtin_simulate ( const smart_ptr<Program> & program,
-        const TBlock<void,bool,smart_ptr<Context>,string> & block, Context * context, LineInfoArg * lineinfo );
+        const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo );
 
     void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);
     void rtti_builtin_program_for_each_registered_module(const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);

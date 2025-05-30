@@ -181,7 +181,7 @@ inline float4x4 look_at_lh_cbb8ffd0a0e23fe4 ( Context * __context__, float3 __Ey
     float3 __zaxis_rename_at_108_30 = ((float3)safe_normalize3(SimPolicy<float3>::Sub(__At_rename_at_106_28,__Eye_rename_at_106_27,*__context__,nullptr)));
     float3 __xaxis_rename_at_109_31 = ((float3)safe_normalize3(cross3(__Up_rename_at_106_29,__zaxis_rename_at_108_30)));
     float3 __yaxis_rename_at_110_32 = ((float3)cross3(__zaxis_rename_at_108_30,__xaxis_rename_at_109_31));
-    float4x4 __tm_rename_at_111_33; das_zero(__tm_rename_at_111_33);
+    float4x4 __tm_rename_at_111_33;das_zero(__tm_rename_at_111_33);
     das_copy(das_index<float4x4>::at(__tm_rename_at_111_33,0,__context__),float4(v_extract_x(__xaxis_rename_at_109_31) /*x*/,v_extract_x(__yaxis_rename_at_110_32) /*x*/,v_extract_x(__zaxis_rename_at_108_30) /*x*/,0.000000e+00f));
     das_copy(das_index<float4x4>::at(__tm_rename_at_111_33,1,__context__),float4(v_extract_y(__xaxis_rename_at_109_31) /*y*/,v_extract_y(__yaxis_rename_at_110_32) /*y*/,v_extract_y(__zaxis_rename_at_108_30) /*y*/,0.000000e+00f));
     das_copy(das_index<float4x4>::at(__tm_rename_at_111_33,2,__context__),float4(v_extract_z(__xaxis_rename_at_109_31) /*z*/,v_extract_z(__yaxis_rename_at_110_32) /*z*/,v_extract_z(__zaxis_rename_at_108_30) /*z*/,0.000000e+00f));
@@ -194,7 +194,7 @@ inline float4x4 look_at_rh_b237be682c2bdd82 ( Context * __context__, float3 __Ey
     float3 __zaxis_rename_at_123_37 = ((float3)safe_normalize3(SimPolicy<float3>::Sub(__Eye_rename_at_121_34,__At_rename_at_121_35,*__context__,nullptr)));
     float3 __xaxis_rename_at_124_38 = ((float3)safe_normalize3(cross3(__Up_rename_at_121_36,__zaxis_rename_at_123_37)));
     float3 __yaxis_rename_at_125_39 = ((float3)cross3(__zaxis_rename_at_123_37,__xaxis_rename_at_124_38));
-    float4x4 __tm_rename_at_126_40; das_zero(__tm_rename_at_126_40);
+    float4x4 __tm_rename_at_126_40;das_zero(__tm_rename_at_126_40);
     das_copy(das_index<float4x4>::at(__tm_rename_at_126_40,0,__context__),float4(v_extract_x(__xaxis_rename_at_124_38) /*x*/,v_extract_x(__yaxis_rename_at_125_39) /*x*/,v_extract_x(__zaxis_rename_at_123_37) /*x*/,0.000000e+00f));
     das_copy(das_index<float4x4>::at(__tm_rename_at_126_40,1,__context__),float4(v_extract_y(__xaxis_rename_at_124_38) /*y*/,v_extract_y(__yaxis_rename_at_125_39) /*y*/,v_extract_y(__zaxis_rename_at_123_37) /*y*/,0.000000e+00f));
     das_copy(das_index<float4x4>::at(__tm_rename_at_126_40,2,__context__),float4(v_extract_z(__xaxis_rename_at_124_38) /*z*/,v_extract_z(__yaxis_rename_at_125_39) /*z*/,v_extract_z(__zaxis_rename_at_123_37) /*z*/,0.000000e+00f));
@@ -206,7 +206,7 @@ inline float4x4 perspective_lh_955bc910ea34b8d8 ( Context * __context__, float _
 {
     float __yScale_rename_at_138_45 = ((float)(SimPolicy<float>::Div(1.000000e+00f,SimPolicy<float>::Tan(SimPolicy<float>::Div(__fovy_rename_at_136_41,2.000000e+00f,*__context__,nullptr),*__context__,nullptr),*__context__,nullptr)));
     float __xScale_rename_at_139_46 = ((float)(SimPolicy<float>::Div(__yScale_rename_at_138_45,__aspect_rename_at_136_42,*__context__,nullptr)));
-    float4x4 __Result_rename_at_140_47; das_zero(__Result_rename_at_140_47);
+    float4x4 __Result_rename_at_140_47;das_zero(__Result_rename_at_140_47);
     float4x4_identity(das_arg<float4x4>::pass(__Result_rename_at_140_47));
     das_copy(das_index<float4>::at(das_index<float4x4>::at(__Result_rename_at_140_47,0,__context__),0,__context__),__xScale_rename_at_139_46);
     das_copy(das_index<float4>::at(das_index<float4x4>::at(__Result_rename_at_140_47,1,__context__),1,__context__),__yScale_rename_at_138_45);
@@ -220,7 +220,7 @@ inline float4x4 perspective_rh_e09d74c3c9231ca2 ( Context * __context__, float _
 {
     float __yScale_rename_at_152_52 = ((float)(SimPolicy<float>::Div(1.000000e+00f,SimPolicy<float>::Tan(SimPolicy<float>::Div(__fovy_rename_at_150_48,2.000000e+00f,*__context__,nullptr),*__context__,nullptr),*__context__,nullptr)));
     float __xScale_rename_at_153_53 = ((float)(SimPolicy<float>::Div(__yScale_rename_at_152_52,__aspect_rename_at_150_49,*__context__,nullptr)));
-    float4x4 __Result_rename_at_154_54; das_zero(__Result_rename_at_154_54);
+    float4x4 __Result_rename_at_154_54;das_zero(__Result_rename_at_154_54);
     float4x4_identity(das_arg<float4x4>::pass(__Result_rename_at_154_54));
     das_copy(das_index<float4>::at(das_index<float4x4>::at(__Result_rename_at_154_54,0,__context__),0,__context__),__xScale_rename_at_153_53);
     das_copy(das_index<float4>::at(das_index<float4x4>::at(__Result_rename_at_154_54,1,__context__),1,__context__),__yScale_rename_at_152_52);
@@ -234,7 +234,7 @@ inline float4x4 perspective_rh_opengl_448c2e9e57ce734f ( Context * __context__, 
 {
     float __yScale_rename_at_166_59 = ((float)(SimPolicy<float>::Div(1.000000e+00f,SimPolicy<float>::Tan(SimPolicy<float>::Div(__fovy_rename_at_164_55,2.000000e+00f,*__context__,nullptr),*__context__,nullptr),*__context__,nullptr)));
     float __xScale_rename_at_167_60 = ((float)(SimPolicy<float>::Div(__yScale_rename_at_166_59,__aspect_rename_at_164_56,*__context__,nullptr)));
-    float4x4 __Result_rename_at_168_61; das_zero(__Result_rename_at_168_61);
+    float4x4 __Result_rename_at_168_61;das_zero(__Result_rename_at_168_61);
     float4x4_identity(das_arg<float4x4>::pass(__Result_rename_at_168_61));
     das_copy(das_index<float4>::at(das_index<float4x4>::at(__Result_rename_at_168_61,0,__context__),0,__context__),__xScale_rename_at_167_60);
     das_copy(das_index<float4>::at(das_index<float4x4>::at(__Result_rename_at_168_61,1,__context__),1,__context__),__yScale_rename_at_166_59);
@@ -246,7 +246,7 @@ inline float4x4 perspective_rh_opengl_448c2e9e57ce734f ( Context * __context__, 
 
 inline float4x4 ortho_rh_9ba657365d994f79 ( Context * __context__, float __left_rename_at_178_62, float __right_rename_at_178_63, float __bottom_rename_at_178_64, float __top_rename_at_178_65, float __zNear_rename_at_178_66, float __zFar_rename_at_178_67 )
 {
-    float4x4 __Result_rename_at_180_68; das_zero(__Result_rename_at_180_68);
+    float4x4 __Result_rename_at_180_68;das_zero(__Result_rename_at_180_68);
     float4x4_identity(das_arg<float4x4>::pass(__Result_rename_at_180_68));
     das_copy(das_index<float4>::at(das_index<float4x4>::at(__Result_rename_at_180_68,0,__context__),0,__context__),SimPolicy<float>::Div(2.000000e+00f,(__right_rename_at_178_63 - __left_rename_at_178_62),*__context__,nullptr));
     das_copy(das_index<float4>::at(das_index<float4x4>::at(__Result_rename_at_180_68,1,__context__),1,__context__),SimPolicy<float>::Div(2.000000e+00f,(__top_rename_at_178_65 - __bottom_rename_at_178_64),*__context__,nullptr));
@@ -278,7 +278,7 @@ inline float4x4 planar_shadow_a86997e7f64f1f6a ( Context * __context__, float4 _
     float4 __P_rename_at_209_77 = ((float4)plane_normalize_b33d45ea1c8c4042(__context__,__Plane_rename_at_207_76));
     float4 __L_rename_at_210_78 = ((float4)__Light_rename_at_207_75);
     float __d_rename_at_211_79 = ((float)-(dot4(__P_rename_at_209_77,__L_rename_at_210_78)));
-    float4x4 __Result_rename_at_212_80; das_zero(__Result_rename_at_212_80);
+    float4x4 __Result_rename_at_212_80;das_zero(__Result_rename_at_212_80);
     das_copy(das_index<float4x4>::at(__Result_rename_at_212_80,0,__context__),float4((v_extract_x(__P_rename_at_209_77) /*x*/ * v_extract_x(__L_rename_at_210_78) /*x*/) + __d_rename_at_211_79,v_extract_x(__P_rename_at_209_77) /*x*/ * v_extract_y(__L_rename_at_210_78) /*y*/,v_extract_x(__P_rename_at_209_77) /*x*/ * v_extract_z(__L_rename_at_210_78) /*z*/,v_extract_x(__P_rename_at_209_77) /*x*/ * v_extract_w(__L_rename_at_210_78) /*w*/));
     das_copy(das_index<float4x4>::at(__Result_rename_at_212_80,1,__context__),float4(v_extract_y(__P_rename_at_209_77) /*y*/ * v_extract_x(__L_rename_at_210_78) /*x*/,(v_extract_y(__P_rename_at_209_77) /*y*/ * v_extract_y(__L_rename_at_210_78) /*y*/) + __d_rename_at_211_79,v_extract_y(__P_rename_at_209_77) /*y*/ * v_extract_z(__L_rename_at_210_78) /*z*/,v_extract_y(__P_rename_at_209_77) /*y*/ * v_extract_w(__L_rename_at_210_78) /*w*/));
     das_copy(das_index<float4x4>::at(__Result_rename_at_212_80,2,__context__),float4(v_extract_z(__P_rename_at_209_77) /*z*/ * v_extract_x(__L_rename_at_210_78) /*x*/,v_extract_z(__P_rename_at_209_77) /*z*/ * v_extract_y(__L_rename_at_210_78) /*y*/,(v_extract_z(__P_rename_at_209_77) /*z*/ * v_extract_z(__L_rename_at_210_78) /*z*/) + __d_rename_at_211_79,v_extract_z(__P_rename_at_209_77) /*z*/ * v_extract_w(__L_rename_at_210_78) /*w*/));

@@ -154,7 +154,64 @@ namespace macro_boost { struct ReturnSkipLockcheck; };
 // unused enumeration ConstMatters
 // unused enumeration RefMatters
 // unused enumeration TemporaryMatters
-// unused enumeration Type
+#if 0 // external enum
+namespace rtti {
+
+enum class Type : int32_t {
+    none = int32_t(INT64_C(0)),
+    autoinfer = int32_t(INT64_C(1)),
+    alias = int32_t(INT64_C(2)),
+    option = int32_t(INT64_C(3)),
+    typeDecl = int32_t(INT64_C(4)),
+    typeMacro = int32_t(INT64_C(5)),
+    fakeContext = int32_t(INT64_C(6)),
+    fakeLineInfo = int32_t(INT64_C(7)),
+    anyArgument = int32_t(INT64_C(8)),
+    tVoid = int32_t(INT64_C(9)),
+    tBool = int32_t(INT64_C(10)),
+    tInt8 = int32_t(INT64_C(11)),
+    tUInt8 = int32_t(INT64_C(12)),
+    tInt16 = int32_t(INT64_C(13)),
+    tUInt16 = int32_t(INT64_C(14)),
+    tInt64 = int32_t(INT64_C(15)),
+    tUInt64 = int32_t(INT64_C(16)),
+    tInt = int32_t(INT64_C(17)),
+    tInt2 = int32_t(INT64_C(18)),
+    tInt3 = int32_t(INT64_C(19)),
+    tInt4 = int32_t(INT64_C(20)),
+    tUInt = int32_t(INT64_C(21)),
+    tUInt2 = int32_t(INT64_C(22)),
+    tUInt3 = int32_t(INT64_C(23)),
+    tUInt4 = int32_t(INT64_C(24)),
+    tFloat = int32_t(INT64_C(25)),
+    tFloat2 = int32_t(INT64_C(26)),
+    tFloat3 = int32_t(INT64_C(27)),
+    tFloat4 = int32_t(INT64_C(28)),
+    tDouble = int32_t(INT64_C(29)),
+    tRange = int32_t(INT64_C(30)),
+    tURange = int32_t(INT64_C(31)),
+    tRange64 = int32_t(INT64_C(32)),
+    tURange64 = int32_t(INT64_C(33)),
+    tString = int32_t(INT64_C(34)),
+    tStructure = int32_t(INT64_C(35)),
+    tHandle = int32_t(INT64_C(36)),
+    tEnumeration = int32_t(INT64_C(37)),
+    tEnumeration8 = int32_t(INT64_C(38)),
+    tEnumeration16 = int32_t(INT64_C(39)),
+    tEnumeration64 = int32_t(INT64_C(40)),
+    tBitfield = int32_t(INT64_C(41)),
+    tPointer = int32_t(INT64_C(42)),
+    tFunction = int32_t(INT64_C(43)),
+    tLambda = int32_t(INT64_C(44)),
+    tIterator = int32_t(INT64_C(45)),
+    tArray = int32_t(INT64_C(46)),
+    tTable = int32_t(INT64_C(47)),
+    tBlock = int32_t(INT64_C(48)),
+    tTuple = int32_t(INT64_C(49)),
+    tVariant = int32_t(INT64_C(50)),
+};
+}
+#endif // external enum
 // unused enumeration CaptureMode
 // unused enumeration SideEffects
 namespace ast {
@@ -574,9 +631,6 @@ enum class AssignOp : int32_t {
     clone = int32_t(2),
 };
 }
-}
-template <> struct cast< das::_anon_6980938829256190596::async_boost::AssignOp > : cast_enum < das::_anon_6980938829256190596::async_boost::AssignOp > {};
-namespace _anon_6980938829256190596 {
 namespace async_boost {
 
 struct AwaitMacro {
@@ -966,7 +1020,7 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_8981e
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1cef803eec7cbc0a ( Context * __context__, async_boost::AwaitCoroutineMacro const  & __cl_rename_at_116_5 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_13f016b2fff568b ( Context * __context__, async_boost::AsyncMacro const  & __cl_rename_at_116_6 );
 inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_7 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_260b01a3ce2c7784 ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  & __cl_rename_at_116_13 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7b8ae90a7b65e8a ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  & __cl_rename_at_116_13 );
 inline smart_ptr_raw<Expression> _Funcast_boostTickconvert_to_expressionTick2307832460972925437_746a2d271cf4b7e ( Context * __context__, bool __value_rename_at_878_18 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_edfee798dfc70fd5 ( Context * __context__, char * const  __name_rename_at_631_19, async_boost::AwaitMacro * __someClassPtr_rename_at_631_20 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_db935d19f2381d6b ( Context * __context__, char * const  __name_rename_at_631_22, async_boost::AwaitCoroutineMacro * __someClassPtr_rename_at_631_23 );
@@ -978,7 +1032,7 @@ inline char * _FuncastTickdescribeTick842554968825501494_452cfc8955963a18 ( Cont
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_fd843de514f7e6bd ( Context * __context__, char * const  __name_rename_at_273_33, char * const  __tag_rename_at_273_34, async_boost::AwaitMacro * __classPtr_rename_at_273_35 );
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_cea3573829e410d5 ( Context * __context__, char * const  __name_rename_at_273_37, char * const  __tag_rename_at_273_38, async_boost::AwaitCoroutineMacro * __classPtr_rename_at_273_39 );
 inline void clone_3bd5de5fb1f4face ( Context * __context__, smart_ptr_raw<TypeDecl> & __dest_rename_at_93_41, smart_ptr_raw<TypeDecl> const  __src_rename_at_93_42 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_3a79047f9c4dec3e ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  & __someClass_rename_at_684_43 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_139c8a91826b7188 ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  & __someClass_rename_at_684_43 );
 inline ExprBlock * _FuncbuiltinTickget_ptrTick5807679485210906136_ebfa36f57bc9f64d ( Context * __context__, smart_ptr_raw<ExprBlock> __src_rename_at_1732_46 );
 inline void await_next_frame_6f8872ea88113391 ( Context * __context__ );
 inline bool await_2402683cee1590ff ( Context * __context__, Sequence DAS_COMMENT((bool)) & __a_rename_at_38_47 );
@@ -1014,12 +1068,12 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_13f01
 
 inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_7 )
 {
-    smart_ptr_raw<Expression> __clone_dest_rename_at_1058_8; das_zero(__clone_dest_rename_at_1058_8);
+    smart_ptr_raw<Expression> __clone_dest_rename_at_1058_8;das_zero(__clone_dest_rename_at_1058_8);
     clone_912660ab1e667e4b(__context__,__clone_dest_rename_at_1058_8,__clone_src_rename_at_1056_7);
     return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1058_8);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_260b01a3ce2c7784 ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  &  __cl_rename_at_116_13 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7b8ae90a7b65e8a ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  &  __cl_rename_at_116_13 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_13.__rtti))).getStructType())));
 }
@@ -1073,7 +1127,7 @@ inline char * _FuncastTickdescribeTick842554968825501494_452cfc8955963a18 ( Cont
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_fd843de514f7e6bd ( Context * __context__, char * const  __name_rename_at_273_33, char * const  __tag_rename_at_273_34, async_boost::AwaitMacro * __classPtr_rename_at_273_35 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_36; memset(&__ann_rename_at_274_36,0,sizeof(__ann_rename_at_274_36));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_36; memset((void*)&__ann_rename_at_274_36,0,sizeof(__ann_rename_at_274_36));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_36);
     /* end finally */ });
@@ -1084,7 +1138,7 @@ inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_fd843d
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_cea3573829e410d5 ( Context * __context__, char * const  __name_rename_at_273_37, char * const  __tag_rename_at_273_38, async_boost::AwaitCoroutineMacro * __classPtr_rename_at_273_39 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_40; memset(&__ann_rename_at_274_40,0,sizeof(__ann_rename_at_274_40));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_40; memset((void*)&__ann_rename_at_274_40,0,sizeof(__ann_rename_at_274_40));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_40);
     /* end finally */ });
@@ -1098,10 +1152,10 @@ inline void clone_3bd5de5fb1f4face ( Context * __context__, smart_ptr_raw<TypeDe
     builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_93_41),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_93_42),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_3a79047f9c4dec3e ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  &  __someClass_rename_at_684_43 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_139c8a91826b7188 ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  &  __someClass_rename_at_684_43 )
 {
     async_boost::CollectAndReplaceIteratorFields const  * __classPtr_rename_at_687_44 = ((async_boost::CollectAndReplaceIteratorFields const  *)das_ref(__context__,__someClass_rename_at_684_43));
-    StructInfo const  * __classInfo_rename_at_688_45 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_260b01a3ce2c7784(__context__,__someClass_rename_at_684_43));
+    StructInfo const  * __classInfo_rename_at_688_45 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_7b8ae90a7b65e8a(__context__,__someClass_rename_at_684_43));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_44),__classInfo_rename_at_688_45,__context__));
 }
 
@@ -1140,8 +1194,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x65e5c22dae4e4d69] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6>>();
     };
-    aotLib[0xa018799d37ed20be] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_260b01a3ce2c7784>>();
+    aotLib[0x1babfa56983eb53a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_7b8ae90a7b65e8a>>();
     };
     aotLib[0x4ba5d3c9200dc2bd] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_boostTickconvert_to_expressionTick2307832460972925437_746a2d271cf4b7e>>();
@@ -1176,8 +1230,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xe36b435a170beed5] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&clone_3bd5de5fb1f4face>>();
     };
-    aotLib[0x34aef3562aec6e6b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_3a79047f9c4dec3e>>();
+    aotLib[0x91aeb195742509dc] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_139c8a91826b7188>>();
     };
     aotLib[0xd06989a50f5ee20d] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick5807679485210906136_ebfa36f57bc9f64d>>();

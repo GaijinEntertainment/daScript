@@ -1,3 +1,5 @@
+module printer_flags_visitor
+
 options gen2
 
 options rtti = true
@@ -71,3 +73,8 @@ class SetPrinterFlags : AstVisitor {
     }
 }
 
+[export]
+def used_flags() {
+    new SetPrinterFlags();
+    panic("unused");
+}

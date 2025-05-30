@@ -424,7 +424,7 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Con
 
 inline TArray<uint8_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_5374efae61d17e26 ( Context * __context__, TArray<uint8_t> const  &  __clone_src_rename_at_1056_2 )
 {
-    TArray<uint8_t> __clone_dest_rename_at_1058_3; das_zero(__clone_dest_rename_at_1058_3);
+    TArray<uint8_t> __clone_dest_rename_at_1058_3;das_zero(__clone_dest_rename_at_1058_3);
     _FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce(__context__,das_arg<TArray<uint8_t>>::pass(__clone_dest_rename_at_1058_3),__clone_src_rename_at_1056_2);
     return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__clone_dest_rename_at_1058_3);
 }
@@ -454,13 +454,13 @@ inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( 
 
 inline void finalize_c806b47786a4f1c9 ( Context * __context__, archive::Serializer &  ____this_rename_at_16_9 )
 {
-    memset(&(____this_rename_at_16_9), 0, TypeSize<archive::Serializer>::size);
+    memset((void*)&(____this_rename_at_16_9), 0, TypeSize<archive::Serializer>::size);
 }
 
 inline void finalize_85ad7a5b2a02d95a ( Context * __context__, archive::MemSerializer &  ____this_rename_at_24_10 )
 {
     _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_24_10.data));
-    memset(&(____this_rename_at_24_10), 0, TypeSize<archive::MemSerializer>::size);
+    memset((void*)&(____this_rename_at_24_10), 0, TypeSize<archive::MemSerializer>::size);
 }
 
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb ( Context * __context__, archive::Archive &  __arch_rename_at_90_11, float3x3 &  __value_rename_at_90_12 )
@@ -641,7 +641,7 @@ inline void serialize_e472b981aa88a5bc ( Context * __context__, archive::Archive
         _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_53),__len_rename_at_233_55);
         if ( __len_rename_at_233_55 > 0 )
         {
-            TArray<uint8_t> __tbuf_rename_at_236_56; das_zero(__tbuf_rename_at_236_56);
+            TArray<uint8_t> __tbuf_rename_at_236_56;das_zero(__tbuf_rename_at_236_56);
             _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_56),__len_rename_at_233_55 + 1);
             das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,uint8_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_230_53.stream))),das_ref(__context__,__tbuf_rename_at_236_56(0,__context__)),__len_rename_at_233_55);
             das_copy(__tbuf_rename_at_236_56(__len_rename_at_233_55,__context__),0x0);

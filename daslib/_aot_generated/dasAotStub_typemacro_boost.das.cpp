@@ -150,7 +150,64 @@ namespace macro_boost { struct ReturnSkipLockcheck; };
 // unused enumeration ConstMatters
 // unused enumeration RefMatters
 // unused enumeration TemporaryMatters
-// unused enumeration Type
+#if 0 // external enum
+namespace rtti {
+
+enum class Type : int32_t {
+    none = int32_t(INT64_C(0)),
+    autoinfer = int32_t(INT64_C(1)),
+    alias = int32_t(INT64_C(2)),
+    option = int32_t(INT64_C(3)),
+    typeDecl = int32_t(INT64_C(4)),
+    typeMacro = int32_t(INT64_C(5)),
+    fakeContext = int32_t(INT64_C(6)),
+    fakeLineInfo = int32_t(INT64_C(7)),
+    anyArgument = int32_t(INT64_C(8)),
+    tVoid = int32_t(INT64_C(9)),
+    tBool = int32_t(INT64_C(10)),
+    tInt8 = int32_t(INT64_C(11)),
+    tUInt8 = int32_t(INT64_C(12)),
+    tInt16 = int32_t(INT64_C(13)),
+    tUInt16 = int32_t(INT64_C(14)),
+    tInt64 = int32_t(INT64_C(15)),
+    tUInt64 = int32_t(INT64_C(16)),
+    tInt = int32_t(INT64_C(17)),
+    tInt2 = int32_t(INT64_C(18)),
+    tInt3 = int32_t(INT64_C(19)),
+    tInt4 = int32_t(INT64_C(20)),
+    tUInt = int32_t(INT64_C(21)),
+    tUInt2 = int32_t(INT64_C(22)),
+    tUInt3 = int32_t(INT64_C(23)),
+    tUInt4 = int32_t(INT64_C(24)),
+    tFloat = int32_t(INT64_C(25)),
+    tFloat2 = int32_t(INT64_C(26)),
+    tFloat3 = int32_t(INT64_C(27)),
+    tFloat4 = int32_t(INT64_C(28)),
+    tDouble = int32_t(INT64_C(29)),
+    tRange = int32_t(INT64_C(30)),
+    tURange = int32_t(INT64_C(31)),
+    tRange64 = int32_t(INT64_C(32)),
+    tURange64 = int32_t(INT64_C(33)),
+    tString = int32_t(INT64_C(34)),
+    tStructure = int32_t(INT64_C(35)),
+    tHandle = int32_t(INT64_C(36)),
+    tEnumeration = int32_t(INT64_C(37)),
+    tEnumeration8 = int32_t(INT64_C(38)),
+    tEnumeration16 = int32_t(INT64_C(39)),
+    tEnumeration64 = int32_t(INT64_C(40)),
+    tBitfield = int32_t(INT64_C(41)),
+    tPointer = int32_t(INT64_C(42)),
+    tFunction = int32_t(INT64_C(43)),
+    tLambda = int32_t(INT64_C(44)),
+    tIterator = int32_t(INT64_C(45)),
+    tArray = int32_t(INT64_C(46)),
+    tTable = int32_t(INT64_C(47)),
+    tBlock = int32_t(INT64_C(48)),
+    tTuple = int32_t(INT64_C(49)),
+    tVariant = int32_t(INT64_C(50)),
+};
+}
+#endif // external enum
 // unused enumeration ConversionResult
 // unused enumeration CaptureMode
 // unused enumeration SideEffects
@@ -327,14 +384,14 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f6d47
 
 inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_8e43a49b5b6891e2 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_8 )
 {
-    smart_ptr_raw<Expression> __clone_dest_rename_at_1058_9; das_zero(__clone_dest_rename_at_1058_9);
+    smart_ptr_raw<Expression> __clone_dest_rename_at_1058_9;das_zero(__clone_dest_rename_at_1058_9);
     clone_912660ab1e667e4b(__context__,__clone_dest_rename_at_1058_9,__clone_src_rename_at_1056_8);
     return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1058_9);
 }
 
 inline TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> _FuncbuiltinTickto_array_moveTick3185538323411982277_77313f057747cf52 ( Context * __context__, TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1> &  __a_rename_at_1342_18 )
 {
-    TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> __arr_rename_at_1344_19; das_zero(__arr_rename_at_1344_19);
+    TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> __arr_rename_at_1344_19;das_zero(__arr_rename_at_1344_19);
     _FuncbuiltinTickresizeTick4811697762258667383_ba6198643c09cf0e(__context__,das_arg<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>>>::pass(__arr_rename_at_1344_19),1);
     das_copy(das_cast<TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1>>::cast(das_ref(__context__,__arr_rename_at_1344_19(0,__context__))),__a_rename_at_1342_18);
     return /* <- */ das_auto_cast_move<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>>>::cast(__arr_rename_at_1344_19);

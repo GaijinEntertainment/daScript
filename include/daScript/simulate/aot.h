@@ -66,7 +66,7 @@ namespace das {
         template <typename QQ>
         __forceinline static TT cast ( QQ && expr ) {
             TT res = expr;
-            memset(&expr, 0, sizeof(QQ));
+            memset((void*)&expr, 0, sizeof(QQ));
             return res;
         }
     };
@@ -74,7 +74,7 @@ namespace das {
     template <typename TT>
     __forceinline void das_zero ( TT & a ) {
         using TTNC = typename remove_const<TT>::type;
-        memset(const_cast<TTNC *>(&a), 0, sizeof(TT));
+        memset(reinterpret_cast<void*>(const_cast<TTNC *>(&a)), 0, sizeof(TT));
     }
 
     template <typename TT, typename QQ>
@@ -82,8 +82,8 @@ namespace das {
         using TTNC = typename remove_const<TT>::type;
         static_assert(sizeof(TT)<=sizeof(QQ),"can't move from smaller type");
         if ( ((void*)&a) != ((void *)&b) ) {
-            memcpy(const_cast<TTNC *>(&a), &b, sizeof(TT));
-            memset((TTNC *)&b, 0, sizeof(TT));
+            memcpy(reinterpret_cast<void*>(const_cast<TTNC *>(&a)), reinterpret_cast<const void*>(&b), sizeof(TT));
+            memset((void *)&b, 0, sizeof(TT));
         }
     }
 
@@ -91,7 +91,7 @@ namespace das {
     __forceinline void das_copy ( TT & a, const QQ b ) {
         using TTNC = typename remove_const<TT>::type;
         static_assert(sizeof(TT)<=sizeof(QQ),"can't copy from smaller type");
-        memcpy(const_cast<TTNC *>(&a), &b, sizeof(TT));
+        memcpy(reinterpret_cast<void*>(const_cast<TTNC *>(&a)), reinterpret_cast<const void*>(&b), sizeof(TT));
     }
 
     template <typename TT>

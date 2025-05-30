@@ -226,7 +226,7 @@ inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTic
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_6b4fceb19f25a20c ( Context * __context__, char * const  __name_rename_at_273_6, char * const  __tag_rename_at_273_7, temp_strings::TempStringMacro * __classPtr_rename_at_273_8 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_9; memset(&__ann_rename_at_274_9,0,sizeof(__ann_rename_at_274_9));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_9; memset((void*)&__ann_rename_at_274_9,0,sizeof(__ann_rename_at_274_9));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_9);
     /* end finally */ });

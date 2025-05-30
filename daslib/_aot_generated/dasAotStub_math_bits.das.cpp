@@ -190,56 +190,56 @@ inline uint4 float_bits_to_uint_c2dd43cd0950592e ( Context * __context__, float4
 
 inline float4 cast_to_vec4f_420ab89e818304a9 ( Context * __context__, bool __x_rename_at_152_20 )
 {
-    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_154_21; das_zero(__v_rename_at_154_21);
+    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_154_21;das_zero(__v_rename_at_154_21);
     das_copy(das_get_auto_variant_field<bool,7,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_154_21),__x_rename_at_152_20);
     return das_auto_cast<float4>::cast(das_get_auto_variant_field<float4,0,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_154_21));
 }
 
 inline float4 cast_to_vec4f_e7bf826166977985 ( Context * __context__, int64_t __x_rename_at_161_22 )
 {
-    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_163_23; das_zero(__v_rename_at_163_23);
+    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_163_23;das_zero(__v_rename_at_163_23);
     das_copy(das_get_auto_variant_field<int64_t,1,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_163_23),__x_rename_at_161_22);
     return das_auto_cast<float4>::cast(das_get_auto_variant_field<float4,0,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_163_23));
 }
 
 inline int64_t cast_to_int64_fb85960df919cc92 ( Context * __context__, float4 __data_rename_at_170_24 )
 {
-    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_172_25; das_zero(__v_rename_at_172_25);
+    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_172_25;das_zero(__v_rename_at_172_25);
     das_copy(das_get_auto_variant_field<float4,0,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_172_25),__data_rename_at_170_24);
     return das_auto_cast<int64_t>::cast(das_get_auto_variant_field<int64_t,1,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_172_25));
 }
 
 inline int32_t cast_to_int32_cba141cd2a1f2bdc ( Context * __context__, float4 __data_rename_at_179_26 )
 {
-    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_181_27; das_zero(__v_rename_at_181_27);
+    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_181_27;das_zero(__v_rename_at_181_27);
     das_copy(das_get_auto_variant_field<float4,0,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_181_27),__data_rename_at_179_26);
     return das_auto_cast<int32_t>::cast(das_get_auto_variant_field<int32_t,2,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_181_27));
 }
 
 inline int16_t cast_to_int16_7f2b6aa5810856fc ( Context * __context__, float4 __data_rename_at_188_28 )
 {
-    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_190_29; das_zero(__v_rename_at_190_29);
+    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_190_29;das_zero(__v_rename_at_190_29);
     das_copy(das_get_auto_variant_field<float4,0,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_190_29),__data_rename_at_188_28);
     return das_auto_cast<int16_t>::cast(das_get_auto_variant_field<int16_t,3,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_190_29));
 }
 
 inline int8_t cast_to_int8_1046b46273a4972d ( Context * __context__, float4 __data_rename_at_197_30 )
 {
-    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_199_31; das_zero(__v_rename_at_199_31);
+    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_199_31;das_zero(__v_rename_at_199_31);
     das_copy(das_get_auto_variant_field<float4,0,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_199_31),__data_rename_at_197_30);
     return das_auto_cast<int8_t>::cast(das_get_auto_variant_field<int8_t,4,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_199_31));
 }
 
 inline char * cast_to_string_ad7494d09b0ab5da ( Context * __context__, float4 __data_rename_at_206_32 )
 {
-    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_208_33; das_zero(__v_rename_at_208_33);
+    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_208_33;das_zero(__v_rename_at_208_33);
     das_copy(das_get_auto_variant_field<float4,0,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_208_33),__data_rename_at_206_32);
     return das_auto_cast<char *>::cast(das_get_auto_variant_field<char *,5,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_208_33));
 }
 
 inline void * cast_to_pointer_dd95fc0327c9fd68 ( Context * __context__, float4 __data_rename_at_215_34 )
 {
-    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_217_35; das_zero(__v_rename_at_217_35);
+    AutoVariant<float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool> __v_rename_at_217_35;das_zero(__v_rename_at_217_35);
     das_copy(das_get_auto_variant_field<float4,0,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_217_35),__data_rename_at_215_34);
     return das_auto_cast<void *>::cast(das_get_auto_variant_field<void *,6,float4,int64_t,int32_t,int16_t,int8_t,char *,void *,bool>::get(__v_rename_at_217_35));
 }

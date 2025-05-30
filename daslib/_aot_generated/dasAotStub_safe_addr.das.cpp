@@ -295,7 +295,7 @@ inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTic
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_47a4aec5bc3e02fc ( Context * __context__, char * const  __name_rename_at_273_14, char * const  __tag_rename_at_273_15, safe_addr::SafeAddrMacro * __classPtr_rename_at_273_16 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_17; memset(&__ann_rename_at_274_17,0,sizeof(__ann_rename_at_274_17));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_17; memset((void*)&__ann_rename_at_274_17,0,sizeof(__ann_rename_at_274_17));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_17);
     /* end finally */ });
@@ -306,7 +306,7 @@ inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_47a4ae
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_bd8aa2a7ab06a770 ( Context * __context__, char * const  __name_rename_at_273_18, char * const  __tag_rename_at_273_19, safe_addr::SharedAddrMacro * __classPtr_rename_at_273_20 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_21; memset(&__ann_rename_at_274_21,0,sizeof(__ann_rename_at_274_21));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_21; memset((void*)&__ann_rename_at_274_21,0,sizeof(__ann_rename_at_274_21));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_21);
     /* end finally */ });
@@ -317,7 +317,7 @@ inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_bd8aa2
 
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_80a1209dc7a73916 ( Context * __context__, char * const  __name_rename_at_273_22, char * const  __tag_rename_at_273_23, safe_addr::TempValueMacro * __classPtr_rename_at_273_24 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_25; memset(&__ann_rename_at_274_25,0,sizeof(__ann_rename_at_274_25));
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_25; memset((void*)&__ann_rename_at_274_25,0,sizeof(__ann_rename_at_274_25));
     /* finally */ auto __finally_273= das_finally([&](){
     das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_25);
     /* end finally */ });
