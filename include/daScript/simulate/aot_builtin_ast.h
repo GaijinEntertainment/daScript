@@ -7,7 +7,7 @@
 
 namespace das {
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at );
-    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context, LineInfoArg * at );
+    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, bool d_ChooseSmartPtr, Context * context, LineInfoArg * at );
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at );
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at );
     char * ast_das_to_string ( Type bt, Context * context, LineInfoArg * at );
