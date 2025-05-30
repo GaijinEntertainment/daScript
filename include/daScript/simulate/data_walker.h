@@ -74,6 +74,7 @@ namespace das {
         virtual void afterPtr ( char * pa, TypeInfo * ti ) {}
         virtual void beforeHandle ( char * pa, TypeInfo * ti ) {}
         virtual void afterHandle ( char * pa, TypeInfo * ti ) {}
+        virtual void afterHandleCancel ( char * pa, TypeInfo * ti ) {}
         virtual void beforeLambda ( Lambda *, TypeInfo * ti ) {}
         virtual void afterLambda ( Lambda *, TypeInfo * ti ) {}
         virtual void beforeIterator ( Sequence *, TypeInfo * ti ) {}
@@ -169,6 +170,10 @@ namespace das {
         void afterHandle_ ( char * ps, TypeInfo * ti ) {
             visited_handles.pop_back();
             afterHandle(ps, ti);
+        }
+        void afterHandleCancel_ ( char * ps, TypeInfo * ti ) {
+            visited_handles.pop_back();
+            afterHandleCancel(ps, ti);
         }
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
