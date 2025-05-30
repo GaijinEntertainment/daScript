@@ -439,6 +439,11 @@ namespace debugapi {
                 invoke_afterHandle(context,fn_afterHandle,classPtr,pa,*ti);
             }
         }
+        virtual void afterHandleCancel ( char * pa, TypeInfo * ti ) override {
+           if ( auto fn_afterHandleCancel = get_afterHandleCancel(classPtr) ) {
+                invoke_afterHandleCancel(context,fn_afterHandleCancel,classPtr,pa,*ti);
+            }
+        }
         virtual bool canVisitLambda ( TypeInfo * ti ) override {
            if ( auto fn_canVisitLambda = get_canVisitLambda(classPtr) ) {
                 return invoke_canVisitLambda(context,fn_canVisitLambda,classPtr,*ti);

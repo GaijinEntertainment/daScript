@@ -145,6 +145,7 @@ class DapiDataWalker {
     def abstract afterPtr(ps : void?; ti : TypeInfo) : void
     def abstract beforeHandle(ps : void?; ti : TypeInfo) : void
     def abstract afterHandle(ps : void?; ti : TypeInfo) : void
+    def abstract afterHandleCancel(ps : void?; ti : TypeInfo) : void
     def abstract beforeLambda(var value : DapiLambda; ti : TypeInfo) : void
     def abstract afterLambda(var value : DapiLambda; ti : TypeInfo) : void
     def abstract beforeIterator(var value : DapiSequence; ti : TypeInfo) : void

@@ -344,6 +344,9 @@ namespace das
         virtual void afterHandle ( char *, TypeInfo * ) override {
             popRange();
         }
+        virtual void afterHandleCancel ( char *, TypeInfo * ) override {
+            popRange();
+        }
         virtual void beforeDim ( char * pa, TypeInfo * ti ) override {
             auto tsize = ti->size;
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
@@ -767,6 +770,9 @@ namespace das
             markAndPushRange(rdata);
         }
         virtual void afterHandle ( char *, TypeInfo * ) override {
+            popRange();
+        }
+        virtual void afterHandleCancel ( char *, TypeInfo * ) override {
             popRange();
         }
         virtual void beforeDim ( char * pa, TypeInfo * ti ) override {

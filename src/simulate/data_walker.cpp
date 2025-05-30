@@ -283,9 +283,15 @@ namespace das {
                 case Type::tHandle:
                     if ( canVisitHandle_(pa, info) ) {
                         beforeHandle_(pa, info);
-                        if ( cancel() ) return;
+                        if ( cancel() ) {
+                            afterHandleCancel_(pa, info);
+                            return;
+                        }
                         info->getAnnotation()->walk(*this, pa);
-                        if ( cancel() ) return;
+                        if ( cancel() ) {
+                            afterHandleCancel_(pa, info);
+                            return;
+                        }
                         afterHandle_(pa, info);
                     }
                     break;
