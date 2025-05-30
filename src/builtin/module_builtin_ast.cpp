@@ -245,13 +245,13 @@ namespace das {
             d_module ? TypeDecl::DescribeModule::yes : TypeDecl::DescribeModule::no),at);
     }
 
-    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context, LineInfoArg * at ) {
+    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, bool d_ChooseSmartPtr, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting type, not null");
         return context->allocateString(describeCppType(t,
             d_substitureRef ? CpptSubstitureRef::yes : CpptSubstitureRef::no,
             d_skipRef ? CpptSkipRef::yes : CpptSkipRef::no,
             d_skipConst ? CpptSkipConst::yes : CpptSkipConst::no,
-            d_redundantConst ? CpptRedundantConst::yes : CpptRedundantConst::no),at);
+            d_redundantConst ? CpptRedundantConst::yes : CpptRedundantConst::no, d_ChooseSmartPtr),at);
     }
 
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at ) {
@@ -983,7 +983,7 @@ namespace das {
                 ->args({"type","extra","contracts","module","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_describe_typedecl_cpp)>(*this, lib,  "describe_typedecl_cpp",
             SideEffects::none, "ast_describe_typedecl_cpp")
-                ->args({"type","substitueRef","skipRef","skipConst","redundantConst","context","lineinfo"});
+                ->args({"type","substitueRef","skipRef","skipConst","redundantConst", "choose_smart_ptr","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
             SideEffects::none, "ast_describe_expression")
                 ->args({"expression","context","lineinfo"});

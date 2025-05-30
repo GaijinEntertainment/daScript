@@ -40,8 +40,8 @@ def describe(decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true
 }
 
 [generic]
-def describe_cpp(decl : smart_ptr<TypeDecl>; substitureRef, skipRef, skipConst : bool = false; redundantConst : bool = true) {
-    return describe_typedecl_cpp(decl, substitureRef, skipRef, skipConst, redundantConst)
+def describe_cpp(decl : smart_ptr<TypeDecl>; substitureRef, skipRef, skipConst : bool = false; redundantConst : bool = true; chooseSmartPtr : bool = true) {
+    return describe_typedecl_cpp(decl, substitureRef, skipRef, skipConst, redundantConst, chooseSmartPtr)
 }
 
 [generic]
