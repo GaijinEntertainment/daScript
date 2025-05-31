@@ -1117,29 +1117,55 @@ def generate_one_alternative(var gen : ParserGenerator; var alt : Alternative; i
 
 
 def alternative_add_epilogue(var block_contents : array<ExpressionPtr>; var gen : ParserGenerator; var action_block) {
-    var inscope action_type <- gen.rule_types |> get_value_and_clone_type(gen.current_context)
+
+    // assert(length(action_block) > 0, "Action block should not be empty")
+
     var inscope return_type <- gen.return_types |> get_value_and_clone_type(gen.current_context)
 
-    var inscope t <- qmacro_block <| $() {
+    var inscope action_type <- gen.rule_types |> get_value_and_clone_type(gen.current_context)
 
-        if ($v(gen.debug)) {
-            parser |> log_plain <| "Executing action"
+    if ( length(action_block) == 0) {
+
+        var inscope t <- qmacro_block <| $() {
+
+            if ($v(gen.debug)) {
+                parser |> log_plain <| "Executing action"
+            }
+
+            if ($v(gen.debug)) {
+                parser |> log_plain <| "Returning result at index {parser.index}"
+            }
+
+            var result : $t(return_type) <-  (true, default<$t(action_type)>, parser.index)
+            return_skip_lockcheck <| result
+            return <- result
         }
 
-        var val : $t(action_type) <- invoke <| $() : $t(action_type) {
-            $b(action_block)
+        block_contents |> append_block_contents <| t
+
+    } else {
+
+        var inscope t <- qmacro_block <| $() {
+
+            if ($v(gen.debug)) {
+                parser |> log_plain <| "Executing action"
+            }
+
+            var val : $t(action_type) <- invoke <| $() : $t(action_type) {
+                $b(action_block)
+            }
+
+            if ($v(gen.debug)) {
+                parser |> log_plain <| "Returning result at index {parser.index}"
+            }
+
+            var result : $t(return_type) <-  (true, val, parser.index)
+            return_skip_lockcheck <| result
+            return <- result
         }
 
-        if ($v(gen.debug)) {
-            parser |> log_plain <| "Returning result at index {parser.index}"
-        }
-
-        var result : $t(return_type) <-  (true, val, parser.index)
-        return_skip_lockcheck <| result
-        return <- result
+        block_contents |> append_block_contents <| t
     }
-
-    block_contents |> append_block_contents <| t
 }
 
 
