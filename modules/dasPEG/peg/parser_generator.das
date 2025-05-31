@@ -1117,8 +1117,12 @@ def generate_one_alternative(var gen : ParserGenerator; var alt : Alternative; i
 
 
 def alternative_add_epilogue(var block_contents : array<ExpressionPtr>; var gen : ParserGenerator; var action_block) {
-    var inscope action_type <- gen.rule_types |> get_value_and_clone_type(gen.current_context)
+
+    assert(length(action_block) > 0, "Action block should not be empty")
+
     var inscope return_type <- gen.return_types |> get_value_and_clone_type(gen.current_context)
+
+    var inscope action_type <- gen.rule_types |> get_value_and_clone_type(gen.current_context)
 
     var inscope t <- qmacro_block <| $() {
 

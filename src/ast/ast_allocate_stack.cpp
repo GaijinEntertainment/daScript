@@ -63,16 +63,37 @@ namespace das {
             if ( failedToCMRES ) return;
             // we can safely skip makeLocal, invoke, or call
             // they are going to CMRES directly, and do not affect nothing
+            ExprVar * evar = nullptr;
             if ( !func->result->isRefType() ) return;
-            if ( expr->subexpr->rtti_isCall() ) return;
-            if ( expr->subexpr->rtti_isInvoke() ) return;
-            if ( expr->subexpr->rtti_isMakeLocal() ) return;
-            // if its return X
-            if ( expr->subexpr->rtti_isVar() ) {
-                auto evar = static_pointer_cast<ExprVar>(expr->subexpr);
+            else if ( expr->subexpr->rtti_isInvoke() ) return;
+            else if ( expr->subexpr->rtti_isMakeLocal() ) return;
+            // if its _return_with_lockcheck(X)
+            else if ( expr->subexpr->rtti_isCall() ) {
+                auto ecall = ((ExprCall *)(expr->subexpr.get()));
+                if ( ecall->func && ecall->func->fromGeneric &&
+                     ecall->arguments.size()==1 &&
+                     ecall->func->fromGeneric->module->name=="$" &&
+                     ecall->func->fromGeneric->name == "_return_with_lockcheck" ) {
+                    if ( ecall->arguments[0]->rtti_isVar() ) {
+                        evar = (ExprVar *)(ecall->arguments[0].get());
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            } // if its return X
+            else if ( expr->subexpr->rtti_isVar() ) {
+                evar = (ExprVar *)(expr->subexpr.get());
+            } else {
+                return;
+            }
+            if ( evar ) {
                 if ( !evar->local ) return; // if its not local, we safely ignore
                 auto var = evar->variable;
-                if ( var->type->ref ) {     // we return local ref variable, so ... game over
+                if ( var->inScope ) {               // if its in scope, we cannot return it as CMRES
+                    failedToCMRES = true;
+                } else if ( var->type->ref ) {     // we return local ref variable, so ... game over
                     failedToCMRES = true;
                 } else if ( !cmresVAR ) {
                     cmresVAR = var;
