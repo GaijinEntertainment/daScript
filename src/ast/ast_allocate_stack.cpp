@@ -91,7 +91,9 @@ namespace das {
             if ( evar ) {
                 if ( !evar->local ) return; // if its not local, we safely ignore
                 auto var = evar->variable;
-                if ( var->type->ref ) {     // we return local ref variable, so ... game over
+                if ( var->inScope ) {               // if its in scope, we cannot return it as CMRES
+                    failedToCMRES = true;
+                } else if ( var->type->ref ) {     // we return local ref variable, so ... game over
                     failedToCMRES = true;
                 } else if ( !cmresVAR ) {
                     cmresVAR = var;
