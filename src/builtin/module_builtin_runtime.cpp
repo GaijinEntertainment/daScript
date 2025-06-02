@@ -338,23 +338,9 @@ namespace das
         };
     };
 
-    struct IsYetAnotherVectorTemplateAnnotation : MarkFunctionAnnotation {
-        IsYetAnotherVectorTemplateAnnotation() : MarkFunctionAnnotation("expect_any_vector") {}
+    struct ArgumentTemplateAnnotation : MarkFunctionAnnotation {
+        ArgumentTemplateAnnotation( const string & na ) : MarkFunctionAnnotation(na) {}
         virtual bool isSpecialized() const override { return true; }
-        virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
-                const AnnotationDeclaration & decl, string & err  ) const override {
-            size_t maxIndex = min(types.size(), fn->arguments.size());
-            for ( size_t ai=0; ai!=maxIndex; ++ ai) {
-                if ( decl.arguments.find(fn->arguments[ai]->name, Type::tBool) ) {
-                    const auto & argT = types[ai];
-                    if ( !(argT->isHandle() && argT->annotation && argT->annotation->isYetAnotherVectorTemplate()) ) {
-                        err = "argument " + fn->arguments[ai]->name + " is expected to be a vector template";
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
         virtual bool apply(const FunctionPtr & fn, ModuleGroup &, const AnnotationArgumentList & decl, string & err) override {
             for ( const auto & arg : decl ) {
                 if ( arg.type!=Type::tBool ) {
@@ -370,9 +356,27 @@ namespace das
         }
     };
 
-    struct IsDimAnnotation : MarkFunctionAnnotation {
-        IsDimAnnotation() : MarkFunctionAnnotation("expect_dim") {}
-        virtual bool isSpecialized() const override { return true; }
+
+    struct IsYetAnotherVectorTemplateAnnotation : ArgumentTemplateAnnotation {
+        IsYetAnotherVectorTemplateAnnotation() : ArgumentTemplateAnnotation("expect_any_vector") {}
+        virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
+                const AnnotationDeclaration & decl, string & err  ) const override {
+            size_t maxIndex = min(types.size(), fn->arguments.size());
+            for ( size_t ai=0; ai!=maxIndex; ++ ai) {
+                if ( decl.arguments.find(fn->arguments[ai]->name, Type::tBool) ) {
+                    const auto & argT = types[ai];
+                    if ( !(argT->isHandle() && argT->annotation && argT->annotation->isYetAnotherVectorTemplate()) ) {
+                        err = "argument " + fn->arguments[ai]->name + " is expected to be a vector template";
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+    };
+
+    struct IsDimAnnotation : ArgumentTemplateAnnotation {
+        IsDimAnnotation() : ArgumentTemplateAnnotation("expect_dim") {}
         virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
                 const AnnotationDeclaration & decl, string & err  ) const override {
             size_t maxIndex = min(types.size(), fn->arguments.size());
@@ -387,15 +391,20 @@ namespace das
             }
             return true;
         }
-        virtual bool apply(const FunctionPtr & fn, ModuleGroup &, const AnnotationArgumentList & decl, string & err) override {
-            for ( const auto & arg : decl ) {
-                if ( arg.type!=Type::tBool ) {
-                    err = "expecting names only";
-                    return false;
-                }
-                if ( !fn->findArgument(arg.name) ) {
-                    err = "unknown argument " + arg.name;
-                    return false;
+    };
+
+    struct IsRefTypeAnnotation : ArgumentTemplateAnnotation {
+        IsRefTypeAnnotation() : ArgumentTemplateAnnotation("expect_ref") {}
+        virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
+                const AnnotationDeclaration & decl, string & err  ) const override {
+            size_t maxIndex = min(types.size(), fn->arguments.size());
+            for ( size_t ai=0; ai!=maxIndex; ++ ai) {
+                if ( decl.arguments.find(fn->arguments[ai]->name, Type::tBool) ) {
+                    const auto & argT = types[ai];
+                    if ( !argT->isRef() ) {
+                        err = "argument " + fn->arguments[ai]->name + " is expected to be a ref type or a reference";
+                        return false;
+                    }
                 }
             }
             return true;
@@ -1585,6 +1594,7 @@ namespace das
         addAnnotation(make_smart<PersistentStructureAnnotation>());
         addAnnotation(make_smart<IsYetAnotherVectorTemplateAnnotation>());
         addAnnotation(make_smart<IsDimAnnotation>());
+        addAnnotation(make_smart<IsRefTypeAnnotation>());
         addAnnotation(make_smart<HashBuilderAnnotation>(lib));
         addAnnotation(make_smart<TypeFunctionFunctionAnnotation>());
         // and call macro

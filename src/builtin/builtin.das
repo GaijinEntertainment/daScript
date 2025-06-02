@@ -1006,6 +1006,39 @@ def emplace_new(var tab : table<auto(kT); smart_ptr<auto(vT)>>; key : kT; var va
     unsafe(tab[key]) |> move_new <| value
 }
 
+[!expect_ref(value)]
+def emplace(var Tab : table<auto, auto>; key : auto; value : auto) {
+    static_if (typeinfo is_smart_ptr(value)) {
+        concept_assert(false, "can't emplace into a table, where the value type is a smart pointer\n\tuse 'emplace_new' instead for smart pointers")
+    } static_elif (typeinfo can_copy(value)) {
+        concept_assert(false, "can't emplace into a table, where the value type is not a reference type\n\tuse 'insert' instead")
+    } static_elif (typeinfo can_clone(value)) {
+        concept_assert(false, "can't emplace into a table, where the value type is not a reference type\n\tuse 'insert_clone' instead")
+    } else {
+        concept_assert(false, "can't emplace into a table, where the value type is not a reference type which is also a constant")
+    }
+}
+
+[!expect_ref(value)]
+def emplace(var a : array<auto>; value : auto) {
+    static_if (typeinfo is_smart_ptr(value)) {
+        concept_assert(false, "can't emplace into an array, where the value type is a smart pointer\n\tuse 'emplace_new' instead for smart pointers")
+    } static_elif (typeinfo can_copy(value)) {
+        concept_assert(false, "can't emplace into an array, where the value type is not a reference type\n\tuse 'push' instead")
+    } static_elif (typeinfo can_clone(value)) {
+        concept_assert(false, "can't emplace into an array, where the value type is not a reference type\n\tuse 'push_clone' instead")
+    } else {
+        concept_assert(false, "can't emplace into an array, where the value type is not a reference type")
+    }
+}
+
+[unused_argument(Arr, value)]
+def emplace_new(var Arr : array<smart_ptr<auto(numT)>>; var value : smart_ptr<numT>) {
+    unsafe {
+        Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- value
+    }
+}
+
 def key_exists(Tab : table<auto(keyT); auto(valT)> | #; at : string#) : bool {
     let at_nt := at
     return __builtin_table_key_exists(Tab, at_nt)
