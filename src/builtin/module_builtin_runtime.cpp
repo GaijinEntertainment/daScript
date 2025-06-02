@@ -394,14 +394,14 @@ namespace das
     };
 
     struct IsRefTypeAnnotation : ArgumentTemplateAnnotation {
-        IsRefTypeAnnotation() : ArgumentTemplateAnnotation("expect_ref_type") {}
+        IsRefTypeAnnotation() : ArgumentTemplateAnnotation("expect_ref") {}
         virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
                 const AnnotationDeclaration & decl, string & err  ) const override {
             size_t maxIndex = min(types.size(), fn->arguments.size());
             for ( size_t ai=0; ai!=maxIndex; ++ ai) {
                 if ( decl.arguments.find(fn->arguments[ai]->name, Type::tBool) ) {
                     const auto & argT = types[ai];
-                    if ( !argT->isRefType() ) {
+                    if ( !argT->isRef() ) {
                         err = "argument " + fn->arguments[ai]->name + " is expected to be a ref type or a reference";
                         return false;
                     }
