@@ -1049,6 +1049,13 @@ def emplace ( var a : array<auto>; value : auto ) {
 }
 
 [unused_argument(Arr, value)]
+def emplace(var Arr : array<smart_ptr<auto(numT)>>; var value : smart_ptr<numT>& ) {
+    unsafe {
+        Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- value
+    }
+}
+
+[unused_argument(Arr, value)]
 def emplace_new(var Arr : array<smart_ptr<auto(numT)>>; var value : smart_ptr<numT> ) {
     unsafe {
         Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- value
