@@ -965,16 +965,6 @@ class private QTypeMacro : AstQCallMacro {
     override macro_call = "qmacro_type"
 }
 
-def public emplace_new(var arr : array<ExpressionPtr>; var expr : ExpressionPtr) {
-    //! Unifies emplace and emplace_new for the array<ExpressionPtr>
-    arr |> emplace(expr)
-}
-
-def public emplace_new(var arr : array<VariablePtr>; var expr : VariablePtr) {
-    //! Unifies emplace and emplace_new for the array<VariablePtr>
-    arr |> emplace(expr)
-}
-
 def public apply_qmacro_function(fname : string; var expr : smart_ptr<Expression>; blk : block<(var rules : Template) : void>) : FunctionPtr {
     //! Implementation details for reification. This is a function generation reification.
     var inscope func <- new Function(at = expr.at, atDecl = expr.at, name := fname, flags = FunctionFlags.generated)
