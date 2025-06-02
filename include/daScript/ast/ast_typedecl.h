@@ -669,13 +669,14 @@ namespace das {
     enum class CpptSkipRef { no, yes };
     enum class CpptSkipConst { no, yes };
     enum class CpptRedundantConst { no, yes };
+    enum class ChooseSmartPtr { no, yes };
 
     string describeCppType(const TypeDeclPtr & type,
                            CpptSubstitureRef substituteRef = CpptSubstitureRef::no,
                            CpptSkipRef skipRef = CpptSkipRef::no,
                            CpptSkipConst skipConst = CpptSkipConst::no,
                            CpptRedundantConst redundantConst = CpptRedundantConst::yes,
-                           bool choose_smart_ptr = false);
+                           ChooseSmartPtr chooseSmartPtr = ChooseSmartPtr::no);
 
     class MangledNameParser {
     protected:

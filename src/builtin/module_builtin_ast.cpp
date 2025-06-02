@@ -251,7 +251,8 @@ namespace das {
             d_substitureRef ? CpptSubstitureRef::yes : CpptSubstitureRef::no,
             d_skipRef ? CpptSkipRef::yes : CpptSkipRef::no,
             d_skipConst ? CpptSkipConst::yes : CpptSkipConst::no,
-            d_redundantConst ? CpptRedundantConst::yes : CpptRedundantConst::no, d_ChooseSmartPtr),at);
+            d_redundantConst ? CpptRedundantConst::yes : CpptRedundantConst::no,
+            d_ChooseSmartPtr ? ChooseSmartPtr::yes : ChooseSmartPtr::no),at);
     }
 
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at ) {
