@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_200878851967350613 {
+namespace _anon_2357099712527627355 {
 
 namespace stringify { struct LongStringReader; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -204,8 +204,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_200878851967350613
-AotListBase impl_aot_stringify(_anon_200878851967350613::registerAotFunctions);
+} // namespace _anon_2357099712527627355
+AotListBase impl_aot_stringify(_anon_2357099712527627355::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

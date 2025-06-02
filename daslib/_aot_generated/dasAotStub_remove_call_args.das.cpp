@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_2096939547242430991 {
+namespace _anon_1334551756318986567 {
 
 namespace remove_call_args { struct RemoveCallArgsMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -339,8 +339,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_2096939547242430991
-AotListBase impl_aot_remove_call_args(_anon_2096939547242430991::registerAotFunctions);
+} // namespace _anon_1334551756318986567
+AotListBase impl_aot_remove_call_args(_anon_1334551756318986567::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

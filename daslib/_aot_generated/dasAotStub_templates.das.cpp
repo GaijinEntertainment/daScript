@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_11306785625934837114 {
+namespace _anon_250365952365424398 {
 
 namespace templates { struct DecltypeMacro; };
 namespace templates { struct DecltypeNoRefMacro; };
@@ -394,8 +394,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_11306785625934837114
-AotListBase impl_aot_templates(_anon_11306785625934837114::registerAotFunctions);
+} // namespace _anon_250365952365424398
+AotListBase impl_aot_templates(_anon_250365952365424398::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

@@ -45,7 +45,7 @@
 #endif
 
 namespace das {
-namespace _anon_2447825518291600098 {
+namespace _anon_13905036187726721927 {
 
 namespace math_boost { struct AABR; };
 namespace math_boost { struct AABB; };
@@ -356,8 +356,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_2447825518291600098
-AotListBase impl_aot_math_boost(_anon_2447825518291600098::registerAotFunctions);
+} // namespace _anon_13905036187726721927
+AotListBase impl_aot_math_boost(_anon_13905036187726721927::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

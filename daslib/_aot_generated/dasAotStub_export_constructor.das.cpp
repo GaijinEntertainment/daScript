@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_8834615050834179166 {
+namespace _anon_4044922623834367742 {
 
 namespace export_constructor { struct ExportConstructor; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -287,8 +287,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_8834615050834179166
-AotListBase impl_aot_export_constructor(_anon_8834615050834179166::registerAotFunctions);
+} // namespace _anon_4044922623834367742
+AotListBase impl_aot_export_constructor(_anon_4044922623834367742::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

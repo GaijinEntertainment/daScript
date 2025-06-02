@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_6250184451394513462 {
+namespace _anon_9638349545935827793 {
 
 namespace typemacro_boost { struct TypeMacroMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -465,8 +465,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6250184451394513462
-AotListBase impl_aot_typemacro_boost(_anon_6250184451394513462::registerAotFunctions);
+} // namespace _anon_9638349545935827793
+AotListBase impl_aot_typemacro_boost(_anon_9638349545935827793::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

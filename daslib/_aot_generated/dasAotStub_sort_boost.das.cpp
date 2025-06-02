@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_11772944861949679470 {
+namespace _anon_11636594240437232457 {
 
 namespace sort_boost { struct QsortMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -294,8 +294,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_11772944861949679470
-AotListBase impl_aot_sort_boost(_anon_11772944861949679470::registerAotFunctions);
+} // namespace _anon_11636594240437232457
+AotListBase impl_aot_sort_boost(_anon_11636594240437232457::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

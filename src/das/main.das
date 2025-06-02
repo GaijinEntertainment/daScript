@@ -4,6 +4,8 @@ require ast/standalone_contexts
 require fio
 require strings
 
+require daslib/rtti
+
 
 def updateCOP(var cop : CodeOfPolicies; gen2 : bool; gen2_make : bool) {
     cop.threadlock_context = false

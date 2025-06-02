@@ -64,7 +64,7 @@
 #endif
 
 namespace das {
-namespace _anon_11749142498843910713 {
+namespace _anon_13893283629425188690 {
 
 namespace interfaces { struct InterfaceMacro; };
 namespace interfaces { struct ImplementsMacro; };
@@ -383,8 +383,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_11749142498843910713
-AotListBase impl_aot_interfaces(_anon_11749142498843910713::registerAotFunctions);
+} // namespace _anon_13893283629425188690
+AotListBase impl_aot_interfaces(_anon_13893283629425188690::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

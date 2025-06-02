@@ -88,7 +88,6 @@ namespace das {
     uint64_t getInitSemanticHashWithDep(ProgramPtr program, uint64_t semH);
     uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * context, LineInfoArg * at);
     bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * context, LineInfoArg * at);
-    const char *modGetNamespace(Module *mod, Context * context, LineInfoArg * at);
 
     #include "daScript/builtin/ast_gen.inc"
 

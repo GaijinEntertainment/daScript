@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_16349877435609483093 {
+namespace _anon_16522433618487010647 {
 
 namespace contracts { struct IsAnyType; };
 namespace contracts { struct IsAnyArrayMacro; };
@@ -704,8 +704,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_16349877435609483093
-AotListBase impl_aot_contracts(_anon_16349877435609483093::registerAotFunctions);
+} // namespace _anon_16522433618487010647
+AotListBase impl_aot_contracts(_anon_16522433618487010647::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

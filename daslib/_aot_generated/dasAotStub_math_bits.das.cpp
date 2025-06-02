@@ -42,7 +42,7 @@
 #endif
 
 namespace das {
-namespace _anon_4693018492673999868 {
+namespace _anon_4402346706582421074 {
 
 
 
@@ -332,8 +332,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_4693018492673999868
-AotListBase impl_aot_math_bits(_anon_4693018492673999868::registerAotFunctions);
+} // namespace _anon_4402346706582421074
+AotListBase impl_aot_math_bits(_anon_4402346706582421074::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

@@ -72,7 +72,7 @@
 #endif
 
 namespace das {
-namespace _anon_9589014636127334148 {
+namespace _anon_16223167832467568254 {
 
 namespace debugapi { struct DapiDebugAgent; };
 namespace debugapi { struct DapiArray; };
@@ -487,8 +487,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_9589014636127334148
-AotListBase impl_aot_profiler_boost(_anon_9589014636127334148::registerAotFunctions);
+} // namespace _anon_16223167832467568254
+AotListBase impl_aot_profiler_boost(_anon_16223167832467568254::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

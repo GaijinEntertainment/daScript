@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_5312897576324991706 {
+namespace _anon_482672747374343583 {
 
 namespace macro_boost { struct MacroVerifyMacro; };
 namespace macro_boost { struct CaptureBlock; };
@@ -1921,8 +1921,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_5312897576324991706
-AotListBase impl_aot_macro_boost(_anon_5312897576324991706::registerAotFunctions);
+} // namespace _anon_482672747374343583
+AotListBase impl_aot_macro_boost(_anon_482672747374343583::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

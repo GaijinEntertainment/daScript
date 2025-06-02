@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_8904537178737950522 {
+namespace _anon_13720612599423879104 {
 
 namespace rst { struct DocGroup; };
 namespace rst { struct _lambda_rst_1216_1; };
@@ -3577,8 +3577,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_8904537178737950522
-AotListBase impl_aot_rst(_anon_8904537178737950522::registerAotFunctions);
+} // namespace _anon_13720612599423879104
+AotListBase impl_aot_rst(_anon_13720612599423879104::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

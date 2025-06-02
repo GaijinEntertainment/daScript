@@ -59,7 +59,7 @@
 #endif
 
 namespace das {
-namespace _anon_24307200680844639 {
+namespace _anon_5471868609294405567 {
 
 namespace profiler { struct PerfNode; };
 namespace profiler { struct PerfEvent; };
@@ -1493,8 +1493,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_24307200680844639
-AotListBase impl_aot_profiler(_anon_24307200680844639::registerAotFunctions);
+} // namespace _anon_5471868609294405567
+AotListBase impl_aot_profiler(_anon_5471868609294405567::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

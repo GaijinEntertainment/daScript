@@ -68,7 +68,7 @@
 #endif
 
 namespace das {
-namespace _anon_12350235091001437762 {
+namespace _anon_10671746371999737784 {
 
 namespace faker { struct MonthNameAndDay; };
 namespace faker { struct Faker; };
@@ -2936,8 +2936,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_12350235091001437762
-AotListBase impl_aot_faker(_anon_12350235091001437762::registerAotFunctions);
+} // namespace _anon_10671746371999737784
+AotListBase impl_aot_faker(_anon_10671746371999737784::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

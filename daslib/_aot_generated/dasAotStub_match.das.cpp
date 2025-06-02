@@ -63,7 +63,7 @@
 #endif
 
 namespace das {
-namespace _anon_1549476554659784961 {
+namespace _anon_8664343054493327357 {
 
 namespace match { struct MatchError; };
 namespace match { struct MatchTo; };
@@ -939,8 +939,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_1549476554659784961
-AotListBase impl_aot_match(_anon_1549476554659784961::registerAotFunctions);
+} // namespace _anon_8664343054493327357
+AotListBase impl_aot_match(_anon_8664343054493327357::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

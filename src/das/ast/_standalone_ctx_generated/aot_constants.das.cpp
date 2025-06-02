@@ -45,7 +45,7 @@
 #endif
 
 namespace das {
-namespace _anon_6294035857681967857 {
+namespace _anon_3693657542224700267 {
 
 
 
@@ -65,8 +65,8 @@ void __init_script ( Context * __context__, bool __init_shared )
     das_global<char *,0xdd9e1917ad07c08>(__context__) = ((char *) "#if defined(_MSC_VER)\n#pragma warning(push)\n#pragma warning(disable:4100)   // unreferenced formal parameter\n#pragma warning(disable:4189)   // local variable is initialized but not referenced\n#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n#pragma warning(disable:4114)   // same qualifier more than once\n#pragma warning(disable:4623)   // default constructor was implicitly defined as deleted\n#pragma warning(disable:4946)   // reinterpret_cast used between related classes\n#pragma warning(disable:4269)   // 'const' automatic data initialized with compiler generated default constructor produces unreliable results\n#pragma warning(disable:4555)   // result of expression not used\n#endif\n#if defined(__EDG__)\n#pragma diag_suppress 826\n#elif defined(__GNUC__) && !defined(__clang__)\n#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n#pragma GCC diagnostic ignored \"-Wunused-variable\"\n#pragma GCC diagnostic ignored \"-Wunused-function\"\n#pragma GCC diagnostic ignored \"-Wwrite-strings\"\n#pragma GCC diagnostic ignored \"-Wreturn-local-addr\"\n#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n#pragma GCC diagnostic ignored \"-Wsign-compare\"\n#pragma GCC diagnostic ignored \"-Wsubobject-linkage\"\n#endif\n#if defined(__clang__)\n#pragma clang diagnostic push\n#pragma clang diagnostic ignored \"-Wunused-parameter\"\n#pragma clang diagnostic ignored \"-Wwritable-strings\"\n#pragma clang diagnostic ignored \"-Wunused-variable\"\n#pragma clang diagnostic ignored \"-Wunused-but-set-variable\"\n#pragma clang diagnostic ignored \"-Wunsequenced\"\n#pragma clang diagnostic ignored \"-Wunused-function\"\n#endif\n\n");/*AOT_HEADERS*/
     das_global<char *,0x51562779c28fd648>(__context__) = ((char *) "\n#if defined(_MSC_VER)\n#pragma warning(pop)\n#endif\n#if defined(__EDG__)\n#pragma diag_default 826\n#elif defined(__GNUC__) && !defined(__clang__)\n#pragma GCC diagnostic pop\n#endif\n#if defined(__clang__)\n#pragma clang diagnostic pop\n#endif\n");/*AOT_FOOTER*/
 }
-} // namespace _anon_6294035857681967857
-using namespace _anon_6294035857681967857;
+} // namespace _anon_3693657542224700267
+using namespace _anon_3693657542224700267;
 namespace aot_constants {
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
@@ -102,19 +102,6 @@ Standalone::Standalone() {
     }
     context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();
     context.tabMnLookup->clear();
-     // start totalFunctions
-    struct FunctionStorage { int idx; FunctionInfo funcInfo; FuncInfo* debugInfo; };
-    FunctionStorage usedFunctions[] = {
-    };
-    // end totalFunctions
-    vector<pair<uint64_t, SimFunction*>> id_to_funcs;
-    for (const auto& [index, func_info, debug_info]: usedFunctions) {
-        InitAotFunction(context, &context.functions[index], func_info);
-        context.functions[index].debugInfo = debug_info;
-        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;
-        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);
-        anyPInvoke |= func_info.pinvoke;
-    }
     context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
     context.tabGMnLookup->clear();
     for ( int i=0, is=context.totalVariables; i!=is; ++i ) {
@@ -128,7 +115,6 @@ Standalone::Standalone() {
             (it->second)(context);
         }
     }
-    FillFunction(context, getGlobalAotLibrary(), das::move(id_to_funcs));
     context.runInitScript();
 }
 #ifdef STANDALONE_CONTEXT_TESTS

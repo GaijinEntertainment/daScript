@@ -63,7 +63,7 @@
 #endif
 
 namespace das {
-namespace _anon_2473521450315745184 {
+namespace _anon_15051537126579498552 {
 
 namespace das_source_formatter { struct TokenTemplate; };
 namespace das_source_formatter { struct Token; };
@@ -3145,8 +3145,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_2473521450315745184
-AotListBase impl_aot_das_source_formatter(_anon_2473521450315745184::registerAotFunctions);
+} // namespace _anon_15051537126579498552
+AotListBase impl_aot_das_source_formatter(_anon_15051537126579498552::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

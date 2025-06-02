@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_15119958093377677888 {
+namespace _anon_400908749650889390 {
 
 namespace temp_strings { struct TempStringMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -294,8 +294,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_15119958093377677888
-AotListBase impl_aot_temp_strings(_anon_15119958093377677888::registerAotFunctions);
+} // namespace _anon_400908749650889390
+AotListBase impl_aot_temp_strings(_anon_400908749650889390::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

@@ -873,10 +873,6 @@ namespace das {
         return mod->aotRequire(*ss) != ModuleAotType::no_aot;
     }
 
-    const char *modGetNamespace(Module *mod, Context * context, LineInfoArg * at) {
-        return context->allocateString(mod->getNamespace(), at);
-    }
-
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -1249,9 +1245,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(modAotRequire)>(*this, lib,  "aot_require",
                                                           SideEffects::modifyExternal, "modAotRequire")
             ->args({"mod", "ss", "context", "at"});
-        addExtern<DAS_BIND_FUN(modGetNamespace)>(*this, lib,  "mod_get_namespace",
-                                                          SideEffects::modifyExternal, "modGetNamespace")
-            ->args({"mod", "context", "at"});
         // ast_aot_helpers)
         addExtern<DAS_BIND_FUN(findFieldParent)>(*this, lib,  "find_struct_field_parent",
                                                   SideEffects::modifyExternal, "findFieldParent")

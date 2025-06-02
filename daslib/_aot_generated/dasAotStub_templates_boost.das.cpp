@@ -60,7 +60,7 @@
 #endif
 
 namespace das {
-namespace _anon_1991842875371335381 {
+namespace _anon_4341486352882525503 {
 
 namespace templates_boost { struct Template; };
 namespace templates_boost { struct TemplateVisitor; };
@@ -8459,8 +8459,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_1991842875371335381
-AotListBase impl_aot_templates_boost(_anon_1991842875371335381::registerAotFunctions);
+} // namespace _anon_4341486352882525503
+AotListBase impl_aot_templates_boost(_anon_4341486352882525503::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_3287071679046918670 {
+namespace _anon_2806344086752556668 {
 
 namespace lint { struct LintEverything; };
 namespace lint { struct LintVisitor; };
@@ -4288,8 +4288,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_3287071679046918670
-AotListBase impl_aot_lint(_anon_3287071679046918670::registerAotFunctions);
+} // namespace _anon_2806344086752556668
+AotListBase impl_aot_lint(_anon_2806344086752556668::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

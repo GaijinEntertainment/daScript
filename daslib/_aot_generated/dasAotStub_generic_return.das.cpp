@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_6361949300883520420 {
+namespace _anon_8885012865483054163 {
 
 namespace generic_return { struct GenericReturn; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -333,8 +333,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6361949300883520420
-AotListBase impl_aot_generic_return(_anon_6361949300883520420::registerAotFunctions);
+} // namespace _anon_8885012865483054163
+AotListBase impl_aot_generic_return(_anon_8885012865483054163::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

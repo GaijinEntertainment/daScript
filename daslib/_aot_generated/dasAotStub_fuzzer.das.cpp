@@ -72,7 +72,7 @@
 #endif
 
 namespace das {
-namespace _anon_4698549016771122163 {
+namespace _anon_12534307592900194460 {
 
 namespace ast { struct AstFunctionAnnotation; };
 namespace ast { struct AstBlockAnnotation; };
@@ -842,8 +842,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_4698549016771122163
-AotListBase impl_aot_fuzzer(_anon_4698549016771122163::registerAotFunctions);
+} // namespace _anon_12534307592900194460
+AotListBase impl_aot_fuzzer(_anon_12534307592900194460::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

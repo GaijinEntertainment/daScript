@@ -73,7 +73,7 @@
 #endif
 
 namespace das {
-namespace _anon_9552944293339180959 {
+namespace _anon_15365992797441145073 {
 namespace ast_aot_cpp { struct DescribeConfig; };
 namespace ast_aot_cpp { struct NoAotMarker; };
 namespace ast_aot_cpp { struct PrologueMarker; };
@@ -25487,8 +25487,8 @@ inline ast_aot_cpp::CppAot CppAot_c9f247b4ec64a264 ( Context * __context__ )
         return __mks_970;
     })()));
 }
-} // namespace _anon_9552944293339180959
-using namespace _anon_9552944293339180959;
+} // namespace _anon_15365992797441145073
+using namespace _anon_15365992797441145073;
 namespace ast_aot_cpp {
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
@@ -27570,7 +27570,7 @@ Standalone::Standalone() {
             (it->second)(context);
         }
     }
-    FillFunction(context, getGlobalAotLibrary(), das::move(id_to_funcs));
+    FillFunction(context, getGlobalAotLibrary(), id_to_funcs);
     context.runInitScript();
 }
 #ifdef STANDALONE_CONTEXT_TESTS

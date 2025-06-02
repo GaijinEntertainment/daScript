@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_6451985058328174572 {
+namespace _anon_4650964341042742801 {
 
 namespace ast { struct AstFunctionAnnotation; };
 namespace ast { struct AstBlockAnnotation; };
@@ -385,8 +385,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6451985058328174572
-AotListBase impl_aot_is_local(_anon_6451985058328174572::registerAotFunctions);
+} // namespace _anon_4650964341042742801
+AotListBase impl_aot_is_local(_anon_4650964341042742801::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

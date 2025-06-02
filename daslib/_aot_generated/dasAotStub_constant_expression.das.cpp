@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_18114170142151338240 {
+namespace _anon_15423984470009869090 {
 
 namespace constant_expression { struct ConstExprAnnotation; };
 namespace constant_expression { struct ConstantExpressionMacro; };
@@ -544,8 +544,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_18114170142151338240
-AotListBase impl_aot_constant_expression(_anon_18114170142151338240::registerAotFunctions);
+} // namespace _anon_15423984470009869090
+AotListBase impl_aot_constant_expression(_anon_15423984470009869090::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

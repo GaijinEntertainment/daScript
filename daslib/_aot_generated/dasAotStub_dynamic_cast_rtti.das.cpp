@@ -63,7 +63,7 @@
 #endif
 
 namespace das {
-namespace _anon_11819317874818849392 {
+namespace _anon_1454587660445495388 {
 
 namespace dynamic_cast_rtti { struct ClassAsIs; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -329,8 +329,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_11819317874818849392
-AotListBase impl_aot_dynamic_cast_rtti(_anon_11819317874818849392::registerAotFunctions);
+} // namespace _anon_1454587660445495388
+AotListBase impl_aot_dynamic_cast_rtti(_anon_1454587660445495388::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

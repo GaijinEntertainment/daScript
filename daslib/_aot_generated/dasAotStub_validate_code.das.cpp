@@ -57,7 +57,7 @@
 #endif
 
 namespace das {
-namespace _anon_3566075217189776365 {
+namespace _anon_11015465630845341602 {
 
 namespace validate_code { struct ValidateCompletionVisitor; };
 namespace validate_code { struct VerifyCompletion; };
@@ -1367,8 +1367,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_3566075217189776365
-AotListBase impl_aot_validate_code(_anon_3566075217189776365::registerAotFunctions);
+} // namespace _anon_11015465630845341602
+AotListBase impl_aot_validate_code(_anon_11015465630845341602::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

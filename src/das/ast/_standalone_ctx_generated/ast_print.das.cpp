@@ -60,7 +60,7 @@
 #endif
 
 namespace das {
-namespace _anon_11569707912173886504 {
+namespace _anon_14219106792330018178 {
 namespace ast_print { struct PrintVisitor; };
 namespace ast_print { struct Foo; };
 namespace ast_print { struct _lambda_ast_print_1018_1; };
@@ -9411,8 +9411,8 @@ inline ast_print::Foo Foo_c322fc17f0589093 ( Context * __context__ )
         return __mks_919;
     })()));
 }
-} // namespace _anon_11569707912173886504
-using namespace _anon_11569707912173886504;
+} // namespace _anon_14219106792330018178
+using namespace _anon_14219106792330018178;
 namespace ast_print {
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
@@ -10311,7 +10311,7 @@ Standalone::Standalone() {
             (it->second)(context);
         }
     }
-    FillFunction(context, getGlobalAotLibrary(), das::move(id_to_funcs));
+    FillFunction(context, getGlobalAotLibrary(), id_to_funcs);
     context.runInitScript();
 }
 #ifdef STANDALONE_CONTEXT_TESTS

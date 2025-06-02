@@ -73,7 +73,7 @@
 #endif
 
 namespace das {
-namespace _anon_9194713204017498454 {
+namespace _anon_4914708719382271039 {
 
 namespace live { struct _lambda_live_205_1; };
 namespace live { struct _lambda_live_225_2; };
@@ -3101,8 +3101,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_9194713204017498454
-AotListBase impl_aot_live(_anon_9194713204017498454::registerAotFunctions);
+} // namespace _anon_4914708719382271039
+AotListBase impl_aot_live(_anon_4914708719382271039::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

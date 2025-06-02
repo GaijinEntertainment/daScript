@@ -47,7 +47,7 @@
 #endif
 
 namespace das {
-namespace _anon_15716382286387863283 {
+namespace _anon_15943883118205164767 {
 
 namespace regex { struct ReNode; };
 namespace regex { struct Regex; };
@@ -2432,8 +2432,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_15716382286387863283
-AotListBase impl_aot_regex(_anon_15716382286387863283::registerAotFunctions);
+} // namespace _anon_15943883118205164767
+AotListBase impl_aot_regex(_anon_15943883118205164767::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

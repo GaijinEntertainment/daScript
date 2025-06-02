@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_4104645709522213235 {
+namespace _anon_13848938059129143628 {
 
 namespace ast_used { struct OnlyUsedTypes; };
 namespace ast_used { struct TypeVisitor; };
@@ -4003,8 +4003,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_4104645709522213235
-AotListBase impl_aot_ast_used(_anon_4104645709522213235::registerAotFunctions);
+} // namespace _anon_13848938059129143628
+AotListBase impl_aot_ast_used(_anon_13848938059129143628::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

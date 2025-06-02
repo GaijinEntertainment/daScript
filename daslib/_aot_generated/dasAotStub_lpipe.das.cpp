@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_7607979542825020372 {
+namespace _anon_17398545618972835597 {
 
 namespace lpipe { struct LpipeMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -378,8 +378,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_7607979542825020372
-AotListBase impl_aot_lpipe(_anon_7607979542825020372::registerAotFunctions);
+} // namespace _anon_17398545618972835597
+AotListBase impl_aot_lpipe(_anon_17398545618972835597::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

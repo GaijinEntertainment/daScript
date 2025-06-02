@@ -14,6 +14,10 @@
 
 #include <sstream>
 
+#if !DAS_NO_FILEIO
+#include <filesystem>
+#endif
+
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
 #if _WIN32
@@ -109,7 +113,14 @@ namespace das {
 
 
 #if DAS_NO_FILEIO
+
+
 namespace das {
+
+    string builtin_proximate(const char *path, const char *) {
+        return path;
+    }
+
     #define GENERATE_IO_STUB { context->throw_error_at(at, "%s is not implemented (because DAS_NO_FILEIO is enabled)", __FUNCTION__); }
     void builtin_fprint(const FILE *f, const char *text, Context *context, LineInfoArg *at) GENERATE_IO_STUB
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -196,6 +207,10 @@ namespace das {
         virtual bool isLocal() const override { return true; }
     };
 
+
+    string builtin_proximate(const char *path, const char *base) {
+        return std::filesystem::proximate(path, base).string().c_str();
+    }
 
     void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fprint NULL");

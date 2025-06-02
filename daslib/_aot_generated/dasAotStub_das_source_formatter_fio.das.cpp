@@ -67,7 +67,7 @@
 #endif
 
 namespace das {
-namespace _anon_392450631618770272 {
+namespace _anon_15787026382107470219 {
 
 namespace fio { struct df_header; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -439,8 +439,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_392450631618770272
-AotListBase impl_aot_das_source_formatter_fio(_anon_392450631618770272::registerAotFunctions);
+} // namespace _anon_15787026382107470219
+AotListBase impl_aot_das_source_formatter_fio(_anon_15787026382107470219::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)
