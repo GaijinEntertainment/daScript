@@ -14,6 +14,7 @@ namespace das {
         }
     protected:
         vector<ExprBlock *>     blocks;
+        vector<ExprBlock *>     scopes;
         ProgramPtr              program;
         FunctionPtr             func;
         VariablePtr             cmresVAR;
@@ -45,8 +46,10 @@ namespace das {
             if ( block->isClosure ) {
                 blocks.push_back(block);
             }
+            scopes.push_back(block);
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            scopes.pop_back();
             if ( block->isClosure ) {
                 blocks.pop_back();
             }
@@ -100,6 +103,18 @@ namespace das {
                 } else if ( cmresVAR!=var ) {
                     // TODO:    verify if we need to fail?
                     failedToCMRES = true;
+                }
+            }
+            if ( !failedToCMRES ) {
+                for ( auto blk = scopes.rbegin(); blk!=scopes.rend(); ++blk ) {
+                    if ( (*blk)->isClosure ) {
+                        break;
+                    }
+                    if ( (*blk)->finalList.size() ) {
+                        // if we have final list, we cannot return as CMRES
+                        failedToCMRES = true;
+                        break;
+                    }
                 }
             }
         }
