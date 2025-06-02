@@ -3706,7 +3706,7 @@ namespace das {
         }
     }
 
-    static void writeStandaloneCtor(const StandaloneContextCfg & cfg, pair<string, string> initFunctions, TextWriter &tw, Program &program) {
+    static void writeStandaloneCtor(const StandaloneContextCfg & cfg, const string &initFunctions, TextWriter &tw, Program &program) {
         vector<VariablePtr> lookupVariableTable;
         if ( program.totalVariables ) {
             for (const auto & pm : program.library.getModules() ) {
@@ -3767,28 +3767,24 @@ namespace das {
         tw << "    context.tabMnLookup->clear();\n";
 
 
-        tw << "     // start totalFunctions\n";
-        tw << "    initializer_list<tuple<int, FunctionInfo, FuncInfo*>> initFunctions = {\n";
-        tw << das::move(initFunctions.first);
-        tw << "    };\n";
-        tw << "    initializer_list<tuple<int, FunctionInfo>> extFunctions = {\n";
-        tw << das::move(initFunctions.second);
-        tw << "    };\n";
-        tw << "    // end totalFunctions\n";
+        // MSVC forbide arrays of size 0
+        if (!initFunctions.empty()) {
+            tw << "     // start totalFunctions\n";
+            tw << "    struct FunctionStorage { int idx; FunctionInfo funcInfo; FuncInfo* debugInfo; };\n";
+            tw << "    FunctionStorage usedFunctions[] = {\n";
+            tw << initFunctions;
+            tw << "    };\n";
+            tw << "    // end totalFunctions\n";
+            tw << "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n";
+            tw << "    for (const auto& [index, func_info, debug_info]: usedFunctions) {\n";
+            tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
+            tw << "        context.functions[index].debugInfo = debug_info;\n";
+            tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
+            tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
+            tw << "        anyPInvoke |= func_info.pinvoke;\n";
+            tw << "    }\n";
 
-        tw << "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n";
-        tw << "    for (const auto& [index, func_info, debug_info]: initFunctions) {\n";
-        tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
-        tw << "        context.functions[index].debugInfo = debug_info;\n";
-        tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
-        tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
-        tw << "        anyPInvoke |= func_info.pinvoke;\n";
-        tw << "    }\n";
-        tw << "    for (const auto& [index, func_info]: extFunctions) {\n";
-        tw << "        InitAotFunction(context, &context.functions[index], func_info);\n";
-        tw << "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n";
-        tw << "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n";
-        tw << "    }\n";
+        }
 
         tw << "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n";
         tw << "    context.tabGMnLookup->clear();\n";
@@ -3813,12 +3809,14 @@ namespace das {
             tw << "    }\n";
         }
 
-        tw << "    FillFunction(context, getGlobalAotLibrary(), das::move(id_to_funcs));\n";
+        if (!initFunctions.empty()) {
+            tw << "    FillFunction(context, getGlobalAotLibrary(), id_to_funcs);\n";
+        }
         tw << "    context.runInitScript();\n";
         tw << "}\n";
     }
 
-    static void writeStandaloneContext ( ProgramPtr program, pair<string, string> initFunctions, TextWriter & header, TextWriter & source, const StandaloneContextCfg & cfg ) {
+    static void writeStandaloneContext ( ProgramPtr program, const string &initFunctions, TextWriter & header, TextWriter & source, const StandaloneContextCfg & cfg ) {
 
         header << "\n\n";
         {
@@ -3829,7 +3827,7 @@ namespace das {
         }
 
         writeStandaloneContextMethods(program, source, cfg.class_name + "::", false);
-        writeStandaloneCtor(cfg, das::move(initFunctions), source, *program);
+        writeStandaloneCtor(cfg, initFunctions, source, *program);
 
         source << "#ifdef STANDALONE_CONTEXT_TESTS\n";
         source << "static Context * registerStandaloneTest ( ) {\n";
@@ -3898,13 +3896,13 @@ namespace das {
     };
 
 
-    static void writeRegistration ( TextWriter &header, TextWriter &source, pair<string, string> initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
+    static void writeRegistration ( TextWriter &header, TextWriter &source, const string &initFunctions, ProgramPtr program, const StandaloneContextCfg cfg, Context & context ) {
         source << "using namespace " << program->thisNamespace << ";\n";
         {
             NamespaceGuard guard1(header, cfg.context_name);
             NamespaceGuard guard2(source, cfg.context_name);
             dumpRegisterAot(source, program, context, false);
-            writeStandaloneContext(program, das::move(initFunctions), header, source, cfg);
+            writeStandaloneContext(program, initFunctions, header, source, cfg);
         }
     }
 
@@ -4008,7 +4006,7 @@ namespace das {
      */
     string GetFunctionInfo(FunctionPtr pfun, std::optional<string> info = std::nullopt) {
         TextWriter tw;
-        tw << "        std::make_tuple(" << pfun->index << ", "
+        tw << "        {" << pfun->index << ", "
            << "FunctionInfo(\"" << pfun->name << "\", \""
            << pfun->getMangledName() << "\", "
            << "0x" << HEX << pfun->getMangledNameHash() << DEC << ", "
@@ -4024,32 +4022,23 @@ namespace das {
         if (info) {
             tw << ", &" << info.value();
         }
-        tw << "),\n";
+        tw << "},\n";
         return tw.str();
     }
 
-    pair<string, string> addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, Module* module, AotDebugInfoHelper& helper) {
+    string addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, Module* module, AotDebugInfoHelper& helper) {
         helper.rtti = rtti;
         vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
-        vector<FunctionPtr> externalFunctions;
         for (auto& pfun : fnn) {
-//            if (module == pfun->module) {
                 auto info = helper.makeFunctionDebugInfo(*pfun);
                 lookupFunctionTable.emplace_back(pfun, info);
-//            } else {
-//                externalFunctions.emplace_back(pfun);
-//            }
         }
 
         TextWriter tw;
-        TextWriter tw2;
         for (auto &[pfun, info]: lookupFunctionTable) {
             tw << GetFunctionInfo(pfun, helper.funcInfoName(info));
         }
-        for (auto pfun: externalFunctions) {
-            tw2 << GetFunctionInfo(pfun);
-        }
-        return {tw.str(), tw2.str()};
+        return tw.str();
     }
 
     void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
@@ -4097,7 +4086,7 @@ namespace das {
         {
             NamespaceGuard guard1(source, "das");
             NamespaceGuard guard2(header, "das");
-            pair<string, string> initFunctions;
+            string initFunctions;
             {
                 StandaloneContextGen gen(program, coll, cfg.cross_platform);
                 program->visitModule(gen, mod);
@@ -4113,7 +4102,7 @@ namespace das {
                 source << gen.str();
                 gen.clear();
             }
-            writeRegistration(header, source, das::move(initFunctions), program, cfg, context);
+            writeRegistration(header, source, initFunctions, program, cfg, context);
         }
         source << AOT_FOOTER;
 

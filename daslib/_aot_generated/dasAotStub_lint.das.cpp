@@ -4285,7 +4285,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x30dd909799a7ed48] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&paranoid_e4cab3a68e5d232d>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
 } // namespace _anon_3287071679046918670

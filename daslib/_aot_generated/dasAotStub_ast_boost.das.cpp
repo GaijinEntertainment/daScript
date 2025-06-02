@@ -3603,7 +3603,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x8676129577d44df] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&getVectorOffset_b6d06fc98795c1fe>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
 } // namespace _anon_5985562682135410200

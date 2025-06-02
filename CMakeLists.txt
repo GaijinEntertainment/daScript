@@ -904,12 +904,12 @@ SETUP_LIBDASCRIPT(libDaScript "${AOT_GENERATED_SRC}" "${STANDALONE_SRC}")
 
 if(WIN32)
     if (CMAKE_CONFIGURATION_TYPES)
-        set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/$<CONFIG>/daslang-stage0.exe")
+        set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/$<CONFIG>/daslang.exe")
     else()
-        set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/daslang-stage0.exe")
+        set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/daslang.exe")
     endif()
 else()
-    set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/daslang-stage0")
+    set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/daslang")
 endif()
 add_custom_target(standaloneGeneratedSrc)
 
@@ -963,9 +963,9 @@ if (NOT ${DAS_TOOLS_DISABLED})
         )
     ENDMACRO()
 
-    SETUP_COMPILER_BINARY(daslang-stage0 libDaScriptStage0)
-    set_property(TARGET daslang-stage0 PROPERTY GENERATED TRUE)
-    SETUP_COMPILER_BINARY(daslang libDaScript)
+    SETUP_COMPILER_BINARY(daslang libDaScriptStage0)
+    set_property(TARGET daslang PROPERTY GENERATED TRUE)
+    SETUP_COMPILER_BINARY(daslang-dev libDaScript)
 
     file(GLOB DASLIB_SOURCES
         ${PROJECT_SOURCE_DIR}/daslib/*.das

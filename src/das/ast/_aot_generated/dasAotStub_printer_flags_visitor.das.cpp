@@ -3880,7 +3880,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xb51eb1598d4a3a3e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&SetPrinterFlags_a250df0e5dc6a661>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
 } // namespace _anon_13893221431784477782

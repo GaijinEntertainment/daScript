@@ -206,7 +206,7 @@ void __init_script ( Context * __context__, bool __init_shared )
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
 } // namespace _anon_8448107916725678143

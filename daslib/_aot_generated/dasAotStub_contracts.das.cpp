@@ -701,7 +701,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xcc511aef0177b5ef] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&isYetAnotherVectorTemplate_a260a54ef8aae7f7>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
 } // namespace _anon_16349877435609483093

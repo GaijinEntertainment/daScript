@@ -103,23 +103,17 @@ Standalone::Standalone() {
     context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();
     context.tabMnLookup->clear();
      // start totalFunctions
-    initializer_list<tuple<int, FunctionInfo, FuncInfo*>> initFunctions = {
-    };
-    initializer_list<tuple<int, FunctionInfo>> extFunctions = {
+    struct FunctionStorage { int idx; FunctionInfo funcInfo; FuncInfo* debugInfo; };
+    FunctionStorage usedFunctions[] = {
     };
     // end totalFunctions
     vector<pair<uint64_t, SimFunction*>> id_to_funcs;
-    for (const auto& [index, func_info, debug_info]: initFunctions) {
+    for (const auto& [index, func_info, debug_info]: usedFunctions) {
         InitAotFunction(context, &context.functions[index], func_info);
         context.functions[index].debugInfo = debug_info;
         (*context.tabMnLookup)[func_info.mnh] = context.functions + index;
         id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);
         anyPInvoke |= func_info.pinvoke;
-    }
-    for (const auto& [index, func_info]: extFunctions) {
-        InitAotFunction(context, &context.functions[index], func_info);
-        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;
-        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);
     }
     context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
     context.tabGMnLookup->clear();

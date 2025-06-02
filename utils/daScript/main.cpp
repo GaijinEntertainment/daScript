@@ -106,7 +106,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_
                         // list STUFF
                         tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                         program->registerAotCpp(tw, *pctx, false);
-                        tw << "\tresolveTypeInfoAnnotations();\n";
+                        tw << "    resolveTypeInfoAnnotations();\n";
                         tw << "}\n";
                         tw << "\n";
                         if ( !isAotLib ) tw << "static AotListBase impl(registerAotFunctions);\n";
