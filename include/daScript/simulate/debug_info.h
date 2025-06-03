@@ -147,6 +147,18 @@ namespace das
         vector<FileInfo *>  chain;
     };
 
+    struct NamelessModuleReq {
+        string              moduleName;
+        string              fileName;
+    };
+
+    struct NamelessMismatch {
+        string              moduleName;
+        string              fileName;
+        string              moduleName2;
+        string              fileName2;
+    };
+
     typedef smart_ptr<class FileAccess> FileAccessPtr;
     class FileAccess : public ptr_ref_count {
     public:

@@ -143,8 +143,11 @@ Result transform_syntax(const string &filename, const string content, format::Fo
 
     auto access = get_file_access(nullptr);
     TextPrinter tout;
-    if (getPrerequisits(filename, access, req, missing, circular, notAllowed, chain,
-                        dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules)) {
+    string moduleName;
+    das_hash_map<string, NamelessModuleReq> namelessReq;
+    vector<NamelessMismatch> namelessMismatches;
+    if (getPrerequisits(filename, access, moduleName, req, missing, circular, notAllowed, chain,
+                        dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules)) {
         for (auto &mod: req) {
             if (libGroup.findModule(mod.moduleName)) {
                 continue;
