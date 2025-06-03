@@ -1703,18 +1703,21 @@ namespace das
     // collect script prerequisits
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
+                          string &modName,
                           vector<ModuleInfo> & req,
                           vector<RequireRecord> & missing,
                           vector<RequireRecord> & circular,
                           vector<RequireRecord> & notAllowed,
                           vector<FileInfo *> & chain,
                           das_set<string> & dependencies,
+                          das_hash_map<string, NamelessModuleReq> & namelessReq,
+                          vector<NamelessMismatch> & namelessMismatches,
                           ModuleGroup & libGroup,
                           TextWriter * log,
                           int tab,
                           bool allowPromoted );
 
-    void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected );
+    void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, das::string &modName, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected );
 
 
     // note: this has sifnificant performance implications
