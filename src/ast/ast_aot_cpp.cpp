@@ -3934,7 +3934,7 @@ namespace das {
                 if (pfun->index < 0 || !pfun->used)
                     return;
                 SimFunction * fn = context.getFunction(fni);
-                pfun->hash = getFunctionHash(pfun.get(), fn->code, &context);
+                pfun->hash = getFunctionSignatureHash(pfun.get(), fn->code, &context);
                 fni++;
             });
         }
