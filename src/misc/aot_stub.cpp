@@ -26,7 +26,8 @@ namespace das {
     extern AotListBase impl_aot_utf8_utils;
     extern AotListBase impl_aot_templates_boost;
     extern AotListBase impl_aot_ast_boost;
-    extern AotListBase impl_aot_printer_flags_visitor;
+    // aot das-mode temporary disabled
+    // extern AotListBase impl_aot_printer_flags_visitor;
 
     vector<void *> force_aot_stub() {
         vector<void *> stubs = {
@@ -41,7 +42,8 @@ namespace das {
             &impl_aot_utf8_utils,
             &impl_aot_templates_boost,
             &impl_aot_ast_boost,
-            &impl_aot_printer_flags_visitor,
+            // aot das-mode temporary disabled
+            // &impl_aot_printer_flags_visitor,
         };
         return stubs;
     }

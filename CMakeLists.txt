@@ -733,88 +733,88 @@ list(SORT DAS_LIB_SRC)
 include_directories(include)
 include_directories(3rdparty/fmt/include)
 set(AotDaslibList
-        daslib/algorithm.das
-        daslib/apply.das
-        daslib/apply_in_context.das
-        daslib/archive.das
-        daslib/array_boost.das
-        daslib/assert_once.das
-        daslib/ast_block_to_loop.das
+        # daslib/algorithm.das
+        # daslib/apply.das
+        # daslib/apply_in_context.das
+        # daslib/archive.das
+        # daslib/array_boost.das
+        # daslib/assert_once.das
+        # daslib/ast_block_to_loop.das
         daslib/ast_boost.das
-        daslib/ast_debug.das
-        daslib/ast_used.das
-        daslib/async_boost.das
-        daslib/base64.das
-        daslib/bitfield_trait.das
-        daslib/constant_expression.das
-        daslib/contracts.das
-        daslib/coroutines.das
-        daslib/cpp_bind.das
-        daslib/cpp_gen.das
-        daslib/dap.das
-        daslib/das_source_formatter.das
-        daslib/das_source_formatter_fio.das
-        daslib/debug.das
-        daslib/debug_eval.das
-        daslib/decs_boost.das
-        daslib/decs.das
-        daslib/decs_state.das
-        daslib/defer.das
-        daslib/dynamic_cast_rtti.das
-        daslib/enum_trait.das
-        daslib/export_constructor.das
-        daslib/faker.das
+        # daslib/ast_debug.das
+        # daslib/ast_used.das
+        # daslib/async_boost.das
+        # daslib/base64.das
+        # daslib/bitfield_trait.das
+        # daslib/constant_expression.das
+        # daslib/contracts.das
+        # daslib/coroutines.das
+        # daslib/cpp_bind.das
+        # daslib/cpp_gen.das
+        # daslib/dap.das
+        # daslib/das_source_formatter.das
+        # daslib/das_source_formatter_fio.das
+        # daslib/debug.das
+        # daslib/debug_eval.das
+        # daslib/decs_boost.das
+        # daslib/decs.das
+        # daslib/decs_state.das
+        # daslib/defer.das
+        # daslib/dynamic_cast_rtti.das
+        # daslib/enum_trait.das
+        # daslib/export_constructor.das
+        # daslib/faker.das
         daslib/functional.das
-        daslib/fuzzer.das
-        daslib/generic_return.das
-        daslib/hash_map.das
-        daslib/heartbeat.das
-        daslib/if_not_null.das
-        daslib/instance_function.das
-        daslib/interfaces.das
-        daslib/is_local.das
+        # daslib/fuzzer.das
+        # daslib/generic_return.das
+        # daslib/hash_map.das
+        # daslib/heartbeat.das
+        # daslib/if_not_null.das
+        # daslib/instance_function.das
+        # daslib/interfaces.das
+        # daslib/is_local.das
         # daslib/jobque_boost.das # We need to add it in a stub. Will do it later for all files
         daslib/json_boost.das
         daslib/json.das
         # daslib/just_in_time.das # jit disabled by default
-        daslib/linked_list.das
-        daslib/lint.das
-        daslib/lint_everything.das
+        # daslib/linked_list.das
+        # daslib/lint.das
+        # daslib/lint_everything.das
         # daslib/live.das # depends on filesystem
-        daslib/lpipe.das
-        daslib/macro_boost.das
-        daslib/match.das
-        daslib/math_bits.das
+        # daslib/lpipe.das
+        # daslib/macro_boost.das
+        # daslib/match.das
+        # daslib/math_bits.das
         daslib/math_boost.das
-        daslib/profiler_boost.das
-        daslib/profiler.das
+        # daslib/profiler_boost.das
+        # daslib/profiler.das
         daslib/random.das
         # daslib/raster_boost.das # fails on windows
-        daslib/refactor.das
+        # daslib/refactor.das
         daslib/regex_boost.das
         daslib/regex.das
-        daslib/remove_call_args.das
-        daslib/rst_comment.das
+        # daslib/remove_call_args.das
+        # daslib/rst_comment.das
         # daslib/rst.das # depends on filesystem
-        daslib/safe_addr.das
-        daslib/soa.das
-        daslib/sort_boost.das
-        daslib/spoof.das
-        daslib/static_let.das
-        daslib/stringify.das
+        # daslib/safe_addr.das
+        # daslib/soa.das
+        # daslib/sort_boost.das
+        # daslib/spoof.das
+        # daslib/static_let.das
+        # daslib/stringify.das
         daslib/strings_boost.das
-        daslib/stub.das
+        # daslib/stub.das
         daslib/templates_boost.das
-        daslib/templates.das
-        daslib/temp_strings.das
-        daslib/typemacro_boost.das
-        daslib/type_traits.das
-        daslib/unroll.das
-        daslib/uriparser_boost.das
+        # daslib/templates.das
+        # daslib/temp_strings.das
+        # daslib/typemacro_boost.das
+        # daslib/type_traits.das
+        # daslib/unroll.das
+        # daslib/uriparser_boost.das
         daslib/utf8_utils.das
-        daslib/validate_code.das
+        # daslib/validate_code.das
 
-        src/das/ast/printer_flags_visitor.das
+        # src/das/ast/printer_flags_visitor.das # aot das-mode temporary disabled
 )
 
 SET(AOT_GENERATED_SRC)
@@ -842,10 +842,11 @@ add_custom_target(dasAotStub)
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 
 set(StandaloneFilesList
-    src/das/ast/ast_print.das
-    src/das/ast/ast_aot_cpp.das
-    src/das/ast/aot_constants.das
-    src/das/ast/standalone_contexts.das
+    # # aot das-mode temporary disabled
+    # src/das/ast/ast_print.das
+    # src/das/ast/ast_aot_cpp.das
+    # src/das/ast/aot_constants.das
+    # src/das/ast/standalone_contexts.das
 )
 
 SET(STANDALONE_SRC)
