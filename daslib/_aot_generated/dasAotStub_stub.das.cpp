@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_11321835919814610152 {
+namespace _anon_7767938433161014479 {
 
 namespace stub { struct TemplateMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -294,11 +294,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x8b5860022b0341ea] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_f03a20a7813130ec>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_11321835919814610152
-AotListBase impl_aot_stub(_anon_11321835919814610152::registerAotFunctions);
+} // namespace _anon_7767938433161014479
+AotListBase impl_aot_stub(_anon_7767938433161014479::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

@@ -46,7 +46,7 @@
 #endif
 
 namespace das {
-namespace _anon_3861862664889125085 {
+namespace _anon_16518193956032479306 {
 
 // unused enumeration ConversionResult
 extern TypeInfo __type_info__5673b06bfec20c2c;
@@ -422,11 +422,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x80367ae3d8465b8f] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&replace_multiple_d0cf6948c5333e25>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_3861862664889125085
-AotListBase impl_aot_strings_boost(_anon_3861862664889125085::registerAotFunctions);
+} // namespace _anon_16518193956032479306
+AotListBase impl_aot_strings_boost(_anon_16518193956032479306::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

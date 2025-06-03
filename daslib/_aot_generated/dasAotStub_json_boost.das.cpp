@@ -65,7 +65,7 @@
 #endif
 
 namespace das {
-namespace _anon_8279526941970859232 {
+namespace _anon_4702729321666677987 {
 
 namespace json_boost { struct BetterJsonMacro; };
 namespace json_boost { struct JsonReader; };
@@ -788,11 +788,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x432b947077ba23da] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&JV_8425ea1d753a21fb>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_8279526941970859232
-AotListBase impl_aot_json_boost(_anon_8279526941970859232::registerAotFunctions);
+} // namespace _anon_4702729321666677987
+AotListBase impl_aot_json_boost(_anon_4702729321666677987::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

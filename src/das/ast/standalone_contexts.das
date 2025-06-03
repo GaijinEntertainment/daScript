@@ -141,20 +141,24 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     write(tw, "    }\n");
     write(tw, "    context.tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();\n");
     write(tw, "    context.tabMnLookup->clear();\n");
-    write(tw, "     // start totalFunctions\n");
-    write(tw, "    initializer_list<tuple<int, FunctionInfo, FuncInfo*>> initFunctions = \{\n");
-    write(tw, "{initFunctions}");
-    write(tw, "    \};\n");
-    write(tw, "    // end totalFunctions\n");
 
-    write(tw, " vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n");
-    write(tw, "    for (const auto& [index, func_info, debug_info]: initFunctions) \{\n");
-    write(tw, "        InitAotFunction(context, &context.functions[index], func_info);\n");
-    write(tw, "        context.functions[index].debugInfo = debug_info;\n");
-    write(tw, "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n");
-    write(tw, "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n");
-    write(tw, "        anyPInvoke |= func_info.pinvoke;\n");
-    write(tw, "    \}\n");
+    // MSVC forbide arrays of size 0
+    if (initFunctions |> length() != 0) {
+        write(tw, "     // start totalFunctions\n");
+        write(tw, "    struct FunctionStorage \{ int idx; FunctionInfo funcInfo; FuncInfo* debugInfo; \};\n");
+        write(tw, "    FunctionStorage usedFunctions[] = \{\n");
+        write(tw, "{initFunctions}");
+        write(tw, "    \};\n");
+        write(tw, "    // end totalFunctions\n");
+        write(tw, "    vector<pair<uint64_t, SimFunction*>> id_to_funcs;\n");
+        write(tw, "    for (const auto& [index, func_info, debug_info]: usedFunctions) \{\n");
+        write(tw, "        InitAotFunction(context, &context.functions[index], func_info);\n");
+        write(tw, "        context.functions[index].debugInfo = debug_info;\n");
+        write(tw, "        (*context.tabMnLookup)[func_info.mnh] = context.functions + index;\n");
+        write(tw, "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n");
+        write(tw, "        anyPInvoke |= func_info.pinvoke;\n");
+        write(tw, "    \}\n");
+    }
 
     write(tw, "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n");
     write(tw, "    context.tabGMnLookup->clear();\n");
@@ -179,9 +183,11 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         write(tw, "    \}\n");
     }
 
-    write(tw, " FillFunction(context, getGlobalAotLibrary(), das::move(id_to_funcs));\n");
-    write(tw, "    context.runInitScript();\n");
-    write(tw, "\}\n");
+    if (initFunctions |> length() != 0) {
+        write(tw, " FillFunction(context, getGlobalAotLibrary(), id_to_funcs);\n");
+        write(tw, "    context.runInitScript();\n");
+        write(tw, "\}\n");
+    }
 }
 
 def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var header : StringBuilderWriter, var source : StringBuilderWriter; cfg : StandaloneContextCfg) {
@@ -304,7 +310,7 @@ def GetFunctionInfo(pfun : Function?, info : string) {
                     "{pfun._module.moduleFlags.promoted}",
                     "{pfun.result.isRefType && !pfun.result.flags.ref}",
                     "{pfun.moreFlags.pinvoke}"]
-        write(tw, "        std::make_tuple({pfun.index}, FunctionInfo({args|>join(", ")})), &{info}),\n");
+        write(tw, "        \{{pfun.index}, FunctionInfo({args|>join(", ")}), &{info}\},\n");
     }
 }
 

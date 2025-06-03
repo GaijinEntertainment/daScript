@@ -59,7 +59,7 @@
 #endif
 
 namespace das {
-namespace _anon_24307200680844639 {
+namespace _anon_5471868609294405567 {
 
 namespace profiler { struct PerfNode; };
 namespace profiler { struct PerfEvent; };
@@ -1490,11 +1490,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_24307200680844639
-AotListBase impl_aot_profiler(_anon_24307200680844639::registerAotFunctions);
+} // namespace _anon_5471868609294405567
+AotListBase impl_aot_profiler(_anon_5471868609294405567::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

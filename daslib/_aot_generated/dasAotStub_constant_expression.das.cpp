@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_18114170142151338240 {
+namespace _anon_15423984470009869090 {
 
 namespace constant_expression { struct ConstExprAnnotation; };
 namespace constant_expression { struct ConstantExpressionMacro; };
@@ -541,11 +541,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xda5779b4a6f3d795] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickclone_functionTick17084718524013848691_8f065c03257702c5>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_18114170142151338240
-AotListBase impl_aot_constant_expression(_anon_18114170142151338240::registerAotFunctions);
+} // namespace _anon_15423984470009869090
+AotListBase impl_aot_constant_expression(_anon_15423984470009869090::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

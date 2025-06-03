@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_7939451368259187062 {
+namespace _anon_584053097784672735 {
 
 namespace defer { struct DeferMacro; };
 namespace defer { struct DeferDeleteMacro; };
@@ -394,11 +394,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_7939451368259187062
-AotListBase impl_aot_defer(_anon_7939451368259187062::registerAotFunctions);
+} // namespace _anon_584053097784672735
+AotListBase impl_aot_defer(_anon_584053097784672735::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

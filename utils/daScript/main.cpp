@@ -5,8 +5,9 @@
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
 
-#include "../../src/das/ast/_standalone_ctx_generated/ast_aot_cpp.das.h"
-#include "../../src/das/ast/_standalone_ctx_generated/standalone_contexts.das.h"
+// aot das-mode temporary disabled
+// #include "../../src/das/ast/_standalone_ctx_generated/ast_aot_cpp.das.h"
+// #include "../../src/das/ast/_standalone_ctx_generated/standalone_contexts.das.h"
 
 using namespace das;
 
@@ -106,7 +107,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_
                         // list STUFF
                         tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
                         program->registerAotCpp(tw, *pctx, false);
-                        tw << "\tresolveTypeInfoAnnotations();\n";
+                        tw << "    resolveTypeInfoAnnotations();\n";
                         tw << "}\n";
                         tw << "\n";
                         if ( !isAotLib ) tw << "static AotListBase impl(registerAotFunctions);\n";
@@ -263,8 +264,10 @@ int das_aot_main ( int argc, char * argv[] ) {
     bool compiled = false;
     if ( standaloneContext ) {
         if (das_mode) {
-            standalone_contexts::Standalone st;
-            st.standalone_aot(argv[2], argv[3], isAotLib, cross_platform, paranoid_validation, getPolicies());
+            // aot das-mode temporary disabled
+            DAS_FATAL_LOG("aot das mode is not ready");
+            // standalone_contexts::Standalone st;
+            // st.standalone_aot(argv[2], argv[3], isAotLib, cross_platform, paranoid_validation, getPolicies());
         } else {
             StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
             cfg.cross_platform = cross_platform;
@@ -272,11 +275,13 @@ int das_aot_main ( int argc, char * argv[] ) {
         }
     } else {
         if (das_mode) {
-            ast_aot_cpp::Standalone st;
-            auto res = st.aot(argv[2], isAotLib, paranoid_validation, cross_platform, getPolicies());
-            TextPrinter printer;
-            saveToFile(printer, argv[3], res);
-            compiled = true;
+            // aot das-mode temporary disabled
+            DAS_FATAL_LOG("aot das mode is not ready");
+            // ast_aot_cpp::Standalone st;
+            // auto res = st.aot(argv[2], isAotLib, paranoid_validation, cross_platform, getPolicies());
+            // TextPrinter printer;
+            // saveToFile(printer, argv[3], res);
+            // compiled = true;
         } else {
             compiled = compile(argv[2], argv[3], dryRun, cross_platform);
         }
@@ -418,21 +423,10 @@ namespace das {
 
 }
 
-vector<void *> force_aot_stub() {
-    vector<void *> stubs = {
-        &impl_aot_ast_boost,
-        &impl_aot_functional,
-        &impl_aot_math_boost,
-        &impl_aot_utf8_utils,
-        &impl_aot_templates_boost,
-        &impl_aot_printer_flags_visitor,
-    };
-    return stubs;
-}
-
 int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool isArgAot = false;
-    force_aot_stub();
+    // // aot das-mode temporary disabled
+    // force_aot_stub();
     if (argc > 1) {
         isArgAot = strcmp(argv[1],"-aot")==0;
         isAotLib = !isArgAot && strcmp(argv[1],"-aotlib")==0;

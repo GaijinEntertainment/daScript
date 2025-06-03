@@ -57,7 +57,7 @@
 #endif
 
 namespace das {
-namespace _anon_3566075217189776365 {
+namespace _anon_11015465630845341602 {
 
 namespace validate_code { struct ValidateCompletionVisitor; };
 namespace validate_code { struct VerifyCompletion; };
@@ -1364,11 +1364,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x4910b7a8b6df7e72] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_bc2bec89bac43d06>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_3566075217189776365
-AotListBase impl_aot_validate_code(_anon_3566075217189776365::registerAotFunctions);
+} // namespace _anon_11015465630845341602
+AotListBase impl_aot_validate_code(_anon_11015465630845341602::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

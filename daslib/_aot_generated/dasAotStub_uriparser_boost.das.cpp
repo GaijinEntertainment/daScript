@@ -65,7 +65,7 @@
 #endif
 
 namespace das {
-namespace _anon_7342041789073712273 {
+namespace _anon_17180201486377726035 {
 
 namespace ast { struct AstFunctionAnnotation; };
 namespace ast { struct AstBlockAnnotation; };
@@ -624,11 +624,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xd4c0fd34e01c1fc9] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&uri_compose_f6e4390f66d274f0>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_7342041789073712273
-AotListBase impl_aot_uriparser_boost(_anon_7342041789073712273::registerAotFunctions);
+} // namespace _anon_17180201486377726035
+AotListBase impl_aot_uriparser_boost(_anon_17180201486377726035::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

@@ -251,7 +251,8 @@ namespace das {
             d_substitureRef ? CpptSubstitureRef::yes : CpptSubstitureRef::no,
             d_skipRef ? CpptSkipRef::yes : CpptSkipRef::no,
             d_skipConst ? CpptSkipConst::yes : CpptSkipConst::no,
-            d_redundantConst ? CpptRedundantConst::yes : CpptRedundantConst::no, d_ChooseSmartPtr),at);
+            d_redundantConst ? CpptRedundantConst::yes : CpptRedundantConst::no,
+            d_ChooseSmartPtr ? ChooseSmartPtr::yes : ChooseSmartPtr::no),at);
     }
 
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at ) {
@@ -872,10 +873,6 @@ namespace das {
         return mod->aotRequire(*ss) != ModuleAotType::no_aot;
     }
 
-    const char *modGetNamespace(Module *mod, Context * context, LineInfoArg * at) {
-        return context->allocateString(mod->getNamespace(), at);
-    }
-
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -1248,9 +1245,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(modAotRequire)>(*this, lib,  "aot_require",
                                                           SideEffects::modifyExternal, "modAotRequire")
             ->args({"mod", "ss", "context", "at"});
-        addExtern<DAS_BIND_FUN(modGetNamespace)>(*this, lib,  "mod_get_namespace",
-                                                          SideEffects::modifyExternal, "modGetNamespace")
-            ->args({"mod", "context", "at"});
         // ast_aot_helpers)
         addExtern<DAS_BIND_FUN(findFieldParent)>(*this, lib,  "find_struct_field_parent",
                                                   SideEffects::modifyExternal, "findFieldParent")

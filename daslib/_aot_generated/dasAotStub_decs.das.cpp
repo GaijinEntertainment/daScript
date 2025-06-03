@@ -66,7 +66,7 @@
 #endif
 
 namespace das {
-namespace _anon_16286561896510742313 {
+namespace _anon_1923401655633431997 {
 
 namespace decs { struct CTypeInfo; };
 namespace decs { struct Component; };
@@ -12604,11 +12604,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_16286561896510742313
-AotListBase impl_aot_decs(_anon_16286561896510742313::registerAotFunctions);
+} // namespace _anon_1923401655633431997
+AotListBase impl_aot_decs(_anon_1923401655633431997::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

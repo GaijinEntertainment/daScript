@@ -57,7 +57,7 @@
 #endif
 
 namespace das {
-namespace _anon_5092117997168752122 {
+namespace _anon_5017419181368256388 {
 
 namespace regex_boost { struct RegexReader; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -395,11 +395,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x7e949fe6fbaa5320] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&finalize_53d748a680ec146b>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_5092117997168752122
-AotListBase impl_aot_regex_boost(_anon_5092117997168752122::registerAotFunctions);
+} // namespace _anon_5017419181368256388
+AotListBase impl_aot_regex_boost(_anon_5017419181368256388::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

@@ -71,7 +71,7 @@
 #endif
 
 namespace das {
-namespace _anon_7594886034964418406 {
+namespace _anon_4947418327762536717 {
 
 namespace cpp_gen { struct ExEnum; };
 namespace cpp_gen { struct Scope; };
@@ -8319,11 +8319,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_7594886034964418406
-AotListBase impl_aot_cpp_gen(_anon_7594886034964418406::registerAotFunctions);
+} // namespace _anon_4947418327762536717
+AotListBase impl_aot_cpp_gen(_anon_4947418327762536717::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

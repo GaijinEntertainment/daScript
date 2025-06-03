@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_11306785625934837114 {
+namespace _anon_250365952365424398 {
 
 namespace templates { struct DecltypeMacro; };
 namespace templates { struct DecltypeNoRefMacro; };
@@ -391,11 +391,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x606ceac33cc83caf] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_index_ifTick4436313710217261332_4b8aca0798d52ea>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_11306785625934837114
-AotListBase impl_aot_templates(_anon_11306785625934837114::registerAotFunctions);
+} // namespace _anon_250365952365424398
+AotListBase impl_aot_templates(_anon_250365952365424398::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

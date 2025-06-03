@@ -60,7 +60,7 @@
 #endif
 
 namespace das {
-namespace _anon_1991842875371335381 {
+namespace _anon_4341486352882525503 {
 
 namespace templates_boost { struct Template; };
 namespace templates_boost { struct TemplateVisitor; };
@@ -8456,11 +8456,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xbabcb540844b0280] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&modify_to_class_member_f4f1aba7b4f0e293>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_1991842875371335381
-AotListBase impl_aot_templates_boost(_anon_1991842875371335381::registerAotFunctions);
+} // namespace _anon_4341486352882525503
+AotListBase impl_aot_templates_boost(_anon_4341486352882525503::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

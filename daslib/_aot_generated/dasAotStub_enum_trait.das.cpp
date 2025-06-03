@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_4389962189540919024 {
+namespace _anon_4562643193483458131 {
 
 namespace enum_trait { struct TypeInfoGetEnumLength; };
 namespace enum_trait { struct TypeInfoGetEnumNames; };
@@ -227,11 +227,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x2ec7a324528feed3] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickiter_rangeTick1065493836214144684_7880c0bbee885dd8>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_4389962189540919024
-AotListBase impl_aot_enum_trait(_anon_4389962189540919024::registerAotFunctions);
+} // namespace _anon_4562643193483458131
+AotListBase impl_aot_enum_trait(_anon_4562643193483458131::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

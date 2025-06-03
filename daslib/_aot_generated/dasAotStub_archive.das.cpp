@@ -64,7 +64,7 @@
 #endif
 
 namespace das {
-namespace _anon_15754215596584572946 {
+namespace _anon_880951671933521401 {
 
 namespace archive { struct Serializer; };
 namespace archive { struct MemSerializer; };
@@ -765,11 +765,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xc8758706775393ff] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&Serializer_3a8e571f3a055b73>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_15754215596584572946
-AotListBase impl_aot_archive(_anon_15754215596584572946::registerAotFunctions);
+} // namespace _anon_880951671933521401
+AotListBase impl_aot_archive(_anon_880951671933521401::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

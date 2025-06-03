@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_15496481978067104778 {
+namespace _anon_9518341467928943131 {
 
 namespace heartbeat { struct AddHeartbeat; };
 namespace heartbeat { struct HeartbeatPass; };
@@ -952,11 +952,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_15496481978067104778
-AotListBase impl_aot_heartbeat(_anon_15496481978067104778::registerAotFunctions);
+} // namespace _anon_9518341467928943131
+AotListBase impl_aot_heartbeat(_anon_9518341467928943131::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

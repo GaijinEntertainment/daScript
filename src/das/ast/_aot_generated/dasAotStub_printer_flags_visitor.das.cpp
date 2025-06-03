@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_13893221431784477782 {
+namespace _anon_11656174562592004024 {
 
 namespace printer_flags_visitor { struct SetPrinterFlags; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -3880,11 +3880,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xb51eb1598d4a3a3e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&SetPrinterFlags_a250df0e5dc6a661>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_13893221431784477782
-AotListBase impl_aot_printer_flags_visitor(_anon_13893221431784477782::registerAotFunctions);
+} // namespace _anon_11656174562592004024
+AotListBase impl_aot_printer_flags_visitor(_anon_11656174562592004024::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

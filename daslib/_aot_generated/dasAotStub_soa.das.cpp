@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_3789683567822028020 {
+namespace _anon_10623123283350456020 {
 
 namespace soa { struct SOA_INDEX; };
 namespace soa { struct SoaCallMacro; };
@@ -4186,11 +4186,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_3789683567822028020
-AotListBase impl_aot_soa(_anon_3789683567822028020::registerAotFunctions);
+} // namespace _anon_10623123283350456020
+AotListBase impl_aot_soa(_anon_10623123283350456020::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

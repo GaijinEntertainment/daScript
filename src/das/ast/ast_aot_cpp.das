@@ -3484,7 +3484,7 @@ def dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
             write(*aotVisitor.ss, "namespace {aotModuleName(ps._module)} \{ struct {aotStructName(ps.get_ptr())}; \};\n");
         });
         pm |> for_each_module_function($(fn) {
-            // Is some functions from another module used we need to declare this type.
+            // If some functions from another module used we need to declare this type.
             // Because we have to add debug info about this function signature in our module
             if (fn.index < 0 || !fn.flags.used)
                 return ;
@@ -3738,7 +3738,7 @@ def aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : b
                     }
                     write(writer, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
                     registerAotCpp(unsafe(addr(writer)), program, *pctx, cross_platform, false);
-                    write(writer, "\tresolveTypeInfoAnnotations();\n");
+                    write(writer, "    resolveTypeInfoAnnotations();\n");
                     write(writer, "}\n");
                     write(writer, "\n");
                     if (!isAotLib) write(writer, "static AotListBase impl(registerAotFunctions);\n");

@@ -674,7 +674,7 @@ namespace das
                 auto ann = make_smart<ManagedVectorAnnotation<VT>>(declN,const_cast<ModuleLibrary &>(library));
                 ann->cppName = "das::vector<" + describeCppType(declT, CpptSubstitureRef::no,
                                                                 CpptSkipRef::no, CpptSkipConst::no,
-                                                                CpptRedundantConst::yes, true) + ">";
+                                                                CpptRedundantConst::yes, ChooseSmartPtr::yes) + ">";
                 auto mod = library.front();
                 mod->addAnnotation(ann);
                 registerVectorFunctions<vector<TT>>::init(mod,library,

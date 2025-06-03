@@ -57,7 +57,7 @@
 #endif
 
 namespace das {
-namespace _anon_15819715509097459901 {
+namespace _anon_14173196563031903885 {
 
 namespace lint_everything { struct LintEverythingGlobal; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -202,11 +202,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x583126906338c7c1] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_24070928e166a5ed>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_15819715509097459901
-AotListBase impl_aot_lint_everything(_anon_15819715509097459901::registerAotFunctions);
+} // namespace _anon_14173196563031903885
+AotListBase impl_aot_lint_everything(_anon_14173196563031903885::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

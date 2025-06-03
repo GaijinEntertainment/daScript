@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_7066115534050122989 {
+namespace _anon_5632098080777272610 {
 
 namespace type_traits { struct TypeInfoGetFieldsNum; };
 namespace type_traits { struct TypeInfoHasProperty; };
@@ -355,11 +355,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xa08ccd8311caaf69] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick5807679485210906136_aebefa62d4d88f1f>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_7066115534050122989
-AotListBase impl_aot_type_traits(_anon_7066115534050122989::registerAotFunctions);
+} // namespace _anon_5632098080777272610
+AotListBase impl_aot_type_traits(_anon_5632098080777272610::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

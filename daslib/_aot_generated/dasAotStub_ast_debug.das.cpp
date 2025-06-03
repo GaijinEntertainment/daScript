@@ -58,7 +58,7 @@
 #endif
 
 namespace das {
-namespace _anon_13117299046523879150 {
+namespace _anon_1280768645085455701 {
 
 namespace ast_debug { struct SampleStackWalker; };
 namespace ast_debug { struct ContextStateAgent; };
@@ -731,7 +731,7 @@ inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_1d28eff7d398c8
 inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_515c5b2443eb4ef0 ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_57_42, char * const  __what_rename_at_57_43 );
 inline void _Funcast_debugTickdescribe_argTick8826490271305289944_efb00f1647d906b2 ( Context * __context__, Context & __ctxid_rename_at_74_44, VarInfo const  & __vinfo_rename_at_74_45, void * const  __arg_rename_at_74_46 );
 inline void _Funcast_debugTickdescribe_argTick8826490271305289944_af045ee043c050cf ( Context * __context__, Context & __ctxid_rename_at_74_48, LocalVariableInfo const  & __vinfo_rename_at_74_49, void * const  __arg_rename_at_74_50 );
-inline smart_ptr_raw<StackWalker> _FuncdebugapiTickmake_stack_walkerTick10101906578839871846_229ea554e31d57ca ( Context * __context__, ast_debug::SampleStackWalker * const  __classPtr_rename_at_215_52 );
+inline smart_ptr_raw<StackWalker> _FuncdebugapiTickmake_stack_walkerTick10101906578839871846_229ea554e31d57ca ( Context * __context__, ast_debug::SampleStackWalker * const  __classPtr_rename_at_216_52 );
 inline void finalize_500fce7609128ffb ( Context * __context__, ast_debug::SampleStackWalker * & ____this_rename_at_143_54 );
 inline void finalize_5733f4cfa043e920 ( Context * __context__, ast_debug::SampleStackWalker & ____this_rename_at_103_56 );
 inline void _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_3e1c20224cd19f2e ( Context * __context__, ast_debug::ContextStateAgent * __agentPtr_rename_at_37_57, char * const  __category_rename_at_37_58 );
@@ -940,10 +940,10 @@ inline void _Funcast_debugTickdescribe_argTick8826490271305289944_af045ee043c050
     };
 }
 
-inline smart_ptr_raw<StackWalker> _FuncdebugapiTickmake_stack_walkerTick10101906578839871846_229ea554e31d57ca ( Context * __context__, ast_debug::SampleStackWalker * const  __classPtr_rename_at_215_52 )
+inline smart_ptr_raw<StackWalker> _FuncdebugapiTickmake_stack_walkerTick10101906578839871846_229ea554e31d57ca ( Context * __context__, ast_debug::SampleStackWalker * const  __classPtr_rename_at_216_52 )
 {
-    StructInfo const  * __classInfo_rename_at_217_53 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_c81a84221fb6bad2(__context__,das_deref(__context__,__classPtr_rename_at_215_52)));
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<StackWalker>>::cast(makeStackWalker(das_auto_cast<void * const >::cast(__classPtr_rename_at_215_52),__classInfo_rename_at_217_53,__context__));
+    StructInfo const  * __classInfo_rename_at_218_53 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_c81a84221fb6bad2(__context__,das_deref(__context__,__classPtr_rename_at_216_52)));
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<StackWalker>>::cast(makeStackWalker(das_auto_cast<void * const >::cast(__classPtr_rename_at_216_52),__classInfo_rename_at_218_53,__context__));
 }
 
 inline void finalize_500fce7609128ffb ( Context * __context__, ast_debug::SampleStackWalker * & ____this_rename_at_143_54 )
@@ -1172,11 +1172,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xbddc52318f02e163] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&SampleStackWalker_b9ed6b4c0fa80af2>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_13117299046523879150
-AotListBase impl_aot_ast_debug(_anon_13117299046523879150::registerAotFunctions);
+} // namespace _anon_1280768645085455701
+AotListBase impl_aot_ast_debug(_anon_1280768645085455701::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

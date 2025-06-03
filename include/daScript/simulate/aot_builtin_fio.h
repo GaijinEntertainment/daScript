@@ -45,6 +45,8 @@ namespace das {
     };
 #endif
 
+    string builtin_proximate(const char *path, const char *base);
+
     const FILE * builtin_fopen  ( const char * name, const char * mode );
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at );
     void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at );

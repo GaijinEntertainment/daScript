@@ -48,7 +48,6 @@ def is_shared_expr(expr : ExpressionPtr) {
     } elif (expr is ExprCall) {
         let ecall = expr as ExprCall
         let func = ecall.func;
-        print("ecall `{func != null ? string(func.name) : "null"}` `{func != null ? string(func._module.name) : "null"}`\n")
         if (func != null && func._module != null &&
             (string(func.name).starts_with("builtin`keys`") || string(func.name).starts_with("builtin`values`"))) {
             return is_shared_expr(ecall.arguments[0])

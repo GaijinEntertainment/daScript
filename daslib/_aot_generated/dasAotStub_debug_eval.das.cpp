@@ -67,7 +67,7 @@
 #endif
 
 namespace das {
-namespace _anon_10652823101843338475 {
+namespace _anon_4115774075089407688 {
 
 namespace debug_eval { struct Result; };
 namespace debug_eval { struct TokenStream; };
@@ -1918,11 +1918,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_10652823101843338475
-AotListBase impl_aot_debug_eval(_anon_10652823101843338475::registerAotFunctions);
+} // namespace _anon_4115774075089407688
+AotListBase impl_aot_debug_eval(_anon_4115774075089407688::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

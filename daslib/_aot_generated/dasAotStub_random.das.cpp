@@ -44,7 +44,7 @@
 #endif
 
 namespace das {
-namespace _anon_2421549459041438271 {
+namespace _anon_14906104661355171097 {
 
 namespace random { struct _lambda_random_111_1; };
 namespace random {
@@ -200,11 +200,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_2421549459041438271
-AotListBase impl_aot_random(_anon_2421549459041438271::registerAotFunctions);
+} // namespace _anon_14906104661355171097
+AotListBase impl_aot_random(_anon_14906104661355171097::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_9236909344651662891 {
+namespace _anon_17937824475781884552 {
 
 namespace unroll { struct UnrollMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -334,11 +334,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_9236909344651662891
-AotListBase impl_aot_unroll(_anon_9236909344651662891::registerAotFunctions);
+} // namespace _anon_17937824475781884552
+AotListBase impl_aot_unroll(_anon_17937824475781884552::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

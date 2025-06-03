@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_6980938829256190596 {
+namespace _anon_602082124837720381 {
 
 namespace async_boost { struct AwaitMacro; };
 namespace async_boost { struct AwaitCoroutineMacro; };
@@ -1247,11 +1247,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6980938829256190596
-AotListBase impl_aot_async_boost(_anon_6980938829256190596::registerAotFunctions);
+} // namespace _anon_602082124837720381
+AotListBase impl_aot_async_boost(_anon_602082124837720381::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

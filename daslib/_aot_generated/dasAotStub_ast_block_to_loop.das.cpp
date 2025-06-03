@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_6959327089906712895 {
+namespace _anon_9086548006838625885 {
 
 namespace ast_block_to_loop { struct B2LVisitor; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -861,11 +861,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xdd91932d305064d5] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_d9214d1fc8ae3a62>>();
     };
-	resolveTypeInfoAnnotations();
+    resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_6959327089906712895
-AotListBase impl_aot_ast_block_to_loop(_anon_6959327089906712895::registerAotFunctions);
+} // namespace _anon_9086548006838625885
+AotListBase impl_aot_ast_block_to_loop(_anon_9086548006838625885::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)
