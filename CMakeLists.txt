@@ -780,7 +780,7 @@ set(AotDaslibList
         daslib/linked_list.das
         daslib/lint.das
         daslib/lint_everything.das
-        daslib/live.das
+        # daslib/live.das # depends on filesystem
         daslib/lpipe.das
         daslib/macro_boost.das
         daslib/match.das
@@ -795,7 +795,7 @@ set(AotDaslibList
         daslib/regex.das
         daslib/remove_call_args.das
         daslib/rst_comment.das
-        daslib/rst.das
+        # daslib/rst.das # depends on filesystem
         daslib/safe_addr.das
         daslib/soa.das
         daslib/sort_boost.das
@@ -878,7 +878,7 @@ MACRO(SETUP_LIBDASCRIPT library aotFiles standaloneFiles)
             ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC}
             ${standaloneFiles} ${aotFiles})
     ADD_DEPENDENCIES(${library} need_and_resolve)
-    ADD_PROJECT_XXD_DEPENDS(${library})
+    ADD_TARGET_PROJECT_XXD_DEPENDS(${library} libDaScript)
     target_include_directories(${library} PUBLIC
             ${DAS_SMMALLOC_DIR}
             ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include

@@ -114,7 +114,6 @@ namespace das {
 
 #if DAS_NO_FILEIO
 
-
 namespace das {
 
     string builtin_proximate(const char *path, const char *) {
