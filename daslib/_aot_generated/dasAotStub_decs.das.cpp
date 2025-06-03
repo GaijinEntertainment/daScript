@@ -1860,7 +1860,7 @@ TypeInfo * __tinfo_76[6] = { &__type_info__af90fe4c864e9d52, &__type_info__af90f
 TypeInfo * __tinfo_77[2] = { &__type_info__af90fe4c864e9d52, &__type_info__af63ee4c86020b22 };
 
 inline void _Func_localfunction_decs_985_178Tickfunction_5496def1ffb3d143 ( Context * __context__, TArray<uint8_t> & __arr_rename_at_985_0 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_345f02cc82623620 ( Context * __context__, TArray<decs::Component> & __a_rename_at_1182_4 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_345f02cc82623620 ( Context * __context__, TArray<decs::Component> & __a_rename_at_1215_4 );
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_4b3aee250f2ea5db ( Context * __context__, archive::Archive & __arch_rename_at_90_6, bool & __value_rename_at_90_7 );
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_d104b0e6448a9195 ( Context * __context__, archive::Archive & __arch_rename_at_90_8, range & __value_rename_at_90_9 );
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_7c2c8293712719e1 ( Context * __context__, archive::Archive & __arch_rename_at_90_10, urange & __value_rename_at_90_11 );
@@ -1883,31 +1883,31 @@ inline void _FuncarchiveTickserialize_rawTick346513482259279339_34c34fce1b45cf4f
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_2619395678ae6ed5 ( Context * __context__, archive::Archive & __arch_rename_at_90_44, float4 & __value_rename_at_90_45 );
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_9993c22fb227c578 ( Context * __context__, archive::Archive & __arch_rename_at_90_46, double & __value_rename_at_90_47 );
 inline void finalize_9a888ca44a018013 ( Context * __context__, decs::EcsRequestPos & ____this_rename_at_81_48 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8872455bc7f9c5ef ( Context * __context__, TArray<bool> & __a_rename_at_1182_49 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5d67e9b53c6ffaec ( Context * __context__, TArray<range> & __a_rename_at_1182_50 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_2b973dd4ba19363e ( Context * __context__, TArray<urange> & __a_rename_at_1182_51 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5ae721d51ac0373d ( Context * __context__, TArray<range64> & __a_rename_at_1182_52 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e359a44a89cc91f9 ( Context * __context__, TArray<urange64> & __a_rename_at_1182_53 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d920e5553c3b0a8a ( Context * __context__, TArray<int8_t> & __a_rename_at_1182_54 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_395caeea6bb4f8db ( Context * __context__, TArray<int16_t> & __a_rename_at_1182_55 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_70029d11b44f2114 ( Context * __context__, TArray<int64_t> & __a_rename_at_1182_56 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_bdbaa3cdf026fd53 ( Context * __context__, TArray<int2> & __a_rename_at_1182_57 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_3e9cd2e37416fedd ( Context * __context__, TArray<int3> & __a_rename_at_1182_58 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_305881b9dfd38d94 ( Context * __context__, TArray<int4> & __a_rename_at_1182_59 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8c72686c5233b867 ( Context * __context__, TArray<uint32_t> & __a_rename_at_1182_60 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_fffaef092afc278c ( Context * __context__, TArray<uint16_t> & __a_rename_at_1182_61 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( Context * __context__, TArray<uint64_t> & __a_rename_at_1182_62 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_687b6a92ad357e8e ( Context * __context__, TArray<uint2> & __a_rename_at_1182_63 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_84b0428ea5f27e4b ( Context * __context__, TArray<uint3> & __a_rename_at_1182_64 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_82b92458d4ee6ada ( Context * __context__, TArray<uint4> & __a_rename_at_1182_65 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_1842c7d3117284e3 ( Context * __context__, TArray<float> & __a_rename_at_1182_66 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ac5d28cb71a5cfe4 ( Context * __context__, TArray<float2> & __a_rename_at_1182_67 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_52f701b7786cc1a7 ( Context * __context__, TArray<float3> & __a_rename_at_1182_68 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c9b4d33613c2b27c ( Context * __context__, TArray<float4> & __a_rename_at_1182_69 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_bc22d20cfb821848 ( Context * __context__, TArray<float3x3> & __a_rename_at_1182_70 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8aeeedc524bce23d ( Context * __context__, TArray<float3x4> & __a_rename_at_1182_71 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_913d10501b52d571 ( Context * __context__, TArray<float4x4> & __a_rename_at_1182_72 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8ec282c4215a7333 ( Context * __context__, TArray<double> & __a_rename_at_1182_73 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8872455bc7f9c5ef ( Context * __context__, TArray<bool> & __a_rename_at_1215_49 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5d67e9b53c6ffaec ( Context * __context__, TArray<range> & __a_rename_at_1215_50 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_2b973dd4ba19363e ( Context * __context__, TArray<urange> & __a_rename_at_1215_51 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5ae721d51ac0373d ( Context * __context__, TArray<range64> & __a_rename_at_1215_52 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e359a44a89cc91f9 ( Context * __context__, TArray<urange64> & __a_rename_at_1215_53 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d920e5553c3b0a8a ( Context * __context__, TArray<int8_t> & __a_rename_at_1215_54 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_395caeea6bb4f8db ( Context * __context__, TArray<int16_t> & __a_rename_at_1215_55 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_70029d11b44f2114 ( Context * __context__, TArray<int64_t> & __a_rename_at_1215_56 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_bdbaa3cdf026fd53 ( Context * __context__, TArray<int2> & __a_rename_at_1215_57 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_3e9cd2e37416fedd ( Context * __context__, TArray<int3> & __a_rename_at_1215_58 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_305881b9dfd38d94 ( Context * __context__, TArray<int4> & __a_rename_at_1215_59 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8c72686c5233b867 ( Context * __context__, TArray<uint32_t> & __a_rename_at_1215_60 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_fffaef092afc278c ( Context * __context__, TArray<uint16_t> & __a_rename_at_1215_61 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( Context * __context__, TArray<uint64_t> & __a_rename_at_1215_62 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_687b6a92ad357e8e ( Context * __context__, TArray<uint2> & __a_rename_at_1215_63 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_84b0428ea5f27e4b ( Context * __context__, TArray<uint3> & __a_rename_at_1215_64 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_82b92458d4ee6ada ( Context * __context__, TArray<uint4> & __a_rename_at_1215_65 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_1842c7d3117284e3 ( Context * __context__, TArray<float> & __a_rename_at_1215_66 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ac5d28cb71a5cfe4 ( Context * __context__, TArray<float2> & __a_rename_at_1215_67 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_52f701b7786cc1a7 ( Context * __context__, TArray<float3> & __a_rename_at_1215_68 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c9b4d33613c2b27c ( Context * __context__, TArray<float4> & __a_rename_at_1215_69 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_bc22d20cfb821848 ( Context * __context__, TArray<float3x3> & __a_rename_at_1215_70 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8aeeedc524bce23d ( Context * __context__, TArray<float3x4> & __a_rename_at_1215_71 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_913d10501b52d571 ( Context * __context__, TArray<float4x4> & __a_rename_at_1215_72 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8ec282c4215a7333 ( Context * __context__, TArray<double> & __a_rename_at_1215_73 );
 inline Lambda DAS_COMMENT((void)) _Func_localfunction_decs_860_122Tickfunction_5747cb7054f3a103 ( Context * __context__, TArray<uint8_t> & __src_rename_at_860_74 );
 inline void _Func_localfunction_decs_893_123Tickfunction_cfdf8c895a1a9ce9 ( Context * __context__, TArray<uint8_t> & __dst_rename_at_893_78, TArray<uint8_t> const  & __src_rename_at_893_79 );
 inline Lambda DAS_COMMENT((void)) _Func_localfunction_decs_860_124Tickfunction_d43602c8c66fba43 ( Context * __context__, TArray<uint8_t> & __src_rename_at_860_87 );
@@ -2042,12 +2042,12 @@ inline void finalize_4480c66b256a23ed ( Context * __context__, decs::_lambda_dec
 inline void _FuncbuiltinTickresizeTick4811697762258667383_3672b2461e8ae26e ( Context * __context__, TArray<double> & __Arr_rename_at_68_560, int32_t __newSize_rename_at_68_561 );
 inline void _FuncarchiveTickserializeTick6962985013043226618_ecea631fa8a6ab51 ( Context * __context__, archive::Archive & __arch_rename_at_112_562, double & __value_rename_at_112_563 );
 inline void finalize_1c927c451f98659e ( Context * __context__, decs::Archetype & ____this_rename_at_57_564 );
-inline void finalize_f87ddce7a3ad05ec ( Context * __context__, AutoTuple<int32_t,uint64_t,int32_t> & ____this_rename_at_1186_565 );
-inline Sequence DAS_COMMENT((decs::CTypeInfo &)) _FuncbuiltinTickvaluesTick1351216622833168869_61c0f20a0f69d8bd ( Context * __context__, TTable<char *,decs::CTypeInfo> & __a_rename_at_1150_566 );
+inline void finalize_f87ddce7a3ad05ec ( Context * __context__, AutoTuple<int32_t,uint64_t,int32_t> & ____this_rename_at_1219_565 );
+inline Sequence DAS_COMMENT((decs::CTypeInfo &)) _FuncbuiltinTickvaluesTick1351216622833168869_61c0f20a0f69d8bd ( Context * __context__, TTable<char *,decs::CTypeInfo> & __a_rename_at_1183_566 );
 inline void finalize_3775538d03196950 ( Context * __context__, decs::EcsRequest & ____this_rename_at_92_568 );
 inline Lambda DAS_COMMENT((void)) _Func_localfunction_decs_860_120Tickfunction_c4d04635f6dfc0e7 ( Context * __context__, TArray<uint8_t> & __src_rename_at_860_569 );
 inline void _Func_localfunction_decs_893_121Tickfunction_e93e5ac7cf13aaa7 ( Context * __context__, TArray<uint8_t> & __dst_rename_at_893_573, TArray<uint8_t> const  & __src_rename_at_893_574 );
-inline void _FuncbuiltinTickcloneTick3038771811667655495_b12ac32c809091fa ( Context * __context__, TArray<char *> & __a_rename_at_1080_582, TArray<char *> const  & __b_rename_at_1080_583 );
+inline void _FuncbuiltinTickcloneTick3038771811667655495_b12ac32c809091fa ( Context * __context__, TArray<char *> & __a_rename_at_1113_582, TArray<char *> const  & __b_rename_at_1113_583 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_1bdb9995fa062a51 ( Context * __context__, TArray<int32_t> & __Arr_rename_at_68_589, int32_t __newSize_rename_at_68_590 );
 inline void finalize_1c109d393a909579 ( Context * __context__, decs::_lambda_decs_885_6 & ____this_rename_at_885_591 );
 inline void _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654 ( Context * __context__, archive::Archive & __arch_rename_at_99_592, int32_t & __value_rename_at_99_593 );
@@ -2227,7 +2227,7 @@ inline void _FuncarchiveTickserialize_rawTick346513482259279339_877086b5c2b9e6d8
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_2cb15e82f6a052bb ( Context * __context__, archive::Archive & __arch_rename_at_90_1136, uint32_t & __value_rename_at_90_1137 );
 inline void _FuncarchiveTickread_rawTick6802855309095275289_59f27d4ca7f63255 ( Context * __context__, archive::Archive & __arch_rename_at_99_1138, uint64_t & __value_rename_at_99_1139 );
 inline void _FuncarchiveTickwrite_rawTick9760319972816126958_7e827e6b1de76fcd ( Context * __context__, archive::Archive & __arch_rename_at_105_1140, uint64_t & __value_rename_at_105_1141 );
-inline void _FuncbuiltinTickcloneTick3038771811667655495_c353b2222916bce3 ( Context * __context__, TArray<int32_t> & __a_rename_at_1080_1142, TArray<int32_t> const  & __b_rename_at_1080_1143 );
+inline void _FuncbuiltinTickcloneTick3038771811667655495_c353b2222916bce3 ( Context * __context__, TArray<int32_t> & __a_rename_at_1113_1142, TArray<int32_t> const  & __b_rename_at_1113_1143 );
 inline TypeInfo const  * _Func_localfunction_decs_839_4Tickfunction_e234cd5aad9a3df5 ( Context * __context__ );
 inline char * _Func_localfunction_decs_846_5Tickfunction_4c8673cff74bd06d ( Context * __context__, void * const  __elem_rename_at_846_1145 );
 inline void _Func_lambda_decs_885_6Tickfunction_199a401e1bb01e8 ( Context * __context__, decs::_lambda_decs_885_6 & ____this_rename_at_885_1147 );
@@ -2272,23 +2272,23 @@ inline void _FuncdecsTickmake_callbacksTick7881608678897058277_5481fc5257156c72 
 inline void _FuncdecsTickmake_callbacksTick7881608678897058277_86a60553dc689590 ( Context * __context__, decs::ComponentValue & __cv_rename_at_838_1245, float3x4 const  & __value_rename_at_838_1246 );
 inline void _FuncdecsTickmake_callbacksTick7881608678897058277_8aec4cc94b2071d0 ( Context * __context__, decs::ComponentValue & __cv_rename_at_838_1247, float4x4 const  & __value_rename_at_838_1248 );
 inline void _FuncdecsTickmake_callbacksTick7881608678897058277_4138a85e510ea6bf ( Context * __context__, decs::ComponentValue & __cv_rename_at_838_1249, double __value_rename_at_838_1250 );
-inline int32_t _FuncalgorithmTicklower_boundTick18126846866405818753_4ca42a3850224fec ( Context * __context__, TArray<decs::Component> const  & __a_rename_at_83_1251, int32_t __f_rename_at_83_1252, int32_t __l_rename_at_83_1253, decs::Component const  & __value_rename_at_83_1254, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  & __less_rename_at_83_1255 );
+inline int32_t _FuncalgorithmTicklower_boundTick8686693477002751267_e2577dcb26631c73 ( Context * __context__, TArray<decs::Component> const  & __a_rename_at_83_1251, int32_t __f_rename_at_83_1252, int32_t __l_rename_at_83_1253, decs::Component const  & __value_rename_at_83_1254, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  & __less_rename_at_83_1255 );
 inline int32_t _FuncalgorithmTicklower_boundTick5845303453396418626_34874817d3fc375e ( Context * __context__, TArray<char *> const  & __a_rename_at_60_1260, int32_t __f_rename_at_60_1261, int32_t __l_rename_at_60_1262, char * const  __val_rename_at_60_1263 );
 inline void _FuncbuiltinTickpush_cloneTick2035469273396957942_ad2b9c3da0be3ce ( Context * __context__, TArray<char *> & __Arr_rename_at_377_1268, char * __value_rename_at_377_1269 );
 inline int32_t _FuncalgorithmTicklower_boundTick5845303453396418626_caca6ae37025416 ( Context * __context__, TArray<int32_t> const  & __a_rename_at_60_1270, int32_t __f_rename_at_60_1271, int32_t __l_rename_at_60_1272, int32_t __val_rename_at_60_1273 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_7b1c641088884a8c ( Context * __context__, TTable<uint64_t,int32_t> & __a_rename_at_1193_1278 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_91a6f1f6e919dff4 ( Context * __context__, TArray<decs::Archetype> & __a_rename_at_1182_1279 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_fa638cea3e326b51 ( Context * __context__, TArray<decs::EntityId> & __a_rename_at_1182_1281 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e9bbb04df3646abc ( Context * __context__, TArray<AutoTuple<int32_t,uint64_t,int32_t>> & __a_rename_at_1182_1283 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_40b6602ff2cc486c ( Context * __context__, TTable<char *,decs::CTypeInfo> & __a_rename_at_1193_1285 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_212839cd1a883cb8 ( Context * __context__, TArray<decs::EcsRequest> & __a_rename_at_1182_1287 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> & __a_rename_at_1182_1289 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_7b1c641088884a8c ( Context * __context__, TTable<uint64_t,int32_t> & __a_rename_at_1226_1278 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_91a6f1f6e919dff4 ( Context * __context__, TArray<decs::Archetype> & __a_rename_at_1215_1279 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_fa638cea3e326b51 ( Context * __context__, TArray<decs::EntityId> & __a_rename_at_1215_1281 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e9bbb04df3646abc ( Context * __context__, TArray<AutoTuple<int32_t,uint64_t,int32_t>> & __a_rename_at_1215_1283 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_40b6602ff2cc486c ( Context * __context__, TTable<char *,decs::CTypeInfo> & __a_rename_at_1226_1285 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_212839cd1a883cb8 ( Context * __context__, TArray<decs::EcsRequest> & __a_rename_at_1215_1287 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> & __a_rename_at_1215_1289 );
 inline void _FuncbuiltinTickpushTick14934788096129379580_b9adfb6d1d3c0d0f ( Context * __context__, TArray<decs::ComponentValue> & __Arr_rename_at_137_1290, decs::ComponentValue const  & __value_rename_at_137_1291, int32_t __at_rename_at_137_1292 );
 inline void _FuncbuiltinTickpushTick17796957415390687191_e881bb936c714b8c ( Context * __context__, TArray<decs::ComponentValue> & __Arr_rename_at_153_1293, decs::ComponentValue & __value_rename_at_153_1294, int32_t __at_rename_at_153_1295 );
 inline void _FuncbuiltinTickemplaceTick567242425908074758_945a508f4be04695 ( Context * __context__, TArray<decs::DecsPass> & __Arr_rename_at_274_1296, decs::DecsPass & __value_rename_at_274_1297, int32_t __at_rename_at_274_1298 );
-inline TArray<int32_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_26d93f744314eca0 ( Context * __context__, TArray<int32_t> const  & __clone_src_rename_at_1056_1299 );
+inline TArray<int32_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_26d93f744314eca0 ( Context * __context__, TArray<int32_t> const  & __clone_src_rename_at_1089_1299 );
 inline void _FuncbuiltinTickeraseTick16646986352019611268_c0f137fec6db20e2 ( Context * __context__, TArray<decs::ComponentValue> & __Arr_rename_at_535_1301, int32_t __at_rename_at_535_1302 );
-inline int32_t _FuncalgorithmTicklower_boundTick18126846866405818753_934d44c6a92fbd19 ( Context * __context__, TArray<decs::ComponentValue> const  & __a_rename_at_83_1303, int32_t __f_rename_at_83_1304, int32_t __l_rename_at_83_1305, decs::ComponentValue const  & __value_rename_at_83_1306, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  & __less_rename_at_83_1307 );
+inline int32_t _FuncalgorithmTicklower_boundTick8686693477002751267_65b824aee440480e ( Context * __context__, TArray<decs::ComponentValue> const  & __a_rename_at_83_1303, int32_t __f_rename_at_83_1304, int32_t __l_rename_at_83_1305, decs::ComponentValue const  & __value_rename_at_83_1306, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  & __less_rename_at_83_1307 );
 inline decs::ComponentValue _FuncdecsTickmake_componentTick10966522786327472693_7686a27f2d90f16e ( Context * __context__, char * const  __name_rename_at_1012_1312, bool __value_rename_at_1012_1313 );
 inline decs::ComponentValue _FuncdecsTickmake_componentTick10966522786327472693_a635acb82ffd39c7 ( Context * __context__, char * const  __name_rename_at_1012_1317, range __value_rename_at_1012_1318 );
 inline decs::ComponentValue _FuncdecsTickmake_componentTick10966522786327472693_121dcc0a7c617b52 ( Context * __context__, char * const  __name_rename_at_1012_1322, urange __value_rename_at_1012_1323 );
@@ -2320,23 +2320,23 @@ inline decs::ComponentValue _FuncdecsTickmake_componentTick10966522786327472693_
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_83ff526b8b4a3feb ( Context * __context__, archive::Archive & __arch_rename_at_90_1452, uint64_t & __value_rename_at_90_1453 );
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_344032bd32dfc282 ( Context * __context__, archive::Archive & __arch_rename_at_90_1454, int32_t & __value_rename_at_90_1455 );
 inline void _FuncapplyTickstructTickCTypeInfoTick0x96Tick0Tick11_50e2ea000b6a5668 ( Context * __context__, decs::CTypeInfo & ___Var_Tick_self_rename_at_62_1456, Block DAS_COMMENT((void,DAS_COMMENT(bound_enum) das::Type &)) const  & ____arg_basicType_rename_at_62_1457, Block DAS_COMMENT((void,char * &)) const  & ____arg_mangledName_rename_at_62_1458, Block DAS_COMMENT((void,char * &)) const  & ____arg_fullName_rename_at_62_1459, Block DAS_COMMENT((void,uint64_t &)) const  & ____arg_hash_rename_at_62_1460, Block DAS_COMMENT((void,uint32_t &)) const  & ____arg_size_rename_at_62_1461, Block DAS_COMMENT((void,Func DAS_COMMENT((void,TArray<uint8_t>)) &)) const  & ____arg_eraser_rename_at_62_1462, Block DAS_COMMENT((void,Func DAS_COMMENT((void,TArray<uint8_t>,TArray<uint8_t> const )) &)) const  & ____arg_clonner_rename_at_62_1463, Block DAS_COMMENT((void,Func DAS_COMMENT((void,archive::Archive,TArray<uint8_t>,char * const )) &)) const  & ____arg_serializer_rename_at_62_1464, Block DAS_COMMENT((void,Func DAS_COMMENT((char *,void * const )) &)) const  & ____arg_dumper_rename_at_62_1465, Block DAS_COMMENT((void,Func DAS_COMMENT((TypeInfo const  *)) &)) const  & ____arg_mkTypeInfo_rename_at_62_1466, Block DAS_COMMENT((void,Func DAS_COMMENT((Lambda DAS_COMMENT((void)),TArray<uint8_t>)) &)) const  & ____arg_gc_rename_at_62_1467 );
-inline int32_t _FuncalgorithmTicklower_boundTick18126846866405818753_dbc0c07e011dc186 ( Context * __context__, TArray<decs::DecsPass> const  & __a_rename_at_83_1468, int32_t __f_rename_at_83_1469, int32_t __l_rename_at_83_1470, decs::DecsPass const  & __value_rename_at_83_1471, Block DAS_COMMENT((bool,decs::DecsPass const ,decs::DecsPass const )) const  & __less_rename_at_83_1472 );
+inline int32_t _FuncalgorithmTicklower_boundTick8686693477002751267_78a9b5beb1a63d65 ( Context * __context__, TArray<decs::DecsPass> const  & __a_rename_at_83_1468, int32_t __f_rename_at_83_1469, int32_t __l_rename_at_83_1470, decs::DecsPass const  & __value_rename_at_83_1471, Block DAS_COMMENT((bool,decs::DecsPass const ,decs::DecsPass const )) const  & __less_rename_at_83_1472 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_be5e4db5cc62bbe2 ( Context * __context__, TArray<decs::EntityId> & __Arr_rename_at_68_1477, int32_t __newSize_rename_at_68_1478 );
-inline int32_t _FuncalgorithmTicklower_boundTick16093794823624193897_ceeda13844fe2646 ( Context * __context__, TArray<decs::Component> const  & __a_rename_at_101_1479, decs::Component const  & __value_rename_at_101_1480, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  & __less_rename_at_101_1481 );
+inline int32_t _FuncalgorithmTicklower_boundTick6423703817649034251_99cab115045d39c8 ( Context * __context__, TArray<decs::Component> const  & __a_rename_at_101_1479, decs::Component const  & __value_rename_at_101_1480, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  & __less_rename_at_101_1481 );
 inline int32_t _FuncalgorithmTicklower_boundTick15764527788046818970_738dc09f48c04cec ( Context * __context__, TArray<char *> const  & __a_rename_at_79_1482, char * const  __val_rename_at_79_1483 );
-inline void _FuncbuiltinTicksortTick14088969635007481283_e8d7aa932cb8bc70 ( Context * __context__, TArray<char *> & __a_rename_at_1517_1484 );
-inline TArray<char *> _FuncalgorithmTickuniqueTick8642070526899511001_1190863ce08ff79f ( Context * __context__, TArray<char *> & __a_rename_at_11_1485 );
+inline void _FuncbuiltinTicksortTick14088969635007481283_e8d7aa932cb8bc70 ( Context * __context__, TArray<char *> & __a_rename_at_1550_1484 );
+inline TArray<char *> _FuncalgorithmTickuniqueTick8642070526899511001_52c7abc78345e039 ( Context * __context__, TArray<char *> & __a_rename_at_11_1485 );
 inline int32_t _FuncalgorithmTicklower_boundTick15764527788046818970_3a9dfe5b83ec32e2 ( Context * __context__, TArray<int32_t> const  & __a_rename_at_79_1492, int32_t __val_rename_at_79_1493 );
 inline void _FuncdecsTickmake_callbacksTick7881608678897058277_b287b18295644fa7 ( Context * __context__, decs::ComponentValue & __cv_rename_at_838_1494, decs::EntityId const  & __value_rename_at_838_1495 );
 inline void finalize_41930a68c71f6668 ( Context * __context__, decs::_lambda_decs_781_1 & ____this_rename_at_781_1496 );
 inline void finalize_c58b7744600e91ae ( Context * __context__, decs::_lambda_decs_789_2 & ____this_rename_at_789_1497 );
 inline void finalize_6889e95f9103d351 ( Context * __context__, decs::_lambda_decs_799_3 & ____this_rename_at_799_1498 );
-inline void _FuncbuiltinTickcloneTick3038771811667655495_4daebed5ed337081 ( Context * __context__, TArray<uint8_t> & __a_rename_at_1080_1499, TArray<uint8_t> const  & __b_rename_at_1080_1500 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1182_1502 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_67d985c3564779d7 ( Context * __context__, TArray<decs::DeferAction> & __a_rename_at_1182_1503 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8 ( Context * __context__, TArray<int32_t> & __a_rename_at_1182_1505 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a7a5d4b55cfb401 ( Context * __context__, TArray<decs::ComponentValue> & __a_rename_at_1182_1506 );
-inline int32_t _FuncalgorithmTicklower_boundTick16093794823624193897_e7668723244a73ff ( Context * __context__, TArray<decs::ComponentValue> const  & __a_rename_at_101_1508, decs::ComponentValue const  & __value_rename_at_101_1509, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  & __less_rename_at_101_1510 );
+inline void _FuncbuiltinTickcloneTick3038771811667655495_4daebed5ed337081 ( Context * __context__, TArray<uint8_t> & __a_rename_at_1113_1499, TArray<uint8_t> const  & __b_rename_at_1113_1500 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1215_1502 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_67d985c3564779d7 ( Context * __context__, TArray<decs::DeferAction> & __a_rename_at_1215_1503 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8 ( Context * __context__, TArray<int32_t> & __a_rename_at_1215_1505 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a7a5d4b55cfb401 ( Context * __context__, TArray<decs::ComponentValue> & __a_rename_at_1215_1506 );
+inline int32_t _FuncalgorithmTicklower_boundTick6423703817649034251_18ada4b2d50e7d67 ( Context * __context__, TArray<decs::ComponentValue> const  & __a_rename_at_101_1508, decs::ComponentValue const  & __value_rename_at_101_1509, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  & __less_rename_at_101_1510 );
 inline void _FuncdecsTicksetTick11209997464375680874_bd5df505c4081c6 ( Context * __context__, decs::ComponentValue & __cv_rename_at_159_1511, decs::EntityId const  & __val_rename_at_159_1512 );
 inline void _FuncdecsTicksetTick11209997464375680874_311d959ae73c7f88 ( Context * __context__, decs::ComponentValue & __cv_rename_at_159_1514, bool __val_rename_at_159_1515 );
 inline void _FuncdecsTicksetTick11209997464375680874_affa5ad56b835b74 ( Context * __context__, decs::ComponentValue & __cv_rename_at_159_1517, range __val_rename_at_159_1518 );
@@ -2369,7 +2369,7 @@ inline void _FuncdecsTicksetTick11209997464375680874_5ca918cdb86c0ca8 ( Context 
 inline void _FuncarchiveTickserializeTick6962985013043226618_b73acc9be821c7a9 ( Context * __context__, archive::Archive & __arch_rename_at_112_1598, uint64_t & __value_rename_at_112_1599 );
 inline void _FuncarchiveTickserializeTick6962985013043226618_dcef979630e7f69c ( Context * __context__, archive::Archive & __arch_rename_at_112_1600, int32_t & __value_rename_at_112_1601 );
 inline void _FuncarchiveTickserializeTick8013964856239694639_b41098b846ab5ad7 ( Context * __context__, archive::Archive & __arch_rename_at_146_1602, decs::CTypeInfo & __value_rename_at_146_1603 );
-inline int32_t _FuncalgorithmTicklower_boundTick16093794823624193897_ce29fe5ecc0183e4 ( Context * __context__, TArray<decs::DecsPass> const  & __a_rename_at_101_1615, decs::DecsPass const  & __value_rename_at_101_1616, Block DAS_COMMENT((bool,decs::DecsPass const ,decs::DecsPass const )) const  & __less_rename_at_101_1617 );
+inline int32_t _FuncalgorithmTicklower_boundTick6423703817649034251_3302e2d7d1f43bc4 ( Context * __context__, TArray<decs::DecsPass> const  & __a_rename_at_101_1615, decs::DecsPass const  & __value_rename_at_101_1616, Block DAS_COMMENT((bool,decs::DecsPass const ,decs::DecsPass const )) const  & __less_rename_at_101_1617 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_871ed3e1df393493 ( Context * __context__, TArray<Func DAS_COMMENT((void))> & __Arr_rename_at_165_1618, Func DAS_COMMENT((void)) const  __value_rename_at_165_1619 );
 inline void finalize_c2cf16c62ac9b1f5 ( Context * __context__, decs::CTypeInfo & ____this_rename_at_25_1620 );
 inline void finalize_5421650afdf54b69 ( Context * __context__, decs::DecsState & ____this_rename_at_102_1621 );
@@ -2380,7 +2380,7 @@ inline void _FuncbuiltinTickemplaceTick13923705686753630697_76aeaf9679c87eb1 ( C
 inline void _FuncbuiltinTickemplaceTick13923705686753630697_2cb46a55cb72e9d0 ( Context * __context__, TArray<decs::Component> & __Arr_rename_at_287_1628, decs::Component & __value_rename_at_287_1629 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_527bd39f2798fbd0 ( Context * __context__, TArray<int32_t> & __Arr_rename_at_165_1630, int32_t __value_rename_at_165_1631 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_1632, int32_t __newSize_rename_at_68_1633 );
-inline bool _FuncalgorithmTickbinary_searchTick14008495768446863867_4a97a34626cd4642 ( Context * __context__, TArray<decs::Component> const  & __a_rename_at_117_1634, decs::Component const  & __val_rename_at_117_1635, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  & __less_rename_at_117_1636 );
+inline bool _FuncalgorithmTickbinary_searchTick14008495768446863867_5a15a37c873324e7 ( Context * __context__, TArray<decs::Component> const  & __a_rename_at_117_1634, decs::Component const  & __val_rename_at_117_1635, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  & __less_rename_at_117_1636 );
 inline bool _FuncbuiltinTickemptyTick15399874715904164783_e7d23d30bed4f24e ( Context * __context__, TArray<char *> const  & __a_rename_at_585_1639 );
 inline bool _FuncalgorithmTickbinary_searchTick17983790476472195392_22cbec779762f854 ( Context * __context__, TArray<char *> const  & __a_rename_at_105_1640, char * const  __val_rename_at_105_1641 );
 inline void _FuncalgorithmTicksort_uniqueTick14985796887508933377_a7cd684429b2af6f ( Context * __context__, TArray<char *> & __a_rename_at_24_1643 );
@@ -2390,7 +2390,7 @@ inline bool _FuncbuiltinTickgetTick8447005936052527643_49e5dcbd82abf929 ( Contex
 inline bool _FuncalgorithmTickbinary_searchTick17983790476472195392_e2c175d7606246dc ( Context * __context__, TArray<int32_t> const  & __a_rename_at_105_1653, int32_t __val_rename_at_105_1654 );
 inline void _FuncbuiltinTickreserveTick3994685146752941225_c352d8d7366dfaf8 ( Context * __context__, TArray<decs::ComponentValue> & __Arr_rename_at_125_1656, int32_t __newSize_rename_at_125_1657 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_851ab10030ae7c38 ( Context * __context__, TArray<decs::ComponentValue> & __Arr_rename_at_181_1658, decs::ComponentValue & __value_rename_at_181_1659 );
-inline void _FuncdecsTicksetTick17458790232895349504_bb6e804b92d95494 ( Context * __context__, TArray<decs::ComponentValue> & __cmp_rename_at_1032_1660, char * const  __name_rename_at_1032_1661, decs::EntityId const  & __value_rename_at_1032_1662 );
+inline void _FuncdecsTicksetTick17458790232895349504_4f9d50ccf9aefe53 ( Context * __context__, TArray<decs::ComponentValue> & __cmp_rename_at_1032_1660, char * const  __name_rename_at_1032_1661, decs::EntityId const  & __value_rename_at_1032_1662 );
 inline decs::ComponentValue _FuncdecsTickmake_componentTick10966522786327472693_3a423ebc636ba8b5 ( Context * __context__, char * const  __name_rename_at_1012_1667, decs::EntityId const  & __value_rename_at_1012_1668 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_eeb9a220589e8d36 ( Context * __context__, TArray<decs::EntityId> & __Arr_rename_at_165_1672, decs::EntityId const  & __value_rename_at_165_1673 );
 inline void _Func_lambda_decs_781_1Tickfunction_1b4444b63f7b7430 ( Context * __context__, decs::_lambda_decs_781_1 & ____this_rename_at_781_1674, decs::DeferAction & __act_rename_at_781_1675 );
@@ -2400,12 +2400,12 @@ inline void _Func_lambda_decs_789_2Tickfunction_c4aaa5d084533b28 ( Context * __c
 inline void _Func_lambda_decs_789_2Tickfinalizer_1140d01740fd791 ( Context * __context__, decs::_lambda_decs_789_2 * ____this_rename_at_789_1681 );
 inline void _Func_lambda_decs_799_3Tickfunction_a95792fba0ebb096 ( Context * __context__, decs::_lambda_decs_799_3 & ____this_rename_at_799_1682, decs::DeferAction & __act_rename_at_799_1683 );
 inline void _Func_lambda_decs_799_3Tickfinalizer_549e2fff439a70a6 ( Context * __context__, decs::_lambda_decs_799_3 * ____this_rename_at_799_1684 );
-inline bool _FuncalgorithmTickbinary_searchTick14008495768446863867_755e751f5817ad1f ( Context * __context__, TArray<decs::ComponentValue> const  & __a_rename_at_117_1685, decs::ComponentValue const  & __val_rename_at_117_1686, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  & __less_rename_at_117_1687 );
+inline bool _FuncalgorithmTickbinary_searchTick14008495768446863867_76d2ee2705c6b78c ( Context * __context__, TArray<decs::ComponentValue> const  & __a_rename_at_117_1685, decs::ComponentValue const  & __val_rename_at_117_1686, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  & __less_rename_at_117_1687 );
 inline decs::EcsRequestPos EcsRequestPos_8050438c327f9d ( Context * __context__, LineInfo const  & __at_rename_at_87_1690 );
 inline bool _FuncEquEqu_34af8c46e2c0e09 ( Context * __context__, decs::EntityId const  & __a_rename_at_130_1691, decs::EntityId const  & __b_rename_at_130_1692 );
 inline bool _FuncExclEqu_735e4725dcf2ac8b ( Context * __context__, decs::EntityId const  & __a_rename_at_135_1693, decs::EntityId const  & __b_rename_at_135_1694 );
 inline char * describe_331f6733cf613d79 ( Context * __context__, decs::CTypeInfo const  & __info_rename_at_140_1695 );
-inline decs::ComponentValue & _FuncDot_e6be57d0f54d9f86 ( Context * __context__, TArray<decs::ComponentValue> & __cmp_rename_at_145_1696, char * const  __name_rename_at_145_1697 );
+inline decs::ComponentValue & _FuncDot_2c50a2ee9c52bead ( Context * __context__, TArray<decs::ComponentValue> & __cmp_rename_at_145_1696, char * const  __name_rename_at_145_1697 );
 inline void clone_659ecf5dab7a3479 ( Context * __context__, decs::ComponentValue & __cv_rename_at_166_1701, decs::EntityId const  & __val_rename_at_166_1702 );
 inline void clone_c6602a5ab0937f65 ( Context * __context__, decs::ComponentValue & __cv_rename_at_167_1703, bool __val_rename_at_167_1704 );
 inline void clone_7ccd28e6e767f3cb ( Context * __context__, decs::ComponentValue & __cv_rename_at_168_1705, range __val_rename_at_168_1706 );
@@ -2437,8 +2437,8 @@ inline void clone_1a68e76f5e0cf01c ( Context * __context__, decs::ComponentValue
 inline void clone_530527a7c6dd86fe ( Context * __context__, decs::ComponentValue & __cv_rename_at_194_1757, double __val_rename_at_194_1758 );
 inline void clone_8c726de24bacdebc ( Context * __context__, decs::Component & __dst_rename_at_196_1759, decs::Component const  & __src_rename_at_196_1760 );
 inline void serialize_2fb21a62b038e15a ( Context * __context__, archive::Archive & __arch_rename_at_209_1761, decs::Component & __src_rename_at_209_1762 );
-inline void register_decs_stage_call_717f6eccc9a4ed59 ( Context * __context__, char * const  __name_rename_at_222_1763, Func DAS_COMMENT((void)) const  __pcall_rename_at_222_1764 );
-inline void decs_stage_efb21162738a05e ( Context * __context__, char * const  __name_rename_at_234_1769 );
+inline void register_decs_stage_call_bd748132595eb376 ( Context * __context__, char * const  __name_rename_at_222_1763, Func DAS_COMMENT((void)) const  __pcall_rename_at_222_1764 );
+inline void decs_stage_3bde74a1063accc5 ( Context * __context__, char * const  __name_rename_at_234_1769 );
 inline void finalize_4dc17927e32cd56d ( Context * __context__, decs::Component & __cmp_rename_at_247_1774 );
 inline void restart_67d9e51e58a3761b ( Context * __context__ );
 inline decs::EntityId new_entity_id_817aada7f57a4f1c ( Context * __context__ );
@@ -2469,7 +2469,7 @@ inline decs::EntityId create_entity_65224082ba124887 ( Context * __context__, La
 inline void delete_entity_b1d654f9ce2287a7 ( Context * __context__, decs::EntityId const  & __entityid_rename_at_797_1910 );
 inline void commit_c50742f73fbd275a ( Context * __context__ );
 inline bool has_14cf9c5ba9e042a8 ( Context * __context__, TArray<decs::ComponentValue> & __cmp_rename_at_1048_1914, char * const  __name_rename_at_1048_1915 );
-inline void remove_5ca51f5fb1aa821a ( Context * __context__, TArray<decs::ComponentValue> & __cmp_rename_at_1052_1918, char * const  __name_rename_at_1052_1919 );
+inline void remove_6815d366d9959b9f ( Context * __context__, TArray<decs::ComponentValue> & __cmp_rename_at_1052_1918, char * const  __name_rename_at_1052_1919 );
 inline void clone_61cd6fd9243f096e ( Context * __context__, decs::CTypeInfo & __a_rename_at_25_1923, decs::CTypeInfo const  & __b_rename_at_25_1924 );
 inline void clone_d022bbfeae50f797 ( Context * __context__, decs::EcsRequest & __a_rename_at_92_1925, decs::EcsRequest const  & __b_rename_at_92_1926 );
 inline void clone_41bf997351f6ece1 ( Context * __context__, decs::EcsRequestPos & __a_rename_at_81_1927, decs::EcsRequestPos const  & __b_rename_at_81_1928 );
@@ -2510,21 +2510,21 @@ inline void _Func_localfunction_decs_985_178Tickfunction_5496def1ffb3d143 ( Cont
     };
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_345f02cc82623620 ( Context * __context__, TArray<decs::Component> &  __a_rename_at_1182_4 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_345f02cc82623620 ( Context * __context__, TArray<decs::Component> &  __a_rename_at_1215_4 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: decs::Component aka TT&
-        das_iterator<TArray<decs::Component>> __aV_iterator(__a_rename_at_1182_4);
-        decs::Component * __aV_rename_at_1184_5;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_5)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_5)) )
+        das_iterator<TArray<decs::Component>> __aV_iterator(__a_rename_at_1215_4);
+        decs::Component * __aV_rename_at_1217_5;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_5)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_5)) )
         {
-            finalize_4dc17927e32cd56d(__context__,das_arg<decs::Component>::pass((*__aV_rename_at_1184_5)));
+            finalize_4dc17927e32cd56d(__context__,das_arg<decs::Component>::pass((*__aV_rename_at_1217_5)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_5));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_5));
     };
-    builtin_array_free(das_arg<TArray<decs::Component>>::pass(__a_rename_at_1182_4),144,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<decs::Component>>::pass(__a_rename_at_1215_4),144,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void _FuncarchiveTickserialize_rawTick346513482259279339_4b3aee250f2ea5db ( Context * __context__, archive::Archive &  __arch_rename_at_90_6, bool & __value_rename_at_90_7 )
@@ -2742,129 +2742,129 @@ inline void finalize_9a888ca44a018013 ( Context * __context__, decs::EcsRequestP
     memset((void*)&(____this_rename_at_81_48), 0, TypeSize<decs::EcsRequestPos>::size);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8872455bc7f9c5ef ( Context * __context__, TArray<bool> &  __a_rename_at_1182_49 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8872455bc7f9c5ef ( Context * __context__, TArray<bool> &  __a_rename_at_1215_49 )
 {
-    builtin_array_free(das_arg<TArray<bool>>::pass(__a_rename_at_1182_49),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<bool>>::pass(__a_rename_at_1215_49),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5d67e9b53c6ffaec ( Context * __context__, TArray<range> &  __a_rename_at_1182_50 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5d67e9b53c6ffaec ( Context * __context__, TArray<range> &  __a_rename_at_1215_50 )
 {
-    builtin_array_free(das_arg<TArray<range>>::pass(__a_rename_at_1182_50),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<range>>::pass(__a_rename_at_1215_50),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_2b973dd4ba19363e ( Context * __context__, TArray<urange> &  __a_rename_at_1182_51 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_2b973dd4ba19363e ( Context * __context__, TArray<urange> &  __a_rename_at_1215_51 )
 {
-    builtin_array_free(das_arg<TArray<urange>>::pass(__a_rename_at_1182_51),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<urange>>::pass(__a_rename_at_1215_51),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5ae721d51ac0373d ( Context * __context__, TArray<range64> &  __a_rename_at_1182_52 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5ae721d51ac0373d ( Context * __context__, TArray<range64> &  __a_rename_at_1215_52 )
 {
-    builtin_array_free(das_arg<TArray<range64>>::pass(__a_rename_at_1182_52),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<range64>>::pass(__a_rename_at_1215_52),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e359a44a89cc91f9 ( Context * __context__, TArray<urange64> &  __a_rename_at_1182_53 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e359a44a89cc91f9 ( Context * __context__, TArray<urange64> &  __a_rename_at_1215_53 )
 {
-    builtin_array_free(das_arg<TArray<urange64>>::pass(__a_rename_at_1182_53),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<urange64>>::pass(__a_rename_at_1215_53),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d920e5553c3b0a8a ( Context * __context__, TArray<int8_t> &  __a_rename_at_1182_54 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d920e5553c3b0a8a ( Context * __context__, TArray<int8_t> &  __a_rename_at_1215_54 )
 {
-    builtin_array_free(das_arg<TArray<int8_t>>::pass(__a_rename_at_1182_54),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<int8_t>>::pass(__a_rename_at_1215_54),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_395caeea6bb4f8db ( Context * __context__, TArray<int16_t> &  __a_rename_at_1182_55 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_395caeea6bb4f8db ( Context * __context__, TArray<int16_t> &  __a_rename_at_1215_55 )
 {
-    builtin_array_free(das_arg<TArray<int16_t>>::pass(__a_rename_at_1182_55),2,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<int16_t>>::pass(__a_rename_at_1215_55),2,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_70029d11b44f2114 ( Context * __context__, TArray<int64_t> &  __a_rename_at_1182_56 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_70029d11b44f2114 ( Context * __context__, TArray<int64_t> &  __a_rename_at_1215_56 )
 {
-    builtin_array_free(das_arg<TArray<int64_t>>::pass(__a_rename_at_1182_56),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<int64_t>>::pass(__a_rename_at_1215_56),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_bdbaa3cdf026fd53 ( Context * __context__, TArray<int2> &  __a_rename_at_1182_57 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_bdbaa3cdf026fd53 ( Context * __context__, TArray<int2> &  __a_rename_at_1215_57 )
 {
-    builtin_array_free(das_arg<TArray<int2>>::pass(__a_rename_at_1182_57),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<int2>>::pass(__a_rename_at_1215_57),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_3e9cd2e37416fedd ( Context * __context__, TArray<int3> &  __a_rename_at_1182_58 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_3e9cd2e37416fedd ( Context * __context__, TArray<int3> &  __a_rename_at_1215_58 )
 {
-    builtin_array_free(das_arg<TArray<int3>>::pass(__a_rename_at_1182_58),12,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<int3>>::pass(__a_rename_at_1215_58),12,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_305881b9dfd38d94 ( Context * __context__, TArray<int4> &  __a_rename_at_1182_59 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_305881b9dfd38d94 ( Context * __context__, TArray<int4> &  __a_rename_at_1215_59 )
 {
-    builtin_array_free(das_arg<TArray<int4>>::pass(__a_rename_at_1182_59),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<int4>>::pass(__a_rename_at_1215_59),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8c72686c5233b867 ( Context * __context__, TArray<uint32_t> &  __a_rename_at_1182_60 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8c72686c5233b867 ( Context * __context__, TArray<uint32_t> &  __a_rename_at_1215_60 )
 {
-    builtin_array_free(das_arg<TArray<uint32_t>>::pass(__a_rename_at_1182_60),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint32_t>>::pass(__a_rename_at_1215_60),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_fffaef092afc278c ( Context * __context__, TArray<uint16_t> &  __a_rename_at_1182_61 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_fffaef092afc278c ( Context * __context__, TArray<uint16_t> &  __a_rename_at_1215_61 )
 {
-    builtin_array_free(das_arg<TArray<uint16_t>>::pass(__a_rename_at_1182_61),2,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint16_t>>::pass(__a_rename_at_1215_61),2,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( Context * __context__, TArray<uint64_t> &  __a_rename_at_1182_62 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( Context * __context__, TArray<uint64_t> &  __a_rename_at_1215_62 )
 {
-    builtin_array_free(das_arg<TArray<uint64_t>>::pass(__a_rename_at_1182_62),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint64_t>>::pass(__a_rename_at_1215_62),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_687b6a92ad357e8e ( Context * __context__, TArray<uint2> &  __a_rename_at_1182_63 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_687b6a92ad357e8e ( Context * __context__, TArray<uint2> &  __a_rename_at_1215_63 )
 {
-    builtin_array_free(das_arg<TArray<uint2>>::pass(__a_rename_at_1182_63),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint2>>::pass(__a_rename_at_1215_63),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_84b0428ea5f27e4b ( Context * __context__, TArray<uint3> &  __a_rename_at_1182_64 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_84b0428ea5f27e4b ( Context * __context__, TArray<uint3> &  __a_rename_at_1215_64 )
 {
-    builtin_array_free(das_arg<TArray<uint3>>::pass(__a_rename_at_1182_64),12,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint3>>::pass(__a_rename_at_1215_64),12,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_82b92458d4ee6ada ( Context * __context__, TArray<uint4> &  __a_rename_at_1182_65 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_82b92458d4ee6ada ( Context * __context__, TArray<uint4> &  __a_rename_at_1215_65 )
 {
-    builtin_array_free(das_arg<TArray<uint4>>::pass(__a_rename_at_1182_65),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint4>>::pass(__a_rename_at_1215_65),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_1842c7d3117284e3 ( Context * __context__, TArray<float> &  __a_rename_at_1182_66 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_1842c7d3117284e3 ( Context * __context__, TArray<float> &  __a_rename_at_1215_66 )
 {
-    builtin_array_free(das_arg<TArray<float>>::pass(__a_rename_at_1182_66),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<float>>::pass(__a_rename_at_1215_66),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ac5d28cb71a5cfe4 ( Context * __context__, TArray<float2> &  __a_rename_at_1182_67 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ac5d28cb71a5cfe4 ( Context * __context__, TArray<float2> &  __a_rename_at_1215_67 )
 {
-    builtin_array_free(das_arg<TArray<float2>>::pass(__a_rename_at_1182_67),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<float2>>::pass(__a_rename_at_1215_67),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_52f701b7786cc1a7 ( Context * __context__, TArray<float3> &  __a_rename_at_1182_68 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_52f701b7786cc1a7 ( Context * __context__, TArray<float3> &  __a_rename_at_1215_68 )
 {
-    builtin_array_free(das_arg<TArray<float3>>::pass(__a_rename_at_1182_68),12,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<float3>>::pass(__a_rename_at_1215_68),12,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c9b4d33613c2b27c ( Context * __context__, TArray<float4> &  __a_rename_at_1182_69 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c9b4d33613c2b27c ( Context * __context__, TArray<float4> &  __a_rename_at_1215_69 )
 {
-    builtin_array_free(das_arg<TArray<float4>>::pass(__a_rename_at_1182_69),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<float4>>::pass(__a_rename_at_1215_69),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_bc22d20cfb821848 ( Context * __context__, TArray<float3x3> &  __a_rename_at_1182_70 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_bc22d20cfb821848 ( Context * __context__, TArray<float3x3> &  __a_rename_at_1215_70 )
 {
-    builtin_array_free(das_arg<TArray<float3x3>>::pass(__a_rename_at_1182_70),36,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<float3x3>>::pass(__a_rename_at_1215_70),36,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8aeeedc524bce23d ( Context * __context__, TArray<float3x4> &  __a_rename_at_1182_71 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8aeeedc524bce23d ( Context * __context__, TArray<float3x4> &  __a_rename_at_1215_71 )
 {
-    builtin_array_free(das_arg<TArray<float3x4>>::pass(__a_rename_at_1182_71),48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<float3x4>>::pass(__a_rename_at_1215_71),48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_913d10501b52d571 ( Context * __context__, TArray<float4x4> &  __a_rename_at_1182_72 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_913d10501b52d571 ( Context * __context__, TArray<float4x4> &  __a_rename_at_1215_72 )
 {
-    builtin_array_free(das_arg<TArray<float4x4>>::pass(__a_rename_at_1182_72),64,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<float4x4>>::pass(__a_rename_at_1215_72),64,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8ec282c4215a7333 ( Context * __context__, TArray<double> &  __a_rename_at_1182_73 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_8ec282c4215a7333 ( Context * __context__, TArray<double> &  __a_rename_at_1215_73 )
 {
-    builtin_array_free(das_arg<TArray<double>>::pass(__a_rename_at_1182_73),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<double>>::pass(__a_rename_at_1215_73),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline Lambda DAS_COMMENT((void)) _Func_localfunction_decs_860_122Tickfunction_5747cb7054f3a103 ( Context * __context__, TArray<uint8_t> &  __src_rename_at_860_74 )
@@ -4547,16 +4547,16 @@ inline void finalize_1c927c451f98659e ( Context * __context__, decs::Archetype &
     memset((void*)&(____this_rename_at_57_564), 0, TypeSize<decs::Archetype>::size);
 }
 
-inline void finalize_f87ddce7a3ad05ec ( Context * __context__, AutoTuple<int32_t,uint64_t,int32_t> &  ____this_rename_at_1186_565 )
+inline void finalize_f87ddce7a3ad05ec ( Context * __context__, AutoTuple<int32_t,uint64_t,int32_t> &  ____this_rename_at_1219_565 )
 {
-    memset((void*)&(____this_rename_at_1186_565), 0, TypeSize<AutoTuple<int32_t,uint64_t,int32_t>>::size);
+    memset((void*)&(____this_rename_at_1219_565), 0, TypeSize<AutoTuple<int32_t,uint64_t,int32_t>>::size);
 }
 
-inline Sequence DAS_COMMENT((decs::CTypeInfo &)) _FuncbuiltinTickvaluesTick1351216622833168869_61c0f20a0f69d8bd ( Context * __context__, TTable<char *,decs::CTypeInfo> &  __a_rename_at_1150_566 )
+inline Sequence DAS_COMMENT((decs::CTypeInfo &)) _FuncbuiltinTickvaluesTick1351216622833168869_61c0f20a0f69d8bd ( Context * __context__, TTable<char *,decs::CTypeInfo> &  __a_rename_at_1183_566 )
 {
-    Sequence DAS_COMMENT((decs::CTypeInfo *)) __it_rename_at_1151_567;das_zero(__it_rename_at_1151_567);
-    builtin_table_values(das_arg<Sequence DAS_COMMENT((decs::CTypeInfo))>::pass(__it_rename_at_1151_567),das_arg<TTable<char *,decs::CTypeInfo>>::pass(__a_rename_at_1150_566),88,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((decs::CTypeInfo &))>::cast(__it_rename_at_1151_567);
+    Sequence DAS_COMMENT((decs::CTypeInfo *)) __it_rename_at_1184_567;das_zero(__it_rename_at_1184_567);
+    builtin_table_values(das_arg<Sequence DAS_COMMENT((decs::CTypeInfo))>::pass(__it_rename_at_1184_567),das_arg<TTable<char *,decs::CTypeInfo>>::pass(__a_rename_at_1183_566),88,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((decs::CTypeInfo &))>::cast(__it_rename_at_1184_567);
 }
 
 inline void finalize_3775538d03196950 ( Context * __context__, decs::EcsRequest &  ____this_rename_at_92_568 )
@@ -4614,30 +4614,30 @@ inline void _Func_localfunction_decs_893_121Tickfunction_e93e5ac7cf13aaa7 ( Cont
     };
 }
 
-inline void _FuncbuiltinTickcloneTick3038771811667655495_b12ac32c809091fa ( Context * __context__, TArray<char *> &  __a_rename_at_1080_582, TArray<char *> const  &  __b_rename_at_1080_583 )
+inline void _FuncbuiltinTickcloneTick3038771811667655495_b12ac32c809091fa ( Context * __context__, TArray<char *> &  __a_rename_at_1113_582, TArray<char *> const  &  __b_rename_at_1113_583 )
 {
-    int32_t __ln_rename_at_1081_584 = ((int32_t)builtin_array_size(__b_rename_at_1080_583));
-    _FuncbuiltinTickresizeTick4811697762258667383_14682004b38ad2a1(__context__,das_arg<TArray<char *>>::pass(__a_rename_at_1080_582),__ln_rename_at_1081_584);
-    if ( __ln_rename_at_1081_584 == 0 )
+    int32_t __ln_rename_at_1114_584 = ((int32_t)builtin_array_size(__b_rename_at_1113_583));
+    _FuncbuiltinTickresizeTick4811697762258667383_14682004b38ad2a1(__context__,das_arg<TArray<char *>>::pass(__a_rename_at_1113_582),__ln_rename_at_1114_584);
+    if ( __ln_rename_at_1114_584 == 0 )
     {
         return ;
     } else {
         {
-            bool __need_loop_1091 = true;
+            bool __need_loop_1124 = true;
             // aV: string aka TT&
-            das_iterator<TArray<char *>> __aV_iterator(__a_rename_at_1080_582);
-            char * * __aV_rename_at_1091_587;
-            __need_loop_1091 = __aV_iterator.first(__context__,(__aV_rename_at_1091_587)) && __need_loop_1091;
+            das_iterator<TArray<char *>> __aV_iterator(__a_rename_at_1113_582);
+            char * * __aV_rename_at_1124_587;
+            __need_loop_1124 = __aV_iterator.first(__context__,(__aV_rename_at_1124_587)) && __need_loop_1124;
             // bV: string const&
-            das_iterator<TArray<char *> const > __bV_iterator(__b_rename_at_1080_583);
-            char * const  * __bV_rename_at_1091_588;
-            __need_loop_1091 = __bV_iterator.first(__context__,(__bV_rename_at_1091_588)) && __need_loop_1091;
-            for ( ; __need_loop_1091 ; __need_loop_1091 = __aV_iterator.next(__context__,(__aV_rename_at_1091_587)) && __bV_iterator.next(__context__,(__bV_rename_at_1091_588)) )
+            das_iterator<TArray<char *> const > __bV_iterator(__b_rename_at_1113_583);
+            char * const  * __bV_rename_at_1124_588;
+            __need_loop_1124 = __bV_iterator.first(__context__,(__bV_rename_at_1124_588)) && __need_loop_1124;
+            for ( ; __need_loop_1124 ; __need_loop_1124 = __aV_iterator.next(__context__,(__aV_rename_at_1124_587)) && __bV_iterator.next(__context__,(__bV_rename_at_1124_588)) )
             {
-                das_copy((*__aV_rename_at_1091_587),((char * const )(builtin_string_clone((*__bV_rename_at_1091_588),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
+                das_copy((*__aV_rename_at_1124_587),((char * const )(builtin_string_clone((*__bV_rename_at_1124_588),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
             }
-            __aV_iterator.close(__context__,(__aV_rename_at_1091_587));
-            __bV_iterator.close(__context__,(__bV_rename_at_1091_588));
+            __aV_iterator.close(__context__,(__aV_rename_at_1124_587));
+            __bV_iterator.close(__context__,(__bV_rename_at_1124_588));
         };
     };
 }
@@ -7438,15 +7438,15 @@ inline void _FuncarchiveTickwrite_rawTick9760319972816126958_7e827e6b1de76fcd ( 
     das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,uint64_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_105_1140.stream))),das_ref(__context__,__value_rename_at_105_1141),8);
 }
 
-inline void _FuncbuiltinTickcloneTick3038771811667655495_c353b2222916bce3 ( Context * __context__, TArray<int32_t> &  __a_rename_at_1080_1142, TArray<int32_t> const  &  __b_rename_at_1080_1143 )
+inline void _FuncbuiltinTickcloneTick3038771811667655495_c353b2222916bce3 ( Context * __context__, TArray<int32_t> &  __a_rename_at_1113_1142, TArray<int32_t> const  &  __b_rename_at_1113_1143 )
 {
-    int32_t __ln_rename_at_1081_1144 = ((int32_t)builtin_array_size(__b_rename_at_1080_1143));
-    _FuncbuiltinTickresizeTick4811697762258667383_1bdb9995fa062a51(__context__,das_arg<TArray<int32_t>>::pass(__a_rename_at_1080_1142),__ln_rename_at_1081_1144);
-    if ( __ln_rename_at_1081_1144 == 0 )
+    int32_t __ln_rename_at_1114_1144 = ((int32_t)builtin_array_size(__b_rename_at_1113_1143));
+    _FuncbuiltinTickresizeTick4811697762258667383_1bdb9995fa062a51(__context__,das_arg<TArray<int32_t>>::pass(__a_rename_at_1113_1142),__ln_rename_at_1114_1144);
+    if ( __ln_rename_at_1114_1144 == 0 )
     {
         return ;
     } else {
-        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1080_1142(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1080_1143(0,__context__))),__ln_rename_at_1081_1144 * 4);
+        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1113_1142(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1113_1143(0,__context__))),__ln_rename_at_1114_1144 * 4);
     };
 }
 
@@ -7918,7 +7918,7 @@ inline void _FuncdecsTickmake_callbacksTick7881608678897058277_4138a85e510ea6bf 
     das_copy(__cv_rename_at_838_1249.info.serializer,Func(__context__->fnByMangledName(/*@decs::_localfunction_decs_923_119`function S<archive::Archive> 1<u8>A Cs*/ 0x2bb740a236f446a)));
 }
 
-inline int32_t _FuncalgorithmTicklower_boundTick18126846866405818753_4ca42a3850224fec ( Context * __context__, TArray<decs::Component> const  &  __a_rename_at_83_1251, int32_t __f_rename_at_83_1252, int32_t __l_rename_at_83_1253, decs::Component const  &  __value_rename_at_83_1254, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  &  __less_rename_at_83_1255 )
+inline int32_t _FuncalgorithmTicklower_boundTick8686693477002751267_e2577dcb26631c73 ( Context * __context__, TArray<decs::Component> const  &  __a_rename_at_83_1251, int32_t __f_rename_at_83_1252, int32_t __l_rename_at_83_1253, decs::Component const  &  __value_rename_at_83_1254, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  &  __less_rename_at_83_1255 )
 {
     DAS_ASSERTF(((__f_rename_at_83_1252 >= 0) && (__f_rename_at_83_1252 <= __l_rename_at_83_1253)),(((char *) "lower bound first out of range")));
     DAS_ASSERTF(((__l_rename_at_83_1253 >= __f_rename_at_83_1252) && (__l_rename_at_83_1253 <= builtin_array_size(__a_rename_at_83_1251))),(((char *) "lower bound last out of range")));
@@ -7986,100 +7986,100 @@ inline int32_t _FuncalgorithmTicklower_boundTick5845303453396418626_caca6ae37025
     return das_auto_cast<int32_t>::cast(__first_rename_at_65_1275);
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_7b1c641088884a8c ( Context * __context__, TTable<uint64_t,int32_t> &  __a_rename_at_1193_1278 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_7b1c641088884a8c ( Context * __context__, TTable<uint64_t,int32_t> &  __a_rename_at_1226_1278 )
 {
-    builtin_table_free(das_arg<TTable<uint64_t,int32_t>>::pass(__a_rename_at_1193_1278),8,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<uint64_t,int32_t>>::pass(__a_rename_at_1226_1278),8,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_91a6f1f6e919dff4 ( Context * __context__, TArray<decs::Archetype> &  __a_rename_at_1182_1279 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_91a6f1f6e919dff4 ( Context * __context__, TArray<decs::Archetype> &  __a_rename_at_1215_1279 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: decs::Archetype aka TT&
-        das_iterator<TArray<decs::Archetype>> __aV_iterator(__a_rename_at_1182_1279);
-        decs::Archetype * __aV_rename_at_1184_1280;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_1280)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_1280)) )
+        das_iterator<TArray<decs::Archetype>> __aV_iterator(__a_rename_at_1215_1279);
+        decs::Archetype * __aV_rename_at_1217_1280;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_1280)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_1280)) )
         {
-            finalize_1c927c451f98659e(__context__,das_arg<decs::Archetype>::pass((*__aV_rename_at_1184_1280)));
+            finalize_1c927c451f98659e(__context__,das_arg<decs::Archetype>::pass((*__aV_rename_at_1217_1280)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_1280));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_1280));
     };
-    builtin_array_free(das_arg<TArray<decs::Archetype>>::pass(__a_rename_at_1182_1279),40,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<decs::Archetype>>::pass(__a_rename_at_1215_1279),40,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_fa638cea3e326b51 ( Context * __context__, TArray<decs::EntityId> &  __a_rename_at_1182_1281 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_fa638cea3e326b51 ( Context * __context__, TArray<decs::EntityId> &  __a_rename_at_1215_1281 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: decs::EntityId aka TT&
-        das_iterator<TArray<decs::EntityId>> __aV_iterator(__a_rename_at_1182_1281);
-        decs::EntityId * __aV_rename_at_1184_1282;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_1282)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_1282)) )
+        das_iterator<TArray<decs::EntityId>> __aV_iterator(__a_rename_at_1215_1281);
+        decs::EntityId * __aV_rename_at_1217_1282;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_1282)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_1282)) )
         {
-            finalize_aed1eae423063a73(__context__,das_arg<decs::EntityId>::pass((*__aV_rename_at_1184_1282)));
+            finalize_aed1eae423063a73(__context__,das_arg<decs::EntityId>::pass((*__aV_rename_at_1217_1282)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_1282));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_1282));
     };
-    builtin_array_free(das_arg<TArray<decs::EntityId>>::pass(__a_rename_at_1182_1281),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<decs::EntityId>>::pass(__a_rename_at_1215_1281),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e9bbb04df3646abc ( Context * __context__, TArray<AutoTuple<int32_t,uint64_t,int32_t>> &  __a_rename_at_1182_1283 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e9bbb04df3646abc ( Context * __context__, TArray<AutoTuple<int32_t,uint64_t,int32_t>> &  __a_rename_at_1215_1283 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: tuple<generation:int;archetype:uint64 aka ComponentHash;index:int> aka TT&
-        das_iterator<TArray<AutoTuple<int32_t,uint64_t,int32_t>>> __aV_iterator(__a_rename_at_1182_1283);
-        AutoTuple<int32_t,uint64_t,int32_t> * __aV_rename_at_1184_1284;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_1284)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_1284)) )
+        das_iterator<TArray<AutoTuple<int32_t,uint64_t,int32_t>>> __aV_iterator(__a_rename_at_1215_1283);
+        AutoTuple<int32_t,uint64_t,int32_t> * __aV_rename_at_1217_1284;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_1284)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_1284)) )
         {
-            finalize_f87ddce7a3ad05ec(__context__,das_arg<AutoTuple<int32_t,uint64_t,int32_t>>::pass((*__aV_rename_at_1184_1284)));
+            finalize_f87ddce7a3ad05ec(__context__,das_arg<AutoTuple<int32_t,uint64_t,int32_t>>::pass((*__aV_rename_at_1217_1284)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_1284));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_1284));
     };
-    builtin_array_free(das_arg<TArray<AutoTuple<int32_t,uint64_t,int32_t>>>::pass(__a_rename_at_1182_1283),24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<AutoTuple<int32_t,uint64_t,int32_t>>>::pass(__a_rename_at_1215_1283),24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_40b6602ff2cc486c ( Context * __context__, TTable<char *,decs::CTypeInfo> &  __a_rename_at_1193_1285 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_40b6602ff2cc486c ( Context * __context__, TTable<char *,decs::CTypeInfo> &  __a_rename_at_1226_1285 )
 {
-    Sequence DAS_COMMENT((decs::CTypeInfo *)) _temp_make_local_1195_19_32; _temp_make_local_1195_19_32;
+    Sequence DAS_COMMENT((decs::CTypeInfo *)) _temp_make_local_1228_19_32; _temp_make_local_1228_19_32;
     {
-        bool __need_loop_1195 = true;
+        bool __need_loop_1228 = true;
         // aV: decs::CTypeInfo&
-        das_iterator<Sequence DAS_COMMENT((decs::CTypeInfo))> __aV_iterator((_temp_make_local_1195_19_32 = (_FuncbuiltinTickvaluesTick1351216622833168869_61c0f20a0f69d8bd(__context__,das_arg<TTable<char *,decs::CTypeInfo>>::pass(__a_rename_at_1193_1285)))));
-        decs::CTypeInfo * __aV_rename_at_1195_1286;
-        __need_loop_1195 = __aV_iterator.first(__context__,(__aV_rename_at_1195_1286)) && __need_loop_1195;
-        for ( ; __need_loop_1195 ; __need_loop_1195 = __aV_iterator.next(__context__,(__aV_rename_at_1195_1286)) )
+        das_iterator<Sequence DAS_COMMENT((decs::CTypeInfo))> __aV_iterator((_temp_make_local_1228_19_32 = (_FuncbuiltinTickvaluesTick1351216622833168869_61c0f20a0f69d8bd(__context__,das_arg<TTable<char *,decs::CTypeInfo>>::pass(__a_rename_at_1226_1285)))));
+        decs::CTypeInfo * __aV_rename_at_1228_1286;
+        __need_loop_1228 = __aV_iterator.first(__context__,(__aV_rename_at_1228_1286)) && __need_loop_1228;
+        for ( ; __need_loop_1228 ; __need_loop_1228 = __aV_iterator.next(__context__,(__aV_rename_at_1228_1286)) )
         {
-            finalize_c2cf16c62ac9b1f5(__context__,das_arg<decs::CTypeInfo>::pass((*__aV_rename_at_1195_1286)));
+            finalize_c2cf16c62ac9b1f5(__context__,das_arg<decs::CTypeInfo>::pass((*__aV_rename_at_1228_1286)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1195_1286));
+        __aV_iterator.close(__context__,(__aV_rename_at_1228_1286));
     };
-    builtin_table_free(das_arg<TTable<char *,decs::CTypeInfo>>::pass(__a_rename_at_1193_1285),8,88,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<char *,decs::CTypeInfo>>::pass(__a_rename_at_1226_1285),8,88,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_212839cd1a883cb8 ( Context * __context__, TArray<decs::EcsRequest> &  __a_rename_at_1182_1287 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_212839cd1a883cb8 ( Context * __context__, TArray<decs::EcsRequest> &  __a_rename_at_1215_1287 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: decs::EcsRequest aka TT&
-        das_iterator<TArray<decs::EcsRequest>> __aV_iterator(__a_rename_at_1182_1287);
-        decs::EcsRequest * __aV_rename_at_1184_1288;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_1288)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_1288)) )
+        das_iterator<TArray<decs::EcsRequest>> __aV_iterator(__a_rename_at_1215_1287);
+        decs::EcsRequest * __aV_rename_at_1217_1288;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_1288)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_1288)) )
         {
-            finalize_3775538d03196950(__context__,das_arg<decs::EcsRequest>::pass((*__aV_rename_at_1184_1288)));
+            finalize_3775538d03196950(__context__,das_arg<decs::EcsRequest>::pass((*__aV_rename_at_1217_1288)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_1288));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_1288));
     };
-    builtin_array_free(das_arg<TArray<decs::EcsRequest>>::pass(__a_rename_at_1182_1287),96,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<decs::EcsRequest>>::pass(__a_rename_at_1215_1287),96,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> &  __a_rename_at_1182_1289 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> &  __a_rename_at_1215_1289 )
 {
-    builtin_array_free(das_arg<TArray<char *>>::pass(__a_rename_at_1182_1289),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<char *>>::pass(__a_rename_at_1215_1289),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void _FuncbuiltinTickpushTick14934788096129379580_b9adfb6d1d3c0d0f ( Context * __context__, TArray<decs::ComponentValue> &  __Arr_rename_at_137_1290, decs::ComponentValue const  &  __value_rename_at_137_1291, int32_t __at_rename_at_137_1292 )
@@ -8098,11 +8098,11 @@ inline void _FuncbuiltinTickemplaceTick567242425908074758_945a508f4be04695 ( Con
     das_move(__Arr_rename_at_274_1296(builtin_array_push(das_arg<TArray<decs::DecsPass>>::pass(__Arr_rename_at_274_1296),__at_rename_at_274_1298,32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_274_1297);
 }
 
-inline TArray<int32_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_26d93f744314eca0 ( Context * __context__, TArray<int32_t> const  &  __clone_src_rename_at_1056_1299 )
+inline TArray<int32_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_26d93f744314eca0 ( Context * __context__, TArray<int32_t> const  &  __clone_src_rename_at_1089_1299 )
 {
-    TArray<int32_t> __clone_dest_rename_at_1058_1300;das_zero(__clone_dest_rename_at_1058_1300);
-    _FuncbuiltinTickcloneTick3038771811667655495_c353b2222916bce3(__context__,das_arg<TArray<int32_t>>::pass(__clone_dest_rename_at_1058_1300),__clone_src_rename_at_1056_1299);
-    return /* <- */ das_auto_cast_move<TArray<int32_t>>::cast(__clone_dest_rename_at_1058_1300);
+    TArray<int32_t> __clone_dest_rename_at_1091_1300;das_zero(__clone_dest_rename_at_1091_1300);
+    _FuncbuiltinTickcloneTick3038771811667655495_c353b2222916bce3(__context__,das_arg<TArray<int32_t>>::pass(__clone_dest_rename_at_1091_1300),__clone_src_rename_at_1089_1299);
+    return /* <- */ das_auto_cast_move<TArray<int32_t>>::cast(__clone_dest_rename_at_1091_1300);
 }
 
 inline void _FuncbuiltinTickeraseTick16646986352019611268_c0f137fec6db20e2 ( Context * __context__, TArray<decs::ComponentValue> &  __Arr_rename_at_535_1301, int32_t __at_rename_at_535_1302 )
@@ -8110,7 +8110,7 @@ inline void _FuncbuiltinTickeraseTick16646986352019611268_c0f137fec6db20e2 ( Con
     builtin_array_erase(das_arg<TArray<decs::ComponentValue>>::pass(__Arr_rename_at_535_1301),__at_rename_at_535_1302,160,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline int32_t _FuncalgorithmTicklower_boundTick18126846866405818753_934d44c6a92fbd19 ( Context * __context__, TArray<decs::ComponentValue> const  &  __a_rename_at_83_1303, int32_t __f_rename_at_83_1304, int32_t __l_rename_at_83_1305, decs::ComponentValue const  &  __value_rename_at_83_1306, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  &  __less_rename_at_83_1307 )
+inline int32_t _FuncalgorithmTicklower_boundTick8686693477002751267_65b824aee440480e ( Context * __context__, TArray<decs::ComponentValue> const  &  __a_rename_at_83_1303, int32_t __f_rename_at_83_1304, int32_t __l_rename_at_83_1305, decs::ComponentValue const  &  __value_rename_at_83_1306, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  &  __less_rename_at_83_1307 )
 {
     DAS_ASSERTF(((__f_rename_at_83_1304 >= 0) && (__f_rename_at_83_1304 <= __l_rename_at_83_1305)),(((char *) "lower bound first out of range")));
     DAS_ASSERTF(((__l_rename_at_83_1305 >= __f_rename_at_83_1304) && (__l_rename_at_83_1305 <= builtin_array_size(__a_rename_at_83_1303))),(((char *) "lower bound last out of range")));
@@ -8922,7 +8922,7 @@ inline void _FuncapplyTickstructTickCTypeInfoTick0x96Tick0Tick11_50e2ea000b6a566
     das_invoke<void>::invoke<Func DAS_COMMENT((Lambda DAS_COMMENT((void)),TArray<uint8_t>)) &>(__context__,nullptr,____arg_gc_rename_at_62_1467,___Var_Tick_self_rename_at_62_1456.gc);
 }
 
-inline int32_t _FuncalgorithmTicklower_boundTick18126846866405818753_dbc0c07e011dc186 ( Context * __context__, TArray<decs::DecsPass> const  &  __a_rename_at_83_1468, int32_t __f_rename_at_83_1469, int32_t __l_rename_at_83_1470, decs::DecsPass const  &  __value_rename_at_83_1471, Block DAS_COMMENT((bool,decs::DecsPass const ,decs::DecsPass const )) const  &  __less_rename_at_83_1472 )
+inline int32_t _FuncalgorithmTicklower_boundTick8686693477002751267_78a9b5beb1a63d65 ( Context * __context__, TArray<decs::DecsPass> const  &  __a_rename_at_83_1468, int32_t __f_rename_at_83_1469, int32_t __l_rename_at_83_1470, decs::DecsPass const  &  __value_rename_at_83_1471, Block DAS_COMMENT((bool,decs::DecsPass const ,decs::DecsPass const )) const  &  __less_rename_at_83_1472 )
 {
     DAS_ASSERTF(((__f_rename_at_83_1469 >= 0) && (__f_rename_at_83_1469 <= __l_rename_at_83_1470)),(((char *) "lower bound first out of range")));
     DAS_ASSERTF(((__l_rename_at_83_1470 >= __f_rename_at_83_1469) && (__l_rename_at_83_1470 <= builtin_array_size(__a_rename_at_83_1468))),(((char *) "lower bound last out of range")));
@@ -8948,9 +8948,9 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_be5e4db5cc62bbe2 ( Con
     builtin_array_resize(das_arg<TArray<decs::EntityId>>::pass(__Arr_rename_at_68_1477),__newSize_rename_at_68_1478,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline int32_t _FuncalgorithmTicklower_boundTick16093794823624193897_ceeda13844fe2646 ( Context * __context__, TArray<decs::Component> const  &  __a_rename_at_101_1479, decs::Component const  &  __value_rename_at_101_1480, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  &  __less_rename_at_101_1481 )
+inline int32_t _FuncalgorithmTicklower_boundTick6423703817649034251_99cab115045d39c8 ( Context * __context__, TArray<decs::Component> const  &  __a_rename_at_101_1479, decs::Component const  &  __value_rename_at_101_1480, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  &  __less_rename_at_101_1481 )
 {
-    return das_auto_cast<int32_t>::cast(_FuncalgorithmTicklower_boundTick18126846866405818753_4ca42a3850224fec(__context__,__a_rename_at_101_1479,0,builtin_array_size(__a_rename_at_101_1479),__value_rename_at_101_1480,__less_rename_at_101_1481));
+    return das_auto_cast<int32_t>::cast(_FuncalgorithmTicklower_boundTick8686693477002751267_e2577dcb26631c73(__context__,__a_rename_at_101_1479,0,builtin_array_size(__a_rename_at_101_1479),__value_rename_at_101_1480,__less_rename_at_101_1481));
 }
 
 inline int32_t _FuncalgorithmTicklower_boundTick15764527788046818970_738dc09f48c04cec ( Context * __context__, TArray<char *> const  &  __a_rename_at_79_1482, char * const  __val_rename_at_79_1483 )
@@ -8958,19 +8958,19 @@ inline int32_t _FuncalgorithmTicklower_boundTick15764527788046818970_738dc09f48c
     return das_auto_cast<int32_t>::cast(_FuncalgorithmTicklower_boundTick5845303453396418626_34874817d3fc375e(__context__,__a_rename_at_79_1482,0,builtin_array_size(__a_rename_at_79_1482),__val_rename_at_79_1483));
 }
 
-inline void _FuncbuiltinTicksortTick14088969635007481283_e8d7aa932cb8bc70 ( Context * __context__, TArray<char *> &  __a_rename_at_1517_1484 )
+inline void _FuncbuiltinTicksortTick14088969635007481283_e8d7aa932cb8bc70 ( Context * __context__, TArray<char *> &  __a_rename_at_1550_1484 )
 {
-    if ( builtin_array_size(das_arg<TArray<char *>>::pass(__a_rename_at_1517_1484)) <= 1 )
+    if ( builtin_array_size(das_arg<TArray<char *>>::pass(__a_rename_at_1550_1484)) <= 1 )
     {
         return ;
     } else {
-        builtin_array_lock(das_arg<TArray<char *>>::pass(__a_rename_at_1517_1484),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-        builtin_sort_string(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1517_1484(0,__context__))),builtin_array_size(das_arg<TArray<char *>>::pass(__a_rename_at_1517_1484)));
-        builtin_array_unlock(das_arg<TArray<char *>>::pass(__a_rename_at_1517_1484),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+        builtin_array_lock(das_arg<TArray<char *>>::pass(__a_rename_at_1550_1484),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+        builtin_sort_string(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1550_1484(0,__context__))),builtin_array_size(das_arg<TArray<char *>>::pass(__a_rename_at_1550_1484)));
+        builtin_array_unlock(das_arg<TArray<char *>>::pass(__a_rename_at_1550_1484),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     };
 }
 
-inline TArray<char *> _FuncalgorithmTickuniqueTick8642070526899511001_1190863ce08ff79f ( Context * __context__, TArray<char *> &  __a_rename_at_11_1485 )
+inline TArray<char *> _FuncalgorithmTickuniqueTick8642070526899511001_52c7abc78345e039 ( Context * __context__, TArray<char *> &  __a_rename_at_11_1485 )
 {
     int32_t __pidx_rename_at_13_1486 = -1;
     TArray<char *> __b_rename_at_14_1487;das_zero(__b_rename_at_14_1487);
@@ -9028,65 +9028,65 @@ inline void finalize_6889e95f9103d351 ( Context * __context__, decs::_lambda_dec
     memset((void*)&(____this_rename_at_799_1498), 0, TypeSize<decs::_lambda_decs_799_3>::size);
 }
 
-inline void _FuncbuiltinTickcloneTick3038771811667655495_4daebed5ed337081 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1080_1499, TArray<uint8_t> const  &  __b_rename_at_1080_1500 )
+inline void _FuncbuiltinTickcloneTick3038771811667655495_4daebed5ed337081 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1113_1499, TArray<uint8_t> const  &  __b_rename_at_1113_1500 )
 {
-    int32_t __ln_rename_at_1081_1501 = ((int32_t)builtin_array_size(__b_rename_at_1080_1500));
-    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__a_rename_at_1080_1499),__ln_rename_at_1081_1501);
-    if ( __ln_rename_at_1081_1501 == 0 )
+    int32_t __ln_rename_at_1114_1501 = ((int32_t)builtin_array_size(__b_rename_at_1113_1500));
+    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__a_rename_at_1113_1499),__ln_rename_at_1114_1501);
+    if ( __ln_rename_at_1114_1501 == 0 )
     {
         return ;
     } else {
-        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1080_1499(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1080_1500(0,__context__))),__ln_rename_at_1081_1501 * 1);
+        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1113_1499(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1113_1500(0,__context__))),__ln_rename_at_1114_1501 * 1);
     };
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1182_1502 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1215_1502 )
 {
-    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1182_1502),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1215_1502),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_67d985c3564779d7 ( Context * __context__, TArray<decs::DeferAction> &  __a_rename_at_1182_1503 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_67d985c3564779d7 ( Context * __context__, TArray<decs::DeferAction> &  __a_rename_at_1215_1503 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: decs::DeferAction aka TT&
-        das_iterator<TArray<decs::DeferAction>> __aV_iterator(__a_rename_at_1182_1503);
-        decs::DeferAction * __aV_rename_at_1184_1504;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_1504)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_1504)) )
+        das_iterator<TArray<decs::DeferAction>> __aV_iterator(__a_rename_at_1215_1503);
+        decs::DeferAction * __aV_rename_at_1217_1504;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_1504)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_1504)) )
         {
-            finalize_45116d7423271b75(__context__,das_arg<decs::DeferAction>::pass((*__aV_rename_at_1184_1504)));
+            finalize_45116d7423271b75(__context__,das_arg<decs::DeferAction>::pass((*__aV_rename_at_1217_1504)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_1504));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_1504));
     };
-    builtin_array_free(das_arg<TArray<decs::DeferAction>>::pass(__a_rename_at_1182_1503),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<decs::DeferAction>>::pass(__a_rename_at_1215_1503),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8 ( Context * __context__, TArray<int32_t> &  __a_rename_at_1182_1505 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8 ( Context * __context__, TArray<int32_t> &  __a_rename_at_1215_1505 )
 {
-    builtin_array_free(das_arg<TArray<int32_t>>::pass(__a_rename_at_1182_1505),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<int32_t>>::pass(__a_rename_at_1215_1505),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a7a5d4b55cfb401 ( Context * __context__, TArray<decs::ComponentValue> &  __a_rename_at_1182_1506 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a7a5d4b55cfb401 ( Context * __context__, TArray<decs::ComponentValue> &  __a_rename_at_1215_1506 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: decs::ComponentValue aka TT&
-        das_iterator<TArray<decs::ComponentValue>> __aV_iterator(__a_rename_at_1182_1506);
-        decs::ComponentValue * __aV_rename_at_1184_1507;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_1507)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_1507)) )
+        das_iterator<TArray<decs::ComponentValue>> __aV_iterator(__a_rename_at_1215_1506);
+        decs::ComponentValue * __aV_rename_at_1217_1507;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_1507)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_1507)) )
         {
-            finalize_a5248a59a609d07c(__context__,das_arg<decs::ComponentValue>::pass((*__aV_rename_at_1184_1507)));
+            finalize_a5248a59a609d07c(__context__,das_arg<decs::ComponentValue>::pass((*__aV_rename_at_1217_1507)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_1507));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_1507));
     };
-    builtin_array_free(das_arg<TArray<decs::ComponentValue>>::pass(__a_rename_at_1182_1506),160,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<decs::ComponentValue>>::pass(__a_rename_at_1215_1506),160,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline int32_t _FuncalgorithmTicklower_boundTick16093794823624193897_e7668723244a73ff ( Context * __context__, TArray<decs::ComponentValue> const  &  __a_rename_at_101_1508, decs::ComponentValue const  &  __value_rename_at_101_1509, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  &  __less_rename_at_101_1510 )
+inline int32_t _FuncalgorithmTicklower_boundTick6423703817649034251_18ada4b2d50e7d67 ( Context * __context__, TArray<decs::ComponentValue> const  &  __a_rename_at_101_1508, decs::ComponentValue const  &  __value_rename_at_101_1509, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  &  __less_rename_at_101_1510 )
 {
-    return das_auto_cast<int32_t>::cast(_FuncalgorithmTicklower_boundTick18126846866405818753_934d44c6a92fbd19(__context__,__a_rename_at_101_1508,0,builtin_array_size(__a_rename_at_101_1508),__value_rename_at_101_1509,__less_rename_at_101_1510));
+    return das_auto_cast<int32_t>::cast(_FuncalgorithmTicklower_boundTick8686693477002751267_65b824aee440480e(__context__,__a_rename_at_101_1508,0,builtin_array_size(__a_rename_at_101_1508),__value_rename_at_101_1509,__less_rename_at_101_1510));
 }
 
 inline void _FuncdecsTicksetTick11209997464375680874_bd5df505c4081c6 ( Context * __context__, decs::ComponentValue &  __cv_rename_at_159_1511, decs::EntityId const  &  __val_rename_at_159_1512 )
@@ -9333,9 +9333,9 @@ inline void _FuncarchiveTickserializeTick8013964856239694639_b41098b846ab5ad7 ( 
     }));
 }}
 
-inline int32_t _FuncalgorithmTicklower_boundTick16093794823624193897_ce29fe5ecc0183e4 ( Context * __context__, TArray<decs::DecsPass> const  &  __a_rename_at_101_1615, decs::DecsPass const  &  __value_rename_at_101_1616, Block DAS_COMMENT((bool,decs::DecsPass const ,decs::DecsPass const )) const  &  __less_rename_at_101_1617 )
+inline int32_t _FuncalgorithmTicklower_boundTick6423703817649034251_3302e2d7d1f43bc4 ( Context * __context__, TArray<decs::DecsPass> const  &  __a_rename_at_101_1615, decs::DecsPass const  &  __value_rename_at_101_1616, Block DAS_COMMENT((bool,decs::DecsPass const ,decs::DecsPass const )) const  &  __less_rename_at_101_1617 )
 {
-    return das_auto_cast<int32_t>::cast(_FuncalgorithmTicklower_boundTick18126846866405818753_dbc0c07e011dc186(__context__,__a_rename_at_101_1615,0,builtin_array_size(__a_rename_at_101_1615),__value_rename_at_101_1616,__less_rename_at_101_1617));
+    return das_auto_cast<int32_t>::cast(_FuncalgorithmTicklower_boundTick8686693477002751267_78a9b5beb1a63d65(__context__,__a_rename_at_101_1615,0,builtin_array_size(__a_rename_at_101_1615),__value_rename_at_101_1616,__less_rename_at_101_1617));
 }
 
 inline void _FuncbuiltinTickpushTick14133213201864676143_871ed3e1df393493 ( Context * __context__, TArray<Func DAS_COMMENT((void))> &  __Arr_rename_at_165_1618, Func DAS_COMMENT((void)) const  __value_rename_at_165_1619 )
@@ -9397,9 +9397,9 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Con
     builtin_array_resize(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_68_1632),__newSize_rename_at_68_1633,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline bool _FuncalgorithmTickbinary_searchTick14008495768446863867_4a97a34626cd4642 ( Context * __context__, TArray<decs::Component> const  &  __a_rename_at_117_1634, decs::Component const  &  __val_rename_at_117_1635, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  &  __less_rename_at_117_1636 )
+inline bool _FuncalgorithmTickbinary_searchTick14008495768446863867_5a15a37c873324e7 ( Context * __context__, TArray<decs::Component> const  &  __a_rename_at_117_1634, decs::Component const  &  __val_rename_at_117_1635, Block DAS_COMMENT((bool,decs::Component const ,decs::Component const )) const  &  __less_rename_at_117_1636 )
 {
-    int32_t __first_rename_at_118_1637 = ((int32_t)_FuncalgorithmTicklower_boundTick16093794823624193897_ceeda13844fe2646(__context__,__a_rename_at_117_1634,__val_rename_at_117_1635,__less_rename_at_117_1636));
+    int32_t __first_rename_at_118_1637 = ((int32_t)_FuncalgorithmTicklower_boundTick6423703817649034251_99cab115045d39c8(__context__,__a_rename_at_117_1634,__val_rename_at_117_1635,__less_rename_at_117_1636));
     int32_t __last_rename_at_119_1638 = ((int32_t)builtin_array_size(__a_rename_at_117_1634));
     return das_auto_cast<bool>::cast((__first_rename_at_118_1637 != __last_rename_at_119_1638) && !(das_invoke<bool>::invoke<decs::Component const  &,decs::Component const  &>(__context__,nullptr,__less_rename_at_117_1636,__val_rename_at_117_1635,__a_rename_at_117_1634(__first_rename_at_118_1637,__context__))));
 }
@@ -9422,7 +9422,7 @@ inline void _FuncalgorithmTicksort_uniqueTick14985796887508933377_a7cd684429b2af
         return ;
     } else {
         _FuncbuiltinTicksortTick14088969635007481283_e8d7aa932cb8bc70(__context__,das_arg<TArray<char *>>::pass(__a_rename_at_24_1643));
-        TArray<char *> __b_rename_at_32_1644; das_zero(__b_rename_at_32_1644); das_move(__b_rename_at_32_1644, _FuncalgorithmTickuniqueTick8642070526899511001_1190863ce08ff79f(__context__,das_arg<TArray<char *>>::pass(__a_rename_at_24_1643)));
+        TArray<char *> __b_rename_at_32_1644; das_zero(__b_rename_at_32_1644); das_move(__b_rename_at_32_1644, _FuncalgorithmTickuniqueTick8642070526899511001_52c7abc78345e039(__context__,das_arg<TArray<char *>>::pass(__a_rename_at_24_1643)));
         _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8(__context__,das_arg<TArray<char *>>::pass(__a_rename_at_24_1643));
         _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_a82a23dca365c5c8(__context__,das_arg<TArray<char *>>::pass(__a_rename_at_24_1643),das_arg<TArray<char *>>::pass(__b_rename_at_32_1644));
     };
@@ -9469,12 +9469,12 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_851ab10030ae7c38 ( Cont
     das_copy(__Arr_rename_at_181_1658(builtin_array_push_back(das_arg<TArray<decs::ComponentValue>>::pass(__Arr_rename_at_181_1658),160,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1659);
 }
 
-inline void _FuncdecsTicksetTick17458790232895349504_bb6e804b92d95494 ( Context * __context__, TArray<decs::ComponentValue> &  __cmp_rename_at_1032_1660, char * const  __name_rename_at_1032_1661, decs::EntityId const  &  __value_rename_at_1032_1662 ) { das_stack_prologue __prologue(__context__,432,"decs`set`17458790232895349504 " DAS_FILE_LINE);
+inline void _FuncdecsTicksetTick17458790232895349504_4f9d50ccf9aefe53 ( Context * __context__, TArray<decs::ComponentValue> &  __cmp_rename_at_1032_1660, char * const  __name_rename_at_1032_1661, decs::EntityId const  &  __value_rename_at_1032_1662 ) { das_stack_prologue __prologue(__context__,432,"decs`set`17458790232895349504 " DAS_FILE_LINE);
 {
     decs::ComponentValue _temp_make_local_1037_31_208; _temp_make_local_1037_31_208;
     decs::ComponentValue __cv_rename_at_1036_1663_ConstRef = ((decs::ComponentValue)_FuncdecsTickmake_componentTick10966522786327472693_3a423ebc636ba8b5(__context__,__name_rename_at_1032_1661,__value_rename_at_1032_1662));
     decs::ComponentValue const  & __cv_rename_at_1036_1663 = __cv_rename_at_1036_1663_ConstRef; ;
-    int32_t __idx_rename_at_1037_1664 = ((int32_t)_FuncalgorithmTicklower_boundTick16093794823624193897_e7668723244a73ff(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_1032_1660),das_arg<decs::ComponentValue>::pass((([&]() -> decs::ComponentValue& {
+    int32_t __idx_rename_at_1037_1664 = ((int32_t)_FuncalgorithmTicklower_boundTick6423703817649034251_18ada4b2d50e7d67(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_1032_1660),das_arg<decs::ComponentValue>::pass((([&]() -> decs::ComponentValue& {
         das_zero(_temp_make_local_1037_31_208);
         das_copy((_temp_make_local_1037_31_208.name),(__name_rename_at_1032_1661));
         return _temp_make_local_1037_31_208;
@@ -9563,9 +9563,9 @@ inline void _Func_lambda_decs_799_3Tickfinalizer_549e2fff439a70a6 ( Context * __
     das_delete_lambda_struct<decs::_lambda_decs_799_3 *>::clear(__context__,____this_rename_at_799_1684);
 }
 
-inline bool _FuncalgorithmTickbinary_searchTick14008495768446863867_755e751f5817ad1f ( Context * __context__, TArray<decs::ComponentValue> const  &  __a_rename_at_117_1685, decs::ComponentValue const  &  __val_rename_at_117_1686, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  &  __less_rename_at_117_1687 )
+inline bool _FuncalgorithmTickbinary_searchTick14008495768446863867_76d2ee2705c6b78c ( Context * __context__, TArray<decs::ComponentValue> const  &  __a_rename_at_117_1685, decs::ComponentValue const  &  __val_rename_at_117_1686, Block DAS_COMMENT((bool,decs::ComponentValue const ,decs::ComponentValue const )) const  &  __less_rename_at_117_1687 )
 {
-    int32_t __first_rename_at_118_1688 = ((int32_t)_FuncalgorithmTicklower_boundTick16093794823624193897_e7668723244a73ff(__context__,__a_rename_at_117_1685,__val_rename_at_117_1686,__less_rename_at_117_1687));
+    int32_t __first_rename_at_118_1688 = ((int32_t)_FuncalgorithmTicklower_boundTick6423703817649034251_18ada4b2d50e7d67(__context__,__a_rename_at_117_1685,__val_rename_at_117_1686,__less_rename_at_117_1687));
     int32_t __last_rename_at_119_1689 = ((int32_t)builtin_array_size(__a_rename_at_117_1685));
     return das_auto_cast<bool>::cast((__first_rename_at_118_1688 != __last_rename_at_119_1689) && !(das_invoke<bool>::invoke<decs::ComponentValue const  &,decs::ComponentValue const  &>(__context__,nullptr,__less_rename_at_117_1687,__val_rename_at_117_1686,__a_rename_at_117_1685(__first_rename_at_118_1688,__context__))));
 }
@@ -9595,10 +9595,10 @@ inline char * describe_331f6733cf613d79 ( Context * __context__, decs::CTypeInfo
     return das_auto_cast<char *>::cast(das_string_builder(__context__,SimNode_AotInterop<9>(__tinfo_66, cast<char * const >::from(__info_rename_at_140_1695.fullName), cast<char * const >::from(((char *) " ")), cast<DAS_COMMENT(bound_enum) das::Type>::from(__info_rename_at_140_1695.basicType), cast<char * const >::from(((char *) " MNH=")), cast<char * const >::from(__info_rename_at_140_1695.mangledName), cast<char * const >::from(((char *) " hash=")), cast<uint64_t>::from(__info_rename_at_140_1695.hash), cast<char * const >::from(((char *) " size=")), cast<uint32_t>::from(__info_rename_at_140_1695.size))));
 }
 
-inline decs::ComponentValue & _FuncDot_e6be57d0f54d9f86 ( Context * __context__, TArray<decs::ComponentValue> &  __cmp_rename_at_145_1696, char * const  __name_rename_at_145_1697 ) { das_stack_prologue __prologue(__context__,432,". " DAS_FILE_LINE);
+inline decs::ComponentValue & _FuncDot_2c50a2ee9c52bead ( Context * __context__, TArray<decs::ComponentValue> &  __cmp_rename_at_145_1696, char * const  __name_rename_at_145_1697 ) { das_stack_prologue __prologue(__context__,432,". " DAS_FILE_LINE);
 {
     decs::ComponentValue _temp_make_local_150_31_48; _temp_make_local_150_31_48;
-    int32_t __idx_rename_at_150_1698 = ((int32_t)_FuncalgorithmTicklower_boundTick16093794823624193897_e7668723244a73ff(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_145_1696),das_arg<decs::ComponentValue>::pass((([&]() -> decs::ComponentValue& {
+    int32_t __idx_rename_at_150_1698 = ((int32_t)_FuncalgorithmTicklower_boundTick6423703817649034251_18ada4b2d50e7d67(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_145_1696),das_arg<decs::ComponentValue>::pass((([&]() -> decs::ComponentValue& {
         das_zero(_temp_make_local_150_31_48);
         das_copy((_temp_make_local_150_31_48.name),(__name_rename_at_145_1697));
         return _temp_make_local_150_31_48;
@@ -9790,7 +9790,7 @@ inline void serialize_2fb21a62b038e15a ( Context * __context__, archive::Archive
     };
 }
 
-inline void register_decs_stage_call_717f6eccc9a4ed59 ( Context * __context__, char * const  __name_rename_at_222_1763, Func DAS_COMMENT((void)) const  __pcall_rename_at_222_1764 ) { das_stack_prologue __prologue(__context__,144,"register_decs_stage_call " DAS_FILE_LINE);
+inline void register_decs_stage_call_bd748132595eb376 ( Context * __context__, char * const  __name_rename_at_222_1763, Func DAS_COMMENT((void)) const  __pcall_rename_at_222_1764 ) { das_stack_prologue __prologue(__context__,144,"register_decs_stage_call " DAS_FILE_LINE);
 {
     decs::DecsPass __dpass_rename_at_224_1765; das_zero(__dpass_rename_at_224_1765); das_move(__dpass_rename_at_224_1765, (([&]() -> decs::DecsPass {
         decs::DecsPass __mks_224;
@@ -9798,7 +9798,7 @@ inline void register_decs_stage_call_717f6eccc9a4ed59 ( Context * __context__, c
         das_copy((__mks_224.name),(__name_rename_at_222_1763));
         return __mks_224;
     })()));
-    int32_t __idx_rename_at_225_1766 = ((int32_t)_FuncalgorithmTicklower_boundTick16093794823624193897_ce29fe5ecc0183e4(__context__,das_arg<TArray<decs::DecsPass>>::pass(das_global<TArray<decs::DecsPass>,0xa9a8094ac42ad77f>(__context__) /*decsPasses*/),das_arg<decs::DecsPass>::pass(__dpass_rename_at_224_1765),das_make_block<bool,decs::DecsPass const  &,decs::DecsPass const  &>(__context__,128,0,&__func_info__f71d94d11895cdf3,[&](decs::DecsPass const  & __x_rename_at_225_1767, decs::DecsPass const  & __y_rename_at_225_1768) -> bool{
+    int32_t __idx_rename_at_225_1766 = ((int32_t)_FuncalgorithmTicklower_boundTick6423703817649034251_3302e2d7d1f43bc4(__context__,das_arg<TArray<decs::DecsPass>>::pass(das_global<TArray<decs::DecsPass>,0xa9a8094ac42ad77f>(__context__) /*decsPasses*/),das_arg<decs::DecsPass>::pass(__dpass_rename_at_224_1765),das_make_block<bool,decs::DecsPass const  &,decs::DecsPass const  &>(__context__,128,0,&__func_info__f71d94d11895cdf3,[&](decs::DecsPass const  & __x_rename_at_225_1767, decs::DecsPass const  & __y_rename_at_225_1768) -> bool{
         return das_auto_cast<bool>::cast(SimPolicy<char *>::Less(cast<char *>::from(__x_rename_at_225_1767.name),cast<char *>::from(__y_rename_at_225_1768.name),*__context__,nullptr));
     })));
     if ( (__idx_rename_at_225_1766 < builtin_array_size(das_arg<TArray<decs::DecsPass>>::pass(das_global<TArray<decs::DecsPass>,0xa9a8094ac42ad77f>(__context__) /*decsPasses*/))) && (SimPolicy<char *>::Equ(cast<char *>::from(das_global<TArray<decs::DecsPass>,0xa9a8094ac42ad77f>(__context__) /*decsPasses*/(__idx_rename_at_225_1766,__context__).name),cast<char *>::from(__name_rename_at_222_1763),*__context__,nullptr)) )
@@ -9810,11 +9810,11 @@ inline void register_decs_stage_call_717f6eccc9a4ed59 ( Context * __context__, c
     };
 }}
 
-inline void decs_stage_efb21162738a05e ( Context * __context__, char * const  __name_rename_at_234_1769 ) { das_stack_prologue __prologue(__context__,160,"decs_stage " DAS_FILE_LINE);
+inline void decs_stage_3bde74a1063accc5 ( Context * __context__, char * const  __name_rename_at_234_1769 ) { das_stack_prologue __prologue(__context__,160,"decs_stage " DAS_FILE_LINE);
 {
     decs::DecsPass _temp_make_local_238_38_48; _temp_make_local_238_38_48;
     commit_c50742f73fbd275a(__context__);
-    int32_t __idx_rename_at_238_1770 = ((int32_t)_FuncalgorithmTicklower_boundTick16093794823624193897_ce29fe5ecc0183e4(__context__,das_arg<TArray<decs::DecsPass>>::pass(das_global<TArray<decs::DecsPass>,0xa9a8094ac42ad77f>(__context__) /*decsPasses*/),das_arg<decs::DecsPass>::pass((([&]() -> decs::DecsPass& {
+    int32_t __idx_rename_at_238_1770 = ((int32_t)_FuncalgorithmTicklower_boundTick6423703817649034251_3302e2d7d1f43bc4(__context__,das_arg<TArray<decs::DecsPass>>::pass(das_global<TArray<decs::DecsPass>,0xa9a8094ac42ad77f>(__context__) /*decsPasses*/),das_arg<decs::DecsPass>::pass((([&]() -> decs::DecsPass& {
         das_zero(_temp_make_local_238_38_48);
         das_copy((_temp_make_local_238_38_48.name),(__name_rename_at_234_1769));
         return _temp_make_local_238_38_48;
@@ -10233,7 +10233,7 @@ inline uint64_t req_hash_5c6b5448a41d13b6 ( Context * __context__, decs::EcsRequ
 inline bool has_33445d43ae17addb ( Context * __context__, decs::Archetype const  &  __arch_rename_at_442_1825, char * const  __name_rename_at_442_1826 ) { das_stack_prologue __prologue(__context__,240,"has " DAS_FILE_LINE);
 {
     decs::Component _temp_make_local_444_44_32; _temp_make_local_444_44_32;
-    return das_auto_cast<bool>::cast(_FuncalgorithmTickbinary_searchTick14008495768446863867_4a97a34626cd4642(__context__,__arch_rename_at_442_1825.components,das_arg<decs::Component>::pass((([&]() -> decs::Component& {
+    return das_auto_cast<bool>::cast(_FuncalgorithmTickbinary_searchTick14008495768446863867_5a15a37c873324e7(__context__,__arch_rename_at_442_1825.components,das_arg<decs::Component>::pass((([&]() -> decs::Component& {
         das_zero(_temp_make_local_444_44_32);
         das_copy((_temp_make_local_444_44_32.name),(__name_rename_at_442_1826));
         return _temp_make_local_444_44_32;
@@ -10545,7 +10545,7 @@ inline void update_entity_imm_1682d5f2eb8622a2 ( Context * __context__, decs::En
         };
         das_copy(__old_ahash_rename_at_718_1880,(*__arch_rename_at_720_1881).hash);
         das_invoke_lambda<void>::invoke<decs::EntityId const  &,TArray<decs::ComponentValue> &>(__context__,nullptr,__blk_rename_at_710_1875,__eid_rename_at_710_1874,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_715_1877));
-        _FuncdecsTicksetTick17458790232895349504_bb6e804b92d95494(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_715_1877),((char *) "eid"),__eid_rename_at_710_1874);
+        _FuncdecsTicksetTick17458790232895349504_4f9d50ccf9aefe53(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_715_1877),((char *) "eid"),__eid_rename_at_710_1874);
         uint64_t __new_ahash_rename_at_733_1884 = cmp_archetype_hash_fd0a1970fd747f9f(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_715_1877));
         if ( __old_ahash_rename_at_718_1880 == __new_ahash_rename_at_733_1884 )
         {
@@ -10593,7 +10593,7 @@ inline void create_entity_imm_ae4a754c49fa5175 ( Context * __context__, decs::En
     TArray<decs::ComponentValue> __cmp_rename_at_754_1895;das_zero(__cmp_rename_at_754_1895);
     _FuncbuiltinTickpushTick10769833213962245646_851ab10030ae7c38(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_754_1895),das_arg<decs::ComponentValue>::pass((_temp_make_local_755_19_64 = (_FuncdecsTickmake_componentTick10966522786327472693_3a423ebc636ba8b5(__context__,((char *) "eid"),__eid_rename_at_753_1893)))));
     das_invoke_lambda<void>::invoke<decs::EntityId const  &,TArray<decs::ComponentValue> &>(__context__,nullptr,__blk_rename_at_753_1894,__eid_rename_at_753_1893,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_754_1895));
-    _FuncdecsTicksetTick17458790232895349504_bb6e804b92d95494(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_754_1895),((char *) "eid"),__eid_rename_at_753_1893);
+    _FuncdecsTicksetTick17458790232895349504_4f9d50ccf9aefe53(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_754_1895),((char *) "eid"),__eid_rename_at_753_1893);
     uint64_t __ahash_rename_at_758_1896 = cmp_archetype_hash_fd0a1970fd747f9f(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_754_1895));
     with_archetype_2a58ce2e169fd0ad(__context__,__ahash_rename_at_758_1896,das_make_block<void,decs::Archetype &,int32_t,bool>(__context__,288,0,&__func_info__3cf31986e6f0f7f0,[&](decs::Archetype & __arch_rename_at_759_1897, int32_t const  __idx_rename_at_759_1898, bool const  __isNew_rename_at_759_1899) -> void{
         if ( __isNew_rename_at_759_1899 )
@@ -10701,7 +10701,7 @@ inline void commit_c50742f73fbd275a ( Context * __context__ )
 inline bool has_14cf9c5ba9e042a8 ( Context * __context__, TArray<decs::ComponentValue> &  __cmp_rename_at_1048_1914, char * const  __name_rename_at_1048_1915 ) { das_stack_prologue __prologue(__context__,256,"has " DAS_FILE_LINE);
 {
     decs::ComponentValue _temp_make_local_1049_30_32; _temp_make_local_1049_30_32;
-    return das_auto_cast<bool>::cast(_FuncalgorithmTickbinary_searchTick14008495768446863867_755e751f5817ad1f(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_1048_1914),das_arg<decs::ComponentValue>::pass((([&]() -> decs::ComponentValue& {
+    return das_auto_cast<bool>::cast(_FuncalgorithmTickbinary_searchTick14008495768446863867_76d2ee2705c6b78c(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_1048_1914),das_arg<decs::ComponentValue>::pass((([&]() -> decs::ComponentValue& {
         das_zero(_temp_make_local_1049_30_32);
         das_copy((_temp_make_local_1049_30_32.name),(__name_rename_at_1048_1915));
         return _temp_make_local_1049_30_32;
@@ -10710,10 +10710,10 @@ inline bool has_14cf9c5ba9e042a8 ( Context * __context__, TArray<decs::Component
     })));
 }}
 
-inline void remove_5ca51f5fb1aa821a ( Context * __context__, TArray<decs::ComponentValue> &  __cmp_rename_at_1052_1918, char * const  __name_rename_at_1052_1919 ) { das_stack_prologue __prologue(__context__,272,"remove " DAS_FILE_LINE);
+inline void remove_6815d366d9959b9f ( Context * __context__, TArray<decs::ComponentValue> &  __cmp_rename_at_1052_1918, char * const  __name_rename_at_1052_1919 ) { das_stack_prologue __prologue(__context__,272,"remove " DAS_FILE_LINE);
 {
     decs::ComponentValue _temp_make_local_1054_31_48; _temp_make_local_1054_31_48;
-    int32_t __idx_rename_at_1054_1920 = ((int32_t)_FuncalgorithmTicklower_boundTick16093794823624193897_e7668723244a73ff(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_1052_1918),das_arg<decs::ComponentValue>::pass((([&]() -> decs::ComponentValue& {
+    int32_t __idx_rename_at_1054_1920 = ((int32_t)_FuncalgorithmTicklower_boundTick6423703817649034251_18ada4b2d50e7d67(__context__,das_arg<TArray<decs::ComponentValue>>::pass(__cmp_rename_at_1052_1918),das_arg<decs::ComponentValue>::pass((([&]() -> decs::ComponentValue& {
         das_zero(_temp_make_local_1054_31_48);
         das_copy((_temp_make_local_1054_31_48.name),(__name_rename_at_1052_1919));
         return _temp_make_local_1054_31_48;
@@ -11996,8 +11996,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x94e204bc41e20f85] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncdecsTickmake_callbacksTick7881608678897058277_4138a85e510ea6bf>>();
     };
-    aotLib[0x9750ec24a4ec47a9] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick18126846866405818753_4ca42a3850224fec>>();
+    aotLib[0x585df8daf12e95e6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick8686693477002751267_e2577dcb26631c73>>();
     };
     aotLib[0xc1172faa1e6c0517] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick5845303453396418626_34874817d3fc375e>>();
@@ -12044,8 +12044,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xcb1441166ae5d2ca] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickeraseTick16646986352019611268_c0f137fec6db20e2>>();
     };
-    aotLib[0xe0900cad445e7571] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick18126846866405818753_934d44c6a92fbd19>>();
+    aotLib[0xe2229dcbd1f5bfde] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick8686693477002751267_65b824aee440480e>>();
     };
     aotLib[0xb9208f171dc63ec7] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncdecsTickmake_componentTick10966522786327472693_7686a27f2d90f16e>>();
@@ -12140,14 +12140,14 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x226c6be0555d0619] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncapplyTickstructTickCTypeInfoTick0x96Tick0Tick11_50e2ea000b6a5668>>();
     };
-    aotLib[0xc8121c55bb89c9a6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick18126846866405818753_dbc0c07e011dc186>>();
+    aotLib[0xe3c24d13e291edba] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick8686693477002751267_78a9b5beb1a63d65>>();
     };
     aotLib[0x4c8adc2de907c86] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_be5e4db5cc62bbe2>>();
     };
-    aotLib[0xc724f781b61ced7e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick16093794823624193897_ceeda13844fe2646>>();
+    aotLib[0x4cf20e9b7a2b7091] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick6423703817649034251_99cab115045d39c8>>();
     };
     aotLib[0x2da73886d0a8db9c] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick15764527788046818970_738dc09f48c04cec>>();
@@ -12155,8 +12155,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xf6946acd53ccb13] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicksortTick14088969635007481283_e8d7aa932cb8bc70>>();
     };
-    aotLib[0xb64eecc300c2d470] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncalgorithmTickuniqueTick8642070526899511001_1190863ce08ff79f>>();
+    aotLib[0x1f9e66ff161eb247] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncalgorithmTickuniqueTick8642070526899511001_52c7abc78345e039>>();
     };
     aotLib[0x40af565c9628882a] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick15764527788046818970_3a9dfe5b83ec32e2>>();
@@ -12188,8 +12188,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xc2ca5d1eb03d42af] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_a7a5d4b55cfb401>>();
     };
-    aotLib[0xae0c2b8d54ce1961] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick16093794823624193897_e7668723244a73ff>>();
+    aotLib[0x36e192dfe2792225] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick6423703817649034251_18ada4b2d50e7d67>>();
     };
     aotLib[0xb4568e56b8f5e649] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncdecsTicksetTick11209997464375680874_bd5df505c4081c6>>();
@@ -12287,8 +12287,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xc93e4c755b291ca6] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickserializeTick8013964856239694639_b41098b846ab5ad7>>();
     };
-    aotLib[0x72fa4ab7d978b584] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick16093794823624193897_ce29fe5ecc0183e4>>();
+    aotLib[0xbcd2dc3789572a4a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicklower_boundTick6423703817649034251_3302e2d7d1f43bc4>>();
     };
     aotLib[0x28a3c08bbb4601e2] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick14133213201864676143_871ed3e1df393493>>();
@@ -12320,8 +12320,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xc502128bbf7c5d21] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176>>();
     };
-    aotLib[0x9722d50f4b6740ac] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTickbinary_searchTick14008495768446863867_4a97a34626cd4642>>();
+    aotLib[0x28939ed71c0f1c4a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTickbinary_searchTick14008495768446863867_5a15a37c873324e7>>();
     };
     aotLib[0x637326493f6fb41c] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickemptyTick15399874715904164783_e7d23d30bed4f24e>>();
@@ -12329,7 +12329,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xb86a94155b498997] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTickbinary_searchTick17983790476472195392_22cbec779762f854>>();
     };
-    aotLib[0x42d806e16ea2c1f1] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xffbc819f49f8dbe6] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTicksort_uniqueTick14985796887508933377_a7cd684429b2af6f>>();
     };
     aotLib[0xb06bed94af39c78f] = +[](Context & ctx) -> SimNode* {
@@ -12350,8 +12350,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x9d50ab484d7a2237] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_851ab10030ae7c38>>();
     };
-    aotLib[0xc6d36a3ff36297d5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncdecsTicksetTick17458790232895349504_bb6e804b92d95494>>();
+    aotLib[0x64c82ffa396114d5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncdecsTicksetTick17458790232895349504_4f9d50ccf9aefe53>>();
     };
     aotLib[0x90b73b8990ca229d] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncdecsTickmake_componentTick10966522786327472693_3a423ebc636ba8b5>>();
@@ -12359,7 +12359,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x7971598792494b7b] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick14133213201864676143_eeb9a220589e8d36>>();
     };
-    aotLib[0xa8772d1e2459fea5] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x4de4042b8fb0ca50] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_Func_lambda_decs_781_1Tickfunction_1b4444b63f7b7430>>();
     };
     aotLib[0xa61a38248a9c7d87] = +[](Context & ctx) -> SimNode* {
@@ -12368,7 +12368,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x734a1049cc0d8511] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickemplaceTick13923705686753630697_ff44252da8ea2981>>();
     };
-    aotLib[0x7b3656e7e3d593d6] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xe0992351e6951298] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_Func_lambda_decs_789_2Tickfunction_c4aaa5d084533b28>>();
     };
     aotLib[0xcdd08e0e7f84640f] = +[](Context & ctx) -> SimNode* {
@@ -12380,8 +12380,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x4627660ff9905f8b] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_Func_lambda_decs_799_3Tickfinalizer_549e2fff439a70a6>>();
     };
-    aotLib[0xaa941b35e7dfc3b6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTickbinary_searchTick14008495768446863867_755e751f5817ad1f>>();
+    aotLib[0xd3fcc3c02c27b019] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncalgorithmTickbinary_searchTick14008495768446863867_76d2ee2705c6b78c>>();
     };
     aotLib[0xfd0f5aee5ad1d309] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&EcsRequestPos_8050438c327f9d>>();
@@ -12395,8 +12395,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xe90ded5457f1ee96] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&describe_331f6733cf613d79>>();
     };
-    aotLib[0xc69260e8b893a46b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncDot_e6be57d0f54d9f86>>();
+    aotLib[0x42e8b9a209a44b56] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncDot_2c50a2ee9c52bead>>();
     };
     aotLib[0xf8e10a1bf938414d] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&clone_659ecf5dab7a3479>>();
@@ -12491,11 +12491,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xb3914826d768064] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&serialize_2fb21a62b038e15a>>();
     };
-    aotLib[0x230436947879b35d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&register_decs_stage_call_717f6eccc9a4ed59>>();
+    aotLib[0x1c57734be542ec98] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&register_decs_stage_call_bd748132595eb376>>();
     };
-    aotLib[0x3a2773676b61e5e3] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&decs_stage_efb21162738a05e>>();
+    aotLib[0xaf15aad1d1d8e003] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&decs_stage_3bde74a1063accc5>>();
     };
     aotLib[0xeda89fe8ad3ece86] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&finalize_4dc17927e32cd56d>>();
@@ -12518,7 +12518,7 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xebc04bfa332eeffc] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&with_archetype_2a58ce2e169fd0ad>>();
     };
-    aotLib[0x74d946efe6f1884] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x271f3309def23934] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&create_archetype_4fc4580b2cd218e6>>();
     };
     aotLib[0x62a16e343ab53e45] = +[](Context & ctx) -> SimNode* {
@@ -12536,46 +12536,46 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x5d34e40307d7e32a] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&req_hash_5c6b5448a41d13b6>>();
     };
-    aotLib[0x663500eeee3479ac] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xb69d70a0f2f639e5] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&has_33445d43ae17addb>>();
     };
-    aotLib[0xd98fc61e4e8db2eb] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x93edc064c4a97539] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&can_process_request_7b2031e9b6e63a65>>();
     };
     aotLib[0x4efb886fab3ba37b] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&verify_request_129d3de26b71cf52>>();
     };
-    aotLib[0x4573906ddb970946] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x68b0e7b29a8ad14c] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&compile_request_baae17979175f881>>();
     };
-    aotLib[0x3c4e9f8dca4e4510] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x3ccbe9890927b23] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&lookup_request_83ca6ae8b48421d7>>();
     };
-    aotLib[0x55d55c7aef51ecc0] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x5c8c509fba49b0d7] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&for_each_archetype_83858c04010ca998>>();
     };
-    aotLib[0xdddd10c945d9c016] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xadac366cb50842be] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&for_eid_archetype_7a37dfdfdc73e54f>>();
     };
-    aotLib[0xeee87a2786d8ebe1] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x180fb2dc6bfa564c] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&for_each_archetype_a221c5ab64b1fd91>>();
     };
-    aotLib[0x64962e032079a451] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x7e778ddc026f18cb] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&for_each_archetype_find_bc80409351fd9125>>();
     };
-    aotLib[0x94f1e6ad15c99242] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xbd5972a73beefc9b] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&update_entity_imm_1682d5f2eb8622a2>>();
     };
-    aotLib[0x7a7c66b101bb04e3] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xef08633fdcba0726] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&create_entity_imm_ae4a754c49fa5175>>();
     };
     aotLib[0x4d4674febdf1212f] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&delete_entity_imm_54947cfd1f40776f>>();
     };
-    aotLib[0xcfad8701ee8c2bc0] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xe09db5f2d0734ea8] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&update_entity_4bfbfb917c25840a>>();
     };
-    aotLib[0x6a70bd2a1c44bd75] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x880bc754fa1fc29e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&create_entity_65224082ba124887>>();
     };
     aotLib[0x9116a4af23c6ba01] = +[](Context & ctx) -> SimNode* {
@@ -12584,11 +12584,11 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x96966d1dd6528935] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&commit_c50742f73fbd275a>>();
     };
-    aotLib[0x3771455eaab359ea] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x6c81ded62de26251] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&has_14cf9c5ba9e042a8>>();
     };
-    aotLib[0xef745b1f21326250] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&remove_5ca51f5fb1aa821a>>();
+    aotLib[0x6403a0173b088161] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&remove_6815d366d9959b9f>>();
     };
     aotLib[0xeb0c1410bea6c255] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&clone_61cd6fd9243f096e>>();

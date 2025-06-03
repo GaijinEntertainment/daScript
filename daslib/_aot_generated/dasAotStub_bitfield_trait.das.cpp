@@ -331,8 +331,9 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Conte
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_134581600e2aea91 ( Context * __context__, bitfield_trait::EachBitfieldMacro const  & __cl_rename_at_116_2 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_31c3e969e3d344d1 ( Context * __context__, char * const  __name_rename_at_631_7, bitfield_trait::EachBitfieldMacro * __someClassPtr_rename_at_631_8 );
 inline smart_ptr_raw<Expression> _Funcast_boostTickconvert_to_expressionTick11707039267614988023_2a80cf3c2085d3f9 ( Context * __context__, char * const  __value_rename_at_882_10 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_473a42788c45df36 ( Context * __context__, TArray<smart_ptr_raw<Expression>> & __a_rename_at_1182_11 );
-inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_68e2d9cc7a378291 ( Context * __context__, char * const  __name_rename_at_273_13, char * const  __tag_rename_at_273_14, bitfield_trait::EachBitfieldMacro * __classPtr_rename_at_273_15 );
+inline void _FuncbuiltinTickemplace_newTick990257600204377963_2ef6c01deeba15de ( Context * __context__, TArray<smart_ptr_raw<Expression>> & __Arr_rename_at_1036_11, smart_ptr_raw<Expression> __value_rename_at_1036_12 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_473a42788c45df36 ( Context * __context__, TArray<smart_ptr_raw<Expression>> & __a_rename_at_1215_13 );
+inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_68e2d9cc7a378291 ( Context * __context__, char * const  __name_rename_at_273_15, char * const  __tag_rename_at_273_16, bitfield_trait::EachBitfieldMacro * __classPtr_rename_at_273_17 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -361,32 +362,37 @@ inline smart_ptr_raw<Expression> _Funcast_boostTickconvert_to_expressionTick1170
     return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(das_invoke_function<smart_ptr_raw<Expression>>::invoke<char * const ,LineInfo const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@bitfield_trait::ast_boost`convert_to_expression`16483834305137942954 C=Xs CH<rtti::LineInfo>*/ 0x2f1974bcbc93080)),__value_rename_at_882_10,das_arg<LineInfo>::pass((_temp_make_local_883_43_32 = (/*c-tor*/ LineInfo(/*end-c-tor*/))))));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_473a42788c45df36 ( Context * __context__, TArray<smart_ptr_raw<Expression>> &  __a_rename_at_1182_11 )
+inline void _FuncbuiltinTickemplace_newTick990257600204377963_2ef6c01deeba15de ( Context * __context__, TArray<smart_ptr_raw<Expression>> &  __Arr_rename_at_1036_11, smart_ptr_raw<Expression> __value_rename_at_1036_12 )
 {
-    {
-        bool __need_loop_1184 = true;
-        // aV: smart_ptr<ast::Expression> aka TT&
-        das_iterator<TArray<smart_ptr_raw<Expression>>> __aV_iterator(__a_rename_at_1182_11);
-        smart_ptr_raw<Expression> * __aV_rename_at_1184_12;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_12)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_12)) )
-        {
-            das_delete_handle<smart_ptr_raw<Expression>>::clear(__context__,(*__aV_rename_at_1184_12));
-        }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_12));
-    };
-    builtin_array_free(das_arg<TArray<smart_ptr_raw<Expression>>>::pass(__a_rename_at_1182_11),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    das_move(__Arr_rename_at_1036_11(builtin_array_push_back(das_arg<TArray<smart_ptr_raw<Expression>>>::pass(__Arr_rename_at_1036_11),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_1036_12);
 }
 
-inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_68e2d9cc7a378291 ( Context * __context__, char * const  __name_rename_at_273_13, char * const  __tag_rename_at_273_14, bitfield_trait::EachBitfieldMacro * __classPtr_rename_at_273_15 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_473a42788c45df36 ( Context * __context__, TArray<smart_ptr_raw<Expression>> &  __a_rename_at_1215_13 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_16; memset((void*)&__ann_rename_at_274_16,0,sizeof(__ann_rename_at_274_16));
+    {
+        bool __need_loop_1217 = true;
+        // aV: smart_ptr<ast::Expression> aka TT&
+        das_iterator<TArray<smart_ptr_raw<Expression>>> __aV_iterator(__a_rename_at_1215_13);
+        smart_ptr_raw<Expression> * __aV_rename_at_1217_14;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_14)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_14)) )
+        {
+            das_delete_handle<smart_ptr_raw<Expression>>::clear(__context__,(*__aV_rename_at_1217_14));
+        }
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_14));
+    };
+    builtin_array_free(das_arg<TArray<smart_ptr_raw<Expression>>>::pass(__a_rename_at_1215_13),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+}
+
+inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_68e2d9cc7a378291 ( Context * __context__, char * const  __name_rename_at_273_15, char * const  __tag_rename_at_273_16, bitfield_trait::EachBitfieldMacro * __classPtr_rename_at_273_17 )
+{
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_18; memset((void*)&__ann_rename_at_274_18,0,sizeof(__ann_rename_at_274_18));
     /* finally */ auto __finally_273= das_finally([&](){
-    das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_16);
+    das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_18);
     /* end finally */ });
-    __ann_rename_at_274_16; das_zero(__ann_rename_at_274_16); das_move(__ann_rename_at_274_16, _FuncastTickmake_function_annotationTick3074191368936885601_31c3e969e3d344d1(__context__,__name_rename_at_273_13,__classPtr_rename_at_273_15));
-    das_invoke_function<void>::invoke<char * const ,smart_ptr_raw<FunctionAnnotation>>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::apply_tag_annotation Cs Y<FunctionAnnotationPtr>1<H<ast::FunctionAnnotation>>?M*/ 0x7678364e276db9c2)),__tag_rename_at_273_14,__ann_rename_at_274_16);
-    addModuleFunctionAnnotation(thisModule(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__ann_rename_at_274_16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    __ann_rename_at_274_18; das_zero(__ann_rename_at_274_18); das_move(__ann_rename_at_274_18, _FuncastTickmake_function_annotationTick3074191368936885601_31c3e969e3d344d1(__context__,__name_rename_at_273_15,__classPtr_rename_at_273_17));
+    das_invoke_function<void>::invoke<char * const ,smart_ptr_raw<FunctionAnnotation>>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::apply_tag_annotation Cs Y<FunctionAnnotationPtr>1<H<ast::FunctionAnnotation>>?M*/ 0x7678364e276db9c2)),__tag_rename_at_273_16,__ann_rename_at_274_18);
+    addModuleFunctionAnnotation(thisModule(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__ann_rename_at_274_18,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
@@ -401,6 +407,9 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     };
     aotLib[0x5a2c36a5ecc10275] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_boostTickconvert_to_expressionTick11707039267614988023_2a80cf3c2085d3f9>>();
+    };
+    aotLib[0x6562a2d87ebeb673] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickemplace_newTick990257600204377963_2ef6c01deeba15de>>();
     };
     aotLib[0x9707e43dd37f682e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_473a42788c45df36>>();

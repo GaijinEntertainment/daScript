@@ -1054,10 +1054,7 @@ namespace das {
                 logs << "module dependency graph:\n" << tw.str();
             }
             if ( !res->failed() ) {
-                const uint64_t fnv_prime = 1099511628211ul;
-                const auto relPathHash = normalizedPathHash(fileName, getDasRoot());
-                auto hf = res->getInitSemanticHashWithDep(fnv_prime) ^ relPathHash;
-                res->thisNamespace = "_anon_" + to_string(hf);
+                res->thisNamespace = "_anon_" + to_string(normalizedPathHash(fileName, getDasRoot()));
             }
             if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
                 auto totT = get_time_usec(time0);

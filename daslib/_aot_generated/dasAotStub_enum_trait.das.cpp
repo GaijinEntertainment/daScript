@@ -188,7 +188,7 @@ static void resolveTypeInfoAnnotations()
 inline void _FuncbuiltinTickpushTick10769833213962245646_e98940bd647b096c ( Context * __context__, TArray<ast::AstTypeInfoMacro *> & __Arr_rename_at_181_0, ast::AstTypeInfoMacro * __value_rename_at_181_1 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_db89bd2a6ff1ad7e ( Context * __context__, enum_trait::TypeInfoGetEnumLength const  & __cl_rename_at_116_2 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_544f4e3f951187ef ( Context * __context__, enum_trait::TypeInfoGetEnumNames const  & __cl_rename_at_116_3 );
-inline range _FuncbuiltinTickiter_rangeTick1065493836214144684_7880c0bbee885dd8 ( Context * __context__, das::vector<Enumeration::EnumEntry> const  & __foo_rename_at_1250_4 );
+inline range _FuncbuiltinTickiter_rangeTick1065493836214144684_7880c0bbee885dd8 ( Context * __context__, das::vector<Enumeration::EnumEntry> const  & __foo_rename_at_1283_4 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -209,9 +209,9 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_544f4
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_3.__rtti))).getStructType())));
 }
 
-inline range _FuncbuiltinTickiter_rangeTick1065493836214144684_7880c0bbee885dd8 ( Context * __context__, das::vector<Enumeration::EnumEntry> const  &  __foo_rename_at_1250_4 )
+inline range _FuncbuiltinTickiter_rangeTick1065493836214144684_7880c0bbee885dd8 ( Context * __context__, das::vector<Enumeration::EnumEntry> const  &  __foo_rename_at_1283_4 )
 {
-    return das_auto_cast<range>::cast(mk_range(das_vector_length(__foo_rename_at_1250_4)));
+    return das_auto_cast<range>::cast(mk_range(das_vector_length(__foo_rename_at_1283_4)));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {

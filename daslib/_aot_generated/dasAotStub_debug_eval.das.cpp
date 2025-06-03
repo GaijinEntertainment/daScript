@@ -559,24 +559,24 @@ TypeInfo * __tinfo_12[4] = { &__type_info__af90fe4c864e9d52, &__type_info__7a089
 TypeInfo * __tinfo_13[5] = { &__type_info__af90fe4c864e9d52, &__type_info__8d8d8008262e16ec, &__type_info__af90fe4c864e9d52, &__type_info__af8afe4c86446b52, &__type_info__af90fe4c864e9d52 };
 TypeInfo * __tinfo_14[2] = { &__type_info__af90fe4c864e9d52, &__type_info__7a089ab9e22fd5f };
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1182_0 );
-inline void _FuncbuiltinTickclearTick13739625760977891612_bc21a7c19d5d96ed ( Context * __context__, TTable<char *,debug_eval::Result> & __t_rename_at_1860_1 );
-inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_d3d21e2c8adb2e77 ( Context * __context__, TTable<char *,debug_eval::Result> const  & __a_rename_at_1128_2 );
-inline Sequence DAS_COMMENT((debug_eval::Result &)) _FuncbuiltinTickvaluesTick1935193042646774172_fa9f9c260fe9a102 ( Context * __context__, TTable<char *,debug_eval::Result> const  & __a_rename_at_1143_4 );
-inline bool _FuncbuiltinTicknextTick17450348357676149856_ba3f4a54e51a0d57 ( Context * __context__, Sequence DAS_COMMENT((int32_t)) & __it_rename_at_1223_6, int32_t & __value_rename_at_1223_7 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1215_0 );
+inline void _FuncbuiltinTickclearTick13739625760977891612_bc21a7c19d5d96ed ( Context * __context__, TTable<char *,debug_eval::Result> & __t_rename_at_1893_1 );
+inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_d3d21e2c8adb2e77 ( Context * __context__, TTable<char *,debug_eval::Result> const  & __a_rename_at_1161_2 );
+inline Sequence DAS_COMMENT((debug_eval::Result &)) _FuncbuiltinTickvaluesTick1935193042646774172_fa9f9c260fe9a102 ( Context * __context__, TTable<char *,debug_eval::Result> const  & __a_rename_at_1176_4 );
+inline bool _FuncbuiltinTicknextTick17450348357676149856_ba3f4a54e51a0d57 ( Context * __context__, Sequence DAS_COMMENT((int32_t)) & __it_rename_at_1256_6, int32_t & __value_rename_at_1256_7 );
 inline void finalize_c2f42de354cd5bce ( Context * __context__, debug_eval::_lambda_debug_eval_26_1 & ____this_rename_at_26_8 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_f497868bddc80ac1 ( Context * __context__, TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>> & __Arr_rename_at_68_9, int32_t __newSize_rename_at_68_10 );
-inline Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) _FuncbuiltinTickeachTick9663565701927713696_acc6981303ddd856 ( Context * __context__, Lambda DAS_COMMENT((bool,AutoVariant<int64_t,int32_t,char *,char *,char *>)) const  __lam_rename_at_1289_11 );
+inline Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) _FuncbuiltinTickeachTick9663565701927713696_acc6981303ddd856 ( Context * __context__, Lambda DAS_COMMENT((bool,AutoVariant<int64_t,int32_t,char *,char *,char *>)) const  __lam_rename_at_1322_11 );
 inline debug_eval::TokenStream & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_32ef8117beffbe31 ( Context * __context__, debug_eval::TokenStream & __a_rename_at_50_13 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_f403d698c1fdad14 ( Context * __context__, TTable<char *,debug_eval::Result> const  & __Tab_rename_at_1014_14, char * const  __at_rename_at_1014_15 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_f403d698c1fdad14 ( Context * __context__, TTable<char *,debug_eval::Result> const  & __Tab_rename_at_1047_14, char * const  __at_rename_at_1047_15 );
 inline debug_eval::Result _FuncbuiltinTickget_valueTick6803070933163225147_25700dfc8547814 ( Context * __context__, TTable<char *,debug_eval::Result> & __Tab_rename_at_741_16, char * const  __at_rename_at_741_17 );
-inline void _FuncbuiltinTickcloneTick3147220447302434744_caf9a18f00151e46 ( Context * __context__, TTable<char *,debug_eval::Result> & __a_rename_at_1119_18, TTable<char *,debug_eval::Result> const  & __b_rename_at_1119_19 );
-inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickeachTick4044332007967089362_d13e7572e5849aa5 ( Context * __context__, char * const  __str_rename_at_1256_25 );
+inline void _FuncbuiltinTickcloneTick3147220447302434744_caf9a18f00151e46 ( Context * __context__, TTable<char *,debug_eval::Result> & __a_rename_at_1152_18, TTable<char *,debug_eval::Result> const  & __b_rename_at_1152_19 );
+inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickeachTick4044332007967089362_d13e7572e5849aa5 ( Context * __context__, char * const  __str_rename_at_1289_25 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_165_27, uint8_t __value_rename_at_165_28 );
 inline bool _Func_lambda_debug_eval_26_1Tickfunction_f6c2387720b0ce3f ( Context * __context__, debug_eval::_lambda_debug_eval_26_1 & ____this_rename_at_26_29, AutoVariant<int64_t,int32_t,char *,char *,char *> & ___yield_26_rename_at_26_30 );
 inline void _Func_lambda_debug_eval_26_1Tickfinalizer_5b0173a727d79cf1 ( Context * __context__, debug_eval::_lambda_debug_eval_26_1 * ____this_rename_at_26_31 );
 inline bool _FuncbuiltinTickemptyTick15399874715904164783_4d77f401303a908c ( Context * __context__, TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>> const  & __a_rename_at_585_32 );
-inline bool _FuncbuiltinTicknextTick17450348357676149856_5cb3f1fd943d9108 ( Context * __context__, Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) & __it_rename_at_1223_33, AutoVariant<int64_t,int32_t,char *,char *,char *> & __value_rename_at_1223_34 );
+inline bool _FuncbuiltinTicknextTick17450348357676149856_5cb3f1fd943d9108 ( Context * __context__, Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) & __it_rename_at_1256_33, AutoVariant<int64_t,int32_t,char *,char *,char *> & __value_rename_at_1256_34 );
 inline AutoVariant<int64_t,int32_t,char *,char *,char *> & _FuncbuiltinTickbackTick18296309835877697278_237276f31a84753f ( Context * __context__, TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>> & __a_rename_at_473_35 );
 inline void _FuncbuiltinTickpopTick1161079256290593740_7a972024f8437b3f ( Context * __context__, TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>> & __Arr_rename_at_132_37 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_e9749418e214318c ( Context * __context__, TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>> & __Arr_rename_at_165_38, AutoVariant<int64_t,int32_t,char *,char *,char *> const  & __value_rename_at_165_39 );
@@ -627,33 +627,33 @@ void __init_script ( Context * __context__, bool __init_shared )
     das_global<int64_t,0x9bae386ba6f944e9>(__context__) = INT64_MIN;/*INVALID_VALUE*/
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1182_0 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1215_0 )
 {
-    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1182_0),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1215_0),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickclearTick13739625760977891612_bc21a7c19d5d96ed ( Context * __context__, TTable<char *,debug_eval::Result> &  __t_rename_at_1860_1 )
+inline void _FuncbuiltinTickclearTick13739625760977891612_bc21a7c19d5d96ed ( Context * __context__, TTable<char *,debug_eval::Result> &  __t_rename_at_1893_1 )
 {
-    builtin_table_clear(das_arg<TTable<char *,debug_eval::Result>>::pass(__t_rename_at_1860_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_clear(das_arg<TTable<char *,debug_eval::Result>>::pass(__t_rename_at_1893_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_d3d21e2c8adb2e77 ( Context * __context__, TTable<char *,debug_eval::Result> const  &  __a_rename_at_1128_2 )
+inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_d3d21e2c8adb2e77 ( Context * __context__, TTable<char *,debug_eval::Result> const  &  __a_rename_at_1161_2 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_3;das_zero(__it_rename_at_1129_3);
-    builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_3),__a_rename_at_1128_2,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_3);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1162_3;das_zero(__it_rename_at_1162_3);
+    builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1162_3),__a_rename_at_1161_2,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1162_3);
 }
 
-inline Sequence DAS_COMMENT((debug_eval::Result &)) _FuncbuiltinTickvaluesTick1935193042646774172_fa9f9c260fe9a102 ( Context * __context__, TTable<char *,debug_eval::Result> const  &  __a_rename_at_1143_4 )
+inline Sequence DAS_COMMENT((debug_eval::Result &)) _FuncbuiltinTickvaluesTick1935193042646774172_fa9f9c260fe9a102 ( Context * __context__, TTable<char *,debug_eval::Result> const  &  __a_rename_at_1176_4 )
 {
-    Sequence DAS_COMMENT((debug_eval::Result *)) __it_rename_at_1144_5;das_zero(__it_rename_at_1144_5);
-    builtin_table_values(das_arg<Sequence DAS_COMMENT((debug_eval::Result const ))>::pass(__it_rename_at_1144_5),__a_rename_at_1143_4,112,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((debug_eval::Result &))>::cast(__it_rename_at_1144_5);
+    Sequence DAS_COMMENT((debug_eval::Result *)) __it_rename_at_1177_5;das_zero(__it_rename_at_1177_5);
+    builtin_table_values(das_arg<Sequence DAS_COMMENT((debug_eval::Result const ))>::pass(__it_rename_at_1177_5),__a_rename_at_1176_4,112,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((debug_eval::Result &))>::cast(__it_rename_at_1177_5);
 }
 
-inline bool _FuncbuiltinTicknextTick17450348357676149856_ba3f4a54e51a0d57 ( Context * __context__, Sequence DAS_COMMENT((int32_t)) &  __it_rename_at_1223_6, int32_t & __value_rename_at_1223_7 )
+inline bool _FuncbuiltinTicknextTick17450348357676149856_ba3f4a54e51a0d57 ( Context * __context__, Sequence DAS_COMMENT((int32_t)) &  __it_rename_at_1256_6, int32_t & __value_rename_at_1256_7 )
 {
-    return das_auto_cast<bool>::cast(builtin_iterator_iterate(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1223_6),das_auto_cast<void * const >::cast(das_ref(__context__,__value_rename_at_1223_7)),__context__));
+    return das_auto_cast<bool>::cast(builtin_iterator_iterate(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1256_6),das_auto_cast<void * const >::cast(das_ref(__context__,__value_rename_at_1256_7)),__context__));
 }
 
 inline void finalize_c2f42de354cd5bce ( Context * __context__, debug_eval::_lambda_debug_eval_26_1 &  ____this_rename_at_26_8 )
@@ -669,11 +669,11 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_f497868bddc80ac1 ( Con
     builtin_array_resize(das_arg<TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>>>::pass(__Arr_rename_at_68_9),__newSize_rename_at_68_10,16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) _FuncbuiltinTickeachTick9663565701927713696_acc6981303ddd856 ( Context * __context__, Lambda DAS_COMMENT((bool,AutoVariant<int64_t,int32_t,char *,char *,char *>)) const  __lam_rename_at_1289_11 )
+inline Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) _FuncbuiltinTickeachTick9663565701927713696_acc6981303ddd856 ( Context * __context__, Lambda DAS_COMMENT((bool,AutoVariant<int64_t,int32_t,char *,char *,char *>)) const  __lam_rename_at_1322_11 )
 {
-    Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) __it_rename_at_1291_12;das_zero(__it_rename_at_1291_12);
-    builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::pass(__it_rename_at_1291_12),__lam_rename_at_1289_11,16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::cast(__it_rename_at_1291_12);
+    Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) __it_rename_at_1324_12;das_zero(__it_rename_at_1324_12);
+    builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::pass(__it_rename_at_1324_12),__lam_rename_at_1322_11,16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::cast(__it_rename_at_1324_12);
 }
 
 inline debug_eval::TokenStream & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_32ef8117beffbe31 ( Context * __context__, debug_eval::TokenStream &  __a_rename_at_50_13 )
@@ -682,9 +682,9 @@ inline debug_eval::TokenStream & _FuncbuiltinTick_return_with_lockcheckTick29393
     return das_auto_cast_ref<debug_eval::TokenStream &>::cast(__a_rename_at_50_13);
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_f403d698c1fdad14 ( Context * __context__, TTable<char *,debug_eval::Result> const  &  __Tab_rename_at_1014_14, char * const  __at_rename_at_1014_15 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_f403d698c1fdad14 ( Context * __context__, TTable<char *,debug_eval::Result> const  &  __Tab_rename_at_1047_14, char * const  __at_rename_at_1047_15 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_14,__at_rename_at_1014_15));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1047_14,__at_rename_at_1047_15));
 }
 
 inline debug_eval::Result _FuncbuiltinTickget_valueTick6803070933163225147_25700dfc8547814 ( Context * __context__, TTable<char *,debug_eval::Result> &  __Tab_rename_at_741_16, char * const  __at_rename_at_741_17 )
@@ -692,36 +692,36 @@ inline debug_eval::Result _FuncbuiltinTickget_valueTick6803070933163225147_25700
     return das_auto_cast_ref<debug_eval::Result>::cast(__Tab_rename_at_741_16(__at_rename_at_741_17,__context__));
 }
 
-inline void _FuncbuiltinTickcloneTick3147220447302434744_caf9a18f00151e46 ( Context * __context__, TTable<char *,debug_eval::Result> &  __a_rename_at_1119_18, TTable<char *,debug_eval::Result> const  &  __b_rename_at_1119_19 )
+inline void _FuncbuiltinTickcloneTick3147220447302434744_caf9a18f00151e46 ( Context * __context__, TTable<char *,debug_eval::Result> &  __a_rename_at_1152_18, TTable<char *,debug_eval::Result> const  &  __b_rename_at_1152_19 )
 {
-    Sequence DAS_COMMENT((char *)) _temp_make_local_1121_17_32; _temp_make_local_1121_17_32;
-    Sequence DAS_COMMENT((debug_eval::Result *)) _temp_make_local_1121_26_48; _temp_make_local_1121_26_48;
-    _FuncbuiltinTickclearTick13739625760977891612_bc21a7c19d5d96ed(__context__,das_arg<TTable<char *,debug_eval::Result>>::pass(__a_rename_at_1119_18));
+    Sequence DAS_COMMENT((char *)) _temp_make_local_1154_17_32; _temp_make_local_1154_17_32;
+    Sequence DAS_COMMENT((debug_eval::Result *)) _temp_make_local_1154_26_48; _temp_make_local_1154_26_48;
+    _FuncbuiltinTickclearTick13739625760977891612_bc21a7c19d5d96ed(__context__,das_arg<TTable<char *,debug_eval::Result>>::pass(__a_rename_at_1152_18));
     {
-        bool __need_loop_1121 = true;
+        bool __need_loop_1154 = true;
         // k: string
-        das_iterator<Sequence DAS_COMMENT((char *))> __k_iterator((_temp_make_local_1121_17_32 = (_FuncbuiltinTickkeysTick2205854368403803976_d3d21e2c8adb2e77(__context__,__b_rename_at_1119_19))));
-        char * __k_rename_at_1121_22;
-        __need_loop_1121 = __k_iterator.first(__context__,(__k_rename_at_1121_22)) && __need_loop_1121;
+        das_iterator<Sequence DAS_COMMENT((char *))> __k_iterator((_temp_make_local_1154_17_32 = (_FuncbuiltinTickkeysTick2205854368403803976_d3d21e2c8adb2e77(__context__,__b_rename_at_1152_19))));
+        char * __k_rename_at_1154_22;
+        __need_loop_1154 = __k_iterator.first(__context__,(__k_rename_at_1154_22)) && __need_loop_1154;
         // v: debug_eval::Result const&
-        das_iterator<Sequence DAS_COMMENT((debug_eval::Result const ))> __v_iterator((_temp_make_local_1121_26_48 = (_FuncbuiltinTickvaluesTick1935193042646774172_fa9f9c260fe9a102(__context__,__b_rename_at_1119_19))));
-        debug_eval::Result const  * __v_rename_at_1121_23;
-        __need_loop_1121 = __v_iterator.first(__context__,(__v_rename_at_1121_23)) && __need_loop_1121;
-        for ( ; __need_loop_1121 ; __need_loop_1121 = __k_iterator.next(__context__,(__k_rename_at_1121_22)) && __v_iterator.next(__context__,(__v_rename_at_1121_23)) )
+        das_iterator<Sequence DAS_COMMENT((debug_eval::Result const ))> __v_iterator((_temp_make_local_1154_26_48 = (_FuncbuiltinTickvaluesTick1935193042646774172_fa9f9c260fe9a102(__context__,__b_rename_at_1152_19))));
+        debug_eval::Result const  * __v_rename_at_1154_23;
+        __need_loop_1154 = __v_iterator.first(__context__,(__v_rename_at_1154_23)) && __need_loop_1154;
+        for ( ; __need_loop_1154 ; __need_loop_1154 = __k_iterator.next(__context__,(__k_rename_at_1154_22)) && __v_iterator.next(__context__,(__v_rename_at_1154_23)) )
         {
-            char * __kk_rename_at_1122_24 = ((char *)(char *)(__k_rename_at_1121_22));
-            das_copy(__a_rename_at_1119_18(__kk_rename_at_1122_24,__context__),(*__v_rename_at_1121_23));
+            char * __kk_rename_at_1155_24 = ((char *)(char *)(__k_rename_at_1154_22));
+            das_copy(__a_rename_at_1152_18(__kk_rename_at_1155_24,__context__),(*__v_rename_at_1154_23));
         }
-        __k_iterator.close(__context__,(__k_rename_at_1121_22));
-        __v_iterator.close(__context__,(__v_rename_at_1121_23));
+        __k_iterator.close(__context__,(__k_rename_at_1154_22));
+        __v_iterator.close(__context__,(__v_rename_at_1154_23));
     };
 }
 
-inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickeachTick4044332007967089362_d13e7572e5849aa5 ( Context * __context__, char * const  __str_rename_at_1256_25 )
+inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickeachTick4044332007967089362_d13e7572e5849aa5 ( Context * __context__, char * const  __str_rename_at_1289_25 )
 {
-    Sequence DAS_COMMENT((int32_t)) __it_rename_at_1257_26;das_zero(__it_rename_at_1257_26);
-    builtin_make_string_iterator(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1257_26),__str_rename_at_1256_25,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((int32_t))>::cast(__it_rename_at_1257_26);
+    Sequence DAS_COMMENT((int32_t)) __it_rename_at_1290_26;das_zero(__it_rename_at_1290_26);
+    builtin_make_string_iterator(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1290_26),__str_rename_at_1289_25,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((int32_t))>::cast(__it_rename_at_1290_26);
 }
 
 inline void _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_165_27, uint8_t __value_rename_at_165_28 )
@@ -878,9 +878,9 @@ inline bool _FuncbuiltinTickemptyTick15399874715904164783_4d77f401303a908c ( Con
     return das_auto_cast<bool>::cast(builtin_array_size(__a_rename_at_585_32) == 0);
 }
 
-inline bool _FuncbuiltinTicknextTick17450348357676149856_5cb3f1fd943d9108 ( Context * __context__, Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) &  __it_rename_at_1223_33, AutoVariant<int64_t,int32_t,char *,char *,char *> &  __value_rename_at_1223_34 )
+inline bool _FuncbuiltinTicknextTick17450348357676149856_5cb3f1fd943d9108 ( Context * __context__, Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>)) &  __it_rename_at_1256_33, AutoVariant<int64_t,int32_t,char *,char *,char *> &  __value_rename_at_1256_34 )
 {
-    return das_auto_cast<bool>::cast(builtin_iterator_iterate(das_arg<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::pass(__it_rename_at_1223_33),das_auto_cast<void * const >::cast(das_ref(__context__,__value_rename_at_1223_34)),__context__));
+    return das_auto_cast<bool>::cast(builtin_iterator_iterate(das_arg<Sequence DAS_COMMENT((AutoVariant<int64_t,int32_t,char *,char *,char *>))>::pass(__it_rename_at_1256_33),das_auto_cast<void * const >::cast(das_ref(__context__,__value_rename_at_1256_34)),__context__));
 }
 
 inline AutoVariant<int64_t,int32_t,char *,char *,char *> & _FuncbuiltinTickbackTick18296309835877697278_237276f31a84753f ( Context * __context__, TArray<AutoVariant<int64_t,int32_t,char *,char *,char *>> &  __a_rename_at_473_35 )

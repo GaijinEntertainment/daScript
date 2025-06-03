@@ -341,17 +341,17 @@ static void resolveTypeInfoAnnotations()
 
 
 inline void _FuncbuiltinTickresizeTick4811697762258667383_ba6198643c09cf0e ( Context * __context__, TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> & __Arr_rename_at_68_0, int32_t __newSize_rename_at_68_1 );
-inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1059_2, smart_ptr_raw<Expression> const  __src_rename_at_1059_3 );
+inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1092_2, smart_ptr_raw<Expression> const  __src_rename_at_1092_3 );
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_a870648d308a6130 ( Context * __context__, TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1> const  & __a_rename_at_581_4 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_5, ast::AstFunctionAnnotation * __value_rename_at_181_6 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f6d476408197914e ( Context * __context__, typemacro_boost::TypeMacroMacro const  & __cl_rename_at_116_7 );
-inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_8e43a49b5b6891e2 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_8 );
-inline TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> _FuncbuiltinTickto_array_moveTick3185538323411982277_77313f057747cf52 ( Context * __context__, TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1> & __a_rename_at_1342_18 );
+inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_8e43a49b5b6891e2 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1089_8 );
+inline TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> _FuncbuiltinTickto_array_moveTick3185538323411982277_77313f057747cf52 ( Context * __context__, TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1> & __a_rename_at_1375_18 );
 inline smart_ptr_raw<Expression> _Funcast_boostTickconvert_to_expressionTick11707039267614988023_c545e308a61d940f ( Context * __context__, int32_t __value_rename_at_882_20 );
 inline smart_ptr_raw<Expression> _Funcast_boostTickconvert_to_expressionTick11707039267614988023_48a5beb36940388d ( Context * __context__, char * const  __value_rename_at_882_21 );
 inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_22, bool __extra_rename_at_38_23, bool __contracts_rename_at_38_24, bool __modules_rename_at_38_25 );
-inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_1c4e5b57d2a9fc6f ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1744_26 );
-inline Structure * _FuncbuiltinTickget_ptrTick5807679485210906136_1c1ac1d8f5641a51 ( Context * __context__, smart_ptr_raw<Structure> __src_rename_at_1732_28 );
+inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_1c4e5b57d2a9fc6f ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1777_26 );
+inline Structure * _FuncbuiltinTickget_ptrTick5807679485210906136_1c1ac1d8f5641a51 ( Context * __context__, smart_ptr_raw<Structure> __src_rename_at_1765_28 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -362,9 +362,9 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_ba6198643c09cf0e ( Con
     builtin_array_resize(das_arg<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>>>::pass(__Arr_rename_at_68_0),__newSize_rename_at_68_1,48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1059_2, smart_ptr_raw<Expression> const  __src_rename_at_1059_3 )
+inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1092_2, smart_ptr_raw<Expression> const  __src_rename_at_1092_3 )
 {
-    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1059_2),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1059_3),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1092_2),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1092_3),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_a870648d308a6130 ( Context * __context__, TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1> const  &  __a_rename_at_581_4 )
@@ -382,19 +382,19 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f6d47
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_7.__rtti))).getStructType())));
 }
 
-inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_8e43a49b5b6891e2 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_8 )
+inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_8e43a49b5b6891e2 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1089_8 )
 {
-    smart_ptr_raw<Expression> __clone_dest_rename_at_1058_9;das_zero(__clone_dest_rename_at_1058_9);
-    clone_912660ab1e667e4b(__context__,__clone_dest_rename_at_1058_9,__clone_src_rename_at_1056_8);
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1058_9);
+    smart_ptr_raw<Expression> __clone_dest_rename_at_1091_9;das_zero(__clone_dest_rename_at_1091_9);
+    clone_912660ab1e667e4b(__context__,__clone_dest_rename_at_1091_9,__clone_src_rename_at_1089_8);
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1091_9);
 }
 
-inline TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> _FuncbuiltinTickto_array_moveTick3185538323411982277_77313f057747cf52 ( Context * __context__, TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1> &  __a_rename_at_1342_18 )
+inline TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> _FuncbuiltinTickto_array_moveTick3185538323411982277_77313f057747cf52 ( Context * __context__, TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1> &  __a_rename_at_1375_18 )
 {
-    TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> __arr_rename_at_1344_19;das_zero(__arr_rename_at_1344_19);
-    _FuncbuiltinTickresizeTick4811697762258667383_ba6198643c09cf0e(__context__,das_arg<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>>>::pass(__arr_rename_at_1344_19),1);
-    das_copy(das_cast<TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1>>::cast(das_ref(__context__,__arr_rename_at_1344_19(0,__context__))),__a_rename_at_1342_18);
-    return /* <- */ das_auto_cast_move<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>>>::cast(__arr_rename_at_1344_19);
+    TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> __arr_rename_at_1377_19;das_zero(__arr_rename_at_1377_19);
+    _FuncbuiltinTickresizeTick4811697762258667383_ba6198643c09cf0e(__context__,das_arg<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>>>::pass(__arr_rename_at_1377_19),1);
+    das_copy(das_cast<TDim<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>,1>>::cast(das_ref(__context__,__arr_rename_at_1377_19(0,__context__))),__a_rename_at_1375_18);
+    return /* <- */ das_auto_cast_move<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>>>::cast(__arr_rename_at_1377_19);
 }
 
 inline smart_ptr_raw<Expression> _Funcast_boostTickconvert_to_expressionTick11707039267614988023_c545e308a61d940f ( Context * __context__, int32_t __value_rename_at_882_20 )
@@ -414,15 +414,15 @@ inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Con
     return das_auto_cast<char *>::cast(((char * const )(ast_describe_typedecl(__decl_rename_at_38_22,__extra_rename_at_38_23,__contracts_rename_at_38_24,__modules_rename_at_38_25,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }
 
-inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_1c4e5b57d2a9fc6f ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1744_26 )
+inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_1c4e5b57d2a9fc6f ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1777_26 )
 {
-    smart_ptr_raw<Expression> __dst_rename_at_1746_27; das_zero(__dst_rename_at_1746_27); das_move(__dst_rename_at_1746_27, _FuncbuiltinTickclone_to_moveTick2007252383599261567_8e43a49b5b6891e2(__context__,das_cast<smart_ptr_raw<Expression>>::cast(__src_rename_at_1744_26)));
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__dst_rename_at_1746_27);
+    smart_ptr_raw<Expression> __dst_rename_at_1779_27; das_zero(__dst_rename_at_1779_27); das_move(__dst_rename_at_1779_27, _FuncbuiltinTickclone_to_moveTick2007252383599261567_8e43a49b5b6891e2(__context__,das_cast<smart_ptr_raw<Expression>>::cast(__src_rename_at_1777_26)));
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__dst_rename_at_1779_27);
 }
 
-inline Structure * _FuncbuiltinTickget_ptrTick5807679485210906136_1c1ac1d8f5641a51 ( Context * __context__, smart_ptr_raw<Structure> __src_rename_at_1732_28 )
+inline Structure * _FuncbuiltinTickget_ptrTick5807679485210906136_1c1ac1d8f5641a51 ( Context * __context__, smart_ptr_raw<Structure> __src_rename_at_1765_28 )
 {
-    return das_auto_cast<Structure *>::cast(das_cast<Structure *>::cast(__src_rename_at_1732_28));
+    return das_auto_cast<Structure *>::cast(das_cast<Structure *>::cast(__src_rename_at_1765_28));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {

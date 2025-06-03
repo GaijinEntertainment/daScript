@@ -330,11 +330,11 @@ static void resolveTypeInfoAnnotations()
 
 TypeInfo * __tinfo_0[2] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 
-inline void finalize_d24b8ca870748b86 ( Context * __context__, AutoTuple<char *,char *> & ____this_rename_at_1186_0 );
+inline void finalize_d24b8ca870748b86 ( Context * __context__, AutoTuple<char *,char *> & ____this_rename_at_1219_0 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_1, ast::AstFunctionAnnotation * __value_rename_at_181_2 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_e752f39e965b4026 ( Context * __context__, static_let::StaticLetMacro const  & __cl_rename_at_116_3 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_93352451674cb798 ( Context * __context__, char * const  __name_rename_at_631_4, static_let::StaticLetMacro * __someClassPtr_rename_at_631_5 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b70d4a3adda2fff ( Context * __context__, TArray<AutoTuple<char *,char *>> & __a_rename_at_1182_7 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b70d4a3adda2fff ( Context * __context__, TArray<AutoTuple<char *,char *>> & __a_rename_at_1215_7 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_b1d2457362f3ba22 ( Context * __context__, TArray<AutoTuple<char *,char *>> & __Arr_rename_at_181_9, AutoTuple<char *,char *> & __value_rename_at_181_10 );
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_54c2da3d6fda4cde ( Context * __context__, char * const  __name_rename_at_273_11, char * const  __tag_rename_at_273_12, static_let::StaticLetMacro * __classPtr_rename_at_273_13 );
 inline void static_let_ff319dd1eed67c66 ( Context * __context__, Block DAS_COMMENT((void)) const  & __blk_rename_at_15_15 );
@@ -345,9 +345,9 @@ void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void finalize_d24b8ca870748b86 ( Context * __context__, AutoTuple<char *,char *> &  ____this_rename_at_1186_0 )
+inline void finalize_d24b8ca870748b86 ( Context * __context__, AutoTuple<char *,char *> &  ____this_rename_at_1219_0 )
 {
-    memset((void*)&(____this_rename_at_1186_0), 0, TypeSize<AutoTuple<char *,char *>>::size);
+    memset((void*)&(____this_rename_at_1219_0), 0, TypeSize<AutoTuple<char *,char *>>::size);
 }
 
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_1, ast::AstFunctionAnnotation * __value_rename_at_181_2 )
@@ -367,21 +367,21 @@ inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTic
     return /* <- */ das_auto_cast_move<smart_ptr_raw<FunctionAnnotation>>::cast(makeFunctionAnnotation(__name_rename_at_631_4,das_auto_cast<void * const >::cast(__someClassPtr_rename_at_631_5),__classInfo_rename_at_634_6,__context__));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b70d4a3adda2fff ( Context * __context__, TArray<AutoTuple<char *,char *>> &  __a_rename_at_1182_7 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b70d4a3adda2fff ( Context * __context__, TArray<AutoTuple<char *,char *>> &  __a_rename_at_1215_7 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: tuple<old_name:string;new_name:string> aka TT&
-        das_iterator<TArray<AutoTuple<char *,char *>>> __aV_iterator(__a_rename_at_1182_7);
-        AutoTuple<char *,char *> * __aV_rename_at_1184_8;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_8)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_8)) )
+        das_iterator<TArray<AutoTuple<char *,char *>>> __aV_iterator(__a_rename_at_1215_7);
+        AutoTuple<char *,char *> * __aV_rename_at_1217_8;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_8)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_8)) )
         {
-            finalize_d24b8ca870748b86(__context__,das_arg<AutoTuple<char *,char *>>::pass((*__aV_rename_at_1184_8)));
+            finalize_d24b8ca870748b86(__context__,das_arg<AutoTuple<char *,char *>>::pass((*__aV_rename_at_1217_8)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_8));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_8));
     };
-    builtin_array_free(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__a_rename_at_1182_7),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__a_rename_at_1215_7),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void _FuncbuiltinTickpushTick10769833213962245646_b1d2457362f3ba22 ( Context * __context__, TArray<AutoTuple<char *,char *>> &  __Arr_rename_at_181_9, AutoTuple<char *,char *> &  __value_rename_at_181_10 )

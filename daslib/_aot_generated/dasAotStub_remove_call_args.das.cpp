@@ -279,8 +279,8 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Conte
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b6f4be09425636e0 ( Context * __context__, remove_call_args::RemoveCallArgsMacro const  & __cl_rename_at_116_2 );
 inline TArray<int32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5eb52cff2bdd0eb4 ( Context * __context__, TArray<int32_t> & __a_rename_at_50_3 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_527bd39f2798fbd0 ( Context * __context__, TArray<int32_t> & __Arr_rename_at_165_4, int32_t __value_rename_at_165_5 );
-inline void _FuncbuiltinTicksortTick5995501125257068354_2f5e31a88a531a99 ( Context * __context__, TArray<int32_t> & __a_rename_at_1576_6, Block DAS_COMMENT((bool,int32_t,int32_t)) const  & __cmp_rename_at_1576_7 );
-inline range _FuncbuiltinTickiter_rangeTick1065493836214144684_80fa2303a9fad6b7 ( Context * __context__, AnnotationList const  & __foo_rename_at_1250_8 );
+inline void _FuncbuiltinTicksortTick5995501125257068354_2f5e31a88a531a99 ( Context * __context__, TArray<int32_t> & __a_rename_at_1609_6, Block DAS_COMMENT((bool,int32_t,int32_t)) const  & __cmp_rename_at_1609_7 );
+inline range _FuncbuiltinTickiter_rangeTick1065493836214144684_80fa2303a9fad6b7 ( Context * __context__, AnnotationList const  & __foo_rename_at_1283_8 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -307,14 +307,14 @@ inline void _FuncbuiltinTickpushTick14133213201864676143_527bd39f2798fbd0 ( Cont
     das_copy(__Arr_rename_at_165_4(builtin_array_push_back(das_arg<TArray<int32_t>>::pass(__Arr_rename_at_165_4),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_5);
 }
 
-inline void _FuncbuiltinTicksortTick5995501125257068354_2f5e31a88a531a99 ( Context * __context__, TArray<int32_t> &  __a_rename_at_1576_6, Block DAS_COMMENT((bool,int32_t,int32_t)) const  &  __cmp_rename_at_1576_7 )
+inline void _FuncbuiltinTicksortTick5995501125257068354_2f5e31a88a531a99 ( Context * __context__, TArray<int32_t> &  __a_rename_at_1609_6, Block DAS_COMMENT((bool,int32_t,int32_t)) const  &  __cmp_rename_at_1609_7 )
 {
-    builtin_sort_array_any_ref_cblock_T(das_arg<TArray<int32_t>>::pass(__a_rename_at_1576_6),4,builtin_array_size(das_arg<TArray<int32_t>>::pass(__a_rename_at_1576_6)),__cmp_rename_at_1576_7,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_sort_array_any_ref_cblock_T(das_arg<TArray<int32_t>>::pass(__a_rename_at_1609_6),4,builtin_array_size(das_arg<TArray<int32_t>>::pass(__a_rename_at_1609_6)),__cmp_rename_at_1609_7,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline range _FuncbuiltinTickiter_rangeTick1065493836214144684_80fa2303a9fad6b7 ( Context * __context__, AnnotationList const  &  __foo_rename_at_1250_8 )
+inline range _FuncbuiltinTickiter_rangeTick1065493836214144684_80fa2303a9fad6b7 ( Context * __context__, AnnotationList const  &  __foo_rename_at_1283_8 )
 {
-    return das_auto_cast<range>::cast(mk_range(das_vector_length(__foo_rename_at_1250_8)));
+    return das_auto_cast<range>::cast(mk_range(das_vector_length(__foo_rename_at_1283_8)));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {

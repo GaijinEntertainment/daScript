@@ -1014,17 +1014,17 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1059_0, smart_ptr_raw<Expression> const  __src_rename_at_1059_1 );
+inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1092_0, smart_ptr_raw<Expression> const  __src_rename_at_1092_1 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_2, ast::AstFunctionAnnotation * __value_rename_at_181_3 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_8981ef7cb8ccb680 ( Context * __context__, async_boost::AwaitMacro const  & __cl_rename_at_116_4 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1cef803eec7cbc0a ( Context * __context__, async_boost::AwaitCoroutineMacro const  & __cl_rename_at_116_5 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_13f016b2fff568b ( Context * __context__, async_boost::AsyncMacro const  & __cl_rename_at_116_6 );
-inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_7 );
+inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1089_7 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7b8ae90a7b65e8a ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  & __cl_rename_at_116_13 );
 inline smart_ptr_raw<Expression> _Funcast_boostTickconvert_to_expressionTick2307832460972925437_746a2d271cf4b7e ( Context * __context__, bool __value_rename_at_878_18 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_edfee798dfc70fd5 ( Context * __context__, char * const  __name_rename_at_631_19, async_boost::AwaitMacro * __someClassPtr_rename_at_631_20 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_db935d19f2381d6b ( Context * __context__, char * const  __name_rename_at_631_22, async_boost::AwaitCoroutineMacro * __someClassPtr_rename_at_631_23 );
-inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_c0234320b02c70c4 ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1744_25 );
+inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_c0234320b02c70c4 ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1777_25 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_f815a1708f9fc21b ( Context * __context__, TArray<ExprBlock *> & __Arr_rename_at_181_27, ExprBlock * __value_rename_at_181_28 );
 inline void _FuncbuiltinTickeraseTick16646986352019611268_2f7c311e5c3efda5 ( Context * __context__, TArray<ExprBlock *> & __Arr_rename_at_535_29, int32_t __at_rename_at_535_30 );
 inline smart_ptr_raw<Expression> _Funcast_boostTickconvert_to_expressionTick11707039267614988023_74fda33e5d4b5a11 ( Context * __context__, bool __value_rename_at_882_31 );
@@ -1033,7 +1033,7 @@ inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_fd843d
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_cea3573829e410d5 ( Context * __context__, char * const  __name_rename_at_273_37, char * const  __tag_rename_at_273_38, async_boost::AwaitCoroutineMacro * __classPtr_rename_at_273_39 );
 inline void clone_3bd5de5fb1f4face ( Context * __context__, smart_ptr_raw<TypeDecl> & __dest_rename_at_93_41, smart_ptr_raw<TypeDecl> const  __src_rename_at_93_42 );
 inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_139c8a91826b7188 ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  & __someClass_rename_at_684_43 );
-inline ExprBlock * _FuncbuiltinTickget_ptrTick5807679485210906136_ebfa36f57bc9f64d ( Context * __context__, smart_ptr_raw<ExprBlock> __src_rename_at_1732_46 );
+inline ExprBlock * _FuncbuiltinTickget_ptrTick5807679485210906136_ebfa36f57bc9f64d ( Context * __context__, smart_ptr_raw<ExprBlock> __src_rename_at_1765_46 );
 inline void await_next_frame_6f8872ea88113391 ( Context * __context__ );
 inline bool await_2402683cee1590ff ( Context * __context__, Sequence DAS_COMMENT((bool)) & __a_rename_at_38_47 );
 
@@ -1041,9 +1041,9 @@ void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1059_0, smart_ptr_raw<Expression> const  __src_rename_at_1059_1 )
+inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1092_0, smart_ptr_raw<Expression> const  __src_rename_at_1092_1 )
 {
-    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1059_0),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1059_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1092_0),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1092_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_2, ast::AstFunctionAnnotation * __value_rename_at_181_3 )
@@ -1066,11 +1066,11 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_13f01
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_6.__rtti))).getStructType())));
 }
 
-inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_7 )
+inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1089_7 )
 {
-    smart_ptr_raw<Expression> __clone_dest_rename_at_1058_8;das_zero(__clone_dest_rename_at_1058_8);
-    clone_912660ab1e667e4b(__context__,__clone_dest_rename_at_1058_8,__clone_src_rename_at_1056_7);
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1058_8);
+    smart_ptr_raw<Expression> __clone_dest_rename_at_1091_8;das_zero(__clone_dest_rename_at_1091_8);
+    clone_912660ab1e667e4b(__context__,__clone_dest_rename_at_1091_8,__clone_src_rename_at_1089_7);
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1091_8);
 }
 
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7b8ae90a7b65e8a ( Context * __context__, async_boost::CollectAndReplaceIteratorFields const  &  __cl_rename_at_116_13 )
@@ -1098,10 +1098,10 @@ inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTic
     return /* <- */ das_auto_cast_move<smart_ptr_raw<FunctionAnnotation>>::cast(makeFunctionAnnotation(__name_rename_at_631_22,das_auto_cast<void * const >::cast(__someClassPtr_rename_at_631_23),__classInfo_rename_at_634_24,__context__));
 }
 
-inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_c0234320b02c70c4 ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1744_25 )
+inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_c0234320b02c70c4 ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1777_25 )
 {
-    smart_ptr_raw<Expression> __dst_rename_at_1746_26; das_zero(__dst_rename_at_1746_26); das_move(__dst_rename_at_1746_26, _FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6(__context__,das_cast<smart_ptr_raw<Expression>>::cast(__src_rename_at_1744_25)));
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__dst_rename_at_1746_26);
+    smart_ptr_raw<Expression> __dst_rename_at_1779_26; das_zero(__dst_rename_at_1779_26); das_move(__dst_rename_at_1779_26, _FuncbuiltinTickclone_to_moveTick2007252383599261567_86ba131bd4babc6(__context__,das_cast<smart_ptr_raw<Expression>>::cast(__src_rename_at_1777_25)));
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__dst_rename_at_1779_26);
 }
 
 inline void _FuncbuiltinTickpushTick10769833213962245646_f815a1708f9fc21b ( Context * __context__, TArray<ExprBlock *> &  __Arr_rename_at_181_27, ExprBlock * __value_rename_at_181_28 )
@@ -1159,9 +1159,9 @@ inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_44),__classInfo_rename_at_688_45,__context__));
 }
 
-inline ExprBlock * _FuncbuiltinTickget_ptrTick5807679485210906136_ebfa36f57bc9f64d ( Context * __context__, smart_ptr_raw<ExprBlock> __src_rename_at_1732_46 )
+inline ExprBlock * _FuncbuiltinTickget_ptrTick5807679485210906136_ebfa36f57bc9f64d ( Context * __context__, smart_ptr_raw<ExprBlock> __src_rename_at_1765_46 )
 {
-    return das_auto_cast<ExprBlock *>::cast(das_cast<ExprBlock *>::cast(__src_rename_at_1732_46));
+    return das_auto_cast<ExprBlock *>::cast(das_cast<ExprBlock *>::cast(__src_rename_at_1765_46));
 }
 
 inline void await_next_frame_6f8872ea88113391 ( Context * __context__ )

@@ -3779,11 +3779,11 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_e50fe2294158f686 ( Context * __context__, TTable<Structure *,bool> & __a_rename_at_1193_0 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5e1308c9d727ed08 ( Context * __context__, TTable<Enumeration *,bool> & __a_rename_at_1193_1 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_e50fe2294158f686 ( Context * __context__, TTable<Structure *,bool> & __a_rename_at_1226_0 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5e1308c9d727ed08 ( Context * __context__, TTable<Enumeration *,bool> & __a_rename_at_1226_1 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_5a659292b350f9a8 ( Context * __context__, ast_used::TypeVisitor const  & __cl_rename_at_116_2 );
 inline void finalize_50a044337ee23495 ( Context * __context__, ast_used::OnlyUsedTypes & ____this_rename_at_11_3 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff ( Context * __context__, TTable<Structure *,bool> const  & __Tab_rename_at_1014_4, Structure * const  __at_rename_at_1014_5 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff ( Context * __context__, TTable<Structure *,bool> const  & __Tab_rename_at_1047_4, Structure * const  __at_rename_at_1047_5 );
 inline void finalize_f43d9f3f7ac2302f ( Context * __context__, ast_used::TypeVisitor & ____this_rename_at_17_6 );
 inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_40e336dfa100afc4 ( Context * __context__, ast_used::TypeVisitor const  & __someClass_rename_at_684_7 );
 inline void finalize_ab68013cde6812f4 ( Context * __context__, ast_used::TypeVisitor * & ____this_rename_at_69_10 );
@@ -3797,14 +3797,14 @@ void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_e50fe2294158f686 ( Context * __context__, TTable<Structure *,bool> &  __a_rename_at_1193_0 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_e50fe2294158f686 ( Context * __context__, TTable<Structure *,bool> &  __a_rename_at_1226_0 )
 {
-    builtin_table_free(das_arg<TTable<Structure *,bool>>::pass(__a_rename_at_1193_0),8,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<Structure *,bool>>::pass(__a_rename_at_1226_0),8,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5e1308c9d727ed08 ( Context * __context__, TTable<Enumeration *,bool> &  __a_rename_at_1193_1 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5e1308c9d727ed08 ( Context * __context__, TTable<Enumeration *,bool> &  __a_rename_at_1226_1 )
 {
-    builtin_table_free(das_arg<TTable<Enumeration *,bool>>::pass(__a_rename_at_1193_1),8,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<Enumeration *,bool>>::pass(__a_rename_at_1226_1),8,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_5a659292b350f9a8 ( Context * __context__, ast_used::TypeVisitor const  &  __cl_rename_at_116_2 )
@@ -3819,9 +3819,9 @@ inline void finalize_50a044337ee23495 ( Context * __context__, ast_used::OnlyUse
     memset((void*)&(____this_rename_at_11_3), 0, TypeSize<ast_used::OnlyUsedTypes>::size);
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff ( Context * __context__, TTable<Structure *,bool> const  &  __Tab_rename_at_1014_4, Structure * const  __at_rename_at_1014_5 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_d6758ac2e9235fff ( Context * __context__, TTable<Structure *,bool> const  &  __Tab_rename_at_1047_4, Structure * const  __at_rename_at_1047_5 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_4,__at_rename_at_1014_5));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1047_4,__at_rename_at_1047_5));
 }
 
 inline void finalize_f43d9f3f7ac2302f ( Context * __context__, ast_used::TypeVisitor &  ____this_rename_at_17_6 )

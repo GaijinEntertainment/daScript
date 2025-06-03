@@ -3816,7 +3816,7 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b10d8
 inline void _FuncbuiltinTickpushTick10769833213962245646_e455d24ced263da9 ( Context * __context__, TArray<ast::AstPassMacro *> & __Arr_rename_at_181_1, ast::AstPassMacro * __value_rename_at_181_2 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1c3d59b398e5d130 ( Context * __context__, lint::LintEverything const  & __cl_rename_at_116_3 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_392d8a8f7dc627ae ( Context * __context__, TArray<uint64_t> & __Arr_rename_at_68_4, int32_t __newSize_rename_at_68_5 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( Context * __context__, TArray<uint64_t> & __a_rename_at_1182_6 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( Context * __context__, TArray<uint64_t> & __a_rename_at_1215_6 );
 inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_d8a0e66b4fc58efe ( Context * __context__, lint::LintVisitor const  & __someClass_rename_at_684_7 );
 inline void clone_ff0636ad6d384e7b ( Context * __context__, smart_ptr_raw<VisitorAdapter> & __dest_rename_at_154_10, void * const  __src_rename_at_154_11 );
 inline void finalize_327ff23c4a330707 ( Context * __context__, lint::LintVisitor * & ____this_rename_at_156_12 );
@@ -3824,10 +3824,10 @@ inline void _FuncbuiltinTickpushTick14133213201864676143_ba560cde7cc1a00f ( Cont
 inline void _FuncbuiltinTickpopTick1161079256290593740_3bfc3a673ced7fa2 ( Context * __context__, TArray<uint64_t> & __Arr_rename_at_132_16 );
 inline uint64_t & _FuncbuiltinTickbackTick18296309835877697278_e492987e0a1f2c26 ( Context * __context__, TArray<uint64_t> & __a_rename_at_473_17 );
 inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65 ( Context * __context__, void * const  __p_rename_at_15_19 );
-inline Expression * _FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c ( Context * __context__, smart_ptr_raw<Expression> __src_rename_at_1732_20 );
-inline ExprReturn * _FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5 ( Context * __context__, smart_ptr_raw<ExprReturn> const  __src_rename_at_1726_21 );
+inline Expression * _FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c ( Context * __context__, smart_ptr_raw<Expression> __src_rename_at_1765_20 );
+inline ExprReturn * _FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5 ( Context * __context__, smart_ptr_raw<ExprReturn> const  __src_rename_at_1759_21 );
 inline bool _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46 ( Context * __context__, das::string const  & __b_rename_at_127_22, char * const  __a_rename_at_127_23 );
-inline ExprCall * _FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51 ( Context * __context__, smart_ptr_raw<ExprCall> const  __src_rename_at_1726_24 );
+inline ExprCall * _FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51 ( Context * __context__, smart_ptr_raw<ExprCall> const  __src_rename_at_1759_24 );
 inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_25, bool __extra_rename_at_38_26, bool __contracts_rename_at_38_27, bool __modules_rename_at_38_28 );
 inline void finalize_d0dc19c6de06c12f ( Context * __context__, lint::LintVisitor & ____this_rename_at_21_29 );
 inline lint::LintVisitor LintVisitor_d36fa7ad77fc6f3b ( Context * __context__ );
@@ -3870,9 +3870,9 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_392d8a8f7dc627ae ( Con
     builtin_array_resize(das_arg<TArray<uint64_t>>::pass(__Arr_rename_at_68_4),__newSize_rename_at_68_5,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( Context * __context__, TArray<uint64_t> &  __a_rename_at_1182_6 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_94631a65d82e1573 ( Context * __context__, TArray<uint64_t> &  __a_rename_at_1215_6 )
 {
-    builtin_array_free(das_arg<TArray<uint64_t>>::pass(__a_rename_at_1182_6),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint64_t>>::pass(__a_rename_at_1215_6),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_d8a0e66b4fc58efe ( Context * __context__, lint::LintVisitor const  &  __someClass_rename_at_684_7 )
@@ -3923,14 +3923,14 @@ inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_c1cab2e197c26e65 
     return das_auto_cast<uint64_t>::cast(das_cast<uint64_t>::cast(__p_rename_at_15_19));
 }
 
-inline Expression * _FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c ( Context * __context__, smart_ptr_raw<Expression> __src_rename_at_1732_20 )
+inline Expression * _FuncbuiltinTickget_ptrTick5807679485210906136_e8ac63235fcb6d6c ( Context * __context__, smart_ptr_raw<Expression> __src_rename_at_1765_20 )
 {
-    return das_auto_cast<Expression *>::cast(das_cast<Expression *>::cast(__src_rename_at_1732_20));
+    return das_auto_cast<Expression *>::cast(das_cast<Expression *>::cast(__src_rename_at_1765_20));
 }
 
-inline ExprReturn * _FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5 ( Context * __context__, smart_ptr_raw<ExprReturn> const  __src_rename_at_1726_21 )
+inline ExprReturn * _FuncbuiltinTickget_ptrTick8468476673553620226_8d777f33f0af2fa5 ( Context * __context__, smart_ptr_raw<ExprReturn> const  __src_rename_at_1759_21 )
 {
-    return das_auto_cast<ExprReturn *>::cast(das_cast<ExprReturn *>::cast(__src_rename_at_1726_21));
+    return das_auto_cast<ExprReturn *>::cast(das_cast<ExprReturn *>::cast(__src_rename_at_1759_21));
 }
 
 inline bool _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46 ( Context * __context__, das::string const  &  __b_rename_at_127_22, char * const  __a_rename_at_127_23 )
@@ -3938,9 +3938,9 @@ inline bool _Funcstrings_boostTickeqTick10467641742855300050_515bd3bb9c23dd46 ( 
     return das_auto_cast<bool>::cast(eq_dstr_str(__b_rename_at_127_22,__a_rename_at_127_23));
 }
 
-inline ExprCall * _FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51 ( Context * __context__, smart_ptr_raw<ExprCall> const  __src_rename_at_1726_24 )
+inline ExprCall * _FuncbuiltinTickget_ptrTick8468476673553620226_847aa4ed7b360b51 ( Context * __context__, smart_ptr_raw<ExprCall> const  __src_rename_at_1759_24 )
 {
-    return das_auto_cast<ExprCall *>::cast(das_cast<ExprCall *>::cast(__src_rename_at_1726_24));
+    return das_auto_cast<ExprCall *>::cast(das_cast<ExprCall *>::cast(__src_rename_at_1759_24));
 }
 
 inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_25, bool __extra_rename_at_38_26, bool __contracts_rename_at_38_27, bool __modules_rename_at_38_28 )

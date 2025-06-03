@@ -302,13 +302,13 @@ static void resolveTypeInfoAnnotations()
 TypeInfo * __tinfo_0[4] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 
 inline void _FuncbuiltinTickresizeTick4811697762258667383_79be43bff405345e ( Context * __context__, TArray<AutoTuple<char *,char *>> & __Arr_rename_at_68_0, int32_t __newSize_rename_at_68_1 );
-inline void finalize_47949244503253d8 ( Context * __context__, AutoTuple<char *,char *,char *> & ____this_rename_at_1186_2 );
+inline void finalize_47949244503253d8 ( Context * __context__, AutoTuple<char *,char *,char *> & ____this_rename_at_1219_2 );
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_cd12b5c9a9152cf9 ( Context * __context__, TDim<AutoTuple<char *,char *>,1> const  & __a_rename_at_581_3 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_1e447dd60252966c ( Context * __context__, TArray<ast::AstCommentReader *> & __Arr_rename_at_181_4, ast::AstCommentReader * __value_rename_at_181_5 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c4ead8a00aa65924 ( Context * __context__, rst_comment::RstComment const  & __cl_rename_at_116_6 );
-inline TArray<AutoTuple<char *,char *>> _FuncbuiltinTickto_array_moveTick3185538323411982277_8551a3ae50f28771 ( Context * __context__, TDim<AutoTuple<char *,char *>,1> & __a_rename_at_1342_7 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1182_9 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_9f4e5aa8ea20038d ( Context * __context__, TArray<AutoTuple<char *,char *,char *>> & __a_rename_at_1182_10 );
+inline TArray<AutoTuple<char *,char *>> _FuncbuiltinTickto_array_moveTick3185538323411982277_8551a3ae50f28771 ( Context * __context__, TDim<AutoTuple<char *,char *>,1> & __a_rename_at_1375_7 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1215_9 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_9f4e5aa8ea20038d ( Context * __context__, TArray<AutoTuple<char *,char *,char *>> & __a_rename_at_1215_10 );
 inline smart_ptr_raw<CommentReader> _FuncastTickmake_comment_readerTick2128729122050972798_95fcefcca436c81a ( Context * __context__, char * const  __name_rename_at_714_12, rst_comment::RstComment * __someClassPtr_rename_at_714_13 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_165_15, uint8_t __value_rename_at_165_16 );
 inline void _FuncbuiltinTickeraseTick16646986352019611268_8409073fa4044020 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_535_17, int32_t __at_rename_at_535_18 );
@@ -328,9 +328,9 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_79be43bff405345e ( Con
     builtin_array_resize(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__Arr_rename_at_68_0),__newSize_rename_at_68_1,16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void finalize_47949244503253d8 ( Context * __context__, AutoTuple<char *,char *,char *> &  ____this_rename_at_1186_2 )
+inline void finalize_47949244503253d8 ( Context * __context__, AutoTuple<char *,char *,char *> &  ____this_rename_at_1219_2 )
 {
-    memset((void*)&(____this_rename_at_1186_2), 0, TypeSize<AutoTuple<char *,char *,char *>>::size);
+    memset((void*)&(____this_rename_at_1219_2), 0, TypeSize<AutoTuple<char *,char *,char *>>::size);
 }
 
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_cd12b5c9a9152cf9 ( Context * __context__, TDim<AutoTuple<char *,char *>,1> const  &  __a_rename_at_581_3 )
@@ -348,34 +348,34 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c4ead
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_6.__rtti))).getStructType())));
 }
 
-inline TArray<AutoTuple<char *,char *>> _FuncbuiltinTickto_array_moveTick3185538323411982277_8551a3ae50f28771 ( Context * __context__, TDim<AutoTuple<char *,char *>,1> &  __a_rename_at_1342_7 )
+inline TArray<AutoTuple<char *,char *>> _FuncbuiltinTickto_array_moveTick3185538323411982277_8551a3ae50f28771 ( Context * __context__, TDim<AutoTuple<char *,char *>,1> &  __a_rename_at_1375_7 )
 {
-    TArray<AutoTuple<char *,char *>> __arr_rename_at_1344_8;das_zero(__arr_rename_at_1344_8);
-    _FuncbuiltinTickresizeTick4811697762258667383_79be43bff405345e(__context__,das_arg<TArray<AutoTuple<char *,char *>>>::pass(__arr_rename_at_1344_8),1);
-    das_copy(das_cast<TDim<AutoTuple<char *,char *>,1>>::cast(das_ref(__context__,__arr_rename_at_1344_8(0,__context__))),__a_rename_at_1342_7);
-    return /* <- */ das_auto_cast_move<TArray<AutoTuple<char *,char *>>>::cast(__arr_rename_at_1344_8);
+    TArray<AutoTuple<char *,char *>> __arr_rename_at_1377_8;das_zero(__arr_rename_at_1377_8);
+    _FuncbuiltinTickresizeTick4811697762258667383_79be43bff405345e(__context__,das_arg<TArray<AutoTuple<char *,char *>>>::pass(__arr_rename_at_1377_8),1);
+    das_copy(das_cast<TDim<AutoTuple<char *,char *>,1>>::cast(das_ref(__context__,__arr_rename_at_1377_8(0,__context__))),__a_rename_at_1375_7);
+    return /* <- */ das_auto_cast_move<TArray<AutoTuple<char *,char *>>>::cast(__arr_rename_at_1377_8);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1182_9 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1215_9 )
 {
-    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1182_9),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1215_9),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_9f4e5aa8ea20038d ( Context * __context__, TArray<AutoTuple<char *,char *,char *>> &  __a_rename_at_1182_10 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_9f4e5aa8ea20038d ( Context * __context__, TArray<AutoTuple<char *,char *,char *>> &  __a_rename_at_1215_10 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: tuple<kind:string;name:string;comment:string> aka TT&
-        das_iterator<TArray<AutoTuple<char *,char *,char *>>> __aV_iterator(__a_rename_at_1182_10);
-        AutoTuple<char *,char *,char *> * __aV_rename_at_1184_11;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_11)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_11)) )
+        das_iterator<TArray<AutoTuple<char *,char *,char *>>> __aV_iterator(__a_rename_at_1215_10);
+        AutoTuple<char *,char *,char *> * __aV_rename_at_1217_11;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_11)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_11)) )
         {
-            finalize_47949244503253d8(__context__,das_arg<AutoTuple<char *,char *,char *>>::pass((*__aV_rename_at_1184_11)));
+            finalize_47949244503253d8(__context__,das_arg<AutoTuple<char *,char *,char *>>::pass((*__aV_rename_at_1217_11)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_11));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_11));
     };
-    builtin_array_free(das_arg<TArray<AutoTuple<char *,char *,char *>>>::pass(__a_rename_at_1182_10),24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<AutoTuple<char *,char *,char *>>>::pass(__a_rename_at_1215_10),24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline smart_ptr_raw<CommentReader> _FuncastTickmake_comment_readerTick2128729122050972798_95fcefcca436c81a ( Context * __context__, char * const  __name_rename_at_714_12, rst_comment::RstComment * __someClassPtr_rename_at_714_13 )

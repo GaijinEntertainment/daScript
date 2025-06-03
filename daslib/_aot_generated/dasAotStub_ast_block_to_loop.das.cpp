@@ -787,7 +787,7 @@ static void resolveTypeInfoAnnotations()
 
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_bb674c1ef03d7420 ( Context * __context__, ast_block_to_loop::B2LVisitor const  & __cl_rename_at_116_0 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_1bdb9995fa062a51 ( Context * __context__, TArray<int32_t> & __Arr_rename_at_68_1, int32_t __newSize_rename_at_68_2 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8 ( Context * __context__, TArray<int32_t> & __a_rename_at_1182_3 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8 ( Context * __context__, TArray<int32_t> & __a_rename_at_1215_3 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_527bd39f2798fbd0 ( Context * __context__, TArray<int32_t> & __Arr_rename_at_165_4, int32_t __value_rename_at_165_5 );
 inline int32_t & _FuncbuiltinTickbackTick18296309835877697278_65b498d9361d727c ( Context * __context__, TArray<int32_t> & __a_rename_at_473_6 );
 inline void _FuncbuiltinTickpopTick1161079256290593740_1e32e23f49324001 ( Context * __context__, TArray<int32_t> & __Arr_rename_at_132_8 );
@@ -807,9 +807,9 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_1bdb9995fa062a51 ( Con
     builtin_array_resize(das_arg<TArray<int32_t>>::pass(__Arr_rename_at_68_1),__newSize_rename_at_68_2,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8 ( Context * __context__, TArray<int32_t> &  __a_rename_at_1182_3 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_c2c15811c6d720e8 ( Context * __context__, TArray<int32_t> &  __a_rename_at_1215_3 )
 {
-    builtin_array_free(das_arg<TArray<int32_t>>::pass(__a_rename_at_1182_3),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<int32_t>>::pass(__a_rename_at_1215_3),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void _FuncbuiltinTickpushTick14133213201864676143_527bd39f2798fbd0 ( Context * __context__, TArray<int32_t> &  __Arr_rename_at_165_4, int32_t __value_rename_at_165_5 )

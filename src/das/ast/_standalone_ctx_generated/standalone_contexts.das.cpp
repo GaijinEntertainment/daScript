@@ -15895,7 +15895,7 @@ VarInfo __func_info__b4a52cb1f64646f1_field_2 =  { Type::tPointer, nullptr, null
 VarInfo __func_info__b4a52cb1f64646f1_field_3 =  { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 1, UINT64_C(0xe9d0a5df4c726485), "all_modules", 0, 0 };
 VarInfo __func_info__b4a52cb1f64646f1_field_4 =  { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 1, UINT64_C(0x4bfa3997629bba35), "is_all", 0, 0 };
 VarInfo * __func_info__b4a52cb1f64646f1_fields[5] =  { &__func_info__b4a52cb1f64646f1_field_0, &__func_info__b4a52cb1f64646f1_field_1, &__func_info__b4a52cb1f64646f1_field_2, &__func_info__b4a52cb1f64646f1_field_3, &__func_info__b4a52cb1f64646f1_field_4 };
-FuncInfo __func_info__b4a52cb1f64646f1 = {"collectUsedFunctions", "", __func_info__b4a52cb1f64646f1_fields, 5, 144, &__type_info__43f8a53d2bdaf2e1, nullptr,0,UINT64_C(0xb4a52cb1f64646f1), 0x0 };
+FuncInfo __func_info__b4a52cb1f64646f1 = {"collectUsedFunctions", "", __func_info__b4a52cb1f64646f1_fields, 5, 112, &__type_info__43f8a53d2bdaf2e1, nullptr,0,UINT64_C(0xb4a52cb1f64646f1), 0x0 };
 VarInfo __func_info__9b224c6688604786_field_0 =  { Type::tEnumeration, nullptr, &__enum_info__c897fe55afe7f727, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 4, UINT64_C(0xd331d5670512f951), "t", 0, 0 };
 VarInfo * __func_info__9b224c6688604786_fields[1] =  { &__func_info__9b224c6688604786_field_0 };
 FuncInfo __func_info__9b224c6688604786 = {"das_to_cppCTypeString", "", __func_info__9b224c6688604786_fields, 1, 32, &__type_info__af90fe4c864e9d52, nullptr,0,UINT64_C(0x9b224c6688604786), 0x0 };
@@ -17199,7 +17199,7 @@ TypeInfo * __tinfo_159[2] = { &__type_info__af90fe4c864e9d52, &__type_info__af90
 
 inline char * _Funcstrings_boostTickjoinTick17792841289284275598_4fea1d2819b6acc5 ( Context * __context__, Sequence DAS_COMMENT((char *)) & __it_rename_at_46_0, char * const  __separator_rename_at_46_1 );
 inline void finalize_93bcc12512fb5e41 ( Context * __context__, standalone_contexts::_lambda_standalone_contexts_43_2 & ____this_rename_at_43_6 );
-inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickeachTick9663565701927713696_12976bc67f5781f5 ( Context * __context__, Lambda DAS_COMMENT((bool,char * &)) const  __lam_rename_at_1289_7 );
+inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickeachTick9663565701927713696_12976bc67f5781f5 ( Context * __context__, Lambda DAS_COMMENT((bool,char * &)) const  __lam_rename_at_1322_7 );
 inline bool _Func_lambda_standalone_contexts_43_2Tickfunction_16c680dbb24ed01d ( Context * __context__, standalone_contexts::_lambda_standalone_contexts_43_2 & ____this_rename_at_43_9, char * & ___yield_43_rename_at_43_10 );
 inline void _Func_lambda_standalone_contexts_43_2Tickfinalizer_ba697981d0d192d2 ( Context * __context__, standalone_contexts::_lambda_standalone_contexts_43_2 * ____this_rename_at_43_11 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_14682004b38ad2a1 ( Context * __context__, TArray<char *> & __Arr_rename_at_68_12, int32_t __newSize_rename_at_68_13 );
@@ -17211,11 +17211,11 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_52379
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_2892705304833493 ( Context * __context__, ast_aot_cpp::PrologueMarker const  & __cl_rename_at_116_21 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_3ba45100c4d9dafb ( Context * __context__, printer_flags_visitor::SetPrinterFlags const  & __cl_rename_at_116_22 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_dc06c38cb537868d ( Context * __context__, ast_aot_cpp::BlockVariableCollector const  & __cl_rename_at_116_23 );
-inline Variable * _FuncbuiltinTickget_ptrTick5807679485210906136_8765b15c0f064ae7 ( Context * __context__, smart_ptr_raw<Variable> __src_rename_at_1732_24 );
+inline Variable * _FuncbuiltinTickget_ptrTick5807679485210906136_8765b15c0f064ae7 ( Context * __context__, smart_ptr_raw<Variable> __src_rename_at_1765_24 );
 inline void clone_1cf5bd7f98cc73df ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_250_25, smart_ptr_raw<Expression> const  __src_rename_at_250_26 );
 inline void finalize_3ea06c9bb8d1cf03 ( Context * __context__, standalone_contexts::_lambda_standalone_contexts_88_1 & ____this_rename_at_88_27 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> & __a_rename_at_1182_28 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_dc408e0240d4e964 ( Context * __context__, TTable<char *,void> & __a_rename_at_1193_29 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> & __a_rename_at_1215_28 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_dc408e0240d4e964 ( Context * __context__, TTable<char *,void> & __a_rename_at_1226_29 );
 inline Sequence DAS_COMMENT((char *)) _FuncfunctionalTickmapTick3767370688684665805_447ba994bbb81f33 ( Context * __context__, Sequence DAS_COMMENT((smart_ptr_raw<Variable> const  &)) & __src_rename_at_73_30, Lambda DAS_COMMENT((char * const ,smart_ptr_raw<Variable> const )) const  __blk_rename_at_73_31 );
 inline void finalize_9107ad0191e1b129 ( Context * __context__, ast_aot_cpp::AotDebugInfoHelper * & ____this_rename_at_999_32 );
 inline void finalize_35ed6dfbf92c2975 ( Context * __context__, ast_aot_cpp::BlockVariableCollector * & ____this_rename_at_1001_34 );
@@ -17223,11 +17223,11 @@ inline char * _Func_lambda_standalone_contexts_88_1Tickfunction_f3c87101e87745dc
 inline void _Func_lambda_standalone_contexts_88_1Tickfinalizer_7b5ae377a2c0cd3b ( Context * __context__, standalone_contexts::_lambda_standalone_contexts_88_1 * ____this_rename_at_88_38 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_d626258b591934af ( Context * __context__, TArray<char *> & __Arr_rename_at_165_39, char * const  __value_rename_at_165_40 );
 inline void _FuncbuiltinTickinsertTick10959621454228962049_c5249085906957b9 ( Context * __context__, TTable<char *,void> & __Tab_rename_at_895_41, char * const  __at_rename_at_895_42 );
-inline TArray<char *> _FuncbuiltinTickto_array_moveTick3185538323411982277_b3c31188a4aad7c ( Context * __context__, TDim<char *,11> & __a_rename_at_1342_43 );
+inline TArray<char *> _FuncbuiltinTickto_array_moveTick3185538323411982277_b3c31188a4aad7c ( Context * __context__, TDim<char *,11> & __a_rename_at_1375_43 );
 inline void clone_7b7af51c483a8756 ( Context * __context__, smart_ptr_raw<VisitorAdapter> & __dest_rename_at_341_45, smart_ptr_raw<VisitorAdapter> const  __src_rename_at_341_46 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_5a77afdd4cbd09e1 ( Context * __context__, TArray<char *> & __Arr_rename_at_181_47, char * __value_rename_at_181_48 );
 inline char * _Funcstrings_boostTickjoinTick16475640899284277631_97cbd29033d05835 ( Context * __context__, TArray<char *> const  & __it_rename_at_22_49, char * const  __separator_rename_at_22_50 );
-inline Program * _FuncbuiltinTickget_ptrTick8468476673553620226_ae31c60b8d8beb31 ( Context * __context__, smart_ptr_raw<Program> const  __src_rename_at_1726_55 );
+inline Program * _FuncbuiltinTickget_ptrTick8468476673553620226_ae31c60b8d8beb31 ( Context * __context__, smart_ptr_raw<Program> const  __src_rename_at_1759_55 );
 inline char * _FuncastTickget_mangled_nameTick9959379635618055908_d7edd371ef61ead6 ( Context * __context__, Variable * const  __decl_rename_at_73_56 );
 inline bool _FuncbuiltinTickemptyTick15399874715904164783_e7d23d30bed4f24e ( Context * __context__, TArray<char *> const  & __a_rename_at_585_57 );
 inline void finalize_2d2fdc65c5304dd2 ( Context * __context__, standalone_contexts::StandaloneContextGen & ____this_rename_at_214_58 );
@@ -17294,11 +17294,11 @@ inline void finalize_93bcc12512fb5e41 ( Context * __context__, standalone_contex
     memset((void*)&(____this_rename_at_43_6), 0, TypeSize<standalone_contexts::_lambda_standalone_contexts_43_2>::size);
 }
 
-inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickeachTick9663565701927713696_12976bc67f5781f5 ( Context * __context__, Lambda DAS_COMMENT((bool,char * &)) const  __lam_rename_at_1289_7 )
+inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickeachTick9663565701927713696_12976bc67f5781f5 ( Context * __context__, Lambda DAS_COMMENT((bool,char * &)) const  __lam_rename_at_1322_7 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1291_8;das_zero(__it_rename_at_1291_8);
-    builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1291_8),__lam_rename_at_1289_7,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1291_8);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1324_8;das_zero(__it_rename_at_1324_8);
+    builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1324_8),__lam_rename_at_1322_7,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1324_8);
 }
 
 inline bool _Func_lambda_standalone_contexts_43_2Tickfunction_16c680dbb24ed01d ( Context * __context__, standalone_contexts::_lambda_standalone_contexts_43_2 &  ____this_rename_at_43_9, char * & ___yield_43_rename_at_43_10 )
@@ -17393,9 +17393,9 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_dc06c
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_23.__rtti))).getStructType())));
 }
 
-inline Variable * _FuncbuiltinTickget_ptrTick5807679485210906136_8765b15c0f064ae7 ( Context * __context__, smart_ptr_raw<Variable> __src_rename_at_1732_24 )
+inline Variable * _FuncbuiltinTickget_ptrTick5807679485210906136_8765b15c0f064ae7 ( Context * __context__, smart_ptr_raw<Variable> __src_rename_at_1765_24 )
 {
-    return das_auto_cast<Variable *>::cast(das_cast<Variable *>::cast(__src_rename_at_1732_24));
+    return das_auto_cast<Variable *>::cast(das_cast<Variable *>::cast(__src_rename_at_1765_24));
 }
 
 inline void clone_1cf5bd7f98cc73df ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_250_25, smart_ptr_raw<Expression> const  __src_rename_at_250_26 )
@@ -17408,14 +17408,14 @@ inline void finalize_3ea06c9bb8d1cf03 ( Context * __context__, standalone_contex
     memset((void*)&(____this_rename_at_88_27), 0, TypeSize<standalone_contexts::_lambda_standalone_contexts_88_1>::size);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> &  __a_rename_at_1182_28 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_79f9e841b4434fd8 ( Context * __context__, TArray<char *> &  __a_rename_at_1215_28 )
 {
-    builtin_array_free(das_arg<TArray<char *>>::pass(__a_rename_at_1182_28),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<char *>>::pass(__a_rename_at_1215_28),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_dc408e0240d4e964 ( Context * __context__, TTable<char *,void> &  __a_rename_at_1193_29 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_dc408e0240d4e964 ( Context * __context__, TTable<char *,void> &  __a_rename_at_1226_29 )
 {
-    builtin_table_free(das_arg<TTable<char *,void>>::pass(__a_rename_at_1193_29),8,0,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<char *,void>>::pass(__a_rename_at_1226_29),8,0,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline Sequence DAS_COMMENT((char *)) _FuncfunctionalTickmapTick3767370688684665805_447ba994bbb81f33 ( Context * __context__, Sequence DAS_COMMENT((smart_ptr_raw<Variable> const  &)) &  __src_rename_at_73_30, Lambda DAS_COMMENT((char * const ,smart_ptr_raw<Variable> const )) const  __blk_rename_at_73_31 )
@@ -17466,12 +17466,12 @@ inline void _FuncbuiltinTickinsertTick10959621454228962049_c5249085906957b9 ( Co
     __builtin_table_set_insert(__context__,__Tab_rename_at_895_41,__at_rename_at_895_42);
 }
 
-inline TArray<char *> _FuncbuiltinTickto_array_moveTick3185538323411982277_b3c31188a4aad7c ( Context * __context__, TDim<char *,11> &  __a_rename_at_1342_43 )
+inline TArray<char *> _FuncbuiltinTickto_array_moveTick3185538323411982277_b3c31188a4aad7c ( Context * __context__, TDim<char *,11> &  __a_rename_at_1375_43 )
 {
-    TArray<char *> __arr_rename_at_1344_44;das_zero(__arr_rename_at_1344_44);
-    _FuncbuiltinTickresizeTick4811697762258667383_14682004b38ad2a1(__context__,das_arg<TArray<char *>>::pass(__arr_rename_at_1344_44),11);
-    das_copy(das_cast<TDim<char *,11>>::cast(das_ref(__context__,__arr_rename_at_1344_44(0,__context__))),__a_rename_at_1342_43);
-    return /* <- */ das_auto_cast_move<TArray<char *>>::cast(__arr_rename_at_1344_44);
+    TArray<char *> __arr_rename_at_1377_44;das_zero(__arr_rename_at_1377_44);
+    _FuncbuiltinTickresizeTick4811697762258667383_14682004b38ad2a1(__context__,das_arg<TArray<char *>>::pass(__arr_rename_at_1377_44),11);
+    das_copy(das_cast<TDim<char *,11>>::cast(das_ref(__context__,__arr_rename_at_1377_44(0,__context__))),__a_rename_at_1375_43);
+    return /* <- */ das_auto_cast_move<TArray<char *>>::cast(__arr_rename_at_1377_44);
 }
 
 inline void clone_7b7af51c483a8756 ( Context * __context__, smart_ptr_raw<VisitorAdapter> & __dest_rename_at_341_45, smart_ptr_raw<VisitorAdapter> const  __src_rename_at_341_46 )
@@ -17510,9 +17510,9 @@ inline char * _Funcstrings_boostTickjoinTick16475640899284277631_97cbd29033d0583
     return das_auto_cast<char *>::cast(__st_rename_at_27_51);
 }
 
-inline Program * _FuncbuiltinTickget_ptrTick8468476673553620226_ae31c60b8d8beb31 ( Context * __context__, smart_ptr_raw<Program> const  __src_rename_at_1726_55 )
+inline Program * _FuncbuiltinTickget_ptrTick8468476673553620226_ae31c60b8d8beb31 ( Context * __context__, smart_ptr_raw<Program> const  __src_rename_at_1759_55 )
 {
-    return das_auto_cast<Program *>::cast(das_cast<Program *>::cast(__src_rename_at_1726_55));
+    return das_auto_cast<Program *>::cast(das_cast<Program *>::cast(__src_rename_at_1759_55));
 }
 
 inline char * _FuncastTickget_mangled_nameTick9959379635618055908_d7edd371ef61ead6 ( Context * __context__, Variable * const  __decl_rename_at_73_56 )
@@ -18548,16 +18548,16 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x54984a0d5cbdd890] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&getInitSemanticHash_745e52ea658104a4>>();
     };
-    aotLib[0xb9c37f7438ac3eaf] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x6a40c155c36997d2] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&writeStandaloneContextMethods_2339a7e3e3d41f61>>();
     };
     aotLib[0x62685d29cd6fe1e9] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&writeStandaloneCtor_d283d22bd340ceec>>();
     };
-    aotLib[0xac45cf00a752cd83] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x6b3306176b7f0a5a] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&writeStandaloneContext_b279e8068d9e5db5>>();
     };
-    aotLib[0xac22fd9b800194dd] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xf3231b264c56ab19] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&StandaloneContextGen_76f266fec5829109>>();
     };
     aotLib[0x68f588c3da460043] = +[](Context & ctx) -> SimNode* {
@@ -18569,13 +18569,13 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x4129202f34780168] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncStandaloneContextGenTickvisitGlobalLet_af3c098bf41924dc>>();
     };
-    aotLib[0xa217f25aebbdd87c] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x68a66e61804c2bc8] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncStandaloneContextGenTickpreVisitProgramBody_48e70b69f82d9ac>>();
     };
     aotLib[0x9c3497337bd79a8c] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncStandaloneContextGen_0x27___finalize_c2bf298b64f3e615>>();
     };
-    aotLib[0x8f19e94ce45e0a88] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xdeb83fdd1410311e] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&writeRegistration_5f38033db236a9f9>>();
     };
     aotLib[0xc6b3c20ddb4cbe9] = +[](Context & ctx) -> SimNode* {
@@ -18584,13 +18584,13 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x4762476529c82bdb] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&addFunctionInfo_55ceabaa4909b0d3>>();
     };
-    aotLib[0xc57ea434bfaae2a9] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x7b658c14a9b6eb11] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&genStandaloneSrc_91328d44d9903eb5>>();
     };
-    aotLib[0x229c3d79f699852] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xca1d9153569c211d] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&runStandaloneVisitor_8a0f5bca94beb10b>>();
     };
-    aotLib[0xe83f44d46f22001e] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xb89a97f39f8f248a] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&standalone_aot_fcd4fd8036c2e616>>();
     };
     resolveTypeInfoAnnotations();
@@ -18669,21 +18669,21 @@ Standalone::Standalone() {
         {42, FunctionInfo("fio`fopen`3937565566638487747", "@standalone_contexts::fio`fopen`3937565566638487747 Cs Cs CN<f>0<CY<file>1<CH<fio::FILE>>?>1<v>$", 0xb341069ac6f93c9a, 0x7c2e30b4091b7513, 48, false, false, false, false, false, false), &__func_info__b341069ac6f93c9a},
         {43, FunctionInfo("ast_aot_cpp`compile_and_simulate`4997334805323826700", "@standalone_contexts::ast_aot_cpp`compile_and_simulate`4997334805323826700 Cs X1<H<rtti::FileAccess>>?W 1<H<rtti::ModuleGroup>>? CXH<rtti::CodeOfPolicies> CXN<program;pctx>0<Y<ProgramPtr>1<H<rtti::Program>>?M;1<H<rtti::Context>>?M>1<v>$", 0x5f80ba363b7e2cba, 0xa6d25950e0b66073, 160, false, false, false, false, false, false), &__func_info__5f80ba363b7e2cba},
         {44, FunctionInfo("getInitSemanticHash", "@standalone_contexts::getInitSemanticHash CH<rtti::Context>", 0x206167296d11b1ec, 0x54984a0d5cbdd890, 32, false, false, false, false, false, false), &__func_info__206167296d11b1ec},
-        {45, FunctionInfo("writeStandaloneContextMethods", "@standalone_contexts::writeStandaloneContextMethods Y<ProgramPtr>1<H<rtti::Program>>?M H<strings::StringBuilderWriter> Cs Cb CS<standalone_contexts::StandaloneContextCfg>", 0xa4665700a6ade709, 0xb9c37f7438ac3eaf, 336, false, false, false, false, false, false), &__func_info__a4665700a6ade709},
+        {45, FunctionInfo("writeStandaloneContextMethods", "@standalone_contexts::writeStandaloneContextMethods Y<ProgramPtr>1<H<rtti::Program>>?M H<strings::StringBuilderWriter> Cs Cb CS<standalone_contexts::StandaloneContextCfg>", 0xa4665700a6ade709, 0x6a40c155c36997d2, 336, false, false, false, false, false, false), &__func_info__a4665700a6ade709},
         {46, FunctionInfo("writeStandaloneCtor", "@standalone_contexts::writeStandaloneCtor CS<standalone_contexts::StandaloneContextCfg> Cs H<strings::StringBuilderWriter> CY<ProgramPtr>1<H<rtti::Program>>?M", 0x9c4847ad01122f10, 0x62685d29cd6fe1e9, 432, false, false, false, false, false, false), &__func_info__9c4847ad01122f10},
-        {47, FunctionInfo("writeStandaloneContext", "@standalone_contexts::writeStandaloneContext Y<ProgramPtr>1<H<rtti::Program>>?M Cs H<strings::StringBuilderWriter> H<strings::StringBuilderWriter> CS<standalone_contexts::StandaloneContextCfg>", 0xfbbd289ed113c68c, 0xac45cf00a752cd83, 32, false, false, false, false, false, false), &__func_info__fbbd289ed113c68c},
-        {48, FunctionInfo("StandaloneContextGen", "@standalone_contexts::StandaloneContextGen Y<ProgramPtr>1<H<rtti::Program>>?M 1<H<strings::StringBuilderWriter>>? 1<S<ast_aot_cpp::BlockVariableCollector>>? Cb", 0x13a955bae2ce082f, 0xac22fd9b800194dd, 32, false, false, false, false, true, false), &__func_info__13a955bae2ce082f},
+        {47, FunctionInfo("writeStandaloneContext", "@standalone_contexts::writeStandaloneContext Y<ProgramPtr>1<H<rtti::Program>>?M Cs H<strings::StringBuilderWriter> H<strings::StringBuilderWriter> CS<standalone_contexts::StandaloneContextCfg>", 0xfbbd289ed113c68c, 0x6b3306176b7f0a5a, 32, false, false, false, false, false, false), &__func_info__fbbd289ed113c68c},
+        {48, FunctionInfo("StandaloneContextGen", "@standalone_contexts::StandaloneContextGen Y<ProgramPtr>1<H<rtti::Program>>?M 1<H<strings::StringBuilderWriter>>? 1<S<ast_aot_cpp::BlockVariableCollector>>? Cb", 0x13a955bae2ce082f, 0xf3231b264c56ab19, 32, false, false, false, false, true, false), &__func_info__13a955bae2ce082f},
         {49, FunctionInfo("StandaloneContextGen`StandaloneContextGen", "@standalone_contexts::StandaloneContextGen`StandaloneContextGen S<standalone_contexts::StandaloneContextGen> Y<ProgramPtr>1<H<rtti::Program>>?M 1<H<strings::StringBuilderWriter>>? 1<S<ast_aot_cpp::BlockVariableCollector>>? Cb", 0xaf7ec7293be89e33, 0x68f588c3da460043, 128, false, false, false, false, false, false), &__func_info__af7ec7293be89e33},
         {50, FunctionInfo("StandaloneContextGen`visitGlobalLetVariableInit", "@standalone_contexts::StandaloneContextGen`visitGlobalLetVariableInit S<standalone_contexts::StandaloneContextGen> CY<VariablePtr>1<H<ast::Variable>>?M Y<ExpressionPtr>1<H<ast::Expression>>?M", 0x5a46ef992a0e019e, 0x97af3369864d47b8, 32, false, false, false, false, false, false), &__func_info__5a46ef992a0e019e},
         {51, FunctionInfo("StandaloneContextGen`visitGlobalLet", "@standalone_contexts::StandaloneContextGen`visitGlobalLet S<standalone_contexts::StandaloneContextGen> CY<ProgramPtr>1<H<rtti::Program>>?M", 0x6160cac39dfd732c, 0x4129202f34780168, 224, false, false, false, false, false, false), &__func_info__6160cac39dfd732c},
-        {52, FunctionInfo("StandaloneContextGen`preVisitProgramBody", "@standalone_contexts::StandaloneContextGen`preVisitProgramBody S<standalone_contexts::StandaloneContextGen> Y<ProgramPtr>1<H<rtti::Program>>?M C1<H<rtti::Module>>?", 0xeafa689c0ad5e4a6, 0xa217f25aebbdd87c, 144, false, false, false, false, false, false), &__func_info__eafa689c0ad5e4a6},
+        {52, FunctionInfo("StandaloneContextGen`preVisitProgramBody", "@standalone_contexts::StandaloneContextGen`preVisitProgramBody S<standalone_contexts::StandaloneContextGen> Y<ProgramPtr>1<H<rtti::Program>>?M C1<H<rtti::Module>>?", 0xeafa689c0ad5e4a6, 0x68a66e61804c2bc8, 144, false, false, false, false, false, false), &__func_info__eafa689c0ad5e4a6},
         {53, FunctionInfo("StandaloneContextGen'__finalize", "@standalone_contexts::StandaloneContextGen'__finalize S<standalone_contexts::StandaloneContextGen>", 0x483500511b266b94, 0x9c3497337bd79a8c, 32, false, false, false, false, false, false), &__func_info__483500511b266b94},
-        {54, FunctionInfo("writeRegistration", "@standalone_contexts::writeRegistration H<strings::StringBuilderWriter> H<strings::StringBuilderWriter> Cs Y<ProgramPtr>1<H<rtti::Program>>?M CS<standalone_contexts::StandaloneContextCfg> H<rtti::Context>", 0xdef1e2f906f70d4e, 0x8f19e94ce45e0a88, 32, false, false, false, false, false, false), &__func_info__def1e2f906f70d4e},
+        {54, FunctionInfo("writeRegistration", "@standalone_contexts::writeRegistration H<strings::StringBuilderWriter> H<strings::StringBuilderWriter> Cs Y<ProgramPtr>1<H<rtti::Program>>?M CS<standalone_contexts::StandaloneContextCfg> H<rtti::Context>", 0xdef1e2f906f70d4e, 0xdeb83fdd1410311e, 32, false, false, false, false, false, false), &__func_info__def1e2f906f70d4e},
         {55, FunctionInfo("GetFunctionInfo", "@standalone_contexts::GetFunctionInfo C1<H<ast::Function>>? Cs", 0x15d4edadc09bfd0e, 0xc6b3c20ddb4cbe9, 224, false, false, false, false, false, false), &__func_info__15d4edadc09bfd0e},
         {56, FunctionInfo("addFunctionInfo", "@standalone_contexts::addFunctionInfo Cb Cb C1<1<H<ast::Function>>?>A 1<S<ast_aot_cpp::AotDebugInfoHelper>>?", 0xacec2c4ba2e01316, 0x4762476529c82bdb, 192, false, false, false, false, false, false), &__func_info__acec2c4ba2e01316},
-        {57, FunctionInfo("genStandaloneSrc", "@standalone_contexts::genStandaloneSrc Y<ProgramPtr>1<H<rtti::Program>>?M H<strings::StringBuilderWriter> CS<standalone_contexts::StandaloneContextCfg> 1<S<ast_aot_cpp::BlockVariableCollector>>?", 0x11dc13b91fffc482, 0xc57ea434bfaae2a9, 512, false, false, false, false, false, false), &__func_info__11dc13b91fffc482},
-        {58, FunctionInfo("runStandaloneVisitor", "@standalone_contexts::runStandaloneVisitor Y<ProgramPtr>1<H<rtti::Program>>?M C1<s>A 1<H<rtti::Context>>?M CS<standalone_contexts::StandaloneContextCfg>", 0x73e644d519bfdf6c, 0x229c3d79f699852, 496, false, false, false, false, false, false), &__func_info__73e644d519bfdf6c},
-        {59, FunctionInfo("standalone_aot", "@standalone_contexts::standalone_aot Cs Cs Cb Cb Cb CH<rtti::CodeOfPolicies>", 0xb9bc655ffdb20de5, 0xe83f44d46f22001e, 352, false, false, false, false, false, false), &__func_info__b9bc655ffdb20de5},
+        {57, FunctionInfo("genStandaloneSrc", "@standalone_contexts::genStandaloneSrc Y<ProgramPtr>1<H<rtti::Program>>?M H<strings::StringBuilderWriter> CS<standalone_contexts::StandaloneContextCfg> 1<S<ast_aot_cpp::BlockVariableCollector>>?", 0x11dc13b91fffc482, 0x7b658c14a9b6eb11, 512, false, false, false, false, false, false), &__func_info__11dc13b91fffc482},
+        {58, FunctionInfo("runStandaloneVisitor", "@standalone_contexts::runStandaloneVisitor Y<ProgramPtr>1<H<rtti::Program>>?M C1<s>A 1<H<rtti::Context>>?M CS<standalone_contexts::StandaloneContextCfg>", 0x73e644d519bfdf6c, 0xca1d9153569c211d, 496, false, false, false, false, false, false), &__func_info__73e644d519bfdf6c},
+        {59, FunctionInfo("standalone_aot", "@standalone_contexts::standalone_aot Cs Cs Cb Cb Cb CH<rtti::CodeOfPolicies>", 0xb9bc655ffdb20de5, 0xb89a97f39f8f248a, 352, false, false, false, false, false, false), &__func_info__b9bc655ffdb20de5},
         {60, FunctionInfo("rtti`RttiValue_nothing`4715542659269841615", "@ast_boost::rtti`RttiValue_nothing`4715542659269841615", 0xd4a73918b71a372b, 0x6a6a8acedd776000, 32, false, false, false, false, true, false), &__func_info__d4a73918b71a372b},
         {61, FunctionInfo("builtin`get_ptr`8468476673553620226", "@ast_boost::builtin`get_ptr`8468476673553620226 C=X1<Y<TT>H<rtti::Annotation>>?M", 0x8b4fbf624c1eb1e8, 0xaf014f870de3fcc6, 32, false, true, false, false, false, false), &__func_info__8b4fbf624c1eb1e8},
         {62, FunctionInfo("find_arg", "@ast_boost::find_arg CH<rtti::AnnotationArgumentList> Cs", 0x40c7502c822ab8eb, 0xca8ab2c17fa91cef, 144, false, false, false, false, true, false), &__func_info__40c7502c822ab8eb},
@@ -18877,7 +18877,7 @@ Standalone::Standalone() {
         {250, FunctionInfo("ast`make_visitor`897644165917210720", "@ast_aot_cpp::ast`make_visitor`897644165917210720 CXS<ast_aot_cpp::UseTypeMarker>", 0x97da66c9c674f865, 0xf6a388558c5ed675, 64, false, false, false, false, false, false), &__func_info__97da66c9c674f865},
         {251, FunctionInfo("builtin`get_ptr`8468476673553620226", "@ast_aot_cpp::builtin`get_ptr`8468476673553620226 C=X1<Y<TT>H<rtti::Program>>?M", 0xe8f68d06a710d0fa, 0x911c6cf074983819, 32, false, true, false, false, false, false), &__func_info__e8f68d06a710d0fa},
         {252, FunctionInfo("builtin`reserve`3994685146752941225", "@ast_aot_cpp::builtin`reserve`3994685146752941225 X1<Y<numT>1<H<ast::Function>>?>A Ci", 0x8c50a4f128099b52, 0xbba549d7d7191c65, 32, false, true, false, false, false, false), &__func_info__8c50a4f128099b52},
-        {253, FunctionInfo("ast_aot_cpp`registerAotCpp`9840454702956667452", "@ast_aot_cpp::ast_aot_cpp`registerAotCpp`9840454702956667452 1<H<strings::StringBuilderWriter>>? CY<ProgramPtr>1<H<rtti::Program>>?M H<rtti::Context> CXb Cb Cb", 0x1823b220bf234c68, 0xe5222f9b8f027e92, 128, false, false, false, false, false, false), &__func_info__1823b220bf234c68},
+        {253, FunctionInfo("ast_aot_cpp`registerAotCpp`9840454702956667452", "@ast_aot_cpp::ast_aot_cpp`registerAotCpp`9840454702956667452 1<H<strings::StringBuilderWriter>>? CY<ProgramPtr>1<H<rtti::Program>>?M H<rtti::Context> CXb Cb Cb", 0x1823b220bf234c68, 0xe5f53acf2e686e65, 128, false, false, false, false, false, false), &__func_info__1823b220bf234c68},
         {254, FunctionInfo("builtin`push`14133213201864676143", "@ast_aot_cpp::builtin`push`14133213201864676143 X1<Y<numT>s>A C=s", 0xa986fdd8e0b65809, 0x3c395992954dd60d, 32, false, true, false, false, false, false), &__func_info__a986fdd8e0b65809},
         {255, FunctionInfo("aotFunctionName", "@ast_aot_cpp::aotFunctionName Cs", 0xa5572da8f6ed1b7e, 0x92083704aa920a4d, 32, false, true, false, false, false, false), &__func_info__a5572da8f6ed1b7e},
         {256, FunctionInfo("aotModuleName", "@ast_aot_cpp::aotModuleName C1<H<rtti::Module>>?", 0xebc4cdbdfff022ca, 0x65d003fa89ec2617, 32, false, false, false, false, false, false), &__func_info__ebc4cdbdfff022ca},
@@ -19178,10 +19178,10 @@ Standalone::Standalone() {
         {551, FunctionInfo("CppAot`visitExprFor", "@ast_aot_cpp::CppAot`visitExprFor S<ast_aot_cpp::CppAot> 1<H<ast::ExprFor>>?M", 0xdba79799652b184, 0x9df63b4883683ea5, 48, false, false, false, false, false, false), &__func_info__dba79799652b184},
         {552, FunctionInfo("CppAot'__finalize", "@ast_aot_cpp::CppAot'__finalize S<ast_aot_cpp::CppAot>", 0xeb96fdcf7ceeb72, 0x954f2be44f1ef845, 32, false, false, false, false, false, false), &__func_info__eb96fdcf7ceeb72},
         {553, FunctionInfo("dumpDependencies", "@ast_aot_cpp::dumpDependencies CY<ProgramPtr>1<H<rtti::Program>>?M 1<S<ast_aot_cpp::CppAot>>?", 0xf3b7d86551f98a4b, 0x2b1ef937fc2b9930, 496, false, false, false, false, false, false), &__func_info__f3b7d86551f98a4b},
-        {554, FunctionInfo("collectUsedFunctions", "@ast_aot_cpp::collectUsedFunctions C1<1<H<rtti::Module>>?>A Ci C1<H<rtti::Module>>? Cb Cb", 0xb4a52cb1f64646f1, 0x7490dccfeab97764, 144, false, false, false, false, true, false), &__func_info__b4a52cb1f64646f1},
-        {555, FunctionInfo("collectProgramUsedFunctions", "@ast_aot_cpp::collectProgramUsedFunctions CY<ProgramPtr>1<H<rtti::Program>>?M Cb Cb", 0xd6f4c20c117ce2f, 0x91c1e879a47b2bb9, 160, false, false, false, false, true, false), &__func_info__d6f4c20c117ce2f},
+        {554, FunctionInfo("collectUsedFunctions", "@ast_aot_cpp::collectUsedFunctions C1<1<H<rtti::Module>>?>A Ci C1<H<rtti::Module>>? Cb Cb", 0xb4a52cb1f64646f1, 0x9339cff4e9a7e67e, 112, false, false, false, false, true, false), &__func_info__b4a52cb1f64646f1},
+        {555, FunctionInfo("collectProgramUsedFunctions", "@ast_aot_cpp::collectProgramUsedFunctions CY<ProgramPtr>1<H<rtti::Program>>?M Cb Cb", 0xd6f4c20c117ce2f, 0x6e4cf1ee5006f9a4, 160, false, false, false, false, true, false), &__func_info__d6f4c20c117ce2f},
         {556, FunctionInfo("setAotHashes", "@ast_aot_cpp::setAotHashes CY<ProgramPtr>1<H<rtti::Program>>?M H<rtti::Context>", 0xa0ed7fe4dc97505e, 0xa69a8ae6d514cd7d, 304, false, false, false, false, false, false), &__func_info__a0ed7fe4dc97505e},
-        {557, FunctionInfo("dumpRegisterAot", "@ast_aot_cpp::dumpRegisterAot 1<H<strings::StringBuilderWriter>>? CY<ProgramPtr>1<H<rtti::Program>>?M H<rtti::Context> Cb Cb", 0x54b1c2518a6dfddf, 0x21d3341d04008e88, 32, false, false, false, false, false, false), &__func_info__54b1c2518a6dfddf},
+        {557, FunctionInfo("dumpRegisterAot", "@ast_aot_cpp::dumpRegisterAot 1<H<strings::StringBuilderWriter>>? CY<ProgramPtr>1<H<rtti::Program>>?M H<rtti::Context> Cb Cb", 0x54b1c2518a6dfddf, 0x83fcedecbcf82dd, 32, false, false, false, false, false, false), &__func_info__54b1c2518a6dfddf},
         {558, FunctionInfo("getRequiredModulesFor", "@ast_aot_cpp::getRequiredModulesFor CY<ProgramPtr>1<H<rtti::Program>>?M", 0x63fb3735236cf18, 0x5181ea006709f2ea, 240, false, false, false, false, true, false), &__func_info__63fb3735236cf18},
         {559, FunctionInfo("DescribeConfig", "@ast_aot_cpp::DescribeConfig", 0x99e223915f99b760, 0xf75fa12d48e9263f, 48, false, false, false, false, true, false), &__func_info__99e223915f99b760},
         {560, FunctionInfo("PrologueMarker", "@ast_aot_cpp::PrologueMarker", 0xf1de25f41dec576, 0x8de874f111929b6a, 48, false, false, false, false, true, false), &__func_info__f1de25f41dec576},

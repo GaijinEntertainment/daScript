@@ -284,15 +284,15 @@ TypeInfo * __tinfo_23[2] = { &__type_info__37d36026a6078a42, &__type_info__af90f
 TypeInfo * __tinfo_24[2] = { &__type_info__37d36026a6078a42, &__type_info__af90fe4c864e9d52 };
 TypeInfo * __tinfo_25[2] = { &__type_info__37d36026a6078a42, &__type_info__af90fe4c864e9d52 };
 
-inline void finalize_9eb64692a374c6cb ( Context * __context__, AutoTuple<char *,char *> & ____this_rename_at_1186_0 );
+inline void finalize_9eb64692a374c6cb ( Context * __context__, AutoTuple<char *,char *> & ____this_rename_at_1219_0 );
 inline TArray<char *> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_354a9a0b57d554a0 ( Context * __context__, TArray<char *> & __a_rename_at_50_1 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_2f7ec56c9ac7d6d0 ( Context * __context__, TArray<AutoTuple<char *,char *>> & __Arr_rename_at_181_2, AutoTuple<char *,char *> & __value_rename_at_181_3 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_baa2ae866f630441 ( Context * __context__, TArray<AutoTuple<char *,char *>> & __a_rename_at_1182_4 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_baa2ae866f630441 ( Context * __context__, TArray<AutoTuple<char *,char *>> & __a_rename_at_1215_4 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_d626258b591934af ( Context * __context__, TArray<char *> & __Arr_rename_at_165_6, char * const  __value_rename_at_165_7 );
-inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  & __a_rename_at_1128_8 );
-inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  & __a_rename_at_1143_10 );
-inline void _FuncbuiltinTicksortTick5995501125257068354_4524eaa061a094a8 ( Context * __context__, TArray<AutoTuple<char *,char *>> & __a_rename_at_1576_12, Block DAS_COMMENT((bool,AutoTuple<char *,char *> const ,AutoTuple<char *,char *> const )) const  & __cmp_rename_at_1576_13 );
-inline TArray<char *> uri_split_full_path_61c8cae43e9301c5 ( Context * __context__, Uri const  & __uri_rename_at_14_14 );
+inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  & __a_rename_at_1161_8 );
+inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  & __a_rename_at_1176_10 );
+inline void _FuncbuiltinTicksortTick5995501125257068354_4524eaa061a094a8 ( Context * __context__, TArray<AutoTuple<char *,char *>> & __a_rename_at_1609_12, Block DAS_COMMENT((bool,AutoTuple<char *,char *> const ,AutoTuple<char *,char *> const )) const  & __cmp_rename_at_1609_13 );
+inline TArray<char *> uri_split_full_path_a180b3fcd3055c21 ( Context * __context__, Uri const  & __uri_rename_at_14_14 );
 inline char * uri_compose_query_8e868129edf6b854 ( Context * __context__, TTable<char *,char *> const  & __query_rename_at_25_17 );
 inline char * uri_compose_query_in_order_c110ae58bd0a3254 ( Context * __context__, TTable<char *,char *> const  & __query_rename_at_44_24 );
 inline char * scheme_868a118e00451a9e ( Context * __context__, Uri const  & __uri_rename_at_77_36 );
@@ -308,9 +308,9 @@ void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void finalize_9eb64692a374c6cb ( Context * __context__, AutoTuple<char *,char *> &  ____this_rename_at_1186_0 )
+inline void finalize_9eb64692a374c6cb ( Context * __context__, AutoTuple<char *,char *> &  ____this_rename_at_1219_0 )
 {
-    memset((void*)&(____this_rename_at_1186_0), 0, TypeSize<AutoTuple<char *,char *>>::size);
+    memset((void*)&(____this_rename_at_1219_0), 0, TypeSize<AutoTuple<char *,char *>>::size);
 }
 
 inline TArray<char *> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_354a9a0b57d554a0 ( Context * __context__, TArray<char *> &  __a_rename_at_50_1 )
@@ -324,21 +324,21 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_2f7ec56c9ac7d6d0 ( Cont
     das_copy(__Arr_rename_at_181_2(builtin_array_push_back(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__Arr_rename_at_181_2),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_3);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_baa2ae866f630441 ( Context * __context__, TArray<AutoTuple<char *,char *>> &  __a_rename_at_1182_4 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_baa2ae866f630441 ( Context * __context__, TArray<AutoTuple<char *,char *>> &  __a_rename_at_1215_4 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: tuple<key:string;value:string> aka TT&
-        das_iterator<TArray<AutoTuple<char *,char *>>> __aV_iterator(__a_rename_at_1182_4);
-        AutoTuple<char *,char *> * __aV_rename_at_1184_5;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_5)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_5)) )
+        das_iterator<TArray<AutoTuple<char *,char *>>> __aV_iterator(__a_rename_at_1215_4);
+        AutoTuple<char *,char *> * __aV_rename_at_1217_5;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_5)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_5)) )
         {
-            finalize_9eb64692a374c6cb(__context__,das_arg<AutoTuple<char *,char *>>::pass((*__aV_rename_at_1184_5)));
+            finalize_9eb64692a374c6cb(__context__,das_arg<AutoTuple<char *,char *>>::pass((*__aV_rename_at_1217_5)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_5));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_5));
     };
-    builtin_array_free(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__a_rename_at_1182_4),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__a_rename_at_1215_4),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void _FuncbuiltinTickpushTick14133213201864676143_d626258b591934af ( Context * __context__, TArray<char *> &  __Arr_rename_at_165_6, char * const  __value_rename_at_165_7 )
@@ -346,26 +346,26 @@ inline void _FuncbuiltinTickpushTick14133213201864676143_d626258b591934af ( Cont
     das_copy(__Arr_rename_at_165_6(builtin_array_push_back(das_arg<TArray<char *>>::pass(__Arr_rename_at_165_6),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_7);
 }
 
-inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1128_8 )
+inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1161_8 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_9;das_zero(__it_rename_at_1129_9);
-    builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_9),__a_rename_at_1128_8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_9);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1162_9;das_zero(__it_rename_at_1162_9);
+    builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1162_9),__a_rename_at_1161_8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1162_9);
 }
 
-inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1143_10 )
+inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1176_10 )
 {
-    Sequence DAS_COMMENT((char * *)) __it_rename_at_1144_11;das_zero(__it_rename_at_1144_11);
-    builtin_table_values(das_arg<Sequence DAS_COMMENT((char * const ))>::pass(__it_rename_at_1144_11),__a_rename_at_1143_10,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char * &))>::cast(__it_rename_at_1144_11);
+    Sequence DAS_COMMENT((char * *)) __it_rename_at_1177_11;das_zero(__it_rename_at_1177_11);
+    builtin_table_values(das_arg<Sequence DAS_COMMENT((char * const ))>::pass(__it_rename_at_1177_11),__a_rename_at_1176_10,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char * &))>::cast(__it_rename_at_1177_11);
 }
 
-inline void _FuncbuiltinTicksortTick5995501125257068354_4524eaa061a094a8 ( Context * __context__, TArray<AutoTuple<char *,char *>> &  __a_rename_at_1576_12, Block DAS_COMMENT((bool,AutoTuple<char *,char *> const ,AutoTuple<char *,char *> const )) const  &  __cmp_rename_at_1576_13 )
+inline void _FuncbuiltinTicksortTick5995501125257068354_4524eaa061a094a8 ( Context * __context__, TArray<AutoTuple<char *,char *>> &  __a_rename_at_1609_12, Block DAS_COMMENT((bool,AutoTuple<char *,char *> const ,AutoTuple<char *,char *> const )) const  &  __cmp_rename_at_1609_13 )
 {
-    builtin_sort_array_any_cblock_T(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__a_rename_at_1576_12),16,builtin_array_size(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__a_rename_at_1576_12)),__cmp_rename_at_1576_13,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_sort_array_any_cblock_T(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__a_rename_at_1609_12),16,builtin_array_size(das_arg<TArray<AutoTuple<char *,char *>>>::pass(__a_rename_at_1609_12)),__cmp_rename_at_1609_13,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline TArray<char *> uri_split_full_path_61c8cae43e9301c5 ( Context * __context__, Uri const  &  __uri_rename_at_14_14 )
+inline TArray<char *> uri_split_full_path_a180b3fcd3055c21 ( Context * __context__, Uri const  &  __uri_rename_at_14_14 )
 {
     TArray<char *> __paths_rename_at_16_15;das_zero(__paths_rename_at_16_15);
     UriPathSegmentStructA const  * __pcur_rename_at_17_16 = __uri_rename_at_14_14.uri /*uri*/.pathHead /*pathHead*/;
@@ -591,8 +591,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xb58c472181b851f0] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicksortTick5995501125257068354_4524eaa061a094a8>>();
     };
-    aotLib[0xc5c07999e07face8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&uri_split_full_path_61c8cae43e9301c5>>();
+    aotLib[0xdf30cc8c7df53410] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&uri_split_full_path_a180b3fcd3055c21>>();
     };
     aotLib[0x3b153912aea97865] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&uri_compose_query_8e868129edf6b854>>();

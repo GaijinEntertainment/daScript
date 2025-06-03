@@ -366,28 +366,28 @@ inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_37238c3cdaec478a (
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_94b9be375031ddbc ( Context * __context__, TDim<char *,21> const  & __a_rename_at_581_5 );
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_9778601c0167a631 ( Context * __context__, TDim<char *,11> const  & __a_rename_at_581_6 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_7, int32_t __newSize_rename_at_68_8 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5f7a4e8904f8977e ( Context * __context__, TArray<das_source_formatter::TokenTemplate> & __a_rename_at_1182_9 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d46b5589c5f4f04b ( Context * __context__, TArray<das_source_formatter::Token> & __a_rename_at_1182_11 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b4e09f66b8118eb0 ( Context * __context__, TArray<das_source_formatter::FormatterToken> & __a_rename_at_1182_13 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5f7a4e8904f8977e ( Context * __context__, TArray<das_source_formatter::TokenTemplate> & __a_rename_at_1215_9 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d46b5589c5f4f04b ( Context * __context__, TArray<das_source_formatter::Token> & __a_rename_at_1215_11 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b4e09f66b8118eb0 ( Context * __context__, TArray<das_source_formatter::FormatterToken> & __a_rename_at_1215_13 );
 inline void _FuncbuiltinTickresizeTick4811697762258667383_4a7556d56e5a6ac1 ( Context * __context__, TArray<das_source_formatter::TokenTemplate> & __Arr_rename_at_68_15, int32_t __newSize_rename_at_68_16 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_7d01ceb11c7f2e53 ( Context * __context__, TTable<char *,void> const  & __Tab_rename_at_1014_17, char * const  __at_rename_at_1014_18 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_7d01ceb11c7f2e53 ( Context * __context__, TTable<char *,void> const  & __Tab_rename_at_1047_17, char * const  __at_rename_at_1047_18 );
 inline void _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c ( Context * __context__, TArray<uint8_t> & __a_rename_at_32_19, TArray<uint8_t> & __b_rename_at_32_20 );
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_3422e7731ae3fc3d ( Context * __context__, TDim<char *,3> const  & __a_rename_at_581_21 );
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_540ecf6ef9e01052 ( Context * __context__, TDim<char *,40> const  & __a_rename_at_581_22 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_6efdca5732854753 ( Context * __context__, TArray<das_source_formatter::Token> & __Arr_rename_at_165_23, das_source_formatter::Token const  & __value_rename_at_165_24 );
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a ( Context * __context__, TDim<char *,22> const  & __arr_rename_at_1658_25, char * const  __key_rename_at_1658_26 );
-inline TTable<char *,void> _FuncbuiltinTickto_table_moveTick3386430563931768014_5f654e62afe15768 ( Context * __context__, TDim<char *,8> const  & __a_rename_at_1417_28 );
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a ( Context * __context__, TDim<char *,22> const  & __arr_rename_at_1691_25, char * const  __key_rename_at_1691_26 );
+inline TTable<char *,void> _FuncbuiltinTickto_table_moveTick3386430563931768014_5f654e62afe15768 ( Context * __context__, TDim<char *,8> const  & __a_rename_at_1450_28 );
 inline void _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_125_31, int32_t __newSize_rename_at_125_32 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1182_33 );
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3 ( Context * __context__, TDim<char *,21> const  & __arr_rename_at_1658_34, char * const  __key_rename_at_1658_35 );
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622 ( Context * __context__, TDim<char *,11> const  & __arr_rename_at_1658_37, char * const  __key_rename_at_1658_38 );
-inline void _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65 ( Context * __context__, TArray<uint8_t> & __a_rename_at_1080_40, TArray<uint8_t> const  & __b_rename_at_1080_41 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1215_33 );
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3 ( Context * __context__, TDim<char *,21> const  & __arr_rename_at_1691_34, char * const  __key_rename_at_1691_35 );
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622 ( Context * __context__, TDim<char *,11> const  & __arr_rename_at_1691_37, char * const  __key_rename_at_1691_38 );
+inline void _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65 ( Context * __context__, TArray<uint8_t> & __a_rename_at_1113_40, TArray<uint8_t> const  & __b_rename_at_1113_41 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_23aa2befa5110673 ( Context * __context__, TArray<das_source_formatter::Token> & __Arr_rename_at_181_43, das_source_formatter::Token & __value_rename_at_181_44 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_a661f9640a1075ce ( Context * __context__, TArray<das_source_formatter::FormatterToken> & __Arr_rename_at_181_45, das_source_formatter::FormatterToken & __value_rename_at_181_46 );
 inline void _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_944_47, int32_t __i_rename_at_944_48 );
 inline void _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_165_49, uint8_t __value_rename_at_165_50 );
 inline void _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_936_51, int32_t __i_rename_at_936_52 );
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856 ( Context * __context__, TDim<char *,3> const  & __arr_rename_at_1658_53, char * const  __key_rename_at_1658_54 );
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856 ( Context * __context__, TDim<char *,3> const  & __arr_rename_at_1691_53, char * const  __key_rename_at_1691_54 );
 inline void finalize_b9f001def6083360 ( Context * __context__, das_source_formatter::FormatterCtx & ____this_rename_at_68_56 );
 inline void initialize_token_templates_cd924eed93b743df ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_89_57 );
 inline bool isUtf8Bom_fc921f39aa33ab23 ( Context * __context__, TArray<uint8_t> & __text_rename_at_103_64 );
@@ -430,21 +430,21 @@ inline void fmt_type_colon_a5b252566f4d584 ( Context * __context__, das_source_f
 inline void fmt_function_decl_param_paren_6c291b7c3a975893 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1047_237 );
 inline void fmt_function_call_param_paren_call_f740219cd0547b48 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1062_239 );
 inline void fmt_spaces_around_operators_9837b8f174165da7 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1073_242 );
-inline void fmt_space_after_keyword_2aab289129cf4fc8 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1092_244 );
-inline void fmt_space_after_paren_a2ef6e80a339831f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1109_246 );
-inline void fmt_space_after_square_brackets_15fb170c80c43d93 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1118_248 );
-inline void fmt_remove_space_inside_parens_fc44c6bd3c600b9c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1127_250 );
-inline void fmt_remove_space_before_as_bb9fc0cabc4ff729 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1139_252 );
-inline void fmt_remove_space_before_end_of_object_64e24a59c1d5b6b ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1148_254 );
-inline void fmt_remove_space_before_object_type_298f1dcfc2f7829c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1158_256 );
-inline void fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1168_258 );
-inline void fmt_glue_type_specifiers_cb3a1c8b879530ae ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1180_260 );
-inline void fmt_space_after_cast_type_446660f13b2ec290 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1200_262 );
-inline void fmt_destructure_space_e9871049a6de7d91 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1215_265 );
-inline void do_format_4835418a8469e5fa ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1224_267 );
-inline char * format_source_string_f69d100c71c99a8c ( Context * __context__, char * const  & __file_data_rename_at_1267_271 );
-inline char * format_source_58c20f6bcb79eabd ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1276_275, TArray<uint8_t> const  & __file_data_rename_at_1276_276 );
-inline char * format_source_f3ae203349d40bcb ( Context * __context__, TArray<uint8_t> const  & __file_data_rename_at_1284_277 );
+inline void fmt_space_after_keyword_f7d8f2259b12f9b2 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1092_244 );
+inline void fmt_space_after_paren_a2ef6e80a339831f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1114_246 );
+inline void fmt_space_after_square_brackets_15fb170c80c43d93 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1123_248 );
+inline void fmt_remove_space_inside_parens_fc44c6bd3c600b9c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1132_250 );
+inline void fmt_remove_space_before_as_bb9fc0cabc4ff729 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1144_252 );
+inline void fmt_remove_space_before_end_of_object_64e24a59c1d5b6b ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1153_254 );
+inline void fmt_remove_space_before_object_type_298f1dcfc2f7829c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1163_256 );
+inline void fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1173_258 );
+inline void fmt_glue_type_specifiers_cb3a1c8b879530ae ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1185_260 );
+inline void fmt_space_after_cast_type_446660f13b2ec290 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1205_262 );
+inline void fmt_destructure_space_e9871049a6de7d91 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1220_265 );
+inline void do_format_4835418a8469e5fa ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1229_267 );
+inline char * format_source_string_f69d100c71c99a8c ( Context * __context__, char * const  & __file_data_rename_at_1272_271 );
+inline char * format_source_58c20f6bcb79eabd ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1281_275, TArray<uint8_t> const  & __file_data_rename_at_1281_276 );
+inline char * format_source_f3ae203349d40bcb ( Context * __context__, TArray<uint8_t> const  & __file_data_rename_at_1289_277 );
 inline das_source_formatter::TokenTemplate TokenTemplate_a02a7415fdb9ba5a ( Context * __context__ );
 inline das_source_formatter::Token Token_c2eeda936a4bfe12 ( Context * __context__ );
 inline das_source_formatter::FormatterCtx FormatterCtx_d786b6c38dffada3 ( Context * __context__ );
@@ -588,11 +588,11 @@ void __init_script ( Context * __context__, bool __init_shared )
         return __mka_1089;
     })());/*space_after_keywords*/
     das_global<TDim<char *,3>,0xca374635aa15cd66>(__context__) = (([&]() -> TDim<char *,3> {
-        TDim<char *,3> __mka_1178;
-        __mka_1178(0,__context__) = ((char *) "?");
-        __mka_1178(1,__context__) = ((char *) "&");
-        __mka_1178(2,__context__) = ((char *) "#");
-        return __mka_1178;
+        TDim<char *,3> __mka_1183;
+        __mka_1183(0,__context__) = ((char *) "?");
+        __mka_1183(1,__context__) = ((char *) "&");
+        __mka_1183(2,__context__) = ((char *) "#");
+        return __mka_1183;
     })());/*type_specifiers*/
 }
 
@@ -638,55 +638,55 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Con
     builtin_array_resize(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_68_7),__newSize_rename_at_68_8,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5f7a4e8904f8977e ( Context * __context__, TArray<das_source_formatter::TokenTemplate> &  __a_rename_at_1182_9 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5f7a4e8904f8977e ( Context * __context__, TArray<das_source_formatter::TokenTemplate> &  __a_rename_at_1215_9 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: das_source_formatter::TokenTemplate aka TT&
-        das_iterator<TArray<das_source_formatter::TokenTemplate>> __aV_iterator(__a_rename_at_1182_9);
-        das_source_formatter::TokenTemplate * __aV_rename_at_1184_10;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_10)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_10)) )
+        das_iterator<TArray<das_source_formatter::TokenTemplate>> __aV_iterator(__a_rename_at_1215_9);
+        das_source_formatter::TokenTemplate * __aV_rename_at_1217_10;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_10)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_10)) )
         {
-            finalize_6a9d04f899c816ac(__context__,das_arg<das_source_formatter::TokenTemplate>::pass((*__aV_rename_at_1184_10)));
+            finalize_6a9d04f899c816ac(__context__,das_arg<das_source_formatter::TokenTemplate>::pass((*__aV_rename_at_1217_10)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_10));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_10));
     };
-    builtin_array_free(das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__a_rename_at_1182_9),48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__a_rename_at_1215_9),48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d46b5589c5f4f04b ( Context * __context__, TArray<das_source_formatter::Token> &  __a_rename_at_1182_11 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d46b5589c5f4f04b ( Context * __context__, TArray<das_source_formatter::Token> &  __a_rename_at_1215_11 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: das_source_formatter::Token aka TT&
-        das_iterator<TArray<das_source_formatter::Token>> __aV_iterator(__a_rename_at_1182_11);
-        das_source_formatter::Token * __aV_rename_at_1184_12;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_12)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_12)) )
+        das_iterator<TArray<das_source_formatter::Token>> __aV_iterator(__a_rename_at_1215_11);
+        das_source_formatter::Token * __aV_rename_at_1217_12;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_12)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_12)) )
         {
-            finalize_597eb4e562707157(__context__,das_arg<das_source_formatter::Token>::pass((*__aV_rename_at_1184_12)));
+            finalize_597eb4e562707157(__context__,das_arg<das_source_formatter::Token>::pass((*__aV_rename_at_1217_12)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_12));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_12));
     };
-    builtin_array_free(das_arg<TArray<das_source_formatter::Token>>::pass(__a_rename_at_1182_11),32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<das_source_formatter::Token>>::pass(__a_rename_at_1215_11),32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b4e09f66b8118eb0 ( Context * __context__, TArray<das_source_formatter::FormatterToken> &  __a_rename_at_1182_13 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b4e09f66b8118eb0 ( Context * __context__, TArray<das_source_formatter::FormatterToken> &  __a_rename_at_1215_13 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: das_source_formatter::FormatterToken aka TT&
-        das_iterator<TArray<das_source_formatter::FormatterToken>> __aV_iterator(__a_rename_at_1182_13);
-        das_source_formatter::FormatterToken * __aV_rename_at_1184_14;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_14)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_14)) )
+        das_iterator<TArray<das_source_formatter::FormatterToken>> __aV_iterator(__a_rename_at_1215_13);
+        das_source_formatter::FormatterToken * __aV_rename_at_1217_14;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_14)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_14)) )
         {
-            finalize_d6c2d9467df86ea8(__context__,das_arg<das_source_formatter::FormatterToken>::pass((*__aV_rename_at_1184_14)));
+            finalize_d6c2d9467df86ea8(__context__,das_arg<das_source_formatter::FormatterToken>::pass((*__aV_rename_at_1217_14)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_14));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_14));
     };
-    builtin_array_free(das_arg<TArray<das_source_formatter::FormatterToken>>::pass(__a_rename_at_1182_13),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<das_source_formatter::FormatterToken>>::pass(__a_rename_at_1215_13),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void _FuncbuiltinTickresizeTick4811697762258667383_4a7556d56e5a6ac1 ( Context * __context__, TArray<das_source_formatter::TokenTemplate> &  __Arr_rename_at_68_15, int32_t __newSize_rename_at_68_16 )
@@ -695,9 +695,9 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_4a7556d56e5a6ac1 ( Con
     builtin_array_resize(das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__Arr_rename_at_68_15),__newSize_rename_at_68_16,48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_7d01ceb11c7f2e53 ( Context * __context__, TTable<char *,void> const  &  __Tab_rename_at_1014_17, char * const  __at_rename_at_1014_18 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_7d01ceb11c7f2e53 ( Context * __context__, TTable<char *,void> const  &  __Tab_rename_at_1047_17, char * const  __at_rename_at_1047_18 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_17,__at_rename_at_1014_18));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1047_17,__at_rename_at_1047_18));
 }
 
 inline void _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c ( Context * __context__, TArray<uint8_t> &  __a_rename_at_32_19, TArray<uint8_t> &  __b_rename_at_32_20 )
@@ -722,42 +722,42 @@ inline void _FuncbuiltinTickpushTick14133213201864676143_6efdca5732854753 ( Cont
     das_copy(__Arr_rename_at_165_23(builtin_array_push_back(das_arg<TArray<das_source_formatter::Token>>::pass(__Arr_rename_at_165_23),32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_24);
 }
 
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a ( Context * __context__, TDim<char *,22> const  &  __arr_rename_at_1658_25, char * const  __key_rename_at_1658_26 )
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a ( Context * __context__, TDim<char *,22> const  &  __arr_rename_at_1691_25, char * const  __key_rename_at_1691_26 )
 {
     {
-        bool __need_loop_1659 = true;
+        bool __need_loop_1692 = true;
         // i: int const
         das_iterator<range> __i_iterator(range(0,22));
-        int32_t __i_rename_at_1659_27;
-        __need_loop_1659 = __i_iterator.first(__context__,(__i_rename_at_1659_27)) && __need_loop_1659;
-        for ( ; __need_loop_1659 ; __need_loop_1659 = __i_iterator.next(__context__,(__i_rename_at_1659_27)) )
+        int32_t __i_rename_at_1692_27;
+        __need_loop_1692 = __i_iterator.first(__context__,(__i_rename_at_1692_27)) && __need_loop_1692;
+        for ( ; __need_loop_1692 ; __need_loop_1692 = __i_iterator.next(__context__,(__i_rename_at_1692_27)) )
         {
-            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1658_25(__i_rename_at_1659_27,__context__)),cast<char *>::from(__key_rename_at_1658_26),*__context__,nullptr) )
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1691_25(__i_rename_at_1692_27,__context__)),cast<char *>::from(__key_rename_at_1691_26),*__context__,nullptr) )
             {
-                return das_auto_cast<int32_t>::cast(__i_rename_at_1659_27);
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1692_27);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1659_27));
+        __i_iterator.close(__context__,(__i_rename_at_1692_27));
     };
     return das_auto_cast<int32_t>::cast(-1);
 }
 
-inline TTable<char *,void> _FuncbuiltinTickto_table_moveTick3386430563931768014_5f654e62afe15768 ( Context * __context__, TDim<char *,8> const  &  __a_rename_at_1417_28 )
+inline TTable<char *,void> _FuncbuiltinTickto_table_moveTick3386430563931768014_5f654e62afe15768 ( Context * __context__, TDim<char *,8> const  &  __a_rename_at_1450_28 )
 {
-    TTable<char *,void> __tab_rename_at_1418_29;das_zero(__tab_rename_at_1418_29);
+    TTable<char *,void> __tab_rename_at_1451_29;das_zero(__tab_rename_at_1451_29);
     {
-        bool __need_loop_1419 = true;
+        bool __need_loop_1452 = true;
         // at: string aka keyT const&
-        das_iterator<TDim<char *,8> const > __at_iterator(__a_rename_at_1417_28);
-        char * const  * __at_rename_at_1419_30;
-        __need_loop_1419 = __at_iterator.first(__context__,(__at_rename_at_1419_30)) && __need_loop_1419;
-        for ( ; __need_loop_1419 ; __need_loop_1419 = __at_iterator.next(__context__,(__at_rename_at_1419_30)) )
+        das_iterator<TDim<char *,8> const > __at_iterator(__a_rename_at_1450_28);
+        char * const  * __at_rename_at_1452_30;
+        __need_loop_1452 = __at_iterator.first(__context__,(__at_rename_at_1452_30)) && __need_loop_1452;
+        for ( ; __need_loop_1452 ; __need_loop_1452 = __at_iterator.next(__context__,(__at_rename_at_1452_30)) )
         {
-            __builtin_table_set_insert(__context__,__tab_rename_at_1418_29,(*__at_rename_at_1419_30));
+            __builtin_table_set_insert(__context__,__tab_rename_at_1451_29,(*__at_rename_at_1452_30));
         }
-        __at_iterator.close(__context__,(__at_rename_at_1419_30));
+        __at_iterator.close(__context__,(__at_rename_at_1452_30));
     };
-    return /* <- */ das_auto_cast_move<TTable<char *,void>>::cast(__tab_rename_at_1418_29);
+    return /* <- */ das_auto_cast_move<TTable<char *,void>>::cast(__tab_rename_at_1451_29);
 }
 
 inline void _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_125_31, int32_t __newSize_rename_at_125_32 )
@@ -765,60 +765,60 @@ inline void _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 ( Co
     builtin_array_reserve(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_125_31),__newSize_rename_at_125_32,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1182_33 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1215_33 )
 {
-    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1182_33),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1215_33),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3 ( Context * __context__, TDim<char *,21> const  &  __arr_rename_at_1658_34, char * const  __key_rename_at_1658_35 )
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3 ( Context * __context__, TDim<char *,21> const  &  __arr_rename_at_1691_34, char * const  __key_rename_at_1691_35 )
 {
     {
-        bool __need_loop_1659 = true;
+        bool __need_loop_1692 = true;
         // i: int const
         das_iterator<range> __i_iterator(range(0,21));
-        int32_t __i_rename_at_1659_36;
-        __need_loop_1659 = __i_iterator.first(__context__,(__i_rename_at_1659_36)) && __need_loop_1659;
-        for ( ; __need_loop_1659 ; __need_loop_1659 = __i_iterator.next(__context__,(__i_rename_at_1659_36)) )
+        int32_t __i_rename_at_1692_36;
+        __need_loop_1692 = __i_iterator.first(__context__,(__i_rename_at_1692_36)) && __need_loop_1692;
+        for ( ; __need_loop_1692 ; __need_loop_1692 = __i_iterator.next(__context__,(__i_rename_at_1692_36)) )
         {
-            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1658_34(__i_rename_at_1659_36,__context__)),cast<char *>::from(__key_rename_at_1658_35),*__context__,nullptr) )
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1691_34(__i_rename_at_1692_36,__context__)),cast<char *>::from(__key_rename_at_1691_35),*__context__,nullptr) )
             {
-                return das_auto_cast<int32_t>::cast(__i_rename_at_1659_36);
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1692_36);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1659_36));
+        __i_iterator.close(__context__,(__i_rename_at_1692_36));
     };
     return das_auto_cast<int32_t>::cast(-1);
 }
 
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622 ( Context * __context__, TDim<char *,11> const  &  __arr_rename_at_1658_37, char * const  __key_rename_at_1658_38 )
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622 ( Context * __context__, TDim<char *,11> const  &  __arr_rename_at_1691_37, char * const  __key_rename_at_1691_38 )
 {
     {
-        bool __need_loop_1659 = true;
+        bool __need_loop_1692 = true;
         // i: int const
         das_iterator<range> __i_iterator(range(0,11));
-        int32_t __i_rename_at_1659_39;
-        __need_loop_1659 = __i_iterator.first(__context__,(__i_rename_at_1659_39)) && __need_loop_1659;
-        for ( ; __need_loop_1659 ; __need_loop_1659 = __i_iterator.next(__context__,(__i_rename_at_1659_39)) )
+        int32_t __i_rename_at_1692_39;
+        __need_loop_1692 = __i_iterator.first(__context__,(__i_rename_at_1692_39)) && __need_loop_1692;
+        for ( ; __need_loop_1692 ; __need_loop_1692 = __i_iterator.next(__context__,(__i_rename_at_1692_39)) )
         {
-            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1658_37(__i_rename_at_1659_39,__context__)),cast<char *>::from(__key_rename_at_1658_38),*__context__,nullptr) )
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1691_37(__i_rename_at_1692_39,__context__)),cast<char *>::from(__key_rename_at_1691_38),*__context__,nullptr) )
             {
-                return das_auto_cast<int32_t>::cast(__i_rename_at_1659_39);
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1692_39);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1659_39));
+        __i_iterator.close(__context__,(__i_rename_at_1692_39));
     };
     return das_auto_cast<int32_t>::cast(-1);
 }
 
-inline void _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1080_40, TArray<uint8_t> const  &  __b_rename_at_1080_41 )
+inline void _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1113_40, TArray<uint8_t> const  &  __b_rename_at_1113_41 )
 {
-    int32_t __ln_rename_at_1081_42 = ((int32_t)builtin_array_size(__b_rename_at_1080_41));
-    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__a_rename_at_1080_40),__ln_rename_at_1081_42);
-    if ( __ln_rename_at_1081_42 == 0 )
+    int32_t __ln_rename_at_1114_42 = ((int32_t)builtin_array_size(__b_rename_at_1113_41));
+    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__a_rename_at_1113_40),__ln_rename_at_1114_42);
+    if ( __ln_rename_at_1114_42 == 0 )
     {
         return ;
     } else {
-        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1080_40(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1080_41(0,__context__))),__ln_rename_at_1081_42 * 1);
+        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1113_40(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1113_41(0,__context__))),__ln_rename_at_1114_42 * 1);
     };
 }
 
@@ -857,22 +857,22 @@ inline void _Funcdas_source_formatterTickadd_space_beforeTick1267595414920989405
     };
 }
 
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856 ( Context * __context__, TDim<char *,3> const  &  __arr_rename_at_1658_53, char * const  __key_rename_at_1658_54 )
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856 ( Context * __context__, TDim<char *,3> const  &  __arr_rename_at_1691_53, char * const  __key_rename_at_1691_54 )
 {
     {
-        bool __need_loop_1659 = true;
+        bool __need_loop_1692 = true;
         // i: int const
         das_iterator<range> __i_iterator(range(0,3));
-        int32_t __i_rename_at_1659_55;
-        __need_loop_1659 = __i_iterator.first(__context__,(__i_rename_at_1659_55)) && __need_loop_1659;
-        for ( ; __need_loop_1659 ; __need_loop_1659 = __i_iterator.next(__context__,(__i_rename_at_1659_55)) )
+        int32_t __i_rename_at_1692_55;
+        __need_loop_1692 = __i_iterator.first(__context__,(__i_rename_at_1692_55)) && __need_loop_1692;
+        for ( ; __need_loop_1692 ; __need_loop_1692 = __i_iterator.next(__context__,(__i_rename_at_1692_55)) )
         {
-            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1658_53(__i_rename_at_1659_55,__context__)),cast<char *>::from(__key_rename_at_1658_54),*__context__,nullptr) )
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1691_53(__i_rename_at_1692_55,__context__)),cast<char *>::from(__key_rename_at_1691_54),*__context__,nullptr) )
             {
-                return das_auto_cast<int32_t>::cast(__i_rename_at_1659_55);
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1692_55);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1659_55));
+        __i_iterator.close(__context__,(__i_rename_at_1692_55));
     };
     return das_auto_cast<int32_t>::cast(-1);
 }
@@ -2451,7 +2451,7 @@ inline void fmt_spaces_around_operators_9837b8f174165da7 ( Context * __context__
     };
 }
 
-inline void fmt_space_after_keyword_2aab289129cf4fc8 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1092_244 )
+inline void fmt_space_after_keyword_f7d8f2259b12f9b2 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1092_244 )
 {
     {
         bool __need_loop_1093 = true;
@@ -2462,6 +2462,13 @@ inline void fmt_space_after_keyword_2aab289129cf4fc8 ( Context * __context__, da
         for ( ; __need_loop_1093 ; __need_loop_1093 = __i_iterator.next(__context__,(__i_rename_at_1093_245)) )
         {
             if ( _FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622(__context__,das_global<TDim<char *,11>,0x94e2878ce5158877>(__context__) /*space_after_keywords*/,__ctx_rename_at_1092_244.tokens(__i_rename_at_1093_245,__context__).str) >= 0 )
+            {
+                if ( !new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1) )
+                {
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1);
+                };
+            };
+            if ( ((__ctx_rename_at_1092_244.tokens(__i_rename_at_1093_245,__context__).spaces >= 2) && (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_1092_244.tokens(__i_rename_at_1093_245,__context__).str),cast<char *>::from(((char *) "match")),*__context__,nullptr))) && ((SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_1092_244.tokens((__i_rename_at_1093_245 + 1),__context__).str),cast<char *>::from(((char *) "(")),*__context__,nullptr)) && !(__ctx_rename_at_1092_244.tokens((__i_rename_at_1093_245 + 1),__context__).isInFunctionParam)) )
             {
                 if ( !new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1) )
                 {
@@ -2480,331 +2487,331 @@ inline void fmt_space_after_keyword_2aab289129cf4fc8 ( Context * __context__, da
     };
 }
 
-inline void fmt_space_after_paren_a2ef6e80a339831f ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1109_246 )
+inline void fmt_space_after_paren_a2ef6e80a339831f ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1114_246 )
 {
     {
-        bool __need_loop_1110 = true;
+        bool __need_loop_1115 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1109_246.tokens)) - 1));
-        int32_t __i_rename_at_1110_247;
-        __need_loop_1110 = __i_iterator.first(__context__,(__i_rename_at_1110_247)) && __need_loop_1110;
-        for ( ; __need_loop_1110 ; __need_loop_1110 = __i_iterator.next(__context__,(__i_rename_at_1110_247)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1114_246.tokens)) - 1));
+        int32_t __i_rename_at_1115_247;
+        __need_loop_1115 = __i_iterator.first(__context__,(__i_rename_at_1115_247)) && __need_loop_1115;
+        for ( ; __need_loop_1115 ; __need_loop_1115 = __i_iterator.next(__context__,(__i_rename_at_1115_247)) )
         {
-            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1109_246),__i_rename_at_1110_247,((char *) ")")) && (__ctx_rename_at_1109_246.tokens((__i_rename_at_1110_247 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) )
+            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1114_246),__i_rename_at_1115_247,((char *) ")")) && (__ctx_rename_at_1114_246.tokens((__i_rename_at_1115_247 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1109_246),__i_rename_at_1110_247 + 1);
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1114_246),__i_rename_at_1115_247 + 1);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1110_247));
+        __i_iterator.close(__context__,(__i_rename_at_1115_247));
     };
 }
 
-inline void fmt_space_after_square_brackets_15fb170c80c43d93 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1118_248 )
+inline void fmt_space_after_square_brackets_15fb170c80c43d93 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1123_248 )
 {
     {
-        bool __need_loop_1119 = true;
+        bool __need_loop_1124 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1118_248.tokens)) - 1));
-        int32_t __i_rename_at_1119_249;
-        __need_loop_1119 = __i_iterator.first(__context__,(__i_rename_at_1119_249)) && __need_loop_1119;
-        for ( ; __need_loop_1119 ; __need_loop_1119 = __i_iterator.next(__context__,(__i_rename_at_1119_249)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1123_248.tokens)) - 1));
+        int32_t __i_rename_at_1124_249;
+        __need_loop_1124 = __i_iterator.first(__context__,(__i_rename_at_1124_249)) && __need_loop_1124;
+        for ( ; __need_loop_1124 ; __need_loop_1124 = __i_iterator.next(__context__,(__i_rename_at_1124_249)) )
         {
-            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1118_248),__i_rename_at_1119_249,((char *) "]")) && (__ctx_rename_at_1118_248.tokens((__i_rename_at_1119_249 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) )
+            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1123_248),__i_rename_at_1124_249,((char *) "]")) && (__ctx_rename_at_1123_248.tokens((__i_rename_at_1124_249 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1118_248),__i_rename_at_1119_249 + 1);
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1123_248),__i_rename_at_1124_249 + 1);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1119_249));
+        __i_iterator.close(__context__,(__i_rename_at_1124_249));
     };
 }
 
-inline void fmt_remove_space_inside_parens_fc44c6bd3c600b9c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1127_250 )
+inline void fmt_remove_space_inside_parens_fc44c6bd3c600b9c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1132_250 )
 {
     {
-        bool __need_loop_1128 = true;
+        bool __need_loop_1133 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1127_250.tokens)) - 1));
-        int32_t __i_rename_at_1128_251;
-        __need_loop_1128 = __i_iterator.first(__context__,(__i_rename_at_1128_251)) && __need_loop_1128;
-        for ( ; __need_loop_1128 ; __need_loop_1128 = __i_iterator.next(__context__,(__i_rename_at_1128_251)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1132_250.tokens)) - 1));
+        int32_t __i_rename_at_1133_251;
+        __need_loop_1133 = __i_iterator.first(__context__,(__i_rename_at_1133_251)) && __need_loop_1133;
+        for ( ; __need_loop_1133 ; __need_loop_1133 = __i_iterator.next(__context__,(__i_rename_at_1133_251)) )
         {
-            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1127_250),__i_rename_at_1128_251,((char *) "(")) )
+            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1132_250),__i_rename_at_1133_251,((char *) "(")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1127_250),__i_rename_at_1128_251 + 1);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1132_250),__i_rename_at_1133_251 + 1);
             };
-            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1127_250),__i_rename_at_1128_251,((char *) ")")) )
+            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1132_250),__i_rename_at_1133_251,((char *) ")")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1127_250),__i_rename_at_1128_251);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1132_250),__i_rename_at_1133_251);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1128_251));
+        __i_iterator.close(__context__,(__i_rename_at_1133_251));
     };
 }
 
-inline void fmt_remove_space_before_as_bb9fc0cabc4ff729 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1139_252 )
+inline void fmt_remove_space_before_as_bb9fc0cabc4ff729 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1144_252 )
 {
     {
-        bool __need_loop_1140 = true;
+        bool __need_loop_1145 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1139_252.tokens))));
-        int32_t __i_rename_at_1140_253;
-        __need_loop_1140 = __i_iterator.first(__context__,(__i_rename_at_1140_253)) && __need_loop_1140;
-        for ( ; __need_loop_1140 ; __need_loop_1140 = __i_iterator.next(__context__,(__i_rename_at_1140_253)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1144_252.tokens))));
+        int32_t __i_rename_at_1145_253;
+        __need_loop_1145 = __i_iterator.first(__context__,(__i_rename_at_1145_253)) && __need_loop_1145;
+        for ( ; __need_loop_1145 ; __need_loop_1145 = __i_iterator.next(__context__,(__i_rename_at_1145_253)) )
         {
-            if ( (!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1139_252),__i_rename_at_1140_253)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1139_252),__i_rename_at_1140_253,((char *) "as"))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1139_252),__i_rename_at_1140_253 - 1,((char *) "?")) )
+            if ( (!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1144_252),__i_rename_at_1145_253)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1144_252),__i_rename_at_1145_253,((char *) "as"))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1144_252),__i_rename_at_1145_253 - 1,((char *) "?")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1139_252),__i_rename_at_1140_253);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1144_252),__i_rename_at_1145_253);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1140_253));
+        __i_iterator.close(__context__,(__i_rename_at_1145_253));
     };
 }
 
-inline void fmt_remove_space_before_end_of_object_64e24a59c1d5b6b ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1148_254 )
+inline void fmt_remove_space_before_end_of_object_64e24a59c1d5b6b ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1153_254 )
 {
     {
-        bool __need_loop_1150 = true;
+        bool __need_loop_1155 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1148_254.tokens)) - 2));
-        int32_t __i_rename_at_1150_255;
-        __need_loop_1150 = __i_iterator.first(__context__,(__i_rename_at_1150_255)) && __need_loop_1150;
-        for ( ; __need_loop_1150 ; __need_loop_1150 = __i_iterator.next(__context__,(__i_rename_at_1150_255)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1153_254.tokens)) - 2));
+        int32_t __i_rename_at_1155_255;
+        __need_loop_1155 = __i_iterator.first(__context__,(__i_rename_at_1155_255)) && __need_loop_1155;
+        for ( ; __need_loop_1155 ; __need_loop_1155 = __i_iterator.next(__context__,(__i_rename_at_1155_255)) )
         {
-            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255,((char *) "]"))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255 + 1,((char *) "]"))) && !(eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255 - 1,((char *) "]"))) )
+            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255,((char *) "]"))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255 + 1,((char *) "]"))) && !(eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255 - 1,((char *) "]"))) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1150_255));
+        __i_iterator.close(__context__,(__i_rename_at_1155_255));
     };
 }
 
-inline void fmt_remove_space_before_object_type_298f1dcfc2f7829c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1158_256 )
+inline void fmt_remove_space_before_object_type_298f1dcfc2f7829c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1163_256 )
 {
     {
-        bool __need_loop_1160 = true;
+        bool __need_loop_1165 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(2,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1158_256.tokens)) - 1));
-        int32_t __i_rename_at_1160_257;
-        __need_loop_1160 = __i_iterator.first(__context__,(__i_rename_at_1160_257)) && __need_loop_1160;
-        for ( ; __need_loop_1160 ; __need_loop_1160 = __i_iterator.next(__context__,(__i_rename_at_1160_257)) )
+        das_iterator<range> __i_iterator(range(2,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1163_256.tokens)) - 1));
+        int32_t __i_rename_at_1165_257;
+        __need_loop_1165 = __i_iterator.first(__context__,(__i_rename_at_1165_257)) && __need_loop_1165;
+        for ( ; __need_loop_1165 ; __need_loop_1165 = __i_iterator.next(__context__,(__i_rename_at_1165_257)) )
         {
-            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1158_256),__i_rename_at_1160_257)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1158_256),__i_rename_at_1160_257 - 2,((char *) "["))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1158_256),__i_rename_at_1160_257 - 1,((char *) "["))) && (__ctx_rename_at_1158_256.tokens(__i_rename_at_1160_257,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER) )
+            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1163_256),__i_rename_at_1165_257)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1163_256),__i_rename_at_1165_257 - 2,((char *) "["))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1163_256),__i_rename_at_1165_257 - 1,((char *) "["))) && (__ctx_rename_at_1163_256.tokens(__i_rename_at_1165_257,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1158_256),__i_rename_at_1160_257);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1163_256),__i_rename_at_1165_257);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1160_257));
+        __i_iterator.close(__context__,(__i_rename_at_1165_257));
     };
 }
 
-inline void fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1168_258 )
+inline void fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1173_258 )
 {
     {
-        bool __need_loop_1170 = true;
+        bool __need_loop_1175 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1168_258.tokens)) - 2));
-        int32_t __i_rename_at_1170_259;
-        __need_loop_1170 = __i_iterator.first(__context__,(__i_rename_at_1170_259)) && __need_loop_1170;
-        for ( ; __need_loop_1170 ; __need_loop_1170 = __i_iterator.next(__context__,(__i_rename_at_1170_259)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1173_258.tokens)) - 2));
+        int32_t __i_rename_at_1175_259;
+        __need_loop_1175 = __i_iterator.first(__context__,(__i_rename_at_1175_259)) && __need_loop_1175;
+        for ( ; __need_loop_1175 ; __need_loop_1175 = __i_iterator.next(__context__,(__i_rename_at_1175_259)) )
         {
-            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1168_258),__i_rename_at_1170_259)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1168_258),__i_rename_at_1170_259 - 1,((char *) ">"))) && __ctx_rename_at_1168_258.tokens((__i_rename_at_1170_259 - 1),__context__).isInType) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1168_258),__i_rename_at_1170_259,((char *) "[")) )
+            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1173_258),__i_rename_at_1175_259)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1173_258),__i_rename_at_1175_259 - 1,((char *) ">"))) && __ctx_rename_at_1173_258.tokens((__i_rename_at_1175_259 - 1),__context__).isInType) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1173_258),__i_rename_at_1175_259,((char *) "[")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1168_258),__i_rename_at_1170_259);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1173_258),__i_rename_at_1175_259);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1170_259));
+        __i_iterator.close(__context__,(__i_rename_at_1175_259));
     };
 }
 
-inline void fmt_glue_type_specifiers_cb3a1c8b879530ae ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1180_260 )
+inline void fmt_glue_type_specifiers_cb3a1c8b879530ae ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1185_260 )
 {
     {
-        bool __need_loop_1181 = true;
+        bool __need_loop_1186 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1180_260.tokens))));
-        int32_t __i_rename_at_1181_261;
-        __need_loop_1181 = __i_iterator.first(__context__,(__i_rename_at_1181_261)) && __need_loop_1181;
-        for ( ; __need_loop_1181 ; __need_loop_1181 = __i_iterator.next(__context__,(__i_rename_at_1181_261)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1185_260.tokens))));
+        int32_t __i_rename_at_1186_261;
+        __need_loop_1186 = __i_iterator.first(__context__,(__i_rename_at_1186_261)) && __need_loop_1186;
+        for ( ; __need_loop_1186 ; __need_loop_1186 = __i_iterator.next(__context__,(__i_rename_at_1186_261)) )
         {
-            if ( __ctx_rename_at_1180_260.tokens(__i_rename_at_1181_261,__context__).isInType )
+            if ( __ctx_rename_at_1185_260.tokens(__i_rename_at_1186_261,__context__).isInType )
             {
-                if ( (__ctx_rename_at_1180_260.tokens(__i_rename_at_1181_261,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) && (_FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856(__context__,das_global<TDim<char *,3>,0xca374635aa15cd66>(__context__) /*type_specifiers*/,__ctx_rename_at_1180_260.tokens(__i_rename_at_1181_261,__context__).str) >= 0) )
+                if ( (__ctx_rename_at_1185_260.tokens(__i_rename_at_1186_261,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) && (_FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856(__context__,das_global<TDim<char *,3>,0xca374635aa15cd66>(__context__) /*type_specifiers*/,__ctx_rename_at_1185_260.tokens(__i_rename_at_1186_261,__context__).str) >= 0) )
                 {
-                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261);
+                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261);
                 };
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261,((char *) "const")) && eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261 - 1,((char *) "-"),((char *) "==")) )
+                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261,((char *) "const")) && eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261 - 1,((char *) "-"),((char *) "==")) )
                 {
-                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261);
+                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261);
                 };
-                if ( eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261,((char *) "-"),((char *) "==")) )
+                if ( eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261,((char *) "-"),((char *) "==")) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261);
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261);
                 };
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261 - 1,((char *) "|")) )
+                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261 - 1,((char *) "|")) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261);
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261);
                 };
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1181_261));
+        __i_iterator.close(__context__,(__i_rename_at_1186_261));
     };
 }
 
-inline void fmt_space_after_cast_type_446660f13b2ec290 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1200_262 )
+inline void fmt_space_after_cast_type_446660f13b2ec290 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1205_262 )
 {
     {
-        bool __need_loop_1201 = true;
+        bool __need_loop_1206 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(0,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1200_262.tokens)) - 3));
-        int32_t __i_rename_at_1201_263;
-        __need_loop_1201 = __i_iterator.first(__context__,(__i_rename_at_1201_263)) && __need_loop_1201;
-        for ( ; __need_loop_1201 ; __need_loop_1201 = __i_iterator.next(__context__,(__i_rename_at_1201_263)) )
+        das_iterator<range> __i_iterator(range(0,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1205_262.tokens)) - 3));
+        int32_t __i_rename_at_1206_263;
+        __need_loop_1206 = __i_iterator.first(__context__,(__i_rename_at_1206_263)) && __need_loop_1206;
+        for ( ; __need_loop_1206 ; __need_loop_1206 = __i_iterator.next(__context__,(__i_rename_at_1206_263)) )
         {
-            if ( __ctx_rename_at_1200_262.tokens(__i_rename_at_1201_263,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER )
+            if ( __ctx_rename_at_1205_262.tokens(__i_rename_at_1206_263,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER )
             {
-                if ( _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a(__context__,das_global<TDim<char *,22>,0xced6bfad8d3e8a64>(__context__) /*type_after_keyword*/,__ctx_rename_at_1200_262.tokens(__i_rename_at_1201_263,__context__).str) >= 0 )
+                if ( _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a(__context__,das_global<TDim<char *,22>,0xced6bfad8d3e8a64>(__context__) /*type_after_keyword*/,__ctx_rename_at_1205_262.tokens(__i_rename_at_1206_263,__context__).str) >= 0 )
                 {
                     {
-                        bool __need_loop_1204 = true;
+                        bool __need_loop_1209 = true;
                         // j: int const
-                        das_iterator<range> __j_iterator(range(__i_rename_at_1201_263 + 2,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1200_262.tokens))));
-                        int32_t __j_rename_at_1204_264;
-                        __need_loop_1204 = __j_iterator.first(__context__,(__j_rename_at_1204_264)) && __need_loop_1204;
-                        for ( ; __need_loop_1204 ; __need_loop_1204 = __j_iterator.next(__context__,(__j_rename_at_1204_264)) )
+                        das_iterator<range> __j_iterator(range(__i_rename_at_1206_263 + 2,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1205_262.tokens))));
+                        int32_t __j_rename_at_1209_264;
+                        __need_loop_1209 = __j_iterator.first(__context__,(__j_rename_at_1209_264)) && __need_loop_1209;
+                        for ( ; __need_loop_1209 ; __need_loop_1209 = __j_iterator.next(__context__,(__j_rename_at_1209_264)) )
                         {
-                            if ( !(__ctx_rename_at_1200_262.tokens(__j_rename_at_1204_264,__context__).isInType) && (__ctx_rename_at_1200_262.tokens(__j_rename_at_1204_264,__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT) )
+                            if ( !(__ctx_rename_at_1205_262.tokens(__j_rename_at_1209_264,__context__).isInType) && (__ctx_rename_at_1205_262.tokens(__j_rename_at_1209_264,__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT) )
                             {
-                                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1200_262),__j_rename_at_1204_264);
+                                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1205_262),__j_rename_at_1209_264);
                                 break;
                             };
                         }
-                        __j_iterator.close(__context__,(__j_rename_at_1204_264));
+                        __j_iterator.close(__context__,(__j_rename_at_1209_264));
                     };
                 };
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1201_263));
+        __i_iterator.close(__context__,(__i_rename_at_1206_263));
     };
 }
 
-inline void fmt_destructure_space_e9871049a6de7d91 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1215_265 )
+inline void fmt_destructure_space_e9871049a6de7d91 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1220_265 )
 {
     {
-        bool __need_loop_1216 = true;
+        bool __need_loop_1221 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(0,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1215_265.tokens)) - 1));
-        int32_t __i_rename_at_1216_266;
-        __need_loop_1216 = __i_iterator.first(__context__,(__i_rename_at_1216_266)) && __need_loop_1216;
-        for ( ; __need_loop_1216 ; __need_loop_1216 = __i_iterator.next(__context__,(__i_rename_at_1216_266)) )
+        das_iterator<range> __i_iterator(range(0,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1220_265.tokens)) - 1));
+        int32_t __i_rename_at_1221_266;
+        __need_loop_1221 = __i_iterator.first(__context__,(__i_rename_at_1221_266)) && __need_loop_1221;
+        for ( ; __need_loop_1221 ; __need_loop_1221 = __i_iterator.next(__context__,(__i_rename_at_1221_266)) )
         {
-            if ( eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1215_265),__i_rename_at_1216_266,((char *) "let"),((char *) "var")) && (__ctx_rename_at_1215_265.tokens((__i_rename_at_1216_266 + 1),__context__).spaces == 0) )
+            if ( eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1220_265),__i_rename_at_1221_266,((char *) "let"),((char *) "var")) && (__ctx_rename_at_1220_265.tokens((__i_rename_at_1221_266 + 1),__context__).spaces == 0) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1215_265),__i_rename_at_1216_266 + 1);
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1220_265),__i_rename_at_1221_266 + 1);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1216_266));
+        __i_iterator.close(__context__,(__i_rename_at_1221_266));
     };
 }
 
-inline void do_format_4835418a8469e5fa ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1224_267 )
+inline void do_format_4835418a8469e5fa ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1229_267 )
 {
-    parse_all_tokens_b5d5b68330cdfcd0(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-    process_formatter_tokens_a63e2ffa4c8206b6(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-    if ( have_formatter_token_296d7fc158126671(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267),((char *) "ignore-file")) )
+    parse_all_tokens_b5d5b68330cdfcd0(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+    process_formatter_tokens_a63e2ffa4c8206b6(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+    if ( have_formatter_token_296d7fc158126671(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267),((char *) "ignore-file")) )
     {
         return ;
     } else {
-        mark_token_context_7dbf70435b518a0a(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_spaces_around_operators_9837b8f174165da7(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_function_call_param_paren_call_f740219cd0547b48(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_comma_7aa6a2faf3ce3f4f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_semicolon_29caf5fd09f6497e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_function_decl_param_paren_6c291b7c3a975893(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_type_colon_a5b252566f4d584(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_cast_type_446660f13b2ec290(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_comma_54b9cd4ba70794e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_semicolon_132b81d1431b5d49(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_inside_parens_fc44c6bd3c600b9c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_as_bb9fc0cabc4ff729(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_glue_type_specifiers_cb3a1c8b879530ae(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_keyword_2aab289129cf4fc8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_paren_a2ef6e80a339831f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_square_brackets_15fb170c80c43d93(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_function_arguments_7d9f22d6302573cb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_args_26ba700ce1a53dbc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_end_of_object_64e24a59c1d5b6b(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_object_type_298f1dcfc2f7829c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_destructure_space_e9871049a6de7d91(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        int32_t __top_rename_at_1256_268 = ((int32_t)(builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1224_267.tokens)) - 1));
+        mark_token_context_7dbf70435b518a0a(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_spaces_around_operators_9837b8f174165da7(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_function_call_param_paren_call_f740219cd0547b48(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_comma_7aa6a2faf3ce3f4f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_semicolon_29caf5fd09f6497e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_function_decl_param_paren_6c291b7c3a975893(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_type_colon_a5b252566f4d584(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_cast_type_446660f13b2ec290(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_comma_54b9cd4ba70794e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_semicolon_132b81d1431b5d49(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_inside_parens_fc44c6bd3c600b9c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_as_bb9fc0cabc4ff729(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_glue_type_specifiers_cb3a1c8b879530ae(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_keyword_f7d8f2259b12f9b2(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_paren_a2ef6e80a339831f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_square_brackets_15fb170c80c43d93(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_function_arguments_7d9f22d6302573cb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_args_26ba700ce1a53dbc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_end_of_object_64e24a59c1d5b6b(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_object_type_298f1dcfc2f7829c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_destructure_space_e9871049a6de7d91(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        int32_t __top_rename_at_1261_268 = ((int32_t)(builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1229_267.tokens)) - 1));
         {
-            bool __need_loop_1257 = true;
+            bool __need_loop_1262 = true;
             // it: int const
             das_iterator<range> __it_iterator(range(0,16));
-            int32_t __it_rename_at_1257_269;
-            __need_loop_1257 = __it_iterator.first(__context__,(__it_rename_at_1257_269)) && __need_loop_1257;
-            for ( ; __need_loop_1257 ; __need_loop_1257 = __it_iterator.next(__context__,(__it_rename_at_1257_269)) )
+            int32_t __it_rename_at_1262_269;
+            __need_loop_1262 = __it_iterator.first(__context__,(__it_rename_at_1262_269)) && __need_loop_1262;
+            for ( ; __need_loop_1262 ; __need_loop_1262 = __it_iterator.next(__context__,(__it_rename_at_1262_269)) )
             {
-                int32_t __i_rename_at_1258_270 = ((int32_t)(__top_rename_at_1256_268 - __it_rename_at_1257_269));
-                if ( (__i_rename_at_1258_270 < 0) || !(builtin_empty(__ctx_rename_at_1224_267.tokens(__i_rename_at_1258_270,__context__).str)) )
+                int32_t __i_rename_at_1263_270 = ((int32_t)(__top_rename_at_1261_268 - __it_rename_at_1262_269));
+                if ( (__i_rename_at_1263_270 < 0) || !(builtin_empty(__ctx_rename_at_1229_267.tokens(__i_rename_at_1263_270,__context__).str)) )
                 {
                     break;
                 } else {
-                    das_copy(__ctx_rename_at_1224_267.tokens(__i_rename_at_1258_270,__context__).spaces,0);
+                    das_copy(__ctx_rename_at_1229_267.tokens(__i_rename_at_1263_270,__context__).spaces,0);
                 };
             }
-            __it_iterator.close(__context__,(__it_rename_at_1257_269));
+            __it_iterator.close(__context__,(__it_rename_at_1262_269));
         };
     };
 }
 
-inline char * format_source_string_f69d100c71c99a8c ( Context * __context__, char * const  & __file_data_rename_at_1267_271 )
+inline char * format_source_string_f69d100c71c99a8c ( Context * __context__, char * const  & __file_data_rename_at_1272_271 )
 {
-    das_source_formatter::FormatterCtx __ctx_rename_at_1268_272; memset((void*)&__ctx_rename_at_1268_272,0,sizeof(__ctx_rename_at_1268_272));
-    /* finally */ auto __finally_1267= das_finally([&](){
-    finalize_b9f001def6083360(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1268_272));
+    das_source_formatter::FormatterCtx __ctx_rename_at_1273_272; memset((void*)&__ctx_rename_at_1273_272,0,sizeof(__ctx_rename_at_1273_272));
+    /* finally */ auto __finally_1272= das_finally([&](){
+    finalize_b9f001def6083360(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1273_272));
     /* end finally */ });
-    das_zero(__ctx_rename_at_1268_272);
-    _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1268_272.data),das_arg<TArray<uint8_t>>::pass(das_invoke<TArray<uint8_t>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<uint8_t>{
-        TArray<uint8_t> ____acomp_1269_18_rename_at_1269_273;das_zero(____acomp_1269_18_rename_at_1269_273);
-        builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_1269_18_rename_at_1269_273),false);
+    das_zero(__ctx_rename_at_1273_272);
+    _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1273_272.data),das_arg<TArray<uint8_t>>::pass(das_invoke<TArray<uint8_t>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<uint8_t>{
+        TArray<uint8_t> ____acomp_1274_18_rename_at_1274_273;das_zero(____acomp_1274_18_rename_at_1274_273);
+        builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_1274_18_rename_at_1274_273),false);
         {
-            bool __need_loop_1269 = true;
+            bool __need_loop_1274 = true;
             // c: int const
-            das_iterator<char * const > __c_iterator(__file_data_rename_at_1267_271);
-            int32_t __c_rename_at_1269_274;
-            __need_loop_1269 = __c_iterator.first(__context__,(__c_rename_at_1269_274)) && __need_loop_1269;
-            for ( ; __need_loop_1269 ; __need_loop_1269 = __c_iterator.next(__context__,(__c_rename_at_1269_274)) )
+            das_iterator<char * const > __c_iterator(__file_data_rename_at_1272_271);
+            int32_t __c_rename_at_1274_274;
+            __need_loop_1274 = __c_iterator.first(__context__,(__c_rename_at_1274_274)) && __need_loop_1274;
+            for ( ; __need_loop_1274 ; __need_loop_1274 = __c_iterator.next(__context__,(__c_rename_at_1274_274)) )
             {
-                _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_1269_18_rename_at_1269_273),uint8_t(__c_rename_at_1269_274));
+                _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_1274_18_rename_at_1274_273),uint8_t(__c_rename_at_1274_274));
             }
-            __c_iterator.close(__context__,(__c_rename_at_1269_274));
+            __c_iterator.close(__context__,(__c_rename_at_1274_274));
         };
-        builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_1269_18_rename_at_1269_273),true);
-        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_1269_18_rename_at_1269_273)));
+        builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_1274_18_rename_at_1274_273),true);
+        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_1274_18_rename_at_1274_273)));
     })));
-    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1268_272.data),0x0);
-    do_format_4835418a8469e5fa(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1268_272));
-    return das_auto_cast<char *>::cast(generate_source_64706a1ce7db4983(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1268_272)));
+    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1273_272.data),0x0);
+    do_format_4835418a8469e5fa(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1273_272));
+    return das_auto_cast<char *>::cast(generate_source_64706a1ce7db4983(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1273_272)));
 }
 
-inline char * format_source_58c20f6bcb79eabd ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1276_275, TArray<uint8_t> const  &  __file_data_rename_at_1276_276 )
+inline char * format_source_58c20f6bcb79eabd ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1281_275, TArray<uint8_t> const  &  __file_data_rename_at_1281_276 )
 {
-    _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1276_275.data),__file_data_rename_at_1276_276);
-    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1276_275.data),0x0);
-    do_format_4835418a8469e5fa(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1276_275));
-    return das_auto_cast<char *>::cast(generate_source_64706a1ce7db4983(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1276_275)));
+    _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1281_275.data),__file_data_rename_at_1281_276);
+    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1281_275.data),0x0);
+    do_format_4835418a8469e5fa(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1281_275));
+    return das_auto_cast<char *>::cast(generate_source_64706a1ce7db4983(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1281_275)));
 }
 
-inline char * format_source_f3ae203349d40bcb ( Context * __context__, TArray<uint8_t> const  &  __file_data_rename_at_1284_277 )
+inline char * format_source_f3ae203349d40bcb ( Context * __context__, TArray<uint8_t> const  &  __file_data_rename_at_1289_277 )
 {
-    das_source_formatter::FormatterCtx __ctx_rename_at_1285_278; memset((void*)&__ctx_rename_at_1285_278,0,sizeof(__ctx_rename_at_1285_278));
-    /* finally */ auto __finally_1284= das_finally([&](){
-    finalize_b9f001def6083360(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1285_278));
+    das_source_formatter::FormatterCtx __ctx_rename_at_1290_278; memset((void*)&__ctx_rename_at_1290_278,0,sizeof(__ctx_rename_at_1290_278));
+    /* finally */ auto __finally_1289= das_finally([&](){
+    finalize_b9f001def6083360(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1290_278));
     /* end finally */ });
-    das_zero(__ctx_rename_at_1285_278);
-    return das_auto_cast<char *>::cast(format_source_58c20f6bcb79eabd(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1285_278),__file_data_rename_at_1284_277));
+    das_zero(__ctx_rename_at_1290_278);
+    return das_auto_cast<char *>::cast(format_source_58c20f6bcb79eabd(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1290_278),__file_data_rename_at_1289_277));
 }
 
 inline das_source_formatter::TokenTemplate TokenTemplate_a02a7415fdb9ba5a ( Context * __context__ )
@@ -3080,8 +3087,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xc4f6b82a1c21b819] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&fmt_spaces_around_operators_9837b8f174165da7>>();
     };
-    aotLib[0x653899930a808ccf] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_keyword_2aab289129cf4fc8>>();
+    aotLib[0x96e95c2124da3d5e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_keyword_f7d8f2259b12f9b2>>();
     };
     aotLib[0x166f8e87303b8e25] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_paren_a2ef6e80a339831f>>();
@@ -3113,16 +3120,16 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0xd91867955dba6780] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&fmt_destructure_space_e9871049a6de7d91>>();
     };
-    aotLib[0x76299977413a1e82] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xef3456545bc17fcc] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&do_format_4835418a8469e5fa>>();
     };
-    aotLib[0x26d8db9170833ef9] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xe41bfe4594650be3] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&format_source_string_f69d100c71c99a8c>>();
     };
-    aotLib[0xbed3d0168e4fcf75] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xd2256bfadaa5dafc] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&format_source_58c20f6bcb79eabd>>();
     };
-    aotLib[0x400629cb54db70cf] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x564bd4f827aa71a5] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&format_source_f3ae203349d40bcb>>();
     };
     aotLib[0xb985c77f13386e53] = +[](Context & ctx) -> SimNode* {

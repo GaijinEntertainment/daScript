@@ -239,7 +239,7 @@ TypeInfo * __tinfo_21[2] = { &__type_info__af90fe4c864e9d52, &__type_info__af90f
 TypeInfo * __tinfo_22[2] = { &__type_info__37d36026a6078a42, &__type_info__af63ee4c86020b22 };
 
 inline void _FuncbuiltinTickresizeTick4811697762258667383_839271fc9974c3bd ( Context * __context__, TArray<regex::ReNode *> & __Arr_rename_at_68_0, int32_t __newSize_rename_at_68_1 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_93dd7ca7375a7759 ( Context * __context__, TArray<regex::ReNode *> & __a_rename_at_1182_2 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_93dd7ca7375a7759 ( Context * __context__, TArray<regex::ReNode *> & __a_rename_at_1215_2 );
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_fcdb4107749fac2d ( Context * __context__, TDim<regex::ReNode *,2> const  & __a_rename_at_581_4 );
 inline void finalize_1b3fa79e78928d5e ( Context * __context__, regex::ReNode & ____this_rename_at_29_5 );
 inline regex::Regex & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_182d4b6f1ba86427 ( Context * __context__, regex::Regex & __a_rename_at_50_6 );
@@ -247,9 +247,9 @@ inline int32_t _FuncregexTickfrom_hexTick16446213900708532977_faa1e859112ad2ec (
 inline void finalize_4d9dff2c4111fea5 ( Context * __context__, AutoVariant<regex::ReNode *,void *> & ____this_rename_at_422_9 );
 inline void finalize_2e3cca8177873ef7 ( Context * __context__, regex::ReNode * & ____this_rename_at_519_10 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_76636a7a79f1cc9 ( Context * __context__, TArray<regex::ReNode *> & __Arr_rename_at_181_11, regex::ReNode * __value_rename_at_181_12 );
-inline TArray<regex::ReNode *> _FuncbuiltinTickto_array_moveTick3185538323411982277_d525ede85535d1d6 ( Context * __context__, TDim<regex::ReNode *,2> & __a_rename_at_1342_13 );
+inline TArray<regex::ReNode *> _FuncbuiltinTickto_array_moveTick3185538323411982277_d525ede85535d1d6 ( Context * __context__, TDim<regex::ReNode *,2> & __a_rename_at_1375_13 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_689721e2e03454a5 ( Context * __context__, TArray<AutoTuple<range,char *>> & __Arr_rename_at_181_15, AutoTuple<range,char *> & __value_rename_at_181_16 );
-inline bool _FuncbuiltinTicknextTick17450348357676149856_78a056decb3ca45d ( Context * __context__, Sequence DAS_COMMENT((uint32_t)) & __it_rename_at_1223_17, uint32_t & __value_rename_at_1223_18 );
+inline bool _FuncbuiltinTicknextTick17450348357676149856_78a056decb3ca45d ( Context * __context__, Sequence DAS_COMMENT((uint32_t)) & __it_rename_at_1256_17, uint32_t & __value_rename_at_1256_18 );
 inline uint32_t re_gen_get_rep_limit_aa71779c47fee5b8 ( Context * __context__ );
 inline void trace_7794f549fda55dde ( Context * __context__, char * const  __msg_rename_at_79_19, int32_t __offset_rename_at_79_20 );
 inline void note_7794f549fda55dde ( Context * __context__, char * const  __msg_rename_at_86_21, int32_t __offset_rename_at_86_22 );
@@ -303,7 +303,7 @@ inline uint8_t const  * re_match2_group_82784eced054ba4e ( Context * __context__
 inline bool re_early_out_80d62a0fdd14cb06 ( Context * __context__, TDim<uint32_t,8> & __cset_rename_at_1020_197, regex::ReNode * const  __node_rename_at_1020_198 );
 inline bool is_valid_87c94e9920e8a112 ( Context * __context__, regex::Regex & __re_rename_at_1063_203 );
 inline bool regex_compile_b802a48fba17c551 ( Context * __context__, regex::Regex & __re_rename_at_1068_204, char * const  __expr_rename_at_1068_205 );
-inline regex::Regex regex_compile_d14729dab5987744 ( Context * __context__, char * const  __expr_rename_at_1082_206 );
+inline regex::Regex regex_compile_9c6bbe3f7bf967b8 ( Context * __context__, char * const  __expr_rename_at_1082_206 );
 inline regex::Regex regex_compile_8b8cd96a70efcb1c ( Context * __context__, regex::Regex & __re_rename_at_1090_208 );
 inline int32_t regex_match_d1084a47d6e2d53e ( Context * __context__, regex::Regex & __regex_rename_at_1098_209, char * const  __str_rename_at_1098_210, int32_t __offset_rename_at_1098_211 );
 inline char * regex_group_f150ed72d9c6b909 ( Context * __context__, regex::Regex const  & __regex_rename_at_1117_213, int32_t __index_rename_at_1117_214, char * const  __match_rename_at_1117_215 );
@@ -343,21 +343,21 @@ inline void _FuncbuiltinTickresizeTick4811697762258667383_839271fc9974c3bd ( Con
     builtin_array_resize(das_arg<TArray<regex::ReNode *>>::pass(__Arr_rename_at_68_0),__newSize_rename_at_68_1,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_93dd7ca7375a7759 ( Context * __context__, TArray<regex::ReNode *> &  __a_rename_at_1182_2 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_93dd7ca7375a7759 ( Context * __context__, TArray<regex::ReNode *> &  __a_rename_at_1215_2 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: regex::ReNode? aka TT&
-        das_iterator<TArray<regex::ReNode *>> __aV_iterator(__a_rename_at_1182_2);
-        regex::ReNode * * __aV_rename_at_1184_3;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_3)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_3)) )
+        das_iterator<TArray<regex::ReNode *>> __aV_iterator(__a_rename_at_1215_2);
+        regex::ReNode * * __aV_rename_at_1217_3;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_3)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_3)) )
         {
-            finalize_2e3cca8177873ef7(__context__,(*__aV_rename_at_1184_3));
+            finalize_2e3cca8177873ef7(__context__,(*__aV_rename_at_1217_3));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_3));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_3));
     };
-    builtin_array_free(das_arg<TArray<regex::ReNode *>>::pass(__a_rename_at_1182_2),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<regex::ReNode *>>::pass(__a_rename_at_1215_2),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_fcdb4107749fac2d ( Context * __context__, TDim<regex::ReNode *,2> const  &  __a_rename_at_581_4 )
@@ -409,12 +409,12 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_76636a7a79f1cc9 ( Conte
     das_copy(__Arr_rename_at_181_11(builtin_array_push_back(das_arg<TArray<regex::ReNode *>>::pass(__Arr_rename_at_181_11),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_12);
 }
 
-inline TArray<regex::ReNode *> _FuncbuiltinTickto_array_moveTick3185538323411982277_d525ede85535d1d6 ( Context * __context__, TDim<regex::ReNode *,2> &  __a_rename_at_1342_13 )
+inline TArray<regex::ReNode *> _FuncbuiltinTickto_array_moveTick3185538323411982277_d525ede85535d1d6 ( Context * __context__, TDim<regex::ReNode *,2> &  __a_rename_at_1375_13 )
 {
-    TArray<regex::ReNode *> __arr_rename_at_1344_14;das_zero(__arr_rename_at_1344_14);
-    _FuncbuiltinTickresizeTick4811697762258667383_839271fc9974c3bd(__context__,das_arg<TArray<regex::ReNode *>>::pass(__arr_rename_at_1344_14),2);
-    das_copy(das_cast<TDim<regex::ReNode *,2>>::cast(das_ref(__context__,__arr_rename_at_1344_14(0,__context__))),__a_rename_at_1342_13);
-    return /* <- */ das_auto_cast_move<TArray<regex::ReNode *>>::cast(__arr_rename_at_1344_14);
+    TArray<regex::ReNode *> __arr_rename_at_1377_14;das_zero(__arr_rename_at_1377_14);
+    _FuncbuiltinTickresizeTick4811697762258667383_839271fc9974c3bd(__context__,das_arg<TArray<regex::ReNode *>>::pass(__arr_rename_at_1377_14),2);
+    das_copy(das_cast<TDim<regex::ReNode *,2>>::cast(das_ref(__context__,__arr_rename_at_1377_14(0,__context__))),__a_rename_at_1375_13);
+    return /* <- */ das_auto_cast_move<TArray<regex::ReNode *>>::cast(__arr_rename_at_1377_14);
 }
 
 inline void _FuncbuiltinTickpushTick10769833213962245646_689721e2e03454a5 ( Context * __context__, TArray<AutoTuple<range,char *>> &  __Arr_rename_at_181_15, AutoTuple<range,char *> &  __value_rename_at_181_16 )
@@ -422,9 +422,9 @@ inline void _FuncbuiltinTickpushTick10769833213962245646_689721e2e03454a5 ( Cont
     das_copy(__Arr_rename_at_181_15(builtin_array_push_back(das_arg<TArray<AutoTuple<range,char *>>>::pass(__Arr_rename_at_181_15),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_16);
 }
 
-inline bool _FuncbuiltinTicknextTick17450348357676149856_78a056decb3ca45d ( Context * __context__, Sequence DAS_COMMENT((uint32_t)) &  __it_rename_at_1223_17, uint32_t & __value_rename_at_1223_18 )
+inline bool _FuncbuiltinTicknextTick17450348357676149856_78a056decb3ca45d ( Context * __context__, Sequence DAS_COMMENT((uint32_t)) &  __it_rename_at_1256_17, uint32_t & __value_rename_at_1256_18 )
 {
-    return das_auto_cast<bool>::cast(builtin_iterator_iterate(das_arg<Sequence DAS_COMMENT((uint32_t))>::pass(__it_rename_at_1223_17),das_auto_cast<void * const >::cast(das_ref(__context__,__value_rename_at_1223_18)),__context__));
+    return das_auto_cast<bool>::cast(builtin_iterator_iterate(das_arg<Sequence DAS_COMMENT((uint32_t))>::pass(__it_rename_at_1256_17),das_auto_cast<void * const >::cast(das_ref(__context__,__value_rename_at_1256_18)),__context__));
 }
 
 inline uint32_t re_gen_get_rep_limit_aa71779c47fee5b8 ( Context * __context__ )
@@ -1714,7 +1714,7 @@ inline bool regex_compile_b802a48fba17c551 ( Context * __context__, regex::Regex
     return das_auto_cast<bool>::cast(__re_rename_at_1068_204.root != nullptr);
 }
 
-inline regex::Regex regex_compile_d14729dab5987744 ( Context * __context__, char * const  __expr_rename_at_1082_206 )
+inline regex::Regex regex_compile_9c6bbe3f7bf967b8 ( Context * __context__, char * const  __expr_rename_at_1082_206 )
 {
     regex::Regex __re_rename_at_1083_207;das_zero(__re_rename_at_1083_207);
     if ( !regex_compile_b802a48fba17c551(__context__,das_arg<regex::Regex>::pass(__re_rename_at_1083_207),__expr_rename_at_1082_206) )
@@ -2358,8 +2358,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x5012025fd3368798] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&regex_compile_b802a48fba17c551>>();
     };
-    aotLib[0x109a38b92b4ad948] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&regex_compile_d14729dab5987744>>();
+    aotLib[0x70e57f693a9ba6a1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&regex_compile_9c6bbe3f7bf967b8>>();
     };
     aotLib[0xacddaf961afe165f] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_AotCMRES<&regex_compile_8b8cd96a70efcb1c>>();

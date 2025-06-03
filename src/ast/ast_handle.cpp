@@ -19,10 +19,9 @@ namespace das {
 
     uint64_t BasicStructureAnnotation::getOwnSemanticHash ( HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep ) const {
         hb.updateString(getMangledName());
-        for ( auto & it : fields ) {
-            auto & sfield = it.second;
+        for ( const auto & name : fieldsInOrder ) {
+            auto & sfield = fields.find(name)->second;
             hb.updateString(sfield.name);
-            hb.update(sfield.offset);
             if ( sfield.constDecl ) {
                 hb.update(sfield.constDecl->getOwnSemanticHash(hb,dep,adep));
             }

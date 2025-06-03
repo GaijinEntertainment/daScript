@@ -300,7 +300,7 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d12f7
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9a401643351dc149 ( Context * __context__, type_traits::TypeInfoHasProperty const  & __cl_rename_at_116_3 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7c226dd0d252342e ( Context * __context__, type_traits::IsSubclassOf const  & __cl_rename_at_116_6 );
-inline Program * _FuncbuiltinTickget_ptrTick5807679485210906136_aebefa62d4d88f1f ( Context * __context__, smart_ptr_raw<Program> __src_rename_at_1732_7 );
+inline Program * _FuncbuiltinTickget_ptrTick5807679485210906136_aebefa62d4d88f1f ( Context * __context__, smart_ptr_raw<Program> __src_rename_at_1765_7 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -331,9 +331,9 @@ inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7c226
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_6.__rtti))).getStructType())));
 }
 
-inline Program * _FuncbuiltinTickget_ptrTick5807679485210906136_aebefa62d4d88f1f ( Context * __context__, smart_ptr_raw<Program> __src_rename_at_1732_7 )
+inline Program * _FuncbuiltinTickget_ptrTick5807679485210906136_aebefa62d4d88f1f ( Context * __context__, smart_ptr_raw<Program> __src_rename_at_1765_7 )
 {
-    return das_auto_cast<Program *>::cast(das_cast<Program *>::cast(__src_rename_at_1732_7));
+    return das_auto_cast<Program *>::cast(das_cast<Program *>::cast(__src_rename_at_1765_7));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {

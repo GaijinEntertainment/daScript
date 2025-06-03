@@ -410,27 +410,27 @@ TypeInfo * __tinfo_4[1] = { &__type_info__af8afe4c86446b52 };
 TypeInfo * __tinfo_5[1] = { &__type_info__af8afe4c86446b52 };
 
 inline void _FuncbuiltinTickinsertTick4246857231018487965_29d8ad7ca1533e22 ( Context * __context__, TTable<char *,json::JsonValue *> & __Tab_rename_at_939_0, char * const  __at_rename_at_939_1, json::JsonValue * __val_rename_at_939_2 );
-inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  & __a_rename_at_1128_3 );
-inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  & __a_rename_at_1143_5 );
+inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  & __a_rename_at_1161_3 );
+inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  & __a_rename_at_1176_5 );
 inline void _FuncapplyTickstructTickExtractMethodDescTick0x217Tick0Tick5_48404bf757ad1933 ( Context * __context__, refactor::ExtractMethodDesc const  & ___Var_Tick_self_rename_at_62_7, Block DAS_COMMENT((void,char * const  &)) const  & ____arg_call_name_rename_at_62_8, Block DAS_COMMENT((void,char * const  &)) const  & ____arg_function_declaration_rename_at_62_9, Block DAS_COMMENT((void,char * const  &)) const  & ____arg_call_expression_rename_at_62_10, Block DAS_COMMENT((void,LineInfo const )) const  & ____arg_call_at_rename_at_62_11, Block DAS_COMMENT((void,LineInfo const )) const  & ____arg_function_body_at_rename_at_62_12 );
 inline void _FuncapplyTickstructTickExtractVariableDescTick0x217Tick0Tick6_d80450c9c7a35438 ( Context * __context__, refactor::ExtractVariableDesc const  & ___Var_Tick_self_rename_at_62_13, Block DAS_COMMENT((void,char * const  &)) const  & ____arg_variable_name_rename_at_62_14, Block DAS_COMMENT((void,char * const  &)) const  & ____arg_variable_type_rename_at_62_15, Block DAS_COMMENT((void,char * const  &)) const  & ____arg_variable_keyword_rename_at_62_16, Block DAS_COMMENT((void,bool const  &)) const  & ____arg_is_reference_rename_at_62_17, Block DAS_COMMENT((void,LineInfo const )) const  & ____arg_call_at_rename_at_62_18, Block DAS_COMMENT((void,LineInfo const )) const  & ____arg_variable_init_at_rename_at_62_19 );
-inline Sequence DAS_COMMENT((json::JsonValue * &)) _FuncbuiltinTickvaluesTick1351216622833168869_e4c809c3c6fa4dfd ( Context * __context__, TTable<char *,json::JsonValue *> & __a_rename_at_1150_20 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_4c53369d1a9c0194 ( Context * __context__, TTable<char *,json::JsonValue *> & __a_rename_at_1193_22 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_dc31ee4da771c4 ( Context * __context__, TArray<json::JsonValue *> & __a_rename_at_1182_24 );
+inline Sequence DAS_COMMENT((json::JsonValue * &)) _FuncbuiltinTickvaluesTick1351216622833168869_e4c809c3c6fa4dfd ( Context * __context__, TTable<char *,json::JsonValue *> & __a_rename_at_1183_20 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_4c53369d1a9c0194 ( Context * __context__, TTable<char *,json::JsonValue *> & __a_rename_at_1226_22 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_dc31ee4da771c4 ( Context * __context__, TArray<json::JsonValue *> & __a_rename_at_1215_24 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_26, ast::AstFunctionAnnotation * __value_rename_at_181_27 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f71f3d89fb753b2 ( Context * __context__, refactor::ExtractMethodMacro const  & __cl_rename_at_116_28 );
 inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_29, ast::AstCallMacro * __value_rename_at_181_30 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_487555842f5620fe ( Context * __context__, refactor::ExtractVariableMacro const  & __cl_rename_at_116_31 );
 inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_42f12d0f0ca9b24d ( Context * __context__, refactor::ExtractVariableFunction const  & __cl_rename_at_116_32 );
 inline void finalize_435c75a1641e15fa ( Context * __context__, AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> & ____this_rename_at_24_33 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5df8cb221c94902 ( Context * __context__, TTable<char *,char *> & __a_rename_at_1193_34 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5df8cb221c94902 ( Context * __context__, TTable<char *,char *> & __a_rename_at_1226_34 );
 inline void finalize_23291ba5b15c15ae ( Context * __context__, json::JsonValue & ____this_rename_at_22_35 );
 inline json::JsonValue * _Funcjson_boostTickJVTick13966542468881610056_6e31ec00abc1b8a7 ( Context * __context__, TTable<char *,char *> const  & __value_rename_at_517_36 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_95ba3a9d4de4e95b ( Context * __context__, char * const  __name_rename_at_631_42, refactor::ExtractMethodMacro * __someClassPtr_rename_at_631_43 );
 inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_e08431098b248a79 ( Context * __context__, char * const  __name_rename_at_631_45, refactor::ExtractVariableFunction * __someClassPtr_rename_at_631_46 );
-inline TTable<char *,char *> _FuncbuiltinTickto_table_moveTick5858896087460481804_9bc7a430485b2b12 ( Context * __context__, TDim<AutoTuple<char *,char *>,6> & __a_rename_at_1455_48 );
+inline TTable<char *,char *> _FuncbuiltinTickto_table_moveTick5858896087460481804_9bc7a430485b2b12 ( Context * __context__, TDim<AutoTuple<char *,char *>,6> & __a_rename_at_1488_48 );
 inline void finalize_f1db2ed1abc2f753 ( Context * __context__, json::JsonValue * & ____this_rename_at_111_51 );
-inline void _FuncbuiltinTicksortTick5995501125257068354_37074a96ed1276f6 ( Context * __context__, TArray<macro_boost::CapturedVariable> & __a_rename_at_1576_52, Block DAS_COMMENT((bool,macro_boost::CapturedVariable const ,macro_boost::CapturedVariable const )) const  & __cmp_rename_at_1576_53 );
+inline void _FuncbuiltinTicksortTick5995501125257068354_37074a96ed1276f6 ( Context * __context__, TArray<macro_boost::CapturedVariable> & __a_rename_at_1609_52, Block DAS_COMMENT((bool,macro_boost::CapturedVariable const ,macro_boost::CapturedVariable const )) const  & __cmp_rename_at_1609_53 );
 inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_54, bool __extra_rename_at_38_55, bool __contracts_rename_at_38_56, bool __modules_rename_at_38_57 );
 inline json::JsonValue * _Funcjson_boostTickJVTick13966542468881610056_1ada305f850b7c84 ( Context * __context__, refactor::ExtractMethodDesc const  & __value_rename_at_517_58 );
 inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_480816f933565535 ( Context * __context__, char * const  __name_rename_at_273_65, char * const  __tag_rename_at_273_66, refactor::ExtractMethodMacro * __classPtr_rename_at_273_67 );
@@ -450,18 +450,18 @@ inline void _FuncbuiltinTickinsertTick4246857231018487965_29d8ad7ca1533e22 ( Con
     das_copy(__Tab_rename_at_939_0(__at_rename_at_939_1,__context__),__val_rename_at_939_2);
 }
 
-inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1128_3 )
+inline Sequence DAS_COMMENT((char *)) _FuncbuiltinTickkeysTick2205854368403803976_2df91d3f4a5c8888 ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1161_3 )
 {
-    Sequence DAS_COMMENT((char *)) __it_rename_at_1129_4;das_zero(__it_rename_at_1129_4);
-    builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1129_4),__a_rename_at_1128_3,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1129_4);
+    Sequence DAS_COMMENT((char *)) __it_rename_at_1162_4;das_zero(__it_rename_at_1162_4);
+    builtin_table_keys(das_arg<Sequence DAS_COMMENT((char *))>::pass(__it_rename_at_1162_4),__a_rename_at_1161_3,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char *))>::cast(__it_rename_at_1162_4);
 }
 
-inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1143_5 )
+inline Sequence DAS_COMMENT((char * &)) _FuncbuiltinTickvaluesTick1935193042646774172_bb2c3e8e5405df3b ( Context * __context__, TTable<char *,char *> const  &  __a_rename_at_1176_5 )
 {
-    Sequence DAS_COMMENT((char * *)) __it_rename_at_1144_6;das_zero(__it_rename_at_1144_6);
-    builtin_table_values(das_arg<Sequence DAS_COMMENT((char * const ))>::pass(__it_rename_at_1144_6),__a_rename_at_1143_5,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char * &))>::cast(__it_rename_at_1144_6);
+    Sequence DAS_COMMENT((char * *)) __it_rename_at_1177_6;das_zero(__it_rename_at_1177_6);
+    builtin_table_values(das_arg<Sequence DAS_COMMENT((char * const ))>::pass(__it_rename_at_1177_6),__a_rename_at_1176_5,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((char * &))>::cast(__it_rename_at_1177_6);
 }
 
 inline void _FuncapplyTickstructTickExtractMethodDescTick0x217Tick0Tick5_48404bf757ad1933 ( Context * __context__, refactor::ExtractMethodDesc const  &  ___Var_Tick_self_rename_at_62_7, Block DAS_COMMENT((void,char * const  &)) const  &  ____arg_call_name_rename_at_62_8, Block DAS_COMMENT((void,char * const  &)) const  &  ____arg_function_declaration_rename_at_62_9, Block DAS_COMMENT((void,char * const  &)) const  &  ____arg_call_expression_rename_at_62_10, Block DAS_COMMENT((void,LineInfo const )) const  &  ____arg_call_at_rename_at_62_11, Block DAS_COMMENT((void,LineInfo const )) const  &  ____arg_function_body_at_rename_at_62_12 )
@@ -483,46 +483,46 @@ inline void _FuncapplyTickstructTickExtractVariableDescTick0x217Tick0Tick6_d8045
     das_invoke<void>::invoke<LineInfo const  &>(__context__,nullptr,____arg_variable_init_at_rename_at_62_19,___Var_Tick_self_rename_at_62_13.variable_init_at);
 }
 
-inline Sequence DAS_COMMENT((json::JsonValue * &)) _FuncbuiltinTickvaluesTick1351216622833168869_e4c809c3c6fa4dfd ( Context * __context__, TTable<char *,json::JsonValue *> &  __a_rename_at_1150_20 )
+inline Sequence DAS_COMMENT((json::JsonValue * &)) _FuncbuiltinTickvaluesTick1351216622833168869_e4c809c3c6fa4dfd ( Context * __context__, TTable<char *,json::JsonValue *> &  __a_rename_at_1183_20 )
 {
-    Sequence DAS_COMMENT((json::JsonValue * *)) __it_rename_at_1151_21;das_zero(__it_rename_at_1151_21);
-    builtin_table_values(das_arg<Sequence DAS_COMMENT((json::JsonValue *))>::pass(__it_rename_at_1151_21),das_arg<TTable<char *,json::JsonValue *>>::pass(__a_rename_at_1150_20),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((json::JsonValue * &))>::cast(__it_rename_at_1151_21);
+    Sequence DAS_COMMENT((json::JsonValue * *)) __it_rename_at_1184_21;das_zero(__it_rename_at_1184_21);
+    builtin_table_values(das_arg<Sequence DAS_COMMENT((json::JsonValue *))>::pass(__it_rename_at_1184_21),das_arg<TTable<char *,json::JsonValue *>>::pass(__a_rename_at_1183_20),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((json::JsonValue * &))>::cast(__it_rename_at_1184_21);
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_4c53369d1a9c0194 ( Context * __context__, TTable<char *,json::JsonValue *> &  __a_rename_at_1193_22 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_4c53369d1a9c0194 ( Context * __context__, TTable<char *,json::JsonValue *> &  __a_rename_at_1226_22 )
 {
-    Sequence DAS_COMMENT((json::JsonValue * *)) _temp_make_local_1195_19_32; _temp_make_local_1195_19_32;
+    Sequence DAS_COMMENT((json::JsonValue * *)) _temp_make_local_1228_19_32; _temp_make_local_1228_19_32;
     {
-        bool __need_loop_1195 = true;
+        bool __need_loop_1228 = true;
         // aV: json::JsonValue?&
-        das_iterator<Sequence DAS_COMMENT((json::JsonValue *))> __aV_iterator((_temp_make_local_1195_19_32 = (_FuncbuiltinTickvaluesTick1351216622833168869_e4c809c3c6fa4dfd(__context__,das_arg<TTable<char *,json::JsonValue *>>::pass(__a_rename_at_1193_22)))));
-        json::JsonValue * * __aV_rename_at_1195_23;
-        __need_loop_1195 = __aV_iterator.first(__context__,(__aV_rename_at_1195_23)) && __need_loop_1195;
-        for ( ; __need_loop_1195 ; __need_loop_1195 = __aV_iterator.next(__context__,(__aV_rename_at_1195_23)) )
+        das_iterator<Sequence DAS_COMMENT((json::JsonValue *))> __aV_iterator((_temp_make_local_1228_19_32 = (_FuncbuiltinTickvaluesTick1351216622833168869_e4c809c3c6fa4dfd(__context__,das_arg<TTable<char *,json::JsonValue *>>::pass(__a_rename_at_1226_22)))));
+        json::JsonValue * * __aV_rename_at_1228_23;
+        __need_loop_1228 = __aV_iterator.first(__context__,(__aV_rename_at_1228_23)) && __need_loop_1228;
+        for ( ; __need_loop_1228 ; __need_loop_1228 = __aV_iterator.next(__context__,(__aV_rename_at_1228_23)) )
         {
-            finalize_f1db2ed1abc2f753(__context__,(*__aV_rename_at_1195_23));
+            finalize_f1db2ed1abc2f753(__context__,(*__aV_rename_at_1228_23));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1195_23));
+        __aV_iterator.close(__context__,(__aV_rename_at_1228_23));
     };
-    builtin_table_free(das_arg<TTable<char *,json::JsonValue *>>::pass(__a_rename_at_1193_22),8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<char *,json::JsonValue *>>::pass(__a_rename_at_1226_22),8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_dc31ee4da771c4 ( Context * __context__, TArray<json::JsonValue *> &  __a_rename_at_1182_24 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_dc31ee4da771c4 ( Context * __context__, TArray<json::JsonValue *> &  __a_rename_at_1215_24 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: json::JsonValue? aka TT&
-        das_iterator<TArray<json::JsonValue *>> __aV_iterator(__a_rename_at_1182_24);
-        json::JsonValue * * __aV_rename_at_1184_25;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_25)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_25)) )
+        das_iterator<TArray<json::JsonValue *>> __aV_iterator(__a_rename_at_1215_24);
+        json::JsonValue * * __aV_rename_at_1217_25;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_25)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_25)) )
         {
-            finalize_f1db2ed1abc2f753(__context__,(*__aV_rename_at_1184_25));
+            finalize_f1db2ed1abc2f753(__context__,(*__aV_rename_at_1217_25));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_25));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_25));
     };
-    builtin_array_free(das_arg<TArray<json::JsonValue *>>::pass(__a_rename_at_1182_24),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<json::JsonValue *>>::pass(__a_rename_at_1215_24),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_26, ast::AstFunctionAnnotation * __value_rename_at_181_27 )
@@ -562,9 +562,9 @@ inline void finalize_435c75a1641e15fa ( Context * __context__, AutoVariant<TTabl
     memset((void*)&(____this_rename_at_24_33), 0, TypeSize<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>>::size);
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5df8cb221c94902 ( Context * __context__, TTable<char *,char *> &  __a_rename_at_1193_34 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5df8cb221c94902 ( Context * __context__, TTable<char *,char *> &  __a_rename_at_1226_34 )
 {
-    builtin_table_free(das_arg<TTable<char *,char *>>::pass(__a_rename_at_1193_34),8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<char *,char *>>::pass(__a_rename_at_1226_34),8,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline void finalize_23291ba5b15c15ae ( Context * __context__, json::JsonValue &  ____this_rename_at_22_35 )
@@ -612,22 +612,22 @@ inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTic
     return /* <- */ das_auto_cast_move<smart_ptr_raw<FunctionAnnotation>>::cast(makeFunctionAnnotation(__name_rename_at_631_45,das_auto_cast<void * const >::cast(__someClassPtr_rename_at_631_46),__classInfo_rename_at_634_47,__context__));
 }
 
-inline TTable<char *,char *> _FuncbuiltinTickto_table_moveTick5858896087460481804_9bc7a430485b2b12 ( Context * __context__, TDim<AutoTuple<char *,char *>,6> &  __a_rename_at_1455_48 )
+inline TTable<char *,char *> _FuncbuiltinTickto_table_moveTick5858896087460481804_9bc7a430485b2b12 ( Context * __context__, TDim<AutoTuple<char *,char *>,6> &  __a_rename_at_1488_48 )
 {
-    TTable<char *,char *> __tab_rename_at_1456_49;das_zero(__tab_rename_at_1456_49);
+    TTable<char *,char *> __tab_rename_at_1489_49;das_zero(__tab_rename_at_1489_49);
     {
-        bool __need_loop_1458 = true;
+        bool __need_loop_1491 = true;
         // x: tuple<string aka keyT;string aka valT>&
-        das_iterator<TDim<AutoTuple<char *,char *>,6>> __x_iterator(__a_rename_at_1455_48);
-        AutoTuple<char *,char *> * __x_rename_at_1458_50;
-        __need_loop_1458 = __x_iterator.first(__context__,(__x_rename_at_1458_50)) && __need_loop_1458;
-        for ( ; __need_loop_1458 ; __need_loop_1458 = __x_iterator.next(__context__,(__x_rename_at_1458_50)) )
+        das_iterator<TDim<AutoTuple<char *,char *>,6>> __x_iterator(__a_rename_at_1488_48);
+        AutoTuple<char *,char *> * __x_rename_at_1491_50;
+        __need_loop_1491 = __x_iterator.first(__context__,(__x_rename_at_1491_50)) && __need_loop_1491;
+        for ( ; __need_loop_1491 ; __need_loop_1491 = __x_iterator.next(__context__,(__x_rename_at_1491_50)) )
         {
-            das_copy(__tab_rename_at_1456_49(das_get_auto_tuple_field<char *,0,char *,char *>::get((*__x_rename_at_1458_50)),__context__),das_get_auto_tuple_field<char *,1,char *,char *>::get((*__x_rename_at_1458_50)));
+            das_copy(__tab_rename_at_1489_49(das_get_auto_tuple_field<char *,0,char *,char *>::get((*__x_rename_at_1491_50)),__context__),das_get_auto_tuple_field<char *,1,char *,char *>::get((*__x_rename_at_1491_50)));
         }
-        __x_iterator.close(__context__,(__x_rename_at_1458_50));
+        __x_iterator.close(__context__,(__x_rename_at_1491_50));
     };
-    return /* <- */ das_auto_cast_move<TTable<char *,char *>>::cast(__tab_rename_at_1456_49);
+    return /* <- */ das_auto_cast_move<TTable<char *,char *>>::cast(__tab_rename_at_1489_49);
 }
 
 inline void finalize_f1db2ed1abc2f753 ( Context * __context__, json::JsonValue * & ____this_rename_at_111_51 )
@@ -640,9 +640,9 @@ inline void finalize_f1db2ed1abc2f753 ( Context * __context__, json::JsonValue *
     };
 }
 
-inline void _FuncbuiltinTicksortTick5995501125257068354_37074a96ed1276f6 ( Context * __context__, TArray<macro_boost::CapturedVariable> &  __a_rename_at_1576_52, Block DAS_COMMENT((bool,macro_boost::CapturedVariable const ,macro_boost::CapturedVariable const )) const  &  __cmp_rename_at_1576_53 )
+inline void _FuncbuiltinTicksortTick5995501125257068354_37074a96ed1276f6 ( Context * __context__, TArray<macro_boost::CapturedVariable> &  __a_rename_at_1609_52, Block DAS_COMMENT((bool,macro_boost::CapturedVariable const ,macro_boost::CapturedVariable const )) const  &  __cmp_rename_at_1609_53 )
 {
-    builtin_sort_array_any_cblock_T(das_arg<TArray<macro_boost::CapturedVariable>>::pass(__a_rename_at_1576_52),24,builtin_array_size(das_arg<TArray<macro_boost::CapturedVariable>>::pass(__a_rename_at_1576_52)),__cmp_rename_at_1576_53,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_sort_array_any_cblock_T(das_arg<TArray<macro_boost::CapturedVariable>>::pass(__a_rename_at_1609_52),24,builtin_array_size(das_arg<TArray<macro_boost::CapturedVariable>>::pass(__a_rename_at_1609_52)),__cmp_rename_at_1609_53,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
 inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_54, bool __extra_rename_at_38_55, bool __contracts_rename_at_38_56, bool __modules_rename_at_38_57 )

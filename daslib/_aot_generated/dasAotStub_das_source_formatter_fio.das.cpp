@@ -425,10 +425,10 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     aotLib[0x7c2e30b4091b7513] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&_FuncfioTickfopenTick3937565566638487747_feeb71cd63fd8eac>>();
     };
-    aotLib[0xe39299f0ef43be2b] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x9285f57b2641f40a] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&format_file_50495df36efe9eb6>>();
     };
-    aotLib[0x4ab94649b2f6cd5f] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xb6ac2a76baee25d6] = +[](Context & ctx) -> SimNode* {
         return ctx.code->makeNode<AutoSimNode_Aot<&format_files_5658cd111c4b8369>>();
     };
     // [[ init script ]]
