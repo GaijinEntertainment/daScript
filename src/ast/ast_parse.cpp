@@ -250,7 +250,7 @@ namespace das {
                           const FileAccessPtr & access,
                           string &modName,
                           vector<ModuleInfo> & req,
-                          vector<RequireRecord> & missing,
+                          vector<MissingRecord> & missing,
                           vector<RequireRecord> & circular,
                           vector<RequireRecord> & notAllowed,
                           vector<FileInfo *> & chain,
@@ -319,6 +319,13 @@ namespace das {
                                 return false;
                             }
                             if ( !fileModName.empty() ) {
+                                if ( info.moduleName != fileModName ) {
+                                    if ( log ) {
+                                        *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND; did you mean '" << fileModName << "'?\n";
+                                    }
+                                    missing.push_back({mod,chain,fileModName});
+                                    return false;
+                                }
                                 info.moduleName = fileModName;
                             } else {
                                 string caseInsensitiveName = info.moduleName;
@@ -328,7 +335,7 @@ namespace das {
                                     namelessReq[caseInsensitiveName] = NamelessModuleReq{info.moduleName, info.fileName};
                                 } else if ( prevMod->second.moduleName != info.moduleName ) {
                                     if ( log ) {
-                                        *log << string(tab,'\t') << "Module name case conflict: " << prevMod->second.moduleName << " vs " << info.moduleName << "\n"
+                                        *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE NAME CASE CONFLICT; " << prevMod->second.moduleName << " vs " << info.moduleName << "\n"
                                              << string(tab+1,'\t') << prevMod->second.moduleName << " from " << prevMod->second.fileName << "\n"
                                              << string(tab+1,'\t') << info.moduleName << " from " << info.fileName << "\n";
                                     }
@@ -714,7 +721,7 @@ namespace das {
     bool addExtraDependency(
         string modName,
         string modFile,
-        vector<RequireRecord> & missing,
+        vector<MissingRecord> & missing,
         vector<RequireRecord> & circular,
         vector<RequireRecord> & notAllowed,
         vector<ModuleInfo> & req,
@@ -835,7 +842,7 @@ namespace das {
 
     ProgramPtr reportPrerequisitesErrors (
             string fileName,
-            vector<RequireRecord> & missing,
+            vector<MissingRecord> & missing,
             vector<RequireRecord> & circular,
             vector<RequireRecord> & notAllowed,
             vector<ModuleInfo> & req,
@@ -859,21 +866,26 @@ namespace das {
         program->thisModuleGroup = &libGroup;
         TextWriter err;
         for ( auto & mis : missing ) {
-            err << "missing prerequisit " << mis.name << "\n";
+            err << "missing prerequisit '" << mis.name;
+            if ( !mis.hintName.empty() ) {
+                err << "'; did you mean '" << mis.hintName << "'?\n";
+            } else {
+                err << "'\n";
+            }
             reportChain(err, mis.chain);
         }
         for ( auto & mis : circular ) {
-            err << "circular dependency " << mis.name << "\n";
+            err << "circular dependency '" << mis.name << "'\n";
             reportChain(err, mis.chain);
         }
         for ( auto & mis : notAllowed ) {
-            err << "module not allowed " << mis.name << "\n";
+            err << "module not allowed '" << mis.name << "'\n";
             reportChain(err, mis.chain);
         }
         for ( auto & nameless : namelessMismatches ) {
-            err << "Module name case conflict: " << nameless.moduleName << " vs " << nameless.moduleName2 << "\n"
-                << "\t" << nameless.moduleName << " from " << nameless.fileName << "\n"
-                << "\t" << nameless.moduleName2 << " from " << nameless.fileName2 << "\n";
+            err << "module name case conflict: '" << nameless.moduleName << "' vs '" << nameless.moduleName2 << "'\n"
+                << "\t'" << nameless.moduleName << "' from " << nameless.fileName << "\n"
+                << "\t'" << nameless.moduleName2 << "' from " << nameless.fileName2 << "\n";
         }
         program->error(err.str(), "", "", LineInfo(),
                         CompilationError::module_not_found);
@@ -920,7 +932,8 @@ namespace das {
         *totM = 0;
         (*daScriptEnvironment::bound)->macroTimeTicks = 0;
         vector<ModuleInfo> req;
-        vector<RequireRecord> missing, circular, notAllowed;
+        vector<MissingRecord> missing;
+        vector<RequireRecord> circular, notAllowed;
         vector<FileInfo *> chain;
         das_set<string> dependencies;
         das_hash_map<string, NamelessModuleReq> namelessReq;

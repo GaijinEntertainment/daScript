@@ -1704,7 +1704,7 @@ namespace das
                           const FileAccessPtr & access,
                           string &modName,
                           vector<ModuleInfo> & req,
-                          vector<RequireRecord> & missing,
+                          vector<MissingRecord> & missing,
                           vector<RequireRecord> & circular,
                           vector<RequireRecord> & notAllowed,
                           vector<FileInfo *> & chain,
