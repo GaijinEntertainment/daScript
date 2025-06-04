@@ -129,7 +129,8 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     }
     string prev;
     vector<ModuleInfo> req;
-    vector<RequireRecord> missing, circular, notAllowed;
+    vector<MissingRecord> missing;
+    vector<RequireRecord> circular, notAllowed;
     vector<FileInfo *> chain;
     das_set<string> dependencies;
     ModuleGroup libGroup;

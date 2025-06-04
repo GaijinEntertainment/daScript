@@ -147,6 +147,10 @@ namespace das
         vector<FileInfo *>  chain;
     };
 
+    struct MissingRecord : RequireRecord {
+        string              hintName;
+    };
+
     struct NamelessModuleReq {
         string              moduleName;
         string              fileName;
