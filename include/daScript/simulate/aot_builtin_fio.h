@@ -77,7 +77,7 @@ namespace das {
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * );
     bool builtin_remove_file ( const char * path );
     bool builtin_rename_file ( const char * old_path, const char * new_path );
-    bool has_env_variable ( const char * var );
+    bool has_env_variable ( const char * var, Context * context, LineInfoArg * at );
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at );
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at );
 }
