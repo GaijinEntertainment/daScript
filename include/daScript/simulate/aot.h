@@ -1006,6 +1006,11 @@ namespace das {
         static constexpr int align = alignof(T);
     };
 
+    template <>
+    struct TypeAlign<FILE> {
+        static constexpr int align = 16; // hardcoded in module fio
+    };
+
     template <typename... TA>
     constexpr int max_alignof() { return std::max({TypeAlign<TA>::align...}); }
 
@@ -1038,6 +1043,16 @@ namespace das {
     template <typename T>
     struct TypeSize {
         static constexpr int size = sizeof(T);
+    };
+
+    template <>
+    struct TypeSize<void> {
+        static constexpr int size = 0;
+    };
+
+    template <>
+    struct TypeSize<FILE> {
+        static constexpr int size = 16; // hardcoded in module FIO
     };
 
     template <int tupleSize, typename... TA>

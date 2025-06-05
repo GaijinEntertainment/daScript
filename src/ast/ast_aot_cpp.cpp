@@ -203,7 +203,7 @@ namespace das {
 
     static bool crossPlatform = false; // It'll be better to forward this flag everywhere in describeTypeEx
 
-    string describeCppTypeEx ( const TypeDeclPtr & type,
+    string describeCppTypeEx ( const smart_ptr_raw<TypeDecl> & type,
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
@@ -365,7 +365,7 @@ namespace das {
         return stream.str();
     }
 
-    string describeCppType ( const TypeDeclPtr & type,
+    string describeCppType ( const smart_ptr_raw<TypeDecl> & type,
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
@@ -646,7 +646,14 @@ namespace das {
                 ss << "nullptr, ";
             }
             ss << info->count << ", ";
-            ss << info->size << ", ";
+            if (crossPlatform) {
+                const auto typeName = info->cppTypeName;
+                // ss << "[]() constexpr {static_assert(TypeSize<" << typeName << ">::size == " << info->size << ", \"Oh no\"); return TypeSize<" << typeName << ">::size; }()";
+                ss << "TypeSize<" << typeName << ">::size";
+            } else {
+                ss << info->size;
+            }
+            ss << ", ";
             ss << "UINT64_C(0x" << HEX << info->init_mnh << DEC << "), ";
             ss << "nullptr, ";  // annotation list
             ss << "UINT64_C(0x" << HEX << info->hash << DEC << "), ";
@@ -764,7 +771,13 @@ namespace das {
                 ss << "nullptr";
             }
             ss << ", " << info->flags;
-            ss << ", " << info->size;
+            if (crossPlatform) {
+                const auto typeName = info->cppTypeName;
+                // ss << ", []() constexpr {static_assert(TypeSize<" << typeName << ">::size == " << info->size << ", \"Oh no\"); return TypeSize<" << typeName << ">::size; }()";
+                ss << ", TypeSize<" << typeName << ">::size";
+            } else {
+                ss << ", " << info->size;
+            }
             ss << ", UINT64_C(0x" << HEX << info->hash << DEC << ")";
         }
 
