@@ -6,6 +6,7 @@ module log shared
 require rtti
 require uriparser
 require strings
+require fio
 
 
 let private verbose = false
@@ -79,16 +80,16 @@ def file_info_hr(at : LineInfo; uri_path : bool) {
 }
 
 
-def private red_str(str : string) {
+def red_str(str : string) {
     return useTtyColors ? "\x1B[31m{str}\x1B[0m" : str
 }
-def private green_str(str : string) {
+def green_str(str : string) {
     return useTtyColors ? "\x1B[32m{str}\x1B[0m" : str
 }
-def private yellow_str(str : string) {
+def yellow_str(str : string) {
     return useTtyColors ? "\x1B[33m{str}\x1B[0m" : str
 }
-def private blue_str(str : string) {
+def blue_str(str : string) {
     return useTtyColors ? "\x1B[34m{str}\x1B[0m" : str
 }
 
@@ -106,5 +107,13 @@ def init_log() {
 
 
 def init_log(args : array<string>) {
-    log::useTtyColors = args |> has_value("--color")
+    let noColor = has_env_variable("NO_COLOR") ? get_env_variable("NO_COLOR") : "0"
+    let forceNoColor = noColor != "0" && noColor != "false"
+    if (forceNoColor || has_value(args, "--no-color")) {
+        useTtyColors = false
+    } else {
+        let term = get_env_variable("TERM")
+        let probabblyColor = length(term) > 3 && (find(term, "xterm") >= 0 || find(term, "color") >= 0 || find(term, "ansi") >= 0 || find(term, "vt100") >= 0)
+        useTtyColors = has_value(args, "--color") || probabblyColor
+    }
 }
