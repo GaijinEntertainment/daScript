@@ -71,7 +71,7 @@ namespace aot_constants {
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
     // [[ init script ]]
-    aotLib[0x75fda8ad07977e92] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xfb2101726506b8c3] = +[](Context & ctx) -> SimNode* {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
@@ -110,7 +110,7 @@ Standalone::Standalone() {
     }
     context.tabAdLookup = make_shared<das_hash_map<uint64_t,uint64_t>>();
     {
-        auto it = getGlobalAotLibrary().find(0x75fda8ad07977e92/*initSemanticHashWithDep*/);
+        auto it = getGlobalAotLibrary().find(0xfb2101726506b8c3/*initSemanticHashWithDep*/);
         if ( it != getGlobalAotLibrary().end() ) {
             (it->second)(context);
         }

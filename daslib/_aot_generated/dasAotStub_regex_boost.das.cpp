@@ -282,118 +282,118 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void finalize_33949679bbb57f6f ( Context * __context__, AutoTuple<range,char *> & ____this_rename_at_1186_0 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191 ( Context * __context__, TArray<regex::ReNode *> & __a_rename_at_1182_1 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_8e4364e894fa22ef ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_18cb71e9c9c54d7b ( Context * __context__, regex_boost::RegexReader const  & __cl_rename_at_116_5 );
-inline void finalize_ce48cc2769f1ff86 ( Context * __context__, regex::ReNode & ____this_rename_at_29_6 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe ( Context * __context__, TArray<AutoTuple<range,char *>> & __a_rename_at_1182_7 );
-inline void finalize_975dc1c3269122c3 ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 );
-inline void finalize_53d748a680ec146b ( Context * __context__, regex::Regex & ____this_rename_at_48_10 );
+inline void finalize_b80b7ef21ddb9bf1 ( Context * __context__, AutoTuple<range,char *> & ____this_rename_at_1219_0 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e966d7202b3b4f58 ( Context * __context__, TArray<regex::ReNode *> & __a_rename_at_1215_1 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_cc8787f882c60e16 ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_97bab1358218f269 ( Context * __context__, regex_boost::RegexReader const  & __cl_rename_at_116_5 );
+inline void finalize_a76cb7ca19c6f570 ( Context * __context__, regex::ReNode & ____this_rename_at_29_6 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ea66d864ed4ed2e ( Context * __context__, TArray<AutoTuple<range,char *>> & __a_rename_at_1215_7 );
+inline void finalize_e3c919e0762048fd ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 );
+inline void finalize_fcb82bdaf2c3e5d ( Context * __context__, regex::Regex & ____this_rename_at_48_10 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void finalize_33949679bbb57f6f ( Context * __context__, AutoTuple<range,char *> &  ____this_rename_at_1186_0 )
+inline void finalize_b80b7ef21ddb9bf1 ( Context * __context__, AutoTuple<range,char *> &  ____this_rename_at_1219_0 )
 {
-    memset((void*)&(____this_rename_at_1186_0), 0, TypeSize<AutoTuple<range,char *>>::size);
+    memset((void*)&(____this_rename_at_1219_0), 0, TypeSize<AutoTuple<range,char *>>::size);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191 ( Context * __context__, TArray<regex::ReNode *> &  __a_rename_at_1182_1 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_e966d7202b3b4f58 ( Context * __context__, TArray<regex::ReNode *> &  __a_rename_at_1215_1 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: regex::ReNode? aka TT&
-        das_iterator<TArray<regex::ReNode *>> __aV_iterator(__a_rename_at_1182_1);
-        regex::ReNode * * __aV_rename_at_1184_2;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_2)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_2)) )
+        das_iterator<TArray<regex::ReNode *>> __aV_iterator(__a_rename_at_1215_1);
+        regex::ReNode * * __aV_rename_at_1217_2;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_2)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_2)) )
         {
-            finalize_975dc1c3269122c3(__context__,(*__aV_rename_at_1184_2));
+            finalize_e3c919e0762048fd(__context__,(*__aV_rename_at_1217_2));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_2));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_2));
     };
-    builtin_array_free(das_arg<TArray<regex::ReNode *>>::pass(__a_rename_at_1182_1),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<regex::ReNode *>>::pass(__a_rename_at_1215_1),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_8e4364e894fa22ef ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_cc8787f882c60e16 ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 )
 {
     das_copy(__Arr_rename_at_181_3(builtin_array_push_back(das_arg<TArray<ast::AstReaderMacro *>>::pass(__Arr_rename_at_181_3),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_4);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_18cb71e9c9c54d7b ( Context * __context__, regex_boost::RegexReader const  &  __cl_rename_at_116_5 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_97bab1358218f269 ( Context * __context__, regex_boost::RegexReader const  &  __cl_rename_at_116_5 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti))).getStructType())));
 }
 
-inline void finalize_ce48cc2769f1ff86 ( Context * __context__, regex::ReNode &  ____this_rename_at_29_6 )
+inline void finalize_a76cb7ca19c6f570 ( Context * __context__, regex::ReNode &  ____this_rename_at_29_6 )
 {
-    _FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191(__context__,das_arg<TArray<regex::ReNode *>>::pass(____this_rename_at_29_6.all));
-    finalize_975dc1c3269122c3(__context__,____this_rename_at_29_6.left);
-    finalize_975dc1c3269122c3(__context__,____this_rename_at_29_6.right);
-    finalize_975dc1c3269122c3(__context__,____this_rename_at_29_6.subexpr);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_e966d7202b3b4f58(__context__,das_arg<TArray<regex::ReNode *>>::pass(____this_rename_at_29_6.all));
+    finalize_e3c919e0762048fd(__context__,____this_rename_at_29_6.left);
+    finalize_e3c919e0762048fd(__context__,____this_rename_at_29_6.right);
+    finalize_e3c919e0762048fd(__context__,____this_rename_at_29_6.subexpr);
     memset((void*)&(____this_rename_at_29_6), 0, TypeSize<regex::ReNode>::size);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe ( Context * __context__, TArray<AutoTuple<range,char *>> &  __a_rename_at_1182_7 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ea66d864ed4ed2e ( Context * __context__, TArray<AutoTuple<range,char *>> &  __a_rename_at_1215_7 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: tuple<range;string> aka TT&
-        das_iterator<TArray<AutoTuple<range,char *>>> __aV_iterator(__a_rename_at_1182_7);
-        AutoTuple<range,char *> * __aV_rename_at_1184_8;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_8)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_8)) )
+        das_iterator<TArray<AutoTuple<range,char *>>> __aV_iterator(__a_rename_at_1215_7);
+        AutoTuple<range,char *> * __aV_rename_at_1217_8;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_8)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_8)) )
         {
-            finalize_33949679bbb57f6f(__context__,das_arg<AutoTuple<range,char *>>::pass((*__aV_rename_at_1184_8)));
+            finalize_b80b7ef21ddb9bf1(__context__,das_arg<AutoTuple<range,char *>>::pass((*__aV_rename_at_1217_8)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_8));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_8));
     };
-    builtin_array_free(das_arg<TArray<AutoTuple<range,char *>>>::pass(__a_rename_at_1182_7),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<AutoTuple<range,char *>>>::pass(__a_rename_at_1215_7),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void finalize_975dc1c3269122c3 ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 )
+inline void finalize_e3c919e0762048fd ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 )
 {
     if ( ____this_rename_at_50_9 != nullptr )
     {
-        finalize_ce48cc2769f1ff86(__context__,das_arg<regex::ReNode>::pass(das_deref(__context__,____this_rename_at_50_9)));
+        finalize_a76cb7ca19c6f570(__context__,das_arg<regex::ReNode>::pass(das_deref(__context__,____this_rename_at_50_9)));
         das_delete<regex::ReNode *>::clear(__context__,____this_rename_at_50_9);
         das_copy(____this_rename_at_50_9,nullptr);
     };
 }
 
-inline void finalize_53d748a680ec146b ( Context * __context__, regex::Regex &  ____this_rename_at_48_10 )
+inline void finalize_fcb82bdaf2c3e5d ( Context * __context__, regex::Regex &  ____this_rename_at_48_10 )
 {
-    finalize_975dc1c3269122c3(__context__,____this_rename_at_48_10.root);
-    _FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe(__context__,das_arg<TArray<AutoTuple<range,char *>>>::pass(____this_rename_at_48_10.groups));
+    finalize_e3c919e0762048fd(__context__,____this_rename_at_48_10.root);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_ea66d864ed4ed2e(__context__,das_arg<TArray<AutoTuple<range,char *>>>::pass(____this_rename_at_48_10.groups));
     memset((void*)&(____this_rename_at_48_10), 0, TypeSize<regex::Regex>::size);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xa9e3b6750d79e922] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_33949679bbb57f6f>>();
+    aotLib[0x1525e6639d91f0cf] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_b80b7ef21ddb9bf1>>();
     };
-    aotLib[0x1ec7afd9ea734cbd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191>>();
+    aotLib[0x3c2e465c4a65a9b6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_e966d7202b3b4f58>>();
     };
-    aotLib[0x92d5b2bdb4b14a67] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_8e4364e894fa22ef>>();
+    aotLib[0x572edd4206198143] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_cc8787f882c60e16>>();
     };
-    aotLib[0xb085676806cb0e2b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_18cb71e9c9c54d7b>>();
+    aotLib[0x2a1af557842b4f81] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_97bab1358218f269>>();
     };
-    aotLib[0xba3f0e2f8f6c2af9] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_ce48cc2769f1ff86>>();
+    aotLib[0x573aa10e1299594e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_a76cb7ca19c6f570>>();
     };
-    aotLib[0x10077f308e6c3336] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe>>();
+    aotLib[0x87bf7ff63b2b920a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_ea66d864ed4ed2e>>();
     };
-    aotLib[0x2f11042503d3f047] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_975dc1c3269122c3>>();
+    aotLib[0xa8919e25e486b17b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_e3c919e0762048fd>>();
     };
-    aotLib[0x7e949fe6fbaa5320] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_53d748a680ec146b>>();
+    aotLib[0x959221d79e0d85c2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_fcb82bdaf2c3e5d>>();
     };
     resolveTypeInfoAnnotations();
 }

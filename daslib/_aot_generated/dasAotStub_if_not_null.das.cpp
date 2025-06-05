@@ -273,59 +273,59 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1059_0, smart_ptr_raw<Expression> const  __src_rename_at_1059_1 );
-inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_f072870b89539ecd ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_2 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4fb66addb9b0d916 ( Context * __context__, if_not_null::ApplyMacro const  & __cl_rename_at_116_6 );
-inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_f22c6071e6b0ab0b ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1744_7 );
+inline void clone_361586e3a680f068 ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1092_0, smart_ptr_raw<Expression> const  __src_rename_at_1092_1 );
+inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_57e0a3ad82c2c7f5 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1089_2 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_dd1d666cc129e6e3 ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_be7532e64f214b69 ( Context * __context__, if_not_null::ApplyMacro const  & __cl_rename_at_116_6 );
+inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_94f2d6c5323f74ac ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1777_7 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1059_0, smart_ptr_raw<Expression> const  __src_rename_at_1059_1 )
+inline void clone_361586e3a680f068 ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1092_0, smart_ptr_raw<Expression> const  __src_rename_at_1092_1 )
 {
-    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1059_0),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1059_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1092_0),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1092_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_f072870b89539ecd ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_2 )
+inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_57e0a3ad82c2c7f5 ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1089_2 )
 {
-    smart_ptr_raw<Expression> __clone_dest_rename_at_1058_3;das_zero(__clone_dest_rename_at_1058_3);
-    clone_912660ab1e667e4b(__context__,__clone_dest_rename_at_1058_3,__clone_src_rename_at_1056_2);
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1058_3);
+    smart_ptr_raw<Expression> __clone_dest_rename_at_1091_3;das_zero(__clone_dest_rename_at_1091_3);
+    clone_361586e3a680f068(__context__,__clone_dest_rename_at_1091_3,__clone_src_rename_at_1089_2);
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1091_3);
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_dd1d666cc129e6e3 ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 )
 {
     das_copy(__Arr_rename_at_181_4(builtin_array_push_back(das_arg<TArray<ast::AstCallMacro *>>::pass(__Arr_rename_at_181_4),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_5);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4fb66addb9b0d916 ( Context * __context__, if_not_null::ApplyMacro const  &  __cl_rename_at_116_6 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_be7532e64f214b69 ( Context * __context__, if_not_null::ApplyMacro const  &  __cl_rename_at_116_6 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_6.__rtti))).getStructType())));
 }
 
-inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_f22c6071e6b0ab0b ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1744_7 )
+inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_94f2d6c5323f74ac ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1777_7 )
 {
-    smart_ptr_raw<Expression> __dst_rename_at_1746_8; das_zero(__dst_rename_at_1746_8); das_move(__dst_rename_at_1746_8, _FuncbuiltinTickclone_to_moveTick2007252383599261567_f072870b89539ecd(__context__,das_cast<smart_ptr_raw<Expression>>::cast(__src_rename_at_1744_7)));
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__dst_rename_at_1746_8);
+    smart_ptr_raw<Expression> __dst_rename_at_1779_8; das_zero(__dst_rename_at_1779_8); das_move(__dst_rename_at_1779_8, _FuncbuiltinTickclone_to_moveTick2007252383599261567_57e0a3ad82c2c7f5(__context__,das_cast<smart_ptr_raw<Expression>>::cast(__src_rename_at_1777_7)));
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__dst_rename_at_1779_8);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0x74b4210f5379bdbd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&clone_912660ab1e667e4b>>();
+    aotLib[0x926909a4c08dee78] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&clone_361586e3a680f068>>();
     };
-    aotLib[0x430a4fa54ab4688] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickclone_to_moveTick2007252383599261567_f072870b89539ecd>>();
+    aotLib[0xf137fd7ce64b82c2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickclone_to_moveTick2007252383599261567_57e0a3ad82c2c7f5>>();
     };
-    aotLib[0xe553d306a044fc24] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce>>();
+    aotLib[0x325b73287e5769a7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_dd1d666cc129e6e3>>();
     };
-    aotLib[0x3c23823af670f93b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_4fb66addb9b0d916>>();
+    aotLib[0x6f79022adc155dd0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_be7532e64f214b69>>();
     };
-    aotLib[0xec28e5cc122573c4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickadd_ptr_refTick918185754185293024_f22c6071e6b0ab0b>>();
+    aotLib[0xdcc02efc2e02b77c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickadd_ptr_refTick918185754185293024_94f2d6c5323f74ac>>();
     };
     resolveTypeInfoAnnotations();
 }

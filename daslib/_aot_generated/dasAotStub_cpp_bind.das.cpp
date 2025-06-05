@@ -157,11 +157,11 @@ extern TypeInfo __type_info__af90fe4c864e9d52;
 extern TypeInfo __type_info__af63e44c8601fa24;
 extern TypeInfo __type_info__af63ee4c86020b22;
 
-TypeInfo __type_info__3c61146b2bdfb90 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 290, 32, UINT64_C(0x3c61146b2bdfb90) };
-TypeInfo __type_info__af8afe4c86446b52 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 4, UINT64_C(0xaf8afe4c86446b52) };
-TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, 8, UINT64_C(0xaf90fe4c864e9d52) };
-TypeInfo __type_info__af63e44c8601fa24 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 4, UINT64_C(0xaf63e44c8601fa24) };
-TypeInfo __type_info__af63ee4c86020b22 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16388, 8, UINT64_C(0xaf63ee4c86020b22) };
+TypeInfo __type_info__3c61146b2bdfb90 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 290, TypeSize<das::string>::size, UINT64_C(0x3c61146b2bdfb90) };
+TypeInfo __type_info__af8afe4c86446b52 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<int32_t>::size, UINT64_C(0xaf8afe4c86446b52) };
+TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, TypeSize<char *>::size, UINT64_C(0xaf90fe4c864e9d52) };
+TypeInfo __type_info__af63e44c8601fa24 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int32_t>::size, UINT64_C(0xaf63e44c8601fa24) };
+TypeInfo __type_info__af63ee4c86020b22 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16388, TypeSize<char *>::size, UINT64_C(0xaf63ee4c86020b22) };
 
 static void resolveTypeInfoAnnotations()
 {
@@ -187,57 +187,57 @@ TypeInfo * __tinfo_12[3] = { &__type_info__af90fe4c864e9d52, &__type_info__af63e
 TypeInfo * __tinfo_13[3] = { &__type_info__af90fe4c864e9d52, &__type_info__af63ee4c86020b22, &__type_info__af90fe4c864e9d52 };
 TypeInfo * __tinfo_14[2] = { &__type_info__af90fe4c864e9d52, &__type_info__af63ee4c86020b22 };
 
-inline void clone_c29a2ce3ce04a328 ( Context * __context__, smart_ptr_raw<TypeDecl> & __dest_rename_at_367_0, smart_ptr_raw<TypeDecl> const  __src_rename_at_367_1 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_615e0425516708d9 ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> & __a_rename_at_1182_2 );
-inline char * _FuncastTickdescribe_cppTick8220285150532477039_64c421c61ecd7262 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_43_4, bool __substitureRef_rename_at_43_5, bool __skipRef_rename_at_43_6, bool __skipConst_rename_at_43_7, bool __redundantConst_rename_at_43_8, bool __chooseSmartPtr_rename_at_43_9 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_b3fa6014e447ff2d ( Context * __context__, TArray<AutoTuple<char *,int32_t>> & __Arr_rename_at_181_10, AutoTuple<char *,int32_t> & __value_rename_at_181_11 );
-inline void _FuncbuiltinTickpush_cloneTick15769051505004837089_338aab8aa242d2bb ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> & __Arr_rename_at_361_12, smart_ptr_raw<TypeDecl> const  __value_rename_at_361_13 );
-inline void log_cpp_class_method_307c561cdfa4a8db ( Context * __context__, FILE const  * const  __cpp_file_rename_at_15_14, char * const  __name_rename_at_15_15, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_15_16 );
-inline void log_cpp_class_method_call_811ba437c8a50b47 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_36_29, char * const  __name_rename_at_36_30, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_36_31 );
-inline void log_cpp_class_adapter_92277e6cbae7f863 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_66_47, char * const  __name_rename_at_66_48, smart_ptr_raw<TypeDecl> const  __cinfo_rename_at_66_49 );
+inline void clone_aa3bc17949e1cf77 ( Context * __context__, smart_ptr_raw<TypeDecl> & __dest_rename_at_367_0, smart_ptr_raw<TypeDecl> const  __src_rename_at_367_1 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_976f9f8d3c51340f ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> & __a_rename_at_1215_2 );
+inline char * _FuncastTickdescribe_cppTick8220285150532477039_79810cc90c7d7683 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_43_4, bool __substitureRef_rename_at_43_5, bool __skipRef_rename_at_43_6, bool __skipConst_rename_at_43_7, bool __redundantConst_rename_at_43_8, bool __chooseSmartPtr_rename_at_43_9 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_533481f1cfa8d26c ( Context * __context__, TArray<AutoTuple<char *,int32_t>> & __Arr_rename_at_181_10, AutoTuple<char *,int32_t> & __value_rename_at_181_11 );
+inline void _FuncbuiltinTickpush_cloneTick15769051505004837089_962ffc2c15cf6636 ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> & __Arr_rename_at_361_12, smart_ptr_raw<TypeDecl> const  __value_rename_at_361_13 );
+inline void log_cpp_class_method_76fa28d7a8658213 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_15_14, char * const  __name_rename_at_15_15, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_15_16 );
+inline void log_cpp_class_method_call_76fa28d7a8658213 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_36_29, char * const  __name_rename_at_36_30, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_36_31 );
+inline void log_cpp_class_adapter_76fa28d7a8658213 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_66_47, char * const  __name_rename_at_66_48, smart_ptr_raw<TypeDecl> const  __cinfo_rename_at_66_49 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void clone_c29a2ce3ce04a328 ( Context * __context__, smart_ptr_raw<TypeDecl> & __dest_rename_at_367_0, smart_ptr_raw<TypeDecl> const  __src_rename_at_367_1 )
+inline void clone_aa3bc17949e1cf77 ( Context * __context__, smart_ptr_raw<TypeDecl> & __dest_rename_at_367_0, smart_ptr_raw<TypeDecl> const  __src_rename_at_367_1 )
 {
     builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_367_0),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_367_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_615e0425516708d9 ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> &  __a_rename_at_1182_2 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_976f9f8d3c51340f ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> &  __a_rename_at_1215_2 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1217 = true;
         // aV: smart_ptr<ast::TypeDecl> aka TT&
-        das_iterator<TArray<smart_ptr_raw<TypeDecl>>> __aV_iterator(__a_rename_at_1182_2);
-        smart_ptr_raw<TypeDecl> * __aV_rename_at_1184_3;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_3)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_3)) )
+        das_iterator<TArray<smart_ptr_raw<TypeDecl>>> __aV_iterator(__a_rename_at_1215_2);
+        smart_ptr_raw<TypeDecl> * __aV_rename_at_1217_3;
+        __need_loop_1217 = __aV_iterator.first(__context__,(__aV_rename_at_1217_3)) && __need_loop_1217;
+        for ( ; __need_loop_1217 ; __need_loop_1217 = __aV_iterator.next(__context__,(__aV_rename_at_1217_3)) )
         {
-            das_delete_handle<smart_ptr_raw<TypeDecl>>::clear(__context__,(*__aV_rename_at_1184_3));
+            das_delete_handle<smart_ptr_raw<TypeDecl>>::clear(__context__,(*__aV_rename_at_1217_3));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_3));
+        __aV_iterator.close(__context__,(__aV_rename_at_1217_3));
     };
-    builtin_array_free(das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__a_rename_at_1182_2),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__a_rename_at_1215_2),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline char * _FuncastTickdescribe_cppTick8220285150532477039_64c421c61ecd7262 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_43_4, bool __substitureRef_rename_at_43_5, bool __skipRef_rename_at_43_6, bool __skipConst_rename_at_43_7, bool __redundantConst_rename_at_43_8, bool __chooseSmartPtr_rename_at_43_9 )
+inline char * _FuncastTickdescribe_cppTick8220285150532477039_79810cc90c7d7683 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_43_4, bool __substitureRef_rename_at_43_5, bool __skipRef_rename_at_43_6, bool __skipConst_rename_at_43_7, bool __redundantConst_rename_at_43_8, bool __chooseSmartPtr_rename_at_43_9 )
 {
     return das_auto_cast<char *>::cast(((char * const )(ast_describe_typedecl_cpp(__decl_rename_at_43_4,__substitureRef_rename_at_43_5,__skipRef_rename_at_43_6,__skipConst_rename_at_43_7,__redundantConst_rename_at_43_8,__chooseSmartPtr_rename_at_43_9,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_b3fa6014e447ff2d ( Context * __context__, TArray<AutoTuple<char *,int32_t>> &  __Arr_rename_at_181_10, AutoTuple<char *,int32_t> &  __value_rename_at_181_11 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_533481f1cfa8d26c ( Context * __context__, TArray<AutoTuple<char *,int32_t>> &  __Arr_rename_at_181_10, AutoTuple<char *,int32_t> &  __value_rename_at_181_11 )
 {
     das_copy(__Arr_rename_at_181_10(builtin_array_push_back(das_arg<TArray<AutoTuple<char *,int32_t>>>::pass(__Arr_rename_at_181_10),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_11);
 }
 
-inline void _FuncbuiltinTickpush_cloneTick15769051505004837089_338aab8aa242d2bb ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> &  __Arr_rename_at_361_12, smart_ptr_raw<TypeDecl> const  __value_rename_at_361_13 )
+inline void _FuncbuiltinTickpush_cloneTick15769051505004837089_962ffc2c15cf6636 ( Context * __context__, TArray<smart_ptr_raw<TypeDecl>> &  __Arr_rename_at_361_12, smart_ptr_raw<TypeDecl> const  __value_rename_at_361_13 )
 {
-    clone_c29a2ce3ce04a328(__context__,__Arr_rename_at_361_12(builtin_array_push_back_zero(das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__Arr_rename_at_361_12),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_361_13);
+    clone_aa3bc17949e1cf77(__context__,__Arr_rename_at_361_12(builtin_array_push_back_zero(das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__Arr_rename_at_361_12),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_361_13);
 }
 
-inline void log_cpp_class_method_307c561cdfa4a8db ( Context * __context__, FILE const  * const  __cpp_file_rename_at_15_14, char * const  __name_rename_at_15_15, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_15_16 )
+inline void log_cpp_class_method_76fa28d7a8658213 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_15_14, char * const  __name_rename_at_15_15, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_15_16 )
 {
     smart_ptr_raw<TypeDecl> __cft_rename_at_16_17; memset((void*)&__cft_rename_at_16_17,0,sizeof(__cft_rename_at_16_17));
     char * __rettd_rename_at_18_18; memset((void*)&__rettd_rename_at_18_18,0,sizeof(__rettd_rename_at_18_18));
@@ -248,7 +248,7 @@ inline void log_cpp_class_method_307c561cdfa4a8db ( Context * __context__, FILE 
     /* end finally */ });
     __cft_rename_at_16_17; das_zero(__cft_rename_at_16_17); das_move(__cft_rename_at_16_17, clone_type(__fntype_rename_at_15_16->firstType /*firstType*/));
     __cft_rename_at_16_17->flags /*flags*/ |= 0x800u;
-    __rettd_rename_at_18_18 = ((char *)(char *)(_FuncastTickdescribe_cppTick8220285150532477039_64c421c61ecd7262(__context__,__cft_rename_at_16_17,false,false,false,true,true)));
+    __rettd_rename_at_18_18 = ((char *)(char *)(_FuncastTickdescribe_cppTick8220285150532477039_79810cc90c7d7683(__context__,__cft_rename_at_16_17,false,false,false,true,true)));
     builtin_fwrite(__cpp_file_rename_at_15_14,das_string_builder_temp(__context__,SimNode_AotInterop<4>(__tinfo_0, cast<char * const >::from(__rettd_rename_at_18_18), cast<char * const >::from(((char *) " ")), cast<char * const >::from(__name_rename_at_15_15), cast<char * const >::from(((char *) " ( Context * __context__, Func __funcCall__")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     {
         bool __need_loop_20 = true;
@@ -271,7 +271,7 @@ inline void log_cpp_class_method_307c561cdfa4a8db ( Context * __context__, FILE 
             {
                 builtin_fwrite(__cpp_file_rename_at_15_14,((char *) "void * "),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             } else {
-                __argtd_rename_at_25_28 = ((char *)(char *)(_FuncastTickdescribe_cppTick8220285150532477039_64c421c61ecd7262(__context__,(*__argT_rename_at_20_26),false,false,false,true,true)));
+                __argtd_rename_at_25_28 = ((char *)(char *)(_FuncastTickdescribe_cppTick8220285150532477039_79810cc90c7d7683(__context__,(*__argT_rename_at_20_26),false,false,false,true,true)));
                 builtin_fwrite(__cpp_file_rename_at_15_14,das_string_builder_temp(__context__,SimNode_AotInterop<2>(__tinfo_1, cast<char * const >::from(__argtd_rename_at_25_28), cast<char * const >::from(((char *) " ")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
                 if ( ((das_deref(__context__,(*__argT_rename_at_20_26))).isRefType()) )
                 {
@@ -287,11 +287,11 @@ inline void log_cpp_class_method_307c561cdfa4a8db ( Context * __context__, FILE 
     builtin_fwrite(__cpp_file_rename_at_15_14,((char *) " )"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void log_cpp_class_method_call_811ba437c8a50b47 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_36_29, char * const  __name_rename_at_36_30, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_36_31 )
+inline void log_cpp_class_method_call_76fa28d7a8658213 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_36_29, char * const  __name_rename_at_36_30, smart_ptr_raw<TypeDecl> const  __fntype_rename_at_36_31 )
 {
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_39_63_48; _temp_make_local_39_63_48;
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_54_40_144; _temp_make_local_54_40_144;
-    char * __rettd_rename_at_37_32 = ((char *)(char *)(_FuncastTickdescribe_cppTick8220285150532477039_64c421c61ecd7262(__context__,__fntype_rename_at_36_31->firstType /*firstType*/,false,false,false,true,true)));
+    char * __rettd_rename_at_37_32 = ((char *)(char *)(_FuncastTickdescribe_cppTick8220285150532477039_79810cc90c7d7683(__context__,__fntype_rename_at_36_31->firstType /*firstType*/,false,false,false,true,true)));
     builtin_fwrite(__cpp_file_rename_at_36_29,das_string_builder_temp(__context__,SimNode_AotInterop<3>(__tinfo_3, cast<char * const >::from(((char *) "das_invoke_function<")), cast<char * const >::from(__rettd_rename_at_37_32), cast<char * const >::from(((char *) ">::invoke\n      <")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     {
         bool __need_loop_39 = true;
@@ -317,7 +317,7 @@ inline void log_cpp_class_method_call_811ba437c8a50b47 ( Context * __context__, 
             {
                 builtin_fwrite(__cpp_file_rename_at_36_29,((char *) "void *"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             } else {
-                char * __argtd_rename_at_46_42 = ((char *)(char *)(_FuncastTickdescribe_cppTick8220285150532477039_64c421c61ecd7262(__context__,(*__argT_rename_at_39_40),false,false,false,true,true)));
+                char * __argtd_rename_at_46_42 = ((char *)(char *)(_FuncastTickdescribe_cppTick8220285150532477039_79810cc90c7d7683(__context__,(*__argT_rename_at_39_40),false,false,false,true,true)));
                 builtin_fwrite(__cpp_file_rename_at_36_29,das_string_builder_temp(__context__,SimNode_AotInterop<1>(__tinfo_4, cast<char * const >::from(__argtd_rename_at_46_42))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
                 if ( ((das_deref(__context__,(*__argT_rename_at_39_40))).isRefType()) )
                 {
@@ -358,7 +358,7 @@ inline void log_cpp_class_method_call_811ba437c8a50b47 ( Context * __context__, 
     };
 }
 
-inline void log_cpp_class_adapter_92277e6cbae7f863 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_66_47, char * const  __name_rename_at_66_48, smart_ptr_raw<TypeDecl> const  __cinfo_rename_at_66_49 )
+inline void log_cpp_class_adapter_76fa28d7a8658213 ( Context * __context__, FILE const  * const  __cpp_file_rename_at_66_47, char * const  __name_rename_at_66_48, smart_ptr_raw<TypeDecl> const  __cinfo_rename_at_66_49 )
 {
     TArray<AutoTuple<char *,int32_t>> __methods_rename_at_72_50; memset((void*)&__methods_rename_at_72_50,0,sizeof(__methods_rename_at_72_50));
     TArray<smart_ptr_raw<TypeDecl>> __types_rename_at_73_51; memset((void*)&__types_rename_at_73_51,0,sizeof(__types_rename_at_73_51));
@@ -367,7 +367,7 @@ inline void log_cpp_class_adapter_92277e6cbae7f863 ( Context * __context__, FILE
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_85_29_272; _temp_make_local_85_29_272;
     Sequence DAS_COMMENT((int32_t)) _temp_make_local_93_29_320; _temp_make_local_93_29_320;
     /* finally */ auto __finally_66= das_finally([&](){
-    _FuncbuiltinTickfinalizeTick13836114024949725080_615e0425516708d9(__context__,das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__types_rename_at_73_51));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_976f9f8d3c51340f(__context__,das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__types_rename_at_73_51));
     /* end finally */ });
     DAS_ASSERTF((((das_deref(__context__,__cinfo_rename_at_66_49)).isClass())),(((char *) "can only make adapter out of a class")));
     das_zero(__methods_rename_at_72_50);
@@ -389,12 +389,12 @@ inline void log_cpp_class_adapter_92277e6cbae7f863 ( Context * __context__, FILE
                 continue;
             } else {
                 AutoTuple<char *,int32_t> _temp_make_local_78_23_240; _temp_make_local_78_23_240;
-                _FuncbuiltinTickpushTick10769833213962245646_b3fa6014e447ff2d(__context__,das_arg<TArray<AutoTuple<char *,int32_t>>>::pass(__methods_rename_at_72_50),das_arg<AutoTuple<char *,int32_t>>::pass((([&]() -> AutoTuple<char *,int32_t>& {
+                _FuncbuiltinTickpushTick10769833213962245646_533481f1cfa8d26c(__context__,das_arg<TArray<AutoTuple<char *,int32_t>>>::pass(__methods_rename_at_72_50),das_arg<AutoTuple<char *,int32_t>>::pass((([&]() -> AutoTuple<char *,int32_t>& {
                     das_get_auto_tuple_field<char *,0,char *,int32_t>::get(_temp_make_local_78_23_240) = das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_6, cast<das::string const  &>::from((*__fld_rename_at_74_54).name /*name*/)));
                     das_get_auto_tuple_field<int32_t,1,char *,int32_t>::get(_temp_make_local_78_23_240) = __idx_rename_at_74_55;
                     return _temp_make_local_78_23_240;
                 })())));
-                _FuncbuiltinTickpush_cloneTick15769051505004837089_338aab8aa242d2bb(__context__,das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__types_rename_at_73_51),(*__fld_rename_at_74_54).type /*_type*/);
+                _FuncbuiltinTickpush_cloneTick15769051505004837089_962ffc2c15cf6636(__context__,das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__types_rename_at_73_51),(*__fld_rename_at_74_54).type /*_type*/);
             };
         }
         __fld_iterator.close(__context__,(__fld_rename_at_74_54));
@@ -460,14 +460,14 @@ inline void log_cpp_class_adapter_92277e6cbae7f863 ( Context * __context__, FILE
             builtin_fwrite(__cpp_file_rename_at_66_47,das_string_builder_temp(__context__,SimNode_AotInterop<3>(__tinfo_13, cast<char * const >::from(((char *) "    return getDasClassMethod(self,_das_class_method_offset[__fn_")), cast<char *>::from(das_get_auto_tuple_field<char *,0,char *,int32_t>::get((*__mn_rename_at_97_67))), cast<char * const >::from(((char *) "]);\n")))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             builtin_fwrite(__cpp_file_rename_at_66_47,((char *) "  }\n"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             builtin_fwrite(__cpp_file_rename_at_66_47,((char *) "  __forceinline "),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-            log_cpp_class_method_307c561cdfa4a8db(__context__,__cpp_file_rename_at_66_47,das_string_builder(__context__,SimNode_AotInterop<2>(__tinfo_14, cast<char * const >::from(((char *) "invoke_")), cast<char *>::from(das_get_auto_tuple_field<char *,0,char *,int32_t>::get((*__mn_rename_at_97_67))))),(*__mt_rename_at_97_68));
+            log_cpp_class_method_76fa28d7a8658213(__context__,__cpp_file_rename_at_66_47,das_string_builder(__context__,SimNode_AotInterop<2>(__tinfo_14, cast<char * const >::from(((char *) "invoke_")), cast<char *>::from(das_get_auto_tuple_field<char *,0,char *,int32_t>::get((*__mn_rename_at_97_67))))),(*__mt_rename_at_97_68));
             builtin_fwrite(__cpp_file_rename_at_66_47,((char *) " const {\n"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             builtin_fwrite(__cpp_file_rename_at_66_47,((char *) "    "),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             if ( !((das_deref(__context__,(*__mt_rename_at_97_68)->firstType /*firstType*/)).isVoid()) )
             {
                 builtin_fwrite(__cpp_file_rename_at_66_47,((char *) "return "),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             };
-            log_cpp_class_method_call_811ba437c8a50b47(__context__,__cpp_file_rename_at_66_47,das_get_auto_tuple_field<char *,0,char *,int32_t>::get((*__mn_rename_at_97_67)),(*__mt_rename_at_97_68));
+            log_cpp_class_method_call_76fa28d7a8658213(__context__,__cpp_file_rename_at_66_47,das_get_auto_tuple_field<char *,0,char *,int32_t>::get((*__mn_rename_at_97_67)),(*__mt_rename_at_97_68));
             builtin_fwrite(__cpp_file_rename_at_66_47,((char *) ";\n"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             builtin_fwrite(__cpp_file_rename_at_66_47,((char *) "  }\n"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
         }
@@ -475,33 +475,33 @@ inline void log_cpp_class_adapter_92277e6cbae7f863 ( Context * __context__, FILE
         __mt_iterator.close(__context__,(__mt_rename_at_97_68));
     };
     builtin_fwrite(__cpp_file_rename_at_66_47,((char *) "};\n\n"),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    _FuncbuiltinTickfinalizeTick13836114024949725080_615e0425516708d9(__context__,das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__types_rename_at_73_51));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_976f9f8d3c51340f(__context__,das_arg<TArray<smart_ptr_raw<TypeDecl>>>::pass(__types_rename_at_73_51));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xa6586de04a0e7816] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&clone_c29a2ce3ce04a328>>();
+    aotLib[0xea54cd12ae312ae0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&clone_aa3bc17949e1cf77>>();
     };
-    aotLib[0x36832c0122a65a24] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_615e0425516708d9>>();
+    aotLib[0xdc7feac4bba2cae5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_976f9f8d3c51340f>>();
     };
-    aotLib[0xaef82688fd0c9c40] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribe_cppTick8220285150532477039_64c421c61ecd7262>>();
+    aotLib[0x492c93ff54a60977] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribe_cppTick8220285150532477039_79810cc90c7d7683>>();
     };
-    aotLib[0x28a367e82588d43d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_b3fa6014e447ff2d>>();
+    aotLib[0xa29da59ab899a542] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_533481f1cfa8d26c>>();
     };
-    aotLib[0x65b03675437c90e9] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpush_cloneTick15769051505004837089_338aab8aa242d2bb>>();
+    aotLib[0xcc67015c286ac0c5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpush_cloneTick15769051505004837089_962ffc2c15cf6636>>();
     };
-    aotLib[0x73b9b7466a89eca0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&log_cpp_class_method_307c561cdfa4a8db>>();
+    aotLib[0xeeddc90916f180e1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&log_cpp_class_method_76fa28d7a8658213>>();
     };
-    aotLib[0xe890efab589dbb45] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&log_cpp_class_method_call_811ba437c8a50b47>>();
+    aotLib[0xeeddc90916f180e1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&log_cpp_class_method_call_76fa28d7a8658213>>();
     };
-    aotLib[0xbc45178c1c5cf58f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&log_cpp_class_adapter_92277e6cbae7f863>>();
+    aotLib[0xbdd96dc40a1f003d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&log_cpp_class_adapter_76fa28d7a8658213>>();
     };
     resolveTypeInfoAnnotations();
 }
