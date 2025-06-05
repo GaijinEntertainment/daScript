@@ -5,7 +5,7 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/das_common.h"
 #include "daScript/simulate/aot_builtin_string.h"
-#include "daScript/simulate/aot_builtin_fio.h"
+#include "daScript/simulate/aot_builtin_uriparser.h"
 
 #include "../parser/parser_state.h"
 
@@ -918,6 +918,19 @@ namespace das {
         return true;
     }
 
+    static uint64_t normalizedPathHash(const string &path, const string &base) {
+        auto urlBase = from_file_name(base.c_str());
+        auto urlPath = from_file_name(path.c_str());
+        urlBase.normalize();
+        urlPath.normalize();
+
+        auto urlRelPath = urlPath.removeBaseUri(urlBase);
+        urlRelPath.normalize();
+
+        auto relPath = (urlRelPath.status() != URI_SUCCESS ? urlPath : urlRelPath).toUnixFileName();
+        return hash_blockz64(reinterpret_cast<const uint8_t *>(relPath.c_str()));
+    }
+
     ProgramPtr compileDaScript ( const string & fileName,
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
@@ -1042,9 +1055,8 @@ namespace das {
             }
             if ( !res->failed() ) {
                 const uint64_t fnv_prime = 1099511628211ul;
-
-                auto relPath = builtin_proximate(fileName.c_str(), getDasRoot().c_str());
-                auto hf = res->getInitSemanticHashWithDep(fnv_prime) ^ hash_blockz64(reinterpret_cast<const uint8_t *>(relPath.c_str()));
+                const auto relPathHash = normalizedPathHash(fileName, getDasRoot());
+                auto hf = res->getInitSemanticHashWithDep(fnv_prime) ^ relPathHash;
                 res->thisNamespace = "_anon_" + to_string(hf);
             }
             if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
