@@ -139,6 +139,7 @@ namespace das {
     int builtin_popen_binary ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool has_env_variable ( const char * var ) GENERATE_IO_STUB
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
 #undef GENERATE_IO_STUB
@@ -575,6 +576,12 @@ namespace das {
         return rename(old_path, new_path) == 0;
     }
 
+    bool has_env_variable ( const char * var ) {
+        if ( !var ) return false;
+        auto res = getenv(var);
+        return res != nullptr;
+    }
+
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) {
         if ( !var ) return nullptr;
         auto res = getenv(var);
@@ -718,6 +725,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(get_env_variable)>(*this, lib, "get_env_variable",
                 SideEffects::accessExternal, "get_env_variable")
                     ->args({"var","context","at"});
+            addExtern<DAS_BIND_FUN(has_env_variable)>(*this, lib, "has_env_variable",
+                SideEffects::accessExternal, "has_env_variable")
+                    ->arg("var");
             addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
                 SideEffects::none, "sanitize_command_line")
                     ->args({"var","context","at"});
