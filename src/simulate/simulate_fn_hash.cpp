@@ -274,7 +274,8 @@ namespace das {
         uvec.push_back(initHash);
         for ( const auto & fn : vec ) {
             if ( !fn.first->noAot ) {
-                uvec.push_back(fn.first->hash);
+                DAS_ASSERT(fn.first->aotHash != 0);
+                uvec.push_back(fn.first->aotHash);
             }
         }
         return hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));

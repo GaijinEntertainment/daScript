@@ -3615,9 +3615,10 @@ namespace das {
             hash = (hash ^ (globalVariables[i].shared ? 13 : 17)) * fnv_prime;
             hash = (hash ^ globalVariables[i].mangledNameHash) * fnv_prime;
             hash = (hash ^ globalVariables[i].size) * fnv_prime;
-            if ( globalVariables[i].init ) {
-                hash = (hash ^ getSemanticHash(globalVariables[i].init,this)) * fnv_prime;
-            }
+            // // Hashing mangledName is enough to avoid collisions.
+            // if ( globalVariables[i].init ) {
+            //     hash = (hash ^ getSemanticHash(globalVariables[i].init,this)) * fnv_prime;
+            // }
         }
         return hash;
     }
