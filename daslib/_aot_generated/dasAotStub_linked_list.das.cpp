@@ -315,7 +315,7 @@ void __init_script ( Context * __context__, bool __init_shared )
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
     // [[ init script ]]
-    aotLib[0x8fd3c5530a4c0eb6] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x648d516376085587] = +[](Context & ctx) -> SimNode* {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };

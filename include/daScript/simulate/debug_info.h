@@ -280,6 +280,7 @@ namespace das
         TypeInfo *                  secondType;             // map  to
         TypeInfo **                 argTypes;
         const char **               argNames;
+        const char *                cppTypeName;
         uint32_t *                  dim;
         uint64_t                    hash;
         Type                        type;
@@ -355,6 +356,7 @@ namespace das
         ,   flag_lockCheck =    (1<<4)
         };
         const char* name;
+        const char* cppTypeName;
         const char* module_name;
         VarInfo **  fields;
         void *      annotation_list;

@@ -3,6 +3,8 @@
 #include "daScript/ast/ast.h"
 #include "daScript/simulate/hash.h"
 
+#include <cinttypes>
+
 namespace das {
 
 #if 1
@@ -30,14 +32,14 @@ namespace das {
             while ( size-- ) {
                 offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
             }
-            debug_hash("%llx ", offset_basis);
+            debug_hash("%" PRIx64 " ", offset_basis);
         }
         __forceinline void write ( const void * pb ) {
             const uint8_t * block = (const uint8_t *) pb;
             for (; *block; block++) {
                 offset_basis = ( offset_basis ^ *block ) * fnv_prime;
             }
-            debug_hash("[%s] %llx ", (const char *) pb, offset_basis);
+            debug_hash("[%s] %" PRIx64 " ", (const char *) pb, offset_basis);
         }
         __forceinline uint64_t getHash() const  {
             return (offset_basis <= 1) ? fnv_prime : offset_basis;
@@ -113,18 +115,30 @@ namespace das {
         return hashV.getHash();
     }
 
-    uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context ) {
+    static void fillFunctionTypesHash( SimFnHashVisitor &hashV, Function * fun, SimNode * node ) {
         debug_hash("\n%s\n", fun->getMangledName().c_str());
-        SimFnHashVisitor hashV(context);
         // append return type and result type
         uint64_t resT = fun->result->getSemanticHash();
         hashV.write(&resT, sizeof(uint64_t));
-        debug_hash("\nresult <%s> = %llx\n", fun->result->getMangledName().c_str(), resT);
+        debug_hash("\nresult <%s> = %" PRIx64 "\n", fun->result->getMangledName().c_str(), resT);
         for ( auto & arg : fun->arguments ) {
             uint64_t argT = arg->type->getSemanticHash();
             hashV.write(&argT, sizeof(argT));
-            debug_hash("arg %s <%s> = %llx\n", arg->type->getMangledName().c_str(), arg->name.c_str(), argT);
+            debug_hash("arg %s <%s> = %" PRIx64 "\n", arg->type->getMangledName().c_str(), arg->name.c_str(), argT);
         }
+    }
+
+    uint64_t getFunctionSignatureHash( Function * fun, SimNode * node, Context * context ) {
+        SimFnHashVisitor hashV(context);
+        fillFunctionTypesHash(hashV, fun, node);
+        uint64_t res = hashV.getHash();
+        debug_hash("\n%s = %" PRIx64 "\n", fun->getMangledName().c_str(), res);
+        return res;
+    }
+
+    uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context ) {
+        SimFnHashVisitor hashV(context);
+        fillFunctionTypesHash(hashV, fun, node);
         // append code
         node->visit(hashV);
         if ( fun->aotHashDeppendsOnArguments ) {
@@ -138,7 +152,7 @@ namespace das {
             }
         }
         uint64_t res = hashV.getHash();
-        debug_hash("\n%s = %llx\n", fun->getMangledName().c_str(), res);
+        debug_hash("\n%s = %" PRIx64 "\n", fun->getMangledName().c_str(), res);
         return res;
     }
 
@@ -234,18 +248,18 @@ namespace das {
         auto vec = collector.getStableDependencies();
         vector<uint64_t> uvec;
         uvec.reserve(vec.size() + 1);
-        debug_aot_hash("HASH %s %llx\n", fun->getMangledName().c_str(), fun->hash);
+        debug_aot_hash("HASH %s %" PRIx64 "\n", fun->getMangledName().c_str(), fun->hash);
         uvec.push_back(fun->hash);
         for ( const auto & fn : vec ) {
             if ( !fn.first->noAot &&!fn.first->builtIn ) {
                 DAS_ASSERTF(fn.first->hash,"%s has dependency on %s, which hash hash of 0",
                     fun->getMangledName().c_str(), fn.first->getMangledName().c_str());
                 uvec.push_back(fn.first->hash);
-                debug_aot_hash("\t%s %llx\n", fn.second.c_str(), fn.first->hash);
+                debug_aot_hash("\t%s " PRIx64 "\n", fn.second.c_str(), fn.first->hash);
             }
         }
         uint64_t res = hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));
-        debug_aot_hash("AOT HASH %llx\n", res);
+        debug_aot_hash("AOT HASH %" PRIx64 "\n", res);
         return res;
     }
 
@@ -260,7 +274,8 @@ namespace das {
         uvec.push_back(initHash);
         for ( const auto & fn : vec ) {
             if ( !fn.first->noAot ) {
-                uvec.push_back(fn.first->hash);
+                DAS_ASSERT(fn.first->aotHash != 0);
+                uvec.push_back(fn.first->aotHash);
             }
         }
         return hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));

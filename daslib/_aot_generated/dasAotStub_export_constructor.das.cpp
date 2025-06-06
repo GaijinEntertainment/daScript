@@ -260,29 +260,29 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_7af251da517ddbb8 ( Context * __context__, TArray<ast::AstStructureAnnotation *> & __Arr_rename_at_181_0, ast::AstStructureAnnotation * __value_rename_at_181_1 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4b3226536e1372a0 ( Context * __context__, export_constructor::ExportConstructor const  & __cl_rename_at_116_2 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_d8d4a649436ee872 ( Context * __context__, TArray<ast::AstStructureAnnotation *> & __Arr_rename_at_181_0, ast::AstStructureAnnotation * __value_rename_at_181_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9743b9114b1d8301 ( Context * __context__, export_constructor::ExportConstructor const  & __cl_rename_at_116_2 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_7af251da517ddbb8 ( Context * __context__, TArray<ast::AstStructureAnnotation *> &  __Arr_rename_at_181_0, ast::AstStructureAnnotation * __value_rename_at_181_1 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_d8d4a649436ee872 ( Context * __context__, TArray<ast::AstStructureAnnotation *> &  __Arr_rename_at_181_0, ast::AstStructureAnnotation * __value_rename_at_181_1 )
 {
     das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstStructureAnnotation *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4b3226536e1372a0 ( Context * __context__, export_constructor::ExportConstructor const  &  __cl_rename_at_116_2 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9743b9114b1d8301 ( Context * __context__, export_constructor::ExportConstructor const  &  __cl_rename_at_116_2 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xa23a03df76258238] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_7af251da517ddbb8>>();
+    aotLib[0x3bf923f191424a6f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_d8d4a649436ee872>>();
     };
-    aotLib[0xa59bc48c710c66b4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_4b3226536e1372a0>>();
+    aotLib[0x344b904470757f8e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_9743b9114b1d8301>>();
     };
     resolveTypeInfoAnnotations();
 }
