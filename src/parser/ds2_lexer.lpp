@@ -175,7 +175,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return END_STRING;
 }
 <strb>\{                {
-    DAS_ASSERT(yyextra->das_nested_sb==0);
+    if ( yyextra->das_nested_sb ) {
+        das2_yyfatalerror(yylloc_param,yyscanner,"nested string constants are not allowed", CompilationError::nested_string_constant);
+        BEGIN(normal);
+        return END_STRING;
+    }
     yyextra->das_nested_sb ++;
     BEGIN(normal);
     return BEGIN_STRING_EXPR;
