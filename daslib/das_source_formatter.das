@@ -1096,6 +1096,11 @@ def fmt_space_after_keyword(var ctx : FormatterCtx) {
                 ctx |> add_space_before(i + 1)
             }
         }
+        if (ctx.tokens[i].spaces >= 2 && ctx.tokens[i].str == "match" && ((ctx.tokens[i + 1].str == "(" && !ctx.tokens[i + 1].isInFunctionParam))) {
+            if (!new_line_before(ctx, i + 1)) {
+                ctx |> add_space_before(i + 1)
+            }
+        }
         // add space only after 'return <expr>' expression
         if (ctx.tokens[i].str == "return" && length(ctx.tokens[i + 1].str) > 0) {
             if (!new_line_before(ctx, i + 1)) {

@@ -32,7 +32,7 @@ struct AB {
 
 [sideeffects]
 def enum_match(color : Color) {
-    match(color) {
+    match (color) {
         if (Color.black) {
             return 0
         }
@@ -74,7 +74,7 @@ def static_match_by_type(what) {
 
 [sideeffects]
 def struct_match(f : Foo) {
-    match(f) {
+    match (f) {
         if (Foo(a = 13)) {
             return 0
         }
@@ -86,7 +86,7 @@ def struct_match(f : Foo) {
 
 [sideeffects]
 def struct_match(b : Bar) {
-    match(b) {
+    match (b) {
         if (Bar(a = 13)) {
             return 0
         }
@@ -101,7 +101,7 @@ def struct_match(b : Bar) {
 
 [sideeffects]
 def guards_match(ab : AB) {
-    match(ab) {
+    match (ab) {
         if (AB(a = $v(a), b = $v(b)) && (b > a)) {
             return "{b} > {a}"
         }
@@ -113,7 +113,7 @@ def guards_match(ab : AB) {
 
 [sideeffects]
 def variant_as_match(v : IF) {
-    match(v) {
+    match (v) {
         if ($v(i) as i) {
             return "int"
         }
@@ -128,7 +128,7 @@ def variant_as_match(v : IF) {
 
 [sideeffects]
 def nested_struct_match(v : Foo) {
-    match(v) {
+    match (v) {
         if (Foo(a = 1, v = $v(i) as i)) {
             return 1
         }
@@ -143,7 +143,7 @@ def nested_struct_match(v : Foo) {
 
 [sideeffects]
 def variant_match(v : IF) {
-    match(v) {
+    match (v) {
         if (IF(i = $v(i))) {
             return 1
         }
@@ -158,7 +158,7 @@ def variant_match(v : IF) {
 
 [sideeffects]
 def static_array_match(A : int[3]) {
-    match(A) {
+    match (A) {
         if (fixed_array($v(a), $v(b), $v(c)) && (a + b + c) == 6) { // total of 3 elements, sum is 6
             return 1
         }
@@ -179,7 +179,7 @@ def static_array_match(A : int[3]) {
 
 [sideeffects]
 def dynamic_array_match(A : array<int>) {
-    match(A) {
+    match (A) {
         if ([ $v(a), $v(b), $v(c)] && (a + b + c) == 6) {// total of 3 elements, sum is 6
             return 1
         }
@@ -201,7 +201,7 @@ def dynamic_array_match(A : array<int>) {
 
 [sideeffects]
 def ascending_array_match(A : int[3]) {
-    match(A) {
+    match (A) {
         if (fixed_array<int>($v(x), match_expr(x + 1), match_expr(x + 2))) {
             return true
         }
@@ -213,7 +213,7 @@ def ascending_array_match(A : int[3]) {
 
 [sideeffects]
 def tuple_match(A : tuple<int; float; string>) {
-    match(A) {
+    match (A) {
         if ((1, _, "3")) {
             return 1
         }
@@ -234,7 +234,7 @@ def tuple_match(A : tuple<int; float; string>) {
 
 [sideeffects]
 def or_match(i : int) {
-    match(i) {
+    match (i) {
         if (1 || 2) {
             return true
         }
@@ -246,7 +246,7 @@ def or_match(i : int) {
 
 [sideeffects]
 def or_match_v(B : Bar) {
-    match(B) {
+    match (B) {
         if (Bar(a = 1, b = $v(b)) || Bar(a = 2, b = $v(b))) {
             return b
         }
@@ -258,7 +258,7 @@ def or_match_v(B : Bar) {
 
 [sideeffects]
 def struct_ptr_match(f : Foo?) {
-    match(f) {
+    match (f) {
         if (null) {
             return -1
         }
@@ -276,7 +276,7 @@ def struct_ptr_match(f : Foo?) {
 
 [sideeffects]
 def match_handle_ptr(T : TypeDeclPtr) {
-    match(T) {
+    match (T) {
         if (null) {
             return "null"
         }
@@ -291,7 +291,7 @@ def match_handle_ptr(T : TypeDeclPtr) {
 
 [sideeffects]
 def match_ast_expr_ptr(E : ExpressionPtr) {
-    match(E) {
+    match (E) {
         if (null) {
             return "null"
         }
@@ -344,7 +344,7 @@ def operator as CmdMove(anything) {
 
 [sideeffects]
 def matching_as_and_is(cmd : Cmd) {
-    match(cmd) {
+    match (cmd) {
         if (CmdMove(x = $v(x), y = $v(y))) {
             return x + y
         }
@@ -356,7 +356,7 @@ def matching_as_and_is(cmd : Cmd) {
 
 [sideeffects]
 def matching_type_as_is(cmd : Cmd) {
-    match(cmd) {
+    match (cmd) {
         if (match_type(type<CmdMove>, $v(cmdm))) {
             return cmdm.x + cmdm.y
         }
@@ -386,7 +386,7 @@ def match_copy(var cmdm : CmdLocate; cmd : Cmd) {
 
 [sideeffects]
 def matching_copy(cmd : Cmd) {
-    match(cmd) {
+    match (cmd) {
         if (CmdLocate(x = $v(x), y = $v(y), z = $v(z))) {
             return x + y + z
         }
@@ -398,7 +398,7 @@ def matching_copy(cmd : Cmd) {
 
 [sideeffects]
 def matching_type_copy(cmd : Cmd) {
-    match(cmd) {
+    match (cmd) {
         if (match_type(type<CmdLocate>, $v(cmdl))) {
             return cmdl.x + cmdl.y + cmdl.z
         }

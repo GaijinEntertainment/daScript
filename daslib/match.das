@@ -616,7 +616,7 @@ class MatchMacro : AstCallMacro {
         }
     }
     def override visit(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
-        macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting match(what) <| block")
+        macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting match (what) <| block")
         assume what = expr.arguments[0]
         assume blk = expr.arguments[1]
         macro_verify(what._type != null && !what._type.isAutoOrAlias, prog, what.at, "match argument {what.describe()} failed to compile")
