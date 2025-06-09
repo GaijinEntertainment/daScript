@@ -196,7 +196,7 @@ def getT(var st : TokenStream; result : Result) : string {
 }
 
 def func_call_length(var st : TokenStream; result : Result) : Result {
-    match(result.tinfo) {
+    match (result.tinfo) {
         if (TypeInfo(dimSize = $v(dim)) && (dim != 0u)) {
             let idim = result.tinfo |> get_dim(int(result.tinfo.dimSize - 1u))
             return <- Result(int64(idim))
@@ -224,7 +224,7 @@ def func_call(var st : TokenStream; name : string; arg : Result) : Result {
 
 def expr_value(var st : TokenStream) : Result {
     let token = token(st)
-    match(token) {
+    match (token) {
         if (Token(invalid = _)) {
             return st |> error("invalid token {token}, expecting number or (")
         }
@@ -334,7 +334,7 @@ def expr_field(var st : TokenStream) : Result {
         if (field is ident) {
             var oti : tuple<offset : int; tinfo : TypeInfo>
             oti.offset = -1
-            match(result.tinfo) {
+            match (result.tinfo) {
                 if (TypeInfo(dimSize = $v(dimSize)) && (dimSize != 0u)) {
                     return st |> error("can't access field of array")
                 }
@@ -446,7 +446,7 @@ def expr_at(var st : TokenStream) : Result {
             return st |> error("expecting ]")
         }
         var nresult : Result
-        match(result.tinfo) {
+        match (result.tinfo) {
             if (TypeInfo(basicType = Type.tString, dimSize = 0u)) {
                 nresult = opDimString(st, st |> getI(eindex), result)
             }
@@ -472,7 +472,7 @@ def expr_at(var st : TokenStream) : Result {
 
 def expr_unary(var st : TokenStream) : Result {
     let token = token(st)
-    match(token) {
+    match (token) {
         if (Token(punkt = '+')) {
             return Result(st |> getI(expr_unary(st)))
         }
@@ -493,7 +493,7 @@ def expr_unary(var st : TokenStream) : Result {
 def expr_mul_div(var st : TokenStream) : Result {
     var leftValue = expr_unary(st)
     let token = token(st)
-    match(token) {
+    match (token) {
         if (Token(punkt = '*')) {
             return Result(st |> getI(leftValue) * st |> getI(expr_mul_div(st)))
         }
@@ -514,7 +514,7 @@ def expr_mul_div(var st : TokenStream) : Result {
 def expr_add_sub(var st : TokenStream) : Result {
     var leftValue = expr_mul_div(st)
     let token = token(st)
-    match(token) {
+    match (token) {
         if (Token(punkt = '+')) {
             return Result(st |> getI(leftValue) + st |> getI(expr_add_sub(st)))
         }
@@ -577,7 +577,7 @@ def expr_bool_op(var st : TokenStream) : Result {
     var leftValue = expr_or(st)
     let token = token(st)
     let subtoken = token(st)
-    match(token) {
+    match (token) {
         if (Token(punkt = '!') && (subtoken ?as punkt ?? 0 == '=')) {
             return Result(st |> getT(leftValue) != st |> getT(expr_bool_op(st)))
         }

@@ -81,7 +81,7 @@ def accept_option(var gen : ParserGenerator; opt : string) {
 
 
 def rule_left_recursive(name : string; rule : Rule) : bool {
-    match(rule) {
+    match (rule) {
         if (Rule(alt = $v(alts))) {
             for (a in alts) {
                 return true if (rule_left_recursive(name, a.rule.rule))
@@ -395,7 +395,7 @@ def generate_grammar(var gen : ParserGenerator; var gram : array<Definition>; na
 
 
 def get_rule_type(var gen : ParserGenerator; rule : Rule) : TypeDeclPtr {
-    match(rule) {
+    match (rule) {
         if (Rule(nonterminal = $v(nonterm))) {
             return <- gen.rule_types |> get_value_and_clone_type(nonterm)
         }
@@ -427,7 +427,7 @@ def set_rule_handle(var subrule_ : Rule_?; handle : string) {
 
     assume subrule_variant = subrule_.rule
 
-    match(subrule_variant) {
+    match (subrule_variant) {
         if (Rule(nonterminal = $v(nonterm))) {
             unsafe {// Moving values that contain smart pointers is generally unsafe
                    // But here we know that the contained variant is nonterminal (string) and cannot
@@ -438,7 +438,7 @@ def set_rule_handle(var subrule_ : Rule_?; handle : string) {
         }
 
         if (Rule(terminal = $v(term))) {
-            match(term) {
+            match (term) {
                 if (Terminal(lit = $v(l))) {
                     // Something like (*"123" as foo)
                     abort("Matching repeated literals is not allowed")
@@ -503,7 +503,7 @@ def flatten_block(var blk : ExprBlock?) {
 
 
 def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr> {
-    match(rule_) {
+    match (rule_) {
         if (Rule(terminal = $v(term))) {
             var inscope termb <- gen |> generate_terminal(term)
             return <- flatten_block(termb as ExprBlock)
@@ -871,7 +871,7 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
 
 
 def describe_terminal(term : Terminal) : string {
-    match(term) {
+    match (term) {
         if (Terminal(lit = $v(l))) {
             return "{l}"
         }
@@ -935,7 +935,7 @@ def describe_terminal(term : Terminal) : string {
 
 
 def describe_rule(r : Rule_?) : string {
-    match(r.rule) {
+    match (r.rule) {
         if (Rule(terminal = $v(term))) {
             return describe_terminal(term)
         }
@@ -1151,7 +1151,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
     var name = "_terminal_result_{gen.rule_counter["terminal"]++}"
     var inscope return_type <- gen.return_types |> get_value_and_clone_type(gen.current_context)
 
-    match(terminal) {
+    match (terminal) {
         if (Terminal(lit = $v(l))) {
             var precomputed_length = l |> length
 

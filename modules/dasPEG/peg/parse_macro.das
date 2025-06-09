@@ -50,7 +50,7 @@ def add_alternative(var rules : array<MacroRule>; var expr : ExprCall?; prog : P
 
 [macro_function]
 def add_name(var rule : Rule; var name : string) {
-    match(rule) {
+    match (rule) {
         if (Rule(repeat = $v(rep))) {
             rep.name <- name
         }

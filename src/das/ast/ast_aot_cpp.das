@@ -46,7 +46,7 @@ def isSequencialMask(fields : dasvector`uint8) {
 
 
 def das_to_cppString(t : Type) {
-    match(t) {
+    match (t) {
         if (Type.anyArgument) { return "vec4f"; }
         if (Type.tVoid) { return "void"; }
         if (Type.tBool) { return "bool"; }
@@ -85,7 +85,7 @@ def das_to_cppString(t : Type) {
 }
 
 def das_to_cppCTypeString(t : Type) {
-    match(t) {
+    match (t) {
         if (Type.autoinfer) { return "autoinfer"; }
         if (Type.alias) { return "alias"; }
         if (Type.anyArgument) { return "anyArgument"; }
@@ -141,7 +141,7 @@ def das_to_cppCTypeString(t : Type) {
 def isConstRedundantForCpp(typeDecl : TypeDeclPtr) {
     if (!empty(typeDecl.dim)) { return false; }
     if (typeDecl.isVectorType) { return true; }
-    match(typeDecl.baseType) {
+    match (typeDecl.baseType) {
         if (Type.tBool) { return true; }
         if (Type.tInt8) { return true; }
         if (Type.tUInt8) { return true; }
@@ -192,7 +192,7 @@ def aotSuffixNameEx(funcName : das_string; suffix : string) {
             } else {
                 prefix = true;
                 var t_ch : string;
-                match(ch) {
+                match (ch) {
                     if ('=') { t_ch = "Equ"; }
                     if ('+') { t_ch = "Add"; }
                     if ('-') { t_ch = "Sub"; }
@@ -1650,7 +1650,7 @@ class CppAot : AstVisitor {
         } else {
             if (that._type.baseType == Type.tBool) {
                 var op = "";
-                match(string(that.op)) {
+                match (string(that.op)) {
                     if ("&") { op = "&&"; }
                     if ("|") { op = "||"; }
                     if ("^" || "^^") { op = "!="; }
@@ -2360,7 +2360,7 @@ class CppAot : AstVisitor {
         }
         write(*ss, " /*");
         for (f in expr.fields) {
-            match(int(f)) {
+            match (int(f)) {
                 if (0) { write(*ss, "x"); }
                 if (1) { write(*ss, "y"); }
                 if (2) { write(*ss, "z"); }
