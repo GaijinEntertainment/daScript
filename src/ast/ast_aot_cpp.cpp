@@ -647,9 +647,10 @@ namespace das {
             }
             ss << info->count << ", ";
             if (crossPlatform) {
-                const auto typeName = info->cppTypeName;
-                // ss << "[]() constexpr {static_assert(TypeSize<" << typeName << ">::size == " << info->size << ", \"Oh no\"); return TypeSize<" << typeName << ">::size; }()";
-                ss << "TypeSize<" << typeName << ">::size";
+                const auto typeName = s2cppTypeName.find(info);
+                DAS_ASSERT(typeName != s2cppTypeName.end());
+                // ss << "[]() constexpr {static_assert(TypeSize<" << typeName->second << ">::size == " << info->size << ", \"Oh no\"); return TypeSize<" << typeName->second << ">::size; }()";
+                ss << "TypeSize<" << typeName->second << ">::size";
             } else {
                 ss << info->size;
             }
@@ -772,9 +773,10 @@ namespace das {
             }
             ss << ", " << info->flags;
             if (crossPlatform) {
-                const auto typeName = info->cppTypeName;
-                // ss << ", []() constexpr {static_assert(TypeSize<" << typeName << ">::size == " << info->size << ", \"Oh no\"); return TypeSize<" << typeName << ">::size; }()";
-                ss << ", TypeSize<" << typeName << ">::size";
+                const auto typeName = t2cppTypeName.find(info);
+                DAS_ASSERT(typeName!=t2cppTypeName.end());
+                // ss << ", []() constexpr {static_assert(TypeSize<" << typeName->second << ">::size == " << info->size << ", \"Oh no\"); return TypeSize<" << typeName->second << ">::size; }()";
+                ss << ", TypeSize<" << typeName->second << ">::size";
             } else {
                 ss << ", " << info->size;
             }

@@ -280,7 +280,6 @@ namespace das
         TypeInfo *                  secondType;             // map  to
         TypeInfo **                 argTypes;
         const char **               argNames;
-        const char *                cppTypeName;
         uint32_t *                  dim;
         uint64_t                    hash;
         Type                        type;
@@ -300,7 +299,6 @@ namespace das
             secondType         = _secondType;
             argTypes           = _argTypes;
             argNames           = _argNames;
-            cppTypeName        = nullptr;
             argCount           = _argCount;
             dimSize            = _dimSize;
             dim                = _dim;
@@ -357,7 +355,6 @@ namespace das
         ,   flag_lockCheck =    (1<<4)
         };
         const char* name;
-        const char* cppTypeName;
         const char* module_name;
         VarInfo **  fields;
         void *      annotation_list;
@@ -372,7 +369,6 @@ namespace das
             const char * _name, const char * _module_name, uint32_t _flags, VarInfo ** _fields, uint32_t _count,
             uint32_t _size, uint64_t _init_mnh, void * _annotation_list, uint64_t _hash, uint32_t _firstGcField ) {
                 name =            _name;
-                cppTypeName = nullptr;
                 module_name =     _module_name;
                 flags =           _flags;
                 fields =          _fields;

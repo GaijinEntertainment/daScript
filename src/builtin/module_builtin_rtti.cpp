@@ -573,7 +573,6 @@ namespace das {
     struct StructInfoAnnotation : DebugInfoAnnotation<VarInfo,StructInfo> {
         StructInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("StructInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
-            addField<DAS_BIND_MANAGED_FIELD(cppTypeName)>("cppTypeName");
             addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
             addField<DAS_BIND_MANAGED_FIELD(firstGcField)>("firstGcField");
             addFieldEx ( "flags", "flags", offsetof(StructInfo, flags), makeStructInfoFlags());
@@ -642,7 +641,6 @@ namespace das {
 
     struct TypeInfoAnnotation : ManagedTypeInfoAnnotation <TypeInfo> {
         TypeInfoAnnotation(ModuleLibrary & ml) : ManagedTypeInfoAnnotation ("TypeInfo", ml) {
-            addField<DAS_BIND_MANAGED_FIELD(cppTypeName)>("cppTypeName");
             addField<DAS_BIND_MANAGED_FIELD(type)>("_type","type");
             addField<DAS_BIND_MANAGED_FIELD(dim)>("dim");
             addField<DAS_BIND_MANAGED_FIELD(annotation_or_name)>("annotation_or_name");

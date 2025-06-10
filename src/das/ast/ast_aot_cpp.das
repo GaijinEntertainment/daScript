@@ -630,7 +630,7 @@ class AotDebugInfoHelper {
             } else {
                 write(writer, "nullptr, ")
             }
-            let info_size = cross_platform ? "TypeSize<{info.cppTypeName}>::size" : "{info.size:d}";
+            let info_size = cross_platform ? "TypeSize<{helper |> debug_helper_find_struct_cppname(info)}>::size" : "{info.size:d}";
             write(writer, "{info.count:d}, {info_size}, UINT64_C(0x{info.init_mnh:x}), nullptr, UINT64_C(0x{info.hash:x}), {info.firstGcField:d}")
         }
     }
@@ -750,7 +750,7 @@ class AotDebugInfoHelper {
             write(writer, "{unsafe(reinterpret<int>(info.flags))}")
             write_sep();
 
-            let info_size = cross_platform ? "TypeSize<{info.cppTypeName}>::size" : "{info.size:d}";
+            let info_size = cross_platform ? "TypeSize<{helper |> debug_helper_find_type_cppname(info)}>::size" : "{info.size:d}";
             write(writer, "{info_size}")
             write_sep();
             write(writer, "UINT64_C(0x{info.hash:x})");

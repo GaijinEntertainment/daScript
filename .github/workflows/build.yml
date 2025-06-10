@@ -210,7 +210,7 @@ jobs:
                  ':!src/parser/lex2.yy.h' \
                  ':!src/parser/lex.yy.h' \
                  ':!utils/dasFormatter/ds_parser.cpp' \
-            || (echo "Generated code changed! To reproduce use `./bin/daslang dasgen/gen_bind.das` or rebuild `daslang-dev` to regenerate aot files." && exit 1)
+            || (echo "Generated code changed! To reproduce use "./bin/daslang dasgen/gen_bind.das" or rebuild "daslang-dev" to regenerate aot files." && exit 1)
             ;;
         esac
     - name: "Run formatter"
