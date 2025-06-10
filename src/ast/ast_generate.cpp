@@ -1852,7 +1852,7 @@ namespace das {
         return func;
     }
 
-    ExpressionPtr convertToCloneExpr ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl ) {
+    ExpressionPtr convertToCloneExpr ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool ignoreCaptureConst ) {
         bool needIndex = expr->structs.size()>1;
         DAS_ASSERT(expr->block->rtti_isMakeBlock());
         auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
@@ -1863,6 +1863,7 @@ namespace das {
         if ( !needIndex ) {
             auto vself = make_smart<ExprVar>(decl->at, selfName);
             auto fdecl = make_smart<ExprField>(decl->at, vself, decl->name);
+            fdecl->ignoreCaptureConst = ignoreCaptureConst;
             auto op2c = make_smart<ExprClone>(decl->at, fdecl, decl->value->clone());
             return op2c;
         } else {
