@@ -58,7 +58,7 @@
 #endif
 
 namespace das {
-namespace _anon_1280768645085455701 {
+namespace _anon_11044519778267414557 {
 
 namespace ast_debug { struct SampleStackWalker; };
 namespace ast_debug { struct ContextStateAgent; };
@@ -198,8 +198,8 @@ struct DapiDebugAgent {
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocate;
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,void * const ,uint64_t,LineInfo const )) onReallocate;
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFree;
-    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocateString;
-    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFreeString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,bool,LineInfo const )) onAllocateString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,bool,LineInfo const )) onFreeString;
     DebugAgent * thisAgent;
 };
 }
@@ -317,8 +317,8 @@ struct ContextStateAgent {
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocate;
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,void * const ,uint64_t,LineInfo const )) onReallocate;
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFree;
-    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocateString;
-    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFreeString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,bool,LineInfo const )) onAllocateString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,bool,LineInfo const )) onFreeString;
     DebugAgent * thisAgent;
     smart_ptr_raw<StackWalker> walker_adapter;
     ast_debug::SampleStackWalker * walker;
@@ -439,268 +439,268 @@ extern VarInfo __var_info__f396ff83ffb05655;
 extern VarInfo __var_info__ac62bd978c461883;
 extern VarInfo __var_info__632c5e0a5c27b74e;
 
-VarInfo __struct_info__550ac570675ff176_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0x7bd1cab21471ab25), "__rtti", offsetof(ast_debug::ContextStateAgent,__rtti), 24 };
+VarInfo __struct_info__550ac570675ff176_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, TypeSize<void *>::size, UINT64_C(0x7bd1cab21471ab25), "__rtti", offsetof(ast_debug::ContextStateAgent,__rtti), 24 };
 TypeInfo * __type_info__843cfb4112bd698e_arg_types_var_6127927329552331126[1] = { &__type_info__4e03c6707d012d5b };
 const char * __type_info__843cfb4112bd698e_arg_names_var_6127927329552331126[1] = { "self" };
-VarInfo __struct_info__550ac570675ff176_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__843cfb4112bd698e_arg_types_var_6127927329552331126, __type_info__843cfb4112bd698e_arg_names_var_6127927329552331126, 1, 0, nullptr, 12, 8, UINT64_C(0x843cfb4112bd698e), "__finalize", offsetof(ast_debug::ContextStateAgent,__finalize), 0 };
+VarInfo __struct_info__550ac570675ff176_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__843cfb4112bd698e_arg_types_var_6127927329552331126, __type_info__843cfb4112bd698e_arg_names_var_6127927329552331126, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent))>::size, UINT64_C(0x843cfb4112bd698e), "__finalize", offsetof(ast_debug::ContextStateAgent,__finalize), 0 };
 TypeInfo * __type_info__2528f5ed5ae1af35_arg_types_var_6127927329552331126[2] = { &__type_info__4e03c6707d012d5b, &__type_info__209f9e4a9562d5c2 };
 const char * __type_info__2528f5ed5ae1af35_arg_names_var_6127927329552331126[2] = { "self", "agent" };
-VarInfo __struct_info__550ac570675ff176_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__2528f5ed5ae1af35_arg_types_var_6127927329552331126, __type_info__2528f5ed5ae1af35_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, 8, UINT64_C(0x2528f5ed5ae1af35), "onInstall", offsetof(ast_debug::ContextStateAgent,onInstall), 0 };
+VarInfo __struct_info__550ac570675ff176_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__2528f5ed5ae1af35_arg_types_var_6127927329552331126, __type_info__2528f5ed5ae1af35_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const ))>::size, UINT64_C(0x2528f5ed5ae1af35), "onInstall", offsetof(ast_debug::ContextStateAgent,onInstall), 0 };
 TypeInfo * __type_info__a6e377cff2c5dc41_arg_types_var_6127927329552331126[2] = { &__type_info__4e03c6707d012d5b, &__type_info__209f9e4a9562d5c2 };
 const char * __type_info__a6e377cff2c5dc41_arg_names_var_6127927329552331126[2] = { "self", "agent" };
-VarInfo __struct_info__550ac570675ff176_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__a6e377cff2c5dc41_arg_types_var_6127927329552331126, __type_info__a6e377cff2c5dc41_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, 8, UINT64_C(0xa6e377cff2c5dc41), "onUninstall", offsetof(ast_debug::ContextStateAgent,onUninstall), 0 };
+VarInfo __struct_info__550ac570675ff176_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__a6e377cff2c5dc41_arg_types_var_6127927329552331126, __type_info__a6e377cff2c5dc41_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const ))>::size, UINT64_C(0xa6e377cff2c5dc41), "onUninstall", offsetof(ast_debug::ContextStateAgent,onUninstall), 0 };
 TypeInfo * __type_info__d8ea5eff76ca2a64_arg_types_var_6127927329552331126[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__d8ea5eff76ca2a64_arg_names_var_6127927329552331126[2] = { "self", "ctx" };
-VarInfo __struct_info__550ac570675ff176_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d8ea5eff76ca2a64_arg_types_var_6127927329552331126, __type_info__d8ea5eff76ca2a64_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, 8, UINT64_C(0xd8ea5eff76ca2a64), "onCreateContext", offsetof(ast_debug::ContextStateAgent,onCreateContext), 0 };
+VarInfo __struct_info__550ac570675ff176_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d8ea5eff76ca2a64_arg_types_var_6127927329552331126, __type_info__d8ea5eff76ca2a64_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0xd8ea5eff76ca2a64), "onCreateContext", offsetof(ast_debug::ContextStateAgent,onCreateContext), 0 };
 TypeInfo * __type_info__592d10706f4919e5_arg_types_var_6127927329552331126[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__592d10706f4919e5_arg_names_var_6127927329552331126[2] = { "self", "ctx" };
-VarInfo __struct_info__550ac570675ff176_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__592d10706f4919e5_arg_types_var_6127927329552331126, __type_info__592d10706f4919e5_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, 8, UINT64_C(0x592d10706f4919e5), "onDestroyContext", offsetof(ast_debug::ContextStateAgent,onDestroyContext), 0 };
+VarInfo __struct_info__550ac570675ff176_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__592d10706f4919e5_arg_types_var_6127927329552331126, __type_info__592d10706f4919e5_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0x592d10706f4919e5), "onDestroyContext", offsetof(ast_debug::ContextStateAgent,onDestroyContext), 0 };
 TypeInfo * __type_info__e42fe79e88d98862_arg_types_var_6127927329552331126[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__e42fe79e88d98862_arg_names_var_6127927329552331126[2] = { "self", "ctx" };
-VarInfo __struct_info__550ac570675ff176_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__e42fe79e88d98862_arg_types_var_6127927329552331126, __type_info__e42fe79e88d98862_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, 8, UINT64_C(0xe42fe79e88d98862), "onSimulateContext", offsetof(ast_debug::ContextStateAgent,onSimulateContext), 0 };
+VarInfo __struct_info__550ac570675ff176_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__e42fe79e88d98862_arg_types_var_6127927329552331126, __type_info__e42fe79e88d98862_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0xe42fe79e88d98862), "onSimulateContext", offsetof(ast_debug::ContextStateAgent,onSimulateContext), 0 };
 TypeInfo * __type_info__c1cc5c742611c50c_arg_types_var_6127927329552331126[3] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__246dda13a8a4b104 };
 const char * __type_info__c1cc5c742611c50c_arg_names_var_6127927329552331126[3] = { "self", "ctx", "at" };
-VarInfo __struct_info__550ac570675ff176_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c1cc5c742611c50c_arg_types_var_6127927329552331126, __type_info__c1cc5c742611c50c_arg_names_var_6127927329552331126, 3, 0, nullptr, 12, 8, UINT64_C(0xc1cc5c742611c50c), "onSingleStep", offsetof(ast_debug::ContextStateAgent,onSingleStep), 0 };
+VarInfo __struct_info__550ac570675ff176_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c1cc5c742611c50c_arg_types_var_6127927329552331126, __type_info__c1cc5c742611c50c_arg_names_var_6127927329552331126, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ))>::size, UINT64_C(0xc1cc5c742611c50c), "onSingleStep", offsetof(ast_debug::ContextStateAgent,onSingleStep), 0 };
 TypeInfo * __type_info__f77a4661fe2771cb_arg_types_var_6127927329552331126[3] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__246dda13a8a4b104 };
 const char * __type_info__f77a4661fe2771cb_arg_names_var_6127927329552331126[3] = { "self", "ctx", "at" };
-VarInfo __struct_info__550ac570675ff176_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f77a4661fe2771cb_arg_types_var_6127927329552331126, __type_info__f77a4661fe2771cb_arg_names_var_6127927329552331126, 3, 0, nullptr, 12, 8, UINT64_C(0xf77a4661fe2771cb), "onInstrument", offsetof(ast_debug::ContextStateAgent,onInstrument), 0 };
+VarInfo __struct_info__550ac570675ff176_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f77a4661fe2771cb_arg_types_var_6127927329552331126, __type_info__f77a4661fe2771cb_arg_names_var_6127927329552331126, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ))>::size, UINT64_C(0xf77a4661fe2771cb), "onInstrument", offsetof(ast_debug::ContextStateAgent,onInstrument), 0 };
 TypeInfo * __type_info__d7043f1cd9c75848_arg_types_var_6127927329552331126[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__ed65100a3b73031a, &__type_info__af81fe4c86352052, &__type_info__b68d800849332aec };
 const char * __type_info__d7043f1cd9c75848_arg_names_var_6127927329552331126[5] = { "self", "ctx", "fn", "entering", "userData" };
-VarInfo __struct_info__550ac570675ff176_field_9 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d7043f1cd9c75848_arg_types_var_6127927329552331126, __type_info__d7043f1cd9c75848_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, 8, UINT64_C(0xd7043f1cd9c75848), "onInstrumentFunction", offsetof(ast_debug::ContextStateAgent,onInstrumentFunction), 0 };
+VarInfo __struct_info__550ac570675ff176_field_9 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d7043f1cd9c75848_arg_types_var_6127927329552331126, __type_info__d7043f1cd9c75848_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,SimFunction * const ,bool,uint64_t))>::size, UINT64_C(0xd7043f1cd9c75848), "onInstrumentFunction", offsetof(ast_debug::ContextStateAgent,onInstrumentFunction), 0 };
 TypeInfo * __type_info__cbb06a53b92d54e5_arg_types_var_6127927329552331126[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__246dda13a8a4b104, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 const char * __type_info__cbb06a53b92d54e5_arg_names_var_6127927329552331126[5] = { "self", "ctx", "at", "reason", "text" };
-VarInfo __struct_info__550ac570675ff176_field_10 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__cbb06a53b92d54e5_arg_types_var_6127927329552331126, __type_info__cbb06a53b92d54e5_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, 8, UINT64_C(0xcbb06a53b92d54e5), "onBreakpoint", offsetof(ast_debug::ContextStateAgent,onBreakpoint), 0 };
+VarInfo __struct_info__550ac570675ff176_field_10 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__cbb06a53b92d54e5_arg_types_var_6127927329552331126, __type_info__cbb06a53b92d54e5_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ,char * const ,char * const ))>::size, UINT64_C(0xcbb06a53b92d54e5), "onBreakpoint", offsetof(ast_debug::ContextStateAgent,onBreakpoint), 0 };
 TypeInfo * __type_info__c55b38b4f047d1a_arg_types_var_6127927329552331126[6] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__bc67beb4aa160fd4, &__type_info__9c225ec61b3e6a3c };
 const char * __type_info__c55b38b4f047d1a_arg_names_var_6127927329552331126[6] = { "self", "ctx", "category", "name", "info", "data" };
-VarInfo __struct_info__550ac570675ff176_field_11 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c55b38b4f047d1a_arg_types_var_6127927329552331126, __type_info__c55b38b4f047d1a_arg_names_var_6127927329552331126, 6, 0, nullptr, 12, 8, UINT64_C(0xc55b38b4f047d1a), "onVariable", offsetof(ast_debug::ContextStateAgent,onVariable), 0 };
+VarInfo __struct_info__550ac570675ff176_field_11 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c55b38b4f047d1a_arg_types_var_6127927329552331126, __type_info__c55b38b4f047d1a_arg_names_var_6127927329552331126, 6, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,char * const ,char * const ,TypeInfo const ,void * const ))>::size, UINT64_C(0xc55b38b4f047d1a), "onVariable", offsetof(ast_debug::ContextStateAgent,onVariable), 0 };
 TypeInfo * __type_info__f99e2e7b8ac97672_arg_types_var_6127927329552331126[3] = { &__type_info__4e03c6707d012d5b, &__type_info__af90fe4c864e9d52, &__type_info__af8afe4c86446b52 };
 const char * __type_info__f99e2e7b8ac97672_arg_names_var_6127927329552331126[3] = { "self", "file", "breakpointsNum" };
-VarInfo __struct_info__550ac570675ff176_field_12 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f99e2e7b8ac97672_arg_types_var_6127927329552331126, __type_info__f99e2e7b8ac97672_arg_names_var_6127927329552331126, 3, 0, nullptr, 12, 8, UINT64_C(0xf99e2e7b8ac97672), "onBreakpointsReset", offsetof(ast_debug::ContextStateAgent,onBreakpointsReset), 0 };
+VarInfo __struct_info__550ac570675ff176_field_12 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f99e2e7b8ac97672_arg_types_var_6127927329552331126, __type_info__f99e2e7b8ac97672_arg_names_var_6127927329552331126, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,char * const ,int32_t))>::size, UINT64_C(0xf99e2e7b8ac97672), "onBreakpointsReset", offsetof(ast_debug::ContextStateAgent,onBreakpointsReset), 0 };
 TypeInfo * __type_info__2f2deacba8a8f559_arg_types_var_6127927329552331126[1] = { &__type_info__4e03c6707d012d5b };
 const char * __type_info__2f2deacba8a8f559_arg_names_var_6127927329552331126[1] = { "self" };
-VarInfo __struct_info__550ac570675ff176_field_13 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__2f2deacba8a8f559_arg_types_var_6127927329552331126, __type_info__2f2deacba8a8f559_arg_names_var_6127927329552331126, 1, 0, nullptr, 12, 8, UINT64_C(0x2f2deacba8a8f559), "onTick", offsetof(ast_debug::ContextStateAgent,onTick), 0 };
+VarInfo __struct_info__550ac570675ff176_field_13 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__2f2deacba8a8f559_arg_types_var_6127927329552331126, __type_info__2f2deacba8a8f559_arg_names_var_6127927329552331126, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent))>::size, UINT64_C(0x2f2deacba8a8f559), "onTick", offsetof(ast_debug::ContextStateAgent,onTick), 0 };
 TypeInfo * __type_info__e5dc68dcc6402013_arg_types_var_6127927329552331126[3] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__246dda13a8a4b104 };
 const char * __type_info__e5dc68dcc6402013_arg_names_var_6127927329552331126[3] = { "self", "ctx", "at" };
-VarInfo __struct_info__550ac570675ff176_field_14 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__e5dc68dcc6402013_arg_types_var_6127927329552331126, __type_info__e5dc68dcc6402013_arg_names_var_6127927329552331126, 3, 0, nullptr, 12, 8, UINT64_C(0xe5dc68dcc6402013), "onCollect", offsetof(ast_debug::ContextStateAgent,onCollect), 0 };
+VarInfo __struct_info__550ac570675ff176_field_14 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__e5dc68dcc6402013_arg_types_var_6127927329552331126, __type_info__e5dc68dcc6402013_arg_names_var_6127927329552331126, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ))>::size, UINT64_C(0xe5dc68dcc6402013), "onCollect", offsetof(ast_debug::ContextStateAgent,onCollect), 0 };
 TypeInfo * __type_info__a0092256e3dafcda_arg_types_var_6127927329552331126[5] = { &__type_info__4e03c6707d012d5b, &__type_info__2d750e15c3790305, &__type_info__a9e212d4f301a82c, &__type_info__af8afe4c86446b52, &__type_info__921d3d0750982f13 };
 const char * __type_info__a0092256e3dafcda_arg_names_var_6127927329552331126[5] = { "self", "context", "at", "level", "text" };
-VarInfo __struct_info__550ac570675ff176_field_15 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__a0092256e3dafcda_arg_types_var_6127927329552331126, __type_info__a0092256e3dafcda_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, 8, UINT64_C(0xa0092256e3dafcda), "onLog", offsetof(ast_debug::ContextStateAgent,onLog), 0 };
+VarInfo __struct_info__550ac570675ff176_field_15 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__a0092256e3dafcda_arg_types_var_6127927329552331126, __type_info__a0092256e3dafcda_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiDebugAgent,Context * const ,LineInfo const  * const ,int32_t,char * const ))>::size, UINT64_C(0xa0092256e3dafcda), "onLog", offsetof(ast_debug::ContextStateAgent,onLog), 0 };
 TypeInfo * __type_info__da55f2c6b151f305_arg_types_var_6127927329552331126[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__da55f2c6b151f305_arg_names_var_6127927329552331126[2] = { "self", "ctx" };
-VarInfo __struct_info__550ac570675ff176_field_16 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__da55f2c6b151f305_arg_types_var_6127927329552331126, __type_info__da55f2c6b151f305_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, 8, UINT64_C(0xda55f2c6b151f305), "onBeforeGC", offsetof(ast_debug::ContextStateAgent,onBeforeGC), 0 };
+VarInfo __struct_info__550ac570675ff176_field_16 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__da55f2c6b151f305_arg_types_var_6127927329552331126, __type_info__da55f2c6b151f305_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0xda55f2c6b151f305), "onBeforeGC", offsetof(ast_debug::ContextStateAgent,onBeforeGC), 0 };
 TypeInfo * __type_info__6a128179deabf0b5_arg_types_var_6127927329552331126[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__6a128179deabf0b5_arg_names_var_6127927329552331126[2] = { "self", "ctx" };
-VarInfo __struct_info__550ac570675ff176_field_17 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6a128179deabf0b5_arg_types_var_6127927329552331126, __type_info__6a128179deabf0b5_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, 8, UINT64_C(0x6a128179deabf0b5), "onAfterGC", offsetof(ast_debug::ContextStateAgent,onAfterGC), 0 };
+VarInfo __struct_info__550ac570675ff176_field_17 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6a128179deabf0b5_arg_types_var_6127927329552331126, __type_info__6a128179deabf0b5_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0x6a128179deabf0b5), "onAfterGC", offsetof(ast_debug::ContextStateAgent,onAfterGC), 0 };
 TypeInfo * __type_info__dd1dcaf58166fe86_arg_types_var_6127927329552331126[2] = { &__type_info__4e03c6707d012d5b, &__type_info__921d3d0750982f13 };
 const char * __type_info__dd1dcaf58166fe86_arg_names_var_6127927329552331126[2] = { "self", "command" };
-VarInfo __struct_info__550ac570675ff176_field_18 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__dd1dcaf58166fe86_arg_types_var_6127927329552331126, __type_info__dd1dcaf58166fe86_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, 8, UINT64_C(0xdd1dcaf58166fe86), "onUserCommand", offsetof(ast_debug::ContextStateAgent,onUserCommand), 0 };
+VarInfo __struct_info__550ac570675ff176_field_18 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__dd1dcaf58166fe86_arg_types_var_6127927329552331126, __type_info__dd1dcaf58166fe86_arg_names_var_6127927329552331126, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiDebugAgent,char * const ))>::size, UINT64_C(0xdd1dcaf58166fe86), "onUserCommand", offsetof(ast_debug::ContextStateAgent,onUserCommand), 0 };
 TypeInfo * __type_info__5e149a6997cfd2da_arg_types_var_6127927329552331126[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__246dda13a8a4b104 };
 const char * __type_info__5e149a6997cfd2da_arg_names_var_6127927329552331126[5] = { "self", "ctx", "data", "size", "at" };
-VarInfo __struct_info__550ac570675ff176_field_19 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__5e149a6997cfd2da_arg_types_var_6127927329552331126, __type_info__5e149a6997cfd2da_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, 8, UINT64_C(0x5e149a6997cfd2da), "onAllocate", offsetof(ast_debug::ContextStateAgent,onAllocate), 0 };
+VarInfo __struct_info__550ac570675ff176_field_19 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__5e149a6997cfd2da_arg_types_var_6127927329552331126, __type_info__5e149a6997cfd2da_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const ))>::size, UINT64_C(0x5e149a6997cfd2da), "onAllocate", offsetof(ast_debug::ContextStateAgent,onAllocate), 0 };
 TypeInfo * __type_info__6867962b4cc54c13_arg_types_var_6127927329552331126[7] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__246dda13a8a4b104 };
 const char * __type_info__6867962b4cc54c13_arg_names_var_6127927329552331126[7] = { "self", "ctx", "data", "size", "newData", "newSize", "at" };
-VarInfo __struct_info__550ac570675ff176_field_20 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6867962b4cc54c13_arg_types_var_6127927329552331126, __type_info__6867962b4cc54c13_arg_names_var_6127927329552331126, 7, 0, nullptr, 12, 8, UINT64_C(0x6867962b4cc54c13), "onReallocate", offsetof(ast_debug::ContextStateAgent,onReallocate), 0 };
+VarInfo __struct_info__550ac570675ff176_field_20 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6867962b4cc54c13_arg_types_var_6127927329552331126, __type_info__6867962b4cc54c13_arg_names_var_6127927329552331126, 7, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,void * const ,uint64_t,LineInfo const ))>::size, UINT64_C(0x6867962b4cc54c13), "onReallocate", offsetof(ast_debug::ContextStateAgent,onReallocate), 0 };
 TypeInfo * __type_info__88c8148858bfb714_arg_types_var_6127927329552331126[4] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__246dda13a8a4b104 };
 const char * __type_info__88c8148858bfb714_arg_names_var_6127927329552331126[4] = { "self", "ctx", "data", "at" };
-VarInfo __struct_info__550ac570675ff176_field_21 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__88c8148858bfb714_arg_types_var_6127927329552331126, __type_info__88c8148858bfb714_arg_names_var_6127927329552331126, 4, 0, nullptr, 12, 8, UINT64_C(0x88c8148858bfb714), "onFree", offsetof(ast_debug::ContextStateAgent,onFree), 0 };
-TypeInfo * __type_info__f74740f6dafd565a_arg_types_var_6127927329552331126[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__246dda13a8a4b104 };
-const char * __type_info__f74740f6dafd565a_arg_names_var_6127927329552331126[5] = { "self", "ctx", "data", "size", "at" };
-VarInfo __struct_info__550ac570675ff176_field_22 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f74740f6dafd565a_arg_types_var_6127927329552331126, __type_info__f74740f6dafd565a_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, 8, UINT64_C(0xf74740f6dafd565a), "onAllocateString", offsetof(ast_debug::ContextStateAgent,onAllocateString), 0 };
-TypeInfo * __type_info__d3967362a16cbe84_arg_types_var_6127927329552331126[4] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__246dda13a8a4b104 };
-const char * __type_info__d3967362a16cbe84_arg_names_var_6127927329552331126[4] = { "self", "ctx", "data", "at" };
-VarInfo __struct_info__550ac570675ff176_field_23 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d3967362a16cbe84_arg_types_var_6127927329552331126, __type_info__d3967362a16cbe84_arg_names_var_6127927329552331126, 4, 0, nullptr, 12, 8, UINT64_C(0xd3967362a16cbe84), "onFreeString", offsetof(ast_debug::ContextStateAgent,onFreeString), 0 };
-VarInfo __struct_info__550ac570675ff176_field_24 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__44ca287faf79178, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0x9123e06308eb280d), "thisAgent", offsetof(ast_debug::ContextStateAgent,thisAgent), 25 };
-VarInfo __struct_info__550ac570675ff176_field_25 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__87688966731f2665, nullptr, nullptr, nullptr, 0, 0, nullptr, 9216, 8, UINT64_C(0xaddc2f65febe2541), "walker_adapter", offsetof(ast_debug::ContextStateAgent,walker_adapter), 26 };
-VarInfo __struct_info__550ac570675ff176_field_26 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__80bd755d94e49a69, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0xc61d1e69a986c615), "walker", offsetof(ast_debug::ContextStateAgent,walker), 27 };
+VarInfo __struct_info__550ac570675ff176_field_21 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__88c8148858bfb714_arg_types_var_6127927329552331126, __type_info__88c8148858bfb714_arg_names_var_6127927329552331126, 4, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const ))>::size, UINT64_C(0x88c8148858bfb714), "onFree", offsetof(ast_debug::ContextStateAgent,onFree), 0 };
+TypeInfo * __type_info__f74740f6dafd565a_arg_types_var_6127927329552331126[6] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__af81fe4c86352052, &__type_info__246dda13a8a4b104 };
+const char * __type_info__f74740f6dafd565a_arg_names_var_6127927329552331126[6] = { "self", "ctx", "data", "size", "tempString", "at" };
+VarInfo __struct_info__550ac570675ff176_field_22 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f74740f6dafd565a_arg_types_var_6127927329552331126, __type_info__f74740f6dafd565a_arg_names_var_6127927329552331126, 6, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,bool,LineInfo const ))>::size, UINT64_C(0xf74740f6dafd565a), "onAllocateString", offsetof(ast_debug::ContextStateAgent,onAllocateString), 0 };
+TypeInfo * __type_info__d3967362a16cbe84_arg_types_var_6127927329552331126[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__af81fe4c86352052, &__type_info__246dda13a8a4b104 };
+const char * __type_info__d3967362a16cbe84_arg_names_var_6127927329552331126[5] = { "self", "ctx", "data", "tempString", "at" };
+VarInfo __struct_info__550ac570675ff176_field_23 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d3967362a16cbe84_arg_types_var_6127927329552331126, __type_info__d3967362a16cbe84_arg_names_var_6127927329552331126, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,bool,LineInfo const ))>::size, UINT64_C(0xd3967362a16cbe84), "onFreeString", offsetof(ast_debug::ContextStateAgent,onFreeString), 0 };
+VarInfo __struct_info__550ac570675ff176_field_24 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__44ca287faf79178, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, TypeSize<DebugAgent *>::size, UINT64_C(0x9123e06308eb280d), "thisAgent", offsetof(ast_debug::ContextStateAgent,thisAgent), 25 };
+VarInfo __struct_info__550ac570675ff176_field_25 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__87688966731f2665, nullptr, nullptr, nullptr, 0, 0, nullptr, 9216, TypeSize<smart_ptr_raw<StackWalker>>::size, UINT64_C(0xaddc2f65febe2541), "walker_adapter", offsetof(ast_debug::ContextStateAgent,walker_adapter), 26 };
+VarInfo __struct_info__550ac570675ff176_field_26 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__80bd755d94e49a69, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, TypeSize<ast_debug::SampleStackWalker *>::size, UINT64_C(0xc61d1e69a986c615), "walker", offsetof(ast_debug::ContextStateAgent,walker), 27 };
 VarInfo * __struct_info__550ac570675ff176_fields[27] =  { &__struct_info__550ac570675ff176_field_0, &__struct_info__550ac570675ff176_field_1, &__struct_info__550ac570675ff176_field_2, &__struct_info__550ac570675ff176_field_3, &__struct_info__550ac570675ff176_field_4, &__struct_info__550ac570675ff176_field_5, &__struct_info__550ac570675ff176_field_6, &__struct_info__550ac570675ff176_field_7, &__struct_info__550ac570675ff176_field_8, &__struct_info__550ac570675ff176_field_9, &__struct_info__550ac570675ff176_field_10, &__struct_info__550ac570675ff176_field_11, &__struct_info__550ac570675ff176_field_12, &__struct_info__550ac570675ff176_field_13, &__struct_info__550ac570675ff176_field_14, &__struct_info__550ac570675ff176_field_15, &__struct_info__550ac570675ff176_field_16, &__struct_info__550ac570675ff176_field_17, &__struct_info__550ac570675ff176_field_18, &__struct_info__550ac570675ff176_field_19, &__struct_info__550ac570675ff176_field_20, &__struct_info__550ac570675ff176_field_21, &__struct_info__550ac570675ff176_field_22, &__struct_info__550ac570675ff176_field_23, &__struct_info__550ac570675ff176_field_24, &__struct_info__550ac570675ff176_field_25, &__struct_info__550ac570675ff176_field_26 };
-StructInfo __struct_info__550ac570675ff176 = {"ContextStateAgent", "ast_debug", 13, __struct_info__550ac570675ff176_fields, 27, 216, UINT64_C(0x0), nullptr, UINT64_C(0x550ac570675ff176), 0 };
-VarInfo __struct_info__f935e99ac014dfbe_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0x1a081159f5f4969d), "__rtti", offsetof(ast_debug::SampleStackWalker,__rtti), 14 };
+StructInfo __struct_info__550ac570675ff176 = {"ContextStateAgent", "ast_debug", 13, __struct_info__550ac570675ff176_fields, 27, TypeSize<ast_debug::ContextStateAgent>::size, UINT64_C(0x0), nullptr, UINT64_C(0x550ac570675ff176), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, TypeSize<void *>::size, UINT64_C(0x1a081159f5f4969d), "__rtti", offsetof(ast_debug::SampleStackWalker,__rtti), 14 };
 TypeInfo * __type_info__6f356ac68231f616_arg_types_var_17957515940066549694[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__6f356ac68231f616_arg_names_var_17957515940066549694[1] = { "self" };
-VarInfo __struct_info__f935e99ac014dfbe_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6f356ac68231f616_arg_types_var_17957515940066549694, __type_info__6f356ac68231f616_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, 8, UINT64_C(0x6f356ac68231f616), "__finalize", offsetof(ast_debug::SampleStackWalker,__finalize), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6f356ac68231f616_arg_types_var_17957515940066549694, __type_info__6f356ac68231f616_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker))>::size, UINT64_C(0x6f356ac68231f616), "__finalize", offsetof(ast_debug::SampleStackWalker,__finalize), 0 };
 TypeInfo * __type_info__73ca2bcef448ca39_arg_types_var_17957515940066549694[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__73ca2bcef448ca39_arg_names_var_17957515940066549694[1] = { "self" };
-VarInfo __struct_info__f935e99ac014dfbe_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__73ca2bcef448ca39_arg_types_var_17957515940066549694, __type_info__73ca2bcef448ca39_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, 8, UINT64_C(0x73ca2bcef448ca39), "canWalkArguments", offsetof(ast_debug::SampleStackWalker,canWalkArguments), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__73ca2bcef448ca39_arg_types_var_17957515940066549694, __type_info__73ca2bcef448ca39_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiStackWalker))>::size, UINT64_C(0x73ca2bcef448ca39), "canWalkArguments", offsetof(ast_debug::SampleStackWalker,canWalkArguments), 0 };
 TypeInfo * __type_info__844614b0b3aae54f_arg_types_var_17957515940066549694[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__844614b0b3aae54f_arg_names_var_17957515940066549694[1] = { "self" };
-VarInfo __struct_info__f935e99ac014dfbe_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__844614b0b3aae54f_arg_types_var_17957515940066549694, __type_info__844614b0b3aae54f_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, 8, UINT64_C(0x844614b0b3aae54f), "canWalkVariables", offsetof(ast_debug::SampleStackWalker,canWalkVariables), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__844614b0b3aae54f_arg_types_var_17957515940066549694, __type_info__844614b0b3aae54f_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiStackWalker))>::size, UINT64_C(0x844614b0b3aae54f), "canWalkVariables", offsetof(ast_debug::SampleStackWalker,canWalkVariables), 0 };
 TypeInfo * __type_info__42d08aee28095765_arg_types_var_17957515940066549694[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__42d08aee28095765_arg_names_var_17957515940066549694[1] = { "self" };
-VarInfo __struct_info__f935e99ac014dfbe_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__42d08aee28095765_arg_types_var_17957515940066549694, __type_info__42d08aee28095765_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, 8, UINT64_C(0x42d08aee28095765), "canWalkOutOfScopeVariables", offsetof(ast_debug::SampleStackWalker,canWalkOutOfScopeVariables), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__42d08aee28095765_arg_types_var_17957515940066549694, __type_info__42d08aee28095765_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiStackWalker))>::size, UINT64_C(0x42d08aee28095765), "canWalkOutOfScopeVariables", offsetof(ast_debug::SampleStackWalker,canWalkOutOfScopeVariables), 0 };
 TypeInfo * __type_info__6b14996a7e65a101_arg_types_var_17957515940066549694[3] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__9c225ec61b3e6a3c };
 const char * __type_info__6b14996a7e65a101_arg_names_var_17957515940066549694[3] = { "self", "pp", "sp" };
-VarInfo __struct_info__f935e99ac014dfbe_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6b14996a7e65a101_arg_types_var_17957515940066549694, __type_info__6b14996a7e65a101_arg_names_var_17957515940066549694, 3, 0, nullptr, 12, 8, UINT64_C(0x6b14996a7e65a101), "onBeforeCall", offsetof(ast_debug::SampleStackWalker,onBeforeCall), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6b14996a7e65a101_arg_types_var_17957515940066549694, __type_info__6b14996a7e65a101_arg_names_var_17957515940066549694, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,void * const ))>::size, UINT64_C(0x6b14996a7e65a101), "onBeforeCall", offsetof(ast_debug::SampleStackWalker,onBeforeCall), 0 };
 TypeInfo * __type_info__46966cc843ece6b9_arg_types_var_17957515940066549694[3] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__921d3d0750982f13 };
 const char * __type_info__46966cc843ece6b9_arg_names_var_17957515940066549694[3] = { "self", "pp", "fileName" };
-VarInfo __struct_info__f935e99ac014dfbe_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__46966cc843ece6b9_arg_types_var_17957515940066549694, __type_info__46966cc843ece6b9_arg_names_var_17957515940066549694, 3, 0, nullptr, 12, 8, UINT64_C(0x46966cc843ece6b9), "onCallAOT", offsetof(ast_debug::SampleStackWalker,onCallAOT), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__46966cc843ece6b9_arg_types_var_17957515940066549694, __type_info__46966cc843ece6b9_arg_names_var_17957515940066549694, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,char * const ))>::size, UINT64_C(0x46966cc843ece6b9), "onCallAOT", offsetof(ast_debug::SampleStackWalker,onCallAOT), 0 };
 TypeInfo * __type_info__46e261c8446df808_arg_types_var_17957515940066549694[4] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__40912bc113ca9a8a, &__type_info__246dda13a8a4b104 };
 const char * __type_info__46e261c8446df808_arg_names_var_17957515940066549694[4] = { "self", "pp", "info", "at" };
-VarInfo __struct_info__f935e99ac014dfbe_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__46e261c8446df808_arg_types_var_17957515940066549694, __type_info__46e261c8446df808_arg_names_var_17957515940066549694, 4, 0, nullptr, 12, 8, UINT64_C(0x46e261c8446df808), "onCallAt", offsetof(ast_debug::SampleStackWalker,onCallAt), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__46e261c8446df808_arg_types_var_17957515940066549694, __type_info__46e261c8446df808_arg_names_var_17957515940066549694, 4, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,FuncInfo const ,LineInfo const ))>::size, UINT64_C(0x46e261c8446df808), "onCallAt", offsetof(ast_debug::SampleStackWalker,onCallAt), 0 };
 TypeInfo * __type_info__123843feb17460ac_arg_types_var_17957515940066549694[3] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__40912bc113ca9a8a };
 const char * __type_info__123843feb17460ac_arg_names_var_17957515940066549694[3] = { "self", "pp", "info" };
-VarInfo __struct_info__f935e99ac014dfbe_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__123843feb17460ac_arg_types_var_17957515940066549694, __type_info__123843feb17460ac_arg_names_var_17957515940066549694, 3, 0, nullptr, 12, 8, UINT64_C(0x123843feb17460ac), "onCall", offsetof(ast_debug::SampleStackWalker,onCall), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__123843feb17460ac_arg_types_var_17957515940066549694, __type_info__123843feb17460ac_arg_names_var_17957515940066549694, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,FuncInfo const ))>::size, UINT64_C(0x123843feb17460ac), "onCall", offsetof(ast_debug::SampleStackWalker,onCall), 0 };
 TypeInfo * __type_info__da0f60d2fedc5561_arg_types_var_17957515940066549694[3] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__9c225ec61b3e6a3c };
 const char * __type_info__da0f60d2fedc5561_arg_names_var_17957515940066549694[3] = { "self", "pp", "sp" };
-VarInfo __struct_info__f935e99ac014dfbe_field_9 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__da0f60d2fedc5561_arg_types_var_17957515940066549694, __type_info__da0f60d2fedc5561_arg_names_var_17957515940066549694, 3, 0, nullptr, 12, 8, UINT64_C(0xda0f60d2fedc5561), "onAfterPrologue", offsetof(ast_debug::SampleStackWalker,onAfterPrologue), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_9 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__da0f60d2fedc5561_arg_types_var_17957515940066549694, __type_info__da0f60d2fedc5561_arg_names_var_17957515940066549694, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,void * const ))>::size, UINT64_C(0xda0f60d2fedc5561), "onAfterPrologue", offsetof(ast_debug::SampleStackWalker,onAfterPrologue), 0 };
 TypeInfo * __type_info__ce0fdf61a430d3ad_arg_types_var_17957515940066549694[5] = { &__type_info__a4d736e8781a7b06, &__type_info__40912bc113ca9a8a, &__type_info__af8afe4c86446b52, &__type_info__c3770d5f54a928b3, &__type_info__7c9b820817d2b152 };
 const char * __type_info__ce0fdf61a430d3ad_arg_names_var_17957515940066549694[5] = { "self", "info", "index", "vinfo", "arg" };
-VarInfo __struct_info__f935e99ac014dfbe_field_10 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__ce0fdf61a430d3ad_arg_types_var_17957515940066549694, __type_info__ce0fdf61a430d3ad_arg_names_var_17957515940066549694, 5, 0, nullptr, 12, 8, UINT64_C(0xce0fdf61a430d3ad), "onArgument", offsetof(ast_debug::SampleStackWalker,onArgument), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_10 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__ce0fdf61a430d3ad_arg_types_var_17957515940066549694, __type_info__ce0fdf61a430d3ad_arg_names_var_17957515940066549694, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,FuncInfo const ,int32_t,VarInfo const ,float4))>::size, UINT64_C(0xce0fdf61a430d3ad), "onArgument", offsetof(ast_debug::SampleStackWalker,onArgument), 0 };
 TypeInfo * __type_info__519597779d68e597_arg_types_var_17957515940066549694[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__519597779d68e597_arg_names_var_17957515940066549694[1] = { "self" };
-VarInfo __struct_info__f935e99ac014dfbe_field_11 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__519597779d68e597_arg_types_var_17957515940066549694, __type_info__519597779d68e597_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, 8, UINT64_C(0x519597779d68e597), "onBeforeVariables", offsetof(ast_debug::SampleStackWalker,onBeforeVariables), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_11 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__519597779d68e597_arg_types_var_17957515940066549694, __type_info__519597779d68e597_arg_names_var_17957515940066549694, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker))>::size, UINT64_C(0x519597779d68e597), "onBeforeVariables", offsetof(ast_debug::SampleStackWalker,onBeforeVariables), 0 };
 TypeInfo * __type_info__b45c2a93b09088d2_arg_types_var_17957515940066549694[5] = { &__type_info__a4d736e8781a7b06, &__type_info__40912bc113ca9a8a, &__type_info__873433ff256e8173, &__type_info__9c225ec61b3e6a3c, &__type_info__af81fe4c86352052 };
 const char * __type_info__b45c2a93b09088d2_arg_names_var_17957515940066549694[5] = { "self", "inf", "vinfo", "arg", "inScope" };
-VarInfo __struct_info__f935e99ac014dfbe_field_12 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__b45c2a93b09088d2_arg_types_var_17957515940066549694, __type_info__b45c2a93b09088d2_arg_names_var_17957515940066549694, 5, 0, nullptr, 12, 8, UINT64_C(0xb45c2a93b09088d2), "onVariable", offsetof(ast_debug::SampleStackWalker,onVariable), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_12 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__b45c2a93b09088d2_arg_types_var_17957515940066549694, __type_info__b45c2a93b09088d2_arg_names_var_17957515940066549694, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,FuncInfo const ,LocalVariableInfo const ,void * const ,bool))>::size, UINT64_C(0xb45c2a93b09088d2), "onVariable", offsetof(ast_debug::SampleStackWalker,onVariable), 0 };
 TypeInfo * __type_info__3f2826b1f873e317_arg_types_var_17957515940066549694[2] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816 };
 const char * __type_info__3f2826b1f873e317_arg_names_var_17957515940066549694[2] = { "self", "pp" };
-VarInfo __struct_info__f935e99ac014dfbe_field_13 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__3f2826b1f873e317_arg_types_var_17957515940066549694, __type_info__3f2826b1f873e317_arg_names_var_17957515940066549694, 2, 0, nullptr, 12, 8, UINT64_C(0x3f2826b1f873e317), "onAfterCall", offsetof(ast_debug::SampleStackWalker,onAfterCall), 0 };
-VarInfo __struct_info__f935e99ac014dfbe_field_14 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__767637ee1a337419, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0x829892f269153876), "ctxid", offsetof(ast_debug::SampleStackWalker,ctxid), 15 };
+VarInfo __struct_info__f935e99ac014dfbe_field_13 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__3f2826b1f873e317_arg_types_var_17957515940066549694, __type_info__3f2826b1f873e317_arg_names_var_17957515940066549694, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiStackWalker,Prologue const ))>::size, UINT64_C(0x3f2826b1f873e317), "onAfterCall", offsetof(ast_debug::SampleStackWalker,onAfterCall), 0 };
+VarInfo __struct_info__f935e99ac014dfbe_field_14 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__767637ee1a337419, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, TypeSize<Context *>::size, UINT64_C(0x829892f269153876), "ctxid", offsetof(ast_debug::SampleStackWalker,ctxid), 15 };
 VarInfo * __struct_info__f935e99ac014dfbe_fields[15] =  { &__struct_info__f935e99ac014dfbe_field_0, &__struct_info__f935e99ac014dfbe_field_1, &__struct_info__f935e99ac014dfbe_field_2, &__struct_info__f935e99ac014dfbe_field_3, &__struct_info__f935e99ac014dfbe_field_4, &__struct_info__f935e99ac014dfbe_field_5, &__struct_info__f935e99ac014dfbe_field_6, &__struct_info__f935e99ac014dfbe_field_7, &__struct_info__f935e99ac014dfbe_field_8, &__struct_info__f935e99ac014dfbe_field_9, &__struct_info__f935e99ac014dfbe_field_10, &__struct_info__f935e99ac014dfbe_field_11, &__struct_info__f935e99ac014dfbe_field_12, &__struct_info__f935e99ac014dfbe_field_13, &__struct_info__f935e99ac014dfbe_field_14 };
-StructInfo __struct_info__f935e99ac014dfbe = {"SampleStackWalker", "ast_debug", 13, __struct_info__f935e99ac014dfbe_fields, 15, 120, UINT64_C(0x0), nullptr, UINT64_C(0xf935e99ac014dfbe), 0 };
-VarInfo __struct_info__d91c21afef62b32c_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0xda073e6d7ab129fb), "__rtti", offsetof(debugapi::DapiDebugAgent,__rtti), 24 };
+StructInfo __struct_info__f935e99ac014dfbe = {"SampleStackWalker", "ast_debug", 13, __struct_info__f935e99ac014dfbe_fields, 15, TypeSize<ast_debug::SampleStackWalker>::size, UINT64_C(0x0), nullptr, UINT64_C(0xf935e99ac014dfbe), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, TypeSize<void *>::size, UINT64_C(0xda073e6d7ab129fb), "__rtti", offsetof(debugapi::DapiDebugAgent,__rtti), 24 };
 TypeInfo * __type_info__f8c54e03a28c41c_arg_types_var_15644416245097476908[1] = { &__type_info__4e03c6707d012d5b };
 const char * __type_info__f8c54e03a28c41c_arg_names_var_15644416245097476908[1] = { "self" };
-VarInfo __struct_info__d91c21afef62b32c_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f8c54e03a28c41c_arg_types_var_15644416245097476908, __type_info__f8c54e03a28c41c_arg_names_var_15644416245097476908, 1, 0, nullptr, 12, 8, UINT64_C(0xf8c54e03a28c41c), "__finalize", offsetof(debugapi::DapiDebugAgent,__finalize), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f8c54e03a28c41c_arg_types_var_15644416245097476908, __type_info__f8c54e03a28c41c_arg_names_var_15644416245097476908, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent))>::size, UINT64_C(0xf8c54e03a28c41c), "__finalize", offsetof(debugapi::DapiDebugAgent,__finalize), 0 };
 TypeInfo * __type_info__bb113b3aa23055d3_arg_types_var_15644416245097476908[2] = { &__type_info__4e03c6707d012d5b, &__type_info__209f9e4a9562d5c2 };
 const char * __type_info__bb113b3aa23055d3_arg_names_var_15644416245097476908[2] = { "self", "agent" };
-VarInfo __struct_info__d91c21afef62b32c_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__bb113b3aa23055d3_arg_types_var_15644416245097476908, __type_info__bb113b3aa23055d3_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, 8, UINT64_C(0xbb113b3aa23055d3), "onInstall", offsetof(debugapi::DapiDebugAgent,onInstall), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__bb113b3aa23055d3_arg_types_var_15644416245097476908, __type_info__bb113b3aa23055d3_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const ))>::size, UINT64_C(0xbb113b3aa23055d3), "onInstall", offsetof(debugapi::DapiDebugAgent,onInstall), 0 };
 TypeInfo * __type_info__b6de3e351cfffee7_arg_types_var_15644416245097476908[2] = { &__type_info__4e03c6707d012d5b, &__type_info__209f9e4a9562d5c2 };
 const char * __type_info__b6de3e351cfffee7_arg_names_var_15644416245097476908[2] = { "self", "agent" };
-VarInfo __struct_info__d91c21afef62b32c_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__b6de3e351cfffee7_arg_types_var_15644416245097476908, __type_info__b6de3e351cfffee7_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, 8, UINT64_C(0xb6de3e351cfffee7), "onUninstall", offsetof(debugapi::DapiDebugAgent,onUninstall), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__b6de3e351cfffee7_arg_types_var_15644416245097476908, __type_info__b6de3e351cfffee7_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,DebugAgent * const ))>::size, UINT64_C(0xb6de3e351cfffee7), "onUninstall", offsetof(debugapi::DapiDebugAgent,onUninstall), 0 };
 TypeInfo * __type_info__99a7ecf15c5ddba_arg_types_var_15644416245097476908[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__99a7ecf15c5ddba_arg_names_var_15644416245097476908[2] = { "self", "ctx" };
-VarInfo __struct_info__d91c21afef62b32c_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__99a7ecf15c5ddba_arg_types_var_15644416245097476908, __type_info__99a7ecf15c5ddba_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, 8, UINT64_C(0x99a7ecf15c5ddba), "onCreateContext", offsetof(debugapi::DapiDebugAgent,onCreateContext), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__99a7ecf15c5ddba_arg_types_var_15644416245097476908, __type_info__99a7ecf15c5ddba_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0x99a7ecf15c5ddba), "onCreateContext", offsetof(debugapi::DapiDebugAgent,onCreateContext), 0 };
 TypeInfo * __type_info__8b4c2a0827deb533_arg_types_var_15644416245097476908[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__8b4c2a0827deb533_arg_names_var_15644416245097476908[2] = { "self", "ctx" };
-VarInfo __struct_info__d91c21afef62b32c_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__8b4c2a0827deb533_arg_types_var_15644416245097476908, __type_info__8b4c2a0827deb533_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, 8, UINT64_C(0x8b4c2a0827deb533), "onDestroyContext", offsetof(debugapi::DapiDebugAgent,onDestroyContext), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__8b4c2a0827deb533_arg_types_var_15644416245097476908, __type_info__8b4c2a0827deb533_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0x8b4c2a0827deb533), "onDestroyContext", offsetof(debugapi::DapiDebugAgent,onDestroyContext), 0 };
 TypeInfo * __type_info__33eddcacfcf4eae8_arg_types_var_15644416245097476908[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__33eddcacfcf4eae8_arg_names_var_15644416245097476908[2] = { "self", "ctx" };
-VarInfo __struct_info__d91c21afef62b32c_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__33eddcacfcf4eae8_arg_types_var_15644416245097476908, __type_info__33eddcacfcf4eae8_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, 8, UINT64_C(0x33eddcacfcf4eae8), "onSimulateContext", offsetof(debugapi::DapiDebugAgent,onSimulateContext), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__33eddcacfcf4eae8_arg_types_var_15644416245097476908, __type_info__33eddcacfcf4eae8_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0x33eddcacfcf4eae8), "onSimulateContext", offsetof(debugapi::DapiDebugAgent,onSimulateContext), 0 };
 TypeInfo * __type_info__d5dfe6dacc8ce102_arg_types_var_15644416245097476908[3] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__246dda13a8a4b104 };
 const char * __type_info__d5dfe6dacc8ce102_arg_names_var_15644416245097476908[3] = { "self", "ctx", "at" };
-VarInfo __struct_info__d91c21afef62b32c_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d5dfe6dacc8ce102_arg_types_var_15644416245097476908, __type_info__d5dfe6dacc8ce102_arg_names_var_15644416245097476908, 3, 0, nullptr, 12, 8, UINT64_C(0xd5dfe6dacc8ce102), "onSingleStep", offsetof(debugapi::DapiDebugAgent,onSingleStep), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d5dfe6dacc8ce102_arg_types_var_15644416245097476908, __type_info__d5dfe6dacc8ce102_arg_names_var_15644416245097476908, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ))>::size, UINT64_C(0xd5dfe6dacc8ce102), "onSingleStep", offsetof(debugapi::DapiDebugAgent,onSingleStep), 0 };
 TypeInfo * __type_info__327f7c9a660b1ab9_arg_types_var_15644416245097476908[3] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__246dda13a8a4b104 };
 const char * __type_info__327f7c9a660b1ab9_arg_names_var_15644416245097476908[3] = { "self", "ctx", "at" };
-VarInfo __struct_info__d91c21afef62b32c_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__327f7c9a660b1ab9_arg_types_var_15644416245097476908, __type_info__327f7c9a660b1ab9_arg_names_var_15644416245097476908, 3, 0, nullptr, 12, 8, UINT64_C(0x327f7c9a660b1ab9), "onInstrument", offsetof(debugapi::DapiDebugAgent,onInstrument), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__327f7c9a660b1ab9_arg_types_var_15644416245097476908, __type_info__327f7c9a660b1ab9_arg_names_var_15644416245097476908, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ))>::size, UINT64_C(0x327f7c9a660b1ab9), "onInstrument", offsetof(debugapi::DapiDebugAgent,onInstrument), 0 };
 TypeInfo * __type_info__21b69962c22005be_arg_types_var_15644416245097476908[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__ed65100a3b73031a, &__type_info__af81fe4c86352052, &__type_info__b68d800849332aec };
 const char * __type_info__21b69962c22005be_arg_names_var_15644416245097476908[5] = { "self", "ctx", "fn", "entering", "userData" };
-VarInfo __struct_info__d91c21afef62b32c_field_9 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__21b69962c22005be_arg_types_var_15644416245097476908, __type_info__21b69962c22005be_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, 8, UINT64_C(0x21b69962c22005be), "onInstrumentFunction", offsetof(debugapi::DapiDebugAgent,onInstrumentFunction), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_9 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__21b69962c22005be_arg_types_var_15644416245097476908, __type_info__21b69962c22005be_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,SimFunction * const ,bool,uint64_t))>::size, UINT64_C(0x21b69962c22005be), "onInstrumentFunction", offsetof(debugapi::DapiDebugAgent,onInstrumentFunction), 0 };
 TypeInfo * __type_info__c913774fc6d2e043_arg_types_var_15644416245097476908[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__246dda13a8a4b104, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 const char * __type_info__c913774fc6d2e043_arg_names_var_15644416245097476908[5] = { "self", "ctx", "at", "reason", "text" };
-VarInfo __struct_info__d91c21afef62b32c_field_10 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c913774fc6d2e043_arg_types_var_15644416245097476908, __type_info__c913774fc6d2e043_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, 8, UINT64_C(0xc913774fc6d2e043), "onBreakpoint", offsetof(debugapi::DapiDebugAgent,onBreakpoint), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_10 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c913774fc6d2e043_arg_types_var_15644416245097476908, __type_info__c913774fc6d2e043_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ,char * const ,char * const ))>::size, UINT64_C(0xc913774fc6d2e043), "onBreakpoint", offsetof(debugapi::DapiDebugAgent,onBreakpoint), 0 };
 TypeInfo * __type_info__79d44cbc9a657bf4_arg_types_var_15644416245097476908[6] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__bc67beb4aa160fd4, &__type_info__9c225ec61b3e6a3c };
 const char * __type_info__79d44cbc9a657bf4_arg_names_var_15644416245097476908[6] = { "self", "ctx", "category", "name", "info", "data" };
-VarInfo __struct_info__d91c21afef62b32c_field_11 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__79d44cbc9a657bf4_arg_types_var_15644416245097476908, __type_info__79d44cbc9a657bf4_arg_names_var_15644416245097476908, 6, 0, nullptr, 12, 8, UINT64_C(0x79d44cbc9a657bf4), "onVariable", offsetof(debugapi::DapiDebugAgent,onVariable), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_11 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__79d44cbc9a657bf4_arg_types_var_15644416245097476908, __type_info__79d44cbc9a657bf4_arg_names_var_15644416245097476908, 6, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,char * const ,char * const ,TypeInfo const ,void * const ))>::size, UINT64_C(0x79d44cbc9a657bf4), "onVariable", offsetof(debugapi::DapiDebugAgent,onVariable), 0 };
 TypeInfo * __type_info__a73424c91982d80c_arg_types_var_15644416245097476908[3] = { &__type_info__4e03c6707d012d5b, &__type_info__af90fe4c864e9d52, &__type_info__af8afe4c86446b52 };
 const char * __type_info__a73424c91982d80c_arg_names_var_15644416245097476908[3] = { "self", "file", "breakpointsNum" };
-VarInfo __struct_info__d91c21afef62b32c_field_12 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__a73424c91982d80c_arg_types_var_15644416245097476908, __type_info__a73424c91982d80c_arg_names_var_15644416245097476908, 3, 0, nullptr, 12, 8, UINT64_C(0xa73424c91982d80c), "onBreakpointsReset", offsetof(debugapi::DapiDebugAgent,onBreakpointsReset), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_12 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__a73424c91982d80c_arg_types_var_15644416245097476908, __type_info__a73424c91982d80c_arg_names_var_15644416245097476908, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,char * const ,int32_t))>::size, UINT64_C(0xa73424c91982d80c), "onBreakpointsReset", offsetof(debugapi::DapiDebugAgent,onBreakpointsReset), 0 };
 TypeInfo * __type_info__edcf7675d0697793_arg_types_var_15644416245097476908[1] = { &__type_info__4e03c6707d012d5b };
 const char * __type_info__edcf7675d0697793_arg_names_var_15644416245097476908[1] = { "self" };
-VarInfo __struct_info__d91c21afef62b32c_field_13 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__edcf7675d0697793_arg_types_var_15644416245097476908, __type_info__edcf7675d0697793_arg_names_var_15644416245097476908, 1, 0, nullptr, 12, 8, UINT64_C(0xedcf7675d0697793), "onTick", offsetof(debugapi::DapiDebugAgent,onTick), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_13 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__edcf7675d0697793_arg_types_var_15644416245097476908, __type_info__edcf7675d0697793_arg_names_var_15644416245097476908, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent))>::size, UINT64_C(0xedcf7675d0697793), "onTick", offsetof(debugapi::DapiDebugAgent,onTick), 0 };
 TypeInfo * __type_info__913dec62813bfe4d_arg_types_var_15644416245097476908[3] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__246dda13a8a4b104 };
 const char * __type_info__913dec62813bfe4d_arg_names_var_15644416245097476908[3] = { "self", "ctx", "at" };
-VarInfo __struct_info__d91c21afef62b32c_field_14 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__913dec62813bfe4d_arg_types_var_15644416245097476908, __type_info__913dec62813bfe4d_arg_names_var_15644416245097476908, 3, 0, nullptr, 12, 8, UINT64_C(0x913dec62813bfe4d), "onCollect", offsetof(debugapi::DapiDebugAgent,onCollect), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_14 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__913dec62813bfe4d_arg_types_var_15644416245097476908, __type_info__913dec62813bfe4d_arg_names_var_15644416245097476908, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ))>::size, UINT64_C(0x913dec62813bfe4d), "onCollect", offsetof(debugapi::DapiDebugAgent,onCollect), 0 };
 TypeInfo * __type_info__68ba67f3d12e3c98_arg_types_var_15644416245097476908[5] = { &__type_info__4e03c6707d012d5b, &__type_info__2d750e15c3790305, &__type_info__a9e212d4f301a82c, &__type_info__af8afe4c86446b52, &__type_info__921d3d0750982f13 };
 const char * __type_info__68ba67f3d12e3c98_arg_names_var_15644416245097476908[5] = { "self", "context", "at", "level", "text" };
-VarInfo __struct_info__d91c21afef62b32c_field_15 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__68ba67f3d12e3c98_arg_types_var_15644416245097476908, __type_info__68ba67f3d12e3c98_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, 8, UINT64_C(0x68ba67f3d12e3c98), "onLog", offsetof(debugapi::DapiDebugAgent,onLog), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_15 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__68ba67f3d12e3c98_arg_types_var_15644416245097476908, __type_info__68ba67f3d12e3c98_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiDebugAgent,Context * const ,LineInfo const  * const ,int32_t,char * const ))>::size, UINT64_C(0x68ba67f3d12e3c98), "onLog", offsetof(debugapi::DapiDebugAgent,onLog), 0 };
 TypeInfo * __type_info__36c2061312a1876b_arg_types_var_15644416245097476908[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__36c2061312a1876b_arg_names_var_15644416245097476908[2] = { "self", "ctx" };
-VarInfo __struct_info__d91c21afef62b32c_field_16 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__36c2061312a1876b_arg_types_var_15644416245097476908, __type_info__36c2061312a1876b_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, 8, UINT64_C(0x36c2061312a1876b), "onBeforeGC", offsetof(debugapi::DapiDebugAgent,onBeforeGC), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_16 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__36c2061312a1876b_arg_types_var_15644416245097476908, __type_info__36c2061312a1876b_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0x36c2061312a1876b), "onBeforeGC", offsetof(debugapi::DapiDebugAgent,onBeforeGC), 0 };
 TypeInfo * __type_info__d024cad15fe2631f_arg_types_var_15644416245097476908[2] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419 };
 const char * __type_info__d024cad15fe2631f_arg_names_var_15644416245097476908[2] = { "self", "ctx" };
-VarInfo __struct_info__d91c21afef62b32c_field_17 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d024cad15fe2631f_arg_types_var_15644416245097476908, __type_info__d024cad15fe2631f_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, 8, UINT64_C(0xd024cad15fe2631f), "onAfterGC", offsetof(debugapi::DapiDebugAgent,onAfterGC), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_17 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d024cad15fe2631f_arg_types_var_15644416245097476908, __type_info__d024cad15fe2631f_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context))>::size, UINT64_C(0xd024cad15fe2631f), "onAfterGC", offsetof(debugapi::DapiDebugAgent,onAfterGC), 0 };
 TypeInfo * __type_info__df3b4662672293c8_arg_types_var_15644416245097476908[2] = { &__type_info__4e03c6707d012d5b, &__type_info__921d3d0750982f13 };
 const char * __type_info__df3b4662672293c8_arg_names_var_15644416245097476908[2] = { "self", "command" };
-VarInfo __struct_info__d91c21afef62b32c_field_18 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__df3b4662672293c8_arg_types_var_15644416245097476908, __type_info__df3b4662672293c8_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, 8, UINT64_C(0xdf3b4662672293c8), "onUserCommand", offsetof(debugapi::DapiDebugAgent,onUserCommand), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_18 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__df3b4662672293c8_arg_types_var_15644416245097476908, __type_info__df3b4662672293c8_arg_names_var_15644416245097476908, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiDebugAgent,char * const ))>::size, UINT64_C(0xdf3b4662672293c8), "onUserCommand", offsetof(debugapi::DapiDebugAgent,onUserCommand), 0 };
 TypeInfo * __type_info__8055238a52f31e0c_arg_types_var_15644416245097476908[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__246dda13a8a4b104 };
 const char * __type_info__8055238a52f31e0c_arg_names_var_15644416245097476908[5] = { "self", "ctx", "data", "size", "at" };
-VarInfo __struct_info__d91c21afef62b32c_field_19 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__8055238a52f31e0c_arg_types_var_15644416245097476908, __type_info__8055238a52f31e0c_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, 8, UINT64_C(0x8055238a52f31e0c), "onAllocate", offsetof(debugapi::DapiDebugAgent,onAllocate), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_19 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__8055238a52f31e0c_arg_types_var_15644416245097476908, __type_info__8055238a52f31e0c_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const ))>::size, UINT64_C(0x8055238a52f31e0c), "onAllocate", offsetof(debugapi::DapiDebugAgent,onAllocate), 0 };
 TypeInfo * __type_info__3d1ee78d21cd5f19_arg_types_var_15644416245097476908[7] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__246dda13a8a4b104 };
 const char * __type_info__3d1ee78d21cd5f19_arg_names_var_15644416245097476908[7] = { "self", "ctx", "data", "size", "newData", "newSize", "at" };
-VarInfo __struct_info__d91c21afef62b32c_field_20 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__3d1ee78d21cd5f19_arg_types_var_15644416245097476908, __type_info__3d1ee78d21cd5f19_arg_names_var_15644416245097476908, 7, 0, nullptr, 12, 8, UINT64_C(0x3d1ee78d21cd5f19), "onReallocate", offsetof(debugapi::DapiDebugAgent,onReallocate), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_20 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__3d1ee78d21cd5f19_arg_types_var_15644416245097476908, __type_info__3d1ee78d21cd5f19_arg_names_var_15644416245097476908, 7, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,void * const ,uint64_t,LineInfo const ))>::size, UINT64_C(0x3d1ee78d21cd5f19), "onReallocate", offsetof(debugapi::DapiDebugAgent,onReallocate), 0 };
 TypeInfo * __type_info__6ff5841b5071093e_arg_types_var_15644416245097476908[4] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__246dda13a8a4b104 };
 const char * __type_info__6ff5841b5071093e_arg_names_var_15644416245097476908[4] = { "self", "ctx", "data", "at" };
-VarInfo __struct_info__d91c21afef62b32c_field_21 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6ff5841b5071093e_arg_types_var_15644416245097476908, __type_info__6ff5841b5071093e_arg_names_var_15644416245097476908, 4, 0, nullptr, 12, 8, UINT64_C(0x6ff5841b5071093e), "onFree", offsetof(debugapi::DapiDebugAgent,onFree), 0 };
-TypeInfo * __type_info__f1f0b5451e923dbc_arg_types_var_15644416245097476908[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__246dda13a8a4b104 };
-const char * __type_info__f1f0b5451e923dbc_arg_names_var_15644416245097476908[5] = { "self", "ctx", "data", "size", "at" };
-VarInfo __struct_info__d91c21afef62b32c_field_22 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f1f0b5451e923dbc_arg_types_var_15644416245097476908, __type_info__f1f0b5451e923dbc_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, 8, UINT64_C(0xf1f0b5451e923dbc), "onAllocateString", offsetof(debugapi::DapiDebugAgent,onAllocateString), 0 };
-TypeInfo * __type_info__c283a5754fe3daf6_arg_types_var_15644416245097476908[4] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__246dda13a8a4b104 };
-const char * __type_info__c283a5754fe3daf6_arg_names_var_15644416245097476908[4] = { "self", "ctx", "data", "at" };
-VarInfo __struct_info__d91c21afef62b32c_field_23 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c283a5754fe3daf6_arg_types_var_15644416245097476908, __type_info__c283a5754fe3daf6_arg_names_var_15644416245097476908, 4, 0, nullptr, 12, 8, UINT64_C(0xc283a5754fe3daf6), "onFreeString", offsetof(debugapi::DapiDebugAgent,onFreeString), 0 };
-VarInfo __struct_info__d91c21afef62b32c_field_24 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__44ca287faf79178, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0x817bf1fe93f2f5d7), "thisAgent", offsetof(debugapi::DapiDebugAgent,thisAgent), 25 };
+VarInfo __struct_info__d91c21afef62b32c_field_21 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6ff5841b5071093e_arg_types_var_15644416245097476908, __type_info__6ff5841b5071093e_arg_names_var_15644416245097476908, 4, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const ))>::size, UINT64_C(0x6ff5841b5071093e), "onFree", offsetof(debugapi::DapiDebugAgent,onFree), 0 };
+TypeInfo * __type_info__f1f0b5451e923dbc_arg_types_var_15644416245097476908[6] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__b68d800849332aec, &__type_info__af81fe4c86352052, &__type_info__246dda13a8a4b104 };
+const char * __type_info__f1f0b5451e923dbc_arg_names_var_15644416245097476908[6] = { "self", "ctx", "data", "size", "tempString", "at" };
+VarInfo __struct_info__d91c21afef62b32c_field_22 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f1f0b5451e923dbc_arg_types_var_15644416245097476908, __type_info__f1f0b5451e923dbc_arg_names_var_15644416245097476908, 6, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,bool,LineInfo const ))>::size, UINT64_C(0xf1f0b5451e923dbc), "onAllocateString", offsetof(debugapi::DapiDebugAgent,onAllocateString), 0 };
+TypeInfo * __type_info__c283a5754fe3daf6_arg_types_var_15644416245097476908[5] = { &__type_info__4e03c6707d012d5b, &__type_info__767637ee1a337419, &__type_info__9c225ec61b3e6a3c, &__type_info__af81fe4c86352052, &__type_info__246dda13a8a4b104 };
+const char * __type_info__c283a5754fe3daf6_arg_names_var_15644416245097476908[5] = { "self", "ctx", "data", "tempString", "at" };
+VarInfo __struct_info__d91c21afef62b32c_field_23 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c283a5754fe3daf6_arg_types_var_15644416245097476908, __type_info__c283a5754fe3daf6_arg_names_var_15644416245097476908, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,bool,LineInfo const ))>::size, UINT64_C(0xc283a5754fe3daf6), "onFreeString", offsetof(debugapi::DapiDebugAgent,onFreeString), 0 };
+VarInfo __struct_info__d91c21afef62b32c_field_24 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__44ca287faf79178, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, TypeSize<DebugAgent *>::size, UINT64_C(0x817bf1fe93f2f5d7), "thisAgent", offsetof(debugapi::DapiDebugAgent,thisAgent), 25 };
 VarInfo * __struct_info__d91c21afef62b32c_fields[25] =  { &__struct_info__d91c21afef62b32c_field_0, &__struct_info__d91c21afef62b32c_field_1, &__struct_info__d91c21afef62b32c_field_2, &__struct_info__d91c21afef62b32c_field_3, &__struct_info__d91c21afef62b32c_field_4, &__struct_info__d91c21afef62b32c_field_5, &__struct_info__d91c21afef62b32c_field_6, &__struct_info__d91c21afef62b32c_field_7, &__struct_info__d91c21afef62b32c_field_8, &__struct_info__d91c21afef62b32c_field_9, &__struct_info__d91c21afef62b32c_field_10, &__struct_info__d91c21afef62b32c_field_11, &__struct_info__d91c21afef62b32c_field_12, &__struct_info__d91c21afef62b32c_field_13, &__struct_info__d91c21afef62b32c_field_14, &__struct_info__d91c21afef62b32c_field_15, &__struct_info__d91c21afef62b32c_field_16, &__struct_info__d91c21afef62b32c_field_17, &__struct_info__d91c21afef62b32c_field_18, &__struct_info__d91c21afef62b32c_field_19, &__struct_info__d91c21afef62b32c_field_20, &__struct_info__d91c21afef62b32c_field_21, &__struct_info__d91c21afef62b32c_field_22, &__struct_info__d91c21afef62b32c_field_23, &__struct_info__d91c21afef62b32c_field_24 };
-StructInfo __struct_info__d91c21afef62b32c = {"DapiDebugAgent", "debugapi", 13, __struct_info__d91c21afef62b32c_fields, 25, 200, UINT64_C(0x0), nullptr, UINT64_C(0xd91c21afef62b32c), 0 };
-VarInfo __struct_info__31e0f560cc005077_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0x280f562af3da5a1), "__rtti", offsetof(debugapi::DapiStackWalker,__rtti), 14 };
+StructInfo __struct_info__d91c21afef62b32c = {"DapiDebugAgent", "debugapi", 13, __struct_info__d91c21afef62b32c_fields, 25, TypeSize<debugapi::DapiDebugAgent>::size, UINT64_C(0x0), nullptr, UINT64_C(0xd91c21afef62b32c), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, TypeSize<void *>::size, UINT64_C(0x280f562af3da5a1), "__rtti", offsetof(debugapi::DapiStackWalker,__rtti), 14 };
 TypeInfo * __type_info__894071b3265e2991_arg_types_var_3594142298729894007[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__894071b3265e2991_arg_names_var_3594142298729894007[1] = { "self" };
-VarInfo __struct_info__31e0f560cc005077_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__894071b3265e2991_arg_types_var_3594142298729894007, __type_info__894071b3265e2991_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, 8, UINT64_C(0x894071b3265e2991), "__finalize", offsetof(debugapi::DapiStackWalker,__finalize), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__894071b3265e2991_arg_types_var_3594142298729894007, __type_info__894071b3265e2991_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker))>::size, UINT64_C(0x894071b3265e2991), "__finalize", offsetof(debugapi::DapiStackWalker,__finalize), 0 };
 TypeInfo * __type_info__ba24a7dae93892bb_arg_types_var_3594142298729894007[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__ba24a7dae93892bb_arg_names_var_3594142298729894007[1] = { "self" };
-VarInfo __struct_info__31e0f560cc005077_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__ba24a7dae93892bb_arg_types_var_3594142298729894007, __type_info__ba24a7dae93892bb_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, 8, UINT64_C(0xba24a7dae93892bb), "canWalkArguments", offsetof(debugapi::DapiStackWalker,canWalkArguments), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__ba24a7dae93892bb_arg_types_var_3594142298729894007, __type_info__ba24a7dae93892bb_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiStackWalker))>::size, UINT64_C(0xba24a7dae93892bb), "canWalkArguments", offsetof(debugapi::DapiStackWalker,canWalkArguments), 0 };
 TypeInfo * __type_info__cc398c743a2640e0_arg_types_var_3594142298729894007[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__cc398c743a2640e0_arg_names_var_3594142298729894007[1] = { "self" };
-VarInfo __struct_info__31e0f560cc005077_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__cc398c743a2640e0_arg_types_var_3594142298729894007, __type_info__cc398c743a2640e0_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, 8, UINT64_C(0xcc398c743a2640e0), "canWalkVariables", offsetof(debugapi::DapiStackWalker,canWalkVariables), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__cc398c743a2640e0_arg_types_var_3594142298729894007, __type_info__cc398c743a2640e0_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiStackWalker))>::size, UINT64_C(0xcc398c743a2640e0), "canWalkVariables", offsetof(debugapi::DapiStackWalker,canWalkVariables), 0 };
 TypeInfo * __type_info__e7ea6856c665cde7_arg_types_var_3594142298729894007[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__e7ea6856c665cde7_arg_names_var_3594142298729894007[1] = { "self" };
-VarInfo __struct_info__31e0f560cc005077_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__e7ea6856c665cde7_arg_types_var_3594142298729894007, __type_info__e7ea6856c665cde7_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, 8, UINT64_C(0xe7ea6856c665cde7), "canWalkOutOfScopeVariables", offsetof(debugapi::DapiStackWalker,canWalkOutOfScopeVariables), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__e7ea6856c665cde7_arg_types_var_3594142298729894007, __type_info__e7ea6856c665cde7_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiStackWalker))>::size, UINT64_C(0xe7ea6856c665cde7), "canWalkOutOfScopeVariables", offsetof(debugapi::DapiStackWalker,canWalkOutOfScopeVariables), 0 };
 TypeInfo * __type_info__6215cbf9e4be26c_arg_types_var_3594142298729894007[3] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__9c225ec61b3e6a3c };
 const char * __type_info__6215cbf9e4be26c_arg_names_var_3594142298729894007[3] = { "self", "pp", "sp" };
-VarInfo __struct_info__31e0f560cc005077_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6215cbf9e4be26c_arg_types_var_3594142298729894007, __type_info__6215cbf9e4be26c_arg_names_var_3594142298729894007, 3, 0, nullptr, 12, 8, UINT64_C(0x6215cbf9e4be26c), "onBeforeCall", offsetof(debugapi::DapiStackWalker,onBeforeCall), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6215cbf9e4be26c_arg_types_var_3594142298729894007, __type_info__6215cbf9e4be26c_arg_names_var_3594142298729894007, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,void * const ))>::size, UINT64_C(0x6215cbf9e4be26c), "onBeforeCall", offsetof(debugapi::DapiStackWalker,onBeforeCall), 0 };
 TypeInfo * __type_info__f396ff83ffb05655_arg_types_var_3594142298729894007[3] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__921d3d0750982f13 };
 const char * __type_info__f396ff83ffb05655_arg_names_var_3594142298729894007[3] = { "self", "pp", "fileName" };
-VarInfo __struct_info__31e0f560cc005077_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f396ff83ffb05655_arg_types_var_3594142298729894007, __type_info__f396ff83ffb05655_arg_names_var_3594142298729894007, 3, 0, nullptr, 12, 8, UINT64_C(0xf396ff83ffb05655), "onCallAOT", offsetof(debugapi::DapiStackWalker,onCallAOT), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__f396ff83ffb05655_arg_types_var_3594142298729894007, __type_info__f396ff83ffb05655_arg_names_var_3594142298729894007, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,char * const ))>::size, UINT64_C(0xf396ff83ffb05655), "onCallAOT", offsetof(debugapi::DapiStackWalker,onCallAOT), 0 };
 TypeInfo * __type_info__ac62bd978c461883_arg_types_var_3594142298729894007[4] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__40912bc113ca9a8a, &__type_info__246dda13a8a4b104 };
 const char * __type_info__ac62bd978c461883_arg_names_var_3594142298729894007[4] = { "self", "pp", "info", "at" };
-VarInfo __struct_info__31e0f560cc005077_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__ac62bd978c461883_arg_types_var_3594142298729894007, __type_info__ac62bd978c461883_arg_names_var_3594142298729894007, 4, 0, nullptr, 12, 8, UINT64_C(0xac62bd978c461883), "onCallAt", offsetof(debugapi::DapiStackWalker,onCallAt), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__ac62bd978c461883_arg_types_var_3594142298729894007, __type_info__ac62bd978c461883_arg_names_var_3594142298729894007, 4, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,FuncInfo const ,LineInfo const ))>::size, UINT64_C(0xac62bd978c461883), "onCallAt", offsetof(debugapi::DapiStackWalker,onCallAt), 0 };
 TypeInfo * __type_info__6e8c47174cd471b0_arg_types_var_3594142298729894007[3] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__40912bc113ca9a8a };
 const char * __type_info__6e8c47174cd471b0_arg_names_var_3594142298729894007[3] = { "self", "pp", "info" };
-VarInfo __struct_info__31e0f560cc005077_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6e8c47174cd471b0_arg_types_var_3594142298729894007, __type_info__6e8c47174cd471b0_arg_names_var_3594142298729894007, 3, 0, nullptr, 12, 8, UINT64_C(0x6e8c47174cd471b0), "onCall", offsetof(debugapi::DapiStackWalker,onCall), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__6e8c47174cd471b0_arg_types_var_3594142298729894007, __type_info__6e8c47174cd471b0_arg_names_var_3594142298729894007, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,FuncInfo const ))>::size, UINT64_C(0x6e8c47174cd471b0), "onCall", offsetof(debugapi::DapiStackWalker,onCall), 0 };
 TypeInfo * __type_info__bb7dd188f2b1d03a_arg_types_var_3594142298729894007[3] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816, &__type_info__9c225ec61b3e6a3c };
 const char * __type_info__bb7dd188f2b1d03a_arg_names_var_3594142298729894007[3] = { "self", "pp", "sp" };
-VarInfo __struct_info__31e0f560cc005077_field_9 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__bb7dd188f2b1d03a_arg_types_var_3594142298729894007, __type_info__bb7dd188f2b1d03a_arg_names_var_3594142298729894007, 3, 0, nullptr, 12, 8, UINT64_C(0xbb7dd188f2b1d03a), "onAfterPrologue", offsetof(debugapi::DapiStackWalker,onAfterPrologue), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_9 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__bb7dd188f2b1d03a_arg_types_var_3594142298729894007, __type_info__bb7dd188f2b1d03a_arg_names_var_3594142298729894007, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,Prologue const ,void * const ))>::size, UINT64_C(0xbb7dd188f2b1d03a), "onAfterPrologue", offsetof(debugapi::DapiStackWalker,onAfterPrologue), 0 };
 TypeInfo * __type_info__d1b1bc8ffb15d968_arg_types_var_3594142298729894007[5] = { &__type_info__a4d736e8781a7b06, &__type_info__40912bc113ca9a8a, &__type_info__af8afe4c86446b52, &__type_info__c3770d5f54a928b3, &__type_info__7c9b820817d2b152 };
 const char * __type_info__d1b1bc8ffb15d968_arg_names_var_3594142298729894007[5] = { "self", "info", "index", "vinfo", "arg" };
-VarInfo __struct_info__31e0f560cc005077_field_10 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d1b1bc8ffb15d968_arg_types_var_3594142298729894007, __type_info__d1b1bc8ffb15d968_arg_names_var_3594142298729894007, 5, 0, nullptr, 12, 8, UINT64_C(0xd1b1bc8ffb15d968), "onArgument", offsetof(debugapi::DapiStackWalker,onArgument), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_10 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d1b1bc8ffb15d968_arg_types_var_3594142298729894007, __type_info__d1b1bc8ffb15d968_arg_names_var_3594142298729894007, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,FuncInfo const ,int32_t,VarInfo const ,float4))>::size, UINT64_C(0xd1b1bc8ffb15d968), "onArgument", offsetof(debugapi::DapiStackWalker,onArgument), 0 };
 TypeInfo * __type_info__c0460d6b0b9f90c3_arg_types_var_3594142298729894007[1] = { &__type_info__a4d736e8781a7b06 };
 const char * __type_info__c0460d6b0b9f90c3_arg_names_var_3594142298729894007[1] = { "self" };
-VarInfo __struct_info__31e0f560cc005077_field_11 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c0460d6b0b9f90c3_arg_types_var_3594142298729894007, __type_info__c0460d6b0b9f90c3_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, 8, UINT64_C(0xc0460d6b0b9f90c3), "onBeforeVariables", offsetof(debugapi::DapiStackWalker,onBeforeVariables), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_11 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__c0460d6b0b9f90c3_arg_types_var_3594142298729894007, __type_info__c0460d6b0b9f90c3_arg_names_var_3594142298729894007, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker))>::size, UINT64_C(0xc0460d6b0b9f90c3), "onBeforeVariables", offsetof(debugapi::DapiStackWalker,onBeforeVariables), 0 };
 TypeInfo * __type_info__632c5e0a5c27b74e_arg_types_var_3594142298729894007[5] = { &__type_info__a4d736e8781a7b06, &__type_info__40912bc113ca9a8a, &__type_info__873433ff256e8173, &__type_info__9c225ec61b3e6a3c, &__type_info__af81fe4c86352052 };
 const char * __type_info__632c5e0a5c27b74e_arg_names_var_3594142298729894007[5] = { "self", "inf", "vinfo", "arg", "inScope" };
-VarInfo __struct_info__31e0f560cc005077_field_12 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__632c5e0a5c27b74e_arg_types_var_3594142298729894007, __type_info__632c5e0a5c27b74e_arg_names_var_3594142298729894007, 5, 0, nullptr, 12, 8, UINT64_C(0x632c5e0a5c27b74e), "onVariable", offsetof(debugapi::DapiStackWalker,onVariable), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_12 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__632c5e0a5c27b74e_arg_types_var_3594142298729894007, __type_info__632c5e0a5c27b74e_arg_names_var_3594142298729894007, 5, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,debugapi::DapiStackWalker,FuncInfo const ,LocalVariableInfo const ,void * const ,bool))>::size, UINT64_C(0x632c5e0a5c27b74e), "onVariable", offsetof(debugapi::DapiStackWalker,onVariable), 0 };
 TypeInfo * __type_info__3e54f61c3199cebd_arg_types_var_3594142298729894007[2] = { &__type_info__a4d736e8781a7b06, &__type_info__e421b7d32038f816 };
 const char * __type_info__3e54f61c3199cebd_arg_names_var_3594142298729894007[2] = { "self", "pp" };
-VarInfo __struct_info__31e0f560cc005077_field_13 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__3e54f61c3199cebd_arg_types_var_3594142298729894007, __type_info__3e54f61c3199cebd_arg_names_var_3594142298729894007, 2, 0, nullptr, 12, 8, UINT64_C(0x3e54f61c3199cebd), "onAfterCall", offsetof(debugapi::DapiStackWalker,onAfterCall), 0 };
+VarInfo __struct_info__31e0f560cc005077_field_13 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__3e54f61c3199cebd_arg_types_var_3594142298729894007, __type_info__3e54f61c3199cebd_arg_names_var_3594142298729894007, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,debugapi::DapiStackWalker,Prologue const ))>::size, UINT64_C(0x3e54f61c3199cebd), "onAfterCall", offsetof(debugapi::DapiStackWalker,onAfterCall), 0 };
 VarInfo * __struct_info__31e0f560cc005077_fields[14] =  { &__struct_info__31e0f560cc005077_field_0, &__struct_info__31e0f560cc005077_field_1, &__struct_info__31e0f560cc005077_field_2, &__struct_info__31e0f560cc005077_field_3, &__struct_info__31e0f560cc005077_field_4, &__struct_info__31e0f560cc005077_field_5, &__struct_info__31e0f560cc005077_field_6, &__struct_info__31e0f560cc005077_field_7, &__struct_info__31e0f560cc005077_field_8, &__struct_info__31e0f560cc005077_field_9, &__struct_info__31e0f560cc005077_field_10, &__struct_info__31e0f560cc005077_field_11, &__struct_info__31e0f560cc005077_field_12, &__struct_info__31e0f560cc005077_field_13 };
-StructInfo __struct_info__31e0f560cc005077 = {"DapiStackWalker", "debugapi", 13, __struct_info__31e0f560cc005077_fields, 14, 112, UINT64_C(0x0), nullptr, UINT64_C(0x31e0f560cc005077), 0 };
-TypeInfo __type_info__921d3d0750982f13 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16484, 8, UINT64_C(0x921d3d0750982f13) };
-TypeInfo __type_info__a9e212d4f301a82c = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__246dda13a8a4b104, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, 8, UINT64_C(0xa9e212d4f301a82c) };
-TypeInfo __type_info__209f9e4a9562d5c2 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__44ca287faf79178, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, 8, UINT64_C(0x209f9e4a9562d5c2) };
-TypeInfo __type_info__2d750e15c3790305 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__767637ee1a337419, nullptr, nullptr, nullptr, 0, 0, nullptr, 24620, 8, UINT64_C(0x2d750e15c3790305) };
-TypeInfo __type_info__ed65100a3b73031a = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__5ac778689ccf4816, nullptr, nullptr, nullptr, 0, 0, nullptr, 24620, 8, UINT64_C(0xed65100a3b73031a) };
-TypeInfo __type_info__9c225ec61b3e6a3c = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, 8, UINT64_C(0x9c225ec61b3e6a3c) };
-TypeInfo __type_info__e421b7d32038f816 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~debugapi::Prologue"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24622, 32, UINT64_C(0xe421b7d32038f816) };
-TypeInfo __type_info__40912bc113ca9a8a = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::FuncInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24622, 80, UINT64_C(0x40912bc113ca9a8a) };
-TypeInfo __type_info__246dda13a8a4b104 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::LineInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 8230, 24, UINT64_C(0x246dda13a8a4b104) };
-TypeInfo __type_info__873433ff256e8173 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::LocalVariableInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24614, 120, UINT64_C(0x873433ff256e8173) };
-TypeInfo __type_info__bc67beb4aa160fd4 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::TypeInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24622, 80, UINT64_C(0xbc67beb4aa160fd4) };
-TypeInfo __type_info__c3770d5f54a928b3 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::VarInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24614, 128, UINT64_C(0xc3770d5f54a928b3) };
-TypeInfo __type_info__faddef75a1c73c1f = { Type::tPointer, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, 8, UINT64_C(0xfaddef75a1c73c1f) };
-TypeInfo __type_info__faddb375a1c6d62b = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, 8, UINT64_C(0xfaddb375a1c6d62b) };
-TypeInfo __type_info__af81fe4c86352052 = { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 1, UINT64_C(0xaf81fe4c86352052) };
-TypeInfo __type_info__7c9b820817d2b152 = { Type::tFloat4, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 16, UINT64_C(0x7c9b820817d2b152) };
-TypeInfo __type_info__af8afe4c86446b52 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 4, UINT64_C(0xaf8afe4c86446b52) };
-TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, 8, UINT64_C(0xaf90fe4c864e9d52) };
-TypeInfo __type_info__b68d800849332aec = { Type::tUInt64, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 8, UINT64_C(0xb68d800849332aec) };
-TypeInfo __type_info__44ca287faf79178 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~debugapi::DebugAgent"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 2, 24, UINT64_C(0x44ca287faf79178) };
-TypeInfo __type_info__87688966731f2665 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~debugapi::StackWalker"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 2, 16, UINT64_C(0x87688966731f2665) };
-TypeInfo __type_info__767637ee1a337419 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::Context"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, 576, UINT64_C(0x767637ee1a337419) };
-TypeInfo __type_info__5ac778689ccf4816 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::SimFunction"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, 56, UINT64_C(0x5ac778689ccf4816) };
-TypeInfo __type_info__2ab2203ab786034d = { Type::tStructure, &__struct_info__550ac570675ff176, nullptr, nullptr, &__type_info__4e03c6707d012d5b, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, 216, UINT64_C(0x2ab2203ab786034d) };
-TypeInfo __type_info__80bd755d94e49a69 = { Type::tStructure, &__struct_info__f935e99ac014dfbe, nullptr, nullptr, &__type_info__a4d736e8781a7b06, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, 120, UINT64_C(0x80bd755d94e49a69) };
-TypeInfo __type_info__4e03c6707d012d5b = { Type::tStructure, &__struct_info__d91c21afef62b32c, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, 200, UINT64_C(0x4e03c6707d012d5b) };
-TypeInfo __type_info__a4d736e8781a7b06 = { Type::tStructure, &__struct_info__31e0f560cc005077, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, 112, UINT64_C(0xa4d736e8781a7b06) };
-TypeInfo __type_info__af63df4c8601f1a5 = { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 1, UINT64_C(0xaf63df4c8601f1a5) };
-TypeInfo __type_info__af63eb4c86020609 = { Type::tVoid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 0, UINT64_C(0xaf63eb4c86020609) };
+StructInfo __struct_info__31e0f560cc005077 = {"DapiStackWalker", "debugapi", 13, __struct_info__31e0f560cc005077_fields, 14, TypeSize<debugapi::DapiStackWalker>::size, UINT64_C(0x0), nullptr, UINT64_C(0x31e0f560cc005077), 0 };
+TypeInfo __type_info__921d3d0750982f13 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16484, TypeSize<char *>::size, UINT64_C(0x921d3d0750982f13) };
+TypeInfo __type_info__a9e212d4f301a82c = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__246dda13a8a4b104, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, TypeSize<LineInfo const  *>::size, UINT64_C(0xa9e212d4f301a82c) };
+TypeInfo __type_info__209f9e4a9562d5c2 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__44ca287faf79178, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, TypeSize<DebugAgent *>::size, UINT64_C(0x209f9e4a9562d5c2) };
+TypeInfo __type_info__2d750e15c3790305 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__767637ee1a337419, nullptr, nullptr, nullptr, 0, 0, nullptr, 24620, TypeSize<Context *>::size, UINT64_C(0x2d750e15c3790305) };
+TypeInfo __type_info__ed65100a3b73031a = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__5ac778689ccf4816, nullptr, nullptr, nullptr, 0, 0, nullptr, 24620, TypeSize<SimFunction *>::size, UINT64_C(0xed65100a3b73031a) };
+TypeInfo __type_info__9c225ec61b3e6a3c = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, TypeSize<void *>::size, UINT64_C(0x9c225ec61b3e6a3c) };
+TypeInfo __type_info__e421b7d32038f816 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~debugapi::Prologue"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24622, TypeSize<Prologue>::size, UINT64_C(0xe421b7d32038f816) };
+TypeInfo __type_info__40912bc113ca9a8a = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::FuncInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24622, TypeSize<FuncInfo>::size, UINT64_C(0x40912bc113ca9a8a) };
+TypeInfo __type_info__246dda13a8a4b104 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::LineInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 8230, TypeSize<LineInfo>::size, UINT64_C(0x246dda13a8a4b104) };
+TypeInfo __type_info__873433ff256e8173 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::LocalVariableInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24614, TypeSize<LocalVariableInfo>::size, UINT64_C(0x873433ff256e8173) };
+TypeInfo __type_info__bc67beb4aa160fd4 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::TypeInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24622, TypeSize<TypeInfo>::size, UINT64_C(0xbc67beb4aa160fd4) };
+TypeInfo __type_info__c3770d5f54a928b3 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::VarInfo"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24614, TypeSize<VarInfo>::size, UINT64_C(0xc3770d5f54a928b3) };
+TypeInfo __type_info__faddef75a1c73c1f = { Type::tPointer, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 8236, TypeSize<void *>::size, UINT64_C(0xfaddef75a1c73c1f) };
+TypeInfo __type_info__faddb375a1c6d62b = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, TypeSize<char *>::size, UINT64_C(0xfaddb375a1c6d62b) };
+TypeInfo __type_info__af81fe4c86352052 = { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<bool>::size, UINT64_C(0xaf81fe4c86352052) };
+TypeInfo __type_info__7c9b820817d2b152 = { Type::tFloat4, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<float4>::size, UINT64_C(0x7c9b820817d2b152) };
+TypeInfo __type_info__af8afe4c86446b52 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<int32_t>::size, UINT64_C(0xaf8afe4c86446b52) };
+TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, TypeSize<char *>::size, UINT64_C(0xaf90fe4c864e9d52) };
+TypeInfo __type_info__b68d800849332aec = { Type::tUInt64, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<uint64_t>::size, UINT64_C(0xb68d800849332aec) };
+TypeInfo __type_info__44ca287faf79178 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~debugapi::DebugAgent"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 2, TypeSize<DebugAgent>::size, UINT64_C(0x44ca287faf79178) };
+TypeInfo __type_info__87688966731f2665 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~debugapi::StackWalker"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 2, TypeSize<StackWalker>::size, UINT64_C(0x87688966731f2665) };
+TypeInfo __type_info__767637ee1a337419 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::Context"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, TypeSize<Context>::size, UINT64_C(0x767637ee1a337419) };
+TypeInfo __type_info__5ac778689ccf4816 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::SimFunction"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, TypeSize<SimFunction>::size, UINT64_C(0x5ac778689ccf4816) };
+TypeInfo __type_info__2ab2203ab786034d = { Type::tStructure, &__struct_info__550ac570675ff176, nullptr, nullptr, &__type_info__4e03c6707d012d5b, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, TypeSize<ast_debug::ContextStateAgent>::size, UINT64_C(0x2ab2203ab786034d) };
+TypeInfo __type_info__80bd755d94e49a69 = { Type::tStructure, &__struct_info__f935e99ac014dfbe, nullptr, nullptr, &__type_info__a4d736e8781a7b06, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, TypeSize<ast_debug::SampleStackWalker>::size, UINT64_C(0x80bd755d94e49a69) };
+TypeInfo __type_info__4e03c6707d012d5b = { Type::tStructure, &__struct_info__d91c21afef62b32c, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, TypeSize<debugapi::DapiDebugAgent>::size, UINT64_C(0x4e03c6707d012d5b) };
+TypeInfo __type_info__a4d736e8781a7b06 = { Type::tStructure, &__struct_info__31e0f560cc005077, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, TypeSize<debugapi::DapiStackWalker>::size, UINT64_C(0xa4d736e8781a7b06) };
+TypeInfo __type_info__af63df4c8601f1a5 = { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<bool>::size, UINT64_C(0xaf63df4c8601f1a5) };
+TypeInfo __type_info__af63eb4c86020609 = { Type::tVoid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<void>::size, UINT64_C(0xaf63eb4c86020609) };
 
 static void resolveTypeInfoAnnotations()
 {
@@ -712,51 +712,51 @@ static void resolveTypeInfoAnnotations()
 
 TypeInfo * __tinfo_0[2] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c81a84221fb6bad2 ( Context * __context__, ast_debug::SampleStackWalker const  & __cl_rename_at_116_0 );
-inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_56257da3a0e7b243 ( Context * __context__, VarInfo const  & ___vinfo_rename_at_36_1, char * const  __mod_rename_at_36_2, char * const  __what_rename_at_36_3 );
-inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_a210fcb9569bff8c ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_36_5, char * const  __mod_rename_at_36_6, char * const  __what_rename_at_36_7 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7c5d3c9bad07d43c ( Context * __context__, ast_debug::ContextStateAgent const  & __cl_rename_at_116_9 );
-inline bool _Funcast_debugTickisRttiTypeTick4516636421360898655_d3b3aacafe01c827 ( Context * __context__, VarInfo const  & __vinfo_rename_at_61_10, char * const  __what_rename_at_61_11 );
-inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37 ( Context * __context__, Context & __ctx_rename_at_13_12, char * const  __category_rename_at_13_13, char * const  __name_rename_at_13_14, char * const  __value_rename_at_13_15 );
-inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_48ecdbe80a06d95e ( Context * __context__, Context & __ctx_rename_at_13_18, char * const  __category_rename_at_13_19, char * const  __name_rename_at_13_20, void * const  __value_rename_at_13_21 );
-inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_59fb59f45b96aa56 ( Context * __context__, VarInfo const  & ___vinfo_rename_at_19_24 );
-inline char * _FuncastTickdescribeTick842554968825501494_452cfc8955963a18 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_48_26 );
-inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_3b7ab890c635e212 ( Context * __context__, VarInfo const  & ___vinfo_rename_at_53_27, char * const  __what_rename_at_53_28 );
-inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_29, bool __extra_rename_at_38_30, bool __contracts_rename_at_38_31, bool __modules_rename_at_38_32 );
-inline char * _FuncastTickdescribeTick16391739697169902387_22f6094444e3262d ( Context * __context__, smart_ptr_raw<Function> const  __expr_rename_at_53_33 );
-inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_48d56f4f80ba3b53 ( Context * __context__, VarInfo const  & ___vinfo_rename_at_57_34, char * const  __what_rename_at_57_35 );
-inline bool _Funcast_debugTickisRttiTypeTick4516636421360898655_2f19fa27e91344c2 ( Context * __context__, LocalVariableInfo const  & __vinfo_rename_at_61_36, char * const  __what_rename_at_61_37 );
-inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_967b88ce98476055 ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_19_38 );
-inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_1d28eff7d398c8a3 ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_53_40, char * const  __what_rename_at_53_41 );
-inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_515c5b2443eb4ef0 ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_57_42, char * const  __what_rename_at_57_43 );
-inline void _Funcast_debugTickdescribe_argTick8826490271305289944_efb00f1647d906b2 ( Context * __context__, Context & __ctxid_rename_at_74_44, VarInfo const  & __vinfo_rename_at_74_45, void * const  __arg_rename_at_74_46 );
-inline void _Funcast_debugTickdescribe_argTick8826490271305289944_af045ee043c050cf ( Context * __context__, Context & __ctxid_rename_at_74_48, LocalVariableInfo const  & __vinfo_rename_at_74_49, void * const  __arg_rename_at_74_50 );
-inline smart_ptr_raw<StackWalker> _FuncdebugapiTickmake_stack_walkerTick10101906578839871846_229ea554e31d57ca ( Context * __context__, ast_debug::SampleStackWalker * const  __classPtr_rename_at_216_52 );
-inline void finalize_500fce7609128ffb ( Context * __context__, ast_debug::SampleStackWalker * & ____this_rename_at_143_54 );
-inline void finalize_5733f4cfa043e920 ( Context * __context__, ast_debug::SampleStackWalker & ____this_rename_at_103_56 );
-inline void _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_3e1c20224cd19f2e ( Context * __context__, ast_debug::ContextStateAgent * __agentPtr_rename_at_37_57, char * const  __category_rename_at_37_58 );
-inline void _FuncSampleStackWalkerTickonArgument_b3c1b48f676b9bbd ( Context * __context__, ast_debug::SampleStackWalker & __self_rename_at_105_61, FuncInfo const  & __info_rename_at_105_62, int32_t __index_rename_at_105_63, VarInfo const  & __vinfo_rename_at_105_64, float4 __arg_rename_at_105_65 );
-inline void _FuncSampleStackWalkerTickonVariable_b047f0cc7c7030d6 ( Context * __context__, ast_debug::SampleStackWalker & __self_rename_at_114_66, FuncInfo const  & __inf_rename_at_114_67, LocalVariableInfo const  & __vinfo_rename_at_114_68, void * const  __arg_rename_at_114_69, bool __inScope_rename_at_114_70 );
-inline bool _FuncSampleStackWalkerTickonAfterCall_eedb864288cb4a8a ( Context * __context__, ast_debug::SampleStackWalker & __self_rename_at_126_71, Prologue const  & __pp_rename_at_126_72 );
-inline void _FuncSampleStackWalker_0x27___finalize_af21cd893b46a727 ( Context * __context__, ast_debug::SampleStackWalker & __self_rename_at_103_73 );
-inline ast_debug::ContextStateAgent ContextStateAgent_e10fdff26046cd6f ( Context * __context__ );
-inline void _FuncContextStateAgentTickContextStateAgent_ce0829614ebac3e5 ( Context * __context__, ast_debug::ContextStateAgent & __self_rename_at_134_75 );
-inline void finalize_dcfff9e2129da1aa ( Context * __context__, ast_debug::ContextStateAgent & __self_rename_at_140_76 );
-inline void _FuncContextStateAgentTickonCollect_d5b055adc3fcc695 ( Context * __context__, ast_debug::ContextStateAgent & __self_rename_at_146_77, Context & __ctx_rename_at_146_78, LineInfo const  & __at_rename_at_146_79 );
-inline void _FuncContextStateAgent_0x27___finalize_c2bf11f8c2d8aef ( Context * __context__, ast_debug::ContextStateAgent & __self_rename_at_131_80 );
-inline void state_agent_a7d0d7fe180b2c1a ( Context * __context__, Context const  & __ctx_rename_at_153_81 );
-inline ast_debug::SampleStackWalker SampleStackWalker_b9ed6b4c0fa80af2 ( Context * __context__ );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_bba5fb0c8374bbbe ( Context * __context__, ast_debug::SampleStackWalker const  & __cl_rename_at_116_0 );
+inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_f8375010a92181fd ( Context * __context__, VarInfo const  & ___vinfo_rename_at_36_1, char * const  __mod_rename_at_36_2, char * const  __what_rename_at_36_3 );
+inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_5bfef199ccb05709 ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_36_5, char * const  __mod_rename_at_36_6, char * const  __what_rename_at_36_7 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a2c8a0c47be9510e ( Context * __context__, ast_debug::ContextStateAgent const  & __cl_rename_at_116_9 );
+inline bool _Funcast_debugTickisRttiTypeTick4516636421360898655_1c5c2baa43ca26e9 ( Context * __context__, VarInfo const  & __vinfo_rename_at_61_10, char * const  __what_rename_at_61_11 );
+inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb ( Context * __context__, Context & __ctx_rename_at_13_12, char * const  __category_rename_at_13_13, char * const  __name_rename_at_13_14, char * const  __value_rename_at_13_15 );
+inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_e721ab7187b99372 ( Context * __context__, Context & __ctx_rename_at_13_18, char * const  __category_rename_at_13_19, char * const  __name_rename_at_13_20, void * const  __value_rename_at_13_21 );
+inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_3df62d18f05fb904 ( Context * __context__, VarInfo const  & ___vinfo_rename_at_19_24 );
+inline char * _FuncastTickdescribeTick842554968825501494_d3b39abef684fd9c ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_48_26 );
+inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_afd096da09a61149 ( Context * __context__, VarInfo const  & ___vinfo_rename_at_53_27, char * const  __what_rename_at_53_28 );
+inline char * _FuncastTickdescribeTick2562845734617055679_1718ec6d98dd8dc2 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_29, bool __extra_rename_at_38_30, bool __contracts_rename_at_38_31, bool __modules_rename_at_38_32 );
+inline char * _FuncastTickdescribeTick16391739697169902387_2486f3e24b9ce074 ( Context * __context__, smart_ptr_raw<Function> const  __expr_rename_at_53_33 );
+inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_e0e95eb3eba76672 ( Context * __context__, VarInfo const  & ___vinfo_rename_at_57_34, char * const  __what_rename_at_57_35 );
+inline bool _Funcast_debugTickisRttiTypeTick4516636421360898655_ea6b8696b187685 ( Context * __context__, LocalVariableInfo const  & __vinfo_rename_at_61_36, char * const  __what_rename_at_61_37 );
+inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_f924b73de8303b73 ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_19_38 );
+inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_6e5a2408f3ed9e38 ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_53_40, char * const  __what_rename_at_53_41 );
+inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_f3041bd0bbf5c642 ( Context * __context__, LocalVariableInfo const  & ___vinfo_rename_at_57_42, char * const  __what_rename_at_57_43 );
+inline void _Funcast_debugTickdescribe_argTick8826490271305289944_e13445f7c8841d0 ( Context * __context__, Context & __ctxid_rename_at_74_44, VarInfo const  & __vinfo_rename_at_74_45, void * const  __arg_rename_at_74_46 );
+inline void _Funcast_debugTickdescribe_argTick8826490271305289944_86c7fa92c147b68e ( Context * __context__, Context & __ctxid_rename_at_74_48, LocalVariableInfo const  & __vinfo_rename_at_74_49, void * const  __arg_rename_at_74_50 );
+inline smart_ptr_raw<StackWalker> _FuncdebugapiTickmake_stack_walkerTick10101906578839871846_a239c653f1dc64ef ( Context * __context__, ast_debug::SampleStackWalker * const  __classPtr_rename_at_216_52 );
+inline void finalize_dddf7161a4a89879 ( Context * __context__, ast_debug::SampleStackWalker * & ____this_rename_at_143_54 );
+inline void finalize_9600d8075ee0768f ( Context * __context__, ast_debug::SampleStackWalker & ____this_rename_at_103_56 );
+inline void _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_4ae64024a0dde4af ( Context * __context__, ast_debug::ContextStateAgent * __agentPtr_rename_at_37_57, char * const  __category_rename_at_37_58 );
+inline void _FuncSampleStackWalkerTickonArgument_154a135b4ae98096 ( Context * __context__, ast_debug::SampleStackWalker & __self_rename_at_105_61, FuncInfo const  & __info_rename_at_105_62, int32_t __index_rename_at_105_63, VarInfo const  & __vinfo_rename_at_105_64, float4 __arg_rename_at_105_65 );
+inline void _FuncSampleStackWalkerTickonVariable_6a1013a916da4e55 ( Context * __context__, ast_debug::SampleStackWalker & __self_rename_at_114_66, FuncInfo const  & __inf_rename_at_114_67, LocalVariableInfo const  & __vinfo_rename_at_114_68, void * const  __arg_rename_at_114_69, bool __inScope_rename_at_114_70 );
+inline bool _FuncSampleStackWalkerTickonAfterCall_92406c7e943a0c53 ( Context * __context__, ast_debug::SampleStackWalker & __self_rename_at_126_71, Prologue const  & __pp_rename_at_126_72 );
+inline void _FuncSampleStackWalker_0x27___finalize_940253be062face6 ( Context * __context__, ast_debug::SampleStackWalker & __self_rename_at_103_73 );
+inline ast_debug::ContextStateAgent ContextStateAgent_9423a148413ae844 ( Context * __context__ );
+inline void _FuncContextStateAgentTickContextStateAgent_2b1248bc0c3fb8fc ( Context * __context__, ast_debug::ContextStateAgent & __self_rename_at_134_75 );
+inline void finalize_447275e618a33c1a ( Context * __context__, ast_debug::ContextStateAgent & __self_rename_at_140_76 );
+inline void _FuncContextStateAgentTickonCollect_bf3eeab30cfe52dd ( Context * __context__, ast_debug::ContextStateAgent & __self_rename_at_146_77, Context & __ctx_rename_at_146_78, LineInfo const  & __at_rename_at_146_79 );
+inline void _FuncContextStateAgent_0x27___finalize_dd5eed4da9e04f59 ( Context * __context__, ast_debug::ContextStateAgent & __self_rename_at_131_80 );
+inline void state_agent_4b4d67a535c503b5 ( Context * __context__, Context const  & __ctx_rename_at_153_81 );
+inline ast_debug::SampleStackWalker SampleStackWalker_5227080c754c5faf ( Context * __context__ );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c81a84221fb6bad2 ( Context * __context__, ast_debug::SampleStackWalker const  &  __cl_rename_at_116_0 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_bba5fb0c8374bbbe ( Context * __context__, ast_debug::SampleStackWalker const  &  __cl_rename_at_116_0 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_0.__rtti))).getStructType())));
 }
 
-inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_56257da3a0e7b243 ( Context * __context__, VarInfo const  &  ___vinfo_rename_at_36_1, char * const  __mod_rename_at_36_2, char * const  __what_rename_at_36_3 )
+inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_f8375010a92181fd ( Context * __context__, VarInfo const  &  ___vinfo_rename_at_36_1, char * const  __mod_rename_at_36_2, char * const  __what_rename_at_36_3 )
 {
     if ( (___vinfo_rename_at_36_1.type /*basicType*/ != DAS_COMMENT(bound_enum) das::Type::tPointer) || (___vinfo_rename_at_36_1.firstType /*firstType*/ == nullptr) )
     {
@@ -767,7 +767,7 @@ inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_56257da3a0
     };
 }
 
-inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_a210fcb9569bff8c ( Context * __context__, LocalVariableInfo const  &  ___vinfo_rename_at_36_5, char * const  __mod_rename_at_36_6, char * const  __what_rename_at_36_7 )
+inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_5bfef199ccb05709 ( Context * __context__, LocalVariableInfo const  &  ___vinfo_rename_at_36_5, char * const  __mod_rename_at_36_6, char * const  __what_rename_at_36_7 )
 {
     if ( (___vinfo_rename_at_36_5.type /*basicType*/ != DAS_COMMENT(bound_enum) das::Type::tPointer) || (___vinfo_rename_at_36_5.firstType /*firstType*/ == nullptr) )
     {
@@ -778,17 +778,17 @@ inline bool _Funcast_debugTickisModulePtrTypeTick12629776342530398480_a210fcb956
     };
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7c5d3c9bad07d43c ( Context * __context__, ast_debug::ContextStateAgent const  &  __cl_rename_at_116_9 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a2c8a0c47be9510e ( Context * __context__, ast_debug::ContextStateAgent const  &  __cl_rename_at_116_9 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_9.__rtti))).getStructType())));
 }
 
-inline bool _Funcast_debugTickisRttiTypeTick4516636421360898655_d3b3aacafe01c827 ( Context * __context__, VarInfo const  &  __vinfo_rename_at_61_10, char * const  __what_rename_at_61_11 )
+inline bool _Funcast_debugTickisRttiTypeTick4516636421360898655_1c5c2baa43ca26e9 ( Context * __context__, VarInfo const  &  __vinfo_rename_at_61_10, char * const  __what_rename_at_61_11 )
 {
     return das_auto_cast<bool>::cast((__vinfo_rename_at_61_10.type /*basicType*/ != DAS_COMMENT(bound_enum) das::Type::tHandle) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast(((neq_dstr_str(das_arg<das::string>::pass(((__vinfo_rename_at_61_10).getAnnotation())->module /*_module*/->name /*name*/),((char *) "rtti"))) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast(((neq_dstr_str(das_arg<das::string>::pass(((__vinfo_rename_at_61_10).getAnnotation())->name /*name*/),__what_rename_at_61_11)) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast(true))))));
 }
 
-inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37 ( Context * __context__, Context &  __ctx_rename_at_13_12, char * const  __category_rename_at_13_13, char * const  __name_rename_at_13_14, char * const  __value_rename_at_13_15 )
+inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb ( Context * __context__, Context &  __ctx_rename_at_13_12, char * const  __category_rename_at_13_13, char * const  __name_rename_at_13_14, char * const  __value_rename_at_13_15 )
 {
     TypeInfo __tinfo_rename_at_14_16_ConstRef = ((TypeInfo)(__type_info__faddb375a1c6d62b));
     TypeInfo const  & __tinfo_rename_at_14_16 = __tinfo_rename_at_14_16_ConstRef; ;
@@ -796,7 +796,7 @@ inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678a
     dapiReportContextState(das_arg<Context>::pass(__ctx_rename_at_13_12),__category_rename_at_13_13,__name_rename_at_13_14,das_ref(__context__,__tinfo_rename_at_14_16),das_auto_cast<void * const >::cast(__pdata_rename_at_15_17));
 }
 
-inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_48ecdbe80a06d95e ( Context * __context__, Context &  __ctx_rename_at_13_18, char * const  __category_rename_at_13_19, char * const  __name_rename_at_13_20, void * const  __value_rename_at_13_21 )
+inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_e721ab7187b99372 ( Context * __context__, Context &  __ctx_rename_at_13_18, char * const  __category_rename_at_13_19, char * const  __name_rename_at_13_20, void * const  __value_rename_at_13_21 )
 {
     TypeInfo __tinfo_rename_at_14_22_ConstRef = ((TypeInfo)(__type_info__faddef75a1c73c1f));
     TypeInfo const  & __tinfo_rename_at_14_22 = __tinfo_rename_at_14_22_ConstRef; ;
@@ -804,7 +804,7 @@ inline void _Funcast_debugTickreport_to_debuggerTick2408265038224314806_48ecdbe8
     dapiReportContextState(das_arg<Context>::pass(__ctx_rename_at_13_18),__category_rename_at_13_19,__name_rename_at_13_20,das_ref(__context__,__tinfo_rename_at_14_22),das_auto_cast<void * const >::cast(__pdata_rename_at_15_23));
 }
 
-inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_59fb59f45b96aa56 ( Context * __context__, VarInfo const  &  ___vinfo_rename_at_19_24 )
+inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_3df62d18f05fb904 ( Context * __context__, VarInfo const  &  ___vinfo_rename_at_19_24 )
 {
     if ( (___vinfo_rename_at_19_24.type /*basicType*/ != DAS_COMMENT(bound_enum) das::Type::tPointer) || (___vinfo_rename_at_19_24.firstType /*firstType*/ == nullptr) )
     {
@@ -815,37 +815,37 @@ inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_59fb59f45b
     };
 }
 
-inline char * _FuncastTickdescribeTick842554968825501494_452cfc8955963a18 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_48_26 )
+inline char * _FuncastTickdescribeTick842554968825501494_d3b39abef684fd9c ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_48_26 )
 {
     return das_auto_cast<char *>::cast(((char * const )(ast_describe_expression(__expr_rename_at_48_26,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }
 
-inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_3b7ab890c635e212 ( Context * __context__, VarInfo const  &  ___vinfo_rename_at_53_27, char * const  __what_rename_at_53_28 )
+inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_afd096da09a61149 ( Context * __context__, VarInfo const  &  ___vinfo_rename_at_53_27, char * const  __what_rename_at_53_28 )
 {
-    return das_auto_cast<bool>::cast(_Funcast_debugTickisModulePtrTypeTick12629776342530398480_56257da3a0e7b243(__context__,___vinfo_rename_at_53_27,((char *) "ast"),__what_rename_at_53_28));
+    return das_auto_cast<bool>::cast(_Funcast_debugTickisModulePtrTypeTick12629776342530398480_f8375010a92181fd(__context__,___vinfo_rename_at_53_27,((char *) "ast"),__what_rename_at_53_28));
 }
 
-inline char * _FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_29, bool __extra_rename_at_38_30, bool __contracts_rename_at_38_31, bool __modules_rename_at_38_32 )
+inline char * _FuncastTickdescribeTick2562845734617055679_1718ec6d98dd8dc2 ( Context * __context__, smart_ptr_raw<TypeDecl> const  __decl_rename_at_38_29, bool __extra_rename_at_38_30, bool __contracts_rename_at_38_31, bool __modules_rename_at_38_32 )
 {
     return das_auto_cast<char *>::cast(((char * const )(ast_describe_typedecl(__decl_rename_at_38_29,__extra_rename_at_38_30,__contracts_rename_at_38_31,__modules_rename_at_38_32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }
 
-inline char * _FuncastTickdescribeTick16391739697169902387_22f6094444e3262d ( Context * __context__, smart_ptr_raw<Function> const  __expr_rename_at_53_33 )
+inline char * _FuncastTickdescribeTick16391739697169902387_2486f3e24b9ce074 ( Context * __context__, smart_ptr_raw<Function> const  __expr_rename_at_53_33 )
 {
     return das_auto_cast<char *>::cast(((char * const )(ast_describe_function(__expr_rename_at_53_33,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }
 
-inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_48d56f4f80ba3b53 ( Context * __context__, VarInfo const  &  ___vinfo_rename_at_57_34, char * const  __what_rename_at_57_35 )
+inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_e0e95eb3eba76672 ( Context * __context__, VarInfo const  &  ___vinfo_rename_at_57_34, char * const  __what_rename_at_57_35 )
 {
-    return das_auto_cast<bool>::cast(_Funcast_debugTickisModulePtrTypeTick12629776342530398480_56257da3a0e7b243(__context__,___vinfo_rename_at_57_34,((char *) "rtti"),__what_rename_at_57_35));
+    return das_auto_cast<bool>::cast(_Funcast_debugTickisModulePtrTypeTick12629776342530398480_f8375010a92181fd(__context__,___vinfo_rename_at_57_34,((char *) "rtti"),__what_rename_at_57_35));
 }
 
-inline bool _Funcast_debugTickisRttiTypeTick4516636421360898655_2f19fa27e91344c2 ( Context * __context__, LocalVariableInfo const  &  __vinfo_rename_at_61_36, char * const  __what_rename_at_61_37 )
+inline bool _Funcast_debugTickisRttiTypeTick4516636421360898655_ea6b8696b187685 ( Context * __context__, LocalVariableInfo const  &  __vinfo_rename_at_61_36, char * const  __what_rename_at_61_37 )
 {
     return das_auto_cast<bool>::cast((__vinfo_rename_at_61_36.type /*basicType*/ != DAS_COMMENT(bound_enum) das::Type::tHandle) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast(((neq_dstr_str(das_arg<das::string>::pass(((__vinfo_rename_at_61_36).getAnnotation())->module /*_module*/->name /*name*/),((char *) "rtti"))) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast(((neq_dstr_str(das_arg<das::string>::pass(((__vinfo_rename_at_61_36).getAnnotation())->name /*name*/),__what_rename_at_61_37)) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast(true))))));
 }
 
-inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_967b88ce98476055 ( Context * __context__, LocalVariableInfo const  &  ___vinfo_rename_at_19_38 )
+inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_f924b73de8303b73 ( Context * __context__, LocalVariableInfo const  &  ___vinfo_rename_at_19_38 )
 {
     if ( (___vinfo_rename_at_19_38.type /*basicType*/ != DAS_COMMENT(bound_enum) das::Type::tPointer) || (___vinfo_rename_at_19_38.firstType /*firstType*/ == nullptr) )
     {
@@ -856,97 +856,97 @@ inline bool _Funcast_debugTickisExpressionTypeTick1683607289072304170_967b88ce98
     };
 }
 
-inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_1d28eff7d398c8a3 ( Context * __context__, LocalVariableInfo const  &  ___vinfo_rename_at_53_40, char * const  __what_rename_at_53_41 )
+inline bool _Funcast_debugTickisAstPtrTypeTick3276036939226023356_6e5a2408f3ed9e38 ( Context * __context__, LocalVariableInfo const  &  ___vinfo_rename_at_53_40, char * const  __what_rename_at_53_41 )
 {
-    return das_auto_cast<bool>::cast(_Funcast_debugTickisModulePtrTypeTick12629776342530398480_a210fcb9569bff8c(__context__,___vinfo_rename_at_53_40,((char *) "ast"),__what_rename_at_53_41));
+    return das_auto_cast<bool>::cast(_Funcast_debugTickisModulePtrTypeTick12629776342530398480_5bfef199ccb05709(__context__,___vinfo_rename_at_53_40,((char *) "ast"),__what_rename_at_53_41));
 }
 
-inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_515c5b2443eb4ef0 ( Context * __context__, LocalVariableInfo const  &  ___vinfo_rename_at_57_42, char * const  __what_rename_at_57_43 )
+inline bool _Funcast_debugTickisRttiPtrTypeTick806345736983820832_f3041bd0bbf5c642 ( Context * __context__, LocalVariableInfo const  &  ___vinfo_rename_at_57_42, char * const  __what_rename_at_57_43 )
 {
-    return das_auto_cast<bool>::cast(_Funcast_debugTickisModulePtrTypeTick12629776342530398480_a210fcb9569bff8c(__context__,___vinfo_rename_at_57_42,((char *) "rtti"),__what_rename_at_57_43));
+    return das_auto_cast<bool>::cast(_Funcast_debugTickisModulePtrTypeTick12629776342530398480_5bfef199ccb05709(__context__,___vinfo_rename_at_57_42,((char *) "rtti"),__what_rename_at_57_43));
 }
 
-inline void _Funcast_debugTickdescribe_argTick8826490271305289944_efb00f1647d906b2 ( Context * __context__, Context &  __ctxid_rename_at_74_44, VarInfo const  &  __vinfo_rename_at_74_45, void * const  __arg_rename_at_74_46 )
+inline void _Funcast_debugTickdescribe_argTick8826490271305289944_e13445f7c8841d0 ( Context * __context__, Context &  __ctxid_rename_at_74_44, VarInfo const  &  __vinfo_rename_at_74_45, void * const  __arg_rename_at_74_46 )
 {
-    if ( _Funcast_debugTickisRttiTypeTick4516636421360898655_d3b3aacafe01c827(__context__,__vinfo_rename_at_74_45,((char *) "AnnotationList")) )
+    if ( _Funcast_debugTickisRttiTypeTick4516636421360898655_1c5c2baa43ca26e9(__context__,__vinfo_rename_at_74_45,((char *) "AnnotationList")) )
     {
-        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationList const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationList>*/ 0x32c9eba4a62fbeaf)),das_arg<AnnotationList>::pass(das_deref(__context__,das_cast<AnnotationList *>::cast(__arg_rename_at_74_46)))));
+        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationList const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationList>*/ 0x32c9eba4a62fbeaf)),das_arg<AnnotationList>::pass(das_deref(__context__,das_cast<AnnotationList *>::cast(__arg_rename_at_74_46)))));
         return ;
-    } else if ( _Funcast_debugTickisRttiTypeTick4516636421360898655_d3b3aacafe01c827(__context__,__vinfo_rename_at_74_45,((char *) "AnnotationArgumentList")) )
+    } else if ( _Funcast_debugTickisRttiTypeTick4516636421360898655_1c5c2baa43ca26e9(__context__,__vinfo_rename_at_74_45,((char *) "AnnotationArgumentList")) )
     {
-        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationArgumentList const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationArgumentList>*/ 0xc00b5d1b29d92686)),das_arg<AnnotationArgumentList>::pass(das_deref(__context__,das_cast<AnnotationArgumentList *>::cast(__arg_rename_at_74_46)))));
+        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationArgumentList const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationArgumentList>*/ 0xc00b5d1b29d92686)),das_arg<AnnotationArgumentList>::pass(das_deref(__context__,das_cast<AnnotationArgumentList *>::cast(__arg_rename_at_74_46)))));
         return ;
     };
     void * * __parg_rename_at_83_47 = ((void * *)das_cast<void * *>::cast(__arg_rename_at_74_46));
     if ( (__parg_rename_at_83_47 == nullptr) || (das_deref(__context__,__parg_rename_at_83_47) == nullptr) )
     {
-        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_48ecdbe80a06d95e(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_auto_cast<void * const >::cast(nullptr));
+        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_e721ab7187b99372(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_auto_cast<void * const >::cast(nullptr));
         return ;
     } else {
-        if ( _Funcast_debugTickisExpressionTypeTick1683607289072304170_59fb59f45b96aa56(__context__,__vinfo_rename_at_74_45) )
+        if ( _Funcast_debugTickisExpressionTypeTick1683607289072304170_3df62d18f05fb904(__context__,__vinfo_rename_at_74_45) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),_FuncastTickdescribeTick842554968825501494_452cfc8955963a18(__context__,das_deref(__context__,das_cast<smart_ptr_raw<Expression> *>::cast(__arg_rename_at_74_46))));
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),cast<char *>::to(SimPolicy<char *>::Add(cast<char *>::from(((char * const )(__vinfo_rename_at_74_45.name /*name*/))),cast<char *>::from(((char *) ".detailed")),*__context__,nullptr)),das_invoke_function<char * const >::invoke<smart_ptr_raw<Expression> const ,Bitfield>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::debug_expression CY<ExpressionPtr>1<H<ast::Expression>>?M CY<DebugExpressionFlags>N<refCount>t*/ 0x28d96126c4ea29b4)),das_deref(__context__,das_cast<smart_ptr_raw<Expression> *>::cast(__arg_rename_at_74_46)),0x0u));
-        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_3b7ab890c635e212(__context__,__vinfo_rename_at_74_45,((char *) "TypeDecl")) )
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),_FuncastTickdescribeTick842554968825501494_d3b39abef684fd9c(__context__,das_deref(__context__,das_cast<smart_ptr_raw<Expression> *>::cast(__arg_rename_at_74_46))));
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),cast<char *>::to(SimPolicy<char *>::Add(cast<char *>::from(((char * const )(__vinfo_rename_at_74_45.name /*name*/))),cast<char *>::from(((char *) ".detailed")),*__context__,nullptr)),das_invoke_function<char * const >::invoke<smart_ptr_raw<Expression> const ,Bitfield>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::debug_expression CY<ExpressionPtr>1<H<ast::Expression>>?M CY<DebugExpressionFlags>N<refCount>t*/ 0x28d96126c4ea29b4)),das_deref(__context__,das_cast<smart_ptr_raw<Expression> *>::cast(__arg_rename_at_74_46)),0x0u));
+        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_afd096da09a61149(__context__,__vinfo_rename_at_74_45,((char *) "TypeDecl")) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,das_deref(__context__,das_cast<smart_ptr_raw<TypeDecl> *>::cast(__arg_rename_at_74_46)),true,true,true));
-        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_3b7ab890c635e212(__context__,__vinfo_rename_at_74_45,((char *) "Function")) )
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),_FuncastTickdescribeTick2562845734617055679_1718ec6d98dd8dc2(__context__,das_deref(__context__,das_cast<smart_ptr_raw<TypeDecl> *>::cast(__arg_rename_at_74_46)),true,true,true));
+        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_afd096da09a61149(__context__,__vinfo_rename_at_74_45,((char *) "Function")) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),_FuncastTickdescribeTick16391739697169902387_22f6094444e3262d(__context__,das_deref(__context__,das_cast<smart_ptr_raw<Function> *>::cast(__arg_rename_at_74_46))));
-        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_3b7ab890c635e212(__context__,__vinfo_rename_at_74_45,((char *) "Variable")) )
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),_FuncastTickdescribeTick16391739697169902387_2486f3e24b9ce074(__context__,das_deref(__context__,das_cast<smart_ptr_raw<Function> *>::cast(__arg_rename_at_74_46))));
+        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_afd096da09a61149(__context__,__vinfo_rename_at_74_45,((char *) "Variable")) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_invoke_function<char * const >::invoke<smart_ptr_raw<Variable> const >(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CY<VariablePtr>1<H<ast::Variable>>?M*/ 0x64d824b4153a1526)),das_deref(__context__,das_cast<smart_ptr_raw<Variable> *>::cast(__arg_rename_at_74_46))));
-        } else if ( _Funcast_debugTickisRttiPtrTypeTick806345736983820832_48d56f4f80ba3b53(__context__,__vinfo_rename_at_74_45,((char *) "AnnotationDeclaration")) )
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_invoke_function<char * const >::invoke<smart_ptr_raw<Variable> const >(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CY<VariablePtr>1<H<ast::Variable>>?M*/ 0x64d824b4153a1526)),das_deref(__context__,das_cast<smart_ptr_raw<Variable> *>::cast(__arg_rename_at_74_46))));
+        } else if ( _Funcast_debugTickisRttiPtrTypeTick806345736983820832_e0e95eb3eba76672(__context__,__vinfo_rename_at_74_45,((char *) "AnnotationDeclaration")) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationDeclaration const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationDeclaration>*/ 0x3208529d31c498ae)),das_arg<AnnotationDeclaration>::pass(das_deref(__context__,das_deref(__context__,das_cast<smart_ptr_raw<AnnotationDeclaration> *>::cast(__arg_rename_at_74_46))))));
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_44),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_45.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationDeclaration const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationDeclaration>*/ 0x3208529d31c498ae)),das_arg<AnnotationDeclaration>::pass(das_deref(__context__,das_deref(__context__,das_cast<smart_ptr_raw<AnnotationDeclaration> *>::cast(__arg_rename_at_74_46))))));
         };
     };
 }
 
-inline void _Funcast_debugTickdescribe_argTick8826490271305289944_af045ee043c050cf ( Context * __context__, Context &  __ctxid_rename_at_74_48, LocalVariableInfo const  &  __vinfo_rename_at_74_49, void * const  __arg_rename_at_74_50 )
+inline void _Funcast_debugTickdescribe_argTick8826490271305289944_86c7fa92c147b68e ( Context * __context__, Context &  __ctxid_rename_at_74_48, LocalVariableInfo const  &  __vinfo_rename_at_74_49, void * const  __arg_rename_at_74_50 )
 {
-    if ( _Funcast_debugTickisRttiTypeTick4516636421360898655_2f19fa27e91344c2(__context__,__vinfo_rename_at_74_49,((char *) "AnnotationList")) )
+    if ( _Funcast_debugTickisRttiTypeTick4516636421360898655_ea6b8696b187685(__context__,__vinfo_rename_at_74_49,((char *) "AnnotationList")) )
     {
-        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationList const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationList>*/ 0x32c9eba4a62fbeaf)),das_arg<AnnotationList>::pass(das_deref(__context__,das_cast<AnnotationList *>::cast(__arg_rename_at_74_50)))));
+        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationList const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationList>*/ 0x32c9eba4a62fbeaf)),das_arg<AnnotationList>::pass(das_deref(__context__,das_cast<AnnotationList *>::cast(__arg_rename_at_74_50)))));
         return ;
-    } else if ( _Funcast_debugTickisRttiTypeTick4516636421360898655_2f19fa27e91344c2(__context__,__vinfo_rename_at_74_49,((char *) "AnnotationArgumentList")) )
+    } else if ( _Funcast_debugTickisRttiTypeTick4516636421360898655_ea6b8696b187685(__context__,__vinfo_rename_at_74_49,((char *) "AnnotationArgumentList")) )
     {
-        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationArgumentList const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationArgumentList>*/ 0xc00b5d1b29d92686)),das_arg<AnnotationArgumentList>::pass(das_deref(__context__,das_cast<AnnotationArgumentList *>::cast(__arg_rename_at_74_50)))));
+        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationArgumentList const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationArgumentList>*/ 0xc00b5d1b29d92686)),das_arg<AnnotationArgumentList>::pass(das_deref(__context__,das_cast<AnnotationArgumentList *>::cast(__arg_rename_at_74_50)))));
         return ;
     };
     void * * __parg_rename_at_83_51 = ((void * *)das_cast<void * *>::cast(__arg_rename_at_74_50));
     if ( (__parg_rename_at_83_51 == nullptr) || (das_deref(__context__,__parg_rename_at_83_51) == nullptr) )
     {
-        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_48ecdbe80a06d95e(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_auto_cast<void * const >::cast(nullptr));
+        _Funcast_debugTickreport_to_debuggerTick2408265038224314806_e721ab7187b99372(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_auto_cast<void * const >::cast(nullptr));
         return ;
     } else {
-        if ( _Funcast_debugTickisExpressionTypeTick1683607289072304170_967b88ce98476055(__context__,__vinfo_rename_at_74_49) )
+        if ( _Funcast_debugTickisExpressionTypeTick1683607289072304170_f924b73de8303b73(__context__,__vinfo_rename_at_74_49) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),_FuncastTickdescribeTick842554968825501494_452cfc8955963a18(__context__,das_deref(__context__,das_cast<smart_ptr_raw<Expression> *>::cast(__arg_rename_at_74_50))));
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),cast<char *>::to(SimPolicy<char *>::Add(cast<char *>::from(((char * const )(__vinfo_rename_at_74_49.name /*name*/))),cast<char *>::from(((char *) ".detailed")),*__context__,nullptr)),das_invoke_function<char * const >::invoke<smart_ptr_raw<Expression> const ,Bitfield>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::debug_expression CY<ExpressionPtr>1<H<ast::Expression>>?M CY<DebugExpressionFlags>N<refCount>t*/ 0x28d96126c4ea29b4)),das_deref(__context__,das_cast<smart_ptr_raw<Expression> *>::cast(__arg_rename_at_74_50)),0x0u));
-        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_1d28eff7d398c8a3(__context__,__vinfo_rename_at_74_49,((char *) "TypeDecl")) )
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),_FuncastTickdescribeTick842554968825501494_d3b39abef684fd9c(__context__,das_deref(__context__,das_cast<smart_ptr_raw<Expression> *>::cast(__arg_rename_at_74_50))));
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),cast<char *>::to(SimPolicy<char *>::Add(cast<char *>::from(((char * const )(__vinfo_rename_at_74_49.name /*name*/))),cast<char *>::from(((char *) ".detailed")),*__context__,nullptr)),das_invoke_function<char * const >::invoke<smart_ptr_raw<Expression> const ,Bitfield>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::debug_expression CY<ExpressionPtr>1<H<ast::Expression>>?M CY<DebugExpressionFlags>N<refCount>t*/ 0x28d96126c4ea29b4)),das_deref(__context__,das_cast<smart_ptr_raw<Expression> *>::cast(__arg_rename_at_74_50)),0x0u));
+        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_6e5a2408f3ed9e38(__context__,__vinfo_rename_at_74_49,((char *) "TypeDecl")) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89(__context__,das_deref(__context__,das_cast<smart_ptr_raw<TypeDecl> *>::cast(__arg_rename_at_74_50)),true,true,true));
-        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_1d28eff7d398c8a3(__context__,__vinfo_rename_at_74_49,((char *) "Function")) )
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),_FuncastTickdescribeTick2562845734617055679_1718ec6d98dd8dc2(__context__,das_deref(__context__,das_cast<smart_ptr_raw<TypeDecl> *>::cast(__arg_rename_at_74_50)),true,true,true));
+        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_6e5a2408f3ed9e38(__context__,__vinfo_rename_at_74_49,((char *) "Function")) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),_FuncastTickdescribeTick16391739697169902387_22f6094444e3262d(__context__,das_deref(__context__,das_cast<smart_ptr_raw<Function> *>::cast(__arg_rename_at_74_50))));
-        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_1d28eff7d398c8a3(__context__,__vinfo_rename_at_74_49,((char *) "Variable")) )
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),_FuncastTickdescribeTick16391739697169902387_2486f3e24b9ce074(__context__,das_deref(__context__,das_cast<smart_ptr_raw<Function> *>::cast(__arg_rename_at_74_50))));
+        } else if ( _Funcast_debugTickisAstPtrTypeTick3276036939226023356_6e5a2408f3ed9e38(__context__,__vinfo_rename_at_74_49,((char *) "Variable")) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_invoke_function<char * const >::invoke<smart_ptr_raw<Variable> const >(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CY<VariablePtr>1<H<ast::Variable>>?M*/ 0x64d824b4153a1526)),das_deref(__context__,das_cast<smart_ptr_raw<Variable> *>::cast(__arg_rename_at_74_50))));
-        } else if ( _Funcast_debugTickisRttiPtrTypeTick806345736983820832_515c5b2443eb4ef0(__context__,__vinfo_rename_at_74_49,((char *) "AnnotationDeclaration")) )
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_invoke_function<char * const >::invoke<smart_ptr_raw<Variable> const >(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CY<VariablePtr>1<H<ast::Variable>>?M*/ 0x64d824b4153a1526)),das_deref(__context__,das_cast<smart_ptr_raw<Variable> *>::cast(__arg_rename_at_74_50))));
+        } else if ( _Funcast_debugTickisRttiPtrTypeTick806345736983820832_f3041bd0bbf5c642(__context__,__vinfo_rename_at_74_49,((char *) "AnnotationDeclaration")) )
         {
-            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationDeclaration const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationDeclaration>*/ 0x3208529d31c498ae)),das_arg<AnnotationDeclaration>::pass(das_deref(__context__,das_deref(__context__,das_cast<smart_ptr_raw<AnnotationDeclaration> *>::cast(__arg_rename_at_74_50))))));
+            _Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb(__context__,das_arg<Context>::pass(__ctxid_rename_at_74_48),((char *) "ast_debug"),((char * const )(__vinfo_rename_at_74_49.name /*name*/)),das_invoke_function<char * const >::invoke<AnnotationDeclaration const  &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::describe CH<rtti::AnnotationDeclaration>*/ 0x3208529d31c498ae)),das_arg<AnnotationDeclaration>::pass(das_deref(__context__,das_deref(__context__,das_cast<smart_ptr_raw<AnnotationDeclaration> *>::cast(__arg_rename_at_74_50))))));
         };
     };
 }
 
-inline smart_ptr_raw<StackWalker> _FuncdebugapiTickmake_stack_walkerTick10101906578839871846_229ea554e31d57ca ( Context * __context__, ast_debug::SampleStackWalker * const  __classPtr_rename_at_216_52 )
+inline smart_ptr_raw<StackWalker> _FuncdebugapiTickmake_stack_walkerTick10101906578839871846_a239c653f1dc64ef ( Context * __context__, ast_debug::SampleStackWalker * const  __classPtr_rename_at_216_52 )
 {
-    StructInfo const  * __classInfo_rename_at_218_53 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_c81a84221fb6bad2(__context__,das_deref(__context__,__classPtr_rename_at_216_52)));
+    StructInfo const  * __classInfo_rename_at_218_53 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_bba5fb0c8374bbbe(__context__,das_deref(__context__,__classPtr_rename_at_216_52)));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<StackWalker>>::cast(makeStackWalker(das_auto_cast<void * const >::cast(__classPtr_rename_at_216_52),__classInfo_rename_at_218_53,__context__));
 }
 
-inline void finalize_500fce7609128ffb ( Context * __context__, ast_debug::SampleStackWalker * & ____this_rename_at_143_54 )
+inline void finalize_dddf7161a4a89879 ( Context * __context__, ast_debug::SampleStackWalker * & ____this_rename_at_143_54 )
 {
     if ( ____this_rename_at_143_54 != nullptr )
     {
@@ -957,12 +957,12 @@ inline void finalize_500fce7609128ffb ( Context * __context__, ast_debug::Sample
     };
 }
 
-inline void finalize_5733f4cfa043e920 ( Context * __context__, ast_debug::SampleStackWalker &  ____this_rename_at_103_56 )
+inline void finalize_9600d8075ee0768f ( Context * __context__, ast_debug::SampleStackWalker &  ____this_rename_at_103_56 )
 {
     memset((void*)&(____this_rename_at_103_56), 0, TypeSize<ast_debug::SampleStackWalker>::size);
 }
 
-inline void _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_3e1c20224cd19f2e ( Context * __context__, ast_debug::ContextStateAgent * __agentPtr_rename_at_37_57, char * const  __category_rename_at_37_58 )
+inline void _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_4ae64024a0dde4af ( Context * __context__, ast_debug::ContextStateAgent * __agentPtr_rename_at_37_57, char * const  __category_rename_at_37_58 )
 {
     StructInfo const  * __agentInfo_rename_at_39_59; memset((void*)&__agentInfo_rename_at_39_59,0,sizeof(__agentInfo_rename_at_39_59));
     smart_ptr_raw<DebugAgent> __agentAdapter_rename_at_40_60; memset((void*)&__agentAdapter_rename_at_40_60,0,sizeof(__agentAdapter_rename_at_40_60));
@@ -970,7 +970,7 @@ inline void _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_3e1c
         /* finally */ auto __finally_38= das_finally([&](){
         das_delete_handle<smart_ptr_raw<DebugAgent>>::clear(__context__,__agentAdapter_rename_at_40_60);
         /* end finally */ });
-        __agentInfo_rename_at_39_59 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_7c5d3c9bad07d43c(__context__,das_arg<ast_debug::ContextStateAgent>::pass(das_deref(__context__,__agentPtr_rename_at_37_57))));
+        __agentInfo_rename_at_39_59 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_a2c8a0c47be9510e(__context__,das_arg<ast_debug::ContextStateAgent>::pass(das_deref(__context__,__agentPtr_rename_at_37_57))));
         __agentAdapter_rename_at_40_60; das_zero(__agentAdapter_rename_at_40_60); das_move(__agentAdapter_rename_at_40_60, makeDebugAgent(das_auto_cast<void * const >::cast(__agentPtr_rename_at_37_57),__agentInfo_rename_at_39_59,__context__));
         das_copy(__agentPtr_rename_at_37_57->thisAgent,das_cast<DebugAgent *>::cast(__agentAdapter_rename_at_40_60));
         installDebugAgent(__agentAdapter_rename_at_40_60,__category_rename_at_37_58,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)),__context__);
@@ -978,17 +978,17 @@ inline void _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_3e1c
     };
 }
 
-inline void _FuncSampleStackWalkerTickonArgument_b3c1b48f676b9bbd ( Context * __context__, ast_debug::SampleStackWalker &  __self_rename_at_105_61, FuncInfo const  &  __info_rename_at_105_62, int32_t __index_rename_at_105_63, VarInfo const  &  __vinfo_rename_at_105_64, float4 __arg_rename_at_105_65 )
+inline void _FuncSampleStackWalkerTickonArgument_154a135b4ae98096 ( Context * __context__, ast_debug::SampleStackWalker &  __self_rename_at_105_61, FuncInfo const  &  __info_rename_at_105_62, int32_t __index_rename_at_105_63, VarInfo const  &  __vinfo_rename_at_105_64, float4 __arg_rename_at_105_65 )
 {
     if ( das_get_bitfield(__vinfo_rename_at_105_64.flags /*flags*/,1u << 0) || das_get_bitfield(__vinfo_rename_at_105_64.flags /*flags*/,1u << 1) )
     {
-        _Funcast_debugTickdescribe_argTick8826490271305289944_efb00f1647d906b2(__context__,das_arg<Context>::pass(das_deref(__context__,__self_rename_at_105_61.ctxid)),__vinfo_rename_at_105_64,das_deref(__context__,das_cast<void * *>::cast(das_ref(__context__,__arg_rename_at_105_65))));
+        _Funcast_debugTickdescribe_argTick8826490271305289944_e13445f7c8841d0(__context__,das_arg<Context>::pass(das_deref(__context__,__self_rename_at_105_61.ctxid)),__vinfo_rename_at_105_64,das_deref(__context__,das_cast<void * *>::cast(das_ref(__context__,__arg_rename_at_105_65))));
     } else {
-        _Funcast_debugTickdescribe_argTick8826490271305289944_efb00f1647d906b2(__context__,das_arg<Context>::pass(das_deref(__context__,__self_rename_at_105_61.ctxid)),__vinfo_rename_at_105_64,das_auto_cast<void * const >::cast(das_ref(__context__,__arg_rename_at_105_65)));
+        _Funcast_debugTickdescribe_argTick8826490271305289944_e13445f7c8841d0(__context__,das_arg<Context>::pass(das_deref(__context__,__self_rename_at_105_61.ctxid)),__vinfo_rename_at_105_64,das_auto_cast<void * const >::cast(das_ref(__context__,__arg_rename_at_105_65)));
     };
 }
 
-inline void _FuncSampleStackWalkerTickonVariable_b047f0cc7c7030d6 ( Context * __context__, ast_debug::SampleStackWalker &  __self_rename_at_114_66, FuncInfo const  &  __inf_rename_at_114_67, LocalVariableInfo const  &  __vinfo_rename_at_114_68, void * const  __arg_rename_at_114_69, bool __inScope_rename_at_114_70 )
+inline void _FuncSampleStackWalkerTickonVariable_6a1013a916da4e55 ( Context * __context__, ast_debug::SampleStackWalker &  __self_rename_at_114_66, FuncInfo const  &  __inf_rename_at_114_67, LocalVariableInfo const  &  __vinfo_rename_at_114_68, void * const  __arg_rename_at_114_69, bool __inScope_rename_at_114_70 )
 {
     if ( !__inScope_rename_at_114_70 )
     {
@@ -996,24 +996,24 @@ inline void _FuncSampleStackWalkerTickonVariable_b047f0cc7c7030d6 ( Context * __
     } else {
         if ( das_get_bitfield(__vinfo_rename_at_114_68.flags /*flags*/,1u << 0) || das_get_bitfield(__vinfo_rename_at_114_68.flags /*flags*/,1u << 1) )
         {
-            _Funcast_debugTickdescribe_argTick8826490271305289944_af045ee043c050cf(__context__,das_arg<Context>::pass(das_deref(__context__,__self_rename_at_114_66.ctxid)),__vinfo_rename_at_114_68,das_deref(__context__,das_cast<void * *>::cast(__arg_rename_at_114_69)));
+            _Funcast_debugTickdescribe_argTick8826490271305289944_86c7fa92c147b68e(__context__,das_arg<Context>::pass(das_deref(__context__,__self_rename_at_114_66.ctxid)),__vinfo_rename_at_114_68,das_deref(__context__,das_cast<void * *>::cast(__arg_rename_at_114_69)));
         } else {
-            _Funcast_debugTickdescribe_argTick8826490271305289944_af045ee043c050cf(__context__,das_arg<Context>::pass(das_deref(__context__,__self_rename_at_114_66.ctxid)),__vinfo_rename_at_114_68,__arg_rename_at_114_69);
+            _Funcast_debugTickdescribe_argTick8826490271305289944_86c7fa92c147b68e(__context__,das_arg<Context>::pass(das_deref(__context__,__self_rename_at_114_66.ctxid)),__vinfo_rename_at_114_68,__arg_rename_at_114_69);
         };
     };
 }
 
-inline bool _FuncSampleStackWalkerTickonAfterCall_eedb864288cb4a8a ( Context * __context__, ast_debug::SampleStackWalker &  __self_rename_at_126_71, Prologue const  &  __pp_rename_at_126_72 )
+inline bool _FuncSampleStackWalkerTickonAfterCall_92406c7e943a0c53 ( Context * __context__, ast_debug::SampleStackWalker &  __self_rename_at_126_71, Prologue const  &  __pp_rename_at_126_72 )
 {
     return das_auto_cast<bool>::cast(false);
 }
 
-inline void _FuncSampleStackWalker_0x27___finalize_af21cd893b46a727 ( Context * __context__, ast_debug::SampleStackWalker &  __self_rename_at_103_73 )
+inline void _FuncSampleStackWalker_0x27___finalize_940253be062face6 ( Context * __context__, ast_debug::SampleStackWalker &  __self_rename_at_103_73 )
 {
-    finalize_5733f4cfa043e920(__context__,das_arg<ast_debug::SampleStackWalker>::pass(__self_rename_at_103_73));
+    finalize_9600d8075ee0768f(__context__,das_arg<ast_debug::SampleStackWalker>::pass(__self_rename_at_103_73));
 }
 
-inline ast_debug::ContextStateAgent ContextStateAgent_e10fdff26046cd6f ( Context * __context__ )
+inline ast_debug::ContextStateAgent ContextStateAgent_9423a148413ae844 ( Context * __context__ )
 {
     ast_debug::ContextStateAgent __self_rename_at_134_74; das_zero(__self_rename_at_134_74); das_move(__self_rename_at_134_74, (([&]() -> ast_debug::ContextStateAgent {
         ast_debug::ContextStateAgent __mks_134;
@@ -1023,39 +1023,39 @@ inline ast_debug::ContextStateAgent ContextStateAgent_e10fdff26046cd6f ( Context
         das_copy((__mks_134.onCollect),(das_cast<Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,LineInfo const ))>::cast(Func(__context__->fnByMangledName(/*@ast_debug::ContextStateAgent`onCollect S<ast_debug::ContextStateAgent> H<rtti::Context> CH<rtti::LineInfo>*/ 0x44e865880fb63b63)))));
         return __mks_134;
     })()));
-    _FuncContextStateAgentTickContextStateAgent_ce0829614ebac3e5(__context__,das_arg<ast_debug::ContextStateAgent>::pass(__self_rename_at_134_74));
+    _FuncContextStateAgentTickContextStateAgent_2b1248bc0c3fb8fc(__context__,das_arg<ast_debug::ContextStateAgent>::pass(__self_rename_at_134_74));
     return /* <- */ das_auto_cast_move<ast_debug::ContextStateAgent>::cast(__self_rename_at_134_74);
 }
 
-inline void _FuncContextStateAgentTickContextStateAgent_ce0829614ebac3e5 ( Context * __context__, ast_debug::ContextStateAgent &  __self_rename_at_134_75 )
+inline void _FuncContextStateAgentTickContextStateAgent_2b1248bc0c3fb8fc ( Context * __context__, ast_debug::ContextStateAgent &  __self_rename_at_134_75 )
 {
-    das_copy(__self_rename_at_134_75.walker,das_new<ast_debug::SampleStackWalker>::make_and_init(__context__,[&]() { return SampleStackWalker_b9ed6b4c0fa80af2(__context__); }));
-    das_move(__self_rename_at_134_75.walker_adapter,_FuncdebugapiTickmake_stack_walkerTick10101906578839871846_229ea554e31d57ca(__context__,__self_rename_at_134_75.walker));
+    das_copy(__self_rename_at_134_75.walker,das_new<ast_debug::SampleStackWalker>::make_and_init(__context__,[&]() { return SampleStackWalker_5227080c754c5faf(__context__); }));
+    das_move(__self_rename_at_134_75.walker_adapter,_FuncdebugapiTickmake_stack_walkerTick10101906578839871846_a239c653f1dc64ef(__context__,__self_rename_at_134_75.walker));
 }
 
-inline void finalize_dcfff9e2129da1aa ( Context * __context__, ast_debug::ContextStateAgent &  __self_rename_at_140_76 )
+inline void finalize_447275e618a33c1a ( Context * __context__, ast_debug::ContextStateAgent &  __self_rename_at_140_76 )
 {
     das_delete_handle<smart_ptr_raw<StackWalker>>::clear(__context__,__self_rename_at_140_76.walker_adapter);
-    finalize_500fce7609128ffb(__context__,__self_rename_at_140_76.walker);
+    finalize_dddf7161a4a89879(__context__,__self_rename_at_140_76.walker);
 }
 
-inline void _FuncContextStateAgentTickonCollect_d5b055adc3fcc695 ( Context * __context__, ast_debug::ContextStateAgent &  __self_rename_at_146_77, Context &  __ctx_rename_at_146_78, LineInfo const  &  __at_rename_at_146_79 )
+inline void _FuncContextStateAgentTickonCollect_bf3eeab30cfe52dd ( Context * __context__, ast_debug::ContextStateAgent &  __self_rename_at_146_77, Context &  __ctx_rename_at_146_78, LineInfo const  &  __at_rename_at_146_79 )
 {
     das_copy(__self_rename_at_146_77.walker->ctxid,das_ref(__context__,__ctx_rename_at_146_78));
     dapiStackWalk(__self_rename_at_146_77.walker_adapter,das_arg<Context>::pass(__ctx_rename_at_146_78),__at_rename_at_146_79);
 }
 
-inline void _FuncContextStateAgent_0x27___finalize_c2bf11f8c2d8aef ( Context * __context__, ast_debug::ContextStateAgent &  __self_rename_at_131_80 )
+inline void _FuncContextStateAgent_0x27___finalize_dd5eed4da9e04f59 ( Context * __context__, ast_debug::ContextStateAgent &  __self_rename_at_131_80 )
 {
-    finalize_dcfff9e2129da1aa(__context__,das_arg<ast_debug::ContextStateAgent>::pass(__self_rename_at_131_80));
+    finalize_447275e618a33c1a(__context__,das_arg<ast_debug::ContextStateAgent>::pass(__self_rename_at_131_80));
 }
 
-inline void state_agent_a7d0d7fe180b2c1a ( Context * __context__, Context const  &  __ctx_rename_at_153_81 )
+inline void state_agent_4b4d67a535c503b5 ( Context * __context__, Context const  &  __ctx_rename_at_153_81 )
 {
-    _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_3e1c20224cd19f2e(__context__,das_new<ast_debug::ContextStateAgent>::make_and_init(__context__,[&]() { return ContextStateAgent_e10fdff26046cd6f(__context__); }),((char *) "ast_debug"));
+    _FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_4ae64024a0dde4af(__context__,das_new<ast_debug::ContextStateAgent>::make_and_init(__context__,[&]() { return ContextStateAgent_9423a148413ae844(__context__); }),((char *) "ast_debug"));
 }
 
-inline ast_debug::SampleStackWalker SampleStackWalker_b9ed6b4c0fa80af2 ( Context * __context__ )
+inline ast_debug::SampleStackWalker SampleStackWalker_5227080c754c5faf ( Context * __context__ )
 {
     return /* <- */ das_auto_cast_move<ast_debug::SampleStackWalker>::cast((([&]() -> ast_debug::SampleStackWalker {
         ast_debug::SampleStackWalker __mks_103;
@@ -1070,113 +1070,113 @@ inline ast_debug::SampleStackWalker SampleStackWalker_b9ed6b4c0fa80af2 ( Context
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xd944b240f1dadce5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_c81a84221fb6bad2>>();
+    aotLib[0x58be6d6162e55bd5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_bba5fb0c8374bbbe>>();
     };
-    aotLib[0xcf481776efa54cc0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisModulePtrTypeTick12629776342530398480_56257da3a0e7b243>>();
+    aotLib[0x9f012a4550953b44] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisModulePtrTypeTick12629776342530398480_f8375010a92181fd>>();
     };
-    aotLib[0xec046597df2ce265] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisModulePtrTypeTick12629776342530398480_a210fcb9569bff8c>>();
+    aotLib[0x525e82b4b72d2fb9] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisModulePtrTypeTick12629776342530398480_5bfef199ccb05709>>();
     };
-    aotLib[0x1abaf737439ed2ef] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_7c5d3c9bad07d43c>>();
+    aotLib[0x45a58e6c0b18d5ae] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_a2c8a0c47be9510e>>();
     };
-    aotLib[0x3961f53f76a6dc70] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisRttiTypeTick4516636421360898655_d3b3aacafe01c827>>();
+    aotLib[0x81e9af62b2bfd11d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisRttiTypeTick4516636421360898655_1c5c2baa43ca26e9>>();
     };
-    aotLib[0xd6d7cce01249a4bc] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickreport_to_debuggerTick2408265038224314806_2643678afa1dfd37>>();
+    aotLib[0x32fac62d26a62e80] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickreport_to_debuggerTick2408265038224314806_79ea3e8a75bdd8cb>>();
     };
-    aotLib[0x5c4b96d7c8bcb6e5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickreport_to_debuggerTick2408265038224314806_48ecdbe80a06d95e>>();
+    aotLib[0xd1bcc6b6f5ff8a0a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickreport_to_debuggerTick2408265038224314806_e721ab7187b99372>>();
     };
-    aotLib[0xf5044d10f8587bb5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisExpressionTypeTick1683607289072304170_59fb59f45b96aa56>>();
+    aotLib[0x423daf6747bfc616] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisExpressionTypeTick1683607289072304170_3df62d18f05fb904>>();
     };
-    aotLib[0xfbfe800d5700e08f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribeTick842554968825501494_452cfc8955963a18>>();
+    aotLib[0xb123788819cfc1bb] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribeTick842554968825501494_d3b39abef684fd9c>>();
     };
-    aotLib[0xf1f22832564e2f65] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisAstPtrTypeTick3276036939226023356_3b7ab890c635e212>>();
+    aotLib[0x24f15e5a87179db4] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisAstPtrTypeTick3276036939226023356_afd096da09a61149>>();
     };
-    aotLib[0xb9c50cbd3f619a9d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribeTick2562845734617055679_2756234bd8d22e89>>();
+    aotLib[0xc122fa98b3ed23a5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribeTick2562845734617055679_1718ec6d98dd8dc2>>();
     };
-    aotLib[0x6559b2976faba9bc] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribeTick16391739697169902387_22f6094444e3262d>>();
+    aotLib[0x2aa68e37d1fa0e31] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickdescribeTick16391739697169902387_2486f3e24b9ce074>>();
     };
-    aotLib[0x712caa686b4e9cf1] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisRttiPtrTypeTick806345736983820832_48d56f4f80ba3b53>>();
+    aotLib[0x6ee39cf4528c9447] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisRttiPtrTypeTick806345736983820832_e0e95eb3eba76672>>();
     };
-    aotLib[0x40f0c191a75f02eb] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisRttiTypeTick4516636421360898655_2f19fa27e91344c2>>();
+    aotLib[0xb4851d1cb91b8a6b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisRttiTypeTick4516636421360898655_ea6b8696b187685>>();
     };
-    aotLib[0xc12611ddde3da5af] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisExpressionTypeTick1683607289072304170_967b88ce98476055>>();
+    aotLib[0x2e4f28e1775574cb] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisExpressionTypeTick1683607289072304170_f924b73de8303b73>>();
     };
-    aotLib[0x44b91979f7cd3be2] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisAstPtrTypeTick3276036939226023356_1d28eff7d398c8a3>>();
+    aotLib[0x1218f64940d543de] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisAstPtrTypeTick3276036939226023356_6e5a2408f3ed9e38>>();
     };
-    aotLib[0x89914d144ab3775e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisRttiPtrTypeTick806345736983820832_515c5b2443eb4ef0>>();
+    aotLib[0x7891e6eb7eaffba4] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickisRttiPtrTypeTick806345736983820832_f3041bd0bbf5c642>>();
     };
-    aotLib[0x9585d59a27adf27b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickdescribe_argTick8826490271305289944_efb00f1647d906b2>>();
+    aotLib[0x101cf59c34e52bd5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickdescribe_argTick8826490271305289944_e13445f7c8841d0>>();
     };
-    aotLib[0x1bc38274120e1354] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickdescribe_argTick8826490271305289944_af045ee043c050cf>>();
+    aotLib[0xb901b8efff1d6618] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_debugTickdescribe_argTick8826490271305289944_86c7fa92c147b68e>>();
     };
-    aotLib[0x86519d383a236a85] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncdebugapiTickmake_stack_walkerTick10101906578839871846_229ea554e31d57ca>>();
+    aotLib[0x681c08cf0b623565] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncdebugapiTickmake_stack_walkerTick10101906578839871846_a239c653f1dc64ef>>();
     };
-    aotLib[0x9e24c1a5d7a1647e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_500fce7609128ffb>>();
+    aotLib[0xe45e57429b1ed95] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_dddf7161a4a89879>>();
     };
-    aotLib[0x16be1c7d7571ba3d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_5733f4cfa043e920>>();
+    aotLib[0xd2c7525fcf8eef0f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_9600d8075ee0768f>>();
     };
-    aotLib[0xc8fd86923428452f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_3e1c20224cd19f2e>>();
+    aotLib[0x7031b166c3e11019] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncdebugapiTickinstall_new_debug_agentTick3897311473844341055_4ae64024a0dde4af>>();
     };
-    aotLib[0x955a91178f2a8500] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSampleStackWalkerTickonArgument_b3c1b48f676b9bbd>>();
+    aotLib[0xfa06096b68eef492] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSampleStackWalkerTickonArgument_154a135b4ae98096>>();
     };
-    aotLib[0x1d8e0b6a1c5583c6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSampleStackWalkerTickonVariable_b047f0cc7c7030d6>>();
+    aotLib[0x88bc99cbef3ca497] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSampleStackWalkerTickonVariable_6a1013a916da4e55>>();
     };
-    aotLib[0xbe942b4a73c4cd55] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSampleStackWalkerTickonAfterCall_eedb864288cb4a8a>>();
+    aotLib[0xf7b25bc66ad3ff9f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSampleStackWalkerTickonAfterCall_92406c7e943a0c53>>();
     };
-    aotLib[0x6c77ecfde1d92d7] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSampleStackWalker_0x27___finalize_af21cd893b46a727>>();
+    aotLib[0x8f94aedea1ae0e3f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSampleStackWalker_0x27___finalize_940253be062face6>>();
     };
-    aotLib[0x3fbf295fb400101b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&ContextStateAgent_e10fdff26046cd6f>>();
+    aotLib[0x1678c2cd9cfd3785] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&ContextStateAgent_9423a148413ae844>>();
     };
-    aotLib[0x954f3558ded65d8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncContextStateAgentTickContextStateAgent_ce0829614ebac3e5>>();
+    aotLib[0x3c2581f92f74a22e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncContextStateAgentTickContextStateAgent_2b1248bc0c3fb8fc>>();
     };
-    aotLib[0x2af306b9895d5228] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_dcfff9e2129da1aa>>();
+    aotLib[0x9b6935ba99e3beab] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_447275e618a33c1a>>();
     };
-    aotLib[0x30e88d3b4dd372e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncContextStateAgentTickonCollect_d5b055adc3fcc695>>();
+    aotLib[0x17ec21c1ae21f2c4] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncContextStateAgentTickonCollect_bf3eeab30cfe52dd>>();
     };
-    aotLib[0x2ae71cff664419fd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncContextStateAgent_0x27___finalize_c2bf11f8c2d8aef>>();
+    aotLib[0x22bae9e88240fd8b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncContextStateAgent_0x27___finalize_dd5eed4da9e04f59>>();
     };
-    aotLib[0xe4e00ea64d552d51] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&state_agent_a7d0d7fe180b2c1a>>();
+    aotLib[0xb6b8f12e2732f629] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&state_agent_4b4d67a535c503b5>>();
     };
-    aotLib[0xbddc52318f02e163] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&SampleStackWalker_b9ed6b4c0fa80af2>>();
+    aotLib[0x2940a682fe26f7b7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&SampleStackWalker_5227080c754c5faf>>();
     };
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_1280768645085455701
-AotListBase impl_aot_ast_debug(_anon_1280768645085455701::registerAotFunctions);
+} // namespace _anon_11044519778267414557
+AotListBase impl_aot_ast_debug(_anon_11044519778267414557::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

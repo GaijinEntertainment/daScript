@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_17398545618972835597 {
+namespace _anon_8787716374767917637 {
 
 namespace lpipe { struct LpipeMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -258,7 +258,7 @@ struct LpipeMacro {
 }
 extern TypeInfo __type_info__6b1c7db4b71a781f;
 
-TypeInfo __type_info__6b1c7db4b71a781f = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 258, 32, UINT64_C(0x6b1c7db4b71a781f) };
+TypeInfo __type_info__6b1c7db4b71a781f = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~$::das_string"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 258, TypeSize<das::string>::size, UINT64_C(0x6b1c7db4b71a781f) };
 
 static void resolveTypeInfoAnnotations()
 {
@@ -270,25 +270,25 @@ static void resolveTypeInfoAnnotations()
 
 TypeInfo * __tinfo_0[1] = { &__type_info__6b1c7db4b71a781f };
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c3c4b8e51b91c26b ( Context * __context__, lpipe::LpipeMacro const  & __cl_rename_at_116_2 );
-inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __context__, smart_ptr_raw<Expression> & __fnCall_rename_at_15_3, smart_ptr_raw<Expression> & __arg_rename_at_15_4 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_d7dff826198d4fd2 ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b0b2ab2e5d9e80a2 ( Context * __context__, lpipe::LpipeMacro const  & __cl_rename_at_116_2 );
+inline smart_ptr_raw<Expression> lpipe_expr_164f00156c60e835 ( Context * __context__, smart_ptr_raw<Expression> & __fnCall_rename_at_15_3, smart_ptr_raw<Expression> & __arg_rename_at_15_4 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_d7dff826198d4fd2 ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_0, ast::AstCallMacro * __value_rename_at_181_1 )
 {
     das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstCallMacro *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c3c4b8e51b91c26b ( Context * __context__, lpipe::LpipeMacro const  &  __cl_rename_at_116_2 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b0b2ab2e5d9e80a2 ( Context * __context__, lpipe::LpipeMacro const  &  __cl_rename_at_116_2 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
 }
 
-inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __context__, smart_ptr_raw<Expression> & __fnCall_rename_at_15_3, smart_ptr_raw<Expression> & __arg_rename_at_15_4 )
+inline smart_ptr_raw<Expression> lpipe_expr_164f00156c60e835 ( Context * __context__, smart_ptr_raw<Expression> & __fnCall_rename_at_15_3, smart_ptr_raw<Expression> & __arg_rename_at_15_4 )
 {
     ExprVar * __pVar_rename_at_17_5; memset((void*)&__pVar_rename_at_17_5,0,sizeof(__pVar_rename_at_17_5));
     smart_ptr_raw<Expression> __pCall_rename_at_18_6; memset((void*)&__pCall_rename_at_18_6,0,sizeof(__pCall_rename_at_18_6));
@@ -315,7 +315,7 @@ inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __conte
         das_delete_handle<smart_ptr_raw<Expression>>::clear(__context__,__cCopy_rename_at_24_8);
         /* end finally */ });
         __cCopy_rename_at_24_8; das_zero(__cCopy_rename_at_24_8); das_move(__cCopy_rename_at_24_8, clone_expression(__fnCall_rename_at_15_3));
-        builtin_smart_ptr_move_new(das_auto_cast<smart_ptr_raw<void> &>::cast((((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__cCopy_rename_at_24_8),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__cCopy_rename_at_24_8->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprCopy")),*__context__,nullptr))) ? das_auto_cast<ExprCopy *>::cast(das_cast<ExprCopy *>::cast(__cCopy_rename_at_24_8)) : das_auto_cast<ExprCopy *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/),das_auto_cast<smart_ptr_raw<void> const >::cast(lpipe_expr_e67a42ebecb119e3(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__fnCall_rename_at_15_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprCopy")),*__context__,nullptr))) ? das_auto_cast<ExprCopy *>::cast(das_cast<ExprCopy *>::cast(__fnCall_rename_at_15_3)) : das_auto_cast<ExprCopy *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/,__arg_rename_at_15_4)),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+        builtin_smart_ptr_move_new(das_auto_cast<smart_ptr_raw<void> &>::cast((((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__cCopy_rename_at_24_8),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__cCopy_rename_at_24_8->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprCopy")),*__context__,nullptr))) ? das_auto_cast<ExprCopy *>::cast(das_cast<ExprCopy *>::cast(__cCopy_rename_at_24_8)) : das_auto_cast<ExprCopy *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/),das_auto_cast<smart_ptr_raw<void> const >::cast(lpipe_expr_164f00156c60e835(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__fnCall_rename_at_15_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprCopy")),*__context__,nullptr))) ? das_auto_cast<ExprCopy *>::cast(das_cast<ExprCopy *>::cast(__fnCall_rename_at_15_3)) : das_auto_cast<ExprCopy *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/,__arg_rename_at_15_4)),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
         return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__cCopy_rename_at_24_8);
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprMove")),*__context__,nullptr) )
     {
@@ -323,7 +323,7 @@ inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __conte
         das_delete_handle<smart_ptr_raw<Expression>>::clear(__context__,__cCopy_rename_at_28_9);
         /* end finally */ });
         __cCopy_rename_at_28_9; das_zero(__cCopy_rename_at_28_9); das_move(__cCopy_rename_at_28_9, clone_expression(__fnCall_rename_at_15_3));
-        builtin_smart_ptr_move_new(das_auto_cast<smart_ptr_raw<void> &>::cast((((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__cCopy_rename_at_28_9),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__cCopy_rename_at_28_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprMove")),*__context__,nullptr))) ? das_auto_cast<ExprMove *>::cast(das_cast<ExprMove *>::cast(__cCopy_rename_at_28_9)) : das_auto_cast<ExprMove *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/),das_auto_cast<smart_ptr_raw<void> const >::cast(lpipe_expr_e67a42ebecb119e3(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__fnCall_rename_at_15_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprMove")),*__context__,nullptr))) ? das_auto_cast<ExprMove *>::cast(das_cast<ExprMove *>::cast(__fnCall_rename_at_15_3)) : das_auto_cast<ExprMove *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/,__arg_rename_at_15_4)),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+        builtin_smart_ptr_move_new(das_auto_cast<smart_ptr_raw<void> &>::cast((((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__cCopy_rename_at_28_9),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__cCopy_rename_at_28_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprMove")),*__context__,nullptr))) ? das_auto_cast<ExprMove *>::cast(das_cast<ExprMove *>::cast(__cCopy_rename_at_28_9)) : das_auto_cast<ExprMove *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/),das_auto_cast<smart_ptr_raw<void> const >::cast(lpipe_expr_164f00156c60e835(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__fnCall_rename_at_15_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprMove")),*__context__,nullptr))) ? das_auto_cast<ExprMove *>::cast(das_cast<ExprMove *>::cast(__fnCall_rename_at_15_3)) : das_auto_cast<ExprMove *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/,__arg_rename_at_15_4)),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
         return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__cCopy_rename_at_28_9);
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprClone")),*__context__,nullptr) )
     {
@@ -331,7 +331,7 @@ inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __conte
         das_delete_handle<smart_ptr_raw<Expression>>::clear(__context__,__cCopy_rename_at_32_10);
         /* end finally */ });
         __cCopy_rename_at_32_10; das_zero(__cCopy_rename_at_32_10); das_move(__cCopy_rename_at_32_10, clone_expression(__fnCall_rename_at_15_3));
-        builtin_smart_ptr_move_new(das_auto_cast<smart_ptr_raw<void> &>::cast((((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__cCopy_rename_at_32_10),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__cCopy_rename_at_32_10->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprClone")),*__context__,nullptr))) ? das_auto_cast<ExprClone *>::cast(das_cast<ExprClone *>::cast(__cCopy_rename_at_32_10)) : das_auto_cast<ExprClone *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/),das_auto_cast<smart_ptr_raw<void> const >::cast(lpipe_expr_e67a42ebecb119e3(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__fnCall_rename_at_15_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprClone")),*__context__,nullptr))) ? das_auto_cast<ExprClone *>::cast(das_cast<ExprClone *>::cast(__fnCall_rename_at_15_3)) : das_auto_cast<ExprClone *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/,__arg_rename_at_15_4)),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+        builtin_smart_ptr_move_new(das_auto_cast<smart_ptr_raw<void> &>::cast((((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__cCopy_rename_at_32_10),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__cCopy_rename_at_32_10->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprClone")),*__context__,nullptr))) ? das_auto_cast<ExprClone *>::cast(das_cast<ExprClone *>::cast(__cCopy_rename_at_32_10)) : das_auto_cast<ExprClone *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/),das_auto_cast<smart_ptr_raw<void> const >::cast(lpipe_expr_164f00156c60e835(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__fnCall_rename_at_15_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprClone")),*__context__,nullptr))) ? das_auto_cast<ExprClone *>::cast(das_cast<ExprClone *>::cast(__fnCall_rename_at_15_3)) : das_auto_cast<ExprClone *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->right /*right*/,__arg_rename_at_15_4)),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
         return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__cCopy_rename_at_32_10);
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__fnCall_rename_at_15_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprLet")),*__context__,nullptr) )
     {
@@ -346,7 +346,7 @@ inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __conte
             return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(nullptr);
         } else {
             das_move(___VarcLetTickatTick41Tick20_rename_at_41_11,clone_expression(__fnCall_rename_at_15_3));
-            builtin_smart_ptr_move_new(das_auto_cast<smart_ptr_raw<void> &>::cast(das_index<das::vector<smart_ptr<Variable>>>::at((((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(___VarcLetTickatTick41Tick20_rename_at_41_11),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(___VarcLetTickatTick41Tick20_rename_at_41_11->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprLet")),*__context__,nullptr))) ? das_auto_cast<ExprLet *>::cast(das_cast<ExprLet *>::cast(___VarcLetTickatTick41Tick20_rename_at_41_11)) : das_auto_cast<ExprLet *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->variables /*variables*/,0,__context__)->init /*init*/),das_auto_cast<smart_ptr_raw<void> const >::cast(lpipe_expr_e67a42ebecb119e3(__context__,das_index<das::vector<smart_ptr<Variable>>>::at(__pLet_rename_at_36_12->variables /*variables*/,0,__context__)->init /*init*/,__arg_rename_at_15_4)),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+            builtin_smart_ptr_move_new(das_auto_cast<smart_ptr_raw<void> &>::cast(das_index<das::vector<smart_ptr<Variable>>>::at((((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(___VarcLetTickatTick41Tick20_rename_at_41_11),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(___VarcLetTickatTick41Tick20_rename_at_41_11->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprLet")),*__context__,nullptr))) ? das_auto_cast<ExprLet *>::cast(das_cast<ExprLet *>::cast(___VarcLetTickatTick41Tick20_rename_at_41_11)) : das_auto_cast<ExprLet *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->variables /*variables*/,0,__context__)->init /*init*/),das_auto_cast<smart_ptr_raw<void> const >::cast(lpipe_expr_164f00156c60e835(__context__,das_index<das::vector<smart_ptr<Variable>>>::at(__pLet_rename_at_36_12->variables /*variables*/,0,__context__)->init /*init*/,__arg_rename_at_15_4)),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
             return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(___VarcLetTickatTick41Tick20_rename_at_41_11);
         };
     } else if ( isExprLikeCall(__fnCall_rename_at_15_3) )
@@ -366,20 +366,20 @@ inline smart_ptr_raw<Expression> lpipe_expr_e67a42ebecb119e3 ( Context * __conte
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xe553d306a044fc24] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce>>();
+    aotLib[0xbd07f1914ed1e4d4] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_d7dff826198d4fd2>>();
     };
-    aotLib[0xa0d309b2e95c9314] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_c3c4b8e51b91c26b>>();
+    aotLib[0xd8d328ecd322f48c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_b0b2ab2e5d9e80a2>>();
     };
-    aotLib[0x7d603bf2fe172b61] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&lpipe_expr_e67a42ebecb119e3>>();
+    aotLib[0xb52dce1a3bf58f9f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&lpipe_expr_164f00156c60e835>>();
     };
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_17398545618972835597
-AotListBase impl_aot_lpipe(_anon_17398545618972835597::registerAotFunctions);
+} // namespace _anon_8787716374767917637
+AotListBase impl_aot_lpipe(_anon_8787716374767917637::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

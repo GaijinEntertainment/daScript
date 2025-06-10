@@ -72,7 +72,7 @@
 #endif
 
 namespace das {
-namespace _anon_12534307592900194460 {
+namespace _anon_7444991120561323634 {
 
 namespace ast { struct AstFunctionAnnotation; };
 namespace ast { struct AstBlockAnnotation; };
@@ -360,42 +360,42 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void fuzz_b284ca1047c9135d ( Context * __context__, Block DAS_COMMENT((void)) const  & __blk_rename_at_15_0 );
-inline void fuzz_26c215c38d1dfd1a ( Context * __context__, int32_t __fuzz_count_rename_at_27_2, Block DAS_COMMENT((void)) const  & __blk_rename_at_27_3 );
-inline void fuzz_debug_93358114940f0b68 ( Context * __context__, Block DAS_COMMENT((void)) const  & __blk_rename_at_39_5 );
-inline void fuzz_debug_3b504f8008b955ef ( Context * __context__, int32_t __fuzz_count_rename_at_48_7, Block DAS_COMMENT((void)) const  & __blk_rename_at_48_8 );
-inline void fuzz_numeric_and_vector_op1_48ce713c34be8575 ( Context * __context__, testing::T * const  __t_rename_at_58_10, faker::Faker & __fake_rename_at_58_11, char * const  __funcname_rename_at_58_12 );
-inline void fuzz_numeric_and_vector_signed_op1_cf02787541ef8a1f ( Context * __context__, testing::T * const  __t_rename_at_77_13, faker::Faker & __fake_rename_at_77_14, char * const  __funcname_rename_at_77_15 );
-inline void fuzz_numeric_op1_7e39ee71d5eea21b ( Context * __context__, testing::T * const  __t_rename_at_92_16, faker::Faker & __fake_rename_at_92_17, char * const  __funcname_rename_at_92_18 );
-inline void fuzz_numeric_and_storage_op1_14e5fe2cc526dd1f ( Context * __context__, testing::T * const  __t_rename_at_102_19, faker::Faker & __fake_rename_at_102_20, char * const  __funcname_rename_at_102_21 );
-inline void fuzz_all_ints_op1_e805e6460a35229d ( Context * __context__, testing::T * const  __t_rename_at_118_22, faker::Faker & __fake_rename_at_118_23, char * const  __funcname_rename_at_118_24 );
-inline void fuzz_all_unsigned_ints_op1_f9f52b078e024909 ( Context * __context__, testing::T * const  __t_rename_at_128_25, faker::Faker & __fake_rename_at_128_26, char * const  __funcname_rename_at_128_27 );
-inline void fuzz_float_double_or_float_vec_op1_3652ef8150f5c24d ( Context * __context__, testing::T * const  __t_rename_at_136_28, faker::Faker & __fake_rename_at_136_29, char * const  __funcname_rename_at_136_30 );
-inline void fuzz_float_or_float_vec_op1_78b3a33e9c015725 ( Context * __context__, testing::T * const  __t_rename_at_147_31, faker::Faker & __fake_rename_at_147_32, char * const  __funcname_rename_at_147_33 );
-inline void fuzz_float_or_float_vec_op2_ae83307b5cfedd1 ( Context * __context__, testing::T * const  __t_rename_at_157_34, faker::Faker & __fake_rename_at_157_35, char * const  __funcname_rename_at_157_36 );
-inline void fuzz_float_double_or_float_vec_op2_a264e3ee00149f0b ( Context * __context__, testing::T * const  __t_rename_at_167_37, faker::Faker & __fake_rename_at_167_38, char * const  __funcname_rename_at_167_39 );
-inline void fuzz_numeric_and_vector_op2_f57314e6b07c00d3 ( Context * __context__, testing::T * const  __t_rename_at_178_40, faker::Faker & __fake_rename_at_178_41, char * const  __funcname_rename_at_178_42 );
-inline void fuzz_numeric_and_vector_op2_no_unint_vec_f9fe354762f0d437 ( Context * __context__, testing::T * const  __t_rename_at_197_43, faker::Faker & __fake_rename_at_197_44, char * const  __funcname_rename_at_197_45 );
-inline void fuzz_numeric_op2_92b03af12a4daff9 ( Context * __context__, testing::T * const  __t_rename_at_214_46, faker::Faker & __fake_rename_at_214_47, char * const  __funcname_rename_at_214_48 );
-inline void fuzz_compareable_op2_87dd0992261931a1 ( Context * __context__, testing::T * const  __t_rename_at_224_49, faker::Faker & __fake_rename_at_224_50, char * const  __funcname_rename_at_224_51 );
-inline void fuzz_eq_neq_op2_97177b59c300d73d ( Context * __context__, testing::T * const  __t_rename_at_237_52, faker::Faker & __fake_rename_at_237_53, char * const  __funcname_rename_at_237_54 );
-inline void fuzz_numeric_vec_scal_op2_52ad44f3d93412e3 ( Context * __context__, testing::T * const  __t_rename_at_259_55, faker::Faker & __fake_rename_at_259_56, char * const  __funcname_rename_at_259_57 );
-inline void fuzz_numeric_scal_vec_op2_fd0677cf42c35c93 ( Context * __context__, testing::T * const  __t_rename_at_274_58, faker::Faker & __fake_rename_at_274_59, char * const  __funcname_rename_at_274_60 );
-inline void fuzz_int_vector_op2_dc7f59e64eb3fb95 ( Context * __context__, testing::T * const  __t_rename_at_289_61, faker::Faker & __fake_rename_at_289_62, char * const  __funcname_rename_at_289_63 );
-inline void fuzz_shift_op2_11a978107d3af929 ( Context * __context__, testing::T * const  __t_rename_at_303_64, faker::Faker & __fake_rename_at_303_65, char * const  __funcname_rename_at_303_66 );
-inline void fuzz_rotate_op2_e76ebde963d165d3 ( Context * __context__, testing::T * const  __t_rename_at_317_67, faker::Faker & __fake_rename_at_317_68, char * const  __funcname_rename_at_317_69 );
-inline void fuzz_numeric_op3_c254164d54c65bef ( Context * __context__, testing::T * const  __t_rename_at_325_70, faker::Faker & __fake_rename_at_325_71, char * const  __funcname_rename_at_325_72 );
-inline void fuzz_vec_op3_b8b2d31bb7eb72a3 ( Context * __context__, testing::T * const  __t_rename_at_335_73, faker::Faker & __fake_rename_at_335_74, char * const  __funcname_rename_at_335_75 );
-inline void fuzz_vec_mad_op3_92bb9a6e84ac3c0b ( Context * __context__, testing::T * const  __t_rename_at_350_76, faker::Faker & __fake_rename_at_350_77, char * const  __funcname_rename_at_350_78 );
-inline void fuzz_float_double_or_float_vec_op3_4985cd878555494d ( Context * __context__, testing::T * const  __t_rename_at_365_79, faker::Faker & __fake_rename_at_365_80, char * const  __funcname_rename_at_365_81 );
-inline void fuzz_numeric_op4_16e37608179824b9 ( Context * __context__, testing::T * const  __t_rename_at_377_82, faker::Faker & __fake_rename_at_377_83, char * const  __funcname_rename_at_377_84 );
+inline void fuzz_b6cca4192262d386 ( Context * __context__, Block DAS_COMMENT((void)) const  & __blk_rename_at_15_0 );
+inline void fuzz_7d277f229f4cd0f9 ( Context * __context__, int32_t __fuzz_count_rename_at_27_2, Block DAS_COMMENT((void)) const  & __blk_rename_at_27_3 );
+inline void fuzz_debug_ab159059eec272ee ( Context * __context__, Block DAS_COMMENT((void)) const  & __blk_rename_at_39_5 );
+inline void fuzz_debug_29ad9cad153dbdaa ( Context * __context__, int32_t __fuzz_count_rename_at_48_7, Block DAS_COMMENT((void)) const  & __blk_rename_at_48_8 );
+inline void fuzz_numeric_and_vector_op1_72d01c291c4bacbd ( Context * __context__, testing::T * const  __t_rename_at_58_10, faker::Faker & __fake_rename_at_58_11, char * const  __funcname_rename_at_58_12 );
+inline void fuzz_numeric_and_vector_signed_op1_46fb5c719132627a ( Context * __context__, testing::T * const  __t_rename_at_77_13, faker::Faker & __fake_rename_at_77_14, char * const  __funcname_rename_at_77_15 );
+inline void fuzz_numeric_op1_f8c16e60be39e7b2 ( Context * __context__, testing::T * const  __t_rename_at_92_16, faker::Faker & __fake_rename_at_92_17, char * const  __funcname_rename_at_92_18 );
+inline void fuzz_numeric_and_storage_op1_d9574a01bd4b947c ( Context * __context__, testing::T * const  __t_rename_at_102_19, faker::Faker & __fake_rename_at_102_20, char * const  __funcname_rename_at_102_21 );
+inline void fuzz_all_ints_op1_12e8b856f3df8f49 ( Context * __context__, testing::T * const  __t_rename_at_118_22, faker::Faker & __fake_rename_at_118_23, char * const  __funcname_rename_at_118_24 );
+inline void fuzz_all_unsigned_ints_op1_14d56f9e36a55c47 ( Context * __context__, testing::T * const  __t_rename_at_128_25, faker::Faker & __fake_rename_at_128_26, char * const  __funcname_rename_at_128_27 );
+inline void fuzz_float_double_or_float_vec_op1_1331e3a60910a3ea ( Context * __context__, testing::T * const  __t_rename_at_136_28, faker::Faker & __fake_rename_at_136_29, char * const  __funcname_rename_at_136_30 );
+inline void fuzz_float_or_float_vec_op1_7f98ee8e7ab5e439 ( Context * __context__, testing::T * const  __t_rename_at_147_31, faker::Faker & __fake_rename_at_147_32, char * const  __funcname_rename_at_147_33 );
+inline void fuzz_float_or_float_vec_op2_5c666abdab47e816 ( Context * __context__, testing::T * const  __t_rename_at_157_34, faker::Faker & __fake_rename_at_157_35, char * const  __funcname_rename_at_157_36 );
+inline void fuzz_float_double_or_float_vec_op2_93ee484934875bf6 ( Context * __context__, testing::T * const  __t_rename_at_167_37, faker::Faker & __fake_rename_at_167_38, char * const  __funcname_rename_at_167_39 );
+inline void fuzz_numeric_and_vector_op2_a09ea21b9decc8ed ( Context * __context__, testing::T * const  __t_rename_at_178_40, faker::Faker & __fake_rename_at_178_41, char * const  __funcname_rename_at_178_42 );
+inline void fuzz_numeric_and_vector_op2_no_unint_vec_ce28c44a6a301c68 ( Context * __context__, testing::T * const  __t_rename_at_197_43, faker::Faker & __fake_rename_at_197_44, char * const  __funcname_rename_at_197_45 );
+inline void fuzz_numeric_op2_de950802fbdfd170 ( Context * __context__, testing::T * const  __t_rename_at_214_46, faker::Faker & __fake_rename_at_214_47, char * const  __funcname_rename_at_214_48 );
+inline void fuzz_compareable_op2_746a36be41773364 ( Context * __context__, testing::T * const  __t_rename_at_224_49, faker::Faker & __fake_rename_at_224_50, char * const  __funcname_rename_at_224_51 );
+inline void fuzz_eq_neq_op2_31d6e11fdab1147f ( Context * __context__, testing::T * const  __t_rename_at_237_52, faker::Faker & __fake_rename_at_237_53, char * const  __funcname_rename_at_237_54 );
+inline void fuzz_numeric_vec_scal_op2_e0e8dc665c3b5ff4 ( Context * __context__, testing::T * const  __t_rename_at_259_55, faker::Faker & __fake_rename_at_259_56, char * const  __funcname_rename_at_259_57 );
+inline void fuzz_numeric_scal_vec_op2_ebb697fbeefa1e48 ( Context * __context__, testing::T * const  __t_rename_at_274_58, faker::Faker & __fake_rename_at_274_59, char * const  __funcname_rename_at_274_60 );
+inline void fuzz_int_vector_op2_f554a9623c159f3f ( Context * __context__, testing::T * const  __t_rename_at_289_61, faker::Faker & __fake_rename_at_289_62, char * const  __funcname_rename_at_289_63 );
+inline void fuzz_shift_op2_853db3bca6011a0f ( Context * __context__, testing::T * const  __t_rename_at_303_64, faker::Faker & __fake_rename_at_303_65, char * const  __funcname_rename_at_303_66 );
+inline void fuzz_rotate_op2_cb4f9cfd40f7e8b5 ( Context * __context__, testing::T * const  __t_rename_at_317_67, faker::Faker & __fake_rename_at_317_68, char * const  __funcname_rename_at_317_69 );
+inline void fuzz_numeric_op3_197b19f31d46a79 ( Context * __context__, testing::T * const  __t_rename_at_325_70, faker::Faker & __fake_rename_at_325_71, char * const  __funcname_rename_at_325_72 );
+inline void fuzz_vec_op3_998671d1b710218 ( Context * __context__, testing::T * const  __t_rename_at_335_73, faker::Faker & __fake_rename_at_335_74, char * const  __funcname_rename_at_335_75 );
+inline void fuzz_vec_mad_op3_a40186d6c2b815be ( Context * __context__, testing::T * const  __t_rename_at_350_76, faker::Faker & __fake_rename_at_350_77, char * const  __funcname_rename_at_350_78 );
+inline void fuzz_float_double_or_float_vec_op3_88cf36c94b6a7a16 ( Context * __context__, testing::T * const  __t_rename_at_365_79, faker::Faker & __fake_rename_at_365_80, char * const  __funcname_rename_at_365_81 );
+inline void fuzz_numeric_op4_b6d5972598a8cbd1 ( Context * __context__, testing::T * const  __t_rename_at_377_82, faker::Faker & __fake_rename_at_377_83, char * const  __funcname_rename_at_377_84 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
     das_global<int32_t,0xbd9f757637c922d6>(__context__) = 1000;/*total_fuzz_count*/
 }
 
-inline void fuzz_b284ca1047c9135d ( Context * __context__, Block DAS_COMMENT((void)) const  &  __blk_rename_at_15_0 )
+inline void fuzz_b6cca4192262d386 ( Context * __context__, Block DAS_COMMENT((void)) const  &  __blk_rename_at_15_0 )
 {
     {
         bool __need_loop_18 = true;
@@ -416,7 +416,7 @@ inline void fuzz_b284ca1047c9135d ( Context * __context__, Block DAS_COMMENT((vo
     };
 }
 
-inline void fuzz_26c215c38d1dfd1a ( Context * __context__, int32_t __fuzz_count_rename_at_27_2, Block DAS_COMMENT((void)) const  &  __blk_rename_at_27_3 )
+inline void fuzz_7d277f229f4cd0f9 ( Context * __context__, int32_t __fuzz_count_rename_at_27_2, Block DAS_COMMENT((void)) const  &  __blk_rename_at_27_3 )
 {
     {
         bool __need_loop_30 = true;
@@ -437,7 +437,7 @@ inline void fuzz_26c215c38d1dfd1a ( Context * __context__, int32_t __fuzz_count_
     };
 }
 
-inline void fuzz_debug_93358114940f0b68 ( Context * __context__, Block DAS_COMMENT((void)) const  &  __blk_rename_at_39_5 )
+inline void fuzz_debug_ab159059eec272ee ( Context * __context__, Block DAS_COMMENT((void)) const  &  __blk_rename_at_39_5 )
 {
     {
         bool __need_loop_43 = true;
@@ -453,7 +453,7 @@ inline void fuzz_debug_93358114940f0b68 ( Context * __context__, Block DAS_COMME
     };
 }
 
-inline void fuzz_debug_3b504f8008b955ef ( Context * __context__, int32_t __fuzz_count_rename_at_48_7, Block DAS_COMMENT((void)) const  &  __blk_rename_at_48_8 )
+inline void fuzz_debug_29ad9cad153dbdaa ( Context * __context__, int32_t __fuzz_count_rename_at_48_7, Block DAS_COMMENT((void)) const  &  __blk_rename_at_48_8 )
 {
     {
         bool __need_loop_52 = true;
@@ -469,7 +469,7 @@ inline void fuzz_debug_3b504f8008b955ef ( Context * __context__, int32_t __fuzz_
     };
 }
 
-inline void fuzz_numeric_and_vector_op1_48ce713c34be8575 ( Context * __context__, testing::T * const  __t_rename_at_58_10, faker::Faker &  __fake_rename_at_58_11, char * const  __funcname_rename_at_58_12 )
+inline void fuzz_numeric_and_vector_op1_72d01c291c4bacbd ( Context * __context__, testing::T * const  __t_rename_at_58_10, faker::Faker &  __fake_rename_at_58_11, char * const  __funcname_rename_at_58_12 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t>(__context__,nullptr,__funcname_rename_at_58_12,__t_rename_at_58_10,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_58_11)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t>(__context__,nullptr,__funcname_rename_at_58_12,__t_rename_at_58_10,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_58_11)));
@@ -486,7 +486,7 @@ inline void fuzz_numeric_and_vector_op1_48ce713c34be8575 ( Context * __context__
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4>(__context__,nullptr,__funcname_rename_at_58_12,__t_rename_at_58_10,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_58_11)));
 }
 
-inline void fuzz_numeric_and_vector_signed_op1_cf02787541ef8a1f ( Context * __context__, testing::T * const  __t_rename_at_77_13, faker::Faker &  __fake_rename_at_77_14, char * const  __funcname_rename_at_77_15 )
+inline void fuzz_numeric_and_vector_signed_op1_46fb5c719132627a ( Context * __context__, testing::T * const  __t_rename_at_77_13, faker::Faker &  __fake_rename_at_77_14, char * const  __funcname_rename_at_77_15 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t>(__context__,nullptr,__funcname_rename_at_77_15,__t_rename_at_77_13,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_77_14)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float>(__context__,nullptr,__funcname_rename_at_77_15,__t_rename_at_77_13,das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_77_14)));
@@ -499,7 +499,7 @@ inline void fuzz_numeric_and_vector_signed_op1_cf02787541ef8a1f ( Context * __co
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4>(__context__,nullptr,__funcname_rename_at_77_15,__t_rename_at_77_13,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_77_14)));
 }
 
-inline void fuzz_numeric_op1_7e39ee71d5eea21b ( Context * __context__, testing::T * const  __t_rename_at_92_16, faker::Faker &  __fake_rename_at_92_17, char * const  __funcname_rename_at_92_18 )
+inline void fuzz_numeric_op1_f8c16e60be39e7b2 ( Context * __context__, testing::T * const  __t_rename_at_92_16, faker::Faker &  __fake_rename_at_92_17, char * const  __funcname_rename_at_92_18 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t>(__context__,nullptr,__funcname_rename_at_92_18,__t_rename_at_92_16,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_92_17)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t>(__context__,nullptr,__funcname_rename_at_92_18,__t_rename_at_92_16,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_92_17)));
@@ -507,7 +507,7 @@ inline void fuzz_numeric_op1_7e39ee71d5eea21b ( Context * __context__, testing::
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,double>(__context__,nullptr,__funcname_rename_at_92_18,__t_rename_at_92_16,das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_92_17)));
 }
 
-inline void fuzz_numeric_and_storage_op1_14e5fe2cc526dd1f ( Context * __context__, testing::T * const  __t_rename_at_102_19, faker::Faker &  __fake_rename_at_102_20, char * const  __funcname_rename_at_102_21 )
+inline void fuzz_numeric_and_storage_op1_d9574a01bd4b947c ( Context * __context__, testing::T * const  __t_rename_at_102_19, faker::Faker &  __fake_rename_at_102_20, char * const  __funcname_rename_at_102_21 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t>(__context__,nullptr,__funcname_rename_at_102_21,__t_rename_at_102_19,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_102_20)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t>(__context__,nullptr,__funcname_rename_at_102_21,__t_rename_at_102_19,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_102_20)));
@@ -521,7 +521,7 @@ inline void fuzz_numeric_and_storage_op1_14e5fe2cc526dd1f ( Context * __context_
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,double>(__context__,nullptr,__funcname_rename_at_102_21,__t_rename_at_102_19,das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_102_20)));
 }
 
-inline void fuzz_all_ints_op1_e805e6460a35229d ( Context * __context__, testing::T * const  __t_rename_at_118_22, faker::Faker &  __fake_rename_at_118_23, char * const  __funcname_rename_at_118_24 )
+inline void fuzz_all_ints_op1_12e8b856f3df8f49 ( Context * __context__, testing::T * const  __t_rename_at_118_22, faker::Faker &  __fake_rename_at_118_23, char * const  __funcname_rename_at_118_24 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t>(__context__,nullptr,__funcname_rename_at_118_24,__t_rename_at_118_22,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_118_23)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t>(__context__,nullptr,__funcname_rename_at_118_24,__t_rename_at_118_22,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_118_23)));
@@ -529,13 +529,13 @@ inline void fuzz_all_ints_op1_e805e6460a35229d ( Context * __context__, testing:
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint64_t>(__context__,nullptr,__funcname_rename_at_118_24,__t_rename_at_118_22,das_invoke_function<uint64_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint64 S<faker::Faker>*/ 0x8d24a4146201a784)),das_arg<faker::Faker>::pass(__fake_rename_at_118_23)));
 }
 
-inline void fuzz_all_unsigned_ints_op1_f9f52b078e024909 ( Context * __context__, testing::T * const  __t_rename_at_128_25, faker::Faker &  __fake_rename_at_128_26, char * const  __funcname_rename_at_128_27 )
+inline void fuzz_all_unsigned_ints_op1_14d56f9e36a55c47 ( Context * __context__, testing::T * const  __t_rename_at_128_25, faker::Faker &  __fake_rename_at_128_26, char * const  __funcname_rename_at_128_27 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t>(__context__,nullptr,__funcname_rename_at_128_27,__t_rename_at_128_25,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_128_26)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint64_t>(__context__,nullptr,__funcname_rename_at_128_27,__t_rename_at_128_25,das_invoke_function<uint64_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint64 S<faker::Faker>*/ 0x8d24a4146201a784)),das_arg<faker::Faker>::pass(__fake_rename_at_128_26)));
 }
 
-inline void fuzz_float_double_or_float_vec_op1_3652ef8150f5c24d ( Context * __context__, testing::T * const  __t_rename_at_136_28, faker::Faker &  __fake_rename_at_136_29, char * const  __funcname_rename_at_136_30 )
+inline void fuzz_float_double_or_float_vec_op1_1331e3a60910a3ea ( Context * __context__, testing::T * const  __t_rename_at_136_28, faker::Faker &  __fake_rename_at_136_29, char * const  __funcname_rename_at_136_30 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float>(__context__,nullptr,__funcname_rename_at_136_30,__t_rename_at_136_28,das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_136_29)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,double>(__context__,nullptr,__funcname_rename_at_136_30,__t_rename_at_136_28,das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_136_29)));
@@ -544,7 +544,7 @@ inline void fuzz_float_double_or_float_vec_op1_3652ef8150f5c24d ( Context * __co
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4>(__context__,nullptr,__funcname_rename_at_136_30,__t_rename_at_136_28,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_136_29)));
 }
 
-inline void fuzz_float_or_float_vec_op1_78b3a33e9c015725 ( Context * __context__, testing::T * const  __t_rename_at_147_31, faker::Faker &  __fake_rename_at_147_32, char * const  __funcname_rename_at_147_33 )
+inline void fuzz_float_or_float_vec_op1_7f98ee8e7ab5e439 ( Context * __context__, testing::T * const  __t_rename_at_147_31, faker::Faker &  __fake_rename_at_147_32, char * const  __funcname_rename_at_147_33 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float>(__context__,nullptr,__funcname_rename_at_147_33,__t_rename_at_147_31,das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_147_32)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float2>(__context__,nullptr,__funcname_rename_at_147_33,__t_rename_at_147_31,das_invoke_function<float2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float2 S<faker::Faker>*/ 0xb12590d5c18e85b8)),das_arg<faker::Faker>::pass(__fake_rename_at_147_32)));
@@ -552,7 +552,7 @@ inline void fuzz_float_or_float_vec_op1_78b3a33e9c015725 ( Context * __context__
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4>(__context__,nullptr,__funcname_rename_at_147_33,__t_rename_at_147_31,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_147_32)));
 }
 
-inline void fuzz_float_or_float_vec_op2_ae83307b5cfedd1 ( Context * __context__, testing::T * const  __t_rename_at_157_34, faker::Faker &  __fake_rename_at_157_35, char * const  __funcname_rename_at_157_36 )
+inline void fuzz_float_or_float_vec_op2_5c666abdab47e816 ( Context * __context__, testing::T * const  __t_rename_at_157_34, faker::Faker &  __fake_rename_at_157_35, char * const  __funcname_rename_at_157_36 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float,float>(__context__,nullptr,__funcname_rename_at_157_36,__t_rename_at_157_34,das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_157_35)),das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_157_35)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float2,float2>(__context__,nullptr,__funcname_rename_at_157_36,__t_rename_at_157_34,das_invoke_function<float2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float2 S<faker::Faker>*/ 0xb12590d5c18e85b8)),das_arg<faker::Faker>::pass(__fake_rename_at_157_35)),das_invoke_function<float2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float2 S<faker::Faker>*/ 0xb12590d5c18e85b8)),das_arg<faker::Faker>::pass(__fake_rename_at_157_35)));
@@ -560,7 +560,7 @@ inline void fuzz_float_or_float_vec_op2_ae83307b5cfedd1 ( Context * __context__,
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4,float4>(__context__,nullptr,__funcname_rename_at_157_36,__t_rename_at_157_34,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_157_35)),das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_157_35)));
 }
 
-inline void fuzz_float_double_or_float_vec_op2_a264e3ee00149f0b ( Context * __context__, testing::T * const  __t_rename_at_167_37, faker::Faker &  __fake_rename_at_167_38, char * const  __funcname_rename_at_167_39 )
+inline void fuzz_float_double_or_float_vec_op2_93ee484934875bf6 ( Context * __context__, testing::T * const  __t_rename_at_167_37, faker::Faker &  __fake_rename_at_167_38, char * const  __funcname_rename_at_167_39 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float,float>(__context__,nullptr,__funcname_rename_at_167_39,__t_rename_at_167_37,das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_167_38)),das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_167_38)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,double,double>(__context__,nullptr,__funcname_rename_at_167_39,__t_rename_at_167_37,das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_167_38)),das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_167_38)));
@@ -569,7 +569,7 @@ inline void fuzz_float_double_or_float_vec_op2_a264e3ee00149f0b ( Context * __co
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4,float4>(__context__,nullptr,__funcname_rename_at_167_39,__t_rename_at_167_37,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_167_38)),das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_167_38)));
 }
 
-inline void fuzz_numeric_and_vector_op2_f57314e6b07c00d3 ( Context * __context__, testing::T * const  __t_rename_at_178_40, faker::Faker &  __fake_rename_at_178_41, char * const  __funcname_rename_at_178_42 )
+inline void fuzz_numeric_and_vector_op2_a09ea21b9decc8ed ( Context * __context__, testing::T * const  __t_rename_at_178_40, faker::Faker &  __fake_rename_at_178_41, char * const  __funcname_rename_at_178_42 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_178_42,__t_rename_at_178_40,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_178_41)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_178_41)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_178_42,__t_rename_at_178_40,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_178_41)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_178_41)));
@@ -586,7 +586,7 @@ inline void fuzz_numeric_and_vector_op2_f57314e6b07c00d3 ( Context * __context__
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4,float4>(__context__,nullptr,__funcname_rename_at_178_42,__t_rename_at_178_40,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_178_41)),das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_178_41)));
 }
 
-inline void fuzz_numeric_and_vector_op2_no_unint_vec_f9fe354762f0d437 ( Context * __context__, testing::T * const  __t_rename_at_197_43, faker::Faker &  __fake_rename_at_197_44, char * const  __funcname_rename_at_197_45 )
+inline void fuzz_numeric_and_vector_op2_no_unint_vec_ce28c44a6a301c68 ( Context * __context__, testing::T * const  __t_rename_at_197_43, faker::Faker &  __fake_rename_at_197_44, char * const  __funcname_rename_at_197_45 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_197_45,__t_rename_at_197_43,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_197_44)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_197_44)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_197_45,__t_rename_at_197_43,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_197_44)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_197_44)));
@@ -600,7 +600,7 @@ inline void fuzz_numeric_and_vector_op2_no_unint_vec_f9fe354762f0d437 ( Context 
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4,float4>(__context__,nullptr,__funcname_rename_at_197_45,__t_rename_at_197_43,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_197_44)),das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_197_44)));
 }
 
-inline void fuzz_numeric_op2_92b03af12a4daff9 ( Context * __context__, testing::T * const  __t_rename_at_214_46, faker::Faker &  __fake_rename_at_214_47, char * const  __funcname_rename_at_214_48 )
+inline void fuzz_numeric_op2_de950802fbdfd170 ( Context * __context__, testing::T * const  __t_rename_at_214_46, faker::Faker &  __fake_rename_at_214_47, char * const  __funcname_rename_at_214_48 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_214_48,__t_rename_at_214_46,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_214_47)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_214_47)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_214_48,__t_rename_at_214_46,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_214_47)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_214_47)));
@@ -608,7 +608,7 @@ inline void fuzz_numeric_op2_92b03af12a4daff9 ( Context * __context__, testing::
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,double,double>(__context__,nullptr,__funcname_rename_at_214_48,__t_rename_at_214_46,das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_214_47)),das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_214_47)));
 }
 
-inline void fuzz_compareable_op2_87dd0992261931a1 ( Context * __context__, testing::T * const  __t_rename_at_224_49, faker::Faker &  __fake_rename_at_224_50, char * const  __funcname_rename_at_224_51 )
+inline void fuzz_compareable_op2_746a36be41773364 ( Context * __context__, testing::T * const  __t_rename_at_224_49, faker::Faker &  __fake_rename_at_224_50, char * const  __funcname_rename_at_224_51 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_224_51,__t_rename_at_224_49,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_224_50)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_224_50)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_224_51,__t_rename_at_224_49,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_224_50)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_224_50)));
@@ -619,7 +619,7 @@ inline void fuzz_compareable_op2_87dd0992261931a1 ( Context * __context__, testi
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,char * const ,char * const >(__context__,nullptr,__funcname_rename_at_224_51,__t_rename_at_224_49,das_invoke_function<char * const >::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::any_string S<faker::Faker>*/ 0x5b048519673aaa43)),das_arg<faker::Faker>::pass(__fake_rename_at_224_50)),das_invoke_function<char * const >::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::any_string S<faker::Faker>*/ 0x5b048519673aaa43)),das_arg<faker::Faker>::pass(__fake_rename_at_224_50)));
 }
 
-inline void fuzz_eq_neq_op2_97177b59c300d73d ( Context * __context__, testing::T * const  __t_rename_at_237_52, faker::Faker &  __fake_rename_at_237_53, char * const  __funcname_rename_at_237_54 )
+inline void fuzz_eq_neq_op2_31d6e11fdab1147f ( Context * __context__, testing::T * const  __t_rename_at_237_52, faker::Faker &  __fake_rename_at_237_53, char * const  __funcname_rename_at_237_54 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_237_54,__t_rename_at_237_52,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_237_53)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_237_53)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_237_54,__t_rename_at_237_52,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_237_53)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_237_53)));
@@ -639,7 +639,7 @@ inline void fuzz_eq_neq_op2_97177b59c300d73d ( Context * __context__, testing::T
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4,float4>(__context__,nullptr,__funcname_rename_at_237_54,__t_rename_at_237_52,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_237_53)),das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_237_53)));
 }
 
-inline void fuzz_numeric_vec_scal_op2_52ad44f3d93412e3 ( Context * __context__, testing::T * const  __t_rename_at_259_55, faker::Faker &  __fake_rename_at_259_56, char * const  __funcname_rename_at_259_57 )
+inline void fuzz_numeric_vec_scal_op2_e0e8dc665c3b5ff4 ( Context * __context__, testing::T * const  __t_rename_at_259_55, faker::Faker &  __fake_rename_at_259_56, char * const  __funcname_rename_at_259_57 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int2,int32_t>(__context__,nullptr,__funcname_rename_at_259_57,__t_rename_at_259_55,das_invoke_function<int2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int2 S<faker::Faker>*/ 0x4e735764aa61d3b5)),das_arg<faker::Faker>::pass(__fake_rename_at_259_56)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_259_56)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int3,int32_t>(__context__,nullptr,__funcname_rename_at_259_57,__t_rename_at_259_55,das_invoke_function<int3>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int3 S<faker::Faker>*/ 0x2c26493dc762dfc2)),das_arg<faker::Faker>::pass(__fake_rename_at_259_56)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_259_56)));
@@ -652,7 +652,7 @@ inline void fuzz_numeric_vec_scal_op2_52ad44f3d93412e3 ( Context * __context__, 
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4,float>(__context__,nullptr,__funcname_rename_at_259_57,__t_rename_at_259_55,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_259_56)),das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_259_56)));
 }
 
-inline void fuzz_numeric_scal_vec_op2_fd0677cf42c35c93 ( Context * __context__, testing::T * const  __t_rename_at_274_58, faker::Faker &  __fake_rename_at_274_59, char * const  __funcname_rename_at_274_60 )
+inline void fuzz_numeric_scal_vec_op2_ebb697fbeefa1e48 ( Context * __context__, testing::T * const  __t_rename_at_274_58, faker::Faker &  __fake_rename_at_274_59, char * const  __funcname_rename_at_274_60 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int2>(__context__,nullptr,__funcname_rename_at_274_60,__t_rename_at_274_58,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_274_59)),das_invoke_function<int2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int2 S<faker::Faker>*/ 0x4e735764aa61d3b5)),das_arg<faker::Faker>::pass(__fake_rename_at_274_59)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int3>(__context__,nullptr,__funcname_rename_at_274_60,__t_rename_at_274_58,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_274_59)),das_invoke_function<int3>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int3 S<faker::Faker>*/ 0x2c26493dc762dfc2)),das_arg<faker::Faker>::pass(__fake_rename_at_274_59)));
@@ -665,7 +665,7 @@ inline void fuzz_numeric_scal_vec_op2_fd0677cf42c35c93 ( Context * __context__, 
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float,float4>(__context__,nullptr,__funcname_rename_at_274_60,__t_rename_at_274_58,das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_274_59)),das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_274_59)));
 }
 
-inline void fuzz_int_vector_op2_dc7f59e64eb3fb95 ( Context * __context__, testing::T * const  __t_rename_at_289_61, faker::Faker &  __fake_rename_at_289_62, char * const  __funcname_rename_at_289_63 )
+inline void fuzz_int_vector_op2_f554a9623c159f3f ( Context * __context__, testing::T * const  __t_rename_at_289_61, faker::Faker &  __fake_rename_at_289_62, char * const  __funcname_rename_at_289_63 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_289_63,__t_rename_at_289_61,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_289_62)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_289_62)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_289_63,__t_rename_at_289_61,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_289_62)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_289_62)));
@@ -677,7 +677,7 @@ inline void fuzz_int_vector_op2_dc7f59e64eb3fb95 ( Context * __context__, testin
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint4,uint4>(__context__,nullptr,__funcname_rename_at_289_63,__t_rename_at_289_61,das_invoke_function<uint4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint4 S<faker::Faker>*/ 0xe2d38a5eaa391409)),das_arg<faker::Faker>::pass(__fake_rename_at_289_62)),das_invoke_function<uint4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint4 S<faker::Faker>*/ 0xe2d38a5eaa391409)),das_arg<faker::Faker>::pass(__fake_rename_at_289_62)));
 }
 
-inline void fuzz_shift_op2_11a978107d3af929 ( Context * __context__, testing::T * const  __t_rename_at_303_64, faker::Faker &  __fake_rename_at_303_65, char * const  __funcname_rename_at_303_66 )
+inline void fuzz_shift_op2_853db3bca6011a0f ( Context * __context__, testing::T * const  __t_rename_at_303_64, faker::Faker &  __fake_rename_at_303_65, char * const  __funcname_rename_at_303_66 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_303_66,__t_rename_at_303_64,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_303_65)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_303_65)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_303_66,__t_rename_at_303_64,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_303_65)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_303_65)));
@@ -689,13 +689,13 @@ inline void fuzz_shift_op2_11a978107d3af929 ( Context * __context__, testing::T 
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint4,int32_t>(__context__,nullptr,__funcname_rename_at_303_66,__t_rename_at_303_64,das_invoke_function<uint4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint4 S<faker::Faker>*/ 0xe2d38a5eaa391409)),das_arg<faker::Faker>::pass(__fake_rename_at_303_65)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_303_65)));
 }
 
-inline void fuzz_rotate_op2_e76ebde963d165d3 ( Context * __context__, testing::T * const  __t_rename_at_317_67, faker::Faker &  __fake_rename_at_317_68, char * const  __funcname_rename_at_317_69 )
+inline void fuzz_rotate_op2_cb4f9cfd40f7e8b5 ( Context * __context__, testing::T * const  __t_rename_at_317_67, faker::Faker &  __fake_rename_at_317_68, char * const  __funcname_rename_at_317_69 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_317_69,__t_rename_at_317_67,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_317_68)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_317_68)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_317_69,__t_rename_at_317_67,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_317_68)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_317_68)));
 }
 
-inline void fuzz_numeric_op3_c254164d54c65bef ( Context * __context__, testing::T * const  __t_rename_at_325_70, faker::Faker &  __fake_rename_at_325_71, char * const  __funcname_rename_at_325_72 )
+inline void fuzz_numeric_op3_197b19f31d46a79 ( Context * __context__, testing::T * const  __t_rename_at_325_70, faker::Faker &  __fake_rename_at_325_71, char * const  __funcname_rename_at_325_72 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_325_72,__t_rename_at_325_70,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_325_72,__t_rename_at_325_70,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)));
@@ -703,7 +703,7 @@ inline void fuzz_numeric_op3_c254164d54c65bef ( Context * __context__, testing::
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,double,double,double>(__context__,nullptr,__funcname_rename_at_325_72,__t_rename_at_325_70,das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)),das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)),das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_325_71)));
 }
 
-inline void fuzz_vec_op3_b8b2d31bb7eb72a3 ( Context * __context__, testing::T * const  __t_rename_at_335_73, faker::Faker &  __fake_rename_at_335_74, char * const  __funcname_rename_at_335_75 )
+inline void fuzz_vec_op3_998671d1b710218 ( Context * __context__, testing::T * const  __t_rename_at_335_73, faker::Faker &  __fake_rename_at_335_74, char * const  __funcname_rename_at_335_75 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float2,float2,float2>(__context__,nullptr,__funcname_rename_at_335_75,__t_rename_at_335_73,das_invoke_function<float2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float2 S<faker::Faker>*/ 0xb12590d5c18e85b8)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)),das_invoke_function<float2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float2 S<faker::Faker>*/ 0xb12590d5c18e85b8)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)),das_invoke_function<float2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float2 S<faker::Faker>*/ 0xb12590d5c18e85b8)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float3,float3,float3>(__context__,nullptr,__funcname_rename_at_335_75,__t_rename_at_335_73,das_invoke_function<float3>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float3 S<faker::Faker>*/ 0x3fec14acf97aa66b)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)),das_invoke_function<float3>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float3 S<faker::Faker>*/ 0x3fec14acf97aa66b)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)),das_invoke_function<float3>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float3 S<faker::Faker>*/ 0x3fec14acf97aa66b)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)));
@@ -716,7 +716,7 @@ inline void fuzz_vec_op3_b8b2d31bb7eb72a3 ( Context * __context__, testing::T * 
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint4,uint4,uint4>(__context__,nullptr,__funcname_rename_at_335_75,__t_rename_at_335_73,das_invoke_function<uint4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint4 S<faker::Faker>*/ 0xe2d38a5eaa391409)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)),das_invoke_function<uint4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint4 S<faker::Faker>*/ 0xe2d38a5eaa391409)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)),das_invoke_function<uint4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint4 S<faker::Faker>*/ 0xe2d38a5eaa391409)),das_arg<faker::Faker>::pass(__fake_rename_at_335_74)));
 }
 
-inline void fuzz_vec_mad_op3_92bb9a6e84ac3c0b ( Context * __context__, testing::T * const  __t_rename_at_350_76, faker::Faker &  __fake_rename_at_350_77, char * const  __funcname_rename_at_350_78 )
+inline void fuzz_vec_mad_op3_a40186d6c2b815be ( Context * __context__, testing::T * const  __t_rename_at_350_76, faker::Faker &  __fake_rename_at_350_77, char * const  __funcname_rename_at_350_78 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float2,float,float2>(__context__,nullptr,__funcname_rename_at_350_78,__t_rename_at_350_76,das_invoke_function<float2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float2 S<faker::Faker>*/ 0xb12590d5c18e85b8)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)),das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)),das_invoke_function<float2>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float2 S<faker::Faker>*/ 0xb12590d5c18e85b8)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float3,float,float3>(__context__,nullptr,__funcname_rename_at_350_78,__t_rename_at_350_76,das_invoke_function<float3>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float3 S<faker::Faker>*/ 0x3fec14acf97aa66b)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)),das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)),das_invoke_function<float3>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float3 S<faker::Faker>*/ 0x3fec14acf97aa66b)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)));
@@ -729,7 +729,7 @@ inline void fuzz_vec_mad_op3_92bb9a6e84ac3c0b ( Context * __context__, testing::
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint4,uint32_t,uint4>(__context__,nullptr,__funcname_rename_at_350_78,__t_rename_at_350_76,das_invoke_function<uint4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint4 S<faker::Faker>*/ 0xe2d38a5eaa391409)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)),das_invoke_function<uint4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint4 S<faker::Faker>*/ 0xe2d38a5eaa391409)),das_arg<faker::Faker>::pass(__fake_rename_at_350_77)));
 }
 
-inline void fuzz_float_double_or_float_vec_op3_4985cd878555494d ( Context * __context__, testing::T * const  __t_rename_at_365_79, faker::Faker &  __fake_rename_at_365_80, char * const  __funcname_rename_at_365_81 )
+inline void fuzz_float_double_or_float_vec_op3_88cf36c94b6a7a16 ( Context * __context__, testing::T * const  __t_rename_at_365_79, faker::Faker &  __fake_rename_at_365_80, char * const  __funcname_rename_at_365_81 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float,float,float>(__context__,nullptr,__funcname_rename_at_365_81,__t_rename_at_365_79,das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)),das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)),das_invoke_function<float>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float S<faker::Faker>*/ 0x8a548e2978b69d8f)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,double,double,double>(__context__,nullptr,__funcname_rename_at_365_81,__t_rename_at_365_79,das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)),das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)),das_invoke_function<double>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_double S<faker::Faker>*/ 0xc10504c7632ea553)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)));
@@ -738,7 +738,7 @@ inline void fuzz_float_double_or_float_vec_op3_4985cd878555494d ( Context * __co
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,float4,float4,float4>(__context__,nullptr,__funcname_rename_at_365_81,__t_rename_at_365_79,das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)),das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)),das_invoke_function<float4>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_float4 S<faker::Faker>*/ 0x9e0d82ee17b5540e)),das_arg<faker::Faker>::pass(__fake_rename_at_365_80)));
 }
 
-inline void fuzz_numeric_op4_16e37608179824b9 ( Context * __context__, testing::T * const  __t_rename_at_377_82, faker::Faker &  __fake_rename_at_377_83, char * const  __funcname_rename_at_377_84 )
+inline void fuzz_numeric_op4_b6d5972598a8cbd1 ( Context * __context__, testing::T * const  __t_rename_at_377_82, faker::Faker &  __fake_rename_at_377_83, char * const  __funcname_rename_at_377_84 )
 {
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,int32_t,int32_t,int32_t,int32_t>(__context__,nullptr,__funcname_rename_at_377_84,__t_rename_at_377_82,das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_377_83)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_377_83)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_377_83)),das_invoke_function<int32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_int S<faker::Faker>*/ 0x55ff764b8725971c)),das_arg<faker::Faker>::pass(__fake_rename_at_377_83)));
     das_invoke_function_by_name<void>::invoke<testing::T * const  &,uint32_t,uint32_t,uint32_t,uint32_t>(__context__,nullptr,__funcname_rename_at_377_84,__t_rename_at_377_82,das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_377_83)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_377_83)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_377_83)),das_invoke_function<uint32_t>::invoke<faker::Faker &>(__context__,nullptr,Func(__context__->fnByMangledName(/*@faker::random_uint S<faker::Faker>*/ 0xb79665e62110de44)),das_arg<faker::Faker>::pass(__fake_rename_at_377_83)));
@@ -747,103 +747,103 @@ inline void fuzz_numeric_op4_16e37608179824b9 ( Context * __context__, testing::
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0x2eb8d27740a137d5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_b284ca1047c9135d>>();
+    aotLib[0xf1e6d26541579c51] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_b6cca4192262d386>>();
     };
-    aotLib[0xc38d362f7f7784c5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_26c215c38d1dfd1a>>();
+    aotLib[0x86f24d8c3ad7d60] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_7d277f229f4cd0f9>>();
     };
-    aotLib[0x10a00d2c416dd160] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_debug_93358114940f0b68>>();
+    aotLib[0x3e2eee8e4d59485] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_debug_ab159059eec272ee>>();
     };
-    aotLib[0x18bb6cb48f9a66a5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_debug_3b504f8008b955ef>>();
+    aotLib[0xcff90e6034a4cae6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_debug_29ad9cad153dbdaa>>();
     };
-    aotLib[0x780b8e70ed847415] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_vector_op1_48ce713c34be8575>>();
+    aotLib[0xe72352b276adff4d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_vector_op1_72d01c291c4bacbd>>();
     };
-    aotLib[0x61eb1fd7b1045ad4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_vector_signed_op1_cf02787541ef8a1f>>();
+    aotLib[0x9bc7d2312e126d72] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_vector_signed_op1_46fb5c719132627a>>();
     };
-    aotLib[0x59548ca1defe16f6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_op1_7e39ee71d5eea21b>>();
+    aotLib[0x8e2b28d8b3f1a9c4] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_op1_f8c16e60be39e7b2>>();
     };
-    aotLib[0x6d7979c6d31d4371] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_storage_op1_14e5fe2cc526dd1f>>();
+    aotLib[0x2b2b5c5cdf736cec] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_storage_op1_d9574a01bd4b947c>>();
     };
-    aotLib[0x7666ef3e5524521] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_all_ints_op1_e805e6460a35229d>>();
+    aotLib[0x3ac91acb624d45da] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_all_ints_op1_12e8b856f3df8f49>>();
     };
-    aotLib[0x8d05c17309c52e08] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_all_unsigned_ints_op1_f9f52b078e024909>>();
+    aotLib[0xf25c38e08149bd1a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_all_unsigned_ints_op1_14d56f9e36a55c47>>();
     };
-    aotLib[0x15f37b41c1b0fce2] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_double_or_float_vec_op1_3652ef8150f5c24d>>();
+    aotLib[0x57fb3dedbffb615f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_double_or_float_vec_op1_1331e3a60910a3ea>>();
     };
-    aotLib[0x530f76cf54d23275] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_or_float_vec_op1_78b3a33e9c015725>>();
+    aotLib[0xb13de7241c25cc4f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_or_float_vec_op1_7f98ee8e7ab5e439>>();
     };
-    aotLib[0x24a846741252cede] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_or_float_vec_op2_ae83307b5cfedd1>>();
+    aotLib[0x6c15066de5bd7789] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_or_float_vec_op2_5c666abdab47e816>>();
     };
-    aotLib[0x1018d9bc4286a4e4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_double_or_float_vec_op2_a264e3ee00149f0b>>();
+    aotLib[0x5a99f352b61393df] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_double_or_float_vec_op2_93ee484934875bf6>>();
     };
-    aotLib[0x72d1813fe6e956ae] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_vector_op2_f57314e6b07c00d3>>();
+    aotLib[0x2e2cd9305099cc17] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_vector_op2_a09ea21b9decc8ed>>();
     };
-    aotLib[0x878fb70d15061de] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_vector_op2_no_unint_vec_f9fe354762f0d437>>();
+    aotLib[0x6626be800f14feff] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_and_vector_op2_no_unint_vec_ce28c44a6a301c68>>();
     };
-    aotLib[0x9473824addbd1324] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_op2_92b03af12a4daff9>>();
+    aotLib[0x3315cc8488adb8c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_op2_de950802fbdfd170>>();
     };
-    aotLib[0xf7378cf35659ab1c] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_compareable_op2_87dd0992261931a1>>();
+    aotLib[0x1396d3d507cc21df] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_compareable_op2_746a36be41773364>>();
     };
-    aotLib[0x468069dbd119ef3a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_eq_neq_op2_97177b59c300d73d>>();
+    aotLib[0xeaeca2ad27d1fff1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_eq_neq_op2_31d6e11fdab1147f>>();
     };
-    aotLib[0x6d83b150a7e1c3ae] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_vec_scal_op2_52ad44f3d93412e3>>();
+    aotLib[0xab5b3a09949e1d4] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_vec_scal_op2_e0e8dc665c3b5ff4>>();
     };
-    aotLib[0x2c246fecf261efc9] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_scal_vec_op2_fd0677cf42c35c93>>();
+    aotLib[0xf885bdc9a2ef5783] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_scal_vec_op2_ebb697fbeefa1e48>>();
     };
-    aotLib[0x15a8c6e9fe4ce25f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_int_vector_op2_dc7f59e64eb3fb95>>();
+    aotLib[0xb68d957c328e76f4] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_int_vector_op2_f554a9623c159f3f>>();
     };
-    aotLib[0x9d8764779c4a8fc2] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_shift_op2_11a978107d3af929>>();
+    aotLib[0x323bc83b9ad7af10] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_shift_op2_853db3bca6011a0f>>();
     };
-    aotLib[0xf492e9c3b70ac051] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_rotate_op2_e76ebde963d165d3>>();
+    aotLib[0x67cc8521bbc24c89] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_rotate_op2_cb4f9cfd40f7e8b5>>();
     };
-    aotLib[0x31c2adea3087c8aa] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_op3_c254164d54c65bef>>();
+    aotLib[0x3f4df2da0b79d70e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_op3_197b19f31d46a79>>();
     };
-    aotLib[0xc696668b8b8904c6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_vec_op3_b8b2d31bb7eb72a3>>();
+    aotLib[0xc87b0f669ebab1ae] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_vec_op3_998671d1b710218>>();
     };
-    aotLib[0xdea5f22560d6f906] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_vec_mad_op3_92bb9a6e84ac3c0b>>();
+    aotLib[0x1325ac7badc70e68] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_vec_mad_op3_a40186d6c2b815be>>();
     };
-    aotLib[0xb74f8bc5ac43b49a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_double_or_float_vec_op3_4985cd878555494d>>();
+    aotLib[0x7c1d01ccf46fe669] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_float_double_or_float_vec_op3_88cf36c94b6a7a16>>();
     };
-    aotLib[0xf2daee70032abf86] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_op4_16e37608179824b9>>();
+    aotLib[0x936ab6582309c7a2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fuzz_numeric_op4_b6d5972598a8cbd1>>();
     };
     // [[ init script ]]
-    aotLib[0xad44ac4628907d9b] = +[](Context & ctx) -> SimNode* {
+    aotLib[0x476b6e57f1fba1dd] = +[](Context & ctx) -> SimNode* {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_12534307592900194460
-AotListBase impl_aot_fuzzer(_anon_12534307592900194460::registerAotFunctions);
+} // namespace _anon_7444991120561323634
+AotListBase impl_aot_fuzzer(_anon_7444991120561323634::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

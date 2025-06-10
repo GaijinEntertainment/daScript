@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_17937824475781884552 {
+namespace _anon_8101909924866969536 {
 
 namespace unroll { struct UnrollMacro; };
 namespace ast { struct AstFunctionAnnotation; };
@@ -270,64 +270,64 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_0, ast::AstFunctionAnnotation * __value_rename_at_181_1 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1a5d4362946e1dfa ( Context * __context__, unroll::UnrollMacro const  & __cl_rename_at_116_2 );
-inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_60b055c72a0f1071 ( Context * __context__, char * const  __name_rename_at_631_3, unroll::UnrollMacro * __someClassPtr_rename_at_631_4 );
-inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_c434f5f8ba663c3b ( Context * __context__, char * const  __name_rename_at_273_6, char * const  __tag_rename_at_273_7, unroll::UnrollMacro * __classPtr_rename_at_273_8 );
-inline void unroll_fe20df40e503f423 ( Context * __context__, Block DAS_COMMENT((void)) const  & __blk_rename_at_15_10 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_51a0128110dff4f8 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_0, ast::AstFunctionAnnotation * __value_rename_at_181_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a7a2caaed744bde3 ( Context * __context__, unroll::UnrollMacro const  & __cl_rename_at_116_2 );
+inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_b7ad6d9d807c55d5 ( Context * __context__, char * const  __name_rename_at_631_3, unroll::UnrollMacro * __someClassPtr_rename_at_631_4 );
+inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_4bdba9712755c255 ( Context * __context__, char * const  __name_rename_at_240_6, char * const  __tag_rename_at_240_7, unroll::UnrollMacro * __classPtr_rename_at_240_8 );
+inline void unroll_57edb0117ddead9f ( Context * __context__, Block DAS_COMMENT((void)) const  & __blk_rename_at_15_10 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_0, ast::AstFunctionAnnotation * __value_rename_at_181_1 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_51a0128110dff4f8 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_0, ast::AstFunctionAnnotation * __value_rename_at_181_1 )
 {
     das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstFunctionAnnotation *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1a5d4362946e1dfa ( Context * __context__, unroll::UnrollMacro const  &  __cl_rename_at_116_2 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a7a2caaed744bde3 ( Context * __context__, unroll::UnrollMacro const  &  __cl_rename_at_116_2 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
 }
 
-inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_60b055c72a0f1071 ( Context * __context__, char * const  __name_rename_at_631_3, unroll::UnrollMacro * __someClassPtr_rename_at_631_4 )
+inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_b7ad6d9d807c55d5 ( Context * __context__, char * const  __name_rename_at_631_3, unroll::UnrollMacro * __someClassPtr_rename_at_631_4 )
 {
-    _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795(__context__,das_arg<TArray<ast::AstFunctionAnnotation *>>::pass(das_global<TArray<ast::AstFunctionAnnotation *>,0x70a17c19e372bb43>(__context__) /*gc_root_AstFunctionAnnotation*/),das_reinterpret<ast::AstFunctionAnnotation *>::pass(__someClassPtr_rename_at_631_4));
-    StructInfo const  * __classInfo_rename_at_634_5 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_1a5d4362946e1dfa(__context__,das_arg<unroll::UnrollMacro>::pass(das_deref(__context__,__someClassPtr_rename_at_631_4))));
+    _FuncbuiltinTickpushTick10769833213962245646_51a0128110dff4f8(__context__,das_arg<TArray<ast::AstFunctionAnnotation *>>::pass(das_global<TArray<ast::AstFunctionAnnotation *>,0x70a17c19e372bb43>(__context__) /*gc_root_AstFunctionAnnotation*/),das_reinterpret<ast::AstFunctionAnnotation *>::pass(__someClassPtr_rename_at_631_4));
+    StructInfo const  * __classInfo_rename_at_634_5 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_a7a2caaed744bde3(__context__,das_arg<unroll::UnrollMacro>::pass(das_deref(__context__,__someClassPtr_rename_at_631_4))));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<FunctionAnnotation>>::cast(makeFunctionAnnotation(__name_rename_at_631_3,das_auto_cast<void * const >::cast(__someClassPtr_rename_at_631_4),__classInfo_rename_at_634_5,__context__));
 }
 
-inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_c434f5f8ba663c3b ( Context * __context__, char * const  __name_rename_at_273_6, char * const  __tag_rename_at_273_7, unroll::UnrollMacro * __classPtr_rename_at_273_8 )
+inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_4bdba9712755c255 ( Context * __context__, char * const  __name_rename_at_240_6, char * const  __tag_rename_at_240_7, unroll::UnrollMacro * __classPtr_rename_at_240_8 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_9; memset((void*)&__ann_rename_at_274_9,0,sizeof(__ann_rename_at_274_9));
-    /* finally */ auto __finally_273= das_finally([&](){
-    das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_9);
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_241_9; memset((void*)&__ann_rename_at_241_9,0,sizeof(__ann_rename_at_241_9));
+    /* finally */ auto __finally_240= das_finally([&](){
+    das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_241_9);
     /* end finally */ });
-    __ann_rename_at_274_9; das_zero(__ann_rename_at_274_9); das_move(__ann_rename_at_274_9, _FuncastTickmake_function_annotationTick3074191368936885601_60b055c72a0f1071(__context__,__name_rename_at_273_6,__classPtr_rename_at_273_8));
-    das_invoke_function<void>::invoke<char * const ,smart_ptr_raw<FunctionAnnotation>>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::apply_tag_annotation Cs Y<FunctionAnnotationPtr>1<H<ast::FunctionAnnotation>>?M*/ 0x7678364e276db9c2)),__tag_rename_at_273_7,__ann_rename_at_274_9);
-    addModuleFunctionAnnotation(thisModule(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__ann_rename_at_274_9,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    __ann_rename_at_241_9; das_zero(__ann_rename_at_241_9); das_move(__ann_rename_at_241_9, _FuncastTickmake_function_annotationTick3074191368936885601_b7ad6d9d807c55d5(__context__,__name_rename_at_240_6,__classPtr_rename_at_240_8));
+    das_invoke_function<void>::invoke<char * const ,smart_ptr_raw<FunctionAnnotation>>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::apply_tag_annotation Cs Y<FunctionAnnotationPtr>1<H<ast::FunctionAnnotation>>?M*/ 0x7678364e276db9c2)),__tag_rename_at_240_7,__ann_rename_at_241_9);
+    addModuleFunctionAnnotation(thisModule(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__ann_rename_at_241_9,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void unroll_fe20df40e503f423 ( Context * __context__, Block DAS_COMMENT((void)) const  &  __blk_rename_at_15_10 )
+inline void unroll_57edb0117ddead9f ( Context * __context__, Block DAS_COMMENT((void)) const  &  __blk_rename_at_15_10 )
 {
     das_invoke<void>::invoke(__context__,nullptr,__blk_rename_at_15_10);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xd09660c6ccc577ae] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795>>();
+    aotLib[0x29b2abaef6e6f762] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_51a0128110dff4f8>>();
     };
-    aotLib[0x1730a99fa61626fe] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_1a5d4362946e1dfa>>();
+    aotLib[0xb3ea585b9a970e34] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_a7a2caaed744bde3>>();
     };
-    aotLib[0x8aa92563cd23047a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_function_annotationTick3074191368936885601_60b055c72a0f1071>>();
+    aotLib[0xd494c24586304e44] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_function_annotationTick3074191368936885601_b7ad6d9d807c55d5>>();
     };
-    aotLib[0xf831537867c5529c] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_boostTicksetup_tag_annotationTick4095297895764883997_c434f5f8ba663c3b>>();
+    aotLib[0x76a4e15c2ddbc389] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_boostTicksetup_tag_annotationTick4095297895764883997_4bdba9712755c255>>();
     };
-    aotLib[0x6cd14d518fb9518a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&unroll_fe20df40e503f423>>();
+    aotLib[0x1766e9a1f5f8f59e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&unroll_57edb0117ddead9f>>();
     };
     // [[ init script ]]
     aotLib[0x5464bbe131808aa5] = +[](Context & ctx) -> SimNode* {
@@ -337,8 +337,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_17937824475781884552
-AotListBase impl_aot_unroll(_anon_17937824475781884552::registerAotFunctions);
+} // namespace _anon_8101909924866969536
+AotListBase impl_aot_unroll(_anon_8101909924866969536::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)
