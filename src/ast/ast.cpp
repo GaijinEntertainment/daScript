@@ -1807,6 +1807,7 @@ namespace das {
         cexpr->field = field;
         cexpr->fieldIndex = fieldIndex;
         cexpr->unsafeDeref = unsafeDeref;
+        cexpr->ignoreCaptureConst = ignoreCaptureConst;
         cexpr->no_promotion = no_promotion;
         cexpr->atField = atField;
         return cexpr;

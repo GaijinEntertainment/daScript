@@ -3253,6 +3253,10 @@ namespace das {
                         error("implicit capture by move requires unsafe, while capturing " + cV->name,  "", "",
                             at, CompilationError::invalid_capture);
                         return false;
+                    } else if ( !cV->type->canCopy() && cV->type->isConst() ) {
+                        error("can't implicitly capture constant variable " + cV->name + " by move",  "", "",
+                            at, CompilationError::invalid_capture);
+                        return false;
                     }
                 } else if ( mode == CaptureMode::capture_by_reference ) {
                     if ( !cV->capture_as_ref && isUnsafe ) {
@@ -3263,6 +3267,10 @@ namespace das {
                 } else if ( mode == CaptureMode::capture_by_move ) {
                     if ( !cV->type->canMove() ) {
                         error("can't move captured variable " + cV->name,  "", "",
+                            at, CompilationError::invalid_capture);
+                        return false;
+                    } else if ( cV->type->isConst() ) {
+                        error("can't capture constant variable " + cV->name + " by move",  "", "",
                             at, CompilationError::invalid_capture);
                         return false;
                     }
@@ -6609,7 +6617,7 @@ namespace das {
                 error("can only clone to a reference", "", "",
                     expr->at, CompilationError::cant_write_to_non_reference);
             } else if ( expr->left->type->constant ) {
-                error("can't write to a constant value", "", "",
+                error("can't write to a constant value " + expr->left->describe(), "", "",
                     expr->at, CompilationError::cant_write_to_const);
             } else if ( !expr->left->type->canClone() ) {
                 reportCantClone("type " + describeType(expr->left->type) + " can't be cloned from " + describeType(expr->right->type),
@@ -9177,7 +9185,15 @@ namespace das {
             auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
             DAS_ASSERT(mkb->block->rtti_isBlock());
             auto blk = static_pointer_cast<ExprBlock>(mkb->block);
-            auto cle = convertToCloneExpr(expr,index,decl);
+            bool ignoreCapturedConstant = false;
+            if ( expr->makeType->baseType == Type::tStructure ) {
+                if ( auto field = expr->makeType->structType->findField(decl->name) ) {
+                    if ( field->capturedConstant ) {
+                        ignoreCapturedConstant = true;
+                    }
+                }
+            }
+            auto cle = convertToCloneExpr(expr,index,decl, ignoreCapturedConstant);
             blk->list.insert(blk->list.begin(), cle); // TODO: fix order. we are making them backwards now
             reportAstChanged();
         }
