@@ -154,7 +154,9 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
 [reader_macro(name="spoof_template")]
 class SpoofTemplateReader : AstReaderMacro {
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
-        append(expr.sequence, ch)
+        if (ch != '\r') {
+            append(expr.sequence, ch)
+        }
         if (ends_with(expr.sequence, "%%")) {
             let len = length(expr.sequence)
             resize(expr.sequence, len - 2)
@@ -229,7 +231,9 @@ def instance_args(invocation : string; blk : block<(var res : SpoofInvocation; e
 [reader_macro(name="spoof_instance")]
 class SpoofInstanceReader : AstReaderMacro {
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
-        append(expr.sequence, ch)
+        if (ch != '\r') {
+            append(expr.sequence, ch)
+        }
         if (ends_with(expr.sequence, "%%")) {
             let len = length(expr.sequence)
             resize(expr.sequence, len - 2)
