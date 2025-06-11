@@ -2623,6 +2623,9 @@ global_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
+    |   global_variable_declaration_list[list] SEMICOLON {
+        $$ = $list;
+    }
     |   global_variable_declaration_list[list] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@list);
