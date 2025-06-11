@@ -2047,15 +2047,15 @@ namespace das
         }
     }
 
-    void Context::onAllocateString ( void * ptr, uint64_t size, const LineInfo & at ) {
+    void Context::onAllocateString ( void * ptr, uint64_t size, bool tempString, const LineInfo & at ) {
         if ( g_envTotal > 0 && *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_threadLocalDebugAgent.debugAgent ) {
-            (*daScriptEnvironment::bound)->g_threadLocalDebugAgent.debugAgent->onAllocateString(this, ptr, size, at);
+            (*daScriptEnvironment::bound)->g_threadLocalDebugAgent.debugAgent->onAllocateString(this, ptr, size, tempString, at);
         }
     }
 
-    void Context::onFreeString ( void * ptr, const LineInfo & at ) {
+    void Context::onFreeString ( void * ptr, bool tempString, const LineInfo & at ) {
         if ( g_envTotal > 0 && *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_threadLocalDebugAgent.debugAgent ) {
-            (*daScriptEnvironment::bound)->g_threadLocalDebugAgent.debugAgent->onFreeString(this, ptr, at);
+            (*daScriptEnvironment::bound)->g_threadLocalDebugAgent.debugAgent->onFreeString(this, ptr, tempString, at);
         }
     }
 

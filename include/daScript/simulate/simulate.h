@@ -267,8 +267,8 @@ namespace das
         virtual void onAllocate ( Context *, void *, uint64_t, const LineInfo & ) {}
         virtual void onReallocate ( Context *, void *, uint64_t, void *, uint64_t, const LineInfo & ) {}
         virtual void onFree ( Context *, void *, const LineInfo & ) {}
-        virtual void onAllocateString ( Context *, void *, uint64_t, const LineInfo & ) {}
-        virtual void onFreeString ( Context *, void *, const LineInfo & ) {}
+        virtual void onAllocateString ( Context *, void *, uint64_t, bool, const LineInfo & ) {}
+        virtual void onFreeString ( Context *, void *, bool, const LineInfo & ) {}
         bool isThreadLocal = false;
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
@@ -344,8 +344,8 @@ namespace das
         }
         uint64_t getInitSemanticHash();
 
-        void onAllocateString ( void * ptr, uint64_t size, const LineInfo & at );
-        void onFreeString ( void * ptr, const LineInfo & at );
+        void onAllocateString ( void * ptr, uint64_t size, bool tempString, const LineInfo & at );
+        void onFreeString ( void * ptr, bool tempString, const LineInfo & at );
         void onAllocate ( void * ptr, uint64_t size, const LineInfo & at );
         void onReallocate ( void * ptr, uint64_t size, void * newPtr, uint64_t newSize, const LineInfo & at );
         void onFree ( void * ptr, const LineInfo & at );
@@ -390,31 +390,35 @@ namespace das
             heap->impl_free(ptr, size);
         }
 
-        __forceinline char * allocateString ( const char * text, uint32_t length, const LineInfo * at ) {
+        __forceinline char * allocateString ( const char * text, uint32_t length, const LineInfo * at, bool tempString = false ) {
             if ( instrumentAllocations ) {
                 auto astr = stringHeap->impl_allocateString(this, text, length, at);
-                onAllocateString(astr, length, at ? *at : LineInfo());
+                onAllocateString(astr, length, tempString, at ? *at : LineInfo());
                 return astr;
             } else {
                 return stringHeap->impl_allocateString(this, text, length, at);
             }
         }
 
-        __forceinline char * allocateString ( const string & str, const LineInfo * at ) {
+        __forceinline char * allocateString ( const string & str, const LineInfo * at, bool tempString = false ) {
             if ( instrumentAllocations ) {
                 auto astr = stringHeap->impl_allocateString(this, str.c_str(), uint32_t(str.size()), at);
-                onAllocateString(astr, str.size(), at ? *at : LineInfo());
+                onAllocateString(astr, str.size(), tempString, at ? *at : LineInfo());
                 return astr;
             } else {
                 return stringHeap->impl_allocateString(this, str.c_str(), uint32_t(str.size()), at);
             }
         }
 
-        __forceinline bool freeString ( char * ptr, uint32_t length, const LineInfo * at) {
+        __forceinline char * allocateTempString ( const char * text, uint32_t length, const LineInfo * at ) {
+            return allocateString(text, length, at, /*temp*/true);
+        }
+
+        __forceinline bool freeString ( char * ptr, uint32_t length, const LineInfo * at, bool tempString = false ) {
             uint32_t size = length + 1;
             size = (size + 15) & ~15;
             if (stringHeap->isOwnPtr(ptr, size)) {
-                if ( instrumentAllocations ) onFreeString(ptr, at ? *at : LineInfo());
+                if ( instrumentAllocations ) onFreeString(ptr, tempString, at ? *at : LineInfo());
                 stringHeap->impl_freeString(ptr, length);
                 return true;
             }
@@ -423,7 +427,7 @@ namespace das
 
         __forceinline void freeTempString ( char * ptr, const LineInfo * at ) {
             if ( stringHeap->isIntern() ) return;
-            if ( stringDisposeQue ) freeString(stringDisposeQue,(uint32_t)strlen(stringDisposeQue),at);
+            if ( stringDisposeQue ) freeString(stringDisposeQue,(uint32_t)strlen(stringDisposeQue),at, /*temp*/true);
             stringDisposeQue = ptr;
         }
 

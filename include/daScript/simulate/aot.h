@@ -1978,7 +1978,7 @@ namespace das {
         }
         auto length = writer.tellp();
         if ( length ) {
-            auto str = __context__->allocateString(writer.c_str(), uint32_t(length), &node.debugInfo);
+            auto str = __context__->allocateTempString(writer.c_str(), uint32_t(length), &node.debugInfo);
             __context__->freeTempString(str, &node.debugInfo);
             return str;
         } else {

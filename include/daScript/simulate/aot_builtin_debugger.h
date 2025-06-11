@@ -39,4 +39,7 @@ namespace das {
     void break_on_free ( Context & ctx, void * ptr, uint32_t size );
 
     void track_insane_pointer ( void * ptr, Context * ctx );
+
+    void free_temp_string ( Context & context, LineInfoArg * lineInfo );
+    uint64_t temp_string_size ( Context & context );
 }
