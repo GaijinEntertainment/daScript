@@ -6595,19 +6595,17 @@ namespace das {
             if ( !expr->left->type || !expr->right->type ) {
                 return Visitor::visit(expr);
             }
-            // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
-            auto fnList = getCloneFunc(expr->left->type, expr->right->type);
-            if ( fnList.size() ) {
-                if ( verifyCloneFunc(fnList, expr->at) ) {
-                    reportAstChanged();
-                    string cloneName = "_::clone";
-                    auto cloneFn = make_smart<ExprCall>(expr->at, cloneName);
-                    cloneFn->arguments.push_back(expr->left->clone());
-                    cloneFn->arguments.push_back(expr->right->clone());
-                    return cloneFn;
-                } else {
-                    return Visitor::visit(expr);
-                }
+            // lets infer clone call (and instance generic if need be)
+            auto opName = "_::clone";
+            auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,opName);
+            tempCall->arguments.push_back(expr->left);
+            tempCall->arguments.push_back(expr->right);
+            expr->func = inferFunctionCall(tempCall.get(),InferCallError::tryOperator).get();
+            if ( expr->func || opName != tempCall->name ) {   // this happens when the clone gets instanced
+                reportAstChanged();
+                auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
+                opCall->arguments = das::move(tempCall->arguments);
+                return opCall;
             }
             // infer
             if ( !isSameSmartPtrType(expr->left->type,expr->right->type,true) ) {
@@ -6661,7 +6659,7 @@ namespace das {
                 } else if ( cloneType->isStructure() ) {
                     reportAstChanged();
                     auto stt = cloneType->structType;
-                    fnList = getCloneFunc(cloneType,cloneType);
+                    auto fnList = getCloneFunc(cloneType,cloneType);
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeClone(stt);
@@ -6677,7 +6675,7 @@ namespace das {
                     }
                 } else if ( cloneType->isTuple() ) {
                     reportAstChanged();
-                    fnList = getCloneFunc(cloneType,cloneType);
+                    auto fnList = getCloneFunc(cloneType,cloneType);
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeCloneTuple(expr->at, cloneType);
@@ -6693,7 +6691,7 @@ namespace das {
                     }
                 } else if ( cloneType->isVariant() ) {
                     reportAstChanged();
-                    fnList = getCloneFunc(cloneType,cloneType);
+                    auto fnList = getCloneFunc(cloneType,cloneType);
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeCloneVariant(expr->at, cloneType);
