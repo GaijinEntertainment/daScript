@@ -1157,6 +1157,25 @@ def clone(var a : table<string; auto(VT)>; b : table<string; VT> | #) {
     }
 }
 
+[expect_any_vector(args), skip_lock_check]
+def clone(var args; var nargs : array<string>) {
+    let tot = length(nargs)
+    args |> resize(tot)
+    for (i in range(tot)) {
+        args[i] := nargs[i]
+    }
+    delete nargs
+}
+
+[expect_any_vector(args), skip_lock_check]
+def clone(var args; var nargs : array<smart_ptr<auto(TT)>>) {
+    args |> clear
+    for (narg in nargs) {
+        args |> emplace(narg)
+    }
+    delete nargs
+}
+
 [unsafe_outside_of_for, nodiscard]
 def keys(a : table<auto(keyT); auto(valT)> | #) : iterator<keyT -const> {
     var it : iterator<keyT -const>
