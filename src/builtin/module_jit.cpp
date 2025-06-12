@@ -110,7 +110,7 @@ extern "C" {
         }
         auto length = writer.tellp();
         if ( length ) {
-            auto str = context.allocateString(writer.c_str(), uint32_t(length),&call->debugInfo);
+            auto str = context.allocateTempString(writer.c_str(), uint32_t(length),&call->debugInfo);
             context.freeTempString(str,&call->debugInfo);
             return str;
         } else {

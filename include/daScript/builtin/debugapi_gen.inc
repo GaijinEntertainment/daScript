@@ -1158,20 +1158,20 @@ public:
   __forceinline Func get_onAllocateString ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onAllocateString]);
   }
-  __forceinline void invoke_onAllocateString ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, uint64_t size, LineInfo const  & at ) const {
+  __forceinline void invoke_onAllocateString ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, uint64_t size, bool tempString, LineInfo const  & at ) const {
     das_invoke_function<void>::invoke
-      <void *,Context &,void * const ,uint64_t,LineInfo const  &>
+      <void *,Context &,void * const ,uint64_t,bool,LineInfo const  &>
         (__context__,nullptr,__funcCall__,
-          self,ctx,data,size,at);
+          self,ctx,data,size,tempString,at);
   }
   __forceinline Func get_onFreeString ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onFreeString]);
   }
-  __forceinline void invoke_onFreeString ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, LineInfo const  & at ) const {
+  __forceinline void invoke_onFreeString ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, bool tempString, LineInfo const  & at ) const {
     das_invoke_function<void>::invoke
-      <void *,Context &,void * const ,LineInfo const  &>
+      <void *,Context &,void * const ,bool,LineInfo const  &>
         (__context__,nullptr,__funcCall__,
-          self,ctx,data,at);
+          self,ctx,data,tempString,at);
   }
 };
 

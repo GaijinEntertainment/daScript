@@ -586,7 +586,7 @@ namespace das
         }
         uint64_t length = writer.tellp();
         if ( length ) {
-            auto pStr = context.allocateString(writer.c_str(), uint32_t(length), &debugInfo);
+            auto pStr = context.allocateString(writer.c_str(), uint32_t(length), &debugInfo, isTempString);
             if ( !pStr  ) {
                 context.throw_out_of_memory(true, uint32_t(length), &debugInfo);
             }
