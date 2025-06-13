@@ -185,7 +185,34 @@ jobs:
             esac
             ;;
         esac
-
+    - name: Run dasgen
+      run: ./bin/daslang dasgen/gen_bind.das || exit 0 # smart pointers leak
+    - name: Check for changes
+      # Ignore changes which depends on stack top.
+      # Also ignore parser generated files.
+      run: |
+        set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+           windows32)
+            # windows32 is not ready yet
+            ;;
+           *)
+            git diff --ignore-all-space --text \
+              -I".*FunctionInfo.*" \
+              -I".*FuncInfo.*" \
+              -I".*das_stack_prologue.*" \
+              -I".*smart_ptr_raw<Function>.*" \
+              --exit-code \
+              -- ':!src/parser/ds2_lexer.cpp' \
+                 ':!src/parser/ds_lexer.cpp' \
+                 ':!src/parser/ds2_parser.output' \
+                 ':!src/parser/ds_parser.output' \
+                 ':!src/parser/lex2.yy.h' \
+                 ':!src/parser/lex.yy.h' \
+                 ':!utils/dasFormatter/ds_parser.cpp' \
+            || (echo "Generated code changed! To reproduce use "./bin/daslang dasgen/gen_bind.das" or rebuild "daslang-dev" to regenerate aot files." && exit 1)
+            ;;
+        esac
     - name: "Run formatter"
       run: |
         set -eux

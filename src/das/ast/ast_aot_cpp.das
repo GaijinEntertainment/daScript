@@ -630,7 +630,8 @@ class AotDebugInfoHelper {
             } else {
                 write(writer, "nullptr, ")
             }
-            write(writer, "{info.count:d}, {info.size:d}, UINT64_C(0x{info.init_mnh:x}), nullptr, UINT64_C(0x{info.hash:x}), {info.firstGcField:d}")
+            let info_size = cross_platform ? "TypeSize<{helper |> debug_helper_find_struct_cppname(info)}>::size" : "{info.size:d}";
+            write(writer, "{info.count:d}, {info_size}, UINT64_C(0x{info.init_mnh:x}), nullptr, UINT64_C(0x{info.hash:x}), {info.firstGcField:d}")
         }
     }
     def describeCppFuncInfoFields(var writer : StringBuilderWriter?; info : FuncInfo?) {
@@ -748,7 +749,9 @@ class AotDebugInfoHelper {
             write_sep();
             write(writer, "{unsafe(reinterpret<int>(info.flags))}")
             write_sep();
-            write(writer, "{info.size:d}")
+
+            let info_size = cross_platform ? "TypeSize<{helper |> debug_helper_find_type_cppname(info)}>::size" : "{info.size:d}";
+            write(writer, "{info_size}")
             write_sep();
             write(writer, "UINT64_C(0x{info.hash:x})");
         }
@@ -1000,6 +1003,7 @@ class CppAot : AstVisitor {
     program : ProgramPtr;
     collector : BlockVariableCollector ? = new BlockVariableCollector();
     aotPrefix : table<string>;
+    @do_not_delete local_temp_names : table<Expression?; int>;
     @do_not_delete scopes : array<ExprBlock?>;
     prologue : bool = false;
     solidContext : bool = false;
@@ -1217,28 +1221,23 @@ class CppAot : AstVisitor {
     }
 // blk
     def makeLocalTempName(expr : ExpressionPtr) {
-        var stackTop : uint = 0u;
         // todo: fix casts to parents A -> B -> C (from A to B)
+        if (!local_temp_names |> key_exists(expr.get_ptr())) {
+            local_temp_names |> insert(expr.get_ptr(), local_temp_names |> length());
+        }
         /*if (isMakeLocal(expr)) {
             stackTop = (expr as ExprMakeLocal).stackTop;
         }*/
-        if (expr is ExprMakeLocal) {
-            stackTop = (expr as ExprMakeLocal).stackTop;
-        } elif (expr is ExprMakeStruct) {
-            stackTop = (expr as ExprMakeStruct).stackTop;
-        } elif (expr is ExprMakeVariant) {
-            stackTop = (expr as ExprMakeVariant).stackTop;
-        } elif (expr is ExprMakeArray) {
-            stackTop = (expr as ExprMakeArray).stackTop;
-        } elif (expr is ExprMakeTuple) {
-            stackTop = (expr as ExprMakeTuple).stackTop;
-        } elif (expr is ExprCall) {
-            stackTop = (expr as ExprCall).stackTop;
+        if (expr is ExprMakeLocal ||
+            expr is ExprMakeStruct ||
+            expr is ExprMakeVariant ||
+            expr is ExprMakeArray ||
+            expr is ExprMakeTuple ||
+            expr is ExprCall) {
         } else {
             panic("we should not be here. we need stacktop for the name");
-            stackTop = (expr.at.line << 16u) + expr.at.column;
         }
-        return "_temp_make_local_{expr.at.line:d}_{expr.at.column:d}_{stackTop:d}";
+        return "_temp_make_local_{expr.at.line:d}_{expr.at.column:d}_{local_temp_names |> get_value(expr.get_ptr()):d}";
     }
     def override preVisitExprBlock(var blk : smart_ptr<ExprBlock>) {
         push(scopes, blk as ExprBlock);

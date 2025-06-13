@@ -1409,6 +1409,9 @@ namespace das
         das_hash_map<string,VarInfo *>           vmn2v;
         das_hash_map<string,FuncInfo *>          fmn2f;
         das_hash_map<string,EnumInfo *>          emn2e;
+
+        das_hash_map<TypeInfo *,string>          t2cppTypeName;
+        das_hash_map<StructInfo *,string>        s2cppTypeName;
     };
 
     struct CodeOfPolicies {

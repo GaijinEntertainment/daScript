@@ -56,7 +56,7 @@
 #endif
 
 namespace das {
-namespace _anon_4650964341042742801 {
+namespace _anon_14414820752429523801 {
 
 namespace ast { struct AstFunctionAnnotation; };
 namespace ast { struct AstBlockAnnotation; };
@@ -214,17 +214,17 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline bool is_temp_safe_b0f7cb3017427de3 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_14_0 );
-inline bool is_shared_expr_480df7d9e3f6dcc2 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_37_3 );
-inline bool is_local_expr_25fd8383ba183774 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_72_9 );
-inline bool is_local_or_global_expr_c8e623604fd9000 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_92_12 );
-inline bool is_scope_expr_6a03a2370c1995a ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_114_17 );
+inline bool is_temp_safe_13dd4cd23ee6c53e ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_14_0 );
+inline bool is_shared_expr_48b8d0de9fca28a7 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_37_3 );
+inline bool is_local_expr_66eccdd076bfd0b5 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_72_9 );
+inline bool is_local_or_global_expr_3e540820be4121ea ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_92_12 );
+inline bool is_scope_expr_fd8d02e37ab6bc8f ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_114_17 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline bool is_temp_safe_b0f7cb3017427de3 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_14_0 )
+inline bool is_temp_safe_13dd4cd23ee6c53e ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_14_0 )
 {
     if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_14_0->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprVar")),*__context__,nullptr) )
     {
@@ -234,18 +234,18 @@ inline bool is_temp_safe_b0f7cb3017427de3 ( Context * __context__, smart_ptr_raw
         ExprAt * __ea_rename_at_20_1 = ((ExprAt *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_14_0),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_14_0->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprAt")),*__context__,nullptr))) ? das_auto_cast<ExprAt *>::cast(das_cast<ExprAt *>::cast(__expr_rename_at_14_0)) : das_auto_cast<ExprAt *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__ea_rename_at_20_1->subexpr /*subexpr*/->type /*_type*/),das_auto_cast<void * const >::cast(nullptr))) && (das_vector_length(__ea_rename_at_20_1->subexpr /*subexpr*/->type /*_type*/->dim /*dim*/) != 0) )
         {
-            return das_auto_cast<bool>::cast(is_temp_safe_b0f7cb3017427de3(__context__,__ea_rename_at_20_1->subexpr /*subexpr*/));
+            return das_auto_cast<bool>::cast(is_temp_safe_13dd4cd23ee6c53e(__context__,__ea_rename_at_20_1->subexpr /*subexpr*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_14_0->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr) )
     {
         ExprField * __ef_rename_at_25_2 = ((ExprField *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_14_0),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_14_0->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr))) ? das_auto_cast<ExprField *>::cast(das_cast<ExprField *>::cast(__expr_rename_at_14_0)) : das_auto_cast<ExprField *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( !((__ef_rename_at_25_2->value /*value*/->type /*_type*/->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tHandle)) || ((das_deref(__context__,__ef_rename_at_25_2->value /*value*/->type /*_type*/)).isLocal()) )
         {
-            return das_auto_cast<bool>::cast(is_temp_safe_b0f7cb3017427de3(__context__,__ef_rename_at_25_2->value /*value*/));
+            return das_auto_cast<bool>::cast(is_temp_safe_13dd4cd23ee6c53e(__context__,__ef_rename_at_25_2->value /*value*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_14_0->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr) )
     {
-        return das_auto_cast<bool>::cast(is_temp_safe_b0f7cb3017427de3(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_14_0),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_14_0->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr))) ? das_auto_cast<ExprSwizzle *>::cast(das_cast<ExprSwizzle *>::cast(__expr_rename_at_14_0)) : das_auto_cast<ExprSwizzle *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->value /*value*/));
+        return das_auto_cast<bool>::cast(is_temp_safe_13dd4cd23ee6c53e(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_14_0),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_14_0->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr))) ? das_auto_cast<ExprSwizzle *>::cast(das_cast<ExprSwizzle *>::cast(__expr_rename_at_14_0)) : das_auto_cast<ExprSwizzle *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->value /*value*/));
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_14_0->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprCall")),*__context__,nullptr) )
     {
         return das_auto_cast<bool>::cast(((das_deref(__context__,__expr_rename_at_14_0->type /*_type*/)).isRef()));
@@ -253,39 +253,39 @@ inline bool is_temp_safe_b0f7cb3017427de3 ( Context * __context__, smart_ptr_raw
     return das_auto_cast<bool>::cast(false);
 }
 
-inline bool is_shared_expr_480df7d9e3f6dcc2 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_37_3 )
+inline bool is_shared_expr_48b8d0de9fca28a7 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_37_3 )
 {
     if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprVar")),*__context__,nullptr) )
     {
         ExprVar * __evar_rename_at_40_4 = ((ExprVar *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_37_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprVar")),*__context__,nullptr))) ? das_auto_cast<ExprVar *>::cast(das_cast<ExprVar *>::cast(__expr_rename_at_37_3)) : das_auto_cast<ExprVar *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
-        return das_auto_cast<bool>::cast(das_get_bitfield(__evar_rename_at_40_4->variable /*variable*/->flags /*flags*/,1u << 5) ? das_auto_cast<bool>::cast(true) : das_auto_cast<bool>::cast(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__evar_rename_at_40_4->variable /*variable*/->source /*source*/),das_auto_cast<void * const >::cast(nullptr))) ? das_auto_cast<bool>::cast(is_shared_expr_480df7d9e3f6dcc2(__context__,__evar_rename_at_40_4->variable /*variable*/->source /*source*/)) : das_auto_cast<bool>::cast(false))));
+        return das_auto_cast<bool>::cast(das_get_bitfield(__evar_rename_at_40_4->variable /*variable*/->flags /*flags*/,1u << 5) ? das_auto_cast<bool>::cast(true) : das_auto_cast<bool>::cast(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__evar_rename_at_40_4->variable /*variable*/->source /*source*/),das_auto_cast<void * const >::cast(nullptr))) ? das_auto_cast<bool>::cast(is_shared_expr_48b8d0de9fca28a7(__context__,__evar_rename_at_40_4->variable /*variable*/->source /*source*/)) : das_auto_cast<bool>::cast(false))));
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprCall")),*__context__,nullptr) )
     {
         ExprCall * __ecall_rename_at_49_5 = ((ExprCall *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_37_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprCall")),*__context__,nullptr))) ? das_auto_cast<ExprCall *>::cast(das_cast<ExprCall *>::cast(__expr_rename_at_37_3)) : das_auto_cast<ExprCall *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         Function * __func_rename_at_50_6 = ((Function *)__ecall_rename_at_49_5->func /*func*/);
-        return das_auto_cast<bool>::cast((((__func_rename_at_50_6 != nullptr) && (__func_rename_at_50_6->module /*_module*/ != nullptr)) && (builtin_string_startswith(((char * const )(to_das_string(__func_rename_at_50_6->name /*name*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))),((char *) "builtin`keys`"),__context__) || builtin_string_startswith(((char * const )(to_das_string(__func_rename_at_50_6->name /*name*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))),((char *) "builtin`values`"),__context__))) ? das_auto_cast<bool>::cast(is_shared_expr_480df7d9e3f6dcc2(__context__,das_index<das::vector<smart_ptr<Expression>> const >::at(__ecall_rename_at_49_5->arguments /*arguments*/,0,__context__))) : das_auto_cast<bool>::cast(false));
+        return das_auto_cast<bool>::cast((((__func_rename_at_50_6 != nullptr) && (__func_rename_at_50_6->module /*_module*/ != nullptr)) && (builtin_string_startswith(((char * const )(to_das_string(__func_rename_at_50_6->name /*name*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))),((char *) "builtin`keys`"),__context__) || builtin_string_startswith(((char * const )(to_das_string(__func_rename_at_50_6->name /*name*/,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))),((char *) "builtin`values`"),__context__))) ? das_auto_cast<bool>::cast(is_shared_expr_48b8d0de9fca28a7(__context__,das_index<das::vector<smart_ptr<Expression>> const >::at(__ecall_rename_at_49_5->arguments /*arguments*/,0,__context__))) : das_auto_cast<bool>::cast(false));
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprAt")),*__context__,nullptr) )
     {
         ExprAt * __ea_rename_at_57_7 = ((ExprAt *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_37_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprAt")),*__context__,nullptr))) ? das_auto_cast<ExprAt *>::cast(das_cast<ExprAt *>::cast(__expr_rename_at_37_3)) : das_auto_cast<ExprAt *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__ea_rename_at_57_7->subexpr /*subexpr*/->type /*_type*/),das_auto_cast<void * const >::cast(nullptr))) && ((__ea_rename_at_57_7->subexpr /*subexpr*/->type /*_type*/->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tArray) || ((das_deref(__context__,__ea_rename_at_57_7->subexpr /*subexpr*/->type /*_type*/)).isArray())) )
         {
-            return das_auto_cast<bool>::cast(is_shared_expr_480df7d9e3f6dcc2(__context__,__ea_rename_at_57_7->subexpr /*subexpr*/));
+            return das_auto_cast<bool>::cast(is_shared_expr_48b8d0de9fca28a7(__context__,__ea_rename_at_57_7->subexpr /*subexpr*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr) )
     {
         ExprField * __ef_rename_at_62_8 = ((ExprField *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_37_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr))) ? das_auto_cast<ExprField *>::cast(das_cast<ExprField *>::cast(__expr_rename_at_37_3)) : das_auto_cast<ExprField *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( !((__ef_rename_at_62_8->value /*value*/->type /*_type*/->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tHandle)) || ((das_deref(__context__,__ef_rename_at_62_8->value /*value*/->type /*_type*/)).isLocal()) )
         {
-            return das_auto_cast<bool>::cast(is_shared_expr_480df7d9e3f6dcc2(__context__,__ef_rename_at_62_8->value /*value*/));
+            return das_auto_cast<bool>::cast(is_shared_expr_48b8d0de9fca28a7(__context__,__ef_rename_at_62_8->value /*value*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr) )
     {
-        return das_auto_cast<bool>::cast(is_shared_expr_480df7d9e3f6dcc2(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_37_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr))) ? das_auto_cast<ExprSwizzle *>::cast(das_cast<ExprSwizzle *>::cast(__expr_rename_at_37_3)) : das_auto_cast<ExprSwizzle *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->value /*value*/));
+        return das_auto_cast<bool>::cast(is_shared_expr_48b8d0de9fca28a7(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_37_3),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_37_3->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr))) ? das_auto_cast<ExprSwizzle *>::cast(das_cast<ExprSwizzle *>::cast(__expr_rename_at_37_3)) : das_auto_cast<ExprSwizzle *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->value /*value*/));
     };
     return das_auto_cast<bool>::cast(false);
 }
 
-inline bool is_local_expr_25fd8383ba183774 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_72_9 )
+inline bool is_local_expr_66eccdd076bfd0b5 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_72_9 )
 {
     if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_72_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprVar")),*__context__,nullptr) )
     {
@@ -295,23 +295,23 @@ inline bool is_local_expr_25fd8383ba183774 ( Context * __context__, smart_ptr_ra
         ExprAt * __ea_rename_at_77_10 = ((ExprAt *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_72_9),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_72_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprAt")),*__context__,nullptr))) ? das_auto_cast<ExprAt *>::cast(das_cast<ExprAt *>::cast(__expr_rename_at_72_9)) : das_auto_cast<ExprAt *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__ea_rename_at_77_10->subexpr /*subexpr*/->type /*_type*/),das_auto_cast<void * const >::cast(nullptr))) && (das_vector_length(__ea_rename_at_77_10->subexpr /*subexpr*/->type /*_type*/->dim /*dim*/) != 0) )
         {
-            return das_auto_cast<bool>::cast(is_local_expr_25fd8383ba183774(__context__,__ea_rename_at_77_10->subexpr /*subexpr*/));
+            return das_auto_cast<bool>::cast(is_local_expr_66eccdd076bfd0b5(__context__,__ea_rename_at_77_10->subexpr /*subexpr*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_72_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr) )
     {
         ExprField * __ef_rename_at_82_11 = ((ExprField *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_72_9),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_72_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr))) ? das_auto_cast<ExprField *>::cast(das_cast<ExprField *>::cast(__expr_rename_at_72_9)) : das_auto_cast<ExprField *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( !((__ef_rename_at_82_11->value /*value*/->type /*_type*/->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tHandle)) || ((das_deref(__context__,__ef_rename_at_82_11->value /*value*/->type /*_type*/)).isLocal()) )
         {
-            return das_auto_cast<bool>::cast(is_local_expr_25fd8383ba183774(__context__,__ef_rename_at_82_11->value /*value*/));
+            return das_auto_cast<bool>::cast(is_local_expr_66eccdd076bfd0b5(__context__,__ef_rename_at_82_11->value /*value*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_72_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr) )
     {
-        return das_auto_cast<bool>::cast(is_local_expr_25fd8383ba183774(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_72_9),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_72_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr))) ? das_auto_cast<ExprSwizzle *>::cast(das_cast<ExprSwizzle *>::cast(__expr_rename_at_72_9)) : das_auto_cast<ExprSwizzle *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->value /*value*/));
+        return das_auto_cast<bool>::cast(is_local_expr_66eccdd076bfd0b5(__context__,(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_72_9),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_72_9->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr))) ? das_auto_cast<ExprSwizzle *>::cast(das_cast<ExprSwizzle *>::cast(__expr_rename_at_72_9)) : das_auto_cast<ExprSwizzle *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19)))))->value /*value*/));
     };
     return das_auto_cast<bool>::cast(false);
 }
 
-inline bool is_local_or_global_expr_c8e623604fd9000 ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_92_12 )
+inline bool is_local_or_global_expr_3e540820be4121ea ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_92_12 )
 {
     if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_92_12->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprVar")),*__context__,nullptr) )
     {
@@ -322,24 +322,24 @@ inline bool is_local_or_global_expr_c8e623604fd9000 ( Context * __context__, sma
         ExprAt * __ea_rename_at_98_14 = ((ExprAt *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_92_12),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_92_12->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprAt")),*__context__,nullptr))) ? das_auto_cast<ExprAt *>::cast(das_cast<ExprAt *>::cast(__expr_rename_at_92_12)) : das_auto_cast<ExprAt *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__ea_rename_at_98_14->subexpr /*subexpr*/->type /*_type*/),das_auto_cast<void * const >::cast(nullptr))) && (das_vector_length(__ea_rename_at_98_14->subexpr /*subexpr*/->type /*_type*/->dim /*dim*/) != 0) )
         {
-            return das_auto_cast<bool>::cast(is_local_or_global_expr_c8e623604fd9000(__context__,__ea_rename_at_98_14->subexpr /*subexpr*/));
+            return das_auto_cast<bool>::cast(is_local_or_global_expr_3e540820be4121ea(__context__,__ea_rename_at_98_14->subexpr /*subexpr*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_92_12->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr) )
     {
         ExprField * __ef_rename_at_103_15 = ((ExprField *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_92_12),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_92_12->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr))) ? das_auto_cast<ExprField *>::cast(das_cast<ExprField *>::cast(__expr_rename_at_92_12)) : das_auto_cast<ExprField *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( !((__ef_rename_at_103_15->value /*value*/->type /*_type*/->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tHandle)) || ((das_deref(__context__,__ef_rename_at_103_15->value /*value*/->type /*_type*/)).isLocal()) )
         {
-            return das_auto_cast<bool>::cast(is_local_or_global_expr_c8e623604fd9000(__context__,__ef_rename_at_103_15->value /*value*/));
+            return das_auto_cast<bool>::cast(is_local_or_global_expr_3e540820be4121ea(__context__,__ef_rename_at_103_15->value /*value*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_92_12->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr) )
     {
         ExprSwizzle * __ef_rename_at_108_16 = ((ExprSwizzle *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_92_12),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_92_12->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr))) ? das_auto_cast<ExprSwizzle *>::cast(das_cast<ExprSwizzle *>::cast(__expr_rename_at_92_12)) : das_auto_cast<ExprSwizzle *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
-        return das_auto_cast<bool>::cast(is_local_or_global_expr_c8e623604fd9000(__context__,__ef_rename_at_108_16->value /*value*/));
+        return das_auto_cast<bool>::cast(is_local_or_global_expr_3e540820be4121ea(__context__,__ef_rename_at_108_16->value /*value*/));
     };
     return das_auto_cast<bool>::cast(false);
 }
 
-inline bool is_scope_expr_6a03a2370c1995a ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_114_17 )
+inline bool is_scope_expr_fd8d02e37ab6bc8f ( Context * __context__, smart_ptr_raw<Expression> const  __expr_rename_at_114_17 )
 {
     if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_114_17->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprVar")),*__context__,nullptr) )
     {
@@ -349,44 +349,44 @@ inline bool is_scope_expr_6a03a2370c1995a ( Context * __context__, smart_ptr_raw
         ExprAt * __ea_rename_at_119_18 = ((ExprAt *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_114_17),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_114_17->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprAt")),*__context__,nullptr))) ? das_auto_cast<ExprAt *>::cast(das_cast<ExprAt *>::cast(__expr_rename_at_114_17)) : das_auto_cast<ExprAt *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( (nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__ea_rename_at_119_18->subexpr /*subexpr*/->type /*_type*/),das_auto_cast<void * const >::cast(nullptr))) && (das_vector_length(__ea_rename_at_119_18->subexpr /*subexpr*/->type /*_type*/->dim /*dim*/) != 0) )
         {
-            return das_auto_cast<bool>::cast(is_scope_expr_6a03a2370c1995a(__context__,__ea_rename_at_119_18->subexpr /*subexpr*/));
+            return das_auto_cast<bool>::cast(is_scope_expr_fd8d02e37ab6bc8f(__context__,__ea_rename_at_119_18->subexpr /*subexpr*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_114_17->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr) )
     {
         ExprField * __ef_rename_at_124_19 = ((ExprField *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_114_17),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_114_17->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprField")),*__context__,nullptr))) ? das_auto_cast<ExprField *>::cast(das_cast<ExprField *>::cast(__expr_rename_at_114_17)) : das_auto_cast<ExprField *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
         if ( !((__ef_rename_at_124_19->value /*value*/->type /*_type*/->baseType /*baseType*/ == DAS_COMMENT(bound_enum) das::Type::tHandle)) || ((das_deref(__context__,__ef_rename_at_124_19->value /*value*/->type /*_type*/)).isLocal()) )
         {
-            return das_auto_cast<bool>::cast(is_scope_expr_6a03a2370c1995a(__context__,__ef_rename_at_124_19->value /*value*/));
+            return das_auto_cast<bool>::cast(is_scope_expr_fd8d02e37ab6bc8f(__context__,__ef_rename_at_124_19->value /*value*/));
         };
     } else if ( SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_114_17->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr) )
     {
         ExprSwizzle * __ef_rename_at_129_20 = ((ExprSwizzle *)(((nequ_sptr_ptr(das_auto_cast<smart_ptr_raw<void> const >::cast(__expr_rename_at_114_17),das_auto_cast<void * const >::cast(nullptr))) && (SimPolicy<char *>::Equ(cast<char *>::from(__expr_rename_at_114_17->__rtti /*__rtti*/),cast<char *>::from(((char *) "ExprSwizzle")),*__context__,nullptr))) ? das_auto_cast<ExprSwizzle *>::cast(das_cast<ExprSwizzle *>::cast(__expr_rename_at_114_17)) : das_auto_cast<ExprSwizzle *>::cast(das_invoke_function<void *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::panic_expr_as*/ 0x299199196cf0e19))))));
-        return das_auto_cast<bool>::cast(is_scope_expr_6a03a2370c1995a(__context__,__ef_rename_at_129_20->value /*value*/));
+        return das_auto_cast<bool>::cast(is_scope_expr_fd8d02e37ab6bc8f(__context__,__ef_rename_at_129_20->value /*value*/));
     };
     return das_auto_cast<bool>::cast(false);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0x4224116f65267573] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_temp_safe_b0f7cb3017427de3>>();
+    aotLib[0x37d283bb73a821e1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&is_temp_safe_13dd4cd23ee6c53e>>();
     };
-    aotLib[0xfd64eb3619452a3] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_shared_expr_480df7d9e3f6dcc2>>();
+    aotLib[0x6174d622c9391155] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&is_shared_expr_48b8d0de9fca28a7>>();
     };
-    aotLib[0x4bc354b59a650f6a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_local_expr_25fd8383ba183774>>();
+    aotLib[0x1de36f0d9b4fe314] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&is_local_expr_66eccdd076bfd0b5>>();
     };
-    aotLib[0xeb5eec3cff58022] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_local_or_global_expr_c8e623604fd9000>>();
+    aotLib[0x541907df5f04cadc] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&is_local_or_global_expr_3e540820be4121ea>>();
     };
-    aotLib[0x1ea8ec7e7de45378] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_scope_expr_6a03a2370c1995a>>();
+    aotLib[0x92b10d79a8c20ea7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&is_scope_expr_fd8d02e37ab6bc8f>>();
     };
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_4650964341042742801
-AotListBase impl_aot_is_local(_anon_4650964341042742801::registerAotFunctions);
+} // namespace _anon_14414820752429523801
+AotListBase impl_aot_is_local(_anon_14414820752429523801::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

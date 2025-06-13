@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_9518341467928943131 {
+namespace _anon_907406427959033683 {
 
 namespace heartbeat { struct AddHeartbeat; };
 namespace heartbeat { struct HeartbeatPass; };
@@ -872,12 +872,12 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e455d24ced263da9 ( Context * __context__, TArray<ast::AstPassMacro *> & __Arr_rename_at_181_0, ast::AstPassMacro * __value_rename_at_181_1 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f0cab35c7d974645 ( Context * __context__, heartbeat::HeartbeatPass const  & __cl_rename_at_116_2 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_80a6ec4eb23dddcb ( Context * __context__, heartbeat::AddHeartbeat const  & __cl_rename_at_116_3 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_f7fe523284831a6a ( Context * __context__, heartbeat::AddHeartbeat const  & __someClass_rename_at_684_4 );
-inline void set_heartbeat_b037c51092251447 ( Context * __context__, Lambda DAS_COMMENT((void)) __cb_rename_at_17_7 );
-inline void heartbeat_dd9ab94cfe6ac86e ( Context * __context__ );
+inline void _FuncbuiltinTickpushTick10769833213962245646_7634cfbbc979d639 ( Context * __context__, TArray<ast::AstPassMacro *> & __Arr_rename_at_181_0, ast::AstPassMacro * __value_rename_at_181_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_583d58425019615b ( Context * __context__, heartbeat::HeartbeatPass const  & __cl_rename_at_116_2 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1ef831ec722694ff ( Context * __context__, heartbeat::AddHeartbeat const  & __cl_rename_at_116_3 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_5b678b951b374377 ( Context * __context__, heartbeat::AddHeartbeat const  & __someClass_rename_at_684_4 );
+inline void set_heartbeat_7cf1a25cdc776e38 ( Context * __context__, Lambda DAS_COMMENT((void)) __cb_rename_at_17_7 );
+inline void heartbeat_7a7d43ee35ed2d58 ( Context * __context__ );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -885,35 +885,35 @@ void __init_script ( Context * __context__, bool __init_shared )
     das_global<bool,0x3ee07d3118c2016a>(__context__) = false;/*g_inHB*/
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e455d24ced263da9 ( Context * __context__, TArray<ast::AstPassMacro *> &  __Arr_rename_at_181_0, ast::AstPassMacro * __value_rename_at_181_1 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_7634cfbbc979d639 ( Context * __context__, TArray<ast::AstPassMacro *> &  __Arr_rename_at_181_0, ast::AstPassMacro * __value_rename_at_181_1 )
 {
     das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstPassMacro *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f0cab35c7d974645 ( Context * __context__, heartbeat::HeartbeatPass const  &  __cl_rename_at_116_2 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_583d58425019615b ( Context * __context__, heartbeat::HeartbeatPass const  &  __cl_rename_at_116_2 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_80a6ec4eb23dddcb ( Context * __context__, heartbeat::AddHeartbeat const  &  __cl_rename_at_116_3 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_1ef831ec722694ff ( Context * __context__, heartbeat::AddHeartbeat const  &  __cl_rename_at_116_3 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_3.__rtti))).getStructType())));
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_f7fe523284831a6a ( Context * __context__, heartbeat::AddHeartbeat const  &  __someClass_rename_at_684_4 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_5b678b951b374377 ( Context * __context__, heartbeat::AddHeartbeat const  &  __someClass_rename_at_684_4 )
 {
     heartbeat::AddHeartbeat const  * __classPtr_rename_at_687_5 = ((heartbeat::AddHeartbeat const  *)das_ref(__context__,__someClass_rename_at_684_4));
-    StructInfo const  * __classInfo_rename_at_688_6 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_80a6ec4eb23dddcb(__context__,__someClass_rename_at_684_4));
+    StructInfo const  * __classInfo_rename_at_688_6 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_1ef831ec722694ff(__context__,__someClass_rename_at_684_4));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_5),__classInfo_rename_at_688_6,__context__));
 }
 
-inline void set_heartbeat_b037c51092251447 ( Context * __context__, Lambda DAS_COMMENT((void)) __cb_rename_at_17_7 )
+inline void set_heartbeat_7cf1a25cdc776e38 ( Context * __context__, Lambda DAS_COMMENT((void)) __cb_rename_at_17_7 )
 {
     das_delete<Lambda DAS_COMMENT((void))>::clear(__context__,das_global<Lambda DAS_COMMENT((void)),0xfd15697e41823168>(__context__) /*g_hbCallback*/);
     das_move(das_global<Lambda DAS_COMMENT((void)),0xfd15697e41823168>(__context__) /*g_hbCallback*/,__cb_rename_at_17_7);
 }
 
-inline void heartbeat_dd9ab94cfe6ac86e ( Context * __context__ )
+inline void heartbeat_7a7d43ee35ed2d58 ( Context * __context__ )
 {
     if ( das_global<bool,0x3ee07d3118c2016a>(__context__) /*g_inHB*/ )
     {
@@ -929,34 +929,34 @@ inline void heartbeat_dd9ab94cfe6ac86e ( Context * __context__ )
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0x10b77304c53aa618] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e455d24ced263da9>>();
+    aotLib[0xf009ef97944db45] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_7634cfbbc979d639>>();
     };
-    aotLib[0x79d2bb4c7cf83f5f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_f0cab35c7d974645>>();
+    aotLib[0x8597ca4f4cffcf5f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_583d58425019615b>>();
     };
-    aotLib[0x3b8612cc6e9fc103] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_80a6ec4eb23dddcb>>();
+    aotLib[0x6f2a82aa14845518] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_1ef831ec722694ff>>();
     };
-    aotLib[0x667d3cc95dacb11] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_f7fe523284831a6a>>();
+    aotLib[0x1ffa5d3d7317776f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_5b678b951b374377>>();
     };
-    aotLib[0x244fc38ec5d850cd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&set_heartbeat_b037c51092251447>>();
+    aotLib[0x4a3545fb6cafbede] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&set_heartbeat_7cf1a25cdc776e38>>();
     };
-    aotLib[0x53719bc08a6d3b2f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&heartbeat_dd9ab94cfe6ac86e>>();
+    aotLib[0x7ec91ded2bf2c550] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&heartbeat_7a7d43ee35ed2d58>>();
     };
     // [[ init script ]]
-    aotLib[0x4f35b1c002401dff] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xb15d228ef0b0492] = +[](Context & ctx) -> SimNode* {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_9518341467928943131
-AotListBase impl_aot_heartbeat(_anon_9518341467928943131::registerAotFunctions);
+} // namespace _anon_907406427959033683
+AotListBase impl_aot_heartbeat(_anon_907406427959033683::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

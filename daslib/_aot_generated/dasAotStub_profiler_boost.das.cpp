@@ -72,7 +72,7 @@
 #endif
 
 namespace das {
-namespace _anon_16223167832467568254 {
+namespace _anon_7612338206597763894 {
 
 namespace debugapi { struct DapiDebugAgent; };
 namespace debugapi { struct DapiArray; };
@@ -202,8 +202,8 @@ struct DapiDebugAgent {
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocate;
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,void * const ,uint64_t,LineInfo const )) onReallocate;
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFree;
-    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocateString;
-    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFreeString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,bool,LineInfo const )) onAllocateString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,bool,LineInfo const )) onFreeString;
     DebugAgent * thisAgent;
 };
 }
@@ -290,8 +290,8 @@ struct ProfilerDebugAgent {
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocate;
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,void * const ,uint64_t,LineInfo const )) onReallocate;
     Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFree;
-    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,LineInfo const )) onAllocateString;
-    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,LineInfo const )) onFreeString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,uint64_t,bool,LineInfo const )) onAllocateString;
+    Func DAS_COMMENT((void,debugapi::DapiDebugAgent,Context,void * const ,bool,LineInfo const )) onFreeString;
     DebugAgent * thisAgent;
     int64_t us0;
     TTable<uint64_t,profiler::PerfContext> events;
@@ -395,13 +395,13 @@ extern TypeInfo __type_info__af63eb4c86020609;
 extern FuncInfo __func_info__955909f57bd61177;
 
 FuncInfo __func_info__955909f57bd61177 = {"invoke block<void> const", "", nullptr, 0, 32, &__type_info__af63eb4c86020609, nullptr,0,UINT64_C(0x955909f57bd61177), 0x0 };
-TypeInfo __type_info__3bdf8339ef37753 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::Context"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24834, 576, UINT64_C(0x3bdf8339ef37753) };
-TypeInfo __type_info__af81fe4c86352052 = { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 1, UINT64_C(0xaf81fe4c86352052) };
+TypeInfo __type_info__3bdf8339ef37753 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~rtti::Context"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24834, TypeSize<Context>::size, UINT64_C(0x3bdf8339ef37753) };
+TypeInfo __type_info__af81fe4c86352052 = { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<bool>::size, UINT64_C(0xaf81fe4c86352052) };
 TypeInfo * __type_info__d6eadf66eea309ce_arg_types[2] = { &__type_info__d9307e078cfb0f0c, &__type_info__af81fe4c86352052 };
 const char * __type_info__d6eadf66eea309ce_arg_names[2] = { "ctxId", "enabled" };
-TypeInfo __type_info__d6eadf66eea309ce = { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d6eadf66eea309ce_arg_types, __type_info__d6eadf66eea309ce_arg_names, 2, 0, nullptr, 12, 8, UINT64_C(0xd6eadf66eea309ce) };
-TypeInfo __type_info__d9307e078cfb0f0c = { Type::tUInt64, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 8, UINT64_C(0xd9307e078cfb0f0c) };
-TypeInfo __type_info__af63eb4c86020609 = { Type::tVoid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 0, UINT64_C(0xaf63eb4c86020609) };
+TypeInfo __type_info__d6eadf66eea309ce = { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d6eadf66eea309ce_arg_types, __type_info__d6eadf66eea309ce_arg_names, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,uint64_t,bool))>::size, UINT64_C(0xd6eadf66eea309ce) };
+TypeInfo __type_info__d9307e078cfb0f0c = { Type::tUInt64, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<uint64_t>::size, UINT64_C(0xd9307e078cfb0f0c) };
+TypeInfo __type_info__af63eb4c86020609 = { Type::tVoid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<void>::size, UINT64_C(0xaf63eb4c86020609) };
 
 static void resolveTypeInfoAnnotations()
 {
@@ -413,71 +413,71 @@ static void resolveTypeInfoAnnotations()
 
 TypeInfo * __tinfo_0[4] = { &__type_info__3bdf8339ef37753, &__type_info__d6eadf66eea309ce, &__type_info__d9307e078cfb0f0c, &__type_info__af81fe4c86352052 };
 
-inline void _FuncCONTEXTTickinternal_enable_profiler_9259ac347efac90d ( Context * __context__, uint64_t __ctxId_rename_at_90_0, bool __enabled_rename_at_90_1 );
-inline void _FuncCONTEXT_CLONETickinternal_enable_profiler_efa02bb71ea20bcd ( Context * __context__, uint64_t __ctxId_rename_at_14_2, bool __enabled_rename_at_14_3 );
-inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_814d48688d3fb11d ( Context * __context__, void * const  __p_rename_at_15_4 );
-inline void internal_enable_profiler_49af0bcaf84865fa ( Context * __context__, uint64_t __ctxId_rename_at_14_5, bool __enabled_rename_at_14_6 );
-inline void enable_profiler_f1a7d4ae3b806df7 ( Context * __context__, Context & __ctx_rename_at_22_7 );
-inline void disable_profiler_32fa37bfb0ad4434 ( Context * __context__, Context & __ctx_rename_at_26_8 );
+inline void _FuncCONTEXTTickinternal_enable_profiler_cce663d12214aa5a ( Context * __context__, uint64_t __ctxId_rename_at_90_0, bool __enabled_rename_at_90_1 );
+inline void _FuncCONTEXT_CLONETickinternal_enable_profiler_6a59ed6870a75fb3 ( Context * __context__, uint64_t __ctxId_rename_at_14_2, bool __enabled_rename_at_14_3 );
+inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_52997ca0b4c85ae3 ( Context * __context__, void * const  __p_rename_at_15_4 );
+inline void internal_enable_profiler_a8ebb8211f24641 ( Context * __context__, uint64_t __ctxId_rename_at_14_5, bool __enabled_rename_at_14_6 );
+inline void enable_profiler_2954a0c01c64742f ( Context * __context__, Context & __ctx_rename_at_22_7 );
+inline void disable_profiler_51d231e02b911fe1 ( Context * __context__, Context & __ctx_rename_at_26_8 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncCONTEXTTickinternal_enable_profiler_9259ac347efac90d ( Context * __context__, uint64_t __ctxId_rename_at_90_0, bool __enabled_rename_at_90_1 )
+inline void _FuncCONTEXTTickinternal_enable_profiler_cce663d12214aa5a ( Context * __context__, uint64_t __ctxId_rename_at_90_0, bool __enabled_rename_at_90_1 )
 {
     DAS_VERIFYF((hasDebugAgentContext(((char *) "profiler"),((LineInfoArg *)(&LineInfo::g_LineInfoNULL)),__context__)),(((char *) "debug agent is not installed")));
     DAS_VERIFYF((das_ref(__context__,getDebugAgentContext(((char *) "profiler"),((LineInfoArg *)(&LineInfo::g_LineInfoNULL)),__context__)) == das_ref(__context__,thisContext(__context__))),(((char *) "agent context mismatch")));
-    _FuncCONTEXT_CLONETickinternal_enable_profiler_efa02bb71ea20bcd(__context__,__ctxId_rename_at_90_0,__enabled_rename_at_90_1);
+    _FuncCONTEXT_CLONETickinternal_enable_profiler_6a59ed6870a75fb3(__context__,__ctxId_rename_at_90_0,__enabled_rename_at_90_1);
 }
 
-inline void _FuncCONTEXT_CLONETickinternal_enable_profiler_efa02bb71ea20bcd ( Context * __context__, uint64_t __ctxId_rename_at_14_2, bool __enabled_rename_at_14_3 ) { das_stack_prologue __prologue(__context__,80,"CONTEXT_CLONE`internal_enable_profiler " DAS_FILE_LINE);
+inline void _FuncCONTEXT_CLONETickinternal_enable_profiler_6a59ed6870a75fb3 ( Context * __context__, uint64_t __ctxId_rename_at_14_2, bool __enabled_rename_at_14_3 ) { das_stack_prologue __prologue(__context__,80,"CONTEXT_CLONE`internal_enable_profiler " DAS_FILE_LINE);
 {
     lockDebugAgent(das_make_block<void>(__context__,0,0,&__func_info__955909f57bd61177,[&]() -> void{
         das_invoke_function<void>::invoke<uint64_t,bool>(__context__,nullptr,Func(__context__->fnByMangledName(/*@profiler::set_enable_profiler u64 Cb*/ 0x141fa5e0c4b2e16b)),__ctxId_rename_at_14_2,__enabled_rename_at_14_3);
     }),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }}
 
-inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_814d48688d3fb11d ( Context * __context__, void * const  __p_rename_at_15_4 )
+inline uint64_t _FuncbuiltinTickintptrTick11320822648609276562_52997ca0b4c85ae3 ( Context * __context__, void * const  __p_rename_at_15_4 )
 {
     return das_auto_cast<uint64_t>::cast(das_cast<uint64_t>::cast(__p_rename_at_15_4));
 }
 
-inline void internal_enable_profiler_49af0bcaf84865fa ( Context * __context__, uint64_t __ctxId_rename_at_14_5, bool __enabled_rename_at_14_6 )
+inline void internal_enable_profiler_a8ebb8211f24641 ( Context * __context__, uint64_t __ctxId_rename_at_14_5, bool __enabled_rename_at_14_6 )
 {
     DAS_VERIFYF((hasDebugAgentContext(((char *) "profiler"),((LineInfoArg *)(&LineInfo::g_LineInfoNULL)),__context__)),(((char *) "debug agent is not installed")));
     DAS_VERIFYF((das_ref(__context__,getDebugAgentContext(((char *) "profiler"),((LineInfoArg *)(&LineInfo::g_LineInfoNULL)),__context__)) != das_ref(__context__,thisContext(__context__))),(((char *) "agent context mismatch")));
     das_call_interop<void>::call(&pinvoke_impl2,__context__,SimNode_AotInterop<4>(__tinfo_0,cast<Context &>::from(getDebugAgentContext(((char *) "profiler"),((LineInfoArg *)(&LineInfo::g_LineInfoNULL)),__context__)),cast<Func DAS_COMMENT((void,uint64_t,bool))>::from(Func(__context__->fnByMangledName(/*@profiler_boost::CONTEXT`internal_enable_profiler u64 Cb*/ 0xa0d31a805c19abf5))),cast<uint64_t>::from(__ctxId_rename_at_14_5),cast<bool>::from(__enabled_rename_at_14_6)));
 }
 
-inline void enable_profiler_f1a7d4ae3b806df7 ( Context * __context__, Context &  __ctx_rename_at_22_7 )
+inline void enable_profiler_2954a0c01c64742f ( Context * __context__, Context &  __ctx_rename_at_22_7 )
 {
-    internal_enable_profiler_49af0bcaf84865fa(__context__,_FuncbuiltinTickintptrTick11320822648609276562_814d48688d3fb11d(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_22_7))),true);
+    internal_enable_profiler_a8ebb8211f24641(__context__,_FuncbuiltinTickintptrTick11320822648609276562_52997ca0b4c85ae3(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_22_7))),true);
 }
 
-inline void disable_profiler_32fa37bfb0ad4434 ( Context * __context__, Context &  __ctx_rename_at_26_8 )
+inline void disable_profiler_51d231e02b911fe1 ( Context * __context__, Context &  __ctx_rename_at_26_8 )
 {
-    internal_enable_profiler_49af0bcaf84865fa(__context__,_FuncbuiltinTickintptrTick11320822648609276562_814d48688d3fb11d(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_26_8))),false);
+    internal_enable_profiler_a8ebb8211f24641(__context__,_FuncbuiltinTickintptrTick11320822648609276562_52997ca0b4c85ae3(__context__,das_auto_cast<void * const >::cast(das_ref(__context__,__ctx_rename_at_26_8))),false);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xfca7001704070a79] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCONTEXTTickinternal_enable_profiler_9259ac347efac90d>>();
+    aotLib[0x7ec70b59b6fd0615] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCONTEXTTickinternal_enable_profiler_cce663d12214aa5a>>();
     };
-    aotLib[0xe9eeed31e8090051] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCONTEXT_CLONETickinternal_enable_profiler_efa02bb71ea20bcd>>();
+    aotLib[0x9e1528e1835727e2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncCONTEXT_CLONETickinternal_enable_profiler_6a59ed6870a75fb3>>();
     };
-    aotLib[0x4577f8df0b21841b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickintptrTick11320822648609276562_814d48688d3fb11d>>();
+    aotLib[0x59f6ea34159e51ec] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickintptrTick11320822648609276562_52997ca0b4c85ae3>>();
     };
-    aotLib[0x6bf987a594e1454a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&internal_enable_profiler_49af0bcaf84865fa>>();
+    aotLib[0xf4e48cce616b0086] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&internal_enable_profiler_a8ebb8211f24641>>();
     };
-    aotLib[0xae293b0b849a6913] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&enable_profiler_f1a7d4ae3b806df7>>();
+    aotLib[0xae7c3090bb03ed47] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&enable_profiler_2954a0c01c64742f>>();
     };
-    aotLib[0x92e9ad71dd13f815] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&disable_profiler_32fa37bfb0ad4434>>();
+    aotLib[0xd247813c6b6ae6bb] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&disable_profiler_51d231e02b911fe1>>();
     };
     // [[ init script ]]
     aotLib[0x6e0e597b34278779] = +[](Context & ctx) -> SimNode* {
@@ -487,8 +487,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_16223167832467568254
-AotListBase impl_aot_profiler_boost(_anon_16223167832467568254::registerAotFunctions);
+} // namespace _anon_7612338206597763894
+AotListBase impl_aot_profiler_boost(_anon_7612338206597763894::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

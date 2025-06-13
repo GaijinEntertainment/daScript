@@ -62,7 +62,7 @@
 #endif
 
 namespace das {
-namespace _anon_5632098080777272610 {
+namespace _anon_14314985163833104490 {
 
 namespace type_traits { struct TypeInfoGetFieldsNum; };
 namespace type_traits { struct TypeInfoHasProperty; };
@@ -295,71 +295,71 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e98940bd647b096c ( Context * __context__, TArray<ast::AstTypeInfoMacro *> & __Arr_rename_at_181_0, ast::AstTypeInfoMacro * __value_rename_at_181_1 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d12f79df67b2fc1e ( Context * __context__, type_traits::TypeInfoGetFieldsNum const  & __cl_rename_at_116_2 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9a401643351dc149 ( Context * __context__, type_traits::TypeInfoHasProperty const  & __cl_rename_at_116_3 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7c226dd0d252342e ( Context * __context__, type_traits::IsSubclassOf const  & __cl_rename_at_116_6 );
-inline Program * _FuncbuiltinTickget_ptrTick5807679485210906136_aebefa62d4d88f1f ( Context * __context__, smart_ptr_raw<Program> __src_rename_at_1732_7 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_577921c6800d781 ( Context * __context__, TArray<ast::AstTypeInfoMacro *> & __Arr_rename_at_181_0, ast::AstTypeInfoMacro * __value_rename_at_181_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_fc1338f7d2f7a834 ( Context * __context__, type_traits::TypeInfoGetFieldsNum const  & __cl_rename_at_116_2 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a4fcd1d448f9686a ( Context * __context__, type_traits::TypeInfoHasProperty const  & __cl_rename_at_116_3 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_8db57777ebff8f0e ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c4f144b73c97e12a ( Context * __context__, type_traits::IsSubclassOf const  & __cl_rename_at_116_6 );
+inline Program * _FuncbuiltinTickget_ptrTick5807679485210906136_d94544dad565fa67 ( Context * __context__, smart_ptr_raw<Program> __src_rename_at_1784_7 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e98940bd647b096c ( Context * __context__, TArray<ast::AstTypeInfoMacro *> &  __Arr_rename_at_181_0, ast::AstTypeInfoMacro * __value_rename_at_181_1 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_577921c6800d781 ( Context * __context__, TArray<ast::AstTypeInfoMacro *> &  __Arr_rename_at_181_0, ast::AstTypeInfoMacro * __value_rename_at_181_1 )
 {
     das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstTypeInfoMacro *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_d12f79df67b2fc1e ( Context * __context__, type_traits::TypeInfoGetFieldsNum const  &  __cl_rename_at_116_2 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_fc1338f7d2f7a834 ( Context * __context__, type_traits::TypeInfoGetFieldsNum const  &  __cl_rename_at_116_2 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_9a401643351dc149 ( Context * __context__, type_traits::TypeInfoHasProperty const  &  __cl_rename_at_116_3 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a4fcd1d448f9686a ( Context * __context__, type_traits::TypeInfoHasProperty const  &  __cl_rename_at_116_3 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_3.__rtti))).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_8db57777ebff8f0e ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_4, ast::AstCallMacro * __value_rename_at_181_5 )
 {
     das_copy(__Arr_rename_at_181_4(builtin_array_push_back(das_arg<TArray<ast::AstCallMacro *>>::pass(__Arr_rename_at_181_4),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_5);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7c226dd0d252342e ( Context * __context__, type_traits::IsSubclassOf const  &  __cl_rename_at_116_6 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_c4f144b73c97e12a ( Context * __context__, type_traits::IsSubclassOf const  &  __cl_rename_at_116_6 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_6.__rtti))).getStructType())));
 }
 
-inline Program * _FuncbuiltinTickget_ptrTick5807679485210906136_aebefa62d4d88f1f ( Context * __context__, smart_ptr_raw<Program> __src_rename_at_1732_7 )
+inline Program * _FuncbuiltinTickget_ptrTick5807679485210906136_d94544dad565fa67 ( Context * __context__, smart_ptr_raw<Program> __src_rename_at_1784_7 )
 {
-    return das_auto_cast<Program *>::cast(das_cast<Program *>::cast(__src_rename_at_1732_7));
+    return das_auto_cast<Program *>::cast(das_cast<Program *>::cast(__src_rename_at_1784_7));
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xf0e3fd00abc15718] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e98940bd647b096c>>();
+    aotLib[0x8336c9a3baaf41a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_577921c6800d781>>();
     };
-    aotLib[0x6b0765f575e4a10b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_d12f79df67b2fc1e>>();
+    aotLib[0x6851f43ce75904c3] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_fc1338f7d2f7a834>>();
     };
-    aotLib[0x43593cf229002796] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_9a401643351dc149>>();
+    aotLib[0x4b5a02969164b5ff] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_a4fcd1d448f9686a>>();
     };
-    aotLib[0xe553d306a044fc24] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce>>();
+    aotLib[0xac1b0548ec02e89b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_8db57777ebff8f0e>>();
     };
-    aotLib[0x732de9c516f7152b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_7c226dd0d252342e>>();
+    aotLib[0xcd35500c283f157d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_c4f144b73c97e12a>>();
     };
-    aotLib[0xa08ccd8311caaf69] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick5807679485210906136_aebefa62d4d88f1f>>();
+    aotLib[0xe7380b7030bc1406] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick5807679485210906136_d94544dad565fa67>>();
     };
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_5632098080777272610
-AotListBase impl_aot_type_traits(_anon_5632098080777272610::registerAotFunctions);
+} // namespace _anon_14314985163833104490
+AotListBase impl_aot_type_traits(_anon_14314985163833104490::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

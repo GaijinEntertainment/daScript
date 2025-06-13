@@ -61,7 +61,7 @@
 #endif
 
 namespace das {
-namespace _anon_482672747374343583 {
+namespace _anon_10246529430971437271 {
 
 namespace macro_boost { struct MacroVerifyMacro; };
 namespace macro_boost { struct CaptureBlock; };
@@ -1555,20 +1555,20 @@ extern VarInfo __var_info__c60c5f46299835fc;
 extern VarInfo __var_info__245ccbce6b5ab224;
 extern VarInfo __var_info__45766677ab541343;
 
-VarInfo __struct_info__2668415385194db3_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__ccd32e474e9a33eb, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0x45766677ab541343), "variable", offsetof(macro_boost::CapturedVariable,variable), 1 };
-VarInfo __struct_info__2668415385194db3_field_1 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__811c0b03f452ec1, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0x245ccbce6b5ab224), "expression", offsetof(macro_boost::CapturedVariable,expression), 3 };
-VarInfo __struct_info__2668415385194db3_field_2 =  { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 1, UINT64_C(0xc60c5f46299835fc), "eref", offsetof(macro_boost::CapturedVariable,eref), 0 };
+VarInfo __struct_info__2668415385194db3_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__ccd32e474e9a33eb, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, TypeSize<Variable *>::size, UINT64_C(0x45766677ab541343), "variable", offsetof(macro_boost::CapturedVariable,variable), 1 };
+VarInfo __struct_info__2668415385194db3_field_1 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__811c0b03f452ec1, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, TypeSize<ExprVar *>::size, UINT64_C(0x245ccbce6b5ab224), "expression", offsetof(macro_boost::CapturedVariable,expression), 3 };
+VarInfo __struct_info__2668415385194db3_field_2 =  { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<bool>::size, UINT64_C(0xc60c5f46299835fc), "eref", offsetof(macro_boost::CapturedVariable,eref), 0 };
 VarInfo * __struct_info__2668415385194db3_fields[3] =  { &__struct_info__2668415385194db3_field_0, &__struct_info__2668415385194db3_field_1, &__struct_info__2668415385194db3_field_2 };
-StructInfo __struct_info__2668415385194db3 = {"CapturedVariable", "macro_boost", 12, __struct_info__2668415385194db3_fields, 3, 24, UINT64_C(0x0), nullptr, UINT64_C(0x2668415385194db3), 0 };
-TypeInfo __type_info__eca8ada468f4bde9 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__71c84a7f531ca5bb, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, 8, UINT64_C(0xeca8ada468f4bde9) };
-TypeInfo __type_info__f1e180ed97abebcd = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__eca8ada468f4bde9, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 24, UINT64_C(0xf1e180ed97abebcd) };
-TypeInfo __type_info__4a2b6c4fa080723 = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__baf2de01229b73a2, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 24, UINT64_C(0x4a2b6c4fa080723) };
-TypeInfo __type_info__5e85fe99b916c6d6 = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af63e44c8601fa24, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0x5e85fe99b916c6d6) };
-TypeInfo __type_info__71c84a7f531ca5bb = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~ast::ExprBlock"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, 256, UINT64_C(0x71c84a7f531ca5bb) };
-TypeInfo __type_info__811c0b03f452ec1 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~ast::ExprVar"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, 128, UINT64_C(0x811c0b03f452ec1) };
-TypeInfo __type_info__ccd32e474e9a33eb = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~ast::Variable"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, 256, UINT64_C(0xccd32e474e9a33eb) };
-TypeInfo __type_info__baf2de01229b73a2 = { Type::tStructure, &__struct_info__2668415385194db3, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, 24, UINT64_C(0xbaf2de01229b73a2) };
-TypeInfo __type_info__af63e44c8601fa24 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 4, UINT64_C(0xaf63e44c8601fa24) };
+StructInfo __struct_info__2668415385194db3 = {"CapturedVariable", "macro_boost", 12, __struct_info__2668415385194db3_fields, 3, TypeSize<macro_boost::CapturedVariable>::size, UINT64_C(0x0), nullptr, UINT64_C(0x2668415385194db3), 0 };
+TypeInfo __type_info__eca8ada468f4bde9 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__71c84a7f531ca5bb, nullptr, nullptr, nullptr, 0, 0, nullptr, 24588, TypeSize<ExprBlock *>::size, UINT64_C(0xeca8ada468f4bde9) };
+TypeInfo __type_info__f1e180ed97abebcd = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__eca8ada468f4bde9, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, TypeSize<TArray<ExprBlock *>>::size, UINT64_C(0xf1e180ed97abebcd) };
+TypeInfo __type_info__4a2b6c4fa080723 = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__baf2de01229b73a2, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, TypeSize<TArray<macro_boost::CapturedVariable>>::size, UINT64_C(0x4a2b6c4fa080723) };
+TypeInfo __type_info__5e85fe99b916c6d6 = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af63e44c8601fa24, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<int32_t>>::size, UINT64_C(0x5e85fe99b916c6d6) };
+TypeInfo __type_info__71c84a7f531ca5bb = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~ast::ExprBlock"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, TypeSize<ExprBlock>::size, UINT64_C(0x71c84a7f531ca5bb) };
+TypeInfo __type_info__811c0b03f452ec1 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~ast::ExprVar"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, TypeSize<ExprVar>::size, UINT64_C(0x811c0b03f452ec1) };
+TypeInfo __type_info__ccd32e474e9a33eb = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~ast::Variable"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24578, TypeSize<Variable>::size, UINT64_C(0xccd32e474e9a33eb) };
+TypeInfo __type_info__baf2de01229b73a2 = { Type::tStructure, &__struct_info__2668415385194db3, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, TypeSize<macro_boost::CapturedVariable>::size, UINT64_C(0xbaf2de01229b73a2) };
+TypeInfo __type_info__af63e44c8601fa24 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int32_t>::size, UINT64_C(0xaf63e44c8601fa24) };
 
 static void resolveTypeInfoAnnotations()
 {
@@ -1582,336 +1582,336 @@ TypeInfo * __tinfo_0[1] = { &__type_info__f1e180ed97abebcd };
 TypeInfo * __tinfo_1[1] = { &__type_info__5e85fe99b916c6d6 };
 TypeInfo * __tinfo_2[1] = { &__type_info__4a2b6c4fa080723 };
 
-inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1059_0, smart_ptr_raw<Expression> const  __src_rename_at_1059_1 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_2, ast::AstFunctionAnnotation * __value_rename_at_181_3 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7a86d959f98dbf0f ( Context * __context__, macro_boost::MacroVerifyMacro const  & __cl_rename_at_116_4 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_5, ast::AstCallMacro * __value_rename_at_181_6 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_e48bce725be85082 ( Context * __context__, macro_boost::ReturnSkipLockcheck const  & __cl_rename_at_116_7 );
-inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_8852dcfb910d89aa ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_8 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_73667a6caa7920c1 ( Context * __context__, macro_boost::ColletFinally const  & __cl_rename_at_116_10 );
-inline TArray<ExprBlock *> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_8477891fe74e291a ( Context * __context__, TArray<ExprBlock *> & __a_rename_at_50_11 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_57e23274c7352cb ( Context * __context__, macro_boost::CaptureBlock const  & __cl_rename_at_116_12 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4a213f79ff5ed21b ( Context * __context__, macro_boost::ColletLabels const  & __cl_rename_at_116_13 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_f815a1708f9fc21b ( Context * __context__, TArray<ExprBlock *> & __Arr_rename_at_181_14, ExprBlock * __value_rename_at_181_15 );
-inline TArray<int32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5eb52cff2bdd0eb4 ( Context * __context__, TArray<int32_t> & __a_rename_at_50_16 );
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5726e2a60ae65060 ( Context * __context__, TTable<int32_t,void> & __a_rename_at_1193_17 );
-inline TArray<macro_boost::CapturedVariable> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_4afe0ef37f3d7d46 ( Context * __context__, TArray<macro_boost::CapturedVariable> & __a_rename_at_50_18 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_36bc6cba83fc099e ( Context * __context__, TArray<int32_t> & __Arr_rename_at_181_19, int32_t __value_rename_at_181_20 );
-inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_62c4a869e90f1282 ( Context * __context__, char * const  __name_rename_at_631_21, macro_boost::MacroVerifyMacro * __someClassPtr_rename_at_631_22 );
-inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_7b8f4ca3a41e72f4 ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1744_24 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_6c6f6f459d1ea17c ( Context * __context__, TTable<Variable *,void> const  & __Tab_rename_at_1014_26, Variable * const  __at_rename_at_1014_27 );
-inline void _FuncbuiltinTickinsertTick10959621454228962049_21162df62a60dfe5 ( Context * __context__, TTable<Variable *,void> & __Tab_rename_at_895_28, Variable * const  __at_rename_at_895_29 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_118a5b29d7d59b09 ( Context * __context__, TArray<macro_boost::CapturedVariable> & __Arr_rename_at_181_30, macro_boost::CapturedVariable & __value_rename_at_181_31 );
-inline void _FuncbuiltinTickinsertTick10959621454228962049_fe29507865f40410 ( Context * __context__, TTable<ExprBlock *,void> & __Tab_rename_at_895_32, ExprBlock * const  __at_rename_at_895_33 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_a778d918650a9f1b ( Context * __context__, macro_boost::ColletFinally const  & __someClass_rename_at_684_34 );
-inline Sequence DAS_COMMENT((ExprBlock *)) _FuncbuiltinTickkeysTick2205854368403803976_95e7a5c5edb9b4fa ( Context * __context__, TTable<ExprBlock *,void> const  & __a_rename_at_1128_37 );
-inline void _FuncbuiltinTickinsertTick10959621454228962049_c74ac84ad6ee5a59 ( Context * __context__, TTable<int32_t,void> & __Tab_rename_at_895_39, int32_t __at_rename_at_895_40 );
-inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_4ca660e879c50a40 ( Context * __context__, char * const  __name_rename_at_273_41, char * const  __tag_rename_at_273_42, macro_boost::MacroVerifyMacro * __classPtr_rename_at_273_43 );
-inline Variable * _FuncbuiltinTickget_ptrTick8468476673553620226_8841038ce28d3387 ( Context * __context__, smart_ptr_raw<Variable> const  __src_rename_at_1726_45 );
-inline ExprVar * _FuncbuiltinTickget_ptrTick8468476673553620226_ebc419a3b3c42a05 ( Context * __context__, smart_ptr_raw<ExprVar> const  __src_rename_at_1726_46 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_ee4ed30e25c091a0 ( Context * __context__, macro_boost::CaptureBlock const  & __someClass_rename_at_684_47 );
-inline Sequence DAS_COMMENT((Variable *)) _FuncbuiltinTickkeysTick2205854368403803976_63e640287a08ea51 ( Context * __context__, TTable<Variable *,ExprVar *> const  & __a_rename_at_1128_50 );
-inline Sequence DAS_COMMENT((ExprVar * &)) _FuncbuiltinTickvaluesTick1351216622833168869_2c23a274fa76e5d2 ( Context * __context__, TTable<Variable *,ExprVar *> & __a_rename_at_1150_52 );
-inline ExprBlock * _FuncbuiltinTickget_ptrTick8468476673553620226_b22ed6a178fb73f0 ( Context * __context__, smart_ptr_raw<ExprBlock> const  __src_rename_at_1726_54 );
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_1a3b715e243e2e09 ( Context * __context__, macro_boost::ColletLabels const  & __someClass_rename_at_684_55 );
-inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickkeysTick2205854368403803976_2aeb949e6a3921a5 ( Context * __context__, TTable<int32_t,void> const  & __a_rename_at_1128_58 );
+inline void clone_86ca1c0ac7b1d1d ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1092_0, smart_ptr_raw<Expression> const  __src_rename_at_1092_1 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_4fc0011daa139cbc ( Context * __context__, TArray<ast::AstFunctionAnnotation *> & __Arr_rename_at_181_2, ast::AstFunctionAnnotation * __value_rename_at_181_3 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_71a9bb24fe296e57 ( Context * __context__, macro_boost::MacroVerifyMacro const  & __cl_rename_at_116_4 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_484e7232b59a56f7 ( Context * __context__, TArray<ast::AstCallMacro *> & __Arr_rename_at_181_5, ast::AstCallMacro * __value_rename_at_181_6 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_5ea2048de1ba70f3 ( Context * __context__, macro_boost::ReturnSkipLockcheck const  & __cl_rename_at_116_7 );
+inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_65003dbe2e0fcabc ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1089_8 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_930f3f6a7fd359ea ( Context * __context__, macro_boost::ColletFinally const  & __cl_rename_at_116_10 );
+inline TArray<ExprBlock *> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_4e5e86e199904b8f ( Context * __context__, TArray<ExprBlock *> & __a_rename_at_50_11 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b212572c1e8c295d ( Context * __context__, macro_boost::CaptureBlock const  & __cl_rename_at_116_12 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f46159975cb22b2e ( Context * __context__, macro_boost::ColletLabels const  & __cl_rename_at_116_13 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_7dea2f3074b7c9ff ( Context * __context__, TArray<ExprBlock *> & __Arr_rename_at_181_14, ExprBlock * __value_rename_at_181_15 );
+inline TArray<int32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_299c97e84a5e3a79 ( Context * __context__, TArray<int32_t> & __a_rename_at_50_16 );
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_d2979b7e4837df14 ( Context * __context__, TTable<int32_t,void> & __a_rename_at_1245_17 );
+inline TArray<macro_boost::CapturedVariable> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_8a5355ae56e832db ( Context * __context__, TArray<macro_boost::CapturedVariable> & __a_rename_at_50_18 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_55c9c7f1c6fe35c1 ( Context * __context__, TArray<int32_t> & __Arr_rename_at_181_19, int32_t __value_rename_at_181_20 );
+inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_ef4370d1b4df1479 ( Context * __context__, char * const  __name_rename_at_631_21, macro_boost::MacroVerifyMacro * __someClassPtr_rename_at_631_22 );
+inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_92e2e2e1a8256c04 ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1796_24 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_42816a2d63000c25 ( Context * __context__, TTable<Variable *,void> const  & __Tab_rename_at_1047_26, Variable * const  __at_rename_at_1047_27 );
+inline void _FuncbuiltinTickinsertTick10959621454228962049_c3864362b4b0783 ( Context * __context__, TTable<Variable *,void> & __Tab_rename_at_895_28, Variable * const  __at_rename_at_895_29 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_9a8c4f187bc5c97 ( Context * __context__, TArray<macro_boost::CapturedVariable> & __Arr_rename_at_181_30, macro_boost::CapturedVariable & __value_rename_at_181_31 );
+inline void _FuncbuiltinTickinsertTick10959621454228962049_fe32b803c9f029b0 ( Context * __context__, TTable<ExprBlock *,void> & __Tab_rename_at_895_32, ExprBlock * const  __at_rename_at_895_33 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_f5d5a4934270833f ( Context * __context__, macro_boost::ColletFinally const  & __someClass_rename_at_684_34 );
+inline Sequence DAS_COMMENT((ExprBlock *)) _FuncbuiltinTickkeysTick2205854368403803976_3a05df03b588d87b ( Context * __context__, TTable<ExprBlock *,void> const  & __a_rename_at_1180_37 );
+inline void _FuncbuiltinTickinsertTick10959621454228962049_65678f88a6a2d463 ( Context * __context__, TTable<int32_t,void> & __Tab_rename_at_895_39, int32_t __at_rename_at_895_40 );
+inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_b4df6698dbc37b7 ( Context * __context__, char * const  __name_rename_at_240_41, char * const  __tag_rename_at_240_42, macro_boost::MacroVerifyMacro * __classPtr_rename_at_240_43 );
+inline Variable * _FuncbuiltinTickget_ptrTick8468476673553620226_afc850c193108de8 ( Context * __context__, smart_ptr_raw<Variable> const  __src_rename_at_1778_45 );
+inline ExprVar * _FuncbuiltinTickget_ptrTick8468476673553620226_9e19c3a08457884e ( Context * __context__, smart_ptr_raw<ExprVar> const  __src_rename_at_1778_46 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_34b9be4e8d5d324a ( Context * __context__, macro_boost::CaptureBlock const  & __someClass_rename_at_684_47 );
+inline Sequence DAS_COMMENT((Variable *)) _FuncbuiltinTickkeysTick2205854368403803976_47af96d984bf48fc ( Context * __context__, TTable<Variable *,ExprVar *> const  & __a_rename_at_1180_50 );
+inline Sequence DAS_COMMENT((ExprVar * &)) _FuncbuiltinTickvaluesTick1351216622833168869_8257506ee978fda0 ( Context * __context__, TTable<Variable *,ExprVar *> & __a_rename_at_1202_52 );
+inline ExprBlock * _FuncbuiltinTickget_ptrTick8468476673553620226_f46791efade7249a ( Context * __context__, smart_ptr_raw<ExprBlock> const  __src_rename_at_1778_54 );
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_153d63fb49a9bbcd ( Context * __context__, macro_boost::ColletLabels const  & __someClass_rename_at_684_55 );
+inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickkeysTick2205854368403803976_a9a52bf0a50573e3 ( Context * __context__, TTable<int32_t,void> const  & __a_rename_at_1180_58 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void clone_912660ab1e667e4b ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1059_0, smart_ptr_raw<Expression> const  __src_rename_at_1059_1 )
+inline void clone_86ca1c0ac7b1d1d ( Context * __context__, smart_ptr_raw<Expression> & __dest_rename_at_1092_0, smart_ptr_raw<Expression> const  __src_rename_at_1092_1 )
 {
-    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1059_0),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1059_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_smart_ptr_clone(das_auto_cast<smart_ptr_raw<void> &>::cast(__dest_rename_at_1092_0),das_auto_cast<smart_ptr_raw<void> const >::cast(__src_rename_at_1092_1),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795 ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_2, ast::AstFunctionAnnotation * __value_rename_at_181_3 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_4fc0011daa139cbc ( Context * __context__, TArray<ast::AstFunctionAnnotation *> &  __Arr_rename_at_181_2, ast::AstFunctionAnnotation * __value_rename_at_181_3 )
 {
     das_copy(__Arr_rename_at_181_2(builtin_array_push_back(das_arg<TArray<ast::AstFunctionAnnotation *>>::pass(__Arr_rename_at_181_2),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_3);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_7a86d959f98dbf0f ( Context * __context__, macro_boost::MacroVerifyMacro const  &  __cl_rename_at_116_4 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_71a9bb24fe296e57 ( Context * __context__, macro_boost::MacroVerifyMacro const  &  __cl_rename_at_116_4 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_4.__rtti))).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_5, ast::AstCallMacro * __value_rename_at_181_6 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_484e7232b59a56f7 ( Context * __context__, TArray<ast::AstCallMacro *> &  __Arr_rename_at_181_5, ast::AstCallMacro * __value_rename_at_181_6 )
 {
     das_copy(__Arr_rename_at_181_5(builtin_array_push_back(das_arg<TArray<ast::AstCallMacro *>>::pass(__Arr_rename_at_181_5),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_6);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_e48bce725be85082 ( Context * __context__, macro_boost::ReturnSkipLockcheck const  &  __cl_rename_at_116_7 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_5ea2048de1ba70f3 ( Context * __context__, macro_boost::ReturnSkipLockcheck const  &  __cl_rename_at_116_7 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_7.__rtti))).getStructType())));
 }
 
-inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_8852dcfb910d89aa ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1056_8 )
+inline smart_ptr_raw<Expression> _FuncbuiltinTickclone_to_moveTick2007252383599261567_65003dbe2e0fcabc ( Context * __context__, smart_ptr_raw<Expression> const  __clone_src_rename_at_1089_8 )
 {
-    smart_ptr_raw<Expression> __clone_dest_rename_at_1058_9;das_zero(__clone_dest_rename_at_1058_9);
-    clone_912660ab1e667e4b(__context__,__clone_dest_rename_at_1058_9,__clone_src_rename_at_1056_8);
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1058_9);
+    smart_ptr_raw<Expression> __clone_dest_rename_at_1091_9;das_zero(__clone_dest_rename_at_1091_9);
+    clone_86ca1c0ac7b1d1d(__context__,__clone_dest_rename_at_1091_9,__clone_src_rename_at_1089_8);
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__clone_dest_rename_at_1091_9);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_73667a6caa7920c1 ( Context * __context__, macro_boost::ColletFinally const  &  __cl_rename_at_116_10 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_930f3f6a7fd359ea ( Context * __context__, macro_boost::ColletFinally const  &  __cl_rename_at_116_10 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_10.__rtti))).getStructType())));
 }
 
-inline TArray<ExprBlock *> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_8477891fe74e291a ( Context * __context__, TArray<ExprBlock *> &  __a_rename_at_50_11 )
+inline TArray<ExprBlock *> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_4e5e86e199904b8f ( Context * __context__, TArray<ExprBlock *> &  __a_rename_at_50_11 )
 {
     das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_0,cast<TArray<ExprBlock *> &>::from(__a_rename_at_50_11)));
     return das_auto_cast_ref<TArray<ExprBlock *> &>::cast(__a_rename_at_50_11);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_57e23274c7352cb ( Context * __context__, macro_boost::CaptureBlock const  &  __cl_rename_at_116_12 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b212572c1e8c295d ( Context * __context__, macro_boost::CaptureBlock const  &  __cl_rename_at_116_12 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_12.__rtti))).getStructType())));
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_4a213f79ff5ed21b ( Context * __context__, macro_boost::ColletLabels const  &  __cl_rename_at_116_13 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_f46159975cb22b2e ( Context * __context__, macro_boost::ColletLabels const  &  __cl_rename_at_116_13 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_13.__rtti))).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_f815a1708f9fc21b ( Context * __context__, TArray<ExprBlock *> &  __Arr_rename_at_181_14, ExprBlock * __value_rename_at_181_15 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_7dea2f3074b7c9ff ( Context * __context__, TArray<ExprBlock *> &  __Arr_rename_at_181_14, ExprBlock * __value_rename_at_181_15 )
 {
     das_copy(__Arr_rename_at_181_14(builtin_array_push_back(das_arg<TArray<ExprBlock *>>::pass(__Arr_rename_at_181_14),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_15);
 }
 
-inline TArray<int32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5eb52cff2bdd0eb4 ( Context * __context__, TArray<int32_t> &  __a_rename_at_50_16 )
+inline TArray<int32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_299c97e84a5e3a79 ( Context * __context__, TArray<int32_t> &  __a_rename_at_50_16 )
 {
     das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_1,cast<TArray<int32_t> &>::from(__a_rename_at_50_16)));
     return das_auto_cast_ref<TArray<int32_t> &>::cast(__a_rename_at_50_16);
 }
 
-inline void _FuncbuiltinTickfinalizeTick5454204887383796109_5726e2a60ae65060 ( Context * __context__, TTable<int32_t,void> &  __a_rename_at_1193_17 )
+inline void _FuncbuiltinTickfinalizeTick5454204887383796109_d2979b7e4837df14 ( Context * __context__, TTable<int32_t,void> &  __a_rename_at_1245_17 )
 {
-    builtin_table_free(das_arg<TTable<int32_t,void>>::pass(__a_rename_at_1193_17),4,0,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_table_free(das_arg<TTable<int32_t,void>>::pass(__a_rename_at_1245_17),4,0,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline TArray<macro_boost::CapturedVariable> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_4afe0ef37f3d7d46 ( Context * __context__, TArray<macro_boost::CapturedVariable> &  __a_rename_at_50_18 )
+inline TArray<macro_boost::CapturedVariable> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_8a5355ae56e832db ( Context * __context__, TArray<macro_boost::CapturedVariable> &  __a_rename_at_50_18 )
 {
     das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_2,cast<TArray<macro_boost::CapturedVariable> &>::from(__a_rename_at_50_18)));
     return das_auto_cast_ref<TArray<macro_boost::CapturedVariable> &>::cast(__a_rename_at_50_18);
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_36bc6cba83fc099e ( Context * __context__, TArray<int32_t> &  __Arr_rename_at_181_19, int32_t __value_rename_at_181_20 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_55c9c7f1c6fe35c1 ( Context * __context__, TArray<int32_t> &  __Arr_rename_at_181_19, int32_t __value_rename_at_181_20 )
 {
     das_copy(__Arr_rename_at_181_19(builtin_array_push_back(das_arg<TArray<int32_t>>::pass(__Arr_rename_at_181_19),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_20);
 }
 
-inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_62c4a869e90f1282 ( Context * __context__, char * const  __name_rename_at_631_21, macro_boost::MacroVerifyMacro * __someClassPtr_rename_at_631_22 )
+inline smart_ptr_raw<FunctionAnnotation> _FuncastTickmake_function_annotationTick3074191368936885601_ef4370d1b4df1479 ( Context * __context__, char * const  __name_rename_at_631_21, macro_boost::MacroVerifyMacro * __someClassPtr_rename_at_631_22 )
 {
-    _FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795(__context__,das_arg<TArray<ast::AstFunctionAnnotation *>>::pass(das_global<TArray<ast::AstFunctionAnnotation *>,0x70a17c19e372bb43>(__context__) /*gc_root_AstFunctionAnnotation*/),das_reinterpret<ast::AstFunctionAnnotation *>::pass(__someClassPtr_rename_at_631_22));
-    StructInfo const  * __classInfo_rename_at_634_23 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_7a86d959f98dbf0f(__context__,das_arg<macro_boost::MacroVerifyMacro>::pass(das_deref(__context__,__someClassPtr_rename_at_631_22))));
+    _FuncbuiltinTickpushTick10769833213962245646_4fc0011daa139cbc(__context__,das_arg<TArray<ast::AstFunctionAnnotation *>>::pass(das_global<TArray<ast::AstFunctionAnnotation *>,0x70a17c19e372bb43>(__context__) /*gc_root_AstFunctionAnnotation*/),das_reinterpret<ast::AstFunctionAnnotation *>::pass(__someClassPtr_rename_at_631_22));
+    StructInfo const  * __classInfo_rename_at_634_23 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_71a9bb24fe296e57(__context__,das_arg<macro_boost::MacroVerifyMacro>::pass(das_deref(__context__,__someClassPtr_rename_at_631_22))));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<FunctionAnnotation>>::cast(makeFunctionAnnotation(__name_rename_at_631_21,das_auto_cast<void * const >::cast(__someClassPtr_rename_at_631_22),__classInfo_rename_at_634_23,__context__));
 }
 
-inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_7b8f4ca3a41e72f4 ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1744_24 )
+inline smart_ptr_raw<Expression> _FuncbuiltinTickadd_ptr_refTick918185754185293024_92e2e2e1a8256c04 ( Context * __context__, smart_ptr_raw<Expression> const  __src_rename_at_1796_24 )
 {
-    smart_ptr_raw<Expression> __dst_rename_at_1746_25; das_zero(__dst_rename_at_1746_25); das_move(__dst_rename_at_1746_25, _FuncbuiltinTickclone_to_moveTick2007252383599261567_8852dcfb910d89aa(__context__,das_cast<smart_ptr_raw<Expression>>::cast(__src_rename_at_1744_24)));
-    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__dst_rename_at_1746_25);
+    smart_ptr_raw<Expression> __dst_rename_at_1798_25; das_zero(__dst_rename_at_1798_25); das_move(__dst_rename_at_1798_25, _FuncbuiltinTickclone_to_moveTick2007252383599261567_65003dbe2e0fcabc(__context__,das_cast<smart_ptr_raw<Expression>>::cast(__src_rename_at_1796_24)));
+    return /* <- */ das_auto_cast_move<smart_ptr_raw<Expression>>::cast(__dst_rename_at_1798_25);
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_6c6f6f459d1ea17c ( Context * __context__, TTable<Variable *,void> const  &  __Tab_rename_at_1014_26, Variable * const  __at_rename_at_1014_27 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_42816a2d63000c25 ( Context * __context__, TTable<Variable *,void> const  &  __Tab_rename_at_1047_26, Variable * const  __at_rename_at_1047_27 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_26,__at_rename_at_1014_27));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1047_26,__at_rename_at_1047_27));
 }
 
-inline void _FuncbuiltinTickinsertTick10959621454228962049_21162df62a60dfe5 ( Context * __context__, TTable<Variable *,void> &  __Tab_rename_at_895_28, Variable * const  __at_rename_at_895_29 )
+inline void _FuncbuiltinTickinsertTick10959621454228962049_c3864362b4b0783 ( Context * __context__, TTable<Variable *,void> &  __Tab_rename_at_895_28, Variable * const  __at_rename_at_895_29 )
 {
     __builtin_table_set_insert(__context__,__Tab_rename_at_895_28,__at_rename_at_895_29);
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_118a5b29d7d59b09 ( Context * __context__, TArray<macro_boost::CapturedVariable> &  __Arr_rename_at_181_30, macro_boost::CapturedVariable &  __value_rename_at_181_31 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_9a8c4f187bc5c97 ( Context * __context__, TArray<macro_boost::CapturedVariable> &  __Arr_rename_at_181_30, macro_boost::CapturedVariable &  __value_rename_at_181_31 )
 {
     das_copy(__Arr_rename_at_181_30(builtin_array_push_back(das_arg<TArray<macro_boost::CapturedVariable>>::pass(__Arr_rename_at_181_30),24,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_31);
 }
 
-inline void _FuncbuiltinTickinsertTick10959621454228962049_fe29507865f40410 ( Context * __context__, TTable<ExprBlock *,void> &  __Tab_rename_at_895_32, ExprBlock * const  __at_rename_at_895_33 )
+inline void _FuncbuiltinTickinsertTick10959621454228962049_fe32b803c9f029b0 ( Context * __context__, TTable<ExprBlock *,void> &  __Tab_rename_at_895_32, ExprBlock * const  __at_rename_at_895_33 )
 {
     __builtin_table_set_insert(__context__,__Tab_rename_at_895_32,__at_rename_at_895_33);
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_a778d918650a9f1b ( Context * __context__, macro_boost::ColletFinally const  &  __someClass_rename_at_684_34 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_f5d5a4934270833f ( Context * __context__, macro_boost::ColletFinally const  &  __someClass_rename_at_684_34 )
 {
     macro_boost::ColletFinally const  * __classPtr_rename_at_687_35 = ((macro_boost::ColletFinally const  *)das_ref(__context__,__someClass_rename_at_684_34));
-    StructInfo const  * __classInfo_rename_at_688_36 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_73667a6caa7920c1(__context__,__someClass_rename_at_684_34));
+    StructInfo const  * __classInfo_rename_at_688_36 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_930f3f6a7fd359ea(__context__,__someClass_rename_at_684_34));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_35),__classInfo_rename_at_688_36,__context__));
 }
 
-inline Sequence DAS_COMMENT((ExprBlock *)) _FuncbuiltinTickkeysTick2205854368403803976_95e7a5c5edb9b4fa ( Context * __context__, TTable<ExprBlock *,void> const  &  __a_rename_at_1128_37 )
+inline Sequence DAS_COMMENT((ExprBlock *)) _FuncbuiltinTickkeysTick2205854368403803976_3a05df03b588d87b ( Context * __context__, TTable<ExprBlock *,void> const  &  __a_rename_at_1180_37 )
 {
-    Sequence DAS_COMMENT((ExprBlock *)) __it_rename_at_1129_38;das_zero(__it_rename_at_1129_38);
-    builtin_table_keys(das_arg<Sequence DAS_COMMENT((ExprBlock *))>::pass(__it_rename_at_1129_38),__a_rename_at_1128_37,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((ExprBlock *))>::cast(__it_rename_at_1129_38);
+    Sequence DAS_COMMENT((ExprBlock *)) __it_rename_at_1181_38;das_zero(__it_rename_at_1181_38);
+    builtin_table_keys(das_arg<Sequence DAS_COMMENT((ExprBlock *))>::pass(__it_rename_at_1181_38),__a_rename_at_1180_37,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((ExprBlock *))>::cast(__it_rename_at_1181_38);
 }
 
-inline void _FuncbuiltinTickinsertTick10959621454228962049_c74ac84ad6ee5a59 ( Context * __context__, TTable<int32_t,void> &  __Tab_rename_at_895_39, int32_t __at_rename_at_895_40 )
+inline void _FuncbuiltinTickinsertTick10959621454228962049_65678f88a6a2d463 ( Context * __context__, TTable<int32_t,void> &  __Tab_rename_at_895_39, int32_t __at_rename_at_895_40 )
 {
     __builtin_table_set_insert(__context__,__Tab_rename_at_895_39,__at_rename_at_895_40);
 }
 
-inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_4ca660e879c50a40 ( Context * __context__, char * const  __name_rename_at_273_41, char * const  __tag_rename_at_273_42, macro_boost::MacroVerifyMacro * __classPtr_rename_at_273_43 )
+inline void _Funcast_boostTicksetup_tag_annotationTick4095297895764883997_b4df6698dbc37b7 ( Context * __context__, char * const  __name_rename_at_240_41, char * const  __tag_rename_at_240_42, macro_boost::MacroVerifyMacro * __classPtr_rename_at_240_43 )
 {
-    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_274_44; memset((void*)&__ann_rename_at_274_44,0,sizeof(__ann_rename_at_274_44));
-    /* finally */ auto __finally_273= das_finally([&](){
-    das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_274_44);
+    smart_ptr_raw<FunctionAnnotation> __ann_rename_at_241_44; memset((void*)&__ann_rename_at_241_44,0,sizeof(__ann_rename_at_241_44));
+    /* finally */ auto __finally_240= das_finally([&](){
+    das_delete_handle<smart_ptr_raw<FunctionAnnotation>>::clear(__context__,__ann_rename_at_241_44);
     /* end finally */ });
-    __ann_rename_at_274_44; das_zero(__ann_rename_at_274_44); das_move(__ann_rename_at_274_44, _FuncastTickmake_function_annotationTick3074191368936885601_62c4a869e90f1282(__context__,__name_rename_at_273_41,__classPtr_rename_at_273_43));
-    das_invoke_function<void>::invoke<char * const ,smart_ptr_raw<FunctionAnnotation>>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::apply_tag_annotation Cs Y<FunctionAnnotationPtr>1<H<ast::FunctionAnnotation>>?M*/ 0x7678364e276db9c2)),__tag_rename_at_273_42,__ann_rename_at_274_44);
-    addModuleFunctionAnnotation(thisModule(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__ann_rename_at_274_44,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    __ann_rename_at_241_44; das_zero(__ann_rename_at_241_44); das_move(__ann_rename_at_241_44, _FuncastTickmake_function_annotationTick3074191368936885601_ef4370d1b4df1479(__context__,__name_rename_at_240_41,__classPtr_rename_at_240_43));
+    das_invoke_function<void>::invoke<char * const ,smart_ptr_raw<FunctionAnnotation>>(__context__,nullptr,Func(__context__->fnByMangledName(/*@ast_boost::apply_tag_annotation Cs Y<FunctionAnnotationPtr>1<H<ast::FunctionAnnotation>>?M*/ 0x7678364e276db9c2)),__tag_rename_at_240_42,__ann_rename_at_241_44);
+    addModuleFunctionAnnotation(thisModule(__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__ann_rename_at_241_44,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline Variable * _FuncbuiltinTickget_ptrTick8468476673553620226_8841038ce28d3387 ( Context * __context__, smart_ptr_raw<Variable> const  __src_rename_at_1726_45 )
+inline Variable * _FuncbuiltinTickget_ptrTick8468476673553620226_afc850c193108de8 ( Context * __context__, smart_ptr_raw<Variable> const  __src_rename_at_1778_45 )
 {
-    return das_auto_cast<Variable *>::cast(das_cast<Variable *>::cast(__src_rename_at_1726_45));
+    return das_auto_cast<Variable *>::cast(das_cast<Variable *>::cast(__src_rename_at_1778_45));
 }
 
-inline ExprVar * _FuncbuiltinTickget_ptrTick8468476673553620226_ebc419a3b3c42a05 ( Context * __context__, smart_ptr_raw<ExprVar> const  __src_rename_at_1726_46 )
+inline ExprVar * _FuncbuiltinTickget_ptrTick8468476673553620226_9e19c3a08457884e ( Context * __context__, smart_ptr_raw<ExprVar> const  __src_rename_at_1778_46 )
 {
-    return das_auto_cast<ExprVar *>::cast(das_cast<ExprVar *>::cast(__src_rename_at_1726_46));
+    return das_auto_cast<ExprVar *>::cast(das_cast<ExprVar *>::cast(__src_rename_at_1778_46));
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_ee4ed30e25c091a0 ( Context * __context__, macro_boost::CaptureBlock const  &  __someClass_rename_at_684_47 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_34b9be4e8d5d324a ( Context * __context__, macro_boost::CaptureBlock const  &  __someClass_rename_at_684_47 )
 {
     macro_boost::CaptureBlock const  * __classPtr_rename_at_687_48 = ((macro_boost::CaptureBlock const  *)das_ref(__context__,__someClass_rename_at_684_47));
-    StructInfo const  * __classInfo_rename_at_688_49 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_57e23274c7352cb(__context__,__someClass_rename_at_684_47));
+    StructInfo const  * __classInfo_rename_at_688_49 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_b212572c1e8c295d(__context__,__someClass_rename_at_684_47));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_48),__classInfo_rename_at_688_49,__context__));
 }
 
-inline Sequence DAS_COMMENT((Variable *)) _FuncbuiltinTickkeysTick2205854368403803976_63e640287a08ea51 ( Context * __context__, TTable<Variable *,ExprVar *> const  &  __a_rename_at_1128_50 )
+inline Sequence DAS_COMMENT((Variable *)) _FuncbuiltinTickkeysTick2205854368403803976_47af96d984bf48fc ( Context * __context__, TTable<Variable *,ExprVar *> const  &  __a_rename_at_1180_50 )
 {
-    Sequence DAS_COMMENT((Variable *)) __it_rename_at_1129_51;das_zero(__it_rename_at_1129_51);
-    builtin_table_keys(das_arg<Sequence DAS_COMMENT((Variable *))>::pass(__it_rename_at_1129_51),__a_rename_at_1128_50,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((Variable *))>::cast(__it_rename_at_1129_51);
+    Sequence DAS_COMMENT((Variable *)) __it_rename_at_1181_51;das_zero(__it_rename_at_1181_51);
+    builtin_table_keys(das_arg<Sequence DAS_COMMENT((Variable *))>::pass(__it_rename_at_1181_51),__a_rename_at_1180_50,8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((Variable *))>::cast(__it_rename_at_1181_51);
 }
 
-inline Sequence DAS_COMMENT((ExprVar * &)) _FuncbuiltinTickvaluesTick1351216622833168869_2c23a274fa76e5d2 ( Context * __context__, TTable<Variable *,ExprVar *> &  __a_rename_at_1150_52 )
+inline Sequence DAS_COMMENT((ExprVar * &)) _FuncbuiltinTickvaluesTick1351216622833168869_8257506ee978fda0 ( Context * __context__, TTable<Variable *,ExprVar *> &  __a_rename_at_1202_52 )
 {
-    Sequence DAS_COMMENT((ExprVar * *)) __it_rename_at_1151_53;das_zero(__it_rename_at_1151_53);
-    builtin_table_values(das_arg<Sequence DAS_COMMENT((ExprVar *))>::pass(__it_rename_at_1151_53),das_arg<TTable<Variable *,ExprVar *>>::pass(__a_rename_at_1150_52),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((ExprVar * &))>::cast(__it_rename_at_1151_53);
+    Sequence DAS_COMMENT((ExprVar * *)) __it_rename_at_1203_53;das_zero(__it_rename_at_1203_53);
+    builtin_table_values(das_arg<Sequence DAS_COMMENT((ExprVar *))>::pass(__it_rename_at_1203_53),das_arg<TTable<Variable *,ExprVar *>>::pass(__a_rename_at_1202_52),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((ExprVar * &))>::cast(__it_rename_at_1203_53);
 }
 
-inline ExprBlock * _FuncbuiltinTickget_ptrTick8468476673553620226_b22ed6a178fb73f0 ( Context * __context__, smart_ptr_raw<ExprBlock> const  __src_rename_at_1726_54 )
+inline ExprBlock * _FuncbuiltinTickget_ptrTick8468476673553620226_f46791efade7249a ( Context * __context__, smart_ptr_raw<ExprBlock> const  __src_rename_at_1778_54 )
 {
-    return das_auto_cast<ExprBlock *>::cast(das_cast<ExprBlock *>::cast(__src_rename_at_1726_54));
+    return das_auto_cast<ExprBlock *>::cast(das_cast<ExprBlock *>::cast(__src_rename_at_1778_54));
 }
 
-inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_1a3b715e243e2e09 ( Context * __context__, macro_boost::ColletLabels const  &  __someClass_rename_at_684_55 )
+inline smart_ptr_raw<VisitorAdapter> _FuncastTickmake_visitorTick897644165917210720_153d63fb49a9bbcd ( Context * __context__, macro_boost::ColletLabels const  &  __someClass_rename_at_684_55 )
 {
     macro_boost::ColletLabels const  * __classPtr_rename_at_687_56 = ((macro_boost::ColletLabels const  *)das_ref(__context__,__someClass_rename_at_684_55));
-    StructInfo const  * __classInfo_rename_at_688_57 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_4a213f79ff5ed21b(__context__,__someClass_rename_at_684_55));
+    StructInfo const  * __classInfo_rename_at_688_57 = ((StructInfo const  *)_FuncrttiTickclass_infoTick15801393167907430156_f46159975cb22b2e(__context__,__someClass_rename_at_684_55));
     return /* <- */ das_auto_cast_move<smart_ptr_raw<VisitorAdapter>>::cast(makeVisitor(das_auto_cast<void * const >::cast(__classPtr_rename_at_687_56),__classInfo_rename_at_688_57,__context__));
 }
 
-inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickkeysTick2205854368403803976_2aeb949e6a3921a5 ( Context * __context__, TTable<int32_t,void> const  &  __a_rename_at_1128_58 )
+inline Sequence DAS_COMMENT((int32_t)) _FuncbuiltinTickkeysTick2205854368403803976_a9a52bf0a50573e3 ( Context * __context__, TTable<int32_t,void> const  &  __a_rename_at_1180_58 )
 {
-    Sequence DAS_COMMENT((int32_t)) __it_rename_at_1129_59;das_zero(__it_rename_at_1129_59);
-    builtin_table_keys(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1129_59),__a_rename_at_1128_58,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((int32_t))>::cast(__it_rename_at_1129_59);
+    Sequence DAS_COMMENT((int32_t)) __it_rename_at_1181_59;das_zero(__it_rename_at_1181_59);
+    builtin_table_keys(das_arg<Sequence DAS_COMMENT((int32_t))>::pass(__it_rename_at_1181_59),__a_rename_at_1180_58,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((int32_t))>::cast(__it_rename_at_1181_59);
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0x74b4210f5379bdbd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&clone_912660ab1e667e4b>>();
+    aotLib[0x7117040df881dd83] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&clone_86ca1c0ac7b1d1d>>();
     };
-    aotLib[0xd09660c6ccc577ae] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e64fa0322491795>>();
+    aotLib[0x2d139e74f26dbfa2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_4fc0011daa139cbc>>();
     };
-    aotLib[0xaa0c767f7a614f15] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_7a86d959f98dbf0f>>();
+    aotLib[0x262c1bb8703d6375] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_71a9bb24fe296e57>>();
     };
-    aotLib[0xe553d306a044fc24] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e608f61b6dfcd4ce>>();
+    aotLib[0xc1d12659d657ed35] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_484e7232b59a56f7>>();
     };
-    aotLib[0x12172bd85eb0aa4c] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_e48bce725be85082>>();
+    aotLib[0x30acf311c917a2af] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_5ea2048de1ba70f3>>();
     };
-    aotLib[0xb070103dd2cac518] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickclone_to_moveTick2007252383599261567_8852dcfb910d89aa>>();
+    aotLib[0x7e6b4c21a343969] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickclone_to_moveTick2007252383599261567_65003dbe2e0fcabc>>();
     };
-    aotLib[0x870b3f6709b46d1d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_73667a6caa7920c1>>();
+    aotLib[0xa23115b55081638f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_930f3f6a7fd359ea>>();
     };
-    aotLib[0xa4d644936e56f2d4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_8477891fe74e291a>>();
+    aotLib[0x7b64851e12f86c03] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_4e5e86e199904b8f>>();
     };
-    aotLib[0xecfb29ad33fca4b2] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_57e23274c7352cb>>();
+    aotLib[0xa25ddf4fef995328] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_b212572c1e8c295d>>();
     };
-    aotLib[0xecf942368c658974] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_4a213f79ff5ed21b>>();
+    aotLib[0x13d5667ac1d7598] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncrttiTickclass_infoTick15801393167907430156_f46159975cb22b2e>>();
     };
-    aotLib[0xd57d561550b41b67] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_f815a1708f9fc21b>>();
+    aotLib[0x79e99282e34f694b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_7dea2f3074b7c9ff>>();
     };
-    aotLib[0x2d35f7e916a2d737] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5eb52cff2bdd0eb4>>();
+    aotLib[0x2673e6d5d4a53524] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_299c97e84a5e3a79>>();
     };
-    aotLib[0x221849cc2c2a5028] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick5454204887383796109_5726e2a60ae65060>>();
+    aotLib[0x719bd2a236685250] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick5454204887383796109_d2979b7e4837df14>>();
     };
-    aotLib[0xd72d456c520ab109] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_4afe0ef37f3d7d46>>();
+    aotLib[0xa90aa96e70fb28f6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_8a5355ae56e832db>>();
     };
-    aotLib[0xb06bed94af39c78f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_36bc6cba83fc099e>>();
+    aotLib[0xdbaa3f2366772f07] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_55c9c7f1c6fe35c1>>();
     };
-    aotLib[0x502ce87403863c7f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_function_annotationTick3074191368936885601_62c4a869e90f1282>>();
+    aotLib[0xe8435bb256ee687] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_function_annotationTick3074191368936885601_ef4370d1b4df1479>>();
     };
-    aotLib[0x80e1870c49481f68] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickadd_ptr_refTick918185754185293024_7b8f4ca3a41e72f4>>();
+    aotLib[0xa5cde809597ba1aa] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickadd_ptr_refTick918185754185293024_92e2e2e1a8256c04>>();
     };
-    aotLib[0x36fc9e1a19baf744] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickkey_existsTick16808803843923989214_6c6f6f459d1ea17c>>();
+    aotLib[0x66d47e814e91472d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickkey_existsTick16808803843923989214_42816a2d63000c25>>();
     };
-    aotLib[0x5d83807cd256fbb0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickinsertTick10959621454228962049_21162df62a60dfe5>>();
+    aotLib[0x254cd89f056bba17] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickinsertTick10959621454228962049_c3864362b4b0783>>();
     };
-    aotLib[0x631fc9ff94e6b639] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_118a5b29d7d59b09>>();
+    aotLib[0xd0bcb49db9a4613e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_9a8c4f187bc5c97>>();
     };
-    aotLib[0xbd978cb2d593c43e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickinsertTick10959621454228962049_fe29507865f40410>>();
+    aotLib[0xf6188ee3fd1d4f3c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickinsertTick10959621454228962049_fe32b803c9f029b0>>();
     };
-    aotLib[0xdc5ef862661ebbe4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_a778d918650a9f1b>>();
+    aotLib[0xb31e903aaa7c47ca] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_f5d5a4934270833f>>();
     };
-    aotLib[0xcc2994356a618695] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickkeysTick2205854368403803976_95e7a5c5edb9b4fa>>();
+    aotLib[0xac3b3b3f27f4a7a6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickkeysTick2205854368403803976_3a05df03b588d87b>>();
     };
-    aotLib[0xd3740a535aff1008] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickinsertTick10959621454228962049_c74ac84ad6ee5a59>>();
+    aotLib[0x957162c0f115a410] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickinsertTick10959621454228962049_65678f88a6a2d463>>();
     };
-    aotLib[0x22e2eaee027cb7ce] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_boostTicksetup_tag_annotationTick4095297895764883997_4ca660e879c50a40>>();
+    aotLib[0xba7b748932ec8299] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcast_boostTicksetup_tag_annotationTick4095297895764883997_b4df6698dbc37b7>>();
     };
-    aotLib[0xa151d20018f876af] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick8468476673553620226_8841038ce28d3387>>();
+    aotLib[0x59be2f6cff0a62db] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick8468476673553620226_afc850c193108de8>>();
     };
-    aotLib[0x1524e3fe8688eddb] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick8468476673553620226_ebc419a3b3c42a05>>();
+    aotLib[0x999b914efd85e49d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick8468476673553620226_9e19c3a08457884e>>();
     };
-    aotLib[0x119d9fd98d06210] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_ee4ed30e25c091a0>>();
+    aotLib[0x19c4017d81cf12f7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_34b9be4e8d5d324a>>();
     };
-    aotLib[0xf663a50c5cf495bb] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickkeysTick2205854368403803976_63e640287a08ea51>>();
+    aotLib[0x8489628dc3521ea5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickkeysTick2205854368403803976_47af96d984bf48fc>>();
     };
-    aotLib[0xab9dd9b84a4933ef] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickvaluesTick1351216622833168869_2c23a274fa76e5d2>>();
+    aotLib[0x929aeb730ac4d9d6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickvaluesTick1351216622833168869_8257506ee978fda0>>();
     };
-    aotLib[0xd5bc22da8d336d95] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick8468476673553620226_b22ed6a178fb73f0>>();
+    aotLib[0xe5ef728070a3994a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickget_ptrTick8468476673553620226_f46791efade7249a>>();
     };
-    aotLib[0x450504417543d4c3] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_1a3b715e243e2e09>>();
+    aotLib[0xda0e39578582159e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncastTickmake_visitorTick897644165917210720_153d63fb49a9bbcd>>();
     };
-    aotLib[0x76ab1e6031b7ec2a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickkeysTick2205854368403803976_2aeb949e6a3921a5>>();
+    aotLib[0x2009b7d13e100525] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickkeysTick2205854368403803976_a9a52bf0a50573e3>>();
     };
     // [[ init script ]]
     aotLib[0x5464bbe131808aa5] = +[](Context & ctx) -> SimNode* {
@@ -1921,8 +1921,8 @@ static void registerAotFunctions ( AotLibrary & aotLib ) {
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_482672747374343583
-AotListBase impl_aot_macro_boost(_anon_482672747374343583::registerAotFunctions);
+} // namespace _anon_10246529430971437271
+AotListBase impl_aot_macro_boost(_anon_10246529430971437271::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

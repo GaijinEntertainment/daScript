@@ -63,7 +63,7 @@
 #endif
 
 namespace das {
-namespace _anon_15051537126579498552 {
+namespace _anon_6368649739184819056 {
 
 namespace das_source_formatter { struct TokenTemplate; };
 namespace das_source_formatter { struct Token; };
@@ -330,19 +330,19 @@ extern VarInfo __var_info__f1744ecb99b5ee52;
 extern VarInfo __var_info__12c1af86475d4616;
 extern VarInfo __var_info__993f8b12277aa369;
 
-VarInfo __struct_info__bf67b648e8f141ed_field_0 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 4, UINT64_C(0xf1744ecb99b5ee52), "firstChar", offsetof(das_source_formatter::TokenTemplate,firstChar), 0 };
-VarInfo __struct_info__bf67b648e8f141ed_field_1 =  { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16388, 8, UINT64_C(0x993f8b12277aa369), "str", offsetof(das_source_formatter::TokenTemplate,str), 2 };
-VarInfo __struct_info__bf67b648e8f141ed_field_2 =  { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0xe807e1b774135f34), "codes", offsetof(das_source_formatter::TokenTemplate,codes), 4 };
-VarInfo __struct_info__bf67b648e8f141ed_field_3 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 4, UINT64_C(0x12c1af86475d4616), "length", offsetof(das_source_formatter::TokenTemplate,length), 0 };
+VarInfo __struct_info__bf67b648e8f141ed_field_0 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int32_t>::size, UINT64_C(0xf1744ecb99b5ee52), "firstChar", offsetof(das_source_formatter::TokenTemplate,firstChar), 0 };
+VarInfo __struct_info__bf67b648e8f141ed_field_1 =  { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16388, TypeSize<char *>::size, UINT64_C(0x993f8b12277aa369), "str", offsetof(das_source_formatter::TokenTemplate,str), 2 };
+VarInfo __struct_info__bf67b648e8f141ed_field_2 =  { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint8_t>>::size, UINT64_C(0xe807e1b774135f34), "codes", offsetof(das_source_formatter::TokenTemplate,codes), 4 };
+VarInfo __struct_info__bf67b648e8f141ed_field_3 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int32_t>::size, UINT64_C(0x12c1af86475d4616), "length", offsetof(das_source_formatter::TokenTemplate,length), 0 };
 VarInfo * __struct_info__bf67b648e8f141ed_fields[4] =  { &__struct_info__bf67b648e8f141ed_field_0, &__struct_info__bf67b648e8f141ed_field_1, &__struct_info__bf67b648e8f141ed_field_2, &__struct_info__bf67b648e8f141ed_field_3 };
-StructInfo __struct_info__bf67b648e8f141ed = {"TokenTemplate", "das_source_formatter", 28, __struct_info__bf67b648e8f141ed_fields, 4, 48, UINT64_C(0x0), nullptr, UINT64_C(0xbf67b648e8f141ed), 1 };
-TypeInfo __type_info__44217c02c8384397 = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__6cf57a81c8f2e7f7, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 24, UINT64_C(0x44217c02c8384397) };
-TypeInfo __type_info__4ac1d999a882997b = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0x4ac1d999a882997b) };
-TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, 8, UINT64_C(0xaf90fe4c864e9d52) };
-TypeInfo __type_info__6cf57a81c8f2e7f7 = { Type::tStructure, &__struct_info__bf67b648e8f141ed, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 48, UINT64_C(0x6cf57a81c8f2e7f7) };
-TypeInfo __type_info__a8d2247d5b8ed91f = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0xa8d2247d5b8ed91f) };
-TypeInfo __type_info__7dcc2c583c294a1f = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0x7dcc2c583c294a1f) };
-TypeInfo __type_info__af5be84c85f468f0 = { Type::tUInt8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 1, UINT64_C(0xaf5be84c85f468f0) };
+StructInfo __struct_info__bf67b648e8f141ed = {"TokenTemplate", "das_source_formatter", 28, __struct_info__bf67b648e8f141ed_fields, 4, TypeSize<das_source_formatter::TokenTemplate>::size, UINT64_C(0x0), nullptr, UINT64_C(0xbf67b648e8f141ed), 1 };
+TypeInfo __type_info__44217c02c8384397 = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__6cf57a81c8f2e7f7, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, TypeSize<TArray<das_source_formatter::TokenTemplate>>::size, UINT64_C(0x44217c02c8384397) };
+TypeInfo __type_info__4ac1d999a882997b = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x4ac1d999a882997b) };
+TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, TypeSize<char *>::size, UINT64_C(0xaf90fe4c864e9d52) };
+TypeInfo __type_info__6cf57a81c8f2e7f7 = { Type::tStructure, &__struct_info__bf67b648e8f141ed, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, TypeSize<das_source_formatter::TokenTemplate>::size, UINT64_C(0x6cf57a81c8f2e7f7) };
+TypeInfo __type_info__a8d2247d5b8ed91f = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint8_t>>::size, UINT64_C(0xa8d2247d5b8ed91f) };
+TypeInfo __type_info__7dcc2c583c294a1f = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x7dcc2c583c294a1f) };
+TypeInfo __type_info__af5be84c85f468f0 = { Type::tUInt8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<uint8_t>::size, UINT64_C(0xaf5be84c85f468f0) };
 
 static void resolveTypeInfoAnnotations()
 {
@@ -358,97 +358,97 @@ TypeInfo * __tinfo_2[1] = { &__type_info__a8d2247d5b8ed91f };
 TypeInfo * __tinfo_3[1] = { &__type_info__7dcc2c583c294a1f };
 TypeInfo * __tinfo_4[5] = { &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52, &__type_info__af90fe4c864e9d52 };
 
-inline void finalize_6a9d04f899c816ac ( Context * __context__, das_source_formatter::TokenTemplate & ____this_rename_at_40_0 );
-inline void finalize_597eb4e562707157 ( Context * __context__, das_source_formatter::Token & ____this_rename_at_48_1 );
-inline void finalize_d6c2d9467df86ea8 ( Context * __context__, das_source_formatter::FormatterToken & ____this_rename_at_62_2 );
-inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e ( Context * __context__, TArray<uint8_t> & __a_rename_at_50_3 );
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_37238c3cdaec478a ( Context * __context__, TDim<char *,22> const  & __a_rename_at_581_4 );
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_94b9be375031ddbc ( Context * __context__, TDim<char *,21> const  & __a_rename_at_581_5 );
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_9778601c0167a631 ( Context * __context__, TDim<char *,11> const  & __a_rename_at_581_6 );
-inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_7, int32_t __newSize_rename_at_68_8 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5f7a4e8904f8977e ( Context * __context__, TArray<das_source_formatter::TokenTemplate> & __a_rename_at_1182_9 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d46b5589c5f4f04b ( Context * __context__, TArray<das_source_formatter::Token> & __a_rename_at_1182_11 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b4e09f66b8118eb0 ( Context * __context__, TArray<das_source_formatter::FormatterToken> & __a_rename_at_1182_13 );
-inline void _FuncbuiltinTickresizeTick4811697762258667383_4a7556d56e5a6ac1 ( Context * __context__, TArray<das_source_formatter::TokenTemplate> & __Arr_rename_at_68_15, int32_t __newSize_rename_at_68_16 );
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_7d01ceb11c7f2e53 ( Context * __context__, TTable<char *,void> const  & __Tab_rename_at_1014_17, char * const  __at_rename_at_1014_18 );
-inline void _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c ( Context * __context__, TArray<uint8_t> & __a_rename_at_32_19, TArray<uint8_t> & __b_rename_at_32_20 );
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_3422e7731ae3fc3d ( Context * __context__, TDim<char *,3> const  & __a_rename_at_581_21 );
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_540ecf6ef9e01052 ( Context * __context__, TDim<char *,40> const  & __a_rename_at_581_22 );
-inline void _FuncbuiltinTickpushTick14133213201864676143_6efdca5732854753 ( Context * __context__, TArray<das_source_formatter::Token> & __Arr_rename_at_165_23, das_source_formatter::Token const  & __value_rename_at_165_24 );
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a ( Context * __context__, TDim<char *,22> const  & __arr_rename_at_1658_25, char * const  __key_rename_at_1658_26 );
-inline TTable<char *,void> _FuncbuiltinTickto_table_moveTick3386430563931768014_5f654e62afe15768 ( Context * __context__, TDim<char *,8> const  & __a_rename_at_1417_28 );
-inline void _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_125_31, int32_t __newSize_rename_at_125_32 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1182_33 );
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3 ( Context * __context__, TDim<char *,21> const  & __arr_rename_at_1658_34, char * const  __key_rename_at_1658_35 );
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622 ( Context * __context__, TDim<char *,11> const  & __arr_rename_at_1658_37, char * const  __key_rename_at_1658_38 );
-inline void _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65 ( Context * __context__, TArray<uint8_t> & __a_rename_at_1080_40, TArray<uint8_t> const  & __b_rename_at_1080_41 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_23aa2befa5110673 ( Context * __context__, TArray<das_source_formatter::Token> & __Arr_rename_at_181_43, das_source_formatter::Token & __value_rename_at_181_44 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_a661f9640a1075ce ( Context * __context__, TArray<das_source_formatter::FormatterToken> & __Arr_rename_at_181_45, das_source_formatter::FormatterToken & __value_rename_at_181_46 );
-inline void _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_944_47, int32_t __i_rename_at_944_48 );
-inline void _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_165_49, uint8_t __value_rename_at_165_50 );
-inline void _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_936_51, int32_t __i_rename_at_936_52 );
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856 ( Context * __context__, TDim<char *,3> const  & __arr_rename_at_1658_53, char * const  __key_rename_at_1658_54 );
-inline void finalize_b9f001def6083360 ( Context * __context__, das_source_formatter::FormatterCtx & ____this_rename_at_68_56 );
-inline void initialize_token_templates_cd924eed93b743df ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_89_57 );
-inline bool isUtf8Bom_fc921f39aa33ab23 ( Context * __context__, TArray<uint8_t> & __text_rename_at_103_64 );
-inline bool eq_1a08ceae13f47e89 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_109_65, int32_t __index_rename_at_109_66, char * const  __s_rename_at_109_67 );
-inline bool eq_32a38f27b5380f0f ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_114_68, int32_t __index_rename_at_114_69, char * const  __s0_rename_at_114_70, char * const  __s1_rename_at_114_71 );
-inline bool eq_f43d812e3a992e4 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_120_72, int32_t __index_rename_at_120_73, char * const  __s0_rename_at_120_74, char * const  __s1_rename_at_120_75, char * const  __s2_rename_at_120_76 );
-inline bool eq_886fe8d1ff63f5fd ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_126_77, int32_t __index_rename_at_126_78, char * const  __s0_rename_at_126_79, char * const  __s1_rename_at_126_80, char * const  __s2_rename_at_126_81, char * const  __s3_rename_at_126_82 );
-inline bool new_line_before_56d9a06feda36687 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_132_83, int32_t __index_rename_at_132_84 );
-inline void next_char_e34bb0a357da1559 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_137_85 );
-inline void skip_spaces_a5027bfd73b7bde6 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_179_87 );
-inline void on_token_added_6925eddc2a7ca309 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_186_88 );
-inline void push_token_92f9637f04a53e36 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_204_89, int32_t __from_char_idx_rename_at_204_90, int32_t __to_char_idx_rename_at_204_91, int32_t __space_count_rename_at_204_92, int32_t __new_lines_rename_at_204_93, int32_t __src_line_rename_at_204_94, int32_t __column_rename_at_204_95, DAS_COMMENT(enum) das_source_formatter::TokenType __token_type_rename_at_204_96 );
-inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_220_100 );
-inline void parse_all_tokens_b5d5b68330cdfcd0 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_344_119 );
-inline void update_paren_62e64d469829ae3d ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_388_122, int32_t __index_rename_at_388_123, das_source_formatter::ParenCounter & __paren_counter_rename_at_388_124 );
-inline int32_t find_pair_paren_90acbe7a3b864d93 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_425_125, int32_t __from_index_rename_at_425_126 );
-inline int32_t find_pair_square_68d9ea1d7c30e49f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_437_129, int32_t __from_index_rename_at_437_130 );
-inline int32_t find_pair_angle_89495f7d100107b7 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_449_133, int32_t __from_index_rename_at_449_134 );
-inline void mark_range_as_type_24b8f876667238a0 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_461_137, int32_t __from_rename_at_461_138, int32_t __to_rename_at_461_139 );
-inline void mark_tokens_as_type_5e4d056374f6927c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_470_141, int32_t __i_rename_at_470_142 );
-inline void mark_tokens_as_type_inside_angle_53305ce8d8ddd8cb ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_528_145, int32_t __i_rename_at_528_146 );
-inline int32_t search_token_in_line_3a9d4fd472c436b3 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_542_149, int32_t __from_index_rename_at_542_150, char * const  __str_rename_at_542_151 );
-inline void process_formatter_tokens_a63e2ffa4c8206b6 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_564_154 );
-inline bool have_formatter_token_296d7fc158126671 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_581_160, char * const  __command_rename_at_581_161 );
-inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_591_163 );
-inline void fmt_function_arguments_7d9f22d6302573cb ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_791_197 );
-inline void fmt_remove_space_before_args_26ba700ce1a53dbc ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_832_203 );
-inline void debug_print_tokens_927617e00a5e50a7 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_841_205 );
-inline char * generate_source_64706a1ce7db4983 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_848_207 );
-inline bool need_spaces_around_7179a668ae90ccd6 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_891_216, int32_t __index_rename_at_891_217 );
-inline bool need_space_only_before_584e48acb8e8a70 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_912_218, int32_t __index_rename_at_912_219 );
-inline bool is_unary_62ad92645c7f9ee6 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_956_220, int32_t __index_rename_at_956_221 );
-inline void remove_spaces_around_1c96d2bcc36445d1 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_979_223, int32_t __index_rename_at_979_224 );
-inline void make_spaces_around_9b0360b9b4d718c3 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_989_225, int32_t __index_rename_at_989_226 );
-inline void fmt_space_after_comma_7aa6a2faf3ce3f4f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_999_227 );
-inline void fmt_space_after_semicolon_29caf5fd09f6497e ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1008_229 );
-inline void fmt_remove_space_before_comma_54b9cd4ba70794e ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1017_231 );
-inline void fmt_remove_space_before_semicolon_132b81d1431b5d49 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1026_233 );
-inline void fmt_type_colon_a5b252566f4d584 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1035_235 );
-inline void fmt_function_decl_param_paren_6c291b7c3a975893 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1047_237 );
-inline void fmt_function_call_param_paren_call_f740219cd0547b48 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1062_239 );
-inline void fmt_spaces_around_operators_9837b8f174165da7 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1073_242 );
-inline void fmt_space_after_keyword_2aab289129cf4fc8 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1092_244 );
-inline void fmt_space_after_paren_a2ef6e80a339831f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1109_246 );
-inline void fmt_space_after_square_brackets_15fb170c80c43d93 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1118_248 );
-inline void fmt_remove_space_inside_parens_fc44c6bd3c600b9c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1127_250 );
-inline void fmt_remove_space_before_as_bb9fc0cabc4ff729 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1139_252 );
-inline void fmt_remove_space_before_end_of_object_64e24a59c1d5b6b ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1148_254 );
-inline void fmt_remove_space_before_object_type_298f1dcfc2f7829c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1158_256 );
-inline void fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1168_258 );
-inline void fmt_glue_type_specifiers_cb3a1c8b879530ae ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1180_260 );
-inline void fmt_space_after_cast_type_446660f13b2ec290 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1200_262 );
-inline void fmt_destructure_space_e9871049a6de7d91 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1215_265 );
-inline void do_format_4835418a8469e5fa ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1224_267 );
-inline char * format_source_string_f69d100c71c99a8c ( Context * __context__, char * const  & __file_data_rename_at_1267_271 );
-inline char * format_source_58c20f6bcb79eabd ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1276_275, TArray<uint8_t> const  & __file_data_rename_at_1276_276 );
-inline char * format_source_f3ae203349d40bcb ( Context * __context__, TArray<uint8_t> const  & __file_data_rename_at_1284_277 );
-inline das_source_formatter::TokenTemplate TokenTemplate_a02a7415fdb9ba5a ( Context * __context__ );
-inline das_source_formatter::Token Token_c2eeda936a4bfe12 ( Context * __context__ );
-inline das_source_formatter::FormatterCtx FormatterCtx_d786b6c38dffada3 ( Context * __context__ );
-inline das_source_formatter::ParenCounter ParenCounter_77d11a7861c772f0 ( Context * __context__ );
+inline void finalize_470a2c87c10459f3 ( Context * __context__, das_source_formatter::TokenTemplate & ____this_rename_at_40_0 );
+inline void finalize_90b2200a89e5f7af ( Context * __context__, das_source_formatter::Token & ____this_rename_at_48_1 );
+inline void finalize_8ce52f97d3e92f29 ( Context * __context__, das_source_formatter::FormatterToken & ____this_rename_at_62_2 );
+inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_ab8b80dafe942dee ( Context * __context__, TArray<uint8_t> & __a_rename_at_50_3 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_e9811f8b8637d85b ( Context * __context__, TDim<char *,22> const  & __a_rename_at_581_4 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_4839b0184671562d ( Context * __context__, TDim<char *,21> const  & __a_rename_at_581_5 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_b38e09a15f381650 ( Context * __context__, TDim<char *,11> const  & __a_rename_at_581_6 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ee4a37bbcf70fe7d ( Context * __context__, TArray<das_source_formatter::TokenTemplate> & __a_rename_at_1234_7 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_3c986bfd8563d8b2 ( Context * __context__, TArray<das_source_formatter::Token> & __a_rename_at_1234_9 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_93cd492387de05e8 ( Context * __context__, TArray<das_source_formatter::FormatterToken> & __a_rename_at_1234_11 );
+inline void _FuncbuiltinTickresizeTick4811697762258667383_fb7a66fc6a63821a ( Context * __context__, TArray<das_source_formatter::TokenTemplate> & __Arr_rename_at_68_13, int32_t __newSize_rename_at_68_14 );
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_5f8f761d5f23964f ( Context * __context__, TTable<char *,void> const  & __Tab_rename_at_1047_15, char * const  __at_rename_at_1047_16 );
+inline void _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_7926e574de26b25d ( Context * __context__, TArray<uint8_t> & __a_rename_at_32_17, TArray<uint8_t> & __b_rename_at_32_18 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_6a9e877c15ce25b4 ( Context * __context__, TDim<char *,3> const  & __a_rename_at_581_19 );
+inline void _FuncbuiltinTickresizeTick4811697762258667383_cb951de01ca87a4e ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_20, int32_t __newSize_rename_at_68_21 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_7e6de3088c45b5fe ( Context * __context__, TDim<char *,40> const  & __a_rename_at_581_22 );
+inline void _FuncbuiltinTickpushTick14133213201864676143_7d58ec4da1ec1b17 ( Context * __context__, TArray<das_source_formatter::Token> & __Arr_rename_at_165_23, das_source_formatter::Token const  & __value_rename_at_165_24 );
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_7889f698fd41c370 ( Context * __context__, TDim<char *,22> const  & __arr_rename_at_1710_25, char * const  __key_rename_at_1710_26 );
+inline TTable<char *,void> _FuncbuiltinTickto_table_moveTick3386430563931768014_c018a9675934bba9 ( Context * __context__, TDim<char *,8> const  & __a_rename_at_1469_28 );
+inline void _FuncbuiltinTickreserveTick3994685146752941225_adfb084cc10e1733 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_125_31, int32_t __newSize_rename_at_125_32 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_19613b645e94680e ( Context * __context__, TArray<uint8_t> & __a_rename_at_1234_33 );
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_eca839f98c5c2bc9 ( Context * __context__, TDim<char *,21> const  & __arr_rename_at_1710_34, char * const  __key_rename_at_1710_35 );
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_feb73043e4854e1f ( Context * __context__, TDim<char *,11> const  & __arr_rename_at_1710_37, char * const  __key_rename_at_1710_38 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_e919271fa2eab772 ( Context * __context__, TArray<das_source_formatter::Token> & __Arr_rename_at_181_40, das_source_formatter::Token & __value_rename_at_181_41 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_fc8141dc0153320a ( Context * __context__, TArray<das_source_formatter::FormatterToken> & __Arr_rename_at_181_42, das_source_formatter::FormatterToken & __value_rename_at_181_43 );
+inline void _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_944_44, int32_t __i_rename_at_944_45 );
+inline void _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_165_46, uint8_t __value_rename_at_165_47 );
+inline void _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_936_48, int32_t __i_rename_at_936_49 );
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_a4c49c41e04684c4 ( Context * __context__, TDim<char *,3> const  & __arr_rename_at_1710_50, char * const  __key_rename_at_1710_51 );
+inline void finalize_db456bcf8e957ca4 ( Context * __context__, das_source_formatter::FormatterCtx & ____this_rename_at_68_53 );
+inline void _FuncbuiltinTickcloneTick3038771811667655495_11c19903beee414c ( Context * __context__, TArray<uint8_t> & __a_rename_at_1113_54, TArray<uint8_t> const  & __b_rename_at_1113_55 );
+inline void initialize_token_templates_c0f484bb6b01366 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_89_57 );
+inline bool isUtf8Bom_d46057f250b5bf59 ( Context * __context__, TArray<uint8_t> & __text_rename_at_103_64 );
+inline bool eq_5251ca869c24b49f ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_109_65, int32_t __index_rename_at_109_66, char * const  __s_rename_at_109_67 );
+inline bool eq_3d631d49cf7e1d ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_114_68, int32_t __index_rename_at_114_69, char * const  __s0_rename_at_114_70, char * const  __s1_rename_at_114_71 );
+inline bool eq_cecc7c5a47abfe6c ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_120_72, int32_t __index_rename_at_120_73, char * const  __s0_rename_at_120_74, char * const  __s1_rename_at_120_75, char * const  __s2_rename_at_120_76 );
+inline bool eq_5ccd37f4ada4b6c8 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_126_77, int32_t __index_rename_at_126_78, char * const  __s0_rename_at_126_79, char * const  __s1_rename_at_126_80, char * const  __s2_rename_at_126_81, char * const  __s3_rename_at_126_82 );
+inline bool new_line_before_74a9e3638b00c26f ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_132_83, int32_t __index_rename_at_132_84 );
+inline void next_char_a68ee7affe47d0eb ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_137_85 );
+inline void skip_spaces_2fa97eb70a48fea7 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_179_87 );
+inline void on_token_added_ec8ba2110b19573e ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_186_88 );
+inline void push_token_cc86b5bb25bf7adc ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_204_89, int32_t __from_char_idx_rename_at_204_90, int32_t __to_char_idx_rename_at_204_91, int32_t __space_count_rename_at_204_92, int32_t __new_lines_rename_at_204_93, int32_t __src_line_rename_at_204_94, int32_t __column_rename_at_204_95, DAS_COMMENT(enum) das_source_formatter::TokenType __token_type_rename_at_204_96 );
+inline void parse_token_321b59f95fe107c9 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_220_100 );
+inline void parse_all_tokens_29fbd1ed87913a0a ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_344_119 );
+inline void update_paren_3503759ee55e89b1 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_388_122, int32_t __index_rename_at_388_123, das_source_formatter::ParenCounter & __paren_counter_rename_at_388_124 );
+inline int32_t find_pair_paren_ff2776f9d2856b4e ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_425_125, int32_t __from_index_rename_at_425_126 );
+inline int32_t find_pair_square_89e4c86c49f03d61 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_437_129, int32_t __from_index_rename_at_437_130 );
+inline int32_t find_pair_angle_43f908d2d3e3a500 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_449_133, int32_t __from_index_rename_at_449_134 );
+inline void mark_range_as_type_1c15599df80afc04 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_461_137, int32_t __from_rename_at_461_138, int32_t __to_rename_at_461_139 );
+inline void mark_tokens_as_type_ff7631c34d0e20a8 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_470_141, int32_t __i_rename_at_470_142 );
+inline void mark_tokens_as_type_inside_angle_5588509bf83aae77 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_528_145, int32_t __i_rename_at_528_146 );
+inline int32_t search_token_in_line_41b34300f8492a5f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_542_149, int32_t __from_index_rename_at_542_150, char * const  __str_rename_at_542_151 );
+inline void process_formatter_tokens_b7e8fa22d8896a75 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_564_154 );
+inline bool have_formatter_token_68c38613f91cfa3f ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_581_160, char * const  __command_rename_at_581_161 );
+inline void mark_token_context_7d9da6c542abc3d5 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_591_163 );
+inline void fmt_function_arguments_393a0d20cb9876da ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_791_197 );
+inline void fmt_remove_space_before_args_b613d1f002f609af ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_832_203 );
+inline void debug_print_tokens_d5c3886aafc47666 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_841_205 );
+inline char * generate_source_d9e23c7a7a794181 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_848_207 );
+inline bool need_spaces_around_c85752147cfda42d ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_891_216, int32_t __index_rename_at_891_217 );
+inline bool need_space_only_before_a3979a2c621820ef ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_912_218, int32_t __index_rename_at_912_219 );
+inline bool is_unary_b0c7219745029c11 ( Context * __context__, das_source_formatter::FormatterCtx const  & __ctx_rename_at_956_220, int32_t __index_rename_at_956_221 );
+inline void remove_spaces_around_203ede7b7eebc7c5 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_979_223, int32_t __index_rename_at_979_224 );
+inline void make_spaces_around_80d61c2838123a7d ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_989_225, int32_t __index_rename_at_989_226 );
+inline void fmt_space_after_comma_f91c855ec419635f ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_999_227 );
+inline void fmt_space_after_semicolon_23f19dedec62b617 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1008_229 );
+inline void fmt_remove_space_before_comma_e4ab43db37a70c74 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1017_231 );
+inline void fmt_remove_space_before_semicolon_e5d8826c5665e6be ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1026_233 );
+inline void fmt_type_colon_400b4390d7623d95 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1035_235 );
+inline void fmt_function_decl_param_paren_dac5114d61e417ed ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1047_237 );
+inline void fmt_function_call_param_paren_call_347b6df2d6483625 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1062_239 );
+inline void fmt_spaces_around_operators_53d08ef306f852f9 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1073_242 );
+inline void fmt_space_after_keyword_2536c1e9542cdc3b ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1092_244 );
+inline void fmt_space_after_paren_82d46f74b7d5652 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1114_246 );
+inline void fmt_space_after_square_brackets_fdbea403935e8e12 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1123_248 );
+inline void fmt_remove_space_inside_parens_cb72085f2dcb9ecd ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1132_250 );
+inline void fmt_remove_space_before_as_865a2960d4580501 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1144_252 );
+inline void fmt_remove_space_before_end_of_object_510336d353cc43f1 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1153_254 );
+inline void fmt_remove_space_before_object_type_fff6f6cd3369398c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1163_256 );
+inline void fmt_remove_space_before_array_of_type_fa116a3241d9e90c ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1173_258 );
+inline void fmt_glue_type_specifiers_538bf5888d1be714 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1185_260 );
+inline void fmt_space_after_cast_type_5d3d2f4d38f83d01 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1205_262 );
+inline void fmt_destructure_space_2fcf524fd08df174 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1220_265 );
+inline void do_format_ff67931097f9f551 ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1229_267 );
+inline char * format_source_string_53ea2afc74eb7140 ( Context * __context__, char * const  & __file_data_rename_at_1272_271 );
+inline char * format_source_555ab24d2bad5d9a ( Context * __context__, das_source_formatter::FormatterCtx & __ctx_rename_at_1281_275, TArray<uint8_t> const  & __file_data_rename_at_1281_276 );
+inline char * format_source_82aae480574c279c ( Context * __context__, TArray<uint8_t> const  & __file_data_rename_at_1289_277 );
+inline das_source_formatter::TokenTemplate TokenTemplate_bb20a1d61f51dcf0 ( Context * __context__ );
+inline das_source_formatter::Token Token_43fa8756d37aefe0 ( Context * __context__ );
+inline das_source_formatter::FormatterCtx FormatterCtx_7640c15af9f3493d ( Context * __context__ );
+inline das_source_formatter::ParenCounter ParenCounter_76ee88379e1e5165 ( Context * __context__ );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -588,311 +588,311 @@ void __init_script ( Context * __context__, bool __init_shared )
         return __mka_1089;
     })());/*space_after_keywords*/
     das_global<TDim<char *,3>,0xca374635aa15cd66>(__context__) = (([&]() -> TDim<char *,3> {
-        TDim<char *,3> __mka_1178;
-        __mka_1178(0,__context__) = ((char *) "?");
-        __mka_1178(1,__context__) = ((char *) "&");
-        __mka_1178(2,__context__) = ((char *) "#");
-        return __mka_1178;
+        TDim<char *,3> __mka_1183;
+        __mka_1183(0,__context__) = ((char *) "?");
+        __mka_1183(1,__context__) = ((char *) "&");
+        __mka_1183(2,__context__) = ((char *) "#");
+        return __mka_1183;
     })());/*type_specifiers*/
 }
 
-inline void finalize_6a9d04f899c816ac ( Context * __context__, das_source_formatter::TokenTemplate &  ____this_rename_at_40_0 )
+inline void finalize_470a2c87c10459f3 ( Context * __context__, das_source_formatter::TokenTemplate &  ____this_rename_at_40_0 )
 {
-    _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_40_0.codes));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_19613b645e94680e(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_40_0.codes));
     memset((void*)&(____this_rename_at_40_0), 0, TypeSize<das_source_formatter::TokenTemplate>::size);
 }
 
-inline void finalize_597eb4e562707157 ( Context * __context__, das_source_formatter::Token &  ____this_rename_at_48_1 )
+inline void finalize_90b2200a89e5f7af ( Context * __context__, das_source_formatter::Token &  ____this_rename_at_48_1 )
 {
     memset((void*)&(____this_rename_at_48_1), 0, TypeSize<das_source_formatter::Token>::size);
 }
 
-inline void finalize_d6c2d9467df86ea8 ( Context * __context__, das_source_formatter::FormatterToken &  ____this_rename_at_62_2 )
+inline void finalize_8ce52f97d3e92f29 ( Context * __context__, das_source_formatter::FormatterToken &  ____this_rename_at_62_2 )
 {
     memset((void*)&(____this_rename_at_62_2), 0, TypeSize<das_source_formatter::FormatterToken>::size);
 }
 
-inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e ( Context * __context__, TArray<uint8_t> &  __a_rename_at_50_3 )
+inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_ab8b80dafe942dee ( Context * __context__, TArray<uint8_t> &  __a_rename_at_50_3 )
 {
     das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_0,cast<TArray<uint8_t> &>::from(__a_rename_at_50_3)));
     return das_auto_cast_ref<TArray<uint8_t> &>::cast(__a_rename_at_50_3);
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_37238c3cdaec478a ( Context * __context__, TDim<char *,22> const  &  __a_rename_at_581_4 )
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_e9811f8b8637d85b ( Context * __context__, TDim<char *,22> const  &  __a_rename_at_581_4 )
 {
     return das_auto_cast<int32_t>::cast(22);
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_94b9be375031ddbc ( Context * __context__, TDim<char *,21> const  &  __a_rename_at_581_5 )
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_4839b0184671562d ( Context * __context__, TDim<char *,21> const  &  __a_rename_at_581_5 )
 {
     return das_auto_cast<int32_t>::cast(21);
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_9778601c0167a631 ( Context * __context__, TDim<char *,11> const  &  __a_rename_at_581_6 )
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_b38e09a15f381650 ( Context * __context__, TDim<char *,11> const  &  __a_rename_at_581_6 )
 {
     return das_auto_cast<int32_t>::cast(11);
 }
 
-inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_68_7, int32_t __newSize_rename_at_68_8 )
-{
-    builtin_array_resize(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_68_7),__newSize_rename_at_68_8,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-}
-
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5f7a4e8904f8977e ( Context * __context__, TArray<das_source_formatter::TokenTemplate> &  __a_rename_at_1182_9 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ee4a37bbcf70fe7d ( Context * __context__, TArray<das_source_formatter::TokenTemplate> &  __a_rename_at_1234_7 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1236 = true;
         // aV: das_source_formatter::TokenTemplate aka TT&
-        das_iterator<TArray<das_source_formatter::TokenTemplate>> __aV_iterator(__a_rename_at_1182_9);
-        das_source_formatter::TokenTemplate * __aV_rename_at_1184_10;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_10)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_10)) )
+        das_iterator<TArray<das_source_formatter::TokenTemplate>> __aV_iterator(__a_rename_at_1234_7);
+        das_source_formatter::TokenTemplate * __aV_rename_at_1236_8;
+        __need_loop_1236 = __aV_iterator.first(__context__,(__aV_rename_at_1236_8)) && __need_loop_1236;
+        for ( ; __need_loop_1236 ; __need_loop_1236 = __aV_iterator.next(__context__,(__aV_rename_at_1236_8)) )
         {
-            finalize_6a9d04f899c816ac(__context__,das_arg<das_source_formatter::TokenTemplate>::pass((*__aV_rename_at_1184_10)));
+            finalize_470a2c87c10459f3(__context__,das_arg<das_source_formatter::TokenTemplate>::pass((*__aV_rename_at_1236_8)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_10));
+        __aV_iterator.close(__context__,(__aV_rename_at_1236_8));
     };
-    builtin_array_free(das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__a_rename_at_1182_9),48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__a_rename_at_1234_7),48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_d46b5589c5f4f04b ( Context * __context__, TArray<das_source_formatter::Token> &  __a_rename_at_1182_11 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_3c986bfd8563d8b2 ( Context * __context__, TArray<das_source_formatter::Token> &  __a_rename_at_1234_9 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1236 = true;
         // aV: das_source_formatter::Token aka TT&
-        das_iterator<TArray<das_source_formatter::Token>> __aV_iterator(__a_rename_at_1182_11);
-        das_source_formatter::Token * __aV_rename_at_1184_12;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_12)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_12)) )
+        das_iterator<TArray<das_source_formatter::Token>> __aV_iterator(__a_rename_at_1234_9);
+        das_source_formatter::Token * __aV_rename_at_1236_10;
+        __need_loop_1236 = __aV_iterator.first(__context__,(__aV_rename_at_1236_10)) && __need_loop_1236;
+        for ( ; __need_loop_1236 ; __need_loop_1236 = __aV_iterator.next(__context__,(__aV_rename_at_1236_10)) )
         {
-            finalize_597eb4e562707157(__context__,das_arg<das_source_formatter::Token>::pass((*__aV_rename_at_1184_12)));
+            finalize_90b2200a89e5f7af(__context__,das_arg<das_source_formatter::Token>::pass((*__aV_rename_at_1236_10)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_12));
+        __aV_iterator.close(__context__,(__aV_rename_at_1236_10));
     };
-    builtin_array_free(das_arg<TArray<das_source_formatter::Token>>::pass(__a_rename_at_1182_11),32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<das_source_formatter::Token>>::pass(__a_rename_at_1234_9),32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_b4e09f66b8118eb0 ( Context * __context__, TArray<das_source_formatter::FormatterToken> &  __a_rename_at_1182_13 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_93cd492387de05e8 ( Context * __context__, TArray<das_source_formatter::FormatterToken> &  __a_rename_at_1234_11 )
 {
     {
-        bool __need_loop_1184 = true;
+        bool __need_loop_1236 = true;
         // aV: das_source_formatter::FormatterToken aka TT&
-        das_iterator<TArray<das_source_formatter::FormatterToken>> __aV_iterator(__a_rename_at_1182_13);
-        das_source_formatter::FormatterToken * __aV_rename_at_1184_14;
-        __need_loop_1184 = __aV_iterator.first(__context__,(__aV_rename_at_1184_14)) && __need_loop_1184;
-        for ( ; __need_loop_1184 ; __need_loop_1184 = __aV_iterator.next(__context__,(__aV_rename_at_1184_14)) )
+        das_iterator<TArray<das_source_formatter::FormatterToken>> __aV_iterator(__a_rename_at_1234_11);
+        das_source_formatter::FormatterToken * __aV_rename_at_1236_12;
+        __need_loop_1236 = __aV_iterator.first(__context__,(__aV_rename_at_1236_12)) && __need_loop_1236;
+        for ( ; __need_loop_1236 ; __need_loop_1236 = __aV_iterator.next(__context__,(__aV_rename_at_1236_12)) )
         {
-            finalize_d6c2d9467df86ea8(__context__,das_arg<das_source_formatter::FormatterToken>::pass((*__aV_rename_at_1184_14)));
+            finalize_8ce52f97d3e92f29(__context__,das_arg<das_source_formatter::FormatterToken>::pass((*__aV_rename_at_1236_12)));
         }
-        __aV_iterator.close(__context__,(__aV_rename_at_1184_14));
+        __aV_iterator.close(__context__,(__aV_rename_at_1236_12));
     };
-    builtin_array_free(das_arg<TArray<das_source_formatter::FormatterToken>>::pass(__a_rename_at_1182_13),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<das_source_formatter::FormatterToken>>::pass(__a_rename_at_1234_11),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickresizeTick4811697762258667383_4a7556d56e5a6ac1 ( Context * __context__, TArray<das_source_formatter::TokenTemplate> &  __Arr_rename_at_68_15, int32_t __newSize_rename_at_68_16 )
+inline void _FuncbuiltinTickresizeTick4811697762258667383_fb7a66fc6a63821a ( Context * __context__, TArray<das_source_formatter::TokenTemplate> &  __Arr_rename_at_68_13, int32_t __newSize_rename_at_68_14 )
 {
-    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_1,cast<TArray<das_source_formatter::TokenTemplate> &>::from(__Arr_rename_at_68_15)));
-    builtin_array_resize(das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__Arr_rename_at_68_15),__newSize_rename_at_68_16,48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_1,cast<TArray<das_source_formatter::TokenTemplate> &>::from(__Arr_rename_at_68_13)));
+    builtin_array_resize(das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__Arr_rename_at_68_13),__newSize_rename_at_68_14,48,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_7d01ceb11c7f2e53 ( Context * __context__, TTable<char *,void> const  &  __Tab_rename_at_1014_17, char * const  __at_rename_at_1014_18 )
+inline bool _FuncbuiltinTickkey_existsTick16808803843923989214_5f8f761d5f23964f ( Context * __context__, TTable<char *,void> const  &  __Tab_rename_at_1047_15, char * const  __at_rename_at_1047_16 )
 {
-    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1014_17,__at_rename_at_1014_18));
+    return das_auto_cast<bool>::cast(__builtin_table_key_exists(__context__,__Tab_rename_at_1047_15,__at_rename_at_1047_16));
 }
 
-inline void _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c ( Context * __context__, TArray<uint8_t> &  __a_rename_at_32_19, TArray<uint8_t> &  __b_rename_at_32_20 )
+inline void _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_7926e574de26b25d ( Context * __context__, TArray<uint8_t> &  __a_rename_at_32_17, TArray<uint8_t> &  __b_rename_at_32_18 )
 {
-    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_2,cast<TArray<uint8_t> &>::from(__a_rename_at_32_19)));
-    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_3,cast<TArray<uint8_t> &>::from(__b_rename_at_32_20)));
-    das_move(__a_rename_at_32_19,__b_rename_at_32_20);
+    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_2,cast<TArray<uint8_t> &>::from(__a_rename_at_32_17)));
+    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_3,cast<TArray<uint8_t> &>::from(__b_rename_at_32_18)));
+    das_move(__a_rename_at_32_17,__b_rename_at_32_18);
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_3422e7731ae3fc3d ( Context * __context__, TDim<char *,3> const  &  __a_rename_at_581_21 )
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_6a9e877c15ce25b4 ( Context * __context__, TDim<char *,3> const  &  __a_rename_at_581_19 )
 {
     return das_auto_cast<int32_t>::cast(3);
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_540ecf6ef9e01052 ( Context * __context__, TDim<char *,40> const  &  __a_rename_at_581_22 )
+inline void _FuncbuiltinTickresizeTick4811697762258667383_cb951de01ca87a4e ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_68_20, int32_t __newSize_rename_at_68_21 )
+{
+    builtin_array_resize(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_68_20),__newSize_rename_at_68_21,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+}
+
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_7e6de3088c45b5fe ( Context * __context__, TDim<char *,40> const  &  __a_rename_at_581_22 )
 {
     return das_auto_cast<int32_t>::cast(40);
 }
 
-inline void _FuncbuiltinTickpushTick14133213201864676143_6efdca5732854753 ( Context * __context__, TArray<das_source_formatter::Token> &  __Arr_rename_at_165_23, das_source_formatter::Token const  &  __value_rename_at_165_24 )
+inline void _FuncbuiltinTickpushTick14133213201864676143_7d58ec4da1ec1b17 ( Context * __context__, TArray<das_source_formatter::Token> &  __Arr_rename_at_165_23, das_source_formatter::Token const  &  __value_rename_at_165_24 )
 {
     das_copy(__Arr_rename_at_165_23(builtin_array_push_back(das_arg<TArray<das_source_formatter::Token>>::pass(__Arr_rename_at_165_23),32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_24);
 }
 
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a ( Context * __context__, TDim<char *,22> const  &  __arr_rename_at_1658_25, char * const  __key_rename_at_1658_26 )
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_7889f698fd41c370 ( Context * __context__, TDim<char *,22> const  &  __arr_rename_at_1710_25, char * const  __key_rename_at_1710_26 )
 {
     {
-        bool __need_loop_1659 = true;
+        bool __need_loop_1711 = true;
         // i: int const
         das_iterator<range> __i_iterator(range(0,22));
-        int32_t __i_rename_at_1659_27;
-        __need_loop_1659 = __i_iterator.first(__context__,(__i_rename_at_1659_27)) && __need_loop_1659;
-        for ( ; __need_loop_1659 ; __need_loop_1659 = __i_iterator.next(__context__,(__i_rename_at_1659_27)) )
+        int32_t __i_rename_at_1711_27;
+        __need_loop_1711 = __i_iterator.first(__context__,(__i_rename_at_1711_27)) && __need_loop_1711;
+        for ( ; __need_loop_1711 ; __need_loop_1711 = __i_iterator.next(__context__,(__i_rename_at_1711_27)) )
         {
-            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1658_25(__i_rename_at_1659_27,__context__)),cast<char *>::from(__key_rename_at_1658_26),*__context__,nullptr) )
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1710_25(__i_rename_at_1711_27,__context__)),cast<char *>::from(__key_rename_at_1710_26),*__context__,nullptr) )
             {
-                return das_auto_cast<int32_t>::cast(__i_rename_at_1659_27);
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1711_27);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1659_27));
+        __i_iterator.close(__context__,(__i_rename_at_1711_27));
     };
     return das_auto_cast<int32_t>::cast(-1);
 }
 
-inline TTable<char *,void> _FuncbuiltinTickto_table_moveTick3386430563931768014_5f654e62afe15768 ( Context * __context__, TDim<char *,8> const  &  __a_rename_at_1417_28 )
+inline TTable<char *,void> _FuncbuiltinTickto_table_moveTick3386430563931768014_c018a9675934bba9 ( Context * __context__, TDim<char *,8> const  &  __a_rename_at_1469_28 )
 {
-    TTable<char *,void> __tab_rename_at_1418_29;das_zero(__tab_rename_at_1418_29);
+    TTable<char *,void> __tab_rename_at_1470_29;das_zero(__tab_rename_at_1470_29);
     {
-        bool __need_loop_1419 = true;
+        bool __need_loop_1471 = true;
         // at: string aka keyT const&
-        das_iterator<TDim<char *,8> const > __at_iterator(__a_rename_at_1417_28);
-        char * const  * __at_rename_at_1419_30;
-        __need_loop_1419 = __at_iterator.first(__context__,(__at_rename_at_1419_30)) && __need_loop_1419;
-        for ( ; __need_loop_1419 ; __need_loop_1419 = __at_iterator.next(__context__,(__at_rename_at_1419_30)) )
+        das_iterator<TDim<char *,8> const > __at_iterator(__a_rename_at_1469_28);
+        char * const  * __at_rename_at_1471_30;
+        __need_loop_1471 = __at_iterator.first(__context__,(__at_rename_at_1471_30)) && __need_loop_1471;
+        for ( ; __need_loop_1471 ; __need_loop_1471 = __at_iterator.next(__context__,(__at_rename_at_1471_30)) )
         {
-            __builtin_table_set_insert(__context__,__tab_rename_at_1418_29,(*__at_rename_at_1419_30));
+            __builtin_table_set_insert(__context__,__tab_rename_at_1470_29,(*__at_rename_at_1471_30));
         }
-        __at_iterator.close(__context__,(__at_rename_at_1419_30));
+        __at_iterator.close(__context__,(__at_rename_at_1471_30));
     };
-    return /* <- */ das_auto_cast_move<TTable<char *,void>>::cast(__tab_rename_at_1418_29);
+    return /* <- */ das_auto_cast_move<TTable<char *,void>>::cast(__tab_rename_at_1470_29);
 }
 
-inline void _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_125_31, int32_t __newSize_rename_at_125_32 )
+inline void _FuncbuiltinTickreserveTick3994685146752941225_adfb084cc10e1733 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_125_31, int32_t __newSize_rename_at_125_32 )
 {
     builtin_array_reserve(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_125_31),__newSize_rename_at_125_32,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1182_33 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_19613b645e94680e ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1234_33 )
 {
-    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1182_33),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1234_33),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3 ( Context * __context__, TDim<char *,21> const  &  __arr_rename_at_1658_34, char * const  __key_rename_at_1658_35 )
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_eca839f98c5c2bc9 ( Context * __context__, TDim<char *,21> const  &  __arr_rename_at_1710_34, char * const  __key_rename_at_1710_35 )
 {
     {
-        bool __need_loop_1659 = true;
+        bool __need_loop_1711 = true;
         // i: int const
         das_iterator<range> __i_iterator(range(0,21));
-        int32_t __i_rename_at_1659_36;
-        __need_loop_1659 = __i_iterator.first(__context__,(__i_rename_at_1659_36)) && __need_loop_1659;
-        for ( ; __need_loop_1659 ; __need_loop_1659 = __i_iterator.next(__context__,(__i_rename_at_1659_36)) )
+        int32_t __i_rename_at_1711_36;
+        __need_loop_1711 = __i_iterator.first(__context__,(__i_rename_at_1711_36)) && __need_loop_1711;
+        for ( ; __need_loop_1711 ; __need_loop_1711 = __i_iterator.next(__context__,(__i_rename_at_1711_36)) )
         {
-            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1658_34(__i_rename_at_1659_36,__context__)),cast<char *>::from(__key_rename_at_1658_35),*__context__,nullptr) )
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1710_34(__i_rename_at_1711_36,__context__)),cast<char *>::from(__key_rename_at_1710_35),*__context__,nullptr) )
             {
-                return das_auto_cast<int32_t>::cast(__i_rename_at_1659_36);
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1711_36);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1659_36));
+        __i_iterator.close(__context__,(__i_rename_at_1711_36));
     };
     return das_auto_cast<int32_t>::cast(-1);
 }
 
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622 ( Context * __context__, TDim<char *,11> const  &  __arr_rename_at_1658_37, char * const  __key_rename_at_1658_38 )
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_feb73043e4854e1f ( Context * __context__, TDim<char *,11> const  &  __arr_rename_at_1710_37, char * const  __key_rename_at_1710_38 )
 {
     {
-        bool __need_loop_1659 = true;
+        bool __need_loop_1711 = true;
         // i: int const
         das_iterator<range> __i_iterator(range(0,11));
-        int32_t __i_rename_at_1659_39;
-        __need_loop_1659 = __i_iterator.first(__context__,(__i_rename_at_1659_39)) && __need_loop_1659;
-        for ( ; __need_loop_1659 ; __need_loop_1659 = __i_iterator.next(__context__,(__i_rename_at_1659_39)) )
+        int32_t __i_rename_at_1711_39;
+        __need_loop_1711 = __i_iterator.first(__context__,(__i_rename_at_1711_39)) && __need_loop_1711;
+        for ( ; __need_loop_1711 ; __need_loop_1711 = __i_iterator.next(__context__,(__i_rename_at_1711_39)) )
         {
-            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1658_37(__i_rename_at_1659_39,__context__)),cast<char *>::from(__key_rename_at_1658_38),*__context__,nullptr) )
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1710_37(__i_rename_at_1711_39,__context__)),cast<char *>::from(__key_rename_at_1710_38),*__context__,nullptr) )
             {
-                return das_auto_cast<int32_t>::cast(__i_rename_at_1659_39);
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1711_39);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1659_39));
+        __i_iterator.close(__context__,(__i_rename_at_1711_39));
     };
     return das_auto_cast<int32_t>::cast(-1);
 }
 
-inline void _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1080_40, TArray<uint8_t> const  &  __b_rename_at_1080_41 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_e919271fa2eab772 ( Context * __context__, TArray<das_source_formatter::Token> &  __Arr_rename_at_181_40, das_source_formatter::Token &  __value_rename_at_181_41 )
 {
-    int32_t __ln_rename_at_1081_42 = ((int32_t)builtin_array_size(__b_rename_at_1080_41));
-    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__a_rename_at_1080_40),__ln_rename_at_1081_42);
-    if ( __ln_rename_at_1081_42 == 0 )
+    das_copy(__Arr_rename_at_181_40(builtin_array_push_back(das_arg<TArray<das_source_formatter::Token>>::pass(__Arr_rename_at_181_40),32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_41);
+}
+
+inline void _FuncbuiltinTickpushTick10769833213962245646_fc8141dc0153320a ( Context * __context__, TArray<das_source_formatter::FormatterToken> &  __Arr_rename_at_181_42, das_source_formatter::FormatterToken &  __value_rename_at_181_43 )
+{
+    das_copy(__Arr_rename_at_181_42(builtin_array_push_back(das_arg<TArray<das_source_formatter::FormatterToken>>::pass(__Arr_rename_at_181_42),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_43);
+}
+
+inline void _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_944_44, int32_t __i_rename_at_944_45 )
+{
+    if ( (__ctx_rename_at_944_44.tokens(__i_rename_at_944_45,__context__).dontFormat || __ctx_rename_at_944_44.tokens((__i_rename_at_944_45 - 1),__context__).dontFormat) || new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_944_44),__i_rename_at_944_45) )
     {
         return ;
     } else {
-        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1080_40(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1080_41(0,__context__))),__ln_rename_at_1081_42 * 1);
+        das_copy(__ctx_rename_at_944_44.tokens(__i_rename_at_944_45,__context__).spaces,0);
     };
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_23aa2befa5110673 ( Context * __context__, TArray<das_source_formatter::Token> &  __Arr_rename_at_181_43, das_source_formatter::Token &  __value_rename_at_181_44 )
+inline void _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_165_46, uint8_t __value_rename_at_165_47 )
 {
-    das_copy(__Arr_rename_at_181_43(builtin_array_push_back(das_arg<TArray<das_source_formatter::Token>>::pass(__Arr_rename_at_181_43),32,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_44);
+    das_copy(__Arr_rename_at_165_46(builtin_array_push_back(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_165_46),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_47);
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_a661f9640a1075ce ( Context * __context__, TArray<das_source_formatter::FormatterToken> &  __Arr_rename_at_181_45, das_source_formatter::FormatterToken &  __value_rename_at_181_46 )
+inline void _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_936_48, int32_t __i_rename_at_936_49 )
 {
-    das_copy(__Arr_rename_at_181_45(builtin_array_push_back(das_arg<TArray<das_source_formatter::FormatterToken>>::pass(__Arr_rename_at_181_45),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_46);
-}
-
-inline void _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_944_47, int32_t __i_rename_at_944_48 )
-{
-    if ( (__ctx_rename_at_944_47.tokens(__i_rename_at_944_48,__context__).dontFormat || __ctx_rename_at_944_47.tokens((__i_rename_at_944_48 - 1),__context__).dontFormat) || new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_944_47),__i_rename_at_944_48) )
+    if ( (__ctx_rename_at_936_48.tokens(__i_rename_at_936_49,__context__).dontFormat || __ctx_rename_at_936_48.tokens((__i_rename_at_936_49 - 1),__context__).dontFormat) || new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_936_48),__i_rename_at_936_49) )
     {
         return ;
     } else {
-        das_copy(__ctx_rename_at_944_47.tokens(__i_rename_at_944_48,__context__).spaces,0);
+        das_copy(__ctx_rename_at_936_48.tokens(__i_rename_at_936_49,__context__).spaces,1);
     };
 }
 
-inline void _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_165_49, uint8_t __value_rename_at_165_50 )
-{
-    das_copy(__Arr_rename_at_165_49(builtin_array_push_back(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_165_49),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_50);
-}
-
-inline void _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_936_51, int32_t __i_rename_at_936_52 )
-{
-    if ( (__ctx_rename_at_936_51.tokens(__i_rename_at_936_52,__context__).dontFormat || __ctx_rename_at_936_51.tokens((__i_rename_at_936_52 - 1),__context__).dontFormat) || new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_936_51),__i_rename_at_936_52) )
-    {
-        return ;
-    } else {
-        das_copy(__ctx_rename_at_936_51.tokens(__i_rename_at_936_52,__context__).spaces,1);
-    };
-}
-
-inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856 ( Context * __context__, TDim<char *,3> const  &  __arr_rename_at_1658_53, char * const  __key_rename_at_1658_54 )
+inline int32_t _FuncbuiltinTickfind_indexTick6703785223819426183_a4c49c41e04684c4 ( Context * __context__, TDim<char *,3> const  &  __arr_rename_at_1710_50, char * const  __key_rename_at_1710_51 )
 {
     {
-        bool __need_loop_1659 = true;
+        bool __need_loop_1711 = true;
         // i: int const
         das_iterator<range> __i_iterator(range(0,3));
-        int32_t __i_rename_at_1659_55;
-        __need_loop_1659 = __i_iterator.first(__context__,(__i_rename_at_1659_55)) && __need_loop_1659;
-        for ( ; __need_loop_1659 ; __need_loop_1659 = __i_iterator.next(__context__,(__i_rename_at_1659_55)) )
+        int32_t __i_rename_at_1711_52;
+        __need_loop_1711 = __i_iterator.first(__context__,(__i_rename_at_1711_52)) && __need_loop_1711;
+        for ( ; __need_loop_1711 ; __need_loop_1711 = __i_iterator.next(__context__,(__i_rename_at_1711_52)) )
         {
-            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1658_53(__i_rename_at_1659_55,__context__)),cast<char *>::from(__key_rename_at_1658_54),*__context__,nullptr) )
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(__arr_rename_at_1710_50(__i_rename_at_1711_52,__context__)),cast<char *>::from(__key_rename_at_1710_51),*__context__,nullptr) )
             {
-                return das_auto_cast<int32_t>::cast(__i_rename_at_1659_55);
+                return das_auto_cast<int32_t>::cast(__i_rename_at_1711_52);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1659_55));
+        __i_iterator.close(__context__,(__i_rename_at_1711_52));
     };
     return das_auto_cast<int32_t>::cast(-1);
 }
 
-inline void finalize_b9f001def6083360 ( Context * __context__, das_source_formatter::FormatterCtx &  ____this_rename_at_68_56 )
+inline void finalize_db456bcf8e957ca4 ( Context * __context__, das_source_formatter::FormatterCtx &  ____this_rename_at_68_53 )
 {
-    _FuncbuiltinTickfinalizeTick13836114024949725080_5f7a4e8904f8977e(__context__,das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(____this_rename_at_68_56.tokenTemplates));
-    _FuncbuiltinTickfinalizeTick13836114024949725080_d46b5589c5f4f04b(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(____this_rename_at_68_56.tokens));
-    _FuncbuiltinTickfinalizeTick13836114024949725080_b4e09f66b8118eb0(__context__,das_arg<TArray<das_source_formatter::FormatterToken>>::pass(____this_rename_at_68_56.formatterTokens));
-    _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_68_56.data));
-    memset((void*)&(____this_rename_at_68_56), 0, TypeSize<das_source_formatter::FormatterCtx>::size);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_ee4a37bbcf70fe7d(__context__,das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(____this_rename_at_68_53.tokenTemplates));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_3c986bfd8563d8b2(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(____this_rename_at_68_53.tokens));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_93cd492387de05e8(__context__,das_arg<TArray<das_source_formatter::FormatterToken>>::pass(____this_rename_at_68_53.formatterTokens));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_19613b645e94680e(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_68_53.data));
+    memset((void*)&(____this_rename_at_68_53), 0, TypeSize<das_source_formatter::FormatterCtx>::size);
 }
 
-inline void initialize_token_templates_cd924eed93b743df ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_89_57 )
+inline void _FuncbuiltinTickcloneTick3038771811667655495_11c19903beee414c ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1113_54, TArray<uint8_t> const  &  __b_rename_at_1113_55 )
+{
+    int32_t __ln_rename_at_1114_56 = ((int32_t)builtin_array_size(__b_rename_at_1113_55));
+    _FuncbuiltinTickresizeTick4811697762258667383_cb951de01ca87a4e(__context__,das_arg<TArray<uint8_t>>::pass(__a_rename_at_1113_54),__ln_rename_at_1114_56);
+    if ( __ln_rename_at_1114_56 == 0 )
+    {
+        return ;
+    } else {
+        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1113_54(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1113_55(0,__context__))),__ln_rename_at_1114_56 * 1);
+    };
+}
+
+inline void initialize_token_templates_c0f484bb6b01366 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_89_57 )
 {
     if ( builtin_array_size(das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__ctx_rename_at_89_57.tokenTemplates)) > 0 )
     {
         return ;
     } else {
-        _FuncbuiltinTickresizeTick4811697762258667383_4a7556d56e5a6ac1(__context__,das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__ctx_rename_at_89_57.tokenTemplates),40);
+        _FuncbuiltinTickresizeTick4811697762258667383_fb7a66fc6a63821a(__context__,das_arg<TArray<das_source_formatter::TokenTemplate>>::pass(__ctx_rename_at_89_57.tokenTemplates),40);
         {
             bool __need_loop_94 = true;
             // s: string const&
@@ -906,7 +906,7 @@ inline void initialize_token_templates_cd924eed93b743df ( Context * __context__,
             for ( ; __need_loop_94 ; __need_loop_94 = __s_iterator.next(__context__,(__s_rename_at_94_60)) && __tt_iterator.next(__context__,(__tt_rename_at_94_61)) )
             {
                 das_copy((*__tt_rename_at_94_61).str,(*__s_rename_at_94_60));
-                _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c(__context__,das_arg<TArray<uint8_t>>::pass((*__tt_rename_at_94_61).codes),das_arg<TArray<uint8_t>>::pass(das_invoke<TArray<uint8_t>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<uint8_t>{
+                _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_7926e574de26b25d(__context__,das_arg<TArray<uint8_t>>::pass((*__tt_rename_at_94_61).codes),das_arg<TArray<uint8_t>>::pass(das_invoke<TArray<uint8_t>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<uint8_t>{
                     TArray<uint8_t> ____acomp_96_21_rename_at_96_62;das_zero(____acomp_96_21_rename_at_96_62);
                     builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_96_21_rename_at_96_62),false);
                     {
@@ -917,12 +917,12 @@ inline void initialize_token_templates_cd924eed93b743df ( Context * __context__,
                         __need_loop_96 = __c_iterator.first(__context__,(__c_rename_at_96_63)) && __need_loop_96;
                         for ( ; __need_loop_96 ; __need_loop_96 = __c_iterator.next(__context__,(__c_rename_at_96_63)) )
                         {
-                            _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_96_21_rename_at_96_62),uint8_t(__c_rename_at_96_63));
+                            _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_96_21_rename_at_96_62),uint8_t(__c_rename_at_96_63));
                         }
                         __c_iterator.close(__context__,(__c_rename_at_96_63));
                     };
                     builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_96_21_rename_at_96_62),true);
-                    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_96_21_rename_at_96_62)));
+                    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_ab8b80dafe942dee(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_96_21_rename_at_96_62)));
                 })));
                 das_copy((*__tt_rename_at_94_61).firstChar,int32_t((*__tt_rename_at_94_61).codes(0,__context__)));
                 das_copy((*__tt_rename_at_94_61).length,builtin_string_length((*__s_rename_at_94_60),__context__));
@@ -933,37 +933,37 @@ inline void initialize_token_templates_cd924eed93b743df ( Context * __context__,
     };
 }
 
-inline bool isUtf8Bom_fc921f39aa33ab23 ( Context * __context__, TArray<uint8_t> &  __text_rename_at_103_64 )
+inline bool isUtf8Bom_d46057f250b5bf59 ( Context * __context__, TArray<uint8_t> &  __text_rename_at_103_64 )
 {
     return das_auto_cast<bool>::cast((((builtin_array_size(das_arg<TArray<uint8_t>>::pass(__text_rename_at_103_64)) >= 3) && (uint32_t(__text_rename_at_103_64(0,__context__)) == 0xefu)) && (uint32_t(__text_rename_at_103_64(1,__context__)) == 0xbbu)) && (uint32_t(__text_rename_at_103_64(2,__context__)) == 0xbfu));
 }
 
-inline bool eq_1a08ceae13f47e89 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_109_65, int32_t __index_rename_at_109_66, char * const  __s_rename_at_109_67 )
+inline bool eq_5251ca869c24b49f ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_109_65, int32_t __index_rename_at_109_66, char * const  __s_rename_at_109_67 )
 {
     return das_auto_cast<bool>::cast(((__index_rename_at_109_66 < 0) || (__index_rename_at_109_66 >= builtin_array_size(__ctx_rename_at_109_65.tokens))) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast((SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_109_65.tokens(__index_rename_at_109_66,__context__).str),cast<char *>::from(__s_rename_at_109_67),*__context__,nullptr))));
 }
 
-inline bool eq_32a38f27b5380f0f ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_114_68, int32_t __index_rename_at_114_69, char * const  __s0_rename_at_114_70, char * const  __s1_rename_at_114_71 )
+inline bool eq_3d631d49cf7e1d ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_114_68, int32_t __index_rename_at_114_69, char * const  __s0_rename_at_114_70, char * const  __s1_rename_at_114_71 )
 {
     return das_auto_cast<bool>::cast(((__index_rename_at_114_69 < 0) || (__index_rename_at_114_69 >= builtin_array_size(__ctx_rename_at_114_68.tokens))) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast(((SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_114_68.tokens(__index_rename_at_114_69,__context__).str),cast<char *>::from(__s0_rename_at_114_70),*__context__,nullptr)) || (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_114_68.tokens(__index_rename_at_114_69,__context__).str),cast<char *>::from(__s1_rename_at_114_71),*__context__,nullptr)))));
 }
 
-inline bool eq_f43d812e3a992e4 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_120_72, int32_t __index_rename_at_120_73, char * const  __s0_rename_at_120_74, char * const  __s1_rename_at_120_75, char * const  __s2_rename_at_120_76 )
+inline bool eq_cecc7c5a47abfe6c ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_120_72, int32_t __index_rename_at_120_73, char * const  __s0_rename_at_120_74, char * const  __s1_rename_at_120_75, char * const  __s2_rename_at_120_76 )
 {
     return das_auto_cast<bool>::cast(((__index_rename_at_120_73 < 0) || (__index_rename_at_120_73 >= builtin_array_size(__ctx_rename_at_120_72.tokens))) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast((((SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_120_72.tokens(__index_rename_at_120_73,__context__).str),cast<char *>::from(__s0_rename_at_120_74),*__context__,nullptr)) || (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_120_72.tokens(__index_rename_at_120_73,__context__).str),cast<char *>::from(__s1_rename_at_120_75),*__context__,nullptr))) || (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_120_72.tokens(__index_rename_at_120_73,__context__).str),cast<char *>::from(__s2_rename_at_120_76),*__context__,nullptr)))));
 }
 
-inline bool eq_886fe8d1ff63f5fd ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_126_77, int32_t __index_rename_at_126_78, char * const  __s0_rename_at_126_79, char * const  __s1_rename_at_126_80, char * const  __s2_rename_at_126_81, char * const  __s3_rename_at_126_82 )
+inline bool eq_5ccd37f4ada4b6c8 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_126_77, int32_t __index_rename_at_126_78, char * const  __s0_rename_at_126_79, char * const  __s1_rename_at_126_80, char * const  __s2_rename_at_126_81, char * const  __s3_rename_at_126_82 )
 {
     return das_auto_cast<bool>::cast(((__index_rename_at_126_78 < 0) || (__index_rename_at_126_78 >= builtin_array_size(__ctx_rename_at_126_77.tokens))) ? das_auto_cast<bool>::cast(false) : das_auto_cast<bool>::cast(((((SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_126_77.tokens(__index_rename_at_126_78,__context__).str),cast<char *>::from(__s0_rename_at_126_79),*__context__,nullptr)) || (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_126_77.tokens(__index_rename_at_126_78,__context__).str),cast<char *>::from(__s1_rename_at_126_80),*__context__,nullptr))) || (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_126_77.tokens(__index_rename_at_126_78,__context__).str),cast<char *>::from(__s2_rename_at_126_81),*__context__,nullptr))) || (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_126_77.tokens(__index_rename_at_126_78,__context__).str),cast<char *>::from(__s3_rename_at_126_82),*__context__,nullptr)))));
 }
 
-inline bool new_line_before_56d9a06feda36687 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_132_83, int32_t __index_rename_at_132_84 )
+inline bool new_line_before_74a9e3638b00c26f ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_132_83, int32_t __index_rename_at_132_84 )
 {
     return das_auto_cast<bool>::cast(((__index_rename_at_132_84 <= 1) || (__index_rename_at_132_84 >= builtin_array_size(__ctx_rename_at_132_83.tokens))) ? das_auto_cast<bool>::cast(true) : das_auto_cast<bool>::cast((__ctx_rename_at_132_83.tokens(__index_rename_at_132_84,__context__).newLines > 0)));
 }
 
-inline void next_char_e34bb0a357da1559 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_137_85 )
+inline void next_char_a68ee7affe47d0eb ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_137_85 )
 {
     das_copy(__ctx_rename_at_137_85.c,int32_t(__ctx_rename_at_137_85.data(__ctx_rename_at_137_85.pos,__context__)));
     if ( __ctx_rename_at_137_85.c == 0 )
@@ -1007,21 +1007,21 @@ inline void next_char_e34bb0a357da1559 ( Context * __context__, das_source_forma
     };
 }
 
-inline void skip_spaces_a5027bfd73b7bde6 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_179_87 )
+inline void skip_spaces_2fa97eb70a48fea7 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_179_87 )
 {
     while ( (((__ctx_rename_at_179_87.c == 32) || (__ctx_rename_at_179_87.c == 9)) || (__ctx_rename_at_179_87.c == 13)) || (__ctx_rename_at_179_87.c == 10) )
     {
-        next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_179_87));
+        next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_179_87));
     };
 }
 
-inline void on_token_added_6925eddc2a7ca309 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_186_88 )
+inline void on_token_added_ec8ba2110b19573e ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_186_88 )
 {
     if ( (((__ctx_rename_at_186_88.indenting == 0) && (__ctx_rename_at_186_88.newLineCounter > 0)) && (__ctx_rename_at_186_88.spaceCounter > 0)) && (__ctx_rename_at_186_88.tokens((builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_186_88.tokens)) - 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT) )
     {
         das_copy(__ctx_rename_at_186_88.indenting,__ctx_rename_at_186_88.spaceCounter);
     };
-    if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_186_88),builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_186_88.tokens)) - 1) )
+    if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_186_88),builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_186_88.tokens)) - 1) )
     {
         das_copy(__ctx_rename_at_186_88.insideOptions,false);
         if ( SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_186_88.tokens((builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_186_88.tokens)) - 1),__context__).str),cast<char *>::from(((char *) "options")),*__context__,nullptr) )
@@ -1035,12 +1035,12 @@ inline void on_token_added_6925eddc2a7ca309 ( Context * __context__, das_source_
     };
 }
 
-inline void push_token_92f9637f04a53e36 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_204_89, int32_t __from_char_idx_rename_at_204_90, int32_t __to_char_idx_rename_at_204_91, int32_t __space_count_rename_at_204_92, int32_t __new_lines_rename_at_204_93, int32_t __src_line_rename_at_204_94, int32_t __column_rename_at_204_95, DAS_COMMENT(enum) das_source_formatter::TokenType __token_type_rename_at_204_96 )
+inline void push_token_cc86b5bb25bf7adc ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_204_89, int32_t __from_char_idx_rename_at_204_90, int32_t __to_char_idx_rename_at_204_91, int32_t __space_count_rename_at_204_92, int32_t __new_lines_rename_at_204_93, int32_t __src_line_rename_at_204_94, int32_t __column_rename_at_204_95, DAS_COMMENT(enum) das_source_formatter::TokenType __token_type_rename_at_204_96 )
 {
     TArray<uint8_t> __buf_rename_at_205_97; memset((void*)&__buf_rename_at_205_97,0,sizeof(__buf_rename_at_205_97));
-    das_source_formatter::Token _temp_make_local_206_23_176; _temp_make_local_206_23_176;
+    das_source_formatter::Token _temp_make_local_206_23_0; _temp_make_local_206_23_0;
     /* finally */ auto __finally_204= das_finally([&](){
-    _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(__buf_rename_at_205_97));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_19613b645e94680e(__context__,das_arg<TArray<uint8_t>>::pass(__buf_rename_at_205_97));
     /* end finally */ });
     __buf_rename_at_205_97; das_zero(__buf_rename_at_205_97); das_move(__buf_rename_at_205_97, das_invoke<TArray<uint8_t>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<uint8_t>{
         TArray<uint8_t> ____acomp_205_17_rename_at_205_98;das_zero(____acomp_205_17_rename_at_205_98);
@@ -1053,34 +1053,34 @@ inline void push_token_92f9637f04a53e36 ( Context * __context__, das_source_form
             __need_loop_205 = __i_iterator.first(__context__,(__i_rename_at_205_99)) && __need_loop_205;
             for ( ; __need_loop_205 ; __need_loop_205 = __i_iterator.next(__context__,(__i_rename_at_205_99)) )
             {
-                _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_205_17_rename_at_205_98),uint8_t(__ctx_rename_at_204_89.data(__i_rename_at_205_99,__context__)));
+                _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_205_17_rename_at_205_98),uint8_t(__ctx_rename_at_204_89.data(__i_rename_at_205_99,__context__)));
             }
             __i_iterator.close(__context__,(__i_rename_at_205_99));
         };
         builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_205_17_rename_at_205_98),true);
         return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(____acomp_205_17_rename_at_205_98);
     }));
-    _FuncbuiltinTickpushTick10769833213962245646_23aa2befa5110673(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_204_89.tokens),das_arg<das_source_formatter::Token>::pass((([&]() -> das_source_formatter::Token& {
-        _temp_make_local_206_23_176 = Token_c2eeda936a4bfe12(__context__);
-        das_copy((_temp_make_local_206_23_176.str),(((char * const )(builtin_string_from_array(das_arg<TArray<uint8_t>>::pass(__buf_rename_at_205_97),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
-        das_copy((_temp_make_local_206_23_176.spaces),(__space_count_rename_at_204_92));
-        das_copy((_temp_make_local_206_23_176.newLines),(__new_lines_rename_at_204_93));
-        das_copy((_temp_make_local_206_23_176.lineInSource),(__src_line_rename_at_204_94));
-        das_copy((_temp_make_local_206_23_176.column),(__column_rename_at_204_95));
-        das_copy((_temp_make_local_206_23_176.tokenType),(__token_type_rename_at_204_96));
-        return _temp_make_local_206_23_176;
+    _FuncbuiltinTickpushTick10769833213962245646_e919271fa2eab772(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_204_89.tokens),das_arg<das_source_formatter::Token>::pass((([&]() -> das_source_formatter::Token& {
+        _temp_make_local_206_23_0 = Token_43fa8756d37aefe0(__context__);
+        das_copy((_temp_make_local_206_23_0.str),(((char * const )(builtin_string_from_array(das_arg<TArray<uint8_t>>::pass(__buf_rename_at_205_97),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
+        das_copy((_temp_make_local_206_23_0.spaces),(__space_count_rename_at_204_92));
+        das_copy((_temp_make_local_206_23_0.newLines),(__new_lines_rename_at_204_93));
+        das_copy((_temp_make_local_206_23_0.lineInSource),(__src_line_rename_at_204_94));
+        das_copy((_temp_make_local_206_23_0.column),(__column_rename_at_204_95));
+        das_copy((_temp_make_local_206_23_0.tokenType),(__token_type_rename_at_204_96));
+        return _temp_make_local_206_23_0;
     })())));
-    on_token_added_6925eddc2a7ca309(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_204_89));
+    on_token_added_ec8ba2110b19573e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_204_89));
     das_copy(__ctx_rename_at_204_89.spaceCounter,0);
     das_copy(__ctx_rename_at_204_89.newLineCounter,0);
 }
 
-inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_220_100 )
+inline void parse_token_321b59f95fe107c9 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_220_100 )
 {
-    skip_spaces_a5027bfd73b7bde6(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+    skip_spaces_2fa97eb70a48fea7(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
     if ( __ctx_rename_at_220_100.eof )
     {
-        _FuncbuiltinTickpushTick10769833213962245646_23aa2befa5110673(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_220_100.tokens),das_arg<das_source_formatter::Token>::pass(__ctx_rename_at_220_100.tokens(0,__context__)));
+        _FuncbuiltinTickpushTick10769833213962245646_e919271fa2eab772(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_220_100.tokens),das_arg<das_source_formatter::Token>::pass(__ctx_rename_at_220_100.tokens(0,__context__)));
         return ;
     } else {
         int32_t __from_rename_at_227_101 = ((int32_t)__ctx_rename_at_220_100.pos);
@@ -1089,18 +1089,18 @@ inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_for
         {
             while ( !(__ctx_rename_at_220_100.eof) && (((is_alpha(__ctx_rename_at_220_100.c) || is_number(__ctx_rename_at_220_100.c)) || (__ctx_rename_at_220_100.c == 95)) || (__ctx_rename_at_220_100.c == 96)) )
             {
-                next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
             };
-            push_token_92f9637f04a53e36(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__ctx_rename_at_220_100.spaceCounter,__ctx_rename_at_220_100.newLineCounter,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER);
+            push_token_cc86b5bb25bf7adc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__ctx_rename_at_220_100.spaceCounter,__ctx_rename_at_220_100.newLineCounter,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER);
             return ;
         } else {
             if ( is_number(__ctx_rename_at_220_100.c) || ((__ctx_rename_at_220_100.c == 46) && is_number(int32_t(__ctx_rename_at_220_100.data((__ctx_rename_at_220_100.pos + 1),__context__)))) )
             {
                 while ( !(__ctx_rename_at_220_100.eof) && (((is_number(__ctx_rename_at_220_100.c) || is_alpha(__ctx_rename_at_220_100.c)) || (__ctx_rename_at_220_100.c == 46)) || (((__ctx_rename_at_220_100.c == 45) || (__ctx_rename_at_220_100.c == 43)) && ((int32_t(__ctx_rename_at_220_100.data((__ctx_rename_at_220_100.pos - 1),__context__)) == 101) || (int32_t(__ctx_rename_at_220_100.data((__ctx_rename_at_220_100.pos - 1),__context__)) == 69)))) )
                 {
-                    next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                    next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                 };
-                push_token_92f9637f04a53e36(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__ctx_rename_at_220_100.spaceCounter,__ctx_rename_at_220_100.newLineCounter,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::NUMBER);
+                push_token_cc86b5bb25bf7adc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__ctx_rename_at_220_100.spaceCounter,__ctx_rename_at_220_100.newLineCounter,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::NUMBER);
                 return ;
             } else {
                 if ( (__ctx_rename_at_220_100.c == 34) || (__ctx_rename_at_220_100.c == 39) )
@@ -1109,7 +1109,7 @@ inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_for
                     int32_t __savedSpace_rename_at_252_104 = ((int32_t)__ctx_rename_at_220_100.spaceCounter);
                     int32_t __openChar_rename_at_253_105 = ((int32_t)__ctx_rename_at_220_100.c);
                     int32_t __depth_rename_at_254_106 = 0;
-                    next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                    next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                     while ( !(__ctx_rename_at_220_100.eof) && ((__ctx_rename_at_220_100.c != __openChar_rename_at_253_105) || (__depth_rename_at_254_106 > 0)) )
                     {
                         if ( (__ctx_rename_at_220_100.c == 123) && (__openChar_rename_at_253_105 == 34) )
@@ -1122,15 +1122,15 @@ inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_for
                         };
                         if ( __ctx_rename_at_220_100.c == 92 )
                         {
-                            next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                            next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                         };
-                        next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                        next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                     };
                     if ( __ctx_rename_at_220_100.c == __openChar_rename_at_253_105 )
                     {
-                        next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                        next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                     };
-                    push_token_92f9637f04a53e36(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__savedSpace_rename_at_252_104,__savedLine_rename_at_251_103,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::STRING);
+                    push_token_cc86b5bb25bf7adc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__savedSpace_rename_at_252_104,__savedLine_rename_at_251_103,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::STRING);
                     return ;
                 } else {
                     if ( (__ctx_rename_at_220_100.c == 47) && (int32_t(__ctx_rename_at_220_100.data((__ctx_rename_at_220_100.pos + 1),__context__)) == 47) )
@@ -1139,17 +1139,17 @@ inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_for
                         int32_t __savedSpace_rename_at_280_108 = ((int32_t)__ctx_rename_at_220_100.spaceCounter);
                         while ( (!(__ctx_rename_at_220_100.eof) && (__ctx_rename_at_220_100.c != 10)) && (__ctx_rename_at_220_100.c != 13) )
                         {
-                            next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                            next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                         };
-                        push_token_92f9637f04a53e36(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__savedSpace_rename_at_280_108,__savedLine_rename_at_279_107,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT);
+                        push_token_cc86b5bb25bf7adc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__savedSpace_rename_at_280_108,__savedLine_rename_at_279_107,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT);
                         return ;
                     } else {
                         if ( (__ctx_rename_at_220_100.c == 47) && (int32_t(__ctx_rename_at_220_100.data((__ctx_rename_at_220_100.pos + 1),__context__)) == 42) )
                         {
                             int32_t __savedLine_rename_at_290_109 = ((int32_t)__ctx_rename_at_220_100.newLineCounter);
                             int32_t __savedSpace_rename_at_291_110 = ((int32_t)__ctx_rename_at_220_100.spaceCounter);
-                            next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
-                            next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                            next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                            next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                             int32_t __depth_rename_at_294_111 = 1;
                             while ( !__ctx_rename_at_220_100.eof )
                             {
@@ -1160,19 +1160,19 @@ inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_for
                                     {
                                         break;
                                     } else {
-                                        next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                                        next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                                     };
                                 };
                                 if ( (__ctx_rename_at_220_100.c == 47) && (int32_t(__ctx_rename_at_220_100.data((__ctx_rename_at_220_100.pos + 1),__context__)) == 42) )
                                 {
-                                    next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                                    next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                                     __depth_rename_at_294_111 += 1;
                                 };
-                                next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                                next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                             };
-                            next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
-                            next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
-                            push_token_92f9637f04a53e36(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__savedSpace_rename_at_291_110,__savedLine_rename_at_290_109,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT);
+                            next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                            next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                            push_token_cc86b5bb25bf7adc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__savedSpace_rename_at_291_110,__savedLine_rename_at_290_109,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT);
                             return ;
                         } else {
                             {
@@ -1217,19 +1217,19 @@ inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_for
                                                 __need_loop_328 = ____iterator.first(__context__,(____rename_at_328_118)) && __need_loop_328;
                                                 for ( ; __need_loop_328 ; __need_loop_328 = ____iterator.next(__context__,(____rename_at_328_118)) )
                                                 {
-                                                    next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                                                    next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
                                                 }
                                                 ____iterator.close(__context__,(____rename_at_328_118));
                                             };
-                                            push_token_92f9637f04a53e36(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__ctx_rename_at_220_100.spaceCounter,__ctx_rename_at_220_100.newLineCounter,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN);
+                                            push_token_cc86b5bb25bf7adc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__ctx_rename_at_220_100.spaceCounter,__ctx_rename_at_220_100.newLineCounter,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN);
                                             return ;
                                         };
                                     };
                                 }
                                 __tt_iterator.close(__context__,(__tt_rename_at_318_112));
                             };
-                            next_char_e34bb0a357da1559(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
-                            push_token_92f9637f04a53e36(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__ctx_rename_at_220_100.spaceCounter,__ctx_rename_at_220_100.newLineCounter,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN);
+                            next_char_a68ee7affe47d0eb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100));
+                            push_token_cc86b5bb25bf7adc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_220_100),__from_rename_at_227_101,__ctx_rename_at_220_100.pos,__ctx_rename_at_220_100.spaceCounter,__ctx_rename_at_220_100.newLineCounter,__ctx_rename_at_220_100.srcLine,__fromColumn_rename_at_228_102,DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN);
                             return ;
                         };
                     };
@@ -1239,16 +1239,16 @@ inline void parse_token_95969fa7ff7b12c4 ( Context * __context__, das_source_for
     };
 }
 
-inline void parse_all_tokens_b5d5b68330cdfcd0 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_344_119 )
+inline void parse_all_tokens_29fbd1ed87913a0a ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_344_119 )
 {
-    initialize_token_templates_cd924eed93b743df(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_344_119));
+    initialize_token_templates_c0f484bb6b01366(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_344_119));
     das_source_formatter::Token __emptyToken_rename_at_346_120_ConstRef; das_zero(__emptyToken_rename_at_346_120_ConstRef); das_move(__emptyToken_rename_at_346_120_ConstRef, ((das_source_formatter::Token)(([&]() -> das_source_formatter::Token {
-        das_source_formatter::Token __mks_346 = Token_c2eeda936a4bfe12(__context__);
+        das_source_formatter::Token __mks_346 = Token_43fa8756d37aefe0(__context__);
         return __mks_346;
     })())));
     das_source_formatter::Token const  & __emptyToken_rename_at_346_120 = __emptyToken_rename_at_346_120_ConstRef; ;
     builtin_array_clear(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_344_119.tokens),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    _FuncbuiltinTickpushTick14133213201864676143_6efdca5732854753(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_344_119.tokens),__emptyToken_rename_at_346_120);
+    _FuncbuiltinTickpushTick14133213201864676143_7d58ec4da1ec1b17(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_344_119.tokens),__emptyToken_rename_at_346_120);
     das_copy(__ctx_rename_at_344_119.pos,0);
     das_copy(__ctx_rename_at_344_119.eof,false);
     das_copy(__ctx_rename_at_344_119.haveUtf8Bom,false);
@@ -1260,7 +1260,7 @@ inline void parse_all_tokens_b5d5b68330cdfcd0 ( Context * __context__, das_sourc
     das_copy(__ctx_rename_at_344_119.insideOptions,false);
     das_copy(__ctx_rename_at_344_119.crCount,0);
     das_copy(__ctx_rename_at_344_119.lfCount,0);
-    if ( isUtf8Bom_fc921f39aa33ab23(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_344_119.data)) )
+    if ( isUtf8Bom_d46057f250b5bf59(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_344_119.data)) )
     {
         __ctx_rename_at_344_119.pos += 3;
         das_copy(__ctx_rename_at_344_119.haveUtf8Bom,true);
@@ -1269,7 +1269,7 @@ inline void parse_all_tokens_b5d5b68330cdfcd0 ( Context * __context__, das_sourc
     das_copy(__ctx_rename_at_344_119.curLineIndex,__ctx_rename_at_344_119.pos);
     while ( !__ctx_rename_at_344_119.eof )
     {
-        parse_token_95969fa7ff7b12c4(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_344_119));
+        parse_token_321b59f95fe107c9(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_344_119));
     };
     {
         bool __need_loop_373 = true;
@@ -1279,61 +1279,61 @@ inline void parse_all_tokens_b5d5b68330cdfcd0 ( Context * __context__, das_sourc
         __need_loop_373 = ____iterator.first(__context__,(____rename_at_373_121)) && __need_loop_373;
         for ( ; __need_loop_373 ; __need_loop_373 = ____iterator.next(__context__,(____rename_at_373_121)) )
         {
-            _FuncbuiltinTickpushTick14133213201864676143_6efdca5732854753(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_344_119.tokens),__emptyToken_rename_at_346_120);
+            _FuncbuiltinTickpushTick14133213201864676143_7d58ec4da1ec1b17(__context__,das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_344_119.tokens),__emptyToken_rename_at_346_120);
         }
         ____iterator.close(__context__,(____rename_at_373_121));
     };
 }
 
-inline void update_paren_62e64d469829ae3d ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_388_122, int32_t __index_rename_at_388_123, das_source_formatter::ParenCounter &  __paren_counter_rename_at_388_124 )
+inline void update_paren_3503759ee55e89b1 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_388_122, int32_t __index_rename_at_388_123, das_source_formatter::ParenCounter &  __paren_counter_rename_at_388_124 )
 {
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "<")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "<")) )
     {
         ++__paren_counter_rename_at_388_124.angle;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) ">")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) ">")) )
     {
         --__paren_counter_rename_at_388_124.angle;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) ">>")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) ">>")) )
     {
         __paren_counter_rename_at_388_124.angle -= 2;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) ">>>")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) ">>>")) )
     {
         __paren_counter_rename_at_388_124.angle -= 3;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "(")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "(")) )
     {
         ++__paren_counter_rename_at_388_124.paren;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) ")")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) ")")) )
     {
         --__paren_counter_rename_at_388_124.paren;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "[")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "[")) )
     {
         ++__paren_counter_rename_at_388_124.square;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "?[")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "?[")) )
     {
         ++__paren_counter_rename_at_388_124.square;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "]")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "]")) )
     {
         --__paren_counter_rename_at_388_124.square;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "{")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "{")) )
     {
         ++__paren_counter_rename_at_388_124.curly;
     };
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "}")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_388_122),__index_rename_at_388_123,((char *) "}")) )
     {
         --__paren_counter_rename_at_388_124.curly;
     };
 }
 
-inline int32_t find_pair_paren_90acbe7a3b864d93 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_425_125, int32_t __from_index_rename_at_425_126 )
+inline int32_t find_pair_paren_ff2776f9d2856b4e ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_425_125, int32_t __from_index_rename_at_425_126 )
 {
     das_source_formatter::ParenCounter __pc_rename_at_426_127;das_zero(__pc_rename_at_426_127);
     {
@@ -1344,7 +1344,7 @@ inline int32_t find_pair_paren_90acbe7a3b864d93 ( Context * __context__, das_sou
         __need_loop_427 = __j_iterator.first(__context__,(__j_rename_at_427_128)) && __need_loop_427;
         for ( ; __need_loop_427 ; __need_loop_427 = __j_iterator.next(__context__,(__j_rename_at_427_128)) )
         {
-            update_paren_62e64d469829ae3d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_425_125),__j_rename_at_427_128,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_426_127));
+            update_paren_3503759ee55e89b1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_425_125),__j_rename_at_427_128,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_426_127));
             if ( __pc_rename_at_426_127.paren < 0 )
             {
                 return das_auto_cast<int32_t>::cast(__j_rename_at_427_128);
@@ -1355,7 +1355,7 @@ inline int32_t find_pair_paren_90acbe7a3b864d93 ( Context * __context__, das_sou
     return das_auto_cast<int32_t>::cast(__from_index_rename_at_425_126);
 }
 
-inline int32_t find_pair_square_68d9ea1d7c30e49f ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_437_129, int32_t __from_index_rename_at_437_130 )
+inline int32_t find_pair_square_89e4c86c49f03d61 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_437_129, int32_t __from_index_rename_at_437_130 )
 {
     das_source_formatter::ParenCounter __pc_rename_at_438_131;das_zero(__pc_rename_at_438_131);
     {
@@ -1366,7 +1366,7 @@ inline int32_t find_pair_square_68d9ea1d7c30e49f ( Context * __context__, das_so
         __need_loop_439 = __j_iterator.first(__context__,(__j_rename_at_439_132)) && __need_loop_439;
         for ( ; __need_loop_439 ; __need_loop_439 = __j_iterator.next(__context__,(__j_rename_at_439_132)) )
         {
-            update_paren_62e64d469829ae3d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_437_129),__j_rename_at_439_132,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_438_131));
+            update_paren_3503759ee55e89b1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_437_129),__j_rename_at_439_132,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_438_131));
             if ( __pc_rename_at_438_131.square < 0 )
             {
                 return das_auto_cast<int32_t>::cast(__j_rename_at_439_132);
@@ -1377,7 +1377,7 @@ inline int32_t find_pair_square_68d9ea1d7c30e49f ( Context * __context__, das_so
     return das_auto_cast<int32_t>::cast(__from_index_rename_at_437_130);
 }
 
-inline int32_t find_pair_angle_89495f7d100107b7 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_449_133, int32_t __from_index_rename_at_449_134 )
+inline int32_t find_pair_angle_43f908d2d3e3a500 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_449_133, int32_t __from_index_rename_at_449_134 )
 {
     das_source_formatter::ParenCounter __pc_rename_at_450_135;das_zero(__pc_rename_at_450_135);
     {
@@ -1388,7 +1388,7 @@ inline int32_t find_pair_angle_89495f7d100107b7 ( Context * __context__, das_sou
         __need_loop_451 = __j_iterator.first(__context__,(__j_rename_at_451_136)) && __need_loop_451;
         for ( ; __need_loop_451 ; __need_loop_451 = __j_iterator.next(__context__,(__j_rename_at_451_136)) )
         {
-            update_paren_62e64d469829ae3d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_449_133),__j_rename_at_451_136,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_450_135));
+            update_paren_3503759ee55e89b1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_449_133),__j_rename_at_451_136,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_450_135));
             if ( __pc_rename_at_450_135.angle < 0 )
             {
                 return das_auto_cast<int32_t>::cast(__j_rename_at_451_136);
@@ -1399,7 +1399,7 @@ inline int32_t find_pair_angle_89495f7d100107b7 ( Context * __context__, das_sou
     return das_auto_cast<int32_t>::cast(__from_index_rename_at_449_134);
 }
 
-inline void mark_range_as_type_24b8f876667238a0 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_461_137, int32_t __from_rename_at_461_138, int32_t __to_rename_at_461_139 )
+inline void mark_range_as_type_1c15599df80afc04 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_461_137, int32_t __from_rename_at_461_138, int32_t __to_rename_at_461_139 )
 {
     {
         bool __need_loop_462 = true;
@@ -1418,25 +1418,25 @@ inline void mark_range_as_type_24b8f876667238a0 ( Context * __context__, das_sou
     };
 }
 
-inline void mark_tokens_as_type_5e4d056374f6927c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_470_141, int32_t __i_rename_at_470_142 )
+inline void mark_tokens_as_type_ff7631c34d0e20a8 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_470_141, int32_t __i_rename_at_470_142 )
 {
     int32_t __pos_rename_at_471_143 = __i_rename_at_470_142;
-    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "auto")) )
+    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "auto")) )
     {
         ++__pos_rename_at_471_143;
-        if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "(")) )
+        if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "(")) )
         {
-            das_copy(__pos_rename_at_471_143,find_pair_paren_90acbe7a3b864d93(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143));
+            das_copy(__pos_rename_at_471_143,find_pair_paren_ff2776f9d2856b4e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143));
             ++__pos_rename_at_471_143;
         };
     } else {
         while ( __pos_rename_at_471_143 < builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_470_141.tokens)) )
         {
-            if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143) )
+            if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143) )
             {
                 break;
             } else {
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "::")) || (__ctx_rename_at_470_141.tokens(__pos_rename_at_471_143,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER) )
+                if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "::")) || (__ctx_rename_at_470_141.tokens(__pos_rename_at_471_143,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER) )
                 {
                     ++__pos_rename_at_471_143;
                 } else {
@@ -1444,18 +1444,18 @@ inline void mark_tokens_as_type_5e4d056374f6927c ( Context * __context__, das_so
                 };
             };
         };
-        if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "<")) )
+        if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "<")) )
         {
-            das_copy(__pos_rename_at_471_143,find_pair_angle_89495f7d100107b7(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143));
+            das_copy(__pos_rename_at_471_143,find_pair_angle_43f908d2d3e3a500(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143));
             ++__pos_rename_at_471_143;
         };
     };
-    if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143) )
+    if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143) )
     {
-        mark_range_as_type_24b8f876667238a0(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__i_rename_at_470_142,__pos_rename_at_471_143);
+        mark_range_as_type_1c15599df80afc04(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__i_rename_at_470_142,__pos_rename_at_471_143);
         return ;
     } else {
-        if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "[")) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143 + 1,((char *) "]")) )
+        if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "[")) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143 + 1,((char *) "]")) )
         {
             __pos_rename_at_471_143 += 2;
         };
@@ -1467,10 +1467,10 @@ inline void mark_tokens_as_type_5e4d056374f6927c ( Context * __context__, das_so
             __need_loop_507 = __j_iterator.first(__context__,(__j_rename_at_507_144)) && __need_loop_507;
             for ( ; __need_loop_507 ; __need_loop_507 = __j_iterator.next(__context__,(__j_rename_at_507_144)) )
             {
-                if ( eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__j_rename_at_507_144,((char *) "-"),((char *) "==")) && eq_886fe8d1ff63f5fd(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__j_rename_at_507_144 + 1,((char *) "const"),((char *) "&"),((char *) "#"),((char *) "?")) )
+                if ( eq_3d631d49cf7e1d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__j_rename_at_507_144,((char *) "-"),((char *) "==")) && eq_5ccd37f4ada4b6c8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__j_rename_at_507_144 + 1,((char *) "const"),((char *) "&"),((char *) "#"),((char *) "?")) )
                 {
                     das_copy(__pos_rename_at_471_143,__j_rename_at_507_144 + 2);
-                } else if ( eq_886fe8d1ff63f5fd(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__j_rename_at_507_144,((char *) "const"),((char *) "&"),((char *) "#"),((char *) "?")) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__j_rename_at_507_144,((char *) "implicit")) )
+                } else if ( eq_5ccd37f4ada4b6c8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__j_rename_at_507_144,((char *) "const"),((char *) "&"),((char *) "#"),((char *) "?")) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__j_rename_at_507_144,((char *) "implicit")) )
                 {
                     das_copy(__pos_rename_at_471_143,__j_rename_at_507_144 + 1);
                 } else {
@@ -1479,17 +1479,17 @@ inline void mark_tokens_as_type_5e4d056374f6927c ( Context * __context__, das_so
             }
             __j_iterator.close(__context__,(__j_rename_at_507_144));
         };
-        mark_range_as_type_24b8f876667238a0(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__i_rename_at_470_142,__pos_rename_at_471_143);
-        if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "|")) )
+        mark_range_as_type_1c15599df80afc04(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__i_rename_at_470_142,__pos_rename_at_471_143);
+        if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143,((char *) "|")) )
         {
             das_copy(__ctx_rename_at_470_141.tokens(__pos_rename_at_471_143,__context__).spaces,1);
             ++__pos_rename_at_471_143;
-            mark_tokens_as_type_5e4d056374f6927c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143);
+            mark_tokens_as_type_ff7631c34d0e20a8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_470_141),__pos_rename_at_471_143);
         };
     };
 }
 
-inline void mark_tokens_as_type_inside_angle_53305ce8d8ddd8cb ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_528_145, int32_t __i_rename_at_528_146 )
+inline void mark_tokens_as_type_inside_angle_5588509bf83aae77 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_528_145, int32_t __i_rename_at_528_146 )
 {
     das_source_formatter::ParenCounter __pc_rename_at_529_147;das_zero(__pc_rename_at_529_147);
     {
@@ -1500,7 +1500,7 @@ inline void mark_tokens_as_type_inside_angle_53305ce8d8ddd8cb ( Context * __cont
         __need_loop_530 = __j_iterator.first(__context__,(__j_rename_at_530_148)) && __need_loop_530;
         for ( ; __need_loop_530 ; __need_loop_530 = __j_iterator.next(__context__,(__j_rename_at_530_148)) )
         {
-            update_paren_62e64d469829ae3d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_528_145),__j_rename_at_530_148,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_529_147));
+            update_paren_3503759ee55e89b1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_528_145),__j_rename_at_530_148,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_529_147));
             if ( __ctx_rename_at_528_145.tokens(__j_rename_at_530_148,__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT )
             {
                 das_copy(__ctx_rename_at_528_145.tokens(__j_rename_at_530_148,__context__).isInType,true);
@@ -1514,7 +1514,7 @@ inline void mark_tokens_as_type_inside_angle_53305ce8d8ddd8cb ( Context * __cont
     };
 }
 
-inline int32_t search_token_in_line_3a9d4fd472c436b3 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_542_149, int32_t __from_index_rename_at_542_150, char * const  __str_rename_at_542_151 )
+inline int32_t search_token_in_line_41b34300f8492a5f ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_542_149, int32_t __from_index_rename_at_542_150, char * const  __str_rename_at_542_151 )
 {
     das_source_formatter::ParenCounter __pc_rename_at_543_152;das_zero(__pc_rename_at_543_152);
     {
@@ -1525,8 +1525,8 @@ inline int32_t search_token_in_line_3a9d4fd472c436b3 ( Context * __context__, da
         __need_loop_544 = __j_iterator.first(__context__,(__j_rename_at_544_153)) && __need_loop_544;
         for ( ; __need_loop_544 ; __need_loop_544 = __j_iterator.next(__context__,(__j_rename_at_544_153)) )
         {
-            update_paren_62e64d469829ae3d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_543_152));
-            if ( (((__j_rename_at_544_153 > __from_index_rename_at_542_150) && new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153)) && (((__pc_rename_at_543_152.paren <= 0) || (__pc_rename_at_543_152.square <= 0)) || (__pc_rename_at_543_152.curly <= 0))) && !(eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153 - 1,((char *) ","))) )
+            update_paren_3503759ee55e89b1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153,das_arg<das_source_formatter::ParenCounter>::pass(__pc_rename_at_543_152));
+            if ( (((__j_rename_at_544_153 > __from_index_rename_at_542_150) && new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153)) && (((__pc_rename_at_543_152.paren <= 0) || (__pc_rename_at_543_152.square <= 0)) || (__pc_rename_at_543_152.curly <= 0))) && !(eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153 - 1,((char *) ","))) )
             {
                 break;
             } else {
@@ -1534,11 +1534,11 @@ inline int32_t search_token_in_line_3a9d4fd472c436b3 ( Context * __context__, da
                 {
                     break;
                 } else {
-                    if ( ((eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153,((char *) ";")) && (__pc_rename_at_543_152.paren == 0)) && (__pc_rename_at_543_152.square == 0)) && (__pc_rename_at_543_152.curly == 0) )
+                    if ( ((eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153,((char *) ";")) && (__pc_rename_at_543_152.paren == 0)) && (__pc_rename_at_543_152.square == 0)) && (__pc_rename_at_543_152.curly == 0) )
                     {
                         break;
                     } else {
-                        if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153,__str_rename_at_542_151) )
+                        if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_542_149),__j_rename_at_544_153,__str_rename_at_542_151) )
                         {
                             return das_auto_cast<int32_t>::cast(__j_rename_at_544_153);
                         };
@@ -1551,7 +1551,7 @@ inline int32_t search_token_in_line_3a9d4fd472c436b3 ( Context * __context__, da
     return das_auto_cast<int32_t>::cast(0);
 }
 
-inline void process_formatter_tokens_a63e2ffa4c8206b6 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_564_154 )
+inline void process_formatter_tokens_b7e8fa22d8896a75 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_564_154 )
 {
     {
         bool __need_loop_567 = true;
@@ -1567,12 +1567,12 @@ inline void process_formatter_tokens_a63e2ffa4c8206b6 ( Context * __context__, d
             int32_t __strSize_rename_at_570_158 = ((int32_t)builtin_string_length(__str_rename_at_569_157,__context__));
             if ( builtin_string_startswith(__str_rename_at_569_157,((char *) "//fmt:"),__context__) )
             {
-                das_source_formatter::FormatterToken _temp_make_local_573_40_128; _temp_make_local_573_40_128;
+                das_source_formatter::FormatterToken _temp_make_local_573_40_1; _temp_make_local_573_40_1;
                 char * __command_rename_at_572_159 = ((char *)(char *)(((char * const )(builtin_string_chop(__str_rename_at_569_157,6,__strSize_rename_at_570_158 - 6,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)))))));
-                _FuncbuiltinTickpushTick10769833213962245646_a661f9640a1075ce(__context__,das_arg<TArray<das_source_formatter::FormatterToken>>::pass(__ctx_rename_at_564_154.formatterTokens),das_arg<das_source_formatter::FormatterToken>::pass((([&]() -> das_source_formatter::FormatterToken& {
-                    das_copy((_temp_make_local_573_40_128.tokenIndex),(__i_rename_at_567_155));
-                    das_copy((_temp_make_local_573_40_128.command),(__command_rename_at_572_159));
-                    return _temp_make_local_573_40_128;
+                _FuncbuiltinTickpushTick10769833213962245646_fc8141dc0153320a(__context__,das_arg<TArray<das_source_formatter::FormatterToken>>::pass(__ctx_rename_at_564_154.formatterTokens),das_arg<das_source_formatter::FormatterToken>::pass((([&]() -> das_source_formatter::FormatterToken& {
+                    das_copy((_temp_make_local_573_40_1.tokenIndex),(__i_rename_at_567_155));
+                    das_copy((_temp_make_local_573_40_1.command),(__command_rename_at_572_159));
+                    return _temp_make_local_573_40_1;
                 })())));
             };
         }
@@ -1580,7 +1580,7 @@ inline void process_formatter_tokens_a63e2ffa4c8206b6 ( Context * __context__, d
     };
 }
 
-inline bool have_formatter_token_296d7fc158126671 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_581_160, char * const  __command_rename_at_581_161 )
+inline bool have_formatter_token_68c38613f91cfa3f ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_581_160, char * const  __command_rename_at_581_161 )
 {
     {
         bool __need_loop_582 = true;
@@ -1600,9 +1600,9 @@ inline bool have_formatter_token_296d7fc158126671 ( Context * __context__, das_s
     return das_auto_cast<bool>::cast(false);
 }
 
-inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_591_163 )
+inline void mark_token_context_7d9da6c542abc3d5 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_591_163 )
 {
-    TDim<char *,8> _temp_make_local_782_24_576; _temp_make_local_782_24_576;
+    TDim<char *,8> _temp_make_local_782_24_2; _temp_make_local_782_24_2;
     {
         bool __need_loop_593 = true;
         // i: int const
@@ -1611,7 +1611,7 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_593 = __i_iterator.first(__context__,(__i_rename_at_593_164)) && __need_loop_593;
         for ( ; __need_loop_593 ; __need_loop_593 = __i_iterator.next(__context__,(__i_rename_at_593_164)) )
         {
-            if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164) && (((eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164,((char *) "require")) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164,((char *) "expect"))) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164,((char *) "label"))) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164,((char *) "include"))) )
+            if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164) && (((eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164,((char *) "require")) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164,((char *) "expect"))) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164,((char *) "label"))) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_593_164,((char *) "include"))) )
             {
                 {
                     bool __need_loop_595 = true;
@@ -1621,7 +1621,7 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                     __need_loop_595 = __j_iterator.first(__context__,(__j_rename_at_595_165)) && __need_loop_595;
                     for ( ; __need_loop_595 ; __need_loop_595 = __j_iterator.next(__context__,(__j_rename_at_595_165)) )
                     {
-                        if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_595_165) )
+                        if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_595_165) )
                         {
                             break;
                         } else {
@@ -1642,7 +1642,7 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_605 = __i_iterator.first(__context__,(__i_rename_at_605_166)) && __need_loop_605;
         for ( ; __need_loop_605 ; __need_loop_605 = __i_iterator.next(__context__,(__i_rename_at_605_166)) )
         {
-            if ( (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_605_166,((char *) "%")) && (__ctx_rename_at_591_163.tokens((__i_rename_at_605_166 + 1),__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_605_166 + 2,((char *) "~")) )
+            if ( (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_605_166,((char *) "%")) && (__ctx_rename_at_591_163.tokens((__i_rename_at_605_166 + 1),__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_605_166 + 2,((char *) "~")) )
             {
                 {
                     bool __need_loop_607 = true;
@@ -1653,7 +1653,7 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                     for ( ; __need_loop_607 ; __need_loop_607 = __j_iterator.next(__context__,(__j_rename_at_607_167)) )
                     {
                         das_copy(__ctx_rename_at_591_163.tokens(__j_rename_at_607_167,__context__).dontFormat,true);
-                        if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_607_167,((char *) "%%")) )
+                        if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_607_167,((char *) "%%")) )
                         {
                             break;
                         };
@@ -1672,15 +1672,15 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_617 = __i_iterator.first(__context__,(__i_rename_at_617_168)) && __need_loop_617;
         for ( ; __need_loop_617 ; __need_loop_617 = __i_iterator.next(__context__,(__i_rename_at_617_168)) )
         {
-            if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168) && (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) "let")) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) "var"))) )
+            if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168) && (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) "let")) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) "var"))) )
             {
-                int32_t __assignPos0_rename_at_619_169 = ((int32_t)search_token_in_line_3a9d4fd472c436b3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) "=")));
-                int32_t __assignPos1_rename_at_620_170 = ((int32_t)search_token_in_line_3a9d4fd472c436b3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) ":=")));
-                int32_t __assignPos2_rename_at_621_171 = ((int32_t)search_token_in_line_3a9d4fd472c436b3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) "<-")));
-                int32_t __colonPos_rename_at_622_172 = ((int32_t)search_token_in_line_3a9d4fd472c436b3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) ":")));
+                int32_t __assignPos0_rename_at_619_169 = ((int32_t)search_token_in_line_41b34300f8492a5f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) "=")));
+                int32_t __assignPos1_rename_at_620_170 = ((int32_t)search_token_in_line_41b34300f8492a5f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) ":=")));
+                int32_t __assignPos2_rename_at_621_171 = ((int32_t)search_token_in_line_41b34300f8492a5f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) "<-")));
+                int32_t __colonPos_rename_at_622_172 = ((int32_t)search_token_in_line_41b34300f8492a5f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_617_168,((char *) ":")));
                 if ( (((__colonPos_rename_at_622_172 > 0) && ((__assignPos0_rename_at_619_169 > __colonPos_rename_at_622_172) || (__assignPos0_rename_at_619_169 <= 0))) && ((__assignPos1_rename_at_620_170 > __colonPos_rename_at_622_172) || (__assignPos1_rename_at_620_170 <= 0))) && ((__assignPos2_rename_at_621_171 > __colonPos_rename_at_622_172) || (__assignPos2_rename_at_621_171 <= 0)) )
                 {
-                    mark_tokens_as_type_5e4d056374f6927c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__colonPos_rename_at_622_172 + 1);
+                    mark_tokens_as_type_ff7631c34d0e20a8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__colonPos_rename_at_622_172 + 1);
                 };
             };
         }
@@ -1696,9 +1696,9 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         {
             if ( __ctx_rename_at_591_163.tokens(__i_rename_at_633_173,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER )
             {
-                if ( (_FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a(__context__,das_global<TDim<char *,22>,0xced6bfad8d3e8a64>(__context__) /*type_after_keyword*/,__ctx_rename_at_591_163.tokens(__i_rename_at_633_173,__context__).str) >= 0) || ((eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_633_173,((char *) "new")) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_633_173,((char *) "struct"))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_633_173 + 1,((char *) "<"))) )
+                if ( (_FuncbuiltinTickfind_indexTick6703785223819426183_7889f698fd41c370(__context__,das_global<TDim<char *,22>,0xced6bfad8d3e8a64>(__context__) /*type_after_keyword*/,__ctx_rename_at_591_163.tokens(__i_rename_at_633_173,__context__).str) >= 0) || ((eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_633_173,((char *) "new")) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_633_173,((char *) "struct"))) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_633_173 + 1,((char *) "<"))) )
                 {
-                    mark_tokens_as_type_inside_angle_53305ce8d8ddd8cb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_633_173 + 1);
+                    mark_tokens_as_type_inside_angle_5588509bf83aae77(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_633_173 + 1);
                 };
             };
         }
@@ -1712,9 +1712,9 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_644 = __i_iterator.first(__context__,(__i_rename_at_644_174)) && __need_loop_644;
         for ( ; __need_loop_644 ; __need_loop_644 = __i_iterator.next(__context__,(__i_rename_at_644_174)) )
         {
-            if ( (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_644_174,((char *) "$")) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_644_174 + 1,((char *) "t"))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_644_174 + 2,((char *) "(")) )
+            if ( (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_644_174,((char *) "$")) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_644_174 + 1,((char *) "t"))) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_644_174 + 2,((char *) "(")) )
             {
-                int32_t __endParams_rename_at_646_175 = ((int32_t)find_pair_paren_90acbe7a3b864d93(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_644_174 + 2));
+                int32_t __endParams_rename_at_646_175 = ((int32_t)find_pair_paren_ff2776f9d2856b4e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_644_174 + 2));
                 {
                     bool __need_loop_647 = true;
                     // j: int const
@@ -1735,11 +1735,11 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                     __need_loop_650 = __j_iterator.first(__context__,(__j_rename_at_650_177)) && __need_loop_650;
                     for ( ; __need_loop_650 ; __need_loop_650 = __j_iterator.next(__context__,(__j_rename_at_650_177)) )
                     {
-                        if ( !(eq_886fe8d1ff63f5fd(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_650_177,((char *) "-"),((char *) "#"),((char *) "&"),((char *) "?")) || eq_f43d812e3a992e4(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_650_177,((char *) "=="),((char *) "const"),((char *) "implicit"))) )
+                        if ( !(eq_5ccd37f4ada4b6c8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_650_177,((char *) "-"),((char *) "#"),((char *) "&"),((char *) "?")) || eq_cecc7c5a47abfe6c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_650_177,((char *) "=="),((char *) "const"),((char *) "implicit"))) )
                         {
                             break;
                         } else {
-                            if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_650_177) )
+                            if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_650_177) )
                             {
                                 break;
                             } else {
@@ -1761,9 +1761,9 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_663 = __i_iterator.first(__context__,(__i_rename_at_663_178)) && __need_loop_663;
         for ( ; __need_loop_663 ; __need_loop_663 = __i_iterator.next(__context__,(__i_rename_at_663_178)) )
         {
-            if ( (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178,((char *) "[")) && eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178 + 1,((char *) "["),((char *) "{"))) || (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178,((char *) "{")) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178 + 1,((char *) "{"))) )
+            if ( (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178,((char *) "[")) && eq_3d631d49cf7e1d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178 + 1,((char *) "["),((char *) "{"))) || (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178,((char *) "{")) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178 + 1,((char *) "{"))) )
             {
-                mark_tokens_as_type_5e4d056374f6927c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178 + 2);
+                mark_tokens_as_type_ff7631c34d0e20a8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_663_178 + 2);
             };
         }
         __i_iterator.close(__context__,(__i_rename_at_663_178));
@@ -1776,14 +1776,14 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_670 = __i_iterator.first(__context__,(__i_rename_at_670_179)) && __need_loop_670;
         for ( ; __need_loop_670 ; __need_loop_670 = __i_iterator.next(__context__,(__i_rename_at_670_179)) )
         {
-            if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179) )
+            if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179) )
             {
                 int32_t __skip_rename_at_672_180 = 0;
-                if ( ((eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "struct")) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "class"))) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "variant"))) || (((eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "typedef")) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "var"))) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "let"))) && new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179 + 1)) )
+                if ( ((eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "struct")) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "class"))) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "variant"))) || (((eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "typedef")) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "var"))) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "let"))) && new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179 + 1)) )
                 {
                     das_copy(__skip_rename_at_672_180,1);
                 };
-                if ( (((eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "typedef")) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "var"))) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "let"))) && (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179 + 1,((char *) "private")) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179 + 1,((char *) "public")))) && new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179 + 2) )
+                if ( (((eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "typedef")) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "var"))) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "let"))) && (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179 + 1,((char *) "private")) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179 + 1,((char *) "public")))) && new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179 + 2) )
                 {
                     das_copy(__skip_rename_at_672_180,2);
                 };
@@ -1800,9 +1800,9 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                         __need_loop_688 = __j_iterator.first(__context__,(__j_rename_at_688_182)) && __need_loop_688;
                         for ( ; __need_loop_688 ; __need_loop_688 = __j_iterator.next(__context__,(__j_rename_at_688_182)) )
                         {
-                            if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_688_182) )
+                            if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_688_182) )
                             {
-                                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_688_182,((char *) "def")) )
+                                if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_688_182,((char *) "def")) )
                                 {
                                     break;
                                 } else {
@@ -1810,10 +1810,10 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                                     {
                                         break;
                                     } else {
-                                        int32_t __colonPos_rename_at_696_183 = ((int32_t)search_token_in_line_3a9d4fd472c436b3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_688_182,eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "typedef")) ? das_auto_cast<char * const >::cast(((char *) "=")) : das_auto_cast<char * const >::cast(((char *) ":"))));
+                                        int32_t __colonPos_rename_at_696_183 = ((int32_t)search_token_in_line_41b34300f8492a5f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_688_182,eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_670_179,((char *) "typedef")) ? das_auto_cast<char * const >::cast(((char *) "=")) : das_auto_cast<char * const >::cast(((char *) ":"))));
                                         if ( __colonPos_rename_at_696_183 > 0 )
                                         {
-                                            mark_tokens_as_type_5e4d056374f6927c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__colonPos_rename_at_696_183 + 1);
+                                            mark_tokens_as_type_ff7631c34d0e20a8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__colonPos_rename_at_696_183 + 1);
                                         };
                                     };
                                 };
@@ -1834,7 +1834,7 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_706 = __i_iterator.first(__context__,(__i_rename_at_706_184)) && __need_loop_706;
         for ( ; __need_loop_706 ; __need_loop_706 = __i_iterator.next(__context__,(__i_rename_at_706_184)) )
         {
-            if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_706_184) && (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_706_184,((char *) "typedef")) && !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_706_184 + 1))) )
+            if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_706_184) && (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_706_184,((char *) "typedef")) && !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_706_184 + 1))) )
             {
                 {
                     bool __need_loop_708 = true;
@@ -1844,14 +1844,14 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                     __need_loop_708 = __j_iterator.first(__context__,(__j_rename_at_708_185)) && __need_loop_708;
                     for ( ; __need_loop_708 ; __need_loop_708 = __j_iterator.next(__context__,(__j_rename_at_708_185)) )
                     {
-                        if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_708_185) )
+                        if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_708_185) )
                         {
                             break;
                         } else {
-                            int32_t __colonPos_rename_at_712_186 = ((int32_t)search_token_in_line_3a9d4fd472c436b3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_708_185,eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_706_184,((char *) "typedef")) ? das_auto_cast<char * const >::cast(((char *) "=")) : das_auto_cast<char * const >::cast(((char *) ":"))));
+                            int32_t __colonPos_rename_at_712_186 = ((int32_t)search_token_in_line_41b34300f8492a5f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_708_185,eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_706_184,((char *) "typedef")) ? das_auto_cast<char * const >::cast(((char *) "=")) : das_auto_cast<char * const >::cast(((char *) ":"))));
                             if ( __colonPos_rename_at_712_186 > 0 )
                             {
-                                mark_tokens_as_type_5e4d056374f6927c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__colonPos_rename_at_712_186 + 1);
+                                mark_tokens_as_type_ff7631c34d0e20a8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__colonPos_rename_at_712_186 + 1);
                             };
                         };
                     }
@@ -1870,10 +1870,10 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         for ( ; __need_loop_721 ; __need_loop_721 = __i_iterator.next(__context__,(__i_rename_at_721_187)) )
         {
             int32_t __pos_rename_at_722_188 = -1;
-            if ( new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187,((char *) "def")) )
+            if ( new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187,((char *) "def")) )
             {
                 das_copy(__pos_rename_at_722_188,__i_rename_at_721_187 + 1);
-            } else if ( eq_f43d812e3a992e4(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187,((char *) "$"),((char *) "@"),((char *) "@@")) && eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187 + 1,((char *) "("),((char *) "[")) )
+            } else if ( eq_cecc7c5a47abfe6c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187,((char *) "$"),((char *) "@"),((char *) "@@")) && eq_3d631d49cf7e1d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187 + 1,((char *) "("),((char *) "[")) )
             {
                 das_copy(__pos_rename_at_722_188,__i_rename_at_721_187);
             };
@@ -1881,26 +1881,26 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
             {
                 continue;
             } else {
-                while ( eq_886fe8d1ff63f5fd(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188,((char *) "private"),((char *) "public"),((char *) "const"),((char *) "implicit")) || eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188,((char *) "abstract"),((char *) "override")) )
+                while ( eq_5ccd37f4ada4b6c8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188,((char *) "private"),((char *) "public"),((char *) "const"),((char *) "implicit")) || eq_3d631d49cf7e1d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188,((char *) "abstract"),((char *) "override")) )
                 {
                     ++__pos_rename_at_722_188;
                 };
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188,((char *) "operator")) )
+                if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188,((char *) "operator")) )
                 {
-                    das_copy(__pos_rename_at_722_188,search_token_in_line_3a9d4fd472c436b3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188,((char *) "(")) - 1);
+                    das_copy(__pos_rename_at_722_188,search_token_in_line_41b34300f8492a5f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188,((char *) "(")) - 1);
                 };
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1,((char *) "[")) )
+                if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1,((char *) "[")) )
                 {
-                    das_copy(__pos_rename_at_722_188,find_pair_square_68d9ea1d7c30e49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1));
+                    das_copy(__pos_rename_at_722_188,find_pair_square_89e4c86c49f03d61(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1));
                 };
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1,((char *) ":")) )
+                if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1,((char *) ":")) )
                 {
-                    mark_tokens_as_type_5e4d056374f6927c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187 + 2);
-                } else if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1,((char *) "(")) )
+                    mark_tokens_as_type_ff7631c34d0e20a8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_721_187 + 2);
+                } else if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1,((char *) "(")) )
                 {
                     int32_t __beginParams_rename_at_748_189 = ((int32_t)(__pos_rename_at_722_188 + 1));
                     das_copy(__ctx_rename_at_591_163.tokens(__beginParams_rename_at_748_189,__context__).dontAddSpacesAround,true);
-                    int32_t __endParams_rename_at_750_190 = ((int32_t)find_pair_paren_90acbe7a3b864d93(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1));
+                    int32_t __endParams_rename_at_750_190 = ((int32_t)find_pair_paren_ff2776f9d2856b4e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__pos_rename_at_722_188 + 1));
                     {
                         bool __need_loop_751 = true;
                         // j: int const
@@ -1910,12 +1910,12 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                         for ( ; __need_loop_751 ; __need_loop_751 = __j_iterator.next(__context__,(__j_rename_at_751_191)) )
                         {
                             das_copy(__ctx_rename_at_591_163.tokens(__j_rename_at_751_191,__context__).isInFunctionParam,true);
-                            if ( ((__j_rename_at_751_191 - 1) == __beginParams_rename_at_748_189) || eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_751_191 - 1,((char *) ";")) )
+                            if ( ((__j_rename_at_751_191 - 1) == __beginParams_rename_at_748_189) || eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_751_191 - 1,((char *) ";")) )
                             {
-                                int32_t __colonPos_rename_at_754_192 = ((int32_t)search_token_in_line_3a9d4fd472c436b3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_751_191,((char *) ":")));
+                                int32_t __colonPos_rename_at_754_192 = ((int32_t)search_token_in_line_41b34300f8492a5f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_751_191,((char *) ":")));
                                 if ( __colonPos_rename_at_754_192 > 0 )
                                 {
-                                    mark_tokens_as_type_5e4d056374f6927c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__colonPos_rename_at_754_192 + 1);
+                                    mark_tokens_as_type_ff7631c34d0e20a8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__colonPos_rename_at_754_192 + 1);
                                 };
                             };
                         }
@@ -1923,9 +1923,9 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                     };
                     if ( __endParams_rename_at_750_190 < (builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_591_163.tokens)) - 1) )
                     {
-                        if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__endParams_rename_at_750_190 + 1,((char *) ":")) )
+                        if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__endParams_rename_at_750_190 + 1,((char *) ":")) )
                         {
-                            mark_tokens_as_type_5e4d056374f6927c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__endParams_rename_at_750_190 + 2);
+                            mark_tokens_as_type_ff7631c34d0e20a8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__endParams_rename_at_750_190 + 2);
                         };
                     };
                 };
@@ -1941,7 +1941,7 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_769 = __i_iterator.first(__context__,(__i_rename_at_769_193)) && __need_loop_769;
         for ( ; __need_loop_769 ; __need_loop_769 = __i_iterator.next(__context__,(__i_rename_at_769_193)) )
         {
-            if ( (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_769_193,((char *) "[")) && !(eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_769_193 + 1,((char *) "[")))) && !(eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_769_193 + 1,((char *) "{"))) )
+            if ( (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_769_193,((char *) "[")) && !(eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_769_193 + 1,((char *) "[")))) && !(eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_769_193 + 1,((char *) "{"))) )
             {
                 {
                     bool __need_loop_771 = true;
@@ -1951,11 +1951,11 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
                     __need_loop_771 = __j_iterator.first(__context__,(__j_rename_at_771_194)) && __need_loop_771;
                     for ( ; __need_loop_771 ; __need_loop_771 = __j_iterator.next(__context__,(__j_rename_at_771_194)) )
                     {
-                        if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_771_194,((char *) "]")) )
+                        if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_771_194,((char *) "]")) )
                         {
                             break;
                         } else {
-                            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_771_194,((char *) "=")) )
+                            if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__j_rename_at_771_194,((char *) "=")) )
                             {
                                 das_copy(__ctx_rename_at_591_163.tokens(__j_rename_at_771_194,__context__).dontAddSpacesAround,true);
                             };
@@ -1967,16 +1967,16 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         }
         __i_iterator.close(__context__,(__i_rename_at_769_193));
     };
-    TTable<char *,void> __macroEscapes_rename_at_782_195_ConstRef; das_zero(__macroEscapes_rename_at_782_195_ConstRef); das_move(__macroEscapes_rename_at_782_195_ConstRef, ((TTable<char *,void>)_FuncbuiltinTickto_table_moveTick3386430563931768014_5f654e62afe15768(__context__,das_arg<TDim<char *,8>>::pass((([&]() -> TDim<char *,8>& {
-        _temp_make_local_782_24_576(0,__context__) = ((char *) "i");
-        _temp_make_local_782_24_576(1,__context__) = ((char *) "v");
-        _temp_make_local_782_24_576(2,__context__) = ((char *) "e");
-        _temp_make_local_782_24_576(3,__context__) = ((char *) "c");
-        _temp_make_local_782_24_576(4,__context__) = ((char *) "t");
-        _temp_make_local_782_24_576(5,__context__) = ((char *) "f");
-        _temp_make_local_782_24_576(6,__context__) = ((char *) "b");
-        _temp_make_local_782_24_576(7,__context__) = ((char *) "a");
-        return _temp_make_local_782_24_576;
+    TTable<char *,void> __macroEscapes_rename_at_782_195_ConstRef; das_zero(__macroEscapes_rename_at_782_195_ConstRef); das_move(__macroEscapes_rename_at_782_195_ConstRef, ((TTable<char *,void>)_FuncbuiltinTickto_table_moveTick3386430563931768014_c018a9675934bba9(__context__,das_arg<TDim<char *,8>>::pass((([&]() -> TDim<char *,8>& {
+        _temp_make_local_782_24_2(0,__context__) = ((char *) "i");
+        _temp_make_local_782_24_2(1,__context__) = ((char *) "v");
+        _temp_make_local_782_24_2(2,__context__) = ((char *) "e");
+        _temp_make_local_782_24_2(3,__context__) = ((char *) "c");
+        _temp_make_local_782_24_2(4,__context__) = ((char *) "t");
+        _temp_make_local_782_24_2(5,__context__) = ((char *) "f");
+        _temp_make_local_782_24_2(6,__context__) = ((char *) "b");
+        _temp_make_local_782_24_2(7,__context__) = ((char *) "a");
+        return _temp_make_local_782_24_2;
     })())))));
     TTable<char *,void> const  & __macroEscapes_rename_at_782_195 = __macroEscapes_rename_at_782_195_ConstRef; ;
     {
@@ -1987,7 +1987,7 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
         __need_loop_783 = __i_iterator.first(__context__,(__i_rename_at_783_196)) && __need_loop_783;
         for ( ; __need_loop_783 ; __need_loop_783 = __i_iterator.next(__context__,(__i_rename_at_783_196)) )
         {
-            if ( (!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_783_196)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_783_196 - 1,((char *) "$"))) && _FuncbuiltinTickkey_existsTick16808803843923989214_7d01ceb11c7f2e53(__context__,__macroEscapes_rename_at_782_195,__ctx_rename_at_591_163.tokens(__i_rename_at_783_196,__context__).str) )
+            if ( (!(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_783_196)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_591_163),__i_rename_at_783_196 - 1,((char *) "$"))) && _FuncbuiltinTickkey_existsTick16808803843923989214_5f8f761d5f23964f(__context__,__macroEscapes_rename_at_782_195,__ctx_rename_at_591_163.tokens(__i_rename_at_783_196,__context__).str) )
             {
                 das_copy(__ctx_rename_at_591_163.tokens((__i_rename_at_783_196 - 1),__context__).dontAddSpacesAround,true);
             };
@@ -1996,7 +1996,7 @@ inline void mark_token_context_7dbf70435b518a0a ( Context * __context__, das_sou
     };
 }
 
-inline void fmt_function_arguments_7d9f22d6302573cb ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_791_197 )
+inline void fmt_function_arguments_393a0d20cb9876da ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_791_197 )
 {
     int32_t __lastNewLineToken_rename_at_793_198 = 0;
     int32_t __i_rename_at_794_199 = 0;
@@ -2018,7 +2018,7 @@ inline void fmt_function_arguments_7d9f22d6302573cb ( Context * __context__, das
                 };
                 if ( __firstBracketColumn_rename_at_802_201 == -1 )
                 {
-                    if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_791_197),__i_rename_at_794_199,((char *) "(")) )
+                    if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_791_197),__i_rename_at_794_199,((char *) "(")) )
                     {
                         das_copy(__firstBracketColumn_rename_at_802_201,0);
                         {
@@ -2051,7 +2051,7 @@ inline void fmt_function_arguments_7d9f22d6302573cb ( Context * __context__, das
     };
 }
 
-inline void fmt_remove_space_before_args_26ba700ce1a53dbc ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_832_203 )
+inline void fmt_remove_space_before_args_b613d1f002f609af ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_832_203 )
 {
     {
         bool __need_loop_833 = true;
@@ -2061,16 +2061,16 @@ inline void fmt_remove_space_before_args_26ba700ce1a53dbc ( Context * __context_
         __need_loop_833 = __i_iterator.first(__context__,(__i_rename_at_833_204)) && __need_loop_833;
         for ( ; __need_loop_833 ; __need_loop_833 = __i_iterator.next(__context__,(__i_rename_at_833_204)) )
         {
-            if ( (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_832_203),__i_rename_at_833_204,((char *) "(")) && !(__ctx_rename_at_832_203.tokens(__i_rename_at_833_204,__context__).isInType)) && __ctx_rename_at_832_203.tokens((__i_rename_at_833_204 - 1),__context__).isInType )
+            if ( (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_832_203),__i_rename_at_833_204,((char *) "(")) && !(__ctx_rename_at_832_203.tokens(__i_rename_at_833_204,__context__).isInType)) && __ctx_rename_at_832_203.tokens((__i_rename_at_833_204 - 1),__context__).isInType )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_832_203),__i_rename_at_833_204);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_832_203),__i_rename_at_833_204);
             };
         }
         __i_iterator.close(__context__,(__i_rename_at_833_204));
     };
 }
 
-inline void debug_print_tokens_927617e00a5e50a7 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_841_205 )
+inline void debug_print_tokens_d5c3886aafc47666 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_841_205 )
 {
     {
         bool __need_loop_842 = true;
@@ -2086,22 +2086,22 @@ inline void debug_print_tokens_927617e00a5e50a7 ( Context * __context__, das_sou
     };
 }
 
-inline char * generate_source_64706a1ce7db4983 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_848_207 )
+inline char * generate_source_d9e23c7a7a794181 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_848_207 )
 {
     TArray<uint8_t> __res_rename_at_849_208; memset((void*)&__res_rename_at_849_208,0,sizeof(__res_rename_at_849_208));
     bool __useCrLf_rename_at_857_209; memset((void*)&__useCrLf_rename_at_857_209,0,sizeof(__useCrLf_rename_at_857_209));
     int32_t __column_rename_at_858_210; memset((void*)&__column_rename_at_858_210,0,sizeof(__column_rename_at_858_210));
     int32_t __spaces_rename_at_869_213; memset((void*)&__spaces_rename_at_869_213,0,sizeof(__spaces_rename_at_869_213));
     /* finally */ auto __finally_848= das_finally([&](){
-    _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_19613b645e94680e(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208));
     /* end finally */ });
     das_zero(__res_rename_at_849_208);
-    _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),(builtin_array_size(__ctx_rename_at_848_207.tokens) * 8) + 1000);
+    _FuncbuiltinTickreserveTick3994685146752941225_adfb084cc10e1733(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),(builtin_array_size(__ctx_rename_at_848_207.tokens) * 8) + 1000);
     if ( __ctx_rename_at_848_207.haveUtf8Bom )
     {
-        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xef);
-        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xbb);
-        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xbf);
+        _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xef);
+        _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xbb);
+        _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xbf);
     };
     __useCrLf_rename_at_857_209 = ((bool)((__ctx_rename_at_848_207.crCount * 2) > __ctx_rename_at_848_207.lfCount));
     __column_rename_at_858_210 = 0;
@@ -2123,9 +2123,9 @@ inline char * generate_source_64706a1ce7db4983 ( Context * __context__, das_sour
                 {
                     if ( __useCrLf_rename_at_857_209 )
                     {
-                        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xd);
+                        _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xd);
                     };
-                    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xa);
+                    _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0xa);
                     das_copy(__column_rename_at_858_210,0);
                 }
                 ____iterator.close(__context__,(____rename_at_861_212));
@@ -2143,7 +2143,7 @@ inline char * generate_source_64706a1ce7db4983 ( Context * __context__, das_sour
                 __need_loop_874 = ____iterator.first(__context__,(____rename_at_874_214)) && __need_loop_874;
                 for ( ; __need_loop_874 ; __need_loop_874 = ____iterator.next(__context__,(____rename_at_874_214)) )
                 {
-                    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0x20);
+                    _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),0x20);
                     ++__column_rename_at_858_210;
                 }
                 ____iterator.close(__context__,(____rename_at_874_214));
@@ -2156,7 +2156,7 @@ inline char * generate_source_64706a1ce7db4983 ( Context * __context__, das_sour
                 __need_loop_879 = __c_iterator.first(__context__,(__c_rename_at_879_215)) && __need_loop_879;
                 for ( ; __need_loop_879 ; __need_loop_879 = __c_iterator.next(__context__,(__c_rename_at_879_215)) )
                 {
-                    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),uint8_t(__c_rename_at_879_215));
+                    _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),uint8_t(__c_rename_at_879_215));
                     ++__column_rename_at_858_210;
                 }
                 __c_iterator.close(__context__,(__c_rename_at_879_215));
@@ -2167,13 +2167,13 @@ inline char * generate_source_64706a1ce7db4983 ( Context * __context__, das_sour
     return das_auto_cast<char *>::cast(((char * const )(builtin_string_from_array(das_arg<TArray<uint8_t>>::pass(__res_rename_at_849_208),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }
 
-inline bool need_spaces_around_7179a668ae90ccd6 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_891_216, int32_t __index_rename_at_891_217 )
+inline bool need_spaces_around_c85752147cfda42d ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_891_216, int32_t __index_rename_at_891_217 )
 {
     if ( ((__ctx_rename_at_891_216.tokens(__index_rename_at_891_217,__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) || __ctx_rename_at_891_216.tokens(__index_rename_at_891_217,__context__).dontFormat) || __ctx_rename_at_891_216.tokens(__index_rename_at_891_217,__context__).dontAddSpacesAround )
     {
         return das_auto_cast<bool>::cast(false);
     } else {
-        if ( _FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3(__context__,das_global<TDim<char *,21>,0x9d441a57052b5c37>(__context__) /*dont_need_space_around*/,__ctx_rename_at_891_216.tokens(__index_rename_at_891_217,__context__).str) >= 0 )
+        if ( _FuncbuiltinTickfind_indexTick6703785223819426183_eca839f98c5c2bc9(__context__,das_global<TDim<char *,21>,0x9d441a57052b5c37>(__context__) /*dont_need_space_around*/,__ctx_rename_at_891_216.tokens(__index_rename_at_891_217,__context__).str) >= 0 )
         {
             return das_auto_cast<bool>::cast(false);
         } else {
@@ -2194,7 +2194,7 @@ inline bool need_spaces_around_7179a668ae90ccd6 ( Context * __context__, das_sou
     };
 }
 
-inline bool need_space_only_before_584e48acb8e8a70 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_912_218, int32_t __index_rename_at_912_219 )
+inline bool need_space_only_before_a3979a2c621820ef ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_912_218, int32_t __index_rename_at_912_219 )
 {
     if ( !__ctx_rename_at_912_218.tokens(__index_rename_at_912_219,__context__).isInType )
     {
@@ -2204,7 +2204,7 @@ inline bool need_space_only_before_584e48acb8e8a70 ( Context * __context__, das_
         {
             return das_auto_cast<bool>::cast(false);
         } else {
-            if ( _FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3(__context__,das_global<TDim<char *,21>,0x9d441a57052b5c37>(__context__) /*dont_need_space_around*/,__ctx_rename_at_912_218.tokens(__index_rename_at_912_219,__context__).str) >= 0 )
+            if ( _FuncbuiltinTickfind_indexTick6703785223819426183_eca839f98c5c2bc9(__context__,das_global<TDim<char *,21>,0x9d441a57052b5c37>(__context__) /*dont_need_space_around*/,__ctx_rename_at_912_218.tokens(__index_rename_at_912_219,__context__).str) >= 0 )
             {
                 return das_auto_cast<bool>::cast(false);
             } else {
@@ -2226,24 +2226,24 @@ inline bool need_space_only_before_584e48acb8e8a70 ( Context * __context__, das_
     };
 }
 
-inline bool is_unary_62ad92645c7f9ee6 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_956_220, int32_t __index_rename_at_956_221 )
+inline bool is_unary_b0c7219745029c11 ( Context * __context__, das_source_formatter::FormatterCtx const  &  __ctx_rename_at_956_220, int32_t __index_rename_at_956_221 )
 {
-    if ( eq_1a08ceae13f47e89(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "!")) || eq_1a08ceae13f47e89(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "~")) )
+    if ( eq_5251ca869c24b49f(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "!")) || eq_5251ca869c24b49f(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "~")) )
     {
         return das_auto_cast<bool>::cast(true);
     } else {
-        if ( (eq_1a08ceae13f47e89(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "*")) && (__index_rename_at_956_221 > 0)) && __ctx_rename_at_956_220.tokens((__index_rename_at_956_221 - 1),__context__).isInType )
+        if ( (eq_5251ca869c24b49f(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "*")) && (__index_rename_at_956_221 > 0)) && __ctx_rename_at_956_220.tokens((__index_rename_at_956_221 - 1),__context__).isInType )
         {
             return das_auto_cast<bool>::cast(true);
         } else {
-            if ( (eq_1a08ceae13f47e89(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "+")) || eq_1a08ceae13f47e89(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "-"))) || eq_1a08ceae13f47e89(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "*")) )
+            if ( (eq_5251ca869c24b49f(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "+")) || eq_5251ca869c24b49f(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "-"))) || eq_5251ca869c24b49f(__context__,__ctx_rename_at_956_220,__index_rename_at_956_221,((char *) "*")) )
             {
                 int32_t __i_rename_at_966_222 = __index_rename_at_956_221;
-                while ( (((__i_rename_at_966_222 - 1) >= 0) && (__ctx_rename_at_956_220.tokens((__i_rename_at_966_222 - 1),__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT)) && !(new_line_before_56d9a06feda36687(__context__,__ctx_rename_at_956_220,__i_rename_at_966_222)) )
+                while ( (((__i_rename_at_966_222 - 1) >= 0) && (__ctx_rename_at_956_220.tokens((__i_rename_at_966_222 - 1),__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT)) && !(new_line_before_74a9e3638b00c26f(__context__,__ctx_rename_at_956_220,__i_rename_at_966_222)) )
                 {
                     --__i_rename_at_966_222;
                 };
-                return das_auto_cast<bool>::cast(((_FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3(__context__,das_global<TDim<char *,21>,0xd52f4fdee217c055>(__context__) /*tokens_before_unary*/,__ctx_rename_at_956_220.tokens((__i_rename_at_966_222 - 1),__context__).str) >= 0) || new_line_before_56d9a06feda36687(__context__,__ctx_rename_at_956_220,__i_rename_at_966_222)) ? das_auto_cast<bool>::cast(true) : das_auto_cast<bool>::cast(need_spaces_around_7179a668ae90ccd6(__context__,__ctx_rename_at_956_220,__i_rename_at_966_222 - 1)));
+                return das_auto_cast<bool>::cast(((_FuncbuiltinTickfind_indexTick6703785223819426183_eca839f98c5c2bc9(__context__,das_global<TDim<char *,21>,0xd52f4fdee217c055>(__context__) /*tokens_before_unary*/,__ctx_rename_at_956_220.tokens((__i_rename_at_966_222 - 1),__context__).str) >= 0) || new_line_before_74a9e3638b00c26f(__context__,__ctx_rename_at_956_220,__i_rename_at_966_222)) ? das_auto_cast<bool>::cast(true) : das_auto_cast<bool>::cast(need_spaces_around_c85752147cfda42d(__context__,__ctx_rename_at_956_220,__i_rename_at_966_222 - 1)));
             } else {
                 return das_auto_cast<bool>::cast(false);
             };
@@ -2251,31 +2251,31 @@ inline bool is_unary_62ad92645c7f9ee6 ( Context * __context__, das_source_format
     };
 }
 
-inline void remove_spaces_around_1c96d2bcc36445d1 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_979_223, int32_t __index_rename_at_979_224 )
+inline void remove_spaces_around_203ede7b7eebc7c5 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_979_223, int32_t __index_rename_at_979_224 )
 {
-    if ( !new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_979_223),__index_rename_at_979_224) )
+    if ( !new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_979_223),__index_rename_at_979_224) )
     {
-        _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_979_223),__index_rename_at_979_224);
+        _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_979_223),__index_rename_at_979_224);
     };
-    if ( !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_979_223),__index_rename_at_979_224 + 1)) && (__ctx_rename_at_979_223.tokens((__index_rename_at_979_224 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT) )
+    if ( !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_979_223),__index_rename_at_979_224 + 1)) && (__ctx_rename_at_979_223.tokens((__index_rename_at_979_224 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT) )
     {
-        _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_979_223),__index_rename_at_979_224 + 1);
+        _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_979_223),__index_rename_at_979_224 + 1);
     };
 }
 
-inline void make_spaces_around_9b0360b9b4d718c3 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_989_225, int32_t __index_rename_at_989_226 )
+inline void make_spaces_around_80d61c2838123a7d ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_989_225, int32_t __index_rename_at_989_226 )
 {
-    if ( !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_989_225),__index_rename_at_989_226)) && (__ctx_rename_at_989_225.tokens(__index_rename_at_989_226,__context__).spaces == 0) )
+    if ( !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_989_225),__index_rename_at_989_226)) && (__ctx_rename_at_989_225.tokens(__index_rename_at_989_226,__context__).spaces == 0) )
     {
-        _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_989_225),__index_rename_at_989_226);
+        _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_989_225),__index_rename_at_989_226);
     };
-    if ( !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_989_225),__index_rename_at_989_226 + 1)) && (__ctx_rename_at_989_225.tokens((__index_rename_at_989_226 + 1),__context__).spaces == 0) )
+    if ( !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_989_225),__index_rename_at_989_226 + 1)) && (__ctx_rename_at_989_225.tokens((__index_rename_at_989_226 + 1),__context__).spaces == 0) )
     {
-        _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_989_225),__index_rename_at_989_226 + 1);
+        _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_989_225),__index_rename_at_989_226 + 1);
     };
 }
 
-inline void fmt_space_after_comma_7aa6a2faf3ce3f4f ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_999_227 )
+inline void fmt_space_after_comma_f91c855ec419635f ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_999_227 )
 {
     {
         bool __need_loop_1000 = true;
@@ -2285,16 +2285,16 @@ inline void fmt_space_after_comma_7aa6a2faf3ce3f4f ( Context * __context__, das_
         __need_loop_1000 = __i_iterator.first(__context__,(__i_rename_at_1000_228)) && __need_loop_1000;
         for ( ; __need_loop_1000 ; __need_loop_1000 = __i_iterator.next(__context__,(__i_rename_at_1000_228)) )
         {
-            if ( (!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_999_227),__i_rename_at_1000_228)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_999_227),__i_rename_at_1000_228 - 1,((char *) ","))) && (__ctx_rename_at_999_227.tokens(__i_rename_at_1000_228,__context__).spaces == 0) )
+            if ( (!(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_999_227),__i_rename_at_1000_228)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_999_227),__i_rename_at_1000_228 - 1,((char *) ","))) && (__ctx_rename_at_999_227.tokens(__i_rename_at_1000_228,__context__).spaces == 0) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_999_227),__i_rename_at_1000_228);
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_999_227),__i_rename_at_1000_228);
             };
         }
         __i_iterator.close(__context__,(__i_rename_at_1000_228));
     };
 }
 
-inline void fmt_space_after_semicolon_29caf5fd09f6497e ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1008_229 )
+inline void fmt_space_after_semicolon_23f19dedec62b617 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1008_229 )
 {
     {
         bool __need_loop_1009 = true;
@@ -2304,16 +2304,16 @@ inline void fmt_space_after_semicolon_29caf5fd09f6497e ( Context * __context__, 
         __need_loop_1009 = __i_iterator.first(__context__,(__i_rename_at_1009_230)) && __need_loop_1009;
         for ( ; __need_loop_1009 ; __need_loop_1009 = __i_iterator.next(__context__,(__i_rename_at_1009_230)) )
         {
-            if ( ((!(eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1008_229),__i_rename_at_1009_230,nullptr)) && !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1008_229),__i_rename_at_1009_230))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1008_229),__i_rename_at_1009_230 - 1,((char *) ";"))) && (__ctx_rename_at_1008_229.tokens(__i_rename_at_1009_230,__context__).spaces == 0) )
+            if ( ((!(eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1008_229),__i_rename_at_1009_230,nullptr)) && !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1008_229),__i_rename_at_1009_230))) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1008_229),__i_rename_at_1009_230 - 1,((char *) ";"))) && (__ctx_rename_at_1008_229.tokens(__i_rename_at_1009_230,__context__).spaces == 0) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1008_229),__i_rename_at_1009_230);
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1008_229),__i_rename_at_1009_230);
             };
         }
         __i_iterator.close(__context__,(__i_rename_at_1009_230));
     };
 }
 
-inline void fmt_remove_space_before_comma_54b9cd4ba70794e ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1017_231 )
+inline void fmt_remove_space_before_comma_e4ab43db37a70c74 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1017_231 )
 {
     {
         bool __need_loop_1018 = true;
@@ -2323,16 +2323,16 @@ inline void fmt_remove_space_before_comma_54b9cd4ba70794e ( Context * __context_
         __need_loop_1018 = __i_iterator.first(__context__,(__i_rename_at_1018_232)) && __need_loop_1018;
         for ( ; __need_loop_1018 ; __need_loop_1018 = __i_iterator.next(__context__,(__i_rename_at_1018_232)) )
         {
-            if ( !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1017_231),__i_rename_at_1018_232)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1017_231),__i_rename_at_1018_232,((char *) ",")) )
+            if ( !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1017_231),__i_rename_at_1018_232)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1017_231),__i_rename_at_1018_232,((char *) ",")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1017_231),__i_rename_at_1018_232);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1017_231),__i_rename_at_1018_232);
             };
         }
         __i_iterator.close(__context__,(__i_rename_at_1018_232));
     };
 }
 
-inline void fmt_remove_space_before_semicolon_132b81d1431b5d49 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1026_233 )
+inline void fmt_remove_space_before_semicolon_e5d8826c5665e6be ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1026_233 )
 {
     {
         bool __need_loop_1027 = true;
@@ -2342,16 +2342,16 @@ inline void fmt_remove_space_before_semicolon_132b81d1431b5d49 ( Context * __con
         __need_loop_1027 = __i_iterator.first(__context__,(__i_rename_at_1027_234)) && __need_loop_1027;
         for ( ; __need_loop_1027 ; __need_loop_1027 = __i_iterator.next(__context__,(__i_rename_at_1027_234)) )
         {
-            if ( !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1026_233),__i_rename_at_1027_234)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1026_233),__i_rename_at_1027_234,((char *) ";")) )
+            if ( !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1026_233),__i_rename_at_1027_234)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1026_233),__i_rename_at_1027_234,((char *) ";")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1026_233),__i_rename_at_1027_234);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1026_233),__i_rename_at_1027_234);
             };
         }
         __i_iterator.close(__context__,(__i_rename_at_1027_234));
     };
 }
 
-inline void fmt_type_colon_a5b252566f4d584 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1035_235 )
+inline void fmt_type_colon_400b4390d7623d95 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1035_235 )
 {
     {
         bool __need_loop_1036 = true;
@@ -2361,12 +2361,12 @@ inline void fmt_type_colon_a5b252566f4d584 ( Context * __context__, das_source_f
         __need_loop_1036 = __i_iterator.first(__context__,(__i_rename_at_1036_236)) && __need_loop_1036;
         for ( ; __need_loop_1036 ; __need_loop_1036 = __i_iterator.next(__context__,(__i_rename_at_1036_236)) )
         {
-            if ( __ctx_rename_at_1035_235.tokens(__i_rename_at_1036_236,__context__).isInType && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1035_235),__i_rename_at_1036_236,((char *) ":")) )
+            if ( __ctx_rename_at_1035_235.tokens(__i_rename_at_1036_236,__context__).isInType && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1035_235),__i_rename_at_1036_236,((char *) ":")) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1035_235),__i_rename_at_1036_236);
-                if ( !new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1035_235),__i_rename_at_1036_236 + 1) )
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1035_235),__i_rename_at_1036_236);
+                if ( !new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1035_235),__i_rename_at_1036_236 + 1) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1035_235),__i_rename_at_1036_236 + 1);
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1035_235),__i_rename_at_1036_236 + 1);
                 };
             };
         }
@@ -2374,7 +2374,7 @@ inline void fmt_type_colon_a5b252566f4d584 ( Context * __context__, das_source_f
     };
 }
 
-inline void fmt_function_decl_param_paren_6c291b7c3a975893 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1047_237 )
+inline void fmt_function_decl_param_paren_dac5114d61e417ed ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1047_237 )
 {
     {
         bool __need_loop_1048 = true;
@@ -2384,24 +2384,24 @@ inline void fmt_function_decl_param_paren_6c291b7c3a975893 ( Context * __context
         __need_loop_1048 = __i_iterator.first(__context__,(__i_rename_at_1048_238)) && __need_loop_1048;
         for ( ; __need_loop_1048 ; __need_loop_1048 = __i_iterator.next(__context__,(__i_rename_at_1048_238)) )
         {
-            if ( (__ctx_rename_at_1047_237.tokens(__i_rename_at_1048_238,__context__).isInFunctionParam && !(__ctx_rename_at_1047_237.tokens((__i_rename_at_1048_238 - 1),__context__).isInFunctionParam)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238,((char *) "(")) )
+            if ( (__ctx_rename_at_1047_237.tokens(__i_rename_at_1048_238,__context__).isInFunctionParam && !(__ctx_rename_at_1047_237.tokens((__i_rename_at_1048_238 - 1),__context__).isInFunctionParam)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238,((char *) "(")) )
             {
-                remove_spaces_around_1c96d2bcc36445d1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238);
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238 - 1,((char *) "]")) )
+                remove_spaces_around_203ede7b7eebc7c5(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238);
+                if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238 - 1,((char *) "]")) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238);
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238);
                 };
             };
-            if ( (__ctx_rename_at_1047_237.tokens(__i_rename_at_1048_238,__context__).isInFunctionParam && !(__ctx_rename_at_1047_237.tokens((__i_rename_at_1048_238 + 1),__context__).isInFunctionParam)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238,((char *) ")")) )
+            if ( (__ctx_rename_at_1047_237.tokens(__i_rename_at_1048_238,__context__).isInFunctionParam && !(__ctx_rename_at_1047_237.tokens((__i_rename_at_1048_238 + 1),__context__).isInFunctionParam)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238,((char *) ")")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1047_237),__i_rename_at_1048_238);
             };
         }
         __i_iterator.close(__context__,(__i_rename_at_1048_238));
     };
 }
 
-inline void fmt_function_call_param_paren_call_f740219cd0547b48 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1062_239 )
+inline void fmt_function_call_param_paren_call_347b6df2d6483625 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1062_239 )
 {
     {
         bool __need_loop_1063 = true;
@@ -2411,18 +2411,18 @@ inline void fmt_function_call_param_paren_call_f740219cd0547b48 ( Context * __co
         __need_loop_1063 = __i_iterator.first(__context__,(__i_rename_at_1063_240)) && __need_loop_1063;
         for ( ; __need_loop_1063 ; __need_loop_1063 = __i_iterator.next(__context__,(__i_rename_at_1063_240)) )
         {
-            if ( (eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__i_rename_at_1063_240,((char *) "(")) && !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__i_rename_at_1063_240))) && (__ctx_rename_at_1062_239.tokens((__i_rename_at_1063_240 - 1),__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER) )
+            if ( (eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__i_rename_at_1063_240,((char *) "(")) && !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__i_rename_at_1063_240))) && (__ctx_rename_at_1062_239.tokens((__i_rename_at_1063_240 - 1),__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER) )
             {
-                remove_spaces_around_1c96d2bcc36445d1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__i_rename_at_1063_240);
-                int32_t __closingParen_rename_at_1066_241 = ((int32_t)find_pair_paren_90acbe7a3b864d93(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__i_rename_at_1063_240));
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__closingParen_rename_at_1066_241);
+                remove_spaces_around_203ede7b7eebc7c5(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__i_rename_at_1063_240);
+                int32_t __closingParen_rename_at_1066_241 = ((int32_t)find_pair_paren_ff2776f9d2856b4e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__i_rename_at_1063_240));
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1062_239),__closingParen_rename_at_1066_241);
             };
         }
         __i_iterator.close(__context__,(__i_rename_at_1063_240));
     };
 }
 
-inline void fmt_spaces_around_operators_9837b8f174165da7 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1073_242 )
+inline void fmt_spaces_around_operators_53d08ef306f852f9 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1073_242 )
 {
     {
         bool __need_loop_1074 = true;
@@ -2434,16 +2434,16 @@ inline void fmt_spaces_around_operators_9837b8f174165da7 ( Context * __context__
         {
             if ( !builtin_empty(__ctx_rename_at_1073_242.tokens(__i_rename_at_1074_243,__context__).str) )
             {
-                if ( is_unary_62ad92645c7f9ee6(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243) && !(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243)) )
+                if ( is_unary_b0c7219745029c11(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243) && !(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243)) )
                 {
-                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243 + 1);
+                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243 + 1);
                 };
-                if ( need_space_only_before_584e48acb8e8a70(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243) && !(is_unary_62ad92645c7f9ee6(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243)) )
+                if ( need_space_only_before_a3979a2c621820ef(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243) && !(is_unary_b0c7219745029c11(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243)) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243);
-                } else if ( need_spaces_around_7179a668ae90ccd6(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243) && !(is_unary_62ad92645c7f9ee6(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243)) )
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243);
+                } else if ( need_spaces_around_c85752147cfda42d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243) && !(is_unary_b0c7219745029c11(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243)) )
                 {
-                    make_spaces_around_9b0360b9b4d718c3(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243);
+                    make_spaces_around_80d61c2838123a7d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1073_242),__i_rename_at_1074_243);
                 };
             };
         }
@@ -2451,7 +2451,7 @@ inline void fmt_spaces_around_operators_9837b8f174165da7 ( Context * __context__
     };
 }
 
-inline void fmt_space_after_keyword_2aab289129cf4fc8 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1092_244 )
+inline void fmt_space_after_keyword_2536c1e9542cdc3b ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1092_244 )
 {
     {
         bool __need_loop_1093 = true;
@@ -2461,18 +2461,25 @@ inline void fmt_space_after_keyword_2aab289129cf4fc8 ( Context * __context__, da
         __need_loop_1093 = __i_iterator.first(__context__,(__i_rename_at_1093_245)) && __need_loop_1093;
         for ( ; __need_loop_1093 ; __need_loop_1093 = __i_iterator.next(__context__,(__i_rename_at_1093_245)) )
         {
-            if ( _FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622(__context__,das_global<TDim<char *,11>,0x94e2878ce5158877>(__context__) /*space_after_keywords*/,__ctx_rename_at_1092_244.tokens(__i_rename_at_1093_245,__context__).str) >= 0 )
+            if ( _FuncbuiltinTickfind_indexTick6703785223819426183_feb73043e4854e1f(__context__,das_global<TDim<char *,11>,0x94e2878ce5158877>(__context__) /*space_after_keywords*/,__ctx_rename_at_1092_244.tokens(__i_rename_at_1093_245,__context__).str) >= 0 )
             {
-                if ( !new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1) )
+                if ( !new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1);
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1);
+                };
+            };
+            if ( ((__ctx_rename_at_1092_244.tokens(__i_rename_at_1093_245,__context__).spaces >= 2) && (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_1092_244.tokens(__i_rename_at_1093_245,__context__).str),cast<char *>::from(((char *) "match")),*__context__,nullptr))) && ((SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_1092_244.tokens((__i_rename_at_1093_245 + 1),__context__).str),cast<char *>::from(((char *) "(")),*__context__,nullptr)) && !(__ctx_rename_at_1092_244.tokens((__i_rename_at_1093_245 + 1),__context__).isInFunctionParam)) )
+            {
+                if ( !new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1) )
+                {
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1);
                 };
             };
             if ( (SimPolicy<char *>::Equ(cast<char *>::from(__ctx_rename_at_1092_244.tokens(__i_rename_at_1093_245,__context__).str),cast<char *>::from(((char *) "return")),*__context__,nullptr)) && (builtin_string_length(__ctx_rename_at_1092_244.tokens((__i_rename_at_1093_245 + 1),__context__).str,__context__) > 0) )
             {
-                if ( !new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1) )
+                if ( !new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1);
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1092_244),__i_rename_at_1093_245 + 1);
                 };
             };
         }
@@ -2480,334 +2487,334 @@ inline void fmt_space_after_keyword_2aab289129cf4fc8 ( Context * __context__, da
     };
 }
 
-inline void fmt_space_after_paren_a2ef6e80a339831f ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1109_246 )
+inline void fmt_space_after_paren_82d46f74b7d5652 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1114_246 )
 {
     {
-        bool __need_loop_1110 = true;
+        bool __need_loop_1115 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1109_246.tokens)) - 1));
-        int32_t __i_rename_at_1110_247;
-        __need_loop_1110 = __i_iterator.first(__context__,(__i_rename_at_1110_247)) && __need_loop_1110;
-        for ( ; __need_loop_1110 ; __need_loop_1110 = __i_iterator.next(__context__,(__i_rename_at_1110_247)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1114_246.tokens)) - 1));
+        int32_t __i_rename_at_1115_247;
+        __need_loop_1115 = __i_iterator.first(__context__,(__i_rename_at_1115_247)) && __need_loop_1115;
+        for ( ; __need_loop_1115 ; __need_loop_1115 = __i_iterator.next(__context__,(__i_rename_at_1115_247)) )
         {
-            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1109_246),__i_rename_at_1110_247,((char *) ")")) && (__ctx_rename_at_1109_246.tokens((__i_rename_at_1110_247 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) )
+            if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1114_246),__i_rename_at_1115_247,((char *) ")")) && (__ctx_rename_at_1114_246.tokens((__i_rename_at_1115_247 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1109_246),__i_rename_at_1110_247 + 1);
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1114_246),__i_rename_at_1115_247 + 1);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1110_247));
+        __i_iterator.close(__context__,(__i_rename_at_1115_247));
     };
 }
 
-inline void fmt_space_after_square_brackets_15fb170c80c43d93 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1118_248 )
+inline void fmt_space_after_square_brackets_fdbea403935e8e12 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1123_248 )
 {
     {
-        bool __need_loop_1119 = true;
+        bool __need_loop_1124 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1118_248.tokens)) - 1));
-        int32_t __i_rename_at_1119_249;
-        __need_loop_1119 = __i_iterator.first(__context__,(__i_rename_at_1119_249)) && __need_loop_1119;
-        for ( ; __need_loop_1119 ; __need_loop_1119 = __i_iterator.next(__context__,(__i_rename_at_1119_249)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1123_248.tokens)) - 1));
+        int32_t __i_rename_at_1124_249;
+        __need_loop_1124 = __i_iterator.first(__context__,(__i_rename_at_1124_249)) && __need_loop_1124;
+        for ( ; __need_loop_1124 ; __need_loop_1124 = __i_iterator.next(__context__,(__i_rename_at_1124_249)) )
         {
-            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1118_248),__i_rename_at_1119_249,((char *) "]")) && (__ctx_rename_at_1118_248.tokens((__i_rename_at_1119_249 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) )
+            if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1123_248),__i_rename_at_1124_249,((char *) "]")) && (__ctx_rename_at_1123_248.tokens((__i_rename_at_1124_249 + 1),__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1118_248),__i_rename_at_1119_249 + 1);
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1123_248),__i_rename_at_1124_249 + 1);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1119_249));
+        __i_iterator.close(__context__,(__i_rename_at_1124_249));
     };
 }
 
-inline void fmt_remove_space_inside_parens_fc44c6bd3c600b9c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1127_250 )
+inline void fmt_remove_space_inside_parens_cb72085f2dcb9ecd ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1132_250 )
 {
     {
-        bool __need_loop_1128 = true;
+        bool __need_loop_1133 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1127_250.tokens)) - 1));
-        int32_t __i_rename_at_1128_251;
-        __need_loop_1128 = __i_iterator.first(__context__,(__i_rename_at_1128_251)) && __need_loop_1128;
-        for ( ; __need_loop_1128 ; __need_loop_1128 = __i_iterator.next(__context__,(__i_rename_at_1128_251)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1132_250.tokens)) - 1));
+        int32_t __i_rename_at_1133_251;
+        __need_loop_1133 = __i_iterator.first(__context__,(__i_rename_at_1133_251)) && __need_loop_1133;
+        for ( ; __need_loop_1133 ; __need_loop_1133 = __i_iterator.next(__context__,(__i_rename_at_1133_251)) )
         {
-            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1127_250),__i_rename_at_1128_251,((char *) "(")) )
+            if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1132_250),__i_rename_at_1133_251,((char *) "(")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1127_250),__i_rename_at_1128_251 + 1);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1132_250),__i_rename_at_1133_251 + 1);
             };
-            if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1127_250),__i_rename_at_1128_251,((char *) ")")) )
+            if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1132_250),__i_rename_at_1133_251,((char *) ")")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1127_250),__i_rename_at_1128_251);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1132_250),__i_rename_at_1133_251);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1128_251));
+        __i_iterator.close(__context__,(__i_rename_at_1133_251));
     };
 }
 
-inline void fmt_remove_space_before_as_bb9fc0cabc4ff729 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1139_252 )
+inline void fmt_remove_space_before_as_865a2960d4580501 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1144_252 )
 {
     {
-        bool __need_loop_1140 = true;
+        bool __need_loop_1145 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1139_252.tokens))));
-        int32_t __i_rename_at_1140_253;
-        __need_loop_1140 = __i_iterator.first(__context__,(__i_rename_at_1140_253)) && __need_loop_1140;
-        for ( ; __need_loop_1140 ; __need_loop_1140 = __i_iterator.next(__context__,(__i_rename_at_1140_253)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1144_252.tokens))));
+        int32_t __i_rename_at_1145_253;
+        __need_loop_1145 = __i_iterator.first(__context__,(__i_rename_at_1145_253)) && __need_loop_1145;
+        for ( ; __need_loop_1145 ; __need_loop_1145 = __i_iterator.next(__context__,(__i_rename_at_1145_253)) )
         {
-            if ( (!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1139_252),__i_rename_at_1140_253)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1139_252),__i_rename_at_1140_253,((char *) "as"))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1139_252),__i_rename_at_1140_253 - 1,((char *) "?")) )
+            if ( (!(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1144_252),__i_rename_at_1145_253)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1144_252),__i_rename_at_1145_253,((char *) "as"))) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1144_252),__i_rename_at_1145_253 - 1,((char *) "?")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1139_252),__i_rename_at_1140_253);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1144_252),__i_rename_at_1145_253);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1140_253));
+        __i_iterator.close(__context__,(__i_rename_at_1145_253));
     };
 }
 
-inline void fmt_remove_space_before_end_of_object_64e24a59c1d5b6b ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1148_254 )
+inline void fmt_remove_space_before_end_of_object_510336d353cc43f1 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1153_254 )
 {
     {
-        bool __need_loop_1150 = true;
+        bool __need_loop_1155 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1148_254.tokens)) - 2));
-        int32_t __i_rename_at_1150_255;
-        __need_loop_1150 = __i_iterator.first(__context__,(__i_rename_at_1150_255)) && __need_loop_1150;
-        for ( ; __need_loop_1150 ; __need_loop_1150 = __i_iterator.next(__context__,(__i_rename_at_1150_255)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1153_254.tokens)) - 2));
+        int32_t __i_rename_at_1155_255;
+        __need_loop_1155 = __i_iterator.first(__context__,(__i_rename_at_1155_255)) && __need_loop_1155;
+        for ( ; __need_loop_1155 ; __need_loop_1155 = __i_iterator.next(__context__,(__i_rename_at_1155_255)) )
         {
-            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255,((char *) "]"))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255 + 1,((char *) "]"))) && !(eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255 - 1,((char *) "]"))) )
+            if ( ((!(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255,((char *) "]"))) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255 + 1,((char *) "]"))) && !(eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255 - 1,((char *) "]"))) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1148_254),__i_rename_at_1150_255);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1153_254),__i_rename_at_1155_255);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1150_255));
+        __i_iterator.close(__context__,(__i_rename_at_1155_255));
     };
 }
 
-inline void fmt_remove_space_before_object_type_298f1dcfc2f7829c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1158_256 )
+inline void fmt_remove_space_before_object_type_fff6f6cd3369398c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1163_256 )
 {
     {
-        bool __need_loop_1160 = true;
+        bool __need_loop_1165 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(2,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1158_256.tokens)) - 1));
-        int32_t __i_rename_at_1160_257;
-        __need_loop_1160 = __i_iterator.first(__context__,(__i_rename_at_1160_257)) && __need_loop_1160;
-        for ( ; __need_loop_1160 ; __need_loop_1160 = __i_iterator.next(__context__,(__i_rename_at_1160_257)) )
+        das_iterator<range> __i_iterator(range(2,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1163_256.tokens)) - 1));
+        int32_t __i_rename_at_1165_257;
+        __need_loop_1165 = __i_iterator.first(__context__,(__i_rename_at_1165_257)) && __need_loop_1165;
+        for ( ; __need_loop_1165 ; __need_loop_1165 = __i_iterator.next(__context__,(__i_rename_at_1165_257)) )
         {
-            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1158_256),__i_rename_at_1160_257)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1158_256),__i_rename_at_1160_257 - 2,((char *) "["))) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1158_256),__i_rename_at_1160_257 - 1,((char *) "["))) && (__ctx_rename_at_1158_256.tokens(__i_rename_at_1160_257,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER) )
+            if ( ((!(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1163_256),__i_rename_at_1165_257)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1163_256),__i_rename_at_1165_257 - 2,((char *) "["))) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1163_256),__i_rename_at_1165_257 - 1,((char *) "["))) && (__ctx_rename_at_1163_256.tokens(__i_rename_at_1165_257,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1158_256),__i_rename_at_1160_257);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1163_256),__i_rename_at_1165_257);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1160_257));
+        __i_iterator.close(__context__,(__i_rename_at_1165_257));
     };
 }
 
-inline void fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1168_258 )
+inline void fmt_remove_space_before_array_of_type_fa116a3241d9e90c ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1173_258 )
 {
     {
-        bool __need_loop_1170 = true;
+        bool __need_loop_1175 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1168_258.tokens)) - 2));
-        int32_t __i_rename_at_1170_259;
-        __need_loop_1170 = __i_iterator.first(__context__,(__i_rename_at_1170_259)) && __need_loop_1170;
-        for ( ; __need_loop_1170 ; __need_loop_1170 = __i_iterator.next(__context__,(__i_rename_at_1170_259)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1173_258.tokens)) - 2));
+        int32_t __i_rename_at_1175_259;
+        __need_loop_1175 = __i_iterator.first(__context__,(__i_rename_at_1175_259)) && __need_loop_1175;
+        for ( ; __need_loop_1175 ; __need_loop_1175 = __i_iterator.next(__context__,(__i_rename_at_1175_259)) )
         {
-            if ( ((!(new_line_before_56d9a06feda36687(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1168_258),__i_rename_at_1170_259)) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1168_258),__i_rename_at_1170_259 - 1,((char *) ">"))) && __ctx_rename_at_1168_258.tokens((__i_rename_at_1170_259 - 1),__context__).isInType) && eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1168_258),__i_rename_at_1170_259,((char *) "[")) )
+            if ( ((!(new_line_before_74a9e3638b00c26f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1173_258),__i_rename_at_1175_259)) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1173_258),__i_rename_at_1175_259 - 1,((char *) ">"))) && __ctx_rename_at_1173_258.tokens((__i_rename_at_1175_259 - 1),__context__).isInType) && eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1173_258),__i_rename_at_1175_259,((char *) "[")) )
             {
-                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1168_258),__i_rename_at_1170_259);
+                _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1173_258),__i_rename_at_1175_259);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1170_259));
+        __i_iterator.close(__context__,(__i_rename_at_1175_259));
     };
 }
 
-inline void fmt_glue_type_specifiers_cb3a1c8b879530ae ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1180_260 )
+inline void fmt_glue_type_specifiers_538bf5888d1be714 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1185_260 )
 {
     {
-        bool __need_loop_1181 = true;
+        bool __need_loop_1186 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1180_260.tokens))));
-        int32_t __i_rename_at_1181_261;
-        __need_loop_1181 = __i_iterator.first(__context__,(__i_rename_at_1181_261)) && __need_loop_1181;
-        for ( ; __need_loop_1181 ; __need_loop_1181 = __i_iterator.next(__context__,(__i_rename_at_1181_261)) )
+        das_iterator<range> __i_iterator(range(1,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1185_260.tokens))));
+        int32_t __i_rename_at_1186_261;
+        __need_loop_1186 = __i_iterator.first(__context__,(__i_rename_at_1186_261)) && __need_loop_1186;
+        for ( ; __need_loop_1186 ; __need_loop_1186 = __i_iterator.next(__context__,(__i_rename_at_1186_261)) )
         {
-            if ( __ctx_rename_at_1180_260.tokens(__i_rename_at_1181_261,__context__).isInType )
+            if ( __ctx_rename_at_1185_260.tokens(__i_rename_at_1186_261,__context__).isInType )
             {
-                if ( (__ctx_rename_at_1180_260.tokens(__i_rename_at_1181_261,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) && (_FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856(__context__,das_global<TDim<char *,3>,0xca374635aa15cd66>(__context__) /*type_specifiers*/,__ctx_rename_at_1180_260.tokens(__i_rename_at_1181_261,__context__).str) >= 0) )
+                if ( (__ctx_rename_at_1185_260.tokens(__i_rename_at_1186_261,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::UNKNOWN) && (_FuncbuiltinTickfind_indexTick6703785223819426183_a4c49c41e04684c4(__context__,das_global<TDim<char *,3>,0xca374635aa15cd66>(__context__) /*type_specifiers*/,__ctx_rename_at_1185_260.tokens(__i_rename_at_1186_261,__context__).str) >= 0) )
                 {
-                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261);
+                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261);
                 };
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261,((char *) "const")) && eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261 - 1,((char *) "-"),((char *) "==")) )
+                if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261,((char *) "const")) && eq_3d631d49cf7e1d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261 - 1,((char *) "-"),((char *) "==")) )
                 {
-                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261);
+                    _Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261);
                 };
-                if ( eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261,((char *) "-"),((char *) "==")) )
+                if ( eq_3d631d49cf7e1d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261,((char *) "-"),((char *) "==")) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261);
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261);
                 };
-                if ( eq_1a08ceae13f47e89(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261 - 1,((char *) "|")) )
+                if ( eq_5251ca869c24b49f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261 - 1,((char *) "|")) )
                 {
-                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1180_260),__i_rename_at_1181_261);
+                    _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1185_260),__i_rename_at_1186_261);
                 };
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1181_261));
+        __i_iterator.close(__context__,(__i_rename_at_1186_261));
     };
 }
 
-inline void fmt_space_after_cast_type_446660f13b2ec290 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1200_262 )
+inline void fmt_space_after_cast_type_5d3d2f4d38f83d01 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1205_262 )
 {
     {
-        bool __need_loop_1201 = true;
+        bool __need_loop_1206 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(0,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1200_262.tokens)) - 3));
-        int32_t __i_rename_at_1201_263;
-        __need_loop_1201 = __i_iterator.first(__context__,(__i_rename_at_1201_263)) && __need_loop_1201;
-        for ( ; __need_loop_1201 ; __need_loop_1201 = __i_iterator.next(__context__,(__i_rename_at_1201_263)) )
+        das_iterator<range> __i_iterator(range(0,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1205_262.tokens)) - 3));
+        int32_t __i_rename_at_1206_263;
+        __need_loop_1206 = __i_iterator.first(__context__,(__i_rename_at_1206_263)) && __need_loop_1206;
+        for ( ; __need_loop_1206 ; __need_loop_1206 = __i_iterator.next(__context__,(__i_rename_at_1206_263)) )
         {
-            if ( __ctx_rename_at_1200_262.tokens(__i_rename_at_1201_263,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER )
+            if ( __ctx_rename_at_1205_262.tokens(__i_rename_at_1206_263,__context__).tokenType == DAS_COMMENT(enum) das_source_formatter::TokenType::KEYWORD_OR_IDENTIFIER )
             {
-                if ( _FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a(__context__,das_global<TDim<char *,22>,0xced6bfad8d3e8a64>(__context__) /*type_after_keyword*/,__ctx_rename_at_1200_262.tokens(__i_rename_at_1201_263,__context__).str) >= 0 )
+                if ( _FuncbuiltinTickfind_indexTick6703785223819426183_7889f698fd41c370(__context__,das_global<TDim<char *,22>,0xced6bfad8d3e8a64>(__context__) /*type_after_keyword*/,__ctx_rename_at_1205_262.tokens(__i_rename_at_1206_263,__context__).str) >= 0 )
                 {
                     {
-                        bool __need_loop_1204 = true;
+                        bool __need_loop_1209 = true;
                         // j: int const
-                        das_iterator<range> __j_iterator(range(__i_rename_at_1201_263 + 2,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1200_262.tokens))));
-                        int32_t __j_rename_at_1204_264;
-                        __need_loop_1204 = __j_iterator.first(__context__,(__j_rename_at_1204_264)) && __need_loop_1204;
-                        for ( ; __need_loop_1204 ; __need_loop_1204 = __j_iterator.next(__context__,(__j_rename_at_1204_264)) )
+                        das_iterator<range> __j_iterator(range(__i_rename_at_1206_263 + 2,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1205_262.tokens))));
+                        int32_t __j_rename_at_1209_264;
+                        __need_loop_1209 = __j_iterator.first(__context__,(__j_rename_at_1209_264)) && __need_loop_1209;
+                        for ( ; __need_loop_1209 ; __need_loop_1209 = __j_iterator.next(__context__,(__j_rename_at_1209_264)) )
                         {
-                            if ( !(__ctx_rename_at_1200_262.tokens(__j_rename_at_1204_264,__context__).isInType) && (__ctx_rename_at_1200_262.tokens(__j_rename_at_1204_264,__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT) )
+                            if ( !(__ctx_rename_at_1205_262.tokens(__j_rename_at_1209_264,__context__).isInType) && (__ctx_rename_at_1205_262.tokens(__j_rename_at_1209_264,__context__).tokenType != DAS_COMMENT(enum) das_source_formatter::TokenType::COMMENT) )
                             {
-                                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1200_262),__j_rename_at_1204_264);
+                                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1205_262),__j_rename_at_1209_264);
                                 break;
                             };
                         }
-                        __j_iterator.close(__context__,(__j_rename_at_1204_264));
+                        __j_iterator.close(__context__,(__j_rename_at_1209_264));
                     };
                 };
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1201_263));
+        __i_iterator.close(__context__,(__i_rename_at_1206_263));
     };
 }
 
-inline void fmt_destructure_space_e9871049a6de7d91 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1215_265 )
+inline void fmt_destructure_space_2fcf524fd08df174 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1220_265 )
 {
     {
-        bool __need_loop_1216 = true;
+        bool __need_loop_1221 = true;
         // i: int const
-        das_iterator<range> __i_iterator(range(0,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1215_265.tokens)) - 1));
-        int32_t __i_rename_at_1216_266;
-        __need_loop_1216 = __i_iterator.first(__context__,(__i_rename_at_1216_266)) && __need_loop_1216;
-        for ( ; __need_loop_1216 ; __need_loop_1216 = __i_iterator.next(__context__,(__i_rename_at_1216_266)) )
+        das_iterator<range> __i_iterator(range(0,builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1220_265.tokens)) - 1));
+        int32_t __i_rename_at_1221_266;
+        __need_loop_1221 = __i_iterator.first(__context__,(__i_rename_at_1221_266)) && __need_loop_1221;
+        for ( ; __need_loop_1221 ; __need_loop_1221 = __i_iterator.next(__context__,(__i_rename_at_1221_266)) )
         {
-            if ( eq_32a38f27b5380f0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1215_265),__i_rename_at_1216_266,((char *) "let"),((char *) "var")) && (__ctx_rename_at_1215_265.tokens((__i_rename_at_1216_266 + 1),__context__).spaces == 0) )
+            if ( eq_3d631d49cf7e1d(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1220_265),__i_rename_at_1221_266,((char *) "let"),((char *) "var")) && (__ctx_rename_at_1220_265.tokens((__i_rename_at_1221_266 + 1),__context__).spaces == 0) )
             {
-                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1215_265),__i_rename_at_1216_266 + 1);
+                _Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1220_265),__i_rename_at_1221_266 + 1);
             };
         }
-        __i_iterator.close(__context__,(__i_rename_at_1216_266));
+        __i_iterator.close(__context__,(__i_rename_at_1221_266));
     };
 }
 
-inline void do_format_4835418a8469e5fa ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1224_267 )
+inline void do_format_ff67931097f9f551 ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1229_267 )
 {
-    parse_all_tokens_b5d5b68330cdfcd0(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-    process_formatter_tokens_a63e2ffa4c8206b6(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-    if ( have_formatter_token_296d7fc158126671(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267),((char *) "ignore-file")) )
+    parse_all_tokens_29fbd1ed87913a0a(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+    process_formatter_tokens_b7e8fa22d8896a75(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+    if ( have_formatter_token_68c38613f91cfa3f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267),((char *) "ignore-file")) )
     {
         return ;
     } else {
-        mark_token_context_7dbf70435b518a0a(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_spaces_around_operators_9837b8f174165da7(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_function_call_param_paren_call_f740219cd0547b48(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_comma_7aa6a2faf3ce3f4f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_semicolon_29caf5fd09f6497e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_function_decl_param_paren_6c291b7c3a975893(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_type_colon_a5b252566f4d584(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_cast_type_446660f13b2ec290(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_comma_54b9cd4ba70794e(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_semicolon_132b81d1431b5d49(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_inside_parens_fc44c6bd3c600b9c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_as_bb9fc0cabc4ff729(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_glue_type_specifiers_cb3a1c8b879530ae(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_keyword_2aab289129cf4fc8(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_paren_a2ef6e80a339831f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_space_after_square_brackets_15fb170c80c43d93(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_function_arguments_7d9f22d6302573cb(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_args_26ba700ce1a53dbc(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_end_of_object_64e24a59c1d5b6b(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_object_type_298f1dcfc2f7829c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        fmt_destructure_space_e9871049a6de7d91(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1224_267));
-        int32_t __top_rename_at_1256_268 = ((int32_t)(builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1224_267.tokens)) - 1));
+        mark_token_context_7d9da6c542abc3d5(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_spaces_around_operators_53d08ef306f852f9(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_function_call_param_paren_call_347b6df2d6483625(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_comma_f91c855ec419635f(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_semicolon_23f19dedec62b617(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_function_decl_param_paren_dac5114d61e417ed(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_type_colon_400b4390d7623d95(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_cast_type_5d3d2f4d38f83d01(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_comma_e4ab43db37a70c74(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_semicolon_e5d8826c5665e6be(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_inside_parens_cb72085f2dcb9ecd(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_as_865a2960d4580501(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_glue_type_specifiers_538bf5888d1be714(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_keyword_2536c1e9542cdc3b(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_paren_82d46f74b7d5652(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_space_after_square_brackets_fdbea403935e8e12(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_function_arguments_393a0d20cb9876da(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_args_b613d1f002f609af(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_end_of_object_510336d353cc43f1(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_object_type_fff6f6cd3369398c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_remove_space_before_array_of_type_fa116a3241d9e90c(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        fmt_destructure_space_2fcf524fd08df174(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1229_267));
+        int32_t __top_rename_at_1261_268 = ((int32_t)(builtin_array_size(das_arg<TArray<das_source_formatter::Token>>::pass(__ctx_rename_at_1229_267.tokens)) - 1));
         {
-            bool __need_loop_1257 = true;
+            bool __need_loop_1262 = true;
             // it: int const
             das_iterator<range> __it_iterator(range(0,16));
-            int32_t __it_rename_at_1257_269;
-            __need_loop_1257 = __it_iterator.first(__context__,(__it_rename_at_1257_269)) && __need_loop_1257;
-            for ( ; __need_loop_1257 ; __need_loop_1257 = __it_iterator.next(__context__,(__it_rename_at_1257_269)) )
+            int32_t __it_rename_at_1262_269;
+            __need_loop_1262 = __it_iterator.first(__context__,(__it_rename_at_1262_269)) && __need_loop_1262;
+            for ( ; __need_loop_1262 ; __need_loop_1262 = __it_iterator.next(__context__,(__it_rename_at_1262_269)) )
             {
-                int32_t __i_rename_at_1258_270 = ((int32_t)(__top_rename_at_1256_268 - __it_rename_at_1257_269));
-                if ( (__i_rename_at_1258_270 < 0) || !(builtin_empty(__ctx_rename_at_1224_267.tokens(__i_rename_at_1258_270,__context__).str)) )
+                int32_t __i_rename_at_1263_270 = ((int32_t)(__top_rename_at_1261_268 - __it_rename_at_1262_269));
+                if ( (__i_rename_at_1263_270 < 0) || !(builtin_empty(__ctx_rename_at_1229_267.tokens(__i_rename_at_1263_270,__context__).str)) )
                 {
                     break;
                 } else {
-                    das_copy(__ctx_rename_at_1224_267.tokens(__i_rename_at_1258_270,__context__).spaces,0);
+                    das_copy(__ctx_rename_at_1229_267.tokens(__i_rename_at_1263_270,__context__).spaces,0);
                 };
             }
-            __it_iterator.close(__context__,(__it_rename_at_1257_269));
+            __it_iterator.close(__context__,(__it_rename_at_1262_269));
         };
     };
 }
 
-inline char * format_source_string_f69d100c71c99a8c ( Context * __context__, char * const  & __file_data_rename_at_1267_271 )
+inline char * format_source_string_53ea2afc74eb7140 ( Context * __context__, char * const  & __file_data_rename_at_1272_271 )
 {
-    das_source_formatter::FormatterCtx __ctx_rename_at_1268_272; memset((void*)&__ctx_rename_at_1268_272,0,sizeof(__ctx_rename_at_1268_272));
-    /* finally */ auto __finally_1267= das_finally([&](){
-    finalize_b9f001def6083360(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1268_272));
+    das_source_formatter::FormatterCtx __ctx_rename_at_1273_272; memset((void*)&__ctx_rename_at_1273_272,0,sizeof(__ctx_rename_at_1273_272));
+    /* finally */ auto __finally_1272= das_finally([&](){
+    finalize_db456bcf8e957ca4(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1273_272));
     /* end finally */ });
-    das_zero(__ctx_rename_at_1268_272);
-    _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1268_272.data),das_arg<TArray<uint8_t>>::pass(das_invoke<TArray<uint8_t>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<uint8_t>{
-        TArray<uint8_t> ____acomp_1269_18_rename_at_1269_273;das_zero(____acomp_1269_18_rename_at_1269_273);
-        builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_1269_18_rename_at_1269_273),false);
+    das_zero(__ctx_rename_at_1273_272);
+    _FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_7926e574de26b25d(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1273_272.data),das_arg<TArray<uint8_t>>::pass(das_invoke<TArray<uint8_t>>::invoke_cmres(__context__,nullptr,[&]() DAS_AOT_INLINE_LAMBDA -> TArray<uint8_t>{
+        TArray<uint8_t> ____acomp_1274_18_rename_at_1274_273;das_zero(____acomp_1274_18_rename_at_1274_273);
+        builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_1274_18_rename_at_1274_273),false);
         {
-            bool __need_loop_1269 = true;
+            bool __need_loop_1274 = true;
             // c: int const
-            das_iterator<char * const > __c_iterator(__file_data_rename_at_1267_271);
-            int32_t __c_rename_at_1269_274;
-            __need_loop_1269 = __c_iterator.first(__context__,(__c_rename_at_1269_274)) && __need_loop_1269;
-            for ( ; __need_loop_1269 ; __need_loop_1269 = __c_iterator.next(__context__,(__c_rename_at_1269_274)) )
+            das_iterator<char * const > __c_iterator(__file_data_rename_at_1272_271);
+            int32_t __c_rename_at_1274_274;
+            __need_loop_1274 = __c_iterator.first(__context__,(__c_rename_at_1274_274)) && __need_loop_1274;
+            for ( ; __need_loop_1274 ; __need_loop_1274 = __c_iterator.next(__context__,(__c_rename_at_1274_274)) )
             {
-                _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_1269_18_rename_at_1269_273),uint8_t(__c_rename_at_1269_274));
+                _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_1274_18_rename_at_1274_273),uint8_t(__c_rename_at_1274_274));
             }
-            __c_iterator.close(__context__,(__c_rename_at_1269_274));
+            __c_iterator.close(__context__,(__c_rename_at_1274_274));
         };
-        builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_1269_18_rename_at_1269_273),true);
-        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_1269_18_rename_at_1269_273)));
+        builtin_set_verify_array_locks(das_arg<TArray<uint8_t>>::pass(____acomp_1274_18_rename_at_1274_273),true);
+        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_ab8b80dafe942dee(__context__,das_arg<TArray<uint8_t>>::pass(____acomp_1274_18_rename_at_1274_273)));
     })));
-    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1268_272.data),0x0);
-    do_format_4835418a8469e5fa(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1268_272));
-    return das_auto_cast<char *>::cast(generate_source_64706a1ce7db4983(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1268_272)));
+    _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1273_272.data),0x0);
+    do_format_ff67931097f9f551(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1273_272));
+    return das_auto_cast<char *>::cast(generate_source_d9e23c7a7a794181(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1273_272)));
 }
 
-inline char * format_source_58c20f6bcb79eabd ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1276_275, TArray<uint8_t> const  &  __file_data_rename_at_1276_276 )
+inline char * format_source_555ab24d2bad5d9a ( Context * __context__, das_source_formatter::FormatterCtx &  __ctx_rename_at_1281_275, TArray<uint8_t> const  &  __file_data_rename_at_1281_276 )
 {
-    _FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1276_275.data),__file_data_rename_at_1276_276);
-    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1276_275.data),0x0);
-    do_format_4835418a8469e5fa(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1276_275));
-    return das_auto_cast<char *>::cast(generate_source_64706a1ce7db4983(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1276_275)));
+    _FuncbuiltinTickcloneTick3038771811667655495_11c19903beee414c(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1281_275.data),__file_data_rename_at_1281_276);
+    _FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb(__context__,das_arg<TArray<uint8_t>>::pass(__ctx_rename_at_1281_275.data),0x0);
+    do_format_ff67931097f9f551(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1281_275));
+    return das_auto_cast<char *>::cast(generate_source_d9e23c7a7a794181(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1281_275)));
 }
 
-inline char * format_source_f3ae203349d40bcb ( Context * __context__, TArray<uint8_t> const  &  __file_data_rename_at_1284_277 )
+inline char * format_source_82aae480574c279c ( Context * __context__, TArray<uint8_t> const  &  __file_data_rename_at_1289_277 )
 {
-    das_source_formatter::FormatterCtx __ctx_rename_at_1285_278; memset((void*)&__ctx_rename_at_1285_278,0,sizeof(__ctx_rename_at_1285_278));
-    /* finally */ auto __finally_1284= das_finally([&](){
-    finalize_b9f001def6083360(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1285_278));
+    das_source_formatter::FormatterCtx __ctx_rename_at_1290_278; memset((void*)&__ctx_rename_at_1290_278,0,sizeof(__ctx_rename_at_1290_278));
+    /* finally */ auto __finally_1289= das_finally([&](){
+    finalize_db456bcf8e957ca4(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1290_278));
     /* end finally */ });
-    das_zero(__ctx_rename_at_1285_278);
-    return das_auto_cast<char *>::cast(format_source_58c20f6bcb79eabd(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1285_278),__file_data_rename_at_1284_277));
+    das_zero(__ctx_rename_at_1290_278);
+    return das_auto_cast<char *>::cast(format_source_555ab24d2bad5d9a(__context__,das_arg<das_source_formatter::FormatterCtx>::pass(__ctx_rename_at_1290_278),__file_data_rename_at_1289_277));
 }
 
-inline das_source_formatter::TokenTemplate TokenTemplate_a02a7415fdb9ba5a ( Context * __context__ )
+inline das_source_formatter::TokenTemplate TokenTemplate_bb20a1d61f51dcf0 ( Context * __context__ )
 {
     return /* <- */ das_auto_cast_move<das_source_formatter::TokenTemplate>::cast((([&]() -> das_source_formatter::TokenTemplate {
         das_source_formatter::TokenTemplate __mks_40;
@@ -2819,7 +2826,7 @@ inline das_source_formatter::TokenTemplate TokenTemplate_a02a7415fdb9ba5a ( Cont
     })()));
 }
 
-inline das_source_formatter::Token Token_c2eeda936a4bfe12 ( Context * __context__ )
+inline das_source_formatter::Token Token_43fa8756d37aefe0 ( Context * __context__ )
 {
     return /* <- */ das_auto_cast_move<das_source_formatter::Token>::cast((([&]() -> das_source_formatter::Token {
         das_source_formatter::Token __mks_48;
@@ -2837,7 +2844,7 @@ inline das_source_formatter::Token Token_c2eeda936a4bfe12 ( Context * __context_
     })()));
 }
 
-inline das_source_formatter::FormatterCtx FormatterCtx_d786b6c38dffada3 ( Context * __context__ )
+inline das_source_formatter::FormatterCtx FormatterCtx_7640c15af9f3493d ( Context * __context__ )
 {
     return /* <- */ das_auto_cast_move<das_source_formatter::FormatterCtx>::cast((([&]() -> das_source_formatter::FormatterCtx {
         das_source_formatter::FormatterCtx __mks_68;
@@ -2851,7 +2858,7 @@ inline das_source_formatter::FormatterCtx FormatterCtx_d786b6c38dffada3 ( Contex
     })()));
 }
 
-inline das_source_formatter::ParenCounter ParenCounter_77d11a7861c772f0 ( Context * __context__ )
+inline das_source_formatter::ParenCounter ParenCounter_76ee88379e1e5165 ( Context * __context__ )
 {
     return /* <- */ das_auto_cast_move<das_source_formatter::ParenCounter>::cast((([&]() -> das_source_formatter::ParenCounter {
         das_source_formatter::ParenCounter __mks_380;
@@ -2864,289 +2871,289 @@ inline das_source_formatter::ParenCounter ParenCounter_77d11a7861c772f0 ( Contex
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xb78809ccdf1ed490] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_6a9d04f899c816ac>>();
+    aotLib[0x4aa25fac6f779bb0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_470a2c87c10459f3>>();
     };
-    aotLib[0x7c39494f594b2264] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_597eb4e562707157>>();
+    aotLib[0xb25e62c34835a4c0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_90b2200a89e5f7af>>();
     };
-    aotLib[0x4173506ace9573dd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_d6c2d9467df86ea8>>();
+    aotLib[0x50fa518e09d52602] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_8ce52f97d3e92f29>>();
     };
-    aotLib[0xa8f929474bbb24c7] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e>>();
+    aotLib[0x736762683c24897e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_ab8b80dafe942dee>>();
     };
-    aotLib[0x36d68b931e0b4d3] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_37238c3cdaec478a>>();
+    aotLib[0x78b5bc4058f435fb] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_e9811f8b8637d85b>>();
     };
-    aotLib[0x8e2ff1ed2afbacc1] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_94b9be375031ddbc>>();
+    aotLib[0x18df4ecc6397afc8] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_4839b0184671562d>>();
     };
-    aotLib[0xc3a1b928acaebfd4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_9778601c0167a631>>();
+    aotLib[0x5094b41c7c1d5a1e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_b38e09a15f381650>>();
     };
-    aotLib[0xc502128bbf7c5d21] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176>>();
+    aotLib[0x9bf1d8b29aed8904] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_ee4a37bbcf70fe7d>>();
     };
-    aotLib[0xa411e29d5b200de2] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_5f7a4e8904f8977e>>();
+    aotLib[0x23aa1048f8cb5edb] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_3c986bfd8563d8b2>>();
     };
-    aotLib[0x2c818f1a3ce08b0f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_d46b5589c5f4f04b>>();
+    aotLib[0xd1880c21eca14451] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_93cd492387de05e8>>();
     };
-    aotLib[0x1e3b54847e499688] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_b4e09f66b8118eb0>>();
+    aotLib[0xe44be04d8967857c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_fb7a66fc6a63821a>>();
     };
-    aotLib[0xa9429ad4e94b7726] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_4a7556d56e5a6ac1>>();
+    aotLib[0xcb8c69afb656ecc1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickkey_existsTick16808803843923989214_5f8f761d5f23964f>>();
     };
-    aotLib[0x45d41e57e6a0547a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickkey_existsTick16808803843923989214_7d01ceb11c7f2e53>>();
+    aotLib[0xbf11061381c6f0d3] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_7926e574de26b25d>>();
     };
-    aotLib[0x8532fc80bb7a983f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_move_with_lockcheckTick3467971516570048129_f314c103a27e7f0c>>();
+    aotLib[0xc0e83cc2459a2298] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_6a9e877c15ce25b4>>();
     };
-    aotLib[0x913a8f2e9b96def6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_3422e7731ae3fc3d>>();
+    aotLib[0x8232e66bbea70b3e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_cb951de01ca87a4e>>();
     };
-    aotLib[0xc101143b8c47b79d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_540ecf6ef9e01052>>();
+    aotLib[0xe66ae9ae7f9b4090] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_7e6de3088c45b5fe>>();
     };
-    aotLib[0x4193f1bbb72e5078] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick14133213201864676143_6efdca5732854753>>();
+    aotLib[0x245f6c342c4fc47d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick14133213201864676143_7d58ec4da1ec1b17>>();
     };
-    aotLib[0x49a0a29a0e94f01d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_indexTick6703785223819426183_a18ce15a2242b33a>>();
+    aotLib[0x6f8fd977899adec5] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_indexTick6703785223819426183_7889f698fd41c370>>();
     };
-    aotLib[0xbcc5889fbf62b93f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickto_table_moveTick3386430563931768014_5f654e62afe15768>>();
+    aotLib[0xf355fd66f709339f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickto_table_moveTick3386430563931768014_c018a9675934bba9>>();
     };
-    aotLib[0xfd084015992baa1] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6>>();
+    aotLib[0xa7eef801007fb7f0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickreserveTick3994685146752941225_adfb084cc10e1733>>();
     };
-    aotLib[0x1f8eb5798352d074] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb>>();
+    aotLib[0xe802aa1e42316a8] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_19613b645e94680e>>();
     };
-    aotLib[0xcc074a37999289f5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_indexTick6703785223819426183_5eb3be401f8b11e3>>();
+    aotLib[0x5b81ab1732e3add2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_indexTick6703785223819426183_eca839f98c5c2bc9>>();
     };
-    aotLib[0xebe627d0e2eb8824] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_indexTick6703785223819426183_716a62e4be337622>>();
+    aotLib[0xee2e9089f4ae9184] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_indexTick6703785223819426183_feb73043e4854e1f>>();
     };
-    aotLib[0x79f2dbbc7a75a980] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickcloneTick3038771811667655495_872ca77a25597c65>>();
+    aotLib[0xa8d1bef95d45e76b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_e919271fa2eab772>>();
     };
-    aotLib[0x209025c6d67841b0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_23aa2befa5110673>>();
+    aotLib[0x736e9e79037419fb] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_fc8141dc0153320a>>();
     };
-    aotLib[0xd145739ee948bbc6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_a661f9640a1075ce>>();
+    aotLib[0xd2b9abf5fc284bcf] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_497548c4fac9c297>>();
     };
-    aotLib[0xfda4983ce7ef7c6d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcdas_source_formatterTickremove_space_beforeTick16814636979153707331_7012dc41ffc1b224>>();
+    aotLib[0x740a9c0d0a23719a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick14133213201864676143_833f2ca565fa23fb>>();
     };
-    aotLib[0xcba4b4c693ad27e9] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67>>();
+    aotLib[0x24494df3d692d9c7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_cfe2c69de3466279>>();
     };
-    aotLib[0x5cc7448b9c1eb4a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_Funcdas_source_formatterTickadd_space_beforeTick12675954149209894053_6c24d8b6bd713a0f>>();
+    aotLib[0x7b7dd1e87c97d2b2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_indexTick6703785223819426183_a4c49c41e04684c4>>();
     };
-    aotLib[0xb547c53e3d68e8cc] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfind_indexTick6703785223819426183_ef73ab5093802856>>();
+    aotLib[0x4d59b8ff59f743a3] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_db456bcf8e957ca4>>();
     };
-    aotLib[0xd182f1155fbf3f83] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_b9f001def6083360>>();
+    aotLib[0x9410e993ae427200] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickcloneTick3038771811667655495_11c19903beee414c>>();
     };
-    aotLib[0xebf5b2593bb8dc0f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&initialize_token_templates_cd924eed93b743df>>();
+    aotLib[0x2b67c4c2e6f82f05] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&initialize_token_templates_c0f484bb6b01366>>();
     };
-    aotLib[0x13fbbc0c63da3118] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&isUtf8Bom_fc921f39aa33ab23>>();
+    aotLib[0x362197137a3187d6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&isUtf8Bom_d46057f250b5bf59>>();
     };
-    aotLib[0xdf0e8bf73e50b162] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&eq_1a08ceae13f47e89>>();
+    aotLib[0xe212b373667d8cda] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&eq_5251ca869c24b49f>>();
     };
-    aotLib[0xc91df3ab4e854102] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&eq_32a38f27b5380f0f>>();
+    aotLib[0xfcdbfa3221b55c38] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&eq_3d631d49cf7e1d>>();
     };
-    aotLib[0x2ad99e5429080c63] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&eq_f43d812e3a992e4>>();
+    aotLib[0xa001d7a1047e2737] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&eq_cecc7c5a47abfe6c>>();
     };
-    aotLib[0x6f2a1442ff77bc9] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&eq_886fe8d1ff63f5fd>>();
+    aotLib[0x817b9d8f0734abaf] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&eq_5ccd37f4ada4b6c8>>();
     };
-    aotLib[0xf3e9621e4b5e66bf] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&new_line_before_56d9a06feda36687>>();
+    aotLib[0x8f4998ebc8e9692] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&new_line_before_74a9e3638b00c26f>>();
     };
-    aotLib[0x45bdf460a7ac3379] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&next_char_e34bb0a357da1559>>();
+    aotLib[0x36e75659e21ce1dc] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&next_char_a68ee7affe47d0eb>>();
     };
-    aotLib[0xd9615e11e6866095] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&skip_spaces_a5027bfd73b7bde6>>();
+    aotLib[0x3a595e2ab1f7c988] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&skip_spaces_2fa97eb70a48fea7>>();
     };
-    aotLib[0xebf4684b0cc035d6] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&on_token_added_6925eddc2a7ca309>>();
+    aotLib[0x44380b9d762416dc] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&on_token_added_ec8ba2110b19573e>>();
     };
-    aotLib[0xeeda67f43c5c866a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&push_token_92f9637f04a53e36>>();
+    aotLib[0xa8bb24e388ec4d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&push_token_cc86b5bb25bf7adc>>();
     };
-    aotLib[0x4cd95b149ca726e0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&parse_token_95969fa7ff7b12c4>>();
+    aotLib[0xd9dd697f9bf31dcf] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&parse_token_321b59f95fe107c9>>();
     };
-    aotLib[0x52d8f0772589855e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&parse_all_tokens_b5d5b68330cdfcd0>>();
+    aotLib[0x43e32108e79dd9f3] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&parse_all_tokens_29fbd1ed87913a0a>>();
     };
-    aotLib[0x8ef31d506691d6ae] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&update_paren_62e64d469829ae3d>>();
+    aotLib[0xebb1d04b56891e1d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&update_paren_3503759ee55e89b1>>();
     };
-    aotLib[0x2b882c644a7adfac] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&find_pair_paren_90acbe7a3b864d93>>();
+    aotLib[0x2fb4da040dfbb63a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&find_pair_paren_ff2776f9d2856b4e>>();
     };
-    aotLib[0xf24a0c0aa689fa7] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&find_pair_square_68d9ea1d7c30e49f>>();
+    aotLib[0x42b26af16bf9cb44] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&find_pair_square_89e4c86c49f03d61>>();
     };
-    aotLib[0x95ec388eb8f5ee01] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&find_pair_angle_89495f7d100107b7>>();
+    aotLib[0xa037baa886bde5b9] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&find_pair_angle_43f908d2d3e3a500>>();
     };
-    aotLib[0x862582ac2965df08] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&mark_range_as_type_24b8f876667238a0>>();
+    aotLib[0x1aa7e0a3973ee31e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&mark_range_as_type_1c15599df80afc04>>();
     };
-    aotLib[0xddab6cda8c22bd55] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&mark_tokens_as_type_5e4d056374f6927c>>();
+    aotLib[0xa9b10018b3aada51] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&mark_tokens_as_type_ff7631c34d0e20a8>>();
     };
-    aotLib[0x3252c8719473f327] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&mark_tokens_as_type_inside_angle_53305ce8d8ddd8cb>>();
+    aotLib[0x389ae1646111c52b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&mark_tokens_as_type_inside_angle_5588509bf83aae77>>();
     };
-    aotLib[0x8157b91b926f811d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&search_token_in_line_3a9d4fd472c436b3>>();
+    aotLib[0x21f00cef608f986d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&search_token_in_line_41b34300f8492a5f>>();
     };
-    aotLib[0x53b7dd25c9bdd4ae] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&process_formatter_tokens_a63e2ffa4c8206b6>>();
+    aotLib[0x443b871f81dfb9d8] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&process_formatter_tokens_b7e8fa22d8896a75>>();
     };
-    aotLib[0x9e31b01c3bf1c57] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&have_formatter_token_296d7fc158126671>>();
+    aotLib[0x8c573025f7cef085] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&have_formatter_token_68c38613f91cfa3f>>();
     };
-    aotLib[0x7f7f61fe2bb52c8a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&mark_token_context_7dbf70435b518a0a>>();
+    aotLib[0x7b3a34dafc5316ab] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&mark_token_context_7d9da6c542abc3d5>>();
     };
-    aotLib[0x759f4146b99597f0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_function_arguments_7d9f22d6302573cb>>();
+    aotLib[0x2c18dd2e5db3a5e1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_function_arguments_393a0d20cb9876da>>();
     };
-    aotLib[0xda3f5313e831cdcd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_args_26ba700ce1a53dbc>>();
+    aotLib[0x26004449ec407e17] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_args_b613d1f002f609af>>();
     };
-    aotLib[0x929083012e3b9e12] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&debug_print_tokens_927617e00a5e50a7>>();
+    aotLib[0xd2ce7bd84f7f0f71] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&debug_print_tokens_d5c3886aafc47666>>();
     };
-    aotLib[0xc0f03fce14842ae8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&generate_source_64706a1ce7db4983>>();
+    aotLib[0xa3ff9c43ba3a01b1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&generate_source_d9e23c7a7a794181>>();
     };
-    aotLib[0x860f3b59063c225b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&need_spaces_around_7179a668ae90ccd6>>();
+    aotLib[0xdaa42b910b6a5443] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&need_spaces_around_c85752147cfda42d>>();
     };
-    aotLib[0x2f30a576df51b8de] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&need_space_only_before_584e48acb8e8a70>>();
+    aotLib[0xd62b4948b08b32c7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&need_space_only_before_a3979a2c621820ef>>();
     };
-    aotLib[0x97f7f44ac8b05577] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_unary_62ad92645c7f9ee6>>();
+    aotLib[0x5842f33ae696c111] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&is_unary_b0c7219745029c11>>();
     };
-    aotLib[0x852e1a05423ed300] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&remove_spaces_around_1c96d2bcc36445d1>>();
+    aotLib[0x29ab249ea159c581] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&remove_spaces_around_203ede7b7eebc7c5>>();
     };
-    aotLib[0xc6f5214396d63e44] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&make_spaces_around_9b0360b9b4d718c3>>();
+    aotLib[0xed11787ca1073ed8] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&make_spaces_around_80d61c2838123a7d>>();
     };
-    aotLib[0x8e1b59f43d841956] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_comma_7aa6a2faf3ce3f4f>>();
+    aotLib[0x35176c5a0d612c61] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_comma_f91c855ec419635f>>();
     };
-    aotLib[0xcd63919adbcd7219] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_semicolon_29caf5fd09f6497e>>();
+    aotLib[0x159591694515b20e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_semicolon_23f19dedec62b617>>();
     };
-    aotLib[0x9b6b65512db6483e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_comma_54b9cd4ba70794e>>();
+    aotLib[0xb64ecf742a9caea1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_comma_e4ab43db37a70c74>>();
     };
-    aotLib[0xd7464f544ade359b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_semicolon_132b81d1431b5d49>>();
+    aotLib[0x581343b9f64885d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_semicolon_e5d8826c5665e6be>>();
     };
-    aotLib[0x61b3fa779d780a56] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_type_colon_a5b252566f4d584>>();
+    aotLib[0xfb8771e003b8c04d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_type_colon_400b4390d7623d95>>();
     };
-    aotLib[0x2829808f398f0a03] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_function_decl_param_paren_6c291b7c3a975893>>();
+    aotLib[0x1bdfe060f0a8f55b] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_function_decl_param_paren_dac5114d61e417ed>>();
     };
-    aotLib[0xc1764d5124503184] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_function_call_param_paren_call_f740219cd0547b48>>();
+    aotLib[0x57e6a634ed2c43c6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_function_call_param_paren_call_347b6df2d6483625>>();
     };
-    aotLib[0xc4f6b82a1c21b819] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_spaces_around_operators_9837b8f174165da7>>();
+    aotLib[0x7e23ec22c4c3ec5e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_spaces_around_operators_53d08ef306f852f9>>();
     };
-    aotLib[0x653899930a808ccf] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_keyword_2aab289129cf4fc8>>();
+    aotLib[0x3370471a0ad46ae9] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_keyword_2536c1e9542cdc3b>>();
     };
-    aotLib[0x166f8e87303b8e25] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_paren_a2ef6e80a339831f>>();
+    aotLib[0xea20f814e47d44c1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_paren_82d46f74b7d5652>>();
     };
-    aotLib[0x9234aa466b5c4975] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_square_brackets_15fb170c80c43d93>>();
+    aotLib[0xc48b81824a27eadd] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_square_brackets_fdbea403935e8e12>>();
     };
-    aotLib[0xcbec5c1aa73e9dd9] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_inside_parens_fc44c6bd3c600b9c>>();
+    aotLib[0x6cfd0126eb4bf52a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_inside_parens_cb72085f2dcb9ecd>>();
     };
-    aotLib[0x984d83a065c4f46d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_as_bb9fc0cabc4ff729>>();
+    aotLib[0x69767b5638f21b8d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_as_865a2960d4580501>>();
     };
-    aotLib[0x8e2f92f73eabb71a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_end_of_object_64e24a59c1d5b6b>>();
+    aotLib[0xb0fa9790354c00ff] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_end_of_object_510336d353cc43f1>>();
     };
-    aotLib[0xe364a5cf53ef43ed] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_object_type_298f1dcfc2f7829c>>();
+    aotLib[0xab3e0b23f75577e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_object_type_fff6f6cd3369398c>>();
     };
-    aotLib[0xa7d13fcbb75338bc] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_array_of_type_ccdc053ec8afd2e1>>();
+    aotLib[0x2f909eeb6e054ca9] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_remove_space_before_array_of_type_fa116a3241d9e90c>>();
     };
-    aotLib[0x454312f88c424971] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_glue_type_specifiers_cb3a1c8b879530ae>>();
+    aotLib[0xf169a4e4fb9131b6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_glue_type_specifiers_538bf5888d1be714>>();
     };
-    aotLib[0x80c3da5513cb2f43] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_cast_type_446660f13b2ec290>>();
+    aotLib[0xf76a56e9b31e093f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_space_after_cast_type_5d3d2f4d38f83d01>>();
     };
-    aotLib[0xd91867955dba6780] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_destructure_space_e9871049a6de7d91>>();
+    aotLib[0xf8626bcb721252dd] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&fmt_destructure_space_2fcf524fd08df174>>();
     };
-    aotLib[0x76299977413a1e82] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&do_format_4835418a8469e5fa>>();
+    aotLib[0x7e638a0b0782cb1a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&do_format_ff67931097f9f551>>();
     };
-    aotLib[0x26d8db9170833ef9] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&format_source_string_f69d100c71c99a8c>>();
+    aotLib[0x9cb42ccc8c21d4df] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&format_source_string_53ea2afc74eb7140>>();
     };
-    aotLib[0xbed3d0168e4fcf75] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&format_source_58c20f6bcb79eabd>>();
+    aotLib[0x6674c826ed098555] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&format_source_555ab24d2bad5d9a>>();
     };
-    aotLib[0x400629cb54db70cf] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&format_source_f3ae203349d40bcb>>();
+    aotLib[0x4448541f4d9bb865] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&format_source_82aae480574c279c>>();
     };
-    aotLib[0xb985c77f13386e53] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&TokenTemplate_a02a7415fdb9ba5a>>();
+    aotLib[0x84f290f2c58a3a] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&TokenTemplate_bb20a1d61f51dcf0>>();
     };
-    aotLib[0x25de37d249637ff5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&Token_c2eeda936a4bfe12>>();
+    aotLib[0x24b28b92ca3d936c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&Token_43fa8756d37aefe0>>();
     };
-    aotLib[0x194c5a22b76bc6f5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&FormatterCtx_d786b6c38dffada3>>();
+    aotLib[0x57f9d0835efac403] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&FormatterCtx_7640c15af9f3493d>>();
     };
-    aotLib[0xb694cd730b4a30bc] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&ParenCounter_77d11a7861c772f0>>();
+    aotLib[0xe58443c1815e45be] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&ParenCounter_76ee88379e1e5165>>();
     };
     // [[ init script ]]
-    aotLib[0x4ec73327d84f23b2] = +[](Context & ctx) -> SimNode* {
+    aotLib[0xa523129a946db789] = +[](Context & ctx) -> SimNode* {
         ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
         return ctx.aotInitScript;
     };
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_15051537126579498552
-AotListBase impl_aot_das_source_formatter(_anon_15051537126579498552::registerAotFunctions);
+} // namespace _anon_6368649739184819056
+AotListBase impl_aot_das_source_formatter(_anon_6368649739184819056::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

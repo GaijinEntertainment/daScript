@@ -64,7 +64,7 @@
 #endif
 
 namespace das {
-namespace _anon_880951671933521401 {
+namespace _anon_9563944200698030257 {
 
 namespace archive { struct Serializer; };
 namespace archive { struct MemSerializer; };
@@ -312,64 +312,64 @@ extern VarInfo __var_info__d3b4679945da3d7d;
 extern VarInfo __var_info__4ba92686dc92032b;
 extern VarInfo __var_info__2f90929bfe0e523d;
 
-VarInfo __struct_info__14f90bc296d98088_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0x1211c90d55d94687), "__rtti", offsetof(archive::MemSerializer,__rtti), 9 };
+VarInfo __struct_info__14f90bc296d98088_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, TypeSize<void *>::size, UINT64_C(0x1211c90d55d94687), "__rtti", offsetof(archive::MemSerializer,__rtti), 9 };
 TypeInfo * __type_info__ea043962cb59a6d8_arg_types_var_1511252080341909640[1] = { &__type_info__d400c4922cb4cfd0 };
 const char * __type_info__ea043962cb59a6d8_arg_names_var_1511252080341909640[1] = { "self" };
-VarInfo __struct_info__14f90bc296d98088_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__ea043962cb59a6d8_arg_types_var_1511252080341909640, __type_info__ea043962cb59a6d8_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, 8, UINT64_C(0xea043962cb59a6d8), "__finalize", offsetof(archive::MemSerializer,__finalize), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__ea043962cb59a6d8_arg_types_var_1511252080341909640, __type_info__ea043962cb59a6d8_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,archive::Serializer))>::size, UINT64_C(0xea043962cb59a6d8), "__finalize", offsetof(archive::MemSerializer,__finalize), 0 };
 TypeInfo * __type_info__fb6691029218b641_arg_types_var_1511252080341909640[3] = { &__type_info__d400c4922cb4cfd0, &__type_info__3a95295ead7e9066, &__type_info__af8afe4c86446b52 };
 const char * __type_info__fb6691029218b641_arg_names_var_1511252080341909640[3] = { "self", "bytes", "size" };
-VarInfo __struct_info__14f90bc296d98088_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__fb6691029218b641_arg_types_var_1511252080341909640, __type_info__fb6691029218b641_arg_names_var_1511252080341909640, 3, 0, nullptr, 12, 8, UINT64_C(0xfb6691029218b641), "write", offsetof(archive::MemSerializer,write), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__fb6691029218b641_arg_types_var_1511252080341909640, __type_info__fb6691029218b641_arg_names_var_1511252080341909640, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,archive::Serializer,void * const ,int32_t))>::size, UINT64_C(0xfb6691029218b641), "write", offsetof(archive::MemSerializer,write), 0 };
 TypeInfo * __type_info__98186f1384e81686_arg_types_var_1511252080341909640[3] = { &__type_info__d400c4922cb4cfd0, &__type_info__3a95295ead7e9066, &__type_info__af8afe4c86446b52 };
 const char * __type_info__98186f1384e81686_arg_names_var_1511252080341909640[3] = { "self", "bytes", "size" };
-VarInfo __struct_info__14f90bc296d98088_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__98186f1384e81686_arg_types_var_1511252080341909640, __type_info__98186f1384e81686_arg_names_var_1511252080341909640, 3, 0, nullptr, 12, 8, UINT64_C(0x98186f1384e81686), "read", offsetof(archive::MemSerializer,read), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__98186f1384e81686_arg_types_var_1511252080341909640, __type_info__98186f1384e81686_arg_names_var_1511252080341909640, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,archive::Serializer,void * const ,int32_t))>::size, UINT64_C(0x98186f1384e81686), "read", offsetof(archive::MemSerializer,read), 0 };
 TypeInfo * __type_info__578d75aa7ddc7c60_arg_types_var_1511252080341909640[2] = { &__type_info__d400c4922cb4cfd0, &__type_info__af90fe4c864e9d52 };
 const char * __type_info__578d75aa7ddc7c60_arg_names_var_1511252080341909640[2] = { "self", "code" };
-VarInfo __struct_info__14f90bc296d98088_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__578d75aa7ddc7c60_arg_types_var_1511252080341909640, __type_info__578d75aa7ddc7c60_arg_names_var_1511252080341909640, 2, 0, nullptr, 12, 8, UINT64_C(0x578d75aa7ddc7c60), "error", offsetof(archive::MemSerializer,error), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__578d75aa7ddc7c60_arg_types_var_1511252080341909640, __type_info__578d75aa7ddc7c60_arg_names_var_1511252080341909640, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,archive::Serializer,char * const ))>::size, UINT64_C(0x578d75aa7ddc7c60), "error", offsetof(archive::MemSerializer,error), 0 };
 TypeInfo * __type_info__508c8ab08466caa4_arg_types_var_1511252080341909640[1] = { &__type_info__d400c4922cb4cfd0 };
 const char * __type_info__508c8ab08466caa4_arg_names_var_1511252080341909640[1] = { "self" };
-VarInfo __struct_info__14f90bc296d98088_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__508c8ab08466caa4_arg_types_var_1511252080341909640, __type_info__508c8ab08466caa4_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, 8, UINT64_C(0x508c8ab08466caa4), "OK", offsetof(archive::MemSerializer,OK), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__508c8ab08466caa4_arg_types_var_1511252080341909640, __type_info__508c8ab08466caa4_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,archive::Serializer))>::size, UINT64_C(0x508c8ab08466caa4), "OK", offsetof(archive::MemSerializer,OK), 0 };
 TypeInfo * __type_info__1dc770d15b82733a_arg_types_var_1511252080341909640[1] = { &__type_info__e6261f7908d89619 };
 const char * __type_info__1dc770d15b82733a_arg_names_var_1511252080341909640[1] = { "self" };
-VarInfo __struct_info__14f90bc296d98088_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__264a3f04ea74314f, nullptr, (TypeInfo **)__type_info__1dc770d15b82733a_arg_types_var_1511252080341909640, __type_info__1dc770d15b82733a_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, 8, UINT64_C(0x1dc770d15b82733a), "extractData", offsetof(archive::MemSerializer,extractData), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_6 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__264a3f04ea74314f, nullptr, (TypeInfo **)__type_info__1dc770d15b82733a_arg_types_var_1511252080341909640, __type_info__1dc770d15b82733a_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((TArray<uint8_t>,archive::MemSerializer))>::size, UINT64_C(0x1dc770d15b82733a), "extractData", offsetof(archive::MemSerializer,extractData), 0 };
 TypeInfo * __type_info__b3774d2580cbad26_arg_types_var_1511252080341909640[1] = { &__type_info__e6261f7908d89619 };
 const char * __type_info__b3774d2580cbad26_arg_names_var_1511252080341909640[1] = { "self" };
-VarInfo __struct_info__14f90bc296d98088_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__264a3f04ea74314f, nullptr, (TypeInfo **)__type_info__b3774d2580cbad26_arg_types_var_1511252080341909640, __type_info__b3774d2580cbad26_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, 8, UINT64_C(0xb3774d2580cbad26), "getCopyOfData", offsetof(archive::MemSerializer,getCopyOfData), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_7 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__264a3f04ea74314f, nullptr, (TypeInfo **)__type_info__b3774d2580cbad26_arg_types_var_1511252080341909640, __type_info__b3774d2580cbad26_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((TArray<uint8_t>,archive::MemSerializer))>::size, UINT64_C(0xb3774d2580cbad26), "getCopyOfData", offsetof(archive::MemSerializer,getCopyOfData), 0 };
 TypeInfo * __type_info__d8f5fa42f01f12fa_arg_types_var_1511252080341909640[1] = { &__type_info__e6261f7908d89619 };
 const char * __type_info__d8f5fa42f01f12fa_arg_names_var_1511252080341909640[1] = { "self" };
-VarInfo __struct_info__14f90bc296d98088_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af90fe4c864e9d52, nullptr, (TypeInfo **)__type_info__d8f5fa42f01f12fa_arg_types_var_1511252080341909640, __type_info__d8f5fa42f01f12fa_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, 8, UINT64_C(0xd8f5fa42f01f12fa), "getLastError", offsetof(archive::MemSerializer,getLastError), 0 };
-VarInfo __struct_info__14f90bc296d98088_field_9 =  { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 106498, 24, UINT64_C(0x5a418ba701cef529), "data", offsetof(archive::MemSerializer,data), 11 };
-VarInfo __struct_info__14f90bc296d98088_field_10 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 65564, 4, UINT64_C(0x75ddea9dd7569de7), "readOffset", offsetof(archive::MemSerializer,readOffset), 0 };
-VarInfo __struct_info__14f90bc296d98088_field_11 =  { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 81924, 8, UINT64_C(0xd0369009b194ee3d), "lastError", offsetof(archive::MemSerializer,lastError), 12 };
+VarInfo __struct_info__14f90bc296d98088_field_8 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af90fe4c864e9d52, nullptr, (TypeInfo **)__type_info__d8f5fa42f01f12fa_arg_types_var_1511252080341909640, __type_info__d8f5fa42f01f12fa_arg_names_var_1511252080341909640, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((char * const ,archive::MemSerializer))>::size, UINT64_C(0xd8f5fa42f01f12fa), "getLastError", offsetof(archive::MemSerializer,getLastError), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_9 =  { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 106498, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x5a418ba701cef529), "data", offsetof(archive::MemSerializer,data), 11 };
+VarInfo __struct_info__14f90bc296d98088_field_10 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 65564, TypeSize<int32_t>::size, UINT64_C(0x75ddea9dd7569de7), "readOffset", offsetof(archive::MemSerializer,readOffset), 0 };
+VarInfo __struct_info__14f90bc296d98088_field_11 =  { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 81924, TypeSize<char *>::size, UINT64_C(0xd0369009b194ee3d), "lastError", offsetof(archive::MemSerializer,lastError), 12 };
 VarInfo * __struct_info__14f90bc296d98088_fields[12] =  { &__struct_info__14f90bc296d98088_field_0, &__struct_info__14f90bc296d98088_field_1, &__struct_info__14f90bc296d98088_field_2, &__struct_info__14f90bc296d98088_field_3, &__struct_info__14f90bc296d98088_field_4, &__struct_info__14f90bc296d98088_field_5, &__struct_info__14f90bc296d98088_field_6, &__struct_info__14f90bc296d98088_field_7, &__struct_info__14f90bc296d98088_field_8, &__struct_info__14f90bc296d98088_field_9, &__struct_info__14f90bc296d98088_field_10, &__struct_info__14f90bc296d98088_field_11 };
-StructInfo __struct_info__14f90bc296d98088 = {"MemSerializer", "archive", 29, __struct_info__14f90bc296d98088_fields, 12, 112, UINT64_C(0x0), nullptr, UINT64_C(0x14f90bc296d98088), 0 };
-VarInfo __struct_info__2ea4c52d3e792fcf_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, 8, UINT64_C(0x6ed86c478b9e1349), "__rtti", offsetof(archive::Serializer,__rtti), 6 };
+StructInfo __struct_info__14f90bc296d98088 = {"MemSerializer", "archive", 29, __struct_info__14f90bc296d98088_fields, 12, TypeSize<archive::MemSerializer>::size, UINT64_C(0x0), nullptr, UINT64_C(0x14f90bc296d98088), 0 };
+VarInfo __struct_info__2ea4c52d3e792fcf_field_0 =  { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8204, TypeSize<void *>::size, UINT64_C(0x6ed86c478b9e1349), "__rtti", offsetof(archive::Serializer,__rtti), 6 };
 TypeInfo * __type_info__87c4dfde8d1d5ca9_arg_types_var_3361028020037562319[1] = { &__type_info__d400c4922cb4cfd0 };
 const char * __type_info__87c4dfde8d1d5ca9_arg_names_var_3361028020037562319[1] = { "self" };
-VarInfo __struct_info__2ea4c52d3e792fcf_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__87c4dfde8d1d5ca9_arg_types_var_3361028020037562319, __type_info__87c4dfde8d1d5ca9_arg_names_var_3361028020037562319, 1, 0, nullptr, 12, 8, UINT64_C(0x87c4dfde8d1d5ca9), "__finalize", offsetof(archive::Serializer,__finalize), 0 };
+VarInfo __struct_info__2ea4c52d3e792fcf_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__87c4dfde8d1d5ca9_arg_types_var_3361028020037562319, __type_info__87c4dfde8d1d5ca9_arg_names_var_3361028020037562319, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,archive::Serializer))>::size, UINT64_C(0x87c4dfde8d1d5ca9), "__finalize", offsetof(archive::Serializer,__finalize), 0 };
 TypeInfo * __type_info__2f90929bfe0e523d_arg_types_var_3361028020037562319[3] = { &__type_info__d400c4922cb4cfd0, &__type_info__3a95295ead7e9066, &__type_info__af8afe4c86446b52 };
 const char * __type_info__2f90929bfe0e523d_arg_names_var_3361028020037562319[3] = { "self", "bytes", "size" };
-VarInfo __struct_info__2ea4c52d3e792fcf_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__2f90929bfe0e523d_arg_types_var_3361028020037562319, __type_info__2f90929bfe0e523d_arg_names_var_3361028020037562319, 3, 0, nullptr, 12, 8, UINT64_C(0x2f90929bfe0e523d), "write", offsetof(archive::Serializer,write), 0 };
+VarInfo __struct_info__2ea4c52d3e792fcf_field_2 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__2f90929bfe0e523d_arg_types_var_3361028020037562319, __type_info__2f90929bfe0e523d_arg_names_var_3361028020037562319, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,archive::Serializer,void * const ,int32_t))>::size, UINT64_C(0x2f90929bfe0e523d), "write", offsetof(archive::Serializer,write), 0 };
 TypeInfo * __type_info__4ba92686dc92032b_arg_types_var_3361028020037562319[3] = { &__type_info__d400c4922cb4cfd0, &__type_info__3a95295ead7e9066, &__type_info__af8afe4c86446b52 };
 const char * __type_info__4ba92686dc92032b_arg_names_var_3361028020037562319[3] = { "self", "bytes", "size" };
-VarInfo __struct_info__2ea4c52d3e792fcf_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__4ba92686dc92032b_arg_types_var_3361028020037562319, __type_info__4ba92686dc92032b_arg_names_var_3361028020037562319, 3, 0, nullptr, 12, 8, UINT64_C(0x4ba92686dc92032b), "read", offsetof(archive::Serializer,read), 0 };
+VarInfo __struct_info__2ea4c52d3e792fcf_field_3 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__4ba92686dc92032b_arg_types_var_3361028020037562319, __type_info__4ba92686dc92032b_arg_names_var_3361028020037562319, 3, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,archive::Serializer,void * const ,int32_t))>::size, UINT64_C(0x4ba92686dc92032b), "read", offsetof(archive::Serializer,read), 0 };
 TypeInfo * __type_info__d3b4679945da3d7d_arg_types_var_3361028020037562319[2] = { &__type_info__d400c4922cb4cfd0, &__type_info__af90fe4c864e9d52 };
 const char * __type_info__d3b4679945da3d7d_arg_names_var_3361028020037562319[2] = { "self", "code" };
-VarInfo __struct_info__2ea4c52d3e792fcf_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d3b4679945da3d7d_arg_types_var_3361028020037562319, __type_info__d3b4679945da3d7d_arg_names_var_3361028020037562319, 2, 0, nullptr, 12, 8, UINT64_C(0xd3b4679945da3d7d), "error", offsetof(archive::Serializer,error), 0 };
+VarInfo __struct_info__2ea4c52d3e792fcf_field_4 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__d3b4679945da3d7d_arg_types_var_3361028020037562319, __type_info__d3b4679945da3d7d_arg_names_var_3361028020037562319, 2, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,archive::Serializer,char * const ))>::size, UINT64_C(0xd3b4679945da3d7d), "error", offsetof(archive::Serializer,error), 0 };
 TypeInfo * __type_info__100e564366a028df_arg_types_var_3361028020037562319[1] = { &__type_info__d400c4922cb4cfd0 };
 const char * __type_info__100e564366a028df_arg_names_var_3361028020037562319[1] = { "self" };
-VarInfo __struct_info__2ea4c52d3e792fcf_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__100e564366a028df_arg_types_var_3361028020037562319, __type_info__100e564366a028df_arg_names_var_3361028020037562319, 1, 0, nullptr, 12, 8, UINT64_C(0x100e564366a028df), "OK", offsetof(archive::Serializer,OK), 0 };
+VarInfo __struct_info__2ea4c52d3e792fcf_field_5 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63df4c8601f1a5, nullptr, (TypeInfo **)__type_info__100e564366a028df_arg_types_var_3361028020037562319, __type_info__100e564366a028df_arg_names_var_3361028020037562319, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((bool,archive::Serializer))>::size, UINT64_C(0x100e564366a028df), "OK", offsetof(archive::Serializer,OK), 0 };
 VarInfo * __struct_info__2ea4c52d3e792fcf_fields[6] =  { &__struct_info__2ea4c52d3e792fcf_field_0, &__struct_info__2ea4c52d3e792fcf_field_1, &__struct_info__2ea4c52d3e792fcf_field_2, &__struct_info__2ea4c52d3e792fcf_field_3, &__struct_info__2ea4c52d3e792fcf_field_4, &__struct_info__2ea4c52d3e792fcf_field_5 };
-StructInfo __struct_info__2ea4c52d3e792fcf = {"Serializer", "archive", 13, __struct_info__2ea4c52d3e792fcf_fields, 6, 48, UINT64_C(0x0), nullptr, UINT64_C(0x2ea4c52d3e792fcf), 0 };
-TypeInfo __type_info__264a3f04ea74314f = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0x264a3f04ea74314f) };
-TypeInfo __type_info__4ac1d999a882997b = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, 24, UINT64_C(0x4ac1d999a882997b) };
-TypeInfo __type_info__3a95295ead7e9066 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8364, 8, UINT64_C(0x3a95295ead7e9066) };
-TypeInfo __type_info__af8afe4c86446b52 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, 4, UINT64_C(0xaf8afe4c86446b52) };
-TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, 8, UINT64_C(0xaf90fe4c864e9d52) };
-TypeInfo __type_info__e6261f7908d89619 = { Type::tStructure, &__struct_info__14f90bc296d98088, nullptr, nullptr, &__type_info__d400c4922cb4cfd0, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, 112, UINT64_C(0xe6261f7908d89619) };
-TypeInfo __type_info__d400c4922cb4cfd0 = { Type::tStructure, &__struct_info__2ea4c52d3e792fcf, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, 48, UINT64_C(0xd400c4922cb4cfd0) };
-TypeInfo __type_info__af63df4c8601f1a5 = { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 1, UINT64_C(0xaf63df4c8601f1a5) };
-TypeInfo __type_info__af5be84c85f468f0 = { Type::tUInt8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 1, UINT64_C(0xaf5be84c85f468f0) };
-TypeInfo __type_info__af63eb4c86020609 = { Type::tVoid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, 0, UINT64_C(0xaf63eb4c86020609) };
+StructInfo __struct_info__2ea4c52d3e792fcf = {"Serializer", "archive", 13, __struct_info__2ea4c52d3e792fcf_fields, 6, TypeSize<archive::Serializer>::size, UINT64_C(0x0), nullptr, UINT64_C(0x2ea4c52d3e792fcf), 0 };
+TypeInfo __type_info__264a3f04ea74314f = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x264a3f04ea74314f) };
+TypeInfo __type_info__4ac1d999a882997b = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x4ac1d999a882997b) };
+TypeInfo __type_info__3a95295ead7e9066 = { Type::tPointer, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, nullptr, nullptr, 0, 0, nullptr, 8364, TypeSize<void *>::size, UINT64_C(0x3a95295ead7e9066) };
+TypeInfo __type_info__af8afe4c86446b52 = { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<int32_t>::size, UINT64_C(0xaf8afe4c86446b52) };
+TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, TypeSize<char *>::size, UINT64_C(0xaf90fe4c864e9d52) };
+TypeInfo __type_info__e6261f7908d89619 = { Type::tStructure, &__struct_info__14f90bc296d98088, nullptr, nullptr, &__type_info__d400c4922cb4cfd0, nullptr, nullptr, nullptr, 0, 0, nullptr, 57346, TypeSize<archive::MemSerializer>::size, UINT64_C(0xe6261f7908d89619) };
+TypeInfo __type_info__d400c4922cb4cfd0 = { Type::tStructure, &__struct_info__2ea4c52d3e792fcf, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 24590, TypeSize<archive::Serializer>::size, UINT64_C(0xd400c4922cb4cfd0) };
+TypeInfo __type_info__af63df4c8601f1a5 = { Type::tBool, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<bool>::size, UINT64_C(0xaf63df4c8601f1a5) };
+TypeInfo __type_info__af5be84c85f468f0 = { Type::tUInt8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<uint8_t>::size, UINT64_C(0xaf5be84c85f468f0) };
+TypeInfo __type_info__af63eb4c86020609 = { Type::tVoid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<void>::size, UINT64_C(0xaf63eb4c86020609) };
 
 static void resolveTypeInfoAnnotations()
 {
@@ -381,89 +381,89 @@ static void resolveTypeInfoAnnotations()
 
 TypeInfo * __tinfo_0[1] = { &__type_info__4ac1d999a882997b };
 
-inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_0, int32_t __newSize_rename_at_68_1 );
-inline TArray<uint8_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_5374efae61d17e26 ( Context * __context__, TArray<uint8_t> const  & __clone_src_rename_at_1056_2 );
-inline void _FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce ( Context * __context__, TArray<uint8_t> & __a_rename_at_1080_4, TArray<uint8_t> const  & __b_rename_at_1080_5 );
-inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e ( Context * __context__, TArray<uint8_t> & __a_rename_at_50_7 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> & __a_rename_at_1182_8 );
-inline void finalize_c806b47786a4f1c9 ( Context * __context__, archive::Serializer & ____this_rename_at_16_9 );
-inline void finalize_85ad7a5b2a02d95a ( Context * __context__, archive::MemSerializer & ____this_rename_at_24_10 );
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb ( Context * __context__, archive::Archive & __arch_rename_at_90_11, float3x3 & __value_rename_at_90_12 );
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07 ( Context * __context__, archive::Archive & __arch_rename_at_90_13, float3x4 & __value_rename_at_90_14 );
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5 ( Context * __context__, archive::Archive & __arch_rename_at_90_15, float4x4 & __value_rename_at_90_16 );
-inline void _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654 ( Context * __context__, archive::Archive & __arch_rename_at_99_17, int32_t & __value_rename_at_99_18 );
-inline void _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_114_19, int32_t __newSize_rename_at_114_20 );
-inline void _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44 ( Context * __context__, archive::Archive & __arch_rename_at_105_21, int32_t & __value_rename_at_105_22 );
-inline void _FuncSerializer_0x27___finalize_9fd945918e1827c2 ( Context * __context__, archive::Serializer & __self_rename_at_16_23 );
-inline archive::MemSerializer MemSerializer_7ed03e14b8aa4fb4 ( Context * __context__ );
-inline void _FuncMemSerializerTickMemSerializer_59fa6e4b02ed33fb ( Context * __context__, archive::MemSerializer & __self_rename_at_26_25 );
-inline archive::MemSerializer MemSerializer_2a5138b36b6cb644 ( Context * __context__, TArray<uint8_t> const  & __from_rename_at_30_26 );
-inline void _FuncMemSerializerTickMemSerializer_161b88126e8c4555 ( Context * __context__, archive::MemSerializer & __self_rename_at_30_28, TArray<uint8_t> const  & __from_rename_at_30_29 );
-inline TArray<uint8_t> _FuncMemSerializerTickextractData_e2917c6b6b7b6ec4 ( Context * __context__, archive::MemSerializer & __self_rename_at_33_30 );
-inline TArray<uint8_t> _FuncMemSerializerTickgetCopyOfData_682f289aa33320f2 ( Context * __context__, archive::MemSerializer & __self_rename_at_37_31 );
-inline char * _FuncMemSerializerTickgetLastError_b94e4e8380cef718 ( Context * __context__, archive::MemSerializer & __self_rename_at_42_33 );
-inline bool _FuncMemSerializerTickOK_a40cae5e96176170 ( Context * __context__, archive::MemSerializer & __self_rename_at_46_34 );
-inline bool _FuncMemSerializerTickwrite_42010d5d4d37e6b4 ( Context * __context__, archive::MemSerializer & __self_rename_at_50_35, void * const  __bytes_rename_at_50_36, int32_t __size_rename_at_50_37 );
-inline bool _FuncMemSerializerTickread_e5e9e0c17fa011c0 ( Context * __context__, archive::MemSerializer & __self_rename_at_59_39, void * const  __bytes_rename_at_59_40, int32_t __size_rename_at_59_41 );
-inline void _FuncMemSerializerTickerror_408f6b66809c6221 ( Context * __context__, archive::MemSerializer & __self_rename_at_74_44, char * const  __code_rename_at_74_45 );
-inline void _FuncMemSerializer_0x27___finalize_eb63259fd4b06d18 ( Context * __context__, archive::MemSerializer & __self_rename_at_24_46 );
-inline void serialize_864aec01f72813a5 ( Context * __context__, archive::Archive & __arch_rename_at_133_47, float3x3 & __value_rename_at_133_48 );
-inline void serialize_2bdd95a82ea20a0e ( Context * __context__, archive::Archive & __arch_rename_at_137_49, float3x4 & __value_rename_at_137_50 );
-inline void serialize_a10311ab5d84440e ( Context * __context__, archive::Archive & __arch_rename_at_141_51, float4x4 & __value_rename_at_141_52 );
-inline void serialize_e472b981aa88a5bc ( Context * __context__, archive::Archive & __arch_rename_at_230_53, char * & __value_rename_at_230_54 );
-inline archive::Serializer Serializer_3a8e571f3a055b73 ( Context * __context__ );
+inline TArray<uint8_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_359bffb73f84303b ( Context * __context__, TArray<uint8_t> const  & __clone_src_rename_at_1089_0 );
+inline void _FuncbuiltinTickresizeTick4811697762258667383_235acebda28335df ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_2, int32_t __newSize_rename_at_68_3 );
+inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_b13cf2a57c7f809e ( Context * __context__, TArray<uint8_t> & __a_rename_at_50_4 );
+inline void _FuncbuiltinTickcloneTick3038771811667655495_5d7fb39f4a94b6 ( Context * __context__, TArray<uint8_t> & __a_rename_at_1113_5, TArray<uint8_t> const  & __b_rename_at_1113_6 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_cf8693e01f654e23 ( Context * __context__, TArray<uint8_t> & __a_rename_at_1234_8 );
+inline void finalize_ec9218c84ddc7c41 ( Context * __context__, archive::Serializer & ____this_rename_at_16_9 );
+inline void finalize_8e7536909ae820d4 ( Context * __context__, archive::MemSerializer & ____this_rename_at_24_10 );
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_f432dbce0a8512d6 ( Context * __context__, archive::Archive & __arch_rename_at_90_11, float3x3 & __value_rename_at_90_12 );
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_2e4698a13889843d ( Context * __context__, archive::Archive & __arch_rename_at_90_13, float3x4 & __value_rename_at_90_14 );
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_dbf93da0a2b7b5c6 ( Context * __context__, archive::Archive & __arch_rename_at_90_15, float4x4 & __value_rename_at_90_16 );
+inline void _FuncarchiveTickread_rawTick6802855309095275289_5ada6eaea03c2d43 ( Context * __context__, archive::Archive & __arch_rename_at_99_17, int32_t & __value_rename_at_99_18 );
+inline void _FuncbuiltinTickresize_no_initTick14746062268774376747_9a94138666aaa1f0 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_114_19, int32_t __newSize_rename_at_114_20 );
+inline void _FuncarchiveTickwrite_rawTick9760319972816126958_ccf41d41b9737aa5 ( Context * __context__, archive::Archive & __arch_rename_at_105_21, int32_t & __value_rename_at_105_22 );
+inline void _FuncSerializer_0x27___finalize_b57170f7841c5fbe ( Context * __context__, archive::Serializer & __self_rename_at_16_23 );
+inline archive::MemSerializer MemSerializer_eedc6c298e8644a7 ( Context * __context__ );
+inline void _FuncMemSerializerTickMemSerializer_651498bb4e1220f8 ( Context * __context__, archive::MemSerializer & __self_rename_at_26_25 );
+inline archive::MemSerializer MemSerializer_ea328262e30b4519 ( Context * __context__, TArray<uint8_t> const  & __from_rename_at_30_26 );
+inline void _FuncMemSerializerTickMemSerializer_1018f16282d2a27f ( Context * __context__, archive::MemSerializer & __self_rename_at_30_28, TArray<uint8_t> const  & __from_rename_at_30_29 );
+inline TArray<uint8_t> _FuncMemSerializerTickextractData_679a82cc6ec7ca5b ( Context * __context__, archive::MemSerializer & __self_rename_at_33_30 );
+inline TArray<uint8_t> _FuncMemSerializerTickgetCopyOfData_4599022380655ed1 ( Context * __context__, archive::MemSerializer & __self_rename_at_37_31 );
+inline char * _FuncMemSerializerTickgetLastError_36b724240a841462 ( Context * __context__, archive::MemSerializer & __self_rename_at_42_33 );
+inline bool _FuncMemSerializerTickOK_d9649f9442911044 ( Context * __context__, archive::MemSerializer & __self_rename_at_46_34 );
+inline bool _FuncMemSerializerTickwrite_e43800f3e4a97c40 ( Context * __context__, archive::MemSerializer & __self_rename_at_50_35, void * const  __bytes_rename_at_50_36, int32_t __size_rename_at_50_37 );
+inline bool _FuncMemSerializerTickread_3955af58030abb80 ( Context * __context__, archive::MemSerializer & __self_rename_at_59_39, void * const  __bytes_rename_at_59_40, int32_t __size_rename_at_59_41 );
+inline void _FuncMemSerializerTickerror_9049005b0c023f73 ( Context * __context__, archive::MemSerializer & __self_rename_at_74_44, char * const  __code_rename_at_74_45 );
+inline void _FuncMemSerializer_0x27___finalize_ede77b6b9785e805 ( Context * __context__, archive::MemSerializer & __self_rename_at_24_46 );
+inline void serialize_507166393832af66 ( Context * __context__, archive::Archive & __arch_rename_at_133_47, float3x3 & __value_rename_at_133_48 );
+inline void serialize_9a46ac2edb06a08c ( Context * __context__, archive::Archive & __arch_rename_at_137_49, float3x4 & __value_rename_at_137_50 );
+inline void serialize_e6dad884473e595d ( Context * __context__, archive::Archive & __arch_rename_at_141_51, float4x4 & __value_rename_at_141_52 );
+inline void serialize_d51d77f15d6914a2 ( Context * __context__, archive::Archive & __arch_rename_at_230_53, char * & __value_rename_at_230_54 );
+inline archive::Serializer Serializer_f09410f601464a77 ( Context * __context__ );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_68_0, int32_t __newSize_rename_at_68_1 )
+inline TArray<uint8_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_359bffb73f84303b ( Context * __context__, TArray<uint8_t> const  &  __clone_src_rename_at_1089_0 )
 {
-    builtin_array_resize(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_68_0),__newSize_rename_at_68_1,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    TArray<uint8_t> __clone_dest_rename_at_1091_1;das_zero(__clone_dest_rename_at_1091_1);
+    _FuncbuiltinTickcloneTick3038771811667655495_5d7fb39f4a94b6(__context__,das_arg<TArray<uint8_t>>::pass(__clone_dest_rename_at_1091_1),__clone_src_rename_at_1089_0);
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__clone_dest_rename_at_1091_1);
 }
 
-inline TArray<uint8_t> _FuncbuiltinTickclone_to_moveTick2007252383599261567_5374efae61d17e26 ( Context * __context__, TArray<uint8_t> const  &  __clone_src_rename_at_1056_2 )
+inline void _FuncbuiltinTickresizeTick4811697762258667383_235acebda28335df ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_68_2, int32_t __newSize_rename_at_68_3 )
 {
-    TArray<uint8_t> __clone_dest_rename_at_1058_3;das_zero(__clone_dest_rename_at_1058_3);
-    _FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce(__context__,das_arg<TArray<uint8_t>>::pass(__clone_dest_rename_at_1058_3),__clone_src_rename_at_1056_2);
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__clone_dest_rename_at_1058_3);
+    builtin_array_resize(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_68_2),__newSize_rename_at_68_3,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1080_4, TArray<uint8_t> const  &  __b_rename_at_1080_5 )
+inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_b13cf2a57c7f809e ( Context * __context__, TArray<uint8_t> &  __a_rename_at_50_4 )
 {
-    int32_t __ln_rename_at_1081_6 = ((int32_t)builtin_array_size(__b_rename_at_1080_5));
-    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__a_rename_at_1080_4),__ln_rename_at_1081_6);
-    if ( __ln_rename_at_1081_6 == 0 )
+    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_0,cast<TArray<uint8_t> &>::from(__a_rename_at_50_4)));
+    return das_auto_cast_ref<TArray<uint8_t> &>::cast(__a_rename_at_50_4);
+}
+
+inline void _FuncbuiltinTickcloneTick3038771811667655495_5d7fb39f4a94b6 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1113_5, TArray<uint8_t> const  &  __b_rename_at_1113_6 )
+{
+    int32_t __ln_rename_at_1114_7 = ((int32_t)builtin_array_size(__b_rename_at_1113_6));
+    _FuncbuiltinTickresizeTick4811697762258667383_235acebda28335df(__context__,das_arg<TArray<uint8_t>>::pass(__a_rename_at_1113_5),__ln_rename_at_1114_7);
+    if ( __ln_rename_at_1114_7 == 0 )
     {
         return ;
     } else {
-        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1080_4(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1080_5(0,__context__))),__ln_rename_at_1081_6 * 1);
+        das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__a_rename_at_1113_5(0,__context__))),das_auto_cast<void * const >::cast(das_ref(__context__,__b_rename_at_1113_6(0,__context__))),__ln_rename_at_1114_7 * 1);
     };
 }
 
-inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e ( Context * __context__, TArray<uint8_t> &  __a_rename_at_50_7 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_cf8693e01f654e23 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1234_8 )
 {
-    das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_0,cast<TArray<uint8_t> &>::from(__a_rename_at_50_7)));
-    return das_auto_cast_ref<TArray<uint8_t> &>::cast(__a_rename_at_50_7);
+    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1234_8),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb ( Context * __context__, TArray<uint8_t> &  __a_rename_at_1182_8 )
-{
-    builtin_array_free(das_arg<TArray<uint8_t>>::pass(__a_rename_at_1182_8),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-}
-
-inline void finalize_c806b47786a4f1c9 ( Context * __context__, archive::Serializer &  ____this_rename_at_16_9 )
+inline void finalize_ec9218c84ddc7c41 ( Context * __context__, archive::Serializer &  ____this_rename_at_16_9 )
 {
     memset((void*)&(____this_rename_at_16_9), 0, TypeSize<archive::Serializer>::size);
 }
 
-inline void finalize_85ad7a5b2a02d95a ( Context * __context__, archive::MemSerializer &  ____this_rename_at_24_10 )
+inline void finalize_8e7536909ae820d4 ( Context * __context__, archive::MemSerializer &  ____this_rename_at_24_10 )
 {
-    _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_24_10.data));
+    _FuncbuiltinTickfinalizeTick13836114024949725080_cf8693e01f654e23(__context__,das_arg<TArray<uint8_t>>::pass(____this_rename_at_24_10.data));
     memset((void*)&(____this_rename_at_24_10), 0, TypeSize<archive::MemSerializer>::size);
 }
 
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb ( Context * __context__, archive::Archive &  __arch_rename_at_90_11, float3x3 &  __value_rename_at_90_12 )
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_f432dbce0a8512d6 ( Context * __context__, archive::Archive &  __arch_rename_at_90_11, float3x3 &  __value_rename_at_90_12 )
 {
     if ( __arch_rename_at_90_11.reading )
     {
@@ -473,7 +473,7 @@ inline void _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb
     };
 }
 
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07 ( Context * __context__, archive::Archive &  __arch_rename_at_90_13, float3x4 &  __value_rename_at_90_14 )
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_2e4698a13889843d ( Context * __context__, archive::Archive &  __arch_rename_at_90_13, float3x4 &  __value_rename_at_90_14 )
 {
     if ( __arch_rename_at_90_13.reading )
     {
@@ -483,7 +483,7 @@ inline void _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07
     };
 }
 
-inline void _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5 ( Context * __context__, archive::Archive &  __arch_rename_at_90_15, float4x4 &  __value_rename_at_90_16 )
+inline void _FuncarchiveTickserialize_rawTick346513482259279339_dbf93da0a2b7b5c6 ( Context * __context__, archive::Archive &  __arch_rename_at_90_15, float4x4 &  __value_rename_at_90_16 )
 {
     if ( __arch_rename_at_90_15.reading )
     {
@@ -493,29 +493,29 @@ inline void _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5
     };
 }
 
-inline void _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654 ( Context * __context__, archive::Archive &  __arch_rename_at_99_17, int32_t & __value_rename_at_99_18 )
+inline void _FuncarchiveTickread_rawTick6802855309095275289_5ada6eaea03c2d43 ( Context * __context__, archive::Archive &  __arch_rename_at_99_17, int32_t & __value_rename_at_99_18 )
 {
     DAS_ASSERT((__arch_rename_at_99_17.reading));
     das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,int32_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_99_17.stream))),das_ref(__context__,__value_rename_at_99_18),4);
 }
 
-inline void _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_114_19, int32_t __newSize_rename_at_114_20 )
+inline void _FuncbuiltinTickresize_no_initTick14746062268774376747_9a94138666aaa1f0 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_114_19, int32_t __newSize_rename_at_114_20 )
 {
     builtin_array_resize_no_init(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_114_19),__newSize_rename_at_114_20,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44 ( Context * __context__, archive::Archive &  __arch_rename_at_105_21, int32_t & __value_rename_at_105_22 )
+inline void _FuncarchiveTickwrite_rawTick9760319972816126958_ccf41d41b9737aa5 ( Context * __context__, archive::Archive &  __arch_rename_at_105_21, int32_t & __value_rename_at_105_22 )
 {
     DAS_ASSERT((!__arch_rename_at_105_21.reading));
     das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,int32_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_105_21.stream))),das_ref(__context__,__value_rename_at_105_22),4);
 }
 
-inline void _FuncSerializer_0x27___finalize_9fd945918e1827c2 ( Context * __context__, archive::Serializer &  __self_rename_at_16_23 )
+inline void _FuncSerializer_0x27___finalize_b57170f7841c5fbe ( Context * __context__, archive::Serializer &  __self_rename_at_16_23 )
 {
-    finalize_c806b47786a4f1c9(__context__,das_arg<archive::Serializer>::pass(__self_rename_at_16_23));
+    finalize_ec9218c84ddc7c41(__context__,das_arg<archive::Serializer>::pass(__self_rename_at_16_23));
 }
 
-inline archive::MemSerializer MemSerializer_7ed03e14b8aa4fb4 ( Context * __context__ )
+inline archive::MemSerializer MemSerializer_eedc6c298e8644a7 ( Context * __context__ )
 {
     archive::MemSerializer __self_rename_at_26_24; das_zero(__self_rename_at_26_24); das_move(__self_rename_at_26_24, (([&]() -> archive::MemSerializer {
         archive::MemSerializer __mks_26;
@@ -534,11 +534,11 @@ inline archive::MemSerializer MemSerializer_7ed03e14b8aa4fb4 ( Context * __conte
     return /* <- */ das_auto_cast_move<archive::MemSerializer>::cast(__self_rename_at_26_24);
 }
 
-inline void _FuncMemSerializerTickMemSerializer_59fa6e4b02ed33fb ( Context * __context__, archive::MemSerializer &  __self_rename_at_26_25 )
+inline void _FuncMemSerializerTickMemSerializer_651498bb4e1220f8 ( Context * __context__, archive::MemSerializer &  __self_rename_at_26_25 )
 {
 }
 
-inline archive::MemSerializer MemSerializer_2a5138b36b6cb644 ( Context * __context__, TArray<uint8_t> const  &  __from_rename_at_30_26 )
+inline archive::MemSerializer MemSerializer_ea328262e30b4519 ( Context * __context__, TArray<uint8_t> const  &  __from_rename_at_30_26 )
 {
     archive::MemSerializer __self_rename_at_30_27; das_zero(__self_rename_at_30_27); das_move(__self_rename_at_30_27, (([&]() -> archive::MemSerializer {
         archive::MemSerializer __mks_30;
@@ -554,45 +554,45 @@ inline archive::MemSerializer MemSerializer_2a5138b36b6cb644 ( Context * __conte
         das_copy((__mks_30.getLastError),(Func(__context__->fnByMangledName(/*@archive::MemSerializer`getLastError S<archive::MemSerializer>*/ 0x5903e37131c8374))));
         return __mks_30;
     })()));
-    _FuncMemSerializerTickMemSerializer_161b88126e8c4555(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_30_27),__from_rename_at_30_26);
+    _FuncMemSerializerTickMemSerializer_1018f16282d2a27f(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_30_27),__from_rename_at_30_26);
     return /* <- */ das_auto_cast_move<archive::MemSerializer>::cast(__self_rename_at_30_27);
 }
 
-inline void _FuncMemSerializerTickMemSerializer_161b88126e8c4555 ( Context * __context__, archive::MemSerializer &  __self_rename_at_30_28, TArray<uint8_t> const  &  __from_rename_at_30_29 )
+inline void _FuncMemSerializerTickMemSerializer_1018f16282d2a27f ( Context * __context__, archive::MemSerializer &  __self_rename_at_30_28, TArray<uint8_t> const  &  __from_rename_at_30_29 )
 {
-    _FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_30_28.data),__from_rename_at_30_29);
+    _FuncbuiltinTickcloneTick3038771811667655495_5d7fb39f4a94b6(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_30_28.data),__from_rename_at_30_29);
 }
 
-inline TArray<uint8_t> _FuncMemSerializerTickextractData_e2917c6b6b7b6ec4 ( Context * __context__, archive::MemSerializer &  __self_rename_at_33_30 )
+inline TArray<uint8_t> _FuncMemSerializerTickextractData_679a82cc6ec7ca5b ( Context * __context__, archive::MemSerializer &  __self_rename_at_33_30 )
 {
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_33_30.data)));
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_b13cf2a57c7f809e(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_33_30.data)));
 }
 
-inline TArray<uint8_t> _FuncMemSerializerTickgetCopyOfData_682f289aa33320f2 ( Context * __context__, archive::MemSerializer &  __self_rename_at_37_31 )
+inline TArray<uint8_t> _FuncMemSerializerTickgetCopyOfData_4599022380655ed1 ( Context * __context__, archive::MemSerializer &  __self_rename_at_37_31 )
 {
-    TArray<uint8_t> __cdata_rename_at_39_32; das_zero(__cdata_rename_at_39_32); das_move(__cdata_rename_at_39_32, _FuncbuiltinTickclone_to_moveTick2007252383599261567_5374efae61d17e26(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_37_31.data)));
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e(__context__,das_arg<TArray<uint8_t>>::pass(__cdata_rename_at_39_32)));
+    TArray<uint8_t> __cdata_rename_at_39_32; das_zero(__cdata_rename_at_39_32); das_move(__cdata_rename_at_39_32, _FuncbuiltinTickclone_to_moveTick2007252383599261567_359bffb73f84303b(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_37_31.data)));
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_b13cf2a57c7f809e(__context__,das_arg<TArray<uint8_t>>::pass(__cdata_rename_at_39_32)));
 }
 
-inline char * _FuncMemSerializerTickgetLastError_b94e4e8380cef718 ( Context * __context__, archive::MemSerializer &  __self_rename_at_42_33 )
+inline char * _FuncMemSerializerTickgetLastError_36b724240a841462 ( Context * __context__, archive::MemSerializer &  __self_rename_at_42_33 )
 {
     return das_auto_cast<char *>::cast(__self_rename_at_42_33.lastError);
 }
 
-inline bool _FuncMemSerializerTickOK_a40cae5e96176170 ( Context * __context__, archive::MemSerializer &  __self_rename_at_46_34 )
+inline bool _FuncMemSerializerTickOK_d9649f9442911044 ( Context * __context__, archive::MemSerializer &  __self_rename_at_46_34 )
 {
     return das_auto_cast<bool>::cast(SimPolicy<char *>::Equ(cast<char *>::from(__self_rename_at_46_34.lastError),cast<char *>::from(nullptr),*__context__,nullptr));
 }
 
-inline bool _FuncMemSerializerTickwrite_42010d5d4d37e6b4 ( Context * __context__, archive::MemSerializer &  __self_rename_at_50_35, void * const  __bytes_rename_at_50_36, int32_t __size_rename_at_50_37 )
+inline bool _FuncMemSerializerTickwrite_e43800f3e4a97c40 ( Context * __context__, archive::MemSerializer &  __self_rename_at_50_35, void * const  __bytes_rename_at_50_36, int32_t __size_rename_at_50_37 )
 {
     int32_t __pos_rename_at_52_38 = ((int32_t)builtin_array_size(das_arg<TArray<uint8_t>>::pass(__self_rename_at_50_35.data)));
-    _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_50_35.data),__pos_rename_at_52_38 + __size_rename_at_50_37);
+    _FuncbuiltinTickresize_no_initTick14746062268774376747_9a94138666aaa1f0(__context__,das_arg<TArray<uint8_t>>::pass(__self_rename_at_50_35.data),__pos_rename_at_52_38 + __size_rename_at_50_37);
     das_memcpy(das_auto_cast<void * const >::cast(das_ref(__context__,__self_rename_at_50_35.data(__pos_rename_at_52_38,__context__))),__bytes_rename_at_50_36,__size_rename_at_50_37);
     return das_auto_cast<bool>::cast(true);
 }
 
-inline bool _FuncMemSerializerTickread_e5e9e0c17fa011c0 ( Context * __context__, archive::MemSerializer &  __self_rename_at_59_39, void * const  __bytes_rename_at_59_40, int32_t __size_rename_at_59_41 )
+inline bool _FuncMemSerializerTickread_3955af58030abb80 ( Context * __context__, archive::MemSerializer &  __self_rename_at_59_39, void * const  __bytes_rename_at_59_40, int32_t __size_rename_at_59_41 )
 {
     int32_t __newOffset_rename_at_61_42 = ((int32_t)(__self_rename_at_59_39.readOffset + __size_rename_at_59_41));
     int32_t __maxOffset_rename_at_62_43 = ((int32_t)builtin_array_size(das_arg<TArray<uint8_t>>::pass(__self_rename_at_59_39.data)));
@@ -608,51 +608,51 @@ inline bool _FuncMemSerializerTickread_e5e9e0c17fa011c0 ( Context * __context__,
     };
 }
 
-inline void _FuncMemSerializerTickerror_408f6b66809c6221 ( Context * __context__, archive::MemSerializer &  __self_rename_at_74_44, char * const  __code_rename_at_74_45 )
+inline void _FuncMemSerializerTickerror_9049005b0c023f73 ( Context * __context__, archive::MemSerializer &  __self_rename_at_74_44, char * const  __code_rename_at_74_45 )
 {
     das_copy(__self_rename_at_74_44.lastError,__code_rename_at_74_45);
 }
 
-inline void _FuncMemSerializer_0x27___finalize_eb63259fd4b06d18 ( Context * __context__, archive::MemSerializer &  __self_rename_at_24_46 )
+inline void _FuncMemSerializer_0x27___finalize_ede77b6b9785e805 ( Context * __context__, archive::MemSerializer &  __self_rename_at_24_46 )
 {
-    finalize_85ad7a5b2a02d95a(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_24_46));
+    finalize_8e7536909ae820d4(__context__,das_arg<archive::MemSerializer>::pass(__self_rename_at_24_46));
 }
 
-inline void serialize_864aec01f72813a5 ( Context * __context__, archive::Archive &  __arch_rename_at_133_47, float3x3 &  __value_rename_at_133_48 )
+inline void serialize_507166393832af66 ( Context * __context__, archive::Archive &  __arch_rename_at_133_47, float3x3 &  __value_rename_at_133_48 )
 {
-    _FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_133_47),das_arg<float3x3>::pass(__value_rename_at_133_48));
+    _FuncarchiveTickserialize_rawTick346513482259279339_f432dbce0a8512d6(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_133_47),das_arg<float3x3>::pass(__value_rename_at_133_48));
 }
 
-inline void serialize_2bdd95a82ea20a0e ( Context * __context__, archive::Archive &  __arch_rename_at_137_49, float3x4 &  __value_rename_at_137_50 )
+inline void serialize_9a46ac2edb06a08c ( Context * __context__, archive::Archive &  __arch_rename_at_137_49, float3x4 &  __value_rename_at_137_50 )
 {
-    _FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_137_49),das_arg<float3x4>::pass(__value_rename_at_137_50));
+    _FuncarchiveTickserialize_rawTick346513482259279339_2e4698a13889843d(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_137_49),das_arg<float3x4>::pass(__value_rename_at_137_50));
 }
 
-inline void serialize_a10311ab5d84440e ( Context * __context__, archive::Archive &  __arch_rename_at_141_51, float4x4 &  __value_rename_at_141_52 )
+inline void serialize_e6dad884473e595d ( Context * __context__, archive::Archive &  __arch_rename_at_141_51, float4x4 &  __value_rename_at_141_52 )
 {
-    _FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_141_51),das_arg<float4x4>::pass(__value_rename_at_141_52));
+    _FuncarchiveTickserialize_rawTick346513482259279339_dbf93da0a2b7b5c6(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_141_51),das_arg<float4x4>::pass(__value_rename_at_141_52));
 }
 
-inline void serialize_e472b981aa88a5bc ( Context * __context__, archive::Archive &  __arch_rename_at_230_53, char * & __value_rename_at_230_54 )
+inline void serialize_d51d77f15d6914a2 ( Context * __context__, archive::Archive &  __arch_rename_at_230_53, char * & __value_rename_at_230_54 )
 {
     if ( __arch_rename_at_230_53.reading )
     {
         int32_t __len_rename_at_233_55 = 0;
-        _FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_53),__len_rename_at_233_55);
+        _FuncarchiveTickread_rawTick6802855309095275289_5ada6eaea03c2d43(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_53),__len_rename_at_233_55);
         if ( __len_rename_at_233_55 > 0 )
         {
             TArray<uint8_t> __tbuf_rename_at_236_56;das_zero(__tbuf_rename_at_236_56);
-            _FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_56),__len_rename_at_233_55 + 1);
+            _FuncbuiltinTickresize_no_initTick14746062268774376747_9a94138666aaa1f0(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_56),__len_rename_at_233_55 + 1);
             das_invoke_method<bool,offsetof(archive::Serializer,read)>::invoke<archive::Serializer &,uint8_t *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_230_53.stream))),das_ref(__context__,__tbuf_rename_at_236_56(0,__context__)),__len_rename_at_233_55);
             das_copy(__tbuf_rename_at_236_56(__len_rename_at_233_55,__context__),0x0);
             das_copy(__value_rename_at_230_54,((char * const )(builtin_string_clone(das_cast<char *>::cast(das_ref(__context__,__tbuf_rename_at_236_56(0,__context__))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
-            _FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_56));
+            _FuncbuiltinTickfinalizeTick13836114024949725080_cf8693e01f654e23(__context__,das_arg<TArray<uint8_t>>::pass(__tbuf_rename_at_236_56));
         } else {
             das_copy(__value_rename_at_230_54,nullptr);
         };
     } else {
         int32_t __len_rename_at_246_57 = builtin_string_length(__value_rename_at_230_54,__context__);
-        _FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_53),__len_rename_at_246_57);
+        _FuncarchiveTickwrite_rawTick9760319972816126958_ccf41d41b9737aa5(__context__,das_arg<archive::Archive>::pass(__arch_rename_at_230_53),__len_rename_at_246_57);
         if ( __len_rename_at_246_57 > 0 )
         {
             das_invoke_method<bool,offsetof(archive::Serializer,write)>::invoke<archive::Serializer &,void *,int32_t>(__context__,nullptr,das_arg<archive::Serializer>::pass(das_cast<archive::Serializer>::cast(das_deref(__context__,__arch_rename_at_230_53.stream))),das_cast<void *>::cast(__value_rename_at_230_54),__len_rename_at_246_57);
@@ -660,7 +660,7 @@ inline void serialize_e472b981aa88a5bc ( Context * __context__, archive::Archive
     };
 }
 
-inline archive::Serializer Serializer_3a8e571f3a055b73 ( Context * __context__ )
+inline archive::Serializer Serializer_f09410f601464a77 ( Context * __context__ )
 {
     return /* <- */ das_auto_cast_move<archive::Serializer>::cast((([&]() -> archive::Serializer {
         archive::Serializer __mks_16;
@@ -672,104 +672,104 @@ inline archive::Serializer Serializer_3a8e571f3a055b73 ( Context * __context__ )
 }
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xc502128bbf7c5d21] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176>>();
+    aotLib[0xea1162d6c7002d8f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickclone_to_moveTick2007252383599261567_359bffb73f84303b>>();
     };
-    aotLib[0xca1af320824cace5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickclone_to_moveTick2007252383599261567_5374efae61d17e26>>();
+    aotLib[0xc00ba5922b28bdc6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_235acebda28335df>>();
     };
-    aotLib[0x9ae1e096a795eae2] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickcloneTick3038771811667655495_2edc7087c1b82fce>>();
+    aotLib[0x454d17c1def471b2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_b13cf2a57c7f809e>>();
     };
-    aotLib[0xa8f929474bbb24c7] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_5aac315099132c4e>>();
+    aotLib[0x5a9d3e5e3b66c8c1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickcloneTick3038771811667655495_5d7fb39f4a94b6>>();
     };
-    aotLib[0x1f8eb5798352d074] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_947eb3679f75acfb>>();
+    aotLib[0x2402206a76e3cd1f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickfinalizeTick13836114024949725080_cf8693e01f654e23>>();
     };
-    aotLib[0x592a7d4951e74f25] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_c806b47786a4f1c9>>();
+    aotLib[0xde7bd1e4ebeb214c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_ec9218c84ddc7c41>>();
     };
-    aotLib[0x3a1da5e9d200abdc] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_85ad7a5b2a02d95a>>();
+    aotLib[0xf234e5dbcf97dda6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&finalize_8e7536909ae820d4>>();
     };
-    aotLib[0x211ee1572cc4d31] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickserialize_rawTick346513482259279339_c2da6d567d74f5fb>>();
+    aotLib[0xf5f2c572cb6af2f7] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickserialize_rawTick346513482259279339_f432dbce0a8512d6>>();
     };
-    aotLib[0x60cee17d6a7a88c4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickserialize_rawTick346513482259279339_a227eb837d918a07>>();
+    aotLib[0x46145fb6b3c467bd] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickserialize_rawTick346513482259279339_2e4698a13889843d>>();
     };
-    aotLib[0x7cf87cb8ee7dd6a4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickserialize_rawTick346513482259279339_1a9c5bf871c817f5>>();
+    aotLib[0xe214758b950cb87d] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickserialize_rawTick346513482259279339_dbf93da0a2b7b5c6>>();
     };
-    aotLib[0x13130f7ba25304c0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickread_rawTick6802855309095275289_b9dfe21dac02b654>>();
+    aotLib[0xc90a696a49fde044] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickread_rawTick6802855309095275289_5ada6eaea03c2d43>>();
     };
-    aotLib[0x59646fca104fdabb] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresize_no_initTick14746062268774376747_99c206c17e15b53>>();
+    aotLib[0x544319553a4ab3e0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresize_no_initTick14746062268774376747_9a94138666aaa1f0>>();
     };
-    aotLib[0x991c09da6401e817] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickwrite_rawTick9760319972816126958_e9195ce9edbb9e44>>();
+    aotLib[0x60ccfeff88772ffe] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncarchiveTickwrite_rawTick9760319972816126958_ccf41d41b9737aa5>>();
     };
-    aotLib[0xfaab756b0f2d55a8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSerializer_0x27___finalize_9fd945918e1827c2>>();
+    aotLib[0x13dfddf185797f46] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncSerializer_0x27___finalize_b57170f7841c5fbe>>();
     };
-    aotLib[0x2c6479bddcd2c0cb] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&MemSerializer_7ed03e14b8aa4fb4>>();
+    aotLib[0xd0718df01c47f852] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&MemSerializer_eedc6c298e8644a7>>();
     };
-    aotLib[0xe895d28e29c9a4c4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickMemSerializer_59fa6e4b02ed33fb>>();
+    aotLib[0x4dc27055756c2d0c] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickMemSerializer_651498bb4e1220f8>>();
     };
-    aotLib[0x7cdaf9182b9afc3b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&MemSerializer_2a5138b36b6cb644>>();
+    aotLib[0x72be9b498a91920e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&MemSerializer_ea328262e30b4519>>();
     };
-    aotLib[0xc5353c3949580f0b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickMemSerializer_161b88126e8c4555>>();
+    aotLib[0x973e778092d30111] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickMemSerializer_1018f16282d2a27f>>();
     };
-    aotLib[0x653a902d3313001a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncMemSerializerTickextractData_e2917c6b6b7b6ec4>>();
+    aotLib[0x35af82e448cb16e] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncMemSerializerTickextractData_679a82cc6ec7ca5b>>();
     };
-    aotLib[0xf5e0a29b44c8f284] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncMemSerializerTickgetCopyOfData_682f289aa33320f2>>();
+    aotLib[0x2a5e151311020411] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncMemSerializerTickgetCopyOfData_4599022380655ed1>>();
     };
-    aotLib[0xef63b8b3f92572fd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickgetLastError_b94e4e8380cef718>>();
+    aotLib[0xe5472d04f10f2554] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickgetLastError_36b724240a841462>>();
     };
-    aotLib[0xc67915df15c39d13] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickOK_a40cae5e96176170>>();
+    aotLib[0x9c5a5e8c5ca39741] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickOK_d9649f9442911044>>();
     };
-    aotLib[0xbfb9e4f067f3d2dd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickwrite_42010d5d4d37e6b4>>();
+    aotLib[0x48fcff447cb32ec4] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickwrite_e43800f3e4a97c40>>();
     };
-    aotLib[0x6036cb960a58c161] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickread_e5e9e0c17fa011c0>>();
+    aotLib[0x678ea98dcad3bee2] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickread_3955af58030abb80>>();
     };
-    aotLib[0xe2ee72e04f66ee4c] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickerror_408f6b66809c6221>>();
+    aotLib[0x92b5ca7a2199c008] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializerTickerror_9049005b0c023f73>>();
     };
-    aotLib[0xbd76d8b56815e9a1] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializer_0x27___finalize_eb63259fd4b06d18>>();
+    aotLib[0xe5d6abf1bdadd7c1] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncMemSerializer_0x27___finalize_ede77b6b9785e805>>();
     };
-    aotLib[0x6160a41cea8b03d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&serialize_864aec01f72813a5>>();
+    aotLib[0xbc80d56faa19cfe6] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&serialize_507166393832af66>>();
     };
-    aotLib[0xad0f4dae224f56ef] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&serialize_2bdd95a82ea20a0e>>();
+    aotLib[0x276297c953120ef0] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&serialize_9a46ac2edb06a08c>>();
     };
-    aotLib[0xd1ad5385f180e8f8] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&serialize_a10311ab5d84440e>>();
+    aotLib[0x98ff7e87a2bcf29f] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&serialize_e6dad884473e595d>>();
     };
-    aotLib[0xeac25f0c9e287515] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&serialize_e472b981aa88a5bc>>();
+    aotLib[0x70b993b0af855414] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_Aot<&serialize_d51d77f15d6914a2>>();
     };
-    aotLib[0xc8758706775393ff] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&Serializer_3a8e571f3a055b73>>();
+    aotLib[0x8d1183c28f501aa8] = +[](Context & ctx) -> SimNode* {
+        return ctx.code->makeNode<AutoSimNode_AotCMRES<&Serializer_f09410f601464a77>>();
     };
     resolveTypeInfoAnnotations();
 }
 
-} // namespace _anon_880951671933521401
-AotListBase impl_aot_archive(_anon_880951671933521401::registerAotFunctions);
+} // namespace _anon_9563944200698030257
+AotListBase impl_aot_archive(_anon_9563944200698030257::registerAotFunctions);
 } // namespace das
 
 #if defined(_MSC_VER)

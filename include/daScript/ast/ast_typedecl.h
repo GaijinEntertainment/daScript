@@ -671,7 +671,7 @@ namespace das {
     enum class CpptRedundantConst { no, yes };
     enum class ChooseSmartPtr { no, yes };
 
-    string describeCppType(const TypeDeclPtr & type,
+    string describeCppType(const smart_ptr_raw<TypeDecl> & type,
                            CpptSubstitureRef substituteRef = CpptSubstitureRef::no,
                            CpptSkipRef skipRef = CpptSkipRef::no,
                            CpptSkipConst skipConst = CpptSkipConst::no,
