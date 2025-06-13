@@ -469,6 +469,7 @@ namespace das
     };
 
     struct TypeAnnotation : Annotation {
+        TypeAnnotation() : Annotation("") {}
         TypeAnnotation ( const string & n, const string & cpn = "" ) : Annotation(n,cpn) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
             DAS_ASSERTF(p, "can only clone real type %s", name.c_str());
@@ -1428,7 +1429,7 @@ namespace das
     // infer passes
         int32_t     max_infer_passes = 50;              // maximum number of infer passes
     // memory
-        uint32_t    stack = 16*1024;                    // 0 for unique stack
+        uint32_t    stack = 512*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
         bool        persistent_heap = false;
         bool        multiple_contexts = false;          // code supports context safety
@@ -1695,6 +1696,7 @@ namespace das
     // this one works for single module only
     ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, bool isDep = false, CodeOfPolicies policies = CodeOfPolicies() );
+    ExpressionPtr parseExpression ( string_view file, bool gen2, bool gen2_make = true);
 
     // this one collectes dependencies and compiles with modules
     ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,

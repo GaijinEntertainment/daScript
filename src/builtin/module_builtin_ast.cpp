@@ -215,6 +215,10 @@ namespace das {
         return found ? found : Module::require(name);
     }
 
+    smart_ptr_raw<Annotation> module_find_annotation ( Module* &module, const char *name ) {
+        return module->findAnnotation(name);
+    }
+
     smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
         if ( !func.PTR ) context->throw_error_at(line_info, "function not found");
         if ( !mod ) context->throw_error_at(line_info, "module not found");
@@ -671,6 +675,11 @@ namespace das {
         return annotation->makeFieldType(name,isConst);
     }
 
+    TypeDeclPtr getHandledTypeIndexTypeDecl ( smart_ptr_raw<TypeAnnotation> annotation, const smart_ptr_raw<Expression> src, const smart_ptr_raw<Expression> idx, Context * context, LineInfoArg * at ) {
+        if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
+        return annotation->makeIndexType(src,idx);
+    }
+
     uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "expecting field name");
         if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
@@ -913,6 +922,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(findRttiModule)>(*this, lib,  "find_module_via_rtti",
             SideEffects::accessExternal, "findRttiModule")
                 ->args({"program","name","context","lineinfo"});
+        addExtern<DAS_BIND_FUN(module_find_annotation)>(*this, lib,  "module_find_annotation",
+            SideEffects::none, "module_find_annotation")
+                ->args({"module","name"});
         addExtern<DAS_BIND_FUN(findRttiFunction)>(*this, lib,  "find_module_function_via_rtti",
             SideEffects::accessExternal, "findRttiFunction")
                 ->args({"module","function","context","lineinfo"});
@@ -1081,6 +1093,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(getHandledTypeFieldTypeDecl)>(*this, lib,  "get_handled_type_field_type_declaration",
             SideEffects::none, "getHandledTypeFieldTypeDecl")
                 ->args({"type","field","isConst","context","line"});
+        addExtern<DAS_BIND_FUN(getHandledTypeIndexTypeDecl)>(*this, lib,  "get_handled_type_index_type_declaration",
+            SideEffects::none, "getHandledTypeIndexTypeDecl")
+                ->args({"type","src","idx","context","line"});
         // module
         addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",
             SideEffects::modifyExternal, "for_each_typedef")

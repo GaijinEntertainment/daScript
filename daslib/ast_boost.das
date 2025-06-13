@@ -769,7 +769,7 @@ def private walk_and_convert_basic(data : uint8 const?; info : TypeDeclPtr; at :
         } elif (info.baseType == Type.tBitfield) {
             return new ExprConstBitfield(at = at, value = *reinterpret<bitfield?> data)
         } else {
-            panic("unsupported {info.baseType}")
+            panic("unsupported {info.baseType} {info}")
             return default<ExpressionPtr>
         }
     }
@@ -795,8 +795,7 @@ def private walk_and_convert_enumeration(data : uint8 const?; info : TypeDeclPtr
         value := name)
 }
 
-def private walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
-    // print("0x{intptr(data)} {describe(info)}\n")
+def public walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (info.dim |> length != 0) {
         return <- walk_and_convert_dim(data, info, at)
     } elif (info.baseType == Type.tArray) {
