@@ -49,19 +49,21 @@ namespace das {
 
     vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
         vector<ExpressionPtr> argList;
+        if (arguments == nullptr) {
+            return argList;
+        }
+
         auto arg = arguments;
-        if ( arg->rtti_isSequence() ) {
-            while ( arg->rtti_isSequence() ) {
-                auto pSeq = static_cast<ExprSequence *>(arg);
-                DAS_ASSERT(!pSeq->right->rtti_isSequence());
-                argList.push_back(pSeq->right);
-                arg = pSeq->left.get();
-            }
-            argList.push_back(arg);
-            reverse(argList.begin(),argList.end());
+        while ( arg->rtti_isSequence() ) {
+            auto pSeq = static_cast<ExprSequence *>(arg);
+            DAS_ASSERT(!pSeq->right->rtti_isSequence());
+            argList.push_back(pSeq->right);
+            arg = pSeq->left.get();
+        }
+        argList.emplace_back(arg);
+        reverse(argList.begin(),argList.end());
+        if (arguments->rtti_isSequence()) {
             delete arguments;
-        } else {
-            argList.push_back(arg);
         }
         return argList;
     }
