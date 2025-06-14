@@ -892,6 +892,7 @@ namespace das
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
     void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context );
     void shutdownDebugAgent();
+    void shutdownThreadLocalDebugAgent();
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
     bool isInDebugAgentCreation();
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );

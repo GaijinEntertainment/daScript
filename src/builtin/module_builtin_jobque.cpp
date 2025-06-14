@@ -389,6 +389,7 @@ namespace das {
             das_invoke_lambda<void>::invoke(forkContext.get(), lineinfo, flambda);
             das_delete<Lambda>::clear(forkContext.get(), flambda);
             g_jobQueTotalThreads --;
+            shutdownThreadLocalDebugAgent();
         }).detach();
     }
 
@@ -419,6 +420,7 @@ namespace das {
             forkContext.reset();
             stop_debugger();
             stop_requested = false;
+            shutdownThreadLocalDebugAgent();
         }).detach();
     }
 
