@@ -1159,8 +1159,8 @@ def clone(var a : table<string; auto(VT)>; b : table<string; VT> | #) {
 
 [expect_any_vector(args), skip_lock_check]
 def clone(var args; var nargs : array<string>) {
-    let tot = length(nargs)
-    args |> resize(tot)
+    let tot = _::length(nargs)
+    _::resize(args,tot)
     for (i in range(tot)) {
         args[i] := nargs[i]
     }
@@ -1169,9 +1169,9 @@ def clone(var args; var nargs : array<string>) {
 
 [expect_any_vector(args), skip_lock_check]
 def clone(var args; var nargs : array<smart_ptr<auto(TT)>>) {
-    args |> clear
+    _::clear(args)
     for (narg in nargs) {
-        args |> emplace(narg)
+        _::emplace(args, narg)
     }
     delete nargs
 }
