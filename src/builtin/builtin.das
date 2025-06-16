@@ -1116,7 +1116,7 @@ def clone(var a : table<string; auto(VT)>; b : table<string; VT> | #) {
 }
 
 [expect_any_vector(args), skip_lock_check]
-def clone(var args; var nargs : array<string>) {
+def clone(var args; var nargs) {
     let tot = _::length(nargs)
     _::resize(args, tot)
     for (i in range(tot)) {
