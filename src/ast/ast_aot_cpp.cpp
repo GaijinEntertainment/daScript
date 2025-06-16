@@ -2849,7 +2849,7 @@ namespace das {
                         ss << " = ";
                         auto call_func = expr->constructor;
                         if ( isHybridCall(call_func) ) {
-                            ss << "das_invoke_function<" << describeCppType(call_func->result) << ">::invoke_cmres";
+                            ss << "das_invoke_function<" << describeCppType(call_func->result, CpptSubstitureRef::no, CpptSkipRef::no, CpptSkipConst::yes) << ">::invoke_cmres";
                             auto mangledName = call_func->getMangledName();
                             uint64_t hash = call_func->getMangledNameHash();
                             ss << "(__context__,nullptr,";
@@ -2864,7 +2864,7 @@ namespace das {
                         ss << tabs() << mksName(expr) << " = ";
                         auto call_func = expr->constructor;
                         if ( isHybridCall(call_func) ) {
-                            ss << "das_invoke_function<" << describeCppType(call_func->result) << ">::invoke_cmres";
+                            ss << "das_invoke_function<" << describeCppType(call_func->result, CpptSubstitureRef::no, CpptSkipRef::no, CpptSkipConst::yes) << ">::invoke_cmres";
                             auto mangledName = call_func->getMangledName();
                             uint64_t hash = call_func->getMangledNameHash();
                             ss << "(__context__,nullptr,";
@@ -3123,7 +3123,7 @@ namespace das {
                 else if (bt == Type::tString) ss << "das_invoke_function_by_name";
                 else ss << "das_invoke /*unknown*/";
                 ExprInvoke * einv = static_cast<ExprInvoke *>(call);
-                ss << "<" << describeCppType(call->type);
+                ss << "<" << describeCppType(call->type, CpptSubstitureRef::no, CpptSkipRef::no, CpptSkipConst::yes);
                 if ( methodName ) {
                     if (crossPlatform) {
                         ss << ",offsetof(" << describeCppType(argType->argTypes.at(0),
@@ -3349,7 +3349,7 @@ namespace das {
                 }
             } else {
                 if ( isHybridCall(call->func) ) {
-                    ss << "das_invoke_function<" << describeCppType(call->func->result) << ">::invoke";
+                    ss << "das_invoke_function<" << describeCppType(call->func->result, CpptSubstitureRef::no, CpptSkipRef::no, CpptSkipConst::yes) << ">::invoke";
                     if ( call->func->result->isRefType() && !call->func->result->ref ) {
                         ss << "_cmres";
                     }
