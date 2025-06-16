@@ -2700,7 +2700,7 @@ class CppAot : AstVisitor {
                     write(*ss, " = ");
                     let call_func = expr.constructor;
                     if (isHybridCall(call_func)) {
-                        write(*ss, "das_invoke_function<{describeCppType(call_func.result,DescribeConfig(cross_platform=cross_platform))}>::invoke_cmres");
+                        write(*ss, "das_invoke_function<{describeCppType(call_func.result,DescribeConfig(skip_const=true,cross_platform=cross_platform))}>::invoke_cmres");
                         assume mangledName = call_func |> get_mangled_name();
                         let hash = call_func.getMangledNameHash;
                         write(*ss, "(__context__,nullptr,");
@@ -2716,7 +2716,7 @@ class CppAot : AstVisitor {
                     write(*ss, "{tabs()}{mksName(expr)} = ");
                     let call_func = expr.constructor;
                     if (isHybridCall(call_func)) {
-                        write(*ss, "das_invoke_function<{describeCppType(call_func.result, DescribeConfig(cross_platform=cross_platform))}>::invoke_cmres");
+                        write(*ss, "das_invoke_function<{describeCppType(call_func.result, DescribeConfig(skip_const=true,cross_platform=cross_platform))}>::invoke_cmres");
                         assume mangledName = call_func |> get_mangled_name();
                         let hash = call_func.getMangledNameHash;
                         write(*ss, "(__context__,nullptr,");
@@ -2968,7 +2968,7 @@ class CppAot : AstVisitor {
                 write(*ss, "das_invoke /*unknown*/");
             }
             let einv = call as ExprInvoke;
-            write(*ss, "<{describeCppType(call._type,DescribeConfig(cross_platform=cross_platform))}");
+            write(*ss, "<{describeCppType(call._type,DescribeConfig(skip_const=true,cross_platform=cross_platform))}");
             if (methodOffset != -1) {
                 assume argType = call.arguments[0]._type;
                 if (cross_platform) {
@@ -3193,7 +3193,7 @@ class CppAot : AstVisitor {
             }
         } else {
             if (isHybridCall(call.func)) {
-                write(*ss, "das_invoke_function<{describeCppType(call.func.result,DescribeConfig(cross_platform=cross_platform))}>::invoke");
+                write(*ss, "das_invoke_function<{describeCppType(call.func.result,DescribeConfig(skip_const=true,cross_platform=cross_platform))}>::invoke");
                 if (call.func.result.isRefType && !call.func.result.flags.ref) {
                     write(*ss, "_cmres");
                 }
