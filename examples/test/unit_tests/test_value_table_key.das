@@ -11,16 +11,20 @@ def test {
     tab |> erase(EntityId(3))
     assert(length(tab) == 2)
 
-    tab |> find(EntityId(2)) <| $(val) {
-        assert(val != null && *val == "world")
+    var found = tab |> get(EntityId(2)) <| $(val) {
+        assert(val == "world")
     }
+    assert(found)
 
-    tab |> get(EntityId(1)) <| $(val) {
+    found = tab |> get(EntityId(1)) <| $(val) {
         assert(val == "hello")
     }
+    assert(found)
 
     if (tab |> key_exists(EntityId(1))) {
         assert(true)
+    } else {
+        assert(false)
     }
     if (tab |> key_exists(EntityId(3))) {
         assert(false)

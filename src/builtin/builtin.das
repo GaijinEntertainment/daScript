@@ -592,20 +592,6 @@ def empty(a : table<auto; auto> | #) : bool {
     return length(a) == 0
 }
 
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find(Tab : table<auto(keyT); auto(valT)> | #; at : keyT -#; blk : block<(p : valT?#) : void>) {
-    __builtin_table_lock(Tab)
-    var val = __builtin_table_find(Tab, at)
-    unsafe {
-        invoke(blk, reinterpret<valT?#> val)
-    }
-    __builtin_table_unlock(Tab)
-}
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find(Tab : table<auto(keyT)>; at : keyT | #; blk : block<(p : void?) : void>) {
-    concept_assert(false, "find(table<keyT; void>, ...) is not supported")
-}
 
 // one table lookup with block to rule them all 'get'
 
@@ -767,105 +753,6 @@ def clone_value(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | 
         var t := Tab[at]
         return <- t
     }
-}
-
-// find if exists
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find_if_exists(Tab : table<auto(keyT); auto(valT)>; at : keyT -#; blk : block<(p : valT&) : void>) {
-    var val = __builtin_table_find(Tab, at)
-    if (val != null) {
-        __builtin_table_lock(Tab)
-        invoke(blk, *val)
-        __builtin_table_unlock(Tab)
-        return true
-    } else {
-        return false
-    }
-}
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find_if_exists(Tab : table<auto(keyT); auto(valT)>#; at : keyT -#; blk : block<(p : valT&#) : void>) {
-    var val = __builtin_table_find(Tab, at)
-    if (val != null) {
-        __builtin_table_lock(Tab)
-        invoke(blk, *(reinterpret<valT?#> val))
-        __builtin_table_unlock(Tab)
-        return true
-    } else {
-        return false
-    }
-}
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find_if_exists(Tab : table<auto(keyT)>; at : keyT -#; blk : block<(p : void?) : void>) {
-    concept_assert(false, "find_if_exists(table<keyT; void>, ...) is not supported")
-    return false
-}
-
-// find for edit
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find_for_edit(var Tab : table<auto(keyT); auto(valT)>; at : keyT -#; blk : block<(var p : valT?#) : void>) {
-    __builtin_table_lock(Tab)
-    var val = __builtin_table_find(Tab, at)
-    unsafe {
-        invoke(blk, reinterpret<valT?#> val)
-    }
-    __builtin_table_unlock(Tab)
-}
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find_for_edit(var Tab : table<auto(keyT)>; at : keyT | #; blk : block<(var p : void?) : void>) {
-    concept_assert(false, "find_for_edit(table<keyT; void>, ...) is not supported")
-}
-
-[unsafe_operation, deprecated(message="use tab?[key] instead")]
-def find_for_edit(var Tab : table<auto(keyT); auto(valT)> | #; at : keyT -#) : valT? {
-    return __builtin_table_find(Tab, at)
-}
-
-[unsafe_operation, deprecated(message="use tab?[key] instead")]
-def find_for_edit(var Tab : table<auto(keyT)>; at : keyT | #) : void? {
-    concept_assert(false, "find_for_edit(table<keyT; void>, ...) is not supported")
-}
-
-// find for edit if exists
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find_for_edit_if_exists(var Tab : table<auto(keyT); auto(valT)>#; at : keyT -#; blk : block<(var p : valT#&) : void>) {
-    var val = __builtin_table_find(Tab, at)
-    if (val != null) {
-        __builtin_table_lock(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT?#> val))
-        }
-        __builtin_table_unlock(Tab)
-        return true
-    } else {
-        return false
-    }
-}
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find_for_edit_if_exists(var Tab : table<auto(keyT); auto(valT)>; at : keyT -#; blk : block<(var p : valT&) : void>) {
-    var val = __builtin_table_find(Tab, at)
-    if (val != null) {
-        __builtin_table_lock(Tab)
-        unsafe {
-            invoke(blk, *(reinterpret<valT?> val))
-        }
-        __builtin_table_unlock(Tab)
-        return true
-    } else {
-        return false
-    }
-}
-
-[deprecated(message="use tab?[key] or 'get' instead")]
-def find_for_edit_if_exists(var Tab : table<auto(keyT)>; at : keyT | #; blk : block<(var p : void?) : void>) {
-    concept_assert(false, "find_for_edit_if_exists(table<keyT; void>, ...) is not supported")
-    return false
 }
 
 def _at_with_lockcheck(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT& {
