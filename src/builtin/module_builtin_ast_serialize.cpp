@@ -2290,7 +2290,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 53;
+        static constexpr uint32_t currentVersion = 54;
         return currentVersion;
     }
 
@@ -2342,7 +2342,7 @@ namespace das {
             for ( auto & m : modules ) {
                 bool builtin = m->builtIn, promoted = m->promoted;
                 ser << builtin << promoted;
-                ser << m->name;
+                ser << m->name << m->fileName;
 
                 if ( m->builtIn && m->promoted ) {
                     bool isNew = ser.writingReadyModules.count(m) == 0;
@@ -2376,8 +2376,8 @@ namespace das {
         uint64_t size = 0; ser << size;
         for ( uint64_t i = 0; i < size; i++ ) {
             bool builtin = false, promoted = false;
-            string name;
-            ser << builtin << promoted << name;
+            string name, fileName;
+            ser << builtin << promoted << name << fileName;
             if ( builtin && !promoted ) {
                 // pass
             } else if ( builtin && promoted ) {
@@ -2386,6 +2386,7 @@ namespace das {
                     Module *prev = Module::require(name);
                     auto deser = new Module;
                     deser->setModuleName(name);
+                    deser->fileName = fileName;
                     if ( prev ) {
                         library.addModule(prev);
                         ser.serializeModule(*deser, /*already_exists*/true);
@@ -2404,6 +2405,7 @@ namespace das {
             } else {
                 auto deser = new Module;
                 deser->setModuleName(name);
+                deser->fileName = fileName;
                 library.addModule(deser);
                 ser << *deser;
             }
