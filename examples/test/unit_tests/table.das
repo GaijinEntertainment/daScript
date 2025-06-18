@@ -1,22 +1,11 @@
 options gen2
 def test_find {
     let const_tab <- { "one" => 1, "two" => 2 }
-    find(const_tab, "one") <| $(num) {
-        assert(deref(num) == 1)
-    }
     get(const_tab, "one") <| $(num) {
         assert(num == 1)
     }
-    find(const_tab, "one") <| $(num) {
-        if (num != null) {
-            assert(deref(num) == 1)
-        }
-    }
     assert(const_tab?["one"] ?? 100500 == 1)
     var tab <- { "one" => 1, "two" => 2 }
-    find(tab, "one") <| $(num) {
-        assert(deref(num) == 1)
-    }
     get(tab, "one") <| $(var num) {
         num = 3
     }
@@ -75,13 +64,10 @@ def test : bool {
     // debug(tab)
     i = 0
     while (i < total) {
-        find(tab, string(i)) <| $(pValue) {
-            if (pValue != null) {
-                assert(deref(pValue) == i)
-            } else {
-                assert(i % 7 == 0)
-            }
+        let found = get(tab, string(i)) <| $(pValue) {
+            assert(pValue == i)
         }
+        assert(!found == (i % 7 == 0))
         i ++
     }
     while (i < total) {
@@ -97,27 +83,13 @@ def test : bool {
         var j, k : int = 0
         i = 0
         while (i < total) {
-            find(tab, string(i)) <| $(pVal) {
-                j += pVal ?? 0
+            get(tab, string(i)) <| $(pVal) {
+                j += pVal
             }
             if (i % 7 != 0) {
                 k += i
             } else {
                 assert(i % 7 == 0)
-            }
-            i ++
-        }
-        assert(j == k)
-    }
-    if (true) {
-        var j, k, zero : int = 0
-        i = 0
-        while (i < total) {
-            find(tab, string(i)) <| $(pVal) {
-                j += pVal ?? zero
-            }
-            if (i % 7 != 0) {
-                k += i
             }
             i ++
         }
@@ -193,24 +165,23 @@ def test_lock_panic {
     var tab <- { "one" => 1, "two" => 2 }
     var failed = false
     try {
-        find(tab, "one") <| $(t) {
-            assert(t != null)
+        get(tab, "one") <| $(t) {
             tab |> insert("three", 3)
         }
     } recover {
         failed = true
     }
     assert(failed)
+    assert(!key_exists(tab, "three"))
     failed = false
     try {
-        find(tab, "three") <| $(t) {
-            assert(t == null)
+        get(tab, "three") <| $(t) {
             erase(tab, "three")
         }
     } recover {
         failed = true
     }
-    assert(failed)
+    assert(!failed)
     return true
 }
 

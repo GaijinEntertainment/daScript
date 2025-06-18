@@ -97,7 +97,7 @@ static void resolveTypeInfoAnnotations()
 
 inline uint32_t _FuncrandomTickrandom_uintTick15141358123050100739_94b4c24d399f76bf ( Context * __context__, int4 & __seed_rename_at_45_0 );
 inline void finalize_ebd08a3d5c6fd96 ( Context * __context__, random::_lambda_random_111_1 & ____this_rename_at_111_2 );
-inline Sequence DAS_COMMENT((uint32_t)) _FuncbuiltinTickeachTick9663565701927713696_42a7f55d60d2de5e ( Context * __context__, Lambda DAS_COMMENT((bool,uint32_t &)) const  __lam_rename_at_1341_3 );
+inline Sequence DAS_COMMENT((uint32_t)) _FuncbuiltinTickeachTick9663565701927713696_42a7f55d60d2de5e ( Context * __context__, Lambda DAS_COMMENT((bool,uint32_t &)) const  __lam_rename_at_1228_3 );
 inline int4 _FuncrandomTickrandom_seedTick15287272150245073176_c95eb01bc40f380 ( Context * __context__, int32_t __seed_rename_at_16_5 );
 inline bool _Func_lambda_random_111_1Tickfunction_f5294c9523845fa ( Context * __context__, random::_lambda_random_111_1 & ____this_rename_at_111_6, uint32_t & ___yield_111_rename_at_111_7 );
 inline void _Func_lambda_random_111_1Tickfinalizer_21f95052fb0fff7a ( Context * __context__, random::_lambda_random_111_1 * ____this_rename_at_111_8 );
@@ -122,11 +122,11 @@ inline void finalize_ebd08a3d5c6fd96 ( Context * __context__, random::_lambda_ra
     memset((void*)&(____this_rename_at_111_2), 0, TypeSize<random::_lambda_random_111_1>::size);
 }
 
-inline Sequence DAS_COMMENT((uint32_t)) _FuncbuiltinTickeachTick9663565701927713696_42a7f55d60d2de5e ( Context * __context__, Lambda DAS_COMMENT((bool,uint32_t &)) const  __lam_rename_at_1341_3 )
+inline Sequence DAS_COMMENT((uint32_t)) _FuncbuiltinTickeachTick9663565701927713696_42a7f55d60d2de5e ( Context * __context__, Lambda DAS_COMMENT((bool,uint32_t &)) const  __lam_rename_at_1228_3 )
 {
-    Sequence DAS_COMMENT((uint32_t)) __it_rename_at_1343_4;das_zero(__it_rename_at_1343_4);
-    builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((uint32_t))>::pass(__it_rename_at_1343_4),__lam_rename_at_1341_3,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((uint32_t))>::cast(__it_rename_at_1343_4);
+    Sequence DAS_COMMENT((uint32_t)) __it_rename_at_1230_4;das_zero(__it_rename_at_1230_4);
+    builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((uint32_t))>::pass(__it_rename_at_1230_4),__lam_rename_at_1228_3,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((uint32_t))>::cast(__it_rename_at_1230_4);
 }
 
 inline int4 _FuncrandomTickrandom_seedTick15287272150245073176_c95eb01bc40f380 ( Context * __context__, int32_t __seed_rename_at_16_5 )
