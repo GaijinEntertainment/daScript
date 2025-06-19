@@ -23,6 +23,11 @@ def isVectorType(typ : Type) {
     )
 }
 
+def public isYetAnotherVectorTemplate(td : TypeDeclPtr) {
+    //! returns true if the given type declaration is a das::vector template bound on C++ side
+    return td.isHandle && td.annotation != null && td.annotation.is_any_vector
+}
+
 def describe(list : AnnotationArgumentList) {
     return join([ for (arg in list); "{arg.name}={get_annotation_argument_value(arg)}" ], ",")
 }
@@ -933,14 +938,14 @@ def private create_string(name) {
     return <- new ExprConstString(value := name);
 }
 
-def to_arr_move_args(var args; var dst_tp; at : LineInfo) {
+def private to_arr_move_args(var args : array<ExpressionPtr>; var dst_tp : TypeDeclPtr; at : LineInfo) {
     return <- to_array_move_expr(new ExprMakeArray(values := args,
                                                    gen2 = true,
                                                    makeType <- clone_type(dst_tp),
                                                    at = at), at)
 }
 
-def private convert_vec(mod : Module?; field_values : uint8 const?; xtype, at) : ExpressionPtr {
+def private convert_vec(mod : Module?; field_values : uint8 const?; xtype : TypeDeclPtr, at : LineInfo) : ExpressionPtr {
     var inscope src_tp <- get_handled_type_index_type_declaration(xtype.annotation,
                              default<Expression?>, default<Expression?>);
     src_tp.flags &= ~TypeDeclFlags.ref; // vec type has ref, we don't need it
@@ -952,7 +957,7 @@ def private convert_vec(mod : Module?; field_values : uint8 const?; xtype, at) :
     var inscope args : array<ExpressionPtr>;
     for (idx in range(fields_num)) {
         if (true) {
-            var inscope arg_expr <- up_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp.get_ptr(), idx))), src_tp, at);
+            var inscope arg_expr <- convert_quote_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp.get_ptr(), idx))), src_tp, at);
             if (dst_tp.baseType != Type.tString && dst_tp != src_tp) {
                 var inscope make_str <- unsafe(reinterpret<smart_ptr<ExprMakeStruct>>(arg_expr));
                 move_new(make_str.makeType) <| clone_type(dst_tp);
@@ -979,7 +984,7 @@ def private get_find_in_module_expr(fn_name; module_name; obj_name; at) {
      )
 }
 
-def private is_field_allowed(f_name, class_name, data) {
+def private is_quote_field_allowed(f_name, class_name, data) {
     for ((cl, fld) in blacklist) {
         if (fld == f_name && (class_name == cl ||
                              (class_name == "ast::Expression" &&
@@ -991,32 +996,33 @@ def private is_field_allowed(f_name, class_name, data) {
 
 }
 
-def private handle_struct_field(mod, data, tstr, name, offset, xtype; at) : smart_ptr<MakeFieldDecl> {
-    if (!is_field_allowed(name, tstr, data)) {
+def private convert_quote_struct_field(mod : Module?, data : uint8 const?,
+                                       tstr : string, name : string,
+                                       offset : uint; xtype : TypeDeclPtr; parent_loc : LineInfo) : smart_ptr<MakeFieldDecl> {
+    if (!is_quote_field_allowed(name, tstr, data)) {
         return <- null;
     }
 
-    let loc = (tstr == "ast::Expression" ? unsafe(reinterpret<Expression>(data)).at
-                                         : LineInfo(column = uint(at.column + offset), line = uint(at.line)));
-
     var fdata = unsafe(data + int(offset));
-    var inscope res_field <- up_expr(mod, fdata, xtype, loc);
+    var inscope res_field <- convert_quote_expr(mod, fdata, xtype, parent_loc);
     if (res_field == null) { return <- null; }
 
     var flags : MakeFieldDeclFlags;
     if (!xtype.canCopy) {
-        flags = ((describe(xtype) == "$::das_string" || is_vector_type(xtype)) ? MakeFieldDeclFlags.cloneSemantics
-                                                             : MakeFieldDeclFlags.moveSemantics);
+        flags = ((describe(xtype) == "$::das_string" || isYetAnotherVectorTemplate(xtype)) ?
+                        MakeFieldDeclFlags.cloneSemantics : MakeFieldDeclFlags.moveSemantics);
     }
-    let res_loc = res_field.at;
-    return <- new MakeFieldDecl(name := name, value <- res_field, at := res_loc, flags = flags);
+    var res_loc = parent_loc;
+    res_loc.column *= 10u;
+    return <- new MakeFieldDecl(name := name, value <- res_field, at := parent_loc, flags = flags);
 }
 
-def private convert_structure_expr(data : uint8 const?; mod : Module?; tstr : string; info : TypeDeclPtr; at : LineInfo) {
+def private convert_quote_structure(mod : Module?; data : uint8 const?;
+                                    tstr : string; info : TypeDeclPtr; at : LineInfo) {
     assume ann = info.annotation;
     var inscope mkS1 <- new default<MakeStruct>;
     for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(ann))) <| $(name, cppName, xtype, offset) {
-        var inscope mkFld = handle_struct_field(mod, data, tstr, name, offset, xtype, at);
+        var inscope mkFld = convert_quote_struct_field(mod, data, tstr, name, offset, xtype, at);
         if (mkFld != null) {
             emplace(*mkS1, mkFld);
         }
@@ -1027,25 +1033,19 @@ def private convert_structure_expr(data : uint8 const?; mod : Module?; tstr : st
     return <- mkStr;
 }
 
-def is_vector_type(xtype) {
-    let tstr = describe(xtype);
-    return (tstr |> starts_with("$::dasvector`") ||
-            tstr |> starts_with("rtti::AnnotationList") ||
-            tstr |> starts_with("rtti::AnnotationArgumentList"))
-}
-
-def private up_expr(mod : Module?; var data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (data == null) {
         return <- null;
     }
     if (info.baseType != Type.tHandle && info.baseType != Type.tPointer) {
         return <- walk_and_convert(data, info, at);
     }
-    if (is_vector_type(info)) {
+    if (isYetAnotherVectorTemplate(info)) {
         return <- convert_vec(mod, data, info, at);
     }
     let tstr = describe(info);
 
+    // First check managed types
     if (tstr == "rtti::Annotation") {
         assume pdata = unsafe(reinterpret<rtti::Annotation>(data));
         return <- get_find_in_module_expr("module_find_annotation", pdata._module.name, pdata.name, at);
@@ -1078,20 +1078,31 @@ def private up_expr(mod : Module?; var data : uint8 const?; info : TypeDeclPtr; 
             move_new(final_type) <| new TypeDecl(baseType = Type.tHandle,
                 annotation = unsafe(reinterpret<TypeAnnotation?> annotation))
         }
-        var inscope subexpr <- up_expr(mod, pdata, final_type, at);
+        var inscope subexpr <- convert_quote_expr(mod, pdata, final_type, at);
 
         // This types are created on cpp side by managed functions.
         // We already got pointer, no need to ascend.
-
         for (t in managed_types) {
             if (t == first_tstr) {
                 return <- subexpr
             }
         }
-        return <- new ExprAscend(subexpr <- subexpr);
+        return <- new ExprAscend(subexpr <- subexpr, at=subexpr != null ? subexpr.at : at);
     }
     if (info.annotation != null && info.annotation.isBasicStructureAnnotation) {
-        return <- convert_structure_expr(data, mod, tstr, info, at);
+        var field_loc = at;
+        // if possible use Expression.at
+        if (isExpression(info)) {
+            let fval = unsafe(reinterpret<Expression?>(data));
+            field_loc = fval.at;
+            print("{describe(info)}\n");
+            print("{field_loc.line:d} {field_loc.column:d}\n")
+        } elif (describe(info) == "ast::TypeDecl") {
+            field_loc = unsafe(reinterpret<TypeDecl?>(data)).at;
+        } elif (describe(info) == "ast::Variable") {
+            field_loc = unsafe(reinterpret<Variable?>(data)).at;
+        }
+        return <- convert_quote_structure(mod, data, tstr, info, field_loc);
     } else {
         panic("Unexpected type {tstr}!");
         return <- null;
@@ -1103,7 +1114,7 @@ def convert_quote_to_expression(var arg_expr : ExpressionPtr; at : LineInfo) {
     assume annotation = mod |> module_find_annotation(arg_expr.__rtti);
     var inscope tp <- new TypeDecl(baseType = Type.tHandle, annotation = unsafe(reinterpret<TypeAnnotation?> annotation));
     tp.flags |= TypeDeclFlags.smartPtr;
-    return <- new ExprAscend(subexpr <- up_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr.get_ptr())), tp, at));
+    return <- new ExprAscend(subexpr <- convert_quote_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr.get_ptr())), tp, at));
 }
 
 def convert_to_expression(value : auto ==const; at : LineInfo) {
