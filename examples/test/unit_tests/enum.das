@@ -1,4 +1,6 @@
 options gen2
+options rtti
+
 require UnitTest
 
 enum Numbers : int16 {
