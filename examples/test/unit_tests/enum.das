@@ -1,4 +1,6 @@
 options gen2
+options rtti
+
 require UnitTest
 
 enum Numbers : int16 {
@@ -47,6 +49,11 @@ enum BooHoo16 : int16 {
 [sideeffects]
 def getZenOne {
     return Zen.not_zero
+}
+
+[export]
+def testBindEnum(arg : SomeEnum) {
+    print("hello, world!\n")
 }
 
 [export]
@@ -99,5 +106,8 @@ def test {
     for (e, tt in each_enum(BooHoo16.boo), fixed_array<int>(4, 5, 6)) {
         assert(int(e) == tt)
     }
+    // binds
+    let bind_ok = testBindEnumFunction()
+    assert(bind_ok, "testBindEnumFunction failed")
     return true
 }
