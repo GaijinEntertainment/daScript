@@ -82,7 +82,7 @@ namespace das {
         ft->alias = "ExprMakeStructFlags";
         ft->argNames = { "useInitializer", "isNewHandle", "usedInitializer", "nativeClassInitializer",
             "isNewClass", "forceClass", "forceStruct", "forceVariant", "forceTuple", "alwaysUseInitializer",
-            "igoreVisCheck" };
+            "ignoreVisCheck", "canShadowBlock" };
         return ft;
     }
 

@@ -255,7 +255,7 @@ namespace das {
         }
     };
 
-    struct FileInfoAnnotation : ManagedStructureAnnotation<FileInfo,false> {
+    struct FileInfoAnnotation : ManagedStructureAnnotation<FileInfo> {
         FileInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FileInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             // addProperty<DAS_BIND_MANAGED_PROP(getSource)>("source");

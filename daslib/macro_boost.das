@@ -150,6 +150,7 @@ class private ReturnSkipLockcheck : AstCallMacro {
     }
 }
 
+// Rename once quote gone
 [call_macro(name="quote2")]
 class private Quote2 : AstCallMacro {
 

@@ -2,8 +2,8 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options stack = 65536
 options strict_smart_pointers
-
 module ast_boost shared public
 
 require rtti
@@ -21,6 +21,11 @@ def isVectorType(typ : Type) {
         typ == Type.tRange  || typ == Type.tURange || typ == Type.tRange64 ||
         typ == Type.tURange64
     )
+}
+
+def public isYetAnotherVectorTemplate(td : TypeDeclPtr) {
+    //! returns true if the given type declaration is a das::vector template bound on C++ side
+    return td.isHandle && td.annotation != null && td.annotation.is_any_vector
 }
 
 def describe(list : AnnotationArgumentList) {
@@ -850,6 +855,14 @@ struct CaptureEntryInitData {
     mode : CaptureMode
 }
 
+def clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>) {
+    a |> resize(length(b))
+    for (e, i in b, count()) {
+        a[i].name := e.name
+        a[i].mode = e.mode
+    }
+}
+
 struct AnnotationArgumentInitData {
     basicType : Type
     name : string
@@ -859,41 +872,6 @@ struct AnnotationArgumentInitData {
     fValue : float
     // @safe_when_uninitialized at: LineInfo // todo: add if needed
 }
-
-def clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>) {
-    a |> resize(length(b))
-    for (e, i in b, count()) {
-        a[i].name := e.name
-        a[i].mode = e.mode
-    }
-}
-
-let blacklist = [
-    ("ast::Function", "inferStack"),
-    ("ast::Function", "annotations"),
-    ("ast::Function", "at"),
-    ("ast::Function", "atDecl"),
-    ("ast::Function", "module"),
-    ("ast::Function", "useGlobalVariables"),
-    ("ast::Function", "useFunctions"),
-    ("ast::Function", "resultAliasesGlobals"),
-    ("ast::Function", "fromGeneric"),
-    ("ast::Function", "classParent"),
-    ("ast::ExprMakeStruct", "structs"),
-    ("ast::ExprReturn", "_block"), // loop
-    ("ast::ExprVar", "pBlock"), // loop
-    ("rtti::AnnotationArgument", "at"), // ignore it for now
-    ("rtti::LineInfo", "fileInfo"),
-]
-
-let managed_types = [
-    "rtti::Module",
-    "rtti::Annotation",
-    "rtti::TypeAnnotation",
-    "ast::Structure",
-    "ast::CallMacro",
-    "ast::Function",
-];
 
 def clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentInitData>) {
     a |> resize(length(b))
@@ -913,15 +891,59 @@ def clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentInitData>)
     }
 }
 
-def private get_vec_dst_type(var src_tp : TypeDeclPtr) {
+struct FileInfoInitData {
+    name: string
+    tabSize: int
+}
+
+def clone_file_info(b : FileInfoInitData) : FileInfo? {
+    return new FileInfo(name:=b.name,tabSize=b.tabSize)
+}
+
+let blacklist = [
+    ("ast::Function", "inferStack"),
+    ("ast::Function", "annotations"),
+    ("ast::Function", "at"),
+    ("ast::Function", "atDecl"),
+    ("ast::Function", "module"),
+    ("ast::Function", "useGlobalVariables"),
+    ("ast::Function", "useFunctions"),
+    ("ast::Function", "resultAliasesGlobals"),
+    ("ast::Function", "fromGeneric"),
+    ("ast::Function", "classParent"),
+    ("ast::ExprMakeStruct", "structs"),
+    ("ast::ExprReturn", "_block"), // loop
+    ("ast::ExprVar", "pBlock"), // loop
+    ("ast::CaptureEntry", "at"), // ignore it for now
+    ("rtti::AnnotationArgument", "at"), // ignore it for now
+]
+
+let managed_types = [
+    "rtti::Module",
+    "rtti::Annotation",
+    "rtti::TypeAnnotation",
+    "ast::Structure",
+    "ast::CallMacro",
+    "ast::Function",
+    "rtti::FileInfo",
+];
+
+def private get_dst_type(var src_tp : TypeDeclPtr) {
     let tstr = describe(src_tp);
     if (tstr |> starts_with("$::das_string")) {
+        delete src_tp;
         return <- new TypeDecl(baseType = Type.tString);
     } elif (tstr |> starts_with("ast::CaptureEntry")) {
         var strct = get_module("ast_boost") |> module_find_structure("CaptureEntryInitData");
+        delete src_tp;
         return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
     } elif (tstr |> starts_with("rtti::AnnotationArgument")) {
         var strct = get_module("ast_boost") |> module_find_structure("AnnotationArgumentInitData");
+        delete src_tp;
+        return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
+    } elif (tstr |> starts_with("rtti::FileInfo")) {
+        var strct = get_module("ast_boost") |> module_find_structure("FileInfoInitData");
+        delete src_tp;
         return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
     } else {
         return <- src_tp;
@@ -929,30 +951,33 @@ def private get_vec_dst_type(var src_tp : TypeDeclPtr) {
 }
 
 
-def private create_string(name) {
+def private create_string_expr(name) {
     return <- new ExprConstString(value := name);
 }
 
-def to_arr_move_args(var args; var dst_tp; at : LineInfo) {
-    return <- to_array_move_expr(new ExprMakeArray(values := args,
-                                                   gen2 = true,
-                                                   makeType <- clone_type(dst_tp),
-                                                   at = at), at)
+def private to_arr_move_args(var args : array<ExpressionPtr>; var dst_tp : TypeDeclPtr; at : LineInfo) {
+    unsafe {
+        return <- to_array_move_expr(new ExprMakeArray(values := args,
+                                                       gen2 = true,
+                                                       makeType <- clone_type(dst_tp),
+                                                       at = at), at)
+    }
 }
 
-def private convert_vec(mod : Module?; field_values : uint8 const?; xtype, at) : ExpressionPtr {
+def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype : TypeDeclPtr, at : LineInfo) : ExpressionPtr {
     var inscope src_tp <- get_handled_type_index_type_declaration(xtype.annotation,
                              default<Expression?>, default<Expression?>);
     src_tp.flags &= ~TypeDeclFlags.ref; // vec type has ref, we don't need it
-    var inscope dst_tp <- get_vec_dst_type(clone(src_tp));
-    let fields_num = get_vector_length(field_values, src_tp);
-    if (fields_num == 0) {
-        return <- new ExprMakeStruct(at = at, makeType <- new TypeDecl(baseType = Type.tArray, firstType <- clone_type(dst_tp)));
-    }
+    var inscope dst_tp <- get_dst_type(clone(src_tp));
     var inscope args : array<ExpressionPtr>;
-    for (idx in range(fields_num)) {
+
+    if (get_vector_length(field_values, src_tp) == 0) {
+        return <- new ExprMakeStruct(at = at, makeType <- new TypeDecl(baseType = Type.tArray, firstType <- clone_type(dst_tp)),
+                                     makeStructFlags = ExprMakeStructFlags.canShadowBlock);
+    }
+    for (idx in range(get_vector_length(field_values, src_tp))) {
         if (true) {
-            var inscope arg_expr <- up_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp.get_ptr(), idx))), src_tp, at);
+            var inscope arg_expr <- convert_quote_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp.get_ptr(), idx))), src_tp, at);
             if (dst_tp.baseType != Type.tString && dst_tp != src_tp) {
                 var inscope make_str <- unsafe(reinterpret<smart_ptr<ExprMakeStruct>>(arg_expr));
                 move_new(make_str.makeType) <| clone_type(dst_tp);
@@ -967,21 +992,21 @@ def private convert_vec(mod : Module?; field_values : uint8 const?; xtype, at) :
 
 def private find_module_expr(name, at) {
      return <- new ExprCall(at = at, name := "get_module",
-                            arguments := array<ExpressionPtr>(create_string(name)))
+                            arguments := array<ExpressionPtr>(create_string_expr(name)))
 }
 
 def private get_find_in_module_expr(fn_name; module_name; obj_name; at) {
      return <- new ExprCall(at = at, name := fn_name,
          arguments := array<ExpressionPtr>(
             find_module_expr(module_name, at),
-            create_string(obj_name)
+            create_string_expr(obj_name)
          )
      )
 }
 
-def private is_field_allowed(f_name, class_name, data) {
+def private is_quote_field_allowed(f_name, class_name, data) {
     for ((cl, fld) in blacklist) {
-        if (fld == f_name && (class_name == cl ||
+        if (fld == f_name && (cl == "*" || class_name == cl ||
                              (class_name == "ast::Expression" &&
                               unsafe(reinterpret<Expression>(data)).__rtti == cl))) {
             return false;
@@ -991,61 +1016,88 @@ def private is_field_allowed(f_name, class_name, data) {
 
 }
 
-def private handle_struct_field(mod, data, tstr, name, offset, xtype; at) : smart_ptr<MakeFieldDecl> {
-    if (!is_field_allowed(name, tstr, data)) {
+def private create_field_expr(name; var res_field; loc; flags) {
+    return <- new MakeFieldDecl(name := name, value <- res_field, at := loc, flags = flags);
+}
+
+def private convert_quote_struct_field(mod : Module?, data : uint8 const ?,
+                                       tstr : string, name : string,
+                                       offset : uint; xtype : TypeDeclPtr; parent_loc : LineInfo) : smart_ptr<MakeFieldDecl> {
+    if (!is_quote_field_allowed(name, tstr, data)) {
         return <- null;
     }
 
-    let loc = (tstr == "ast::Expression" ? unsafe(reinterpret<Expression>(data)).at
-                                         : LineInfo(column = uint(at.column + offset), line = uint(at.line)));
-
     var fdata = unsafe(data + int(offset));
-    var inscope res_field <- up_expr(mod, fdata, xtype, loc);
+    var inscope res_field <- convert_quote_expr(mod, fdata, xtype, parent_loc);
     if (res_field == null) { return <- null; }
 
     var flags : MakeFieldDeclFlags;
     if (!xtype.canCopy) {
-        flags = ((describe(xtype) == "$::das_string" || is_vector_type(xtype)) ? MakeFieldDeclFlags.cloneSemantics
-                                                             : MakeFieldDeclFlags.moveSemantics);
+        flags = ((describe(xtype) == "$::das_string" || isYetAnotherVectorTemplate(xtype)) ?
+                        MakeFieldDeclFlags.cloneSemantics : MakeFieldDeclFlags.moveSemantics);
     }
-    let res_loc = res_field.at;
-    return <- new MakeFieldDecl(name := name, value <- res_field, at := res_loc, flags = flags);
+    var res_loc = parent_loc;
+    res_loc.column *= 10u;
+    return <- create_field_expr(name, clone(res_field), parent_loc, flags);
 }
 
-def private convert_structure_expr(data : uint8 const?; mod : Module?; tstr : string; info : TypeDeclPtr; at : LineInfo) {
+def private convert_quote_structure(mod : Module?; data : uint8 const?;
+                                    tstr : string; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     assume ann = info.annotation;
     var inscope mkS1 <- new default<MakeStruct>;
     for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(ann))) <| $(name, cppName, xtype, offset) {
-        var inscope mkFld = handle_struct_field(mod, data, tstr, name, offset, xtype, at);
+        var inscope mkFld = convert_quote_struct_field(mod, data, tstr, name, offset, xtype, at);
         if (mkFld != null) {
             emplace(*mkS1, mkFld);
         }
     }
-    var inscope mkStr <- new ExprMakeStruct(makeType <- clone_type(info), at = at)
+    var inscope mkStr <- new ExprMakeStruct(makeType <- get_dst_type(clone_type(info)), at = at)
     emplace(mkStr.structs, mkS1)
-    mkStr.makeStructFlags |= ExprMakeStructFlags.useInitializer;
+    mkStr.makeStructFlags |= ExprMakeStructFlags.useInitializer | ExprMakeStructFlags.canShadowBlock;
+    if (describe(info) == "rtti::FileInfo") {
+        return <- new ExprCall(at = at, name := "clone_file_info",
+                               arguments := array<ExpressionPtr>(mkStr))
+    }
     return <- mkStr;
 }
 
-def is_vector_type(xtype) {
-    let tstr = describe(xtype);
-    return (tstr |> starts_with("$::dasvector`") ||
-            tstr |> starts_with("rtti::AnnotationList") ||
-            tstr |> starts_with("rtti::AnnotationArgumentList"))
+def private convert_pointer_expr(mod; data; info; at) : ExpressionPtr {
+    assume pdata = *unsafe(reinterpret<uint8 const ??> data);
+    if (pdata == null) {
+        return <- null;
+    }
+    assume first_tstr = describe(info.firstType);
+    var inscope final_type <- clone(info.firstType);
+    if (first_tstr == "ast::Expression") {
+        assume annotation = unsafe(mod |> module_find_annotation(unsafe(reinterpret<ExpressionPtr>(pdata)).__rtti)).get_ptr();
+        move_new(final_type) <| new TypeDecl(baseType = Type.tHandle,
+            annotation = unsafe(reinterpret<TypeAnnotation?> annotation))
+    }
+    var inscope subexpr <- convert_quote_expr(mod, pdata, final_type, at);
+
+    // This types are created on cpp side by managed functions.
+    // We already got pointer, no need to ascend.
+    for (t in managed_types) {
+        if (t == first_tstr) {
+            return <- subexpr
+        }
+    }
+    return <- new ExprAscend(subexpr <- subexpr, at = subexpr != null ? subexpr.at : at);
 }
 
-def private up_expr(mod : Module?; var data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (data == null) {
         return <- null;
     }
     if (info.baseType != Type.tHandle && info.baseType != Type.tPointer) {
         return <- walk_and_convert(data, info, at);
     }
-    if (is_vector_type(info)) {
-        return <- convert_vec(mod, data, info, at);
+    if (isYetAnotherVectorTemplate(info)) {
+        return <- convert_vec_expr(mod, data, info, at);
     }
     let tstr = describe(info);
 
+    // First check managed types
     if (tstr == "rtti::Annotation") {
         assume pdata = unsafe(reinterpret<rtti::Annotation>(data));
         return <- get_find_in_module_expr("module_find_annotation", pdata._module.name, pdata.name, at);
@@ -1065,37 +1117,24 @@ def private up_expr(mod : Module?; var data : uint8 const?; info : TypeDeclPtr; 
          assume cur_mod = unsafe(reinterpret<Module?>(data));
          return <- find_module_expr(cur_mod.name, at);
     } elif (tstr == "$::das_string") {
-        return <- create_string(*unsafe(reinterpret<das_string?>(data)));
-    } elif (info.baseType == Type.tPointer) {
-        var pdata = *unsafe(reinterpret<uint8 const ??> data);
-        if (pdata == null) {
-            return <- null;
-        }
-        let first_tstr = describe(info.firstType);
-        var inscope final_type <- clone(info.firstType);
-        if (first_tstr == "ast::Expression") {
-            var annotation = unsafe(mod |> module_find_annotation(unsafe(reinterpret<ExpressionPtr>(pdata)).__rtti)).get_ptr();
-            move_new(final_type) <| new TypeDecl(baseType = Type.tHandle,
-                annotation = unsafe(reinterpret<TypeAnnotation?> annotation))
-        }
-        var inscope subexpr <- up_expr(mod, pdata, final_type, at);
-
-        // This types are created on cpp side by managed functions.
-        // We already got pointer, no need to ascend.
-
-        for (t in managed_types) {
-            if (t == first_tstr) {
-                return <- subexpr
-            }
-        }
-        return <- new ExprAscend(subexpr <- subexpr);
+        return <- create_string_expr(*unsafe(reinterpret<das_string?>(data)));
     }
+    // Convert pointers
+    if (info.baseType == Type.tPointer) {
+        return <- convert_pointer_expr(mod, data, info, at);
+    }
+    // Convert structures
     if (info.annotation != null && info.annotation.isBasicStructureAnnotation) {
-        return <- convert_structure_expr(data, mod, tstr, info, at);
-    } else {
-        panic("Unexpected type {tstr}!");
-        return <- null;
+        var field_loc = at;
+        // if possible use Expression.at
+        if (isExpression(info)) {
+            let fval = unsafe(reinterpret<Expression?>(data));
+            field_loc = fval.at;
+        }
+        return <- convert_quote_structure(mod, data, tstr, info, field_loc);
     }
+    panic("Unexpected type {tstr}!");
+    return <- null;
 }
 
 def convert_quote_to_expression(var arg_expr : ExpressionPtr; at : LineInfo) {
@@ -1103,7 +1142,7 @@ def convert_quote_to_expression(var arg_expr : ExpressionPtr; at : LineInfo) {
     assume annotation = mod |> module_find_annotation(arg_expr.__rtti);
     var inscope tp <- new TypeDecl(baseType = Type.tHandle, annotation = unsafe(reinterpret<TypeAnnotation?> annotation));
     tp.flags |= TypeDeclFlags.smartPtr;
-    return <- new ExprAscend(subexpr <- up_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr.get_ptr())), tp, at));
+    return <- new ExprAscend(subexpr <- convert_quote_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr.get_ptr())), tp, at));
 }
 
 def convert_to_expression(value : auto ==const; at : LineInfo) {

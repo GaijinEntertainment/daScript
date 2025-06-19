@@ -216,7 +216,9 @@ namespace das {
     }
 
     smart_ptr_raw<Annotation> module_find_annotation ( const Module* module, const char *name ) {
-        return module->findAnnotation(name);
+        auto ann = module->findAnnotation(name);
+        ann->addRef();
+        return ann;
     }
 
     TypeAnnotation* module_find_type_annotation ( const Module* module, const char *name ) {
@@ -224,10 +226,12 @@ namespace das {
         return static_cast<TypeAnnotation*>(ann.get());
     }
 
-    smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
+    smart_ptr_raw<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
         if ( !func.PTR ) context->throw_error_at(line_info, "function not found");
         if ( !mod ) context->throw_error_at(line_info, "module not found");
-        return mod->findFunction(func.PTR->mangledName);
+        auto fn = mod->findFunction(func.PTR->mangledName);
+        fn->addRef();
+        return fn;
     }
 
     smart_ptr_raw<Program> thisProgram ( Context * context ) {
@@ -590,7 +594,7 @@ namespace das {
     }
 
     Structure * module_find_structure ( const Module* module, const char * name, Context * context, LineInfoArg * at ) {
-        if ( !module ) context->throw_error_at(at, "expecting program");
+        if ( !module ) context->throw_error_at(at, "expecting module");
         return module->findStructure(name).get();
     }
 
@@ -707,14 +711,14 @@ namespace das {
         } else if (tstr == "int") {
             return apply(static_cast<vector<int>*>(vec));
         } else if (tstr == "tuple<uint;uint>") {
-            return apply(static_cast<vector<std::pair<unsigned int, unsigned int>>*>(vec));
+            return apply(static_cast<vector<pair<unsigned int, unsigned int>>*>(vec));
         } else if (tstr == "smart_ptr<rtti::AnnotationDeclaration>") {
             return apply(static_cast<vector<smart_ptr<AnnotationDeclaration>>*>(vec));
         } else if (tstr == "rtti::AnnotationArgument") {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
         }
-        printf("vec length/index for %s is not implemented!\n", tstr.data());
-        std::abort();
+        DAS_FATAL_ERROR("vec length/index for %s is not implemented!\n", tstr.data());
+        abort();
     }
 
     void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * context, LineInfoArg * at) {
