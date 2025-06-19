@@ -296,3 +296,4 @@ inline void deleteFancyClassDummy(FancyClass& ) {  } // this one in AOT version,
 
 void test_abi_lambda_and_function ( das::Lambda lambda, das::Func fn, int32_t lambdaSize, das::Context * context, das::LineInfoArg * lineinfo );
 
+bool testBindEnumFunction ( das::Context * context, das::LineInfoArg * at );

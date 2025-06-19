@@ -462,7 +462,6 @@ struct ByteCodeAnnotation : ManagedStructureAnnotation <ByteCode> {
     }
 };
 
-
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib(this);
     lib.addBuiltInModule();

@@ -50,6 +50,11 @@ def getZenOne {
 }
 
 [export]
+def testBindEnum(arg : SomeEnum) {
+    print("hello, world!\n")
+}
+
+[export]
 def test {
     assert(int(QQ.size_of_Foo_Padded) == 16)
     assert(int(Numbers.zero) == 0)
@@ -99,5 +104,8 @@ def test {
     for (e, tt in each_enum(BooHoo16.boo), fixed_array<int>(4, 5, 6)) {
         assert(int(e) == tt)
     }
+    // binds
+    let bind_ok = testBindEnumFunction()
+    assert(bind_ok, "testBindEnumFunction failed")
     return true
 }
