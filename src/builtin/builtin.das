@@ -947,6 +947,56 @@ def emplace_new(var Arr : array<smart_ptr<auto(numT)>>; var value : smart_ptr<nu
     }
 }
 
+def insert_default(var tab : table<auto(TT), auto(QQ)>, key : TT | #, var value : QQ == const | #) : void {
+    //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
+    if (!key_exists(tab, key)) {
+        insert(tab, key, value)
+    }
+}
+
+def insert_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #, value : valT == const | #) : void {
+    //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
+    if (!key_exists(tab, key)) {
+        insert(tab, key, value)
+    }
+}
+
+def insert_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #) : void {
+    //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
+    if (!key_exists(tab, key)) {
+        var val : valT -const
+        insert(tab, key, val)
+    }
+}
+
+def emplace_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #) : void {
+    //! Emplaces a default value into the table if the key does not exist. Does not overwrite existing keys.
+    if (!key_exists(tab, key)) {
+        emplace(tab, key, default<valT -#>)
+    }
+}
+
+def get_with_default(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : block<(var p : valT&) : void>) : void {
+    //! Gets the value from the table, add it with a default value if it does not exist. Callback is invoked with the value.
+    unsafe {
+        var val & = Tab[at]
+        __builtin_table_lock(Tab)
+        invoke(blk, val)
+        __builtin_table_unlock(Tab)
+    }
+}
+
+def modify(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : block<(p : valT&) : valT>) : void {
+    //! Modifies the value in the table. Callback is invoked with the value and should return the modified value.
+    //! Adds the value with a default value if it does not exist.
+    unsafe {
+        var val & = Tab[at]
+        __builtin_table_lock(Tab)
+        val = invoke(blk, val)
+        __builtin_table_unlock(Tab)
+    }
+}
+
 def key_exists(Tab : table<auto(keyT); auto(valT)> | #; at : string#) : bool {
     let at_nt := at
     return __builtin_table_key_exists(Tab, at_nt)
