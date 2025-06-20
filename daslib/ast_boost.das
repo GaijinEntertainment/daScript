@@ -924,12 +924,15 @@ def clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentInitData>)
 def private get_vec_dst_type(var src_tp : TypeDeclPtr) {
     let tstr = describe(src_tp);
     if (tstr |> starts_with("$::das_string")) {
+        delete src_tp;
         return <- new TypeDecl(baseType = Type.tString);
     } elif (tstr |> starts_with("ast::CaptureEntry")) {
         var strct = get_module("ast_boost") |> module_find_structure("CaptureEntryInitData");
+        delete src_tp;
         return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
     } elif (tstr |> starts_with("rtti::AnnotationArgument")) {
         var strct = get_module("ast_boost") |> module_find_structure("AnnotationArgumentInitData");
+        delete src_tp;
         return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
     } else {
         return <- src_tp;
@@ -955,7 +958,8 @@ def private convert_vec(mod : Module?; field_values : uint8 const?; xtype : Type
     var inscope dst_tp <- get_vec_dst_type(clone(src_tp));
     let fields_num = get_vector_length(field_values, src_tp);
     if (fields_num == 0) {
-        return <- new ExprMakeStruct(at = at, makeType <- new TypeDecl(baseType = Type.tArray, firstType <- clone_type(dst_tp)));
+        return <- new ExprMakeStruct(at = at, makeType <- new TypeDecl(baseType = Type.tArray, firstType <- clone_type(dst_tp)),
+                                     makeStructFlags = ExprMakeStructFlags.canShadowBlock);
     }
     var inscope args : array<ExpressionPtr>;
     for (idx in range(fields_num)) {
@@ -999,7 +1003,7 @@ def private is_quote_field_allowed(f_name, class_name, data) {
 
 }
 
-def private convert_quote_struct_field(mod : Module?, data : uint8 const?,
+def private convert_quote_struct_field(mod : Module?, data : uint8 const ?,
                                        tstr : string, name : string,
                                        offset : uint; xtype : TypeDeclPtr; parent_loc : LineInfo) : smart_ptr<MakeFieldDecl> {
     if (!is_quote_field_allowed(name, tstr, data)) {
@@ -1032,7 +1036,7 @@ def private convert_quote_structure(mod : Module?; data : uint8 const?;
     }
     var inscope mkStr <- new ExprMakeStruct(makeType <- clone_type(info), at = at)
     emplace(mkStr.structs, mkS1)
-    mkStr.makeStructFlags |= ExprMakeStructFlags.useInitializer;
+    mkStr.makeStructFlags |= ExprMakeStructFlags.useInitializer | ExprMakeStructFlags.canShadowBlock;
     return <- mkStr;
 }
 
@@ -1090,7 +1094,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
                 return <- subexpr
             }
         }
-        return <- new ExprAscend(subexpr <- subexpr, at=subexpr != null ? subexpr.at : at);
+        return <- new ExprAscend(subexpr <- subexpr, at = subexpr != null ? subexpr.at : at);
     }
     if (info.annotation != null && info.annotation.isBasicStructureAnnotation) {
         var field_loc = at;
@@ -1098,16 +1102,6 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
         if (isExpression(info)) {
             let fval = unsafe(reinterpret<Expression?>(data));
             field_loc = fval.at;
-            print("{describe(info)}\n");
-            print("{field_loc.line:d} {field_loc.column:d}\n")
-        } elif (describe(info) == "ast::TypeDecl") {
-            field_loc = unsafe(reinterpret<TypeDecl?>(data)).at;
-        } elif (describe(info) == "ast::Variable") {
-            field_loc = unsafe(reinterpret<Variable?>(data)).at;
-        } elif (describe(info) == "ast::AnnotationArgument") {
-            field_loc = unsafe(reinterpret<AnnotationArgument?>(data)).at;
-        } elif (describe(info) == "ast::CaptureEntry") {
-            field_loc = unsafe(reinterpret<CaptureEntry?>(data)).at;
         }
         return <- convert_quote_structure(mod, data, tstr, info, field_loc);
     } else {

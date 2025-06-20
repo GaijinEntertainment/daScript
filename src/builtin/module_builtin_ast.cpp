@@ -707,14 +707,13 @@ namespace das {
         } else if (tstr == "int") {
             return apply(static_cast<vector<int>*>(vec));
         } else if (tstr == "tuple<uint;uint>") {
-            return apply(static_cast<vector<std::pair<unsigned int, unsigned int>>*>(vec));
+            return apply(static_cast<vector<pair<unsigned int, unsigned int>>*>(vec));
         } else if (tstr == "smart_ptr<rtti::AnnotationDeclaration>") {
             return apply(static_cast<vector<smart_ptr<AnnotationDeclaration>>*>(vec));
         } else if (tstr == "rtti::AnnotationArgument") {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
         }
-        printf("vec length/index for %s is not implemented!\n", tstr.data());
-        std::abort();
+        DAS_FATAL_ERROR("vec length/index for %s is not implemented!\n", tstr.data());
     }
 
     void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * context, LineInfoArg * at) {
