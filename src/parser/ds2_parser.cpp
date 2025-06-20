@@ -7749,19 +7749,19 @@ yyreduce:
     break;
 
   case 350: /* capture_entry: '&' "name"  */
-                                    { (yyval.pCapt) = new CaptureEntry(*(yyvsp[0].s),CaptureMode::capture_by_reference); delete (yyvsp[0].s); }
+                                    { (yyval.pCapt) = new CaptureEntry(*(yyvsp[0].s),CaptureMode::capture_by_reference,tokAt(scanner,(yylsp[0]))); delete (yyvsp[0].s); }
     break;
 
   case 351: /* capture_entry: '=' "name"  */
-                                    { (yyval.pCapt) = new CaptureEntry(*(yyvsp[0].s),CaptureMode::capture_by_copy); delete (yyvsp[0].s); }
+                                    { (yyval.pCapt) = new CaptureEntry(*(yyvsp[0].s),CaptureMode::capture_by_copy,tokAt(scanner,(yylsp[0]))); delete (yyvsp[0].s); }
     break;
 
   case 352: /* capture_entry: "<-" "name"  */
-                                    { (yyval.pCapt) = new CaptureEntry(*(yyvsp[0].s),CaptureMode::capture_by_move); delete (yyvsp[0].s); }
+                                    { (yyval.pCapt) = new CaptureEntry(*(yyvsp[0].s),CaptureMode::capture_by_move,tokAt(scanner,(yylsp[0]))); delete (yyvsp[0].s); }
     break;
 
   case 353: /* capture_entry: ":=" "name"  */
-                                    { (yyval.pCapt) = new CaptureEntry(*(yyvsp[0].s),CaptureMode::capture_by_clone); delete (yyvsp[0].s); }
+                                    { (yyval.pCapt) = new CaptureEntry(*(yyvsp[0].s),CaptureMode::capture_by_clone,tokAt(scanner,(yylsp[0]))); delete (yyvsp[0].s); }
     break;
 
   case 354: /* capture_entry: "name" '(' "name" ')'  */
@@ -10758,7 +10758,7 @@ yyreduce:
   case 836: /* make_dim_decl: '[' optional_expr_list ']'  */
                                                   {
         if ( (yyvsp[-1].pExpression) ) {
-            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-2])));
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-1])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
             mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
             mka->gen2 = true;

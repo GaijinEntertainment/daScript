@@ -218,6 +218,7 @@ namespace das {
             :  ManagedStructureAnnotation<CaptureEntry> ("CaptureEntry", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(mode)>("mode");
+            addField<DAS_BIND_MANAGED_FIELD(at)>("at");
         }
     };
 

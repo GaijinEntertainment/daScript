@@ -1027,8 +1027,9 @@ namespace das
     struct CaptureEntry {
         string  name;
         CaptureMode mode = CaptureMode::capture_any;
+        LineInfo at;
         CaptureEntry() {}
-        CaptureEntry( const string n, CaptureMode m ) : name(n), mode(m) {}
+        CaptureEntry( const string n, CaptureMode m, LineInfo at ) : name(n), mode(m), at(at) {}
     };
 
     struct ExprMakeBlock : Expression {

@@ -1812,10 +1812,10 @@ block_or_lambda
     ;
 
 capture_entry
-    :   '&' NAME[name]              { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_reference); delete $name; }
-    |   '=' NAME[name]              { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_copy); delete $name; }
-    |   LARROW NAME[name]           { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_move); delete $name; }
-    |   CLONEEQU NAME[name]         { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_clone); delete $name; }
+    :   '&' NAME[name]              { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_reference,tokAt(scanner,@name)); delete $name; }
+    |   '=' NAME[name]              { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_copy,tokAt(scanner,@name)); delete $name; }
+    |   LARROW NAME[name]           { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_move,tokAt(scanner,@name)); delete $name; }
+    |   CLONEEQU NAME[name]         { $$ = new CaptureEntry(*$name,CaptureMode::capture_by_clone,tokAt(scanner,@name)); delete $name; }
     |   NAME[op] '(' NAME[name] ')' { $$ = ast_makeCaptureEntry(scanner,tokAt(scanner,@op),*$op,*$name); delete $op; delete $name; }
     ;
 
@@ -3718,7 +3718,7 @@ make_dim
 make_dim_decl
     :   '[' [loc] optional_expr_list[arguments] ']' {
         if ( $arguments ) {
-            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@arguments));
             mka->values = sequenceToList($arguments);
             mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
             mka->gen2 = true;

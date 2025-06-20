@@ -207,6 +207,8 @@ jobs:
                  ':!src/parser/ds_lexer.cpp' \
                  ':!src/parser/ds2_parser.output' \
                  ':!src/parser/ds_parser.output' \
+                 ':!src/parser/ds2_parser.cpp' \
+                 ':!src/parser/ds_parser.cpp' \
                  ':!src/parser/lex2.yy.h' \
                  ':!src/parser/lex.yy.h' \
                  ':!utils/dasFormatter/ds_parser.cpp' \

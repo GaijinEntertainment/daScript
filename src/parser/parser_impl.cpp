@@ -1194,6 +1194,6 @@ namespace das {
         else if ( op=="copy" ) mode = CaptureMode::capture_by_copy;
         else if ( op=="ref" ) mode = CaptureMode::capture_by_reference;
         else yyextra->g_Program->error("unknown capture mode " + op, "", "", at, CompilationError::syntax_error);
-        return new CaptureEntry(name,mode);
+        return new CaptureEntry(name,mode,at);
     }
  }
