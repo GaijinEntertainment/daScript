@@ -628,7 +628,9 @@ def operator as StructureAnnotation(foo : smart_ptr<Annotation>) {
 }
 
 def private to_array_move_expr(var mkArr : smart_ptr<ExprMakeArray>, at : LineInfo) {
-    var inscope mkToArrayMove <- new ExprCall(at = at, name := "to_array_move")
+    var tmp_loc = at;
+    tmp_loc.column += 5u;
+    var inscope mkToArrayMove <- new ExprCall(at = tmp_loc, name := "to_array_move")
     emplace(mkToArrayMove.arguments, mkArr)
     return <- mkToArrayMove
 }
@@ -887,6 +889,7 @@ let blacklist = [
     ("ast::ExprMakeStruct", "structs"),
     ("ast::ExprReturn", "_block"), // loop
     ("ast::ExprVar", "pBlock"), // loop
+    ("ast::CaptureEntry", "at"), // ignore it for now
     ("rtti::AnnotationArgument", "at"), // ignore it for now
     ("rtti::LineInfo", "fileInfo"),
 ]
@@ -1101,6 +1104,10 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
             field_loc = unsafe(reinterpret<TypeDecl?>(data)).at;
         } elif (describe(info) == "ast::Variable") {
             field_loc = unsafe(reinterpret<Variable?>(data)).at;
+        } elif (describe(info) == "ast::AnnotationArgument") {
+            field_loc = unsafe(reinterpret<AnnotationArgument?>(data)).at;
+        } elif (describe(info) == "ast::CaptureEntry") {
+            field_loc = unsafe(reinterpret<CaptureEntry?>(data)).at;
         }
         return <- convert_quote_structure(mod, data, tstr, info, field_loc);
     } else {
