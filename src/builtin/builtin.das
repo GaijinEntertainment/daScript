@@ -271,6 +271,7 @@ def push(var Arr : array<auto(numT)[]>; var varr : numT[] -# ==const) {
     }
 }
 
+[unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)>; var value : numT -#&; at : int) {
     static_if (typeinfo can_move(value)) {
         static_if (typeinfo need_lock_check(type<numT>)) {
@@ -284,6 +285,7 @@ def emplace(var Arr : array<auto(numT)>; var value : numT -#&; at : int) {
     }
 }
 
+[unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)>; var value : numT -#&) {
     static_if (typeinfo can_move(value)) {
         static_if (typeinfo need_lock_check(type<numT>)) {
@@ -297,6 +299,7 @@ def emplace(var Arr : array<auto(numT)>; var value : numT -#&) {
     }
 }
 
+[unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)>; var value : numT[] -#) {
     static_if (typeinfo can_move(value)) {
         static_if (typeinfo need_lock_check(type<numT>)) {
@@ -312,6 +315,7 @@ def emplace(var Arr : array<auto(numT)>; var value : numT[] -#) {
     }
 }
 
+[unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)[]>; var value : numT[] -#) {
     static_if (typeinfo can_move(value)) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(value)) {
@@ -455,6 +459,7 @@ def push_clone(var Arr : array<auto(numT)[]>; var varr : numT[]) {
     }
 }
 
+[unused_argument(A, b)]
 def push_clone(var A : auto(CT) -# -const; b : auto(TT) | #) {
     static_if (!typeinfo can_clone(type<TT -#>)) {
         concept_assert(false, "can't push_clone type which can't be cloned")
@@ -709,21 +714,25 @@ def get(var Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : 
     }
 }
 
+[unused_argument(Tab, at)]
 def get(Tab : table<auto(keyT)>; at : keyT | #; blk : block<(var p : void?) : void>) {
     concept_assert(false, "get(table<keyT>, ...) is not supported; use 'key_exists' instead")
     return false
 }
 
+[unused_argument(Tab, at)]
 def get_value(Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #) : valT {
     concept_assert(false, "can't get value from const table, use Tab?[key] or 'get' instead")
     return type<valT>
 }
 
+[unused_argument(Tab, at)]
 def get_value(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #) : smart_ptr<valT> {
     concept_assert(false, "can't get smart_ptr value from table, use clone_value instead")
     return <- default<smart_ptr<valT>>
 }
 
+[unused_argument(Tab, at)]
 def get_value(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT {
     static_if (typeinfo is_void(type<valT>)) {
         concept_assert(false, "can't get value, which is void")
@@ -736,6 +745,7 @@ def get_value(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT {
     }
 }
 
+[unused_argument(Tab, at)]
 def get_value(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #) : valT[typeinfo dim(Tab[type<keyT> ])] {
     static_if (typeinfo is_void(type<valT>)) {
         concept_assert(false, "can't get value, which is void")
@@ -783,6 +793,7 @@ def insert(var Tab : table<auto(keyT)>; at : keyT | #) {
     __builtin_table_set_insert(Tab, at)
 }
 
+[unused_argument(Tab, at)]
 def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : valT ==const | #) {
     static_if (typeinfo can_clone(val)) {
         unsafe(Tab[at]) := val
@@ -791,6 +802,7 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val
     }
 }
 
+[unused_argument(Tab, at, val)]
 def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : valT ==const | #) {
     static_if (typeinfo can_clone(val)) {
         if (typeinfo can_clone_from_const(val)) {
@@ -803,6 +815,7 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : v
     }
 }
 
+[unused_argument(Tab, at, val)]
 def insert_clone(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var val : valT[] ==const | #) {
     static_if (typeinfo can_clone(val)) {
         unsafe(Tab[at]) := val
@@ -811,6 +824,7 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var v
     }
 }
 
+[unused_argument(Tab, at, val)]
 def insert_clone(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; val : valT[] ==const | #) {
     static_if (typeinfo can_clone(val)) {
         if (typeinfo can_clone_from_const(val)) {
@@ -823,6 +837,7 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; val :
     }
 }
 
+[unused_argument(Tab, at, val)]
 def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : valT ==const | #) {
     static_if (typeinfo can_copy(type<valT>)) {
         unsafe(Tab[at]) = val
@@ -831,6 +846,7 @@ def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : val
     }
 }
 
+[unused_argument(Tab, at, val)]
 def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : valT ==const | #) {
     static_if (typeinfo can_copy(type<valT>)) {
         static_if (typeinfo can_clone_from_const(val)) {
@@ -843,6 +859,7 @@ def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : valT ==
     }
 }
 
+[unused_argument(Tab, at, val)]
 def insert(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var val : valT[] ==const | #) {
     static_if (typeinfo can_copy(type<valT>)) {
         unsafe(Tab[at]) = val
@@ -851,6 +868,7 @@ def insert(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var val : v
     }
 }
 
+[unused_argument(Tab, at, val)]
 def insert(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; val : valT[] ==const | #) {
     static_if (typeinfo can_copy(type<valT>)) {
         static_if (typeinfo can_clone_from_const(val)) {
@@ -863,6 +881,7 @@ def insert(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; val : valT[
     }
 }
 
+[unused_argument(Tab, at, val)]
 def emplace(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : valT -#&) {
     static_if (typeinfo can_move(val)) {
         unsafe(Tab[at]) <- val
@@ -871,6 +890,7 @@ def emplace(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : va
     }
 }
 
+[unused_argument(Tab, at, val)]
 def emplace(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #; var val : smart_ptr<valT>&) {
     static_if (typeinfo can_move(val)) {
         unsafe {
@@ -881,6 +901,7 @@ def emplace(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #; v
     }
 }
 
+[unused_argument(Tab, at, val)]
 def emplace(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #; var val : valT[] -#&) {
     static_if (typeinfo can_move(val)) {
         unsafe(Tab[at]) <- val
@@ -893,7 +914,7 @@ def emplace_new(var tab : table<auto(kT); smart_ptr<auto(vT)>>; key : kT; var va
     unsafe(tab[key]) |> move_new <| value
 }
 
-[!expect_ref(value)]
+[!expect_ref(value), unused_argument(Tab, key, value)]
 def emplace(var Tab : table<auto, auto>; key : auto; value : auto) {
     static_if (typeinfo is_smart_ptr(value)) {
         concept_assert(false, "can't emplace into a table, where the value type is a smart pointer\n\tuse 'emplace_new' instead for smart pointers")
@@ -906,7 +927,7 @@ def emplace(var Tab : table<auto, auto>; key : auto; value : auto) {
     }
 }
 
-[!expect_ref(value)]
+[!expect_ref(value), unused_argument(a, value)]
 def emplace(var a : array<auto>; value : auto) {
     static_if (typeinfo is_smart_ptr(value)) {
         concept_assert(false, "can't emplace into an array, where the value type is a smart pointer\n\tuse 'emplace_new' instead for smart pointers")
@@ -923,6 +944,56 @@ def emplace(var a : array<auto>; value : auto) {
 def emplace_new(var Arr : array<smart_ptr<auto(numT)>>; var value : smart_ptr<numT>) {
     unsafe {
         Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- value
+    }
+}
+
+def insert_default(var tab : table<auto(TT), auto(QQ)>, key : TT | #, var value : QQ == const | #) : void {
+    //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
+    if (!key_exists(tab, key)) {
+        insert(tab, key, value)
+    }
+}
+
+def insert_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #, value : valT == const | #) : void {
+    //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
+    if (!key_exists(tab, key)) {
+        insert(tab, key, value)
+    }
+}
+
+def insert_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #) : void {
+    //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
+    if (!key_exists(tab, key)) {
+        var val : valT -const
+        insert(tab, key, val)
+    }
+}
+
+def emplace_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #) : void {
+    //! Emplaces a default value into the table if the key does not exist. Does not overwrite existing keys.
+    if (!key_exists(tab, key)) {
+        emplace(tab, key, default<valT -#>)
+    }
+}
+
+def get_with_default(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : block<(var p : valT&) : void>) : void {
+    //! Gets the value from the table, add it with a default value if it does not exist. Callback is invoked with the value.
+    unsafe {
+        var val & = Tab[at]
+        __builtin_table_lock(Tab)
+        invoke(blk, val)
+        __builtin_table_unlock(Tab)
+    }
+}
+
+def modify(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : block<(p : valT&) : valT>) : void {
+    //! Modifies the value in the table. Callback is invoked with the value and should return the modified value.
+    //! Adds the value with a default value if it does not exist.
+    unsafe {
+        var val & = Tab[at]
+        __builtin_table_lock(Tab)
+        val = invoke(blk, val)
+        __builtin_table_unlock(Tab)
     }
 }
 
