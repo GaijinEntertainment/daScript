@@ -254,7 +254,10 @@ class ApplyMacro : AstCallMacro {
             if (length(calls) == 1) {
                 return <- calls[0]
             }
-            var inscope callblock <- new ExprBlock(at = expr.at, list := calls)
+            var inscope callblock <- new ExprBlock(at = expr.at)
+            unsafe {
+                callblock.list := calls
+            }
             return <- callblock
         }
         return <- default<ExpressionPtr>

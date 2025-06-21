@@ -8831,6 +8831,18 @@ namespace das {
             return nullptr;
         }
 
+        bool isCloneArrayExpression ( ExprCall * expr ) const {
+            if ( !expr->func ) return false;
+            if ( expr->arguments.size() != 2 ) return false;
+            if ( !(expr->func->name=="clone" || (expr->func->fromGeneric && expr->func->fromGeneric->name=="clone"))  ) return false;
+            if ( !expr->arguments[1]->rtti_isCall() ) return false;
+            auto call = (ExprCall *)(expr->arguments[1].get());
+            if ( !call->func ) return false;
+            if ( !call->func->fromGeneric ) return false;
+            if ( !(call->func->fromGeneric->name=="to_array_move" && call->func->fromGeneric->module->name=="$") ) return false;
+            return true;
+        }
+
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
             if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
             expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get();
@@ -8948,6 +8960,9 @@ namespace das {
                     expr->at, CompilationError::unsafe);
             } else if ( expr->func && expr->func->unsafeOutsideOfFor && !(expr->isForLoopSource || safeExpression(expr)) ) {
                 error("'" + expr->name + "' is unsafe, when not source of the for-loop; must be inside the 'unsafe' block", "", "",
+                    expr->at, CompilationError::unsafe);
+            } else if ( expr->func && expr->func->unsafeWhenNotCloneArray && !(safeExpression(expr) || isCloneArrayExpression(expr))) {
+                error("'" + expr->name + "' is unsafe, when not clone array; must be inside the 'unsafe' block", "", "",
                     expr->at, CompilationError::unsafe);
             } else if (enableInferTimeFolding && expr->func && isConstExprFunc(expr->func)) {
                 vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());
