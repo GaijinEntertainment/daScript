@@ -112,6 +112,8 @@ namespace ast_boost { struct SetupGlobalLintMacro; };
 namespace ast_boost { struct SetupOptimizationMacro; };
 namespace ast_boost { struct TagFunctionMacro; };
 namespace ast_boost { struct BetterRttiVisitor; };
+namespace ast_boost { struct CaptureEntryInitData; };
+namespace ast_boost { struct AnnotationArgumentInitData; };
 namespace contracts { struct IsAnyType; };
 namespace contracts { struct IsAnyArrayMacro; };
 namespace contracts { struct IsAnyEnumMacro; };
@@ -153,6 +155,7 @@ namespace macro_boost { struct CapturedVariable; };
 namespace macro_boost { struct ColletFinally; };
 namespace macro_boost { struct ColletLabels; };
 namespace macro_boost { struct ReturnSkipLockcheck; };
+namespace macro_boost { struct Quote2; };
 namespace defer { struct DeferMacro; };
 namespace defer { struct DeferDeleteMacro; };
 namespace apply { struct ApplyMacro; };
@@ -287,6 +290,8 @@ struct JsonValue {
 // unused structure SetupOptimizationMacro
 // unused structure TagFunctionMacro
 // unused structure BetterRttiVisitor
+// unused structure CaptureEntryInitData
+// unused structure AnnotationArgumentInitData
 // unused structure IsAnyType
 // unused structure IsAnyArrayMacro
 // unused structure IsAnyEnumMacro
@@ -328,6 +333,7 @@ struct JsonValue {
 // unused structure ColletFinally
 // unused structure ColletLabels
 // unused structure ReturnSkipLockcheck
+// unused structure Quote2
 // unused structure DeferMacro
 // unused structure DeferDeleteMacro
 // unused structure ApplyMacro

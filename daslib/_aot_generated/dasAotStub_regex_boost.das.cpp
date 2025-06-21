@@ -100,6 +100,8 @@ namespace ast_boost { struct SetupGlobalLintMacro; };
 namespace ast_boost { struct SetupOptimizationMacro; };
 namespace ast_boost { struct TagFunctionMacro; };
 namespace ast_boost { struct BetterRttiVisitor; };
+namespace ast_boost { struct CaptureEntryInitData; };
+namespace ast_boost { struct AnnotationArgumentInitData; };
 namespace regex { struct ReNode; };
 namespace regex { struct Regex; };
 // unused enumeration CompilationError
@@ -216,6 +218,8 @@ struct AstReaderMacro {
 // unused structure SetupOptimizationMacro
 // unused structure TagFunctionMacro
 // unused structure BetterRttiVisitor
+// unused structure CaptureEntryInitData
+// unused structure AnnotationArgumentInitData
 namespace regex {
 
 enum class ReOp : int32_t {
