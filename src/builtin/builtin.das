@@ -1122,10 +1122,10 @@ def clone(var args; var nargs : array<string>) {
     for (i in range(tot)) {
         args[i] := nargs[i]
     }
-    delete nargs
+    // delete nargs // we can make this unsafe_when_not_clone_array, or just let GC deal with it
 }
 
-[expect_any_vector(args), skip_lock_check]
+[expect_any_vector(args), skip_lock_check, unsafe_when_not_clone_array]
 def clone(var args; var nargs : array<smart_ptr<auto(TT)>>) {
     _::clear(args)
     for (narg in nargs) {
