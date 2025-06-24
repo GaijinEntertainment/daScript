@@ -750,7 +750,7 @@ def mark_token_context(var ctx : FormatterCtx) {
             let endParams = ctx |> find_pair_paren(pos + 1);
             for (j in range(beginParams, endParams + 1)) {
                 ctx.tokens[j].isInFunctionParam = true;
-                if (j - 1 == beginParams || ctx |> eq(j - 1, ";")) {
+                if (j - 1 == beginParams || ctx |> eq(j - 1, ";") || ctx |> eq(j - 1, ",")) {
                     let colonPos = ctx |> search_token_in_line(j, ":");
                     if (colonPos > 0) {
                         ctx |> mark_tokens_as_type(colonPos + 1);
