@@ -213,7 +213,7 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
 
 class StandaloneContextGen : CppAot {
 
-    def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector ?, cp : bool) {
+    def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector?, cp : bool) {
         ss <- ss_;
         collector <- coll;
         program <- program_;
@@ -255,7 +255,7 @@ class StandaloneContextGen : CppAot {
         tab --;
         write(*ss, "\}\n");
     }
-    def override preVisitProgramBody(var prog : ProgramPtr, that : Module ?) {
+    def override preVisitProgramBody(var prog : ProgramPtr, that : Module?) {
         // functions
         declarations = ss |> string_builder_str();
         ss |> string_builder_clear();
@@ -314,7 +314,7 @@ def GetFunctionInfo(pfun : Function?, info : string) {
     }
 }
 
-def addFunctionInfo(disableInit : bool; rtti : bool, fnn : array<Function?>, var helper : AotDebugInfoHelper ?) {
+def addFunctionInfo(disableInit : bool; rtti : bool, fnn : array<Function?>, var helper : AotDebugInfoHelper?) {
     helper.helper.rtti = rtti;
     var lookupFunctionTable : array<tuple<Function?, FuncInfo?>>;
     for (pfun in fnn) {

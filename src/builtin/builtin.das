@@ -947,14 +947,14 @@ def emplace_new(var Arr : array<smart_ptr<auto(numT)>>; var value : smart_ptr<nu
     }
 }
 
-def insert_default(var tab : table<auto(TT), auto(QQ)>, key : TT | #, var value : QQ == const | #) : void {
+def insert_default(var tab : table<auto(TT), auto(QQ)>, key : TT | #, var value : QQ ==const | #) : void {
     //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
     if (!key_exists(tab, key)) {
         insert(tab, key, value)
     }
 }
 
-def insert_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #, value : valT == const | #) : void {
+def insert_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #, value : valT ==const | #) : void {
     //! Inserts a default value into the table if the key does not exist. Does not overwrite existing keys.
     if (!key_exists(tab, key)) {
         insert(tab, key, value)
