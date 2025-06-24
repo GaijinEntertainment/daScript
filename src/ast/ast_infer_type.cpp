@@ -9247,6 +9247,10 @@ namespace das {
                         error("can't move from a constant value " + describeType(decl->value->type), "", "",
                             decl->value->at, CompilationError::cant_move);
                     }
+                    if ( field->privateField && !expr->nativeClassInitializer ) {
+                        error("field " + decl->name + " is private, can't be initialized", "", "",
+                            decl->at, CompilationError::cant_get_field);
+                    }
                     if ( !decl->moveSemantics && !field->type->ref ) {
                         decl->value = Expression::autoDereference(decl->value);
                     }

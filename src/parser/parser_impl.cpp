@@ -298,6 +298,7 @@ namespace das {
             }
             for ( auto pDecl : *list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
+                    /*
                     if ( !pStruct->isClass && pDecl->isPrivate ) {
                         das_yyerror(scanner,"only class member can be private "+name_at.name,name_at.at,
                             CompilationError::invalid_private);
@@ -306,6 +307,7 @@ namespace das {
                         das_yyerror(scanner,"only class member can be static "+name_at.name,name_at.at,
                             CompilationError::invalid_static);
                     }
+                    */
                     if ( (pDecl->override || pDecl->sealed) && pDecl->isStatic ) {
                         das_yyerror(scanner,"static member can't be sealed or override "+name_at.name,name_at.at,
                             CompilationError::invalid_static);
