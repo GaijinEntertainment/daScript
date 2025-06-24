@@ -3481,7 +3481,7 @@ make_variant_dim
     ;
 
 make_struct_single
-    :   make_struct_fields[msf] {
+    :   make_struct_fields[msf] optional_comma {
         auto msd = new ExprMakeStruct();
         msd->structs.push_back(MakeStructPtr($msf));
         $$ = msd;
