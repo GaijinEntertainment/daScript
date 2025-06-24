@@ -128,10 +128,8 @@ namespace das {
             debug_hash("arg %s <%s> = %" PRIx64 "\n", arg->type->getMangledName().c_str(), arg->name.c_str(), argT);
         }
 
-        // Use mangled name instead of function body
-        const auto mnh = fun->getMangledNameHash();
-        hashV.write(&mnh, sizeof(mnh));
         // append code
+        node->visit(hashV);
         if ( fun->aotHashDeppendsOnArguments ) {
             for ( auto & arg : fun->arguments ) {
                 hashV.write(arg->name.c_str());
@@ -265,8 +263,7 @@ namespace das {
         uvec.push_back(initHash);
         for ( const auto & fn : vec ) {
             if ( !fn.first->noAot ) {
-                DAS_ASSERT(fn.first->aotHash != 0);
-                uvec.push_back(fn.first->aotHash);
+                uvec.push_back(fn.first->hash);
             }
         }
         return hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));
