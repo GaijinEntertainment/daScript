@@ -721,6 +721,8 @@ namespace das {
         } else if (tstr == "smart_ptr<ast::MakeFieldDecl>") {
             auto vec2 = (MakeStruct*)(vec); // todo: hack, multiple inheritance breaks order in memory.
             return apply(static_cast<vector<smart_ptr<MakeFieldDecl>>*>(vec2));
+        } else if (tstr == "ast::EnumEntry") {
+            return apply(static_cast<vector<Enumeration::EnumEntry>*>(vec));
         }
         DAS_FATAL_ERROR("vec length/index for %s is not implemented!\n", tstr.data());
         abort();

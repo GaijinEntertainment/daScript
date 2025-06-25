@@ -863,6 +863,22 @@ def clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>) {
     }
 }
 
+struct EnumEntryInitData {
+    name : string
+    cppName : string
+    // at : LineInfo
+    // value : ExpressionPtr
+}
+
+def clone(var a : dasvector`EnumEntry; var b : array<EnumEntryInitData>) {
+    a |> resize(length(b))
+    for (e, i in b, count()) {
+        a[i].name := e.name
+        a[i].cppName := e.cppName
+        // move_new(a[i].value) <| e.value
+    }
+}
+
 struct AnnotationArgumentInitData {
     basicType : Type
     name : string
@@ -917,7 +933,10 @@ let blacklist = [
     ("ast::Function", "classParent"), // loop
     ("ast::ExprReturn", "_block"), // loop
     ("ast::ExprVar", "pBlock"), // loop
+    ("ast::EnumEntry", "value"), // loop
+    ("ast::Enumeration", "list"), // too huge in TypeDecl
     ("ast::CaptureEntry", "at"), // ignore it for now
+    ("ast::EnumEntry", "at"), // ignore it for now
     ("ast::MakeFieldDecl", "at"), // ignore it for now
     ("rtti::AnnotationArgument", "at"), // ignore it for now
 ]
@@ -940,6 +959,10 @@ def private get_dst_type(var src_tp : TypeDeclPtr) {
         return <- new TypeDecl(baseType = Type.tString);
     } elif (tstr |> starts_with("ast::CaptureEntry")) {
         var strct = get_module("ast_boost") |> module_find_structure("CaptureEntryInitData");
+        delete src_tp;
+        return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
+    } elif (tstr |> starts_with("ast::EnumEntry")) {
+        var strct = get_module("ast_boost") |> module_find_structure("EnumEntryInitData");
         delete src_tp;
         return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
     } elif (tstr |> starts_with("rtti::AnnotationArgument")) {
@@ -986,7 +1009,6 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
             var inscope arg_expr <- convert_quote_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp.get_ptr(), idx))), src_tp, at);
             if (dst_tp.baseType != Type.tString && dst_tp != src_tp) {
                 var inscope make_str <- unsafe(reinterpret<smart_ptr<ExprMakeStruct>>(arg_expr));
-                print("EEEEEE{describe(dst_tp)}\n");
                 move_new(make_str.makeType) <| clone_type(dst_tp);
                 args |> emplace(make_str);
             } else {
