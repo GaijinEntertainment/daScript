@@ -223,7 +223,7 @@ namespace das {
 
     TypeAnnotation* module_find_type_annotation ( const Module* module, const char *name ) {
         auto ann = module->findAnnotation(name);
-        return dynamic_cast<TypeAnnotation*>(ann.get());
+        return static_cast<TypeAnnotation*>(ann.get());
     }
 
     smart_ptr_raw<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {

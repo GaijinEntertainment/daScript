@@ -958,21 +958,17 @@ def private get_dst_type(var src_tp : TypeDeclPtr) {
         delete src_tp;
         return <- new TypeDecl(baseType = Type.tString);
     } elif (tstr |> starts_with("ast::CaptureEntry")) {
-        var strct = get_module("ast_boost") |> module_find_structure("CaptureEntryInitData");
         delete src_tp;
-        return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
+        return <- typeinfo ast_typedecl(type<CaptureEntryInitData>);
     } elif (tstr |> starts_with("ast::EnumEntry")) {
-        var strct = get_module("ast_boost") |> module_find_structure("EnumEntryInitData");
         delete src_tp;
-        return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
+        return <- typeinfo ast_typedecl(type<EnumEntryInitData>);
     } elif (tstr |> starts_with("rtti::AnnotationArgument")) {
-        var strct = get_module("ast_boost") |> module_find_structure("AnnotationArgumentInitData");
         delete src_tp;
-        return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
+        return <- typeinfo ast_typedecl(type<AnnotationArgumentInitData>);
     } elif (tstr |> starts_with("rtti::FileInfo")) {
-        var strct = get_module("ast_boost") |> module_find_structure("FileInfoInitData");
         delete src_tp;
-        return <- new TypeDecl(baseType = Type.tStructure, structType = strct);
+        return <- typeinfo ast_typedecl(type<FileInfoInitData>);
     } else {
         return <- src_tp;
     }
@@ -1075,7 +1071,6 @@ def private convert_quote_struct_field(mod : Module?, data : uint8 const ?,
         flags = ((describe(xtype) == "$::das_string" || isYetAnotherVectorTemplate(xtype)) ?
                         MakeFieldDeclFlags.cloneSemantics : MakeFieldDeclFlags.moveSemantics);
     }
-    var res_loc = parent_loc;
     return <- create_field_expr(name, clone(res_field), parent_loc, flags);
 }
 
@@ -1146,7 +1141,13 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
          return <- get_find_in_module_expr("find_call_macro", pdata._module.name, pdata.name, at)
     } elif (tstr == "ast::Structure") {
          assume pdata = unsafe(reinterpret<Structure?>(data));
-         return <- get_find_in_module_expr("module_find_structure", pdata._module.name, pdata.name, at);
+         // disable support for Structure::Module. If we compile without shared_modules it's impossible
+         if (pdata._module.name == "ast_boost") { // How to check COP.shared_modules = false?
+            return <- null;
+         }
+         // It's unnecessary, however there is bug in aot with ternary operator
+         var inscope tmp = get_find_in_module_expr("module_find_structure", pdata._module.name, pdata.name, at);
+         return <- tmp;
     } elif (tstr == "ast::Function") {
          assume pdata = unsafe(reinterpret<Function?>(data));
          return <- get_find_in_module_expr("find_unique_function_ptr", pdata._module.name, pdata.name, at);
