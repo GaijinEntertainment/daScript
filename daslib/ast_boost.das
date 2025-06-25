@@ -1055,7 +1055,7 @@ def private create_field_expr(name; var res_field; loc; flags) {
     return <- new MakeFieldDecl(name := name, value <- res_field, at := loc, flags = flags);
 }
 
-def private convert_quote_struct_field(mod : Module?, data : uint8 const ?,
+def private convert_quote_struct_field(mod : Module?, data : uint8 const?,
                                        tstr : string, name : string,
                                        offset : uint; xtype : TypeDeclPtr; parent_loc : LineInfo) : smart_ptr<MakeFieldDecl> {
     if (!is_quote_field_allowed(name, tstr, data)) {
