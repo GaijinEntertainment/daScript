@@ -427,6 +427,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(avoidNullPtr)>("avoidNullPtr");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf", "getSizeOf");
             addProperty<DAS_BIND_MANAGED_PROP(getAlignOf)>("alignOf", "getAlignOf");
+            from("Annotation");
         }
     };
 
@@ -435,6 +436,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addProperty<DAS_BIND_MANAGED_PROP(fieldCount)>("fieldCount");
+            from("TypeAnnotation");
         }
     };
 

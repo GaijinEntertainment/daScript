@@ -1116,7 +1116,7 @@ def clone(var a : table<string; auto(VT)>; b : table<string; VT> | #) {
 }
 
 [expect_any_vector(args), skip_lock_check]
-def clone(var args; var nargs : array<string>) {
+def clone(var args; var nargs : array<auto(TT)>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
     for (i in range(tot)) {
@@ -1125,7 +1125,7 @@ def clone(var args; var nargs : array<string>) {
     // delete nargs // we can make this unsafe_when_not_clone_array, or just let GC deal with it
 }
 
-[expect_any_vector(args), skip_lock_check, unsafe_when_not_clone_array]
+[expect_any_vector(args), skip_lock_check]
 def clone(var args; var nargs : array<smart_ptr<auto(TT)>>) {
     _::clear(args)
     for (narg in nargs) {

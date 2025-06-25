@@ -149,3 +149,16 @@ class private ReturnSkipLockcheck : AstCallMacro {
         )
     }
 }
+
+// Rename once quote gone
+[call_macro(name="quote2")]
+class private Quote2 : AstCallMacro {
+
+    def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        unsafe {
+            assume arg_expr = call.arguments[0];
+            return <- convert_quote_to_expression(arg_expr, call.at);
+        }
+    }
+}
+
