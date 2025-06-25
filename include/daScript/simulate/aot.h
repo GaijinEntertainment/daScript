@@ -41,6 +41,10 @@ namespace das {
     void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody);
 #endif
 
+    __forceinline void __bit_set ( Bitfield & value, Bitfield mask, bool on ) {
+        value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
+    }
+
     template <typename TT>
     struct das_auto_cast {
         template <typename QQ>

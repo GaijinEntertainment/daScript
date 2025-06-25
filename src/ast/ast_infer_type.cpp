@@ -6583,6 +6583,26 @@ namespace das {
                         expr->left = propGet;
                         return expr;
                     }
+                    if ( expr->right->type->isBool() && efield->value->type && efield->value->type->isBitfield() ) { // bitfield.field = bool
+                        auto value = efield->value;
+                        if ( value->rtti_isR2V() ) {
+                            value = static_pointer_cast<ExprRef2Value>(value)->subexpr;
+                        }
+                        if ( value->type->ref ) {
+                            // lets find the right field
+                            auto fidx = efield->value->type->bitFieldIndex(efield->name);
+                            if ( fidx != -1 ) {
+                                reportAstChanged();
+                                auto mask = make_smart<ExprConstBitfield>(efield->at,1u<<fidx);
+                                mask->bitfieldType = make_smart<TypeDecl>(*efield->value->type);
+                                auto call = make_smart<ExprCall>(efield->at, "__bit_set");
+                                call->arguments.push_back(value->clone());
+                                call->arguments.push_back(mask);
+                                call->arguments.push_back(expr->right->clone());
+                                return call;
+                            }
+                        }
+                    }
                 }
             }
             return nullptr;
