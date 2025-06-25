@@ -12,6 +12,7 @@ def main() {
         } else {
             let z = quote2($(a : int) { let z = 123 + foo(123, "asd" + 123); });
         }
+        return <- struct<$t(blobHandleStruct)>(provider = self.registry |> getProvider(), resUid = self.resUid);
     });
     var inscope y <- quote(@capture(& a, & b) (c : array<int>; d : vector`int){
         let c = [123, 321, 123];
@@ -22,6 +23,7 @@ def main() {
         } else {
             let z = quote2($(a : int) { let z = 123 + foo(123, "asd" + 123); });
         }
+        return <- struct<$t(blobHandleStruct)>(provider = self.registry |> getProvider(), resUid = self.resUid);
     });
     print("{describe(y)}\n\n{describe(x)}\n");
 }

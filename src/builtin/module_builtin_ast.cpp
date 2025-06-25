@@ -223,7 +223,7 @@ namespace das {
 
     TypeAnnotation* module_find_type_annotation ( const Module* module, const char *name ) {
         auto ann = module->findAnnotation(name);
-        return static_cast<TypeAnnotation*>(ann.get());
+        return dynamic_cast<TypeAnnotation*>(ann.get());
     }
 
     smart_ptr_raw<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
@@ -716,6 +716,11 @@ namespace das {
             return apply(static_cast<vector<smart_ptr<AnnotationDeclaration>>*>(vec));
         } else if (tstr == "rtti::AnnotationArgument") {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
+        } else if (tstr == "smart_ptr<ast::MakeStruct>") {
+            return apply(static_cast<vector<smart_ptr<MakeStruct>>*>(vec));
+        } else if (tstr == "smart_ptr<ast::MakeFieldDecl>") {
+            auto vec2 = (MakeStruct*)(vec); // todo: hack, multiple inheritance breaks order in memory.
+            return apply(static_cast<vector<smart_ptr<MakeFieldDecl>>*>(vec2));
         }
         DAS_FATAL_ERROR("vec length/index for %s is not implemented!\n", tstr.data());
         abort();
@@ -925,6 +930,14 @@ namespace das {
 
     bool macro_aot_infix(TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr) {
         return macro->aotInfix(*ss, expr);
+    }
+
+    FileInfo *clone_file_info(const char *name, int tabSize, Context * context, LineInfoArg * at) {
+        auto res = new FileInfo();
+        context->deleteUponFinish.emplace_back(res);
+        res->name = name;
+        res->tabSize = tabSize;
+        return res;
     }
 
     void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at) {
@@ -1333,6 +1346,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(macro_aot_infix)>(*this, lib,  "macro_aot_infix",
                                                            SideEffects::modifyArgument, "macro_aot_infix")
             ->args({"macro","ss", "expr"});
+        addExtern<DAS_BIND_FUN(clone_file_info)>(*this, lib,  "clone_file_info",
+                                                           SideEffects::none, "clone_file_info")
+            ->args({"name","tab_size", "context", "at"});
         addExtern<DAS_BIND_FUN(for_each_module_function)>(*this, lib,  "for_each_module_function",
                                                           SideEffects::modifyExternal, "for_each_module_function")
             ->args({"module","blk", "context", "at"});

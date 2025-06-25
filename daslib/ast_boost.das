@@ -891,30 +891,34 @@ def clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentInitData>)
     }
 }
 
+def cvt_to_mks(var args) : smart_ptr<MakeStruct> {
+    var inscope res <- new MakeStruct(uninitialized);
+    *res |> resize(length(args))
+    for (arg, i in args, count()) {
+        if (true) {
+            move_new((*res)[i]) <| arg;
+        }
+    }
+    return <- res;
+}
+
 struct FileInfoInitData {
-    name: string
-    tabSize: int
+    name : string
+    tabSize : int
 }
 
 def clone_file_info(b : FileInfoInitData) : FileInfo? {
-    return new FileInfo(name:=b.name,tabSize=b.tabSize)
+    return clone_file_info(b.name, b.tabSize)
 }
 
 let blacklist = [
     ("ast::Function", "inferStack"),
     ("ast::Function", "annotations"),
-    ("ast::Function", "at"),
-    ("ast::Function", "atDecl"),
-    ("ast::Function", "module"),
-    ("ast::Function", "useGlobalVariables"),
-    ("ast::Function", "useFunctions"),
-    ("ast::Function", "resultAliasesGlobals"),
-    ("ast::Function", "fromGeneric"),
-    ("ast::Function", "classParent"),
-    ("ast::ExprMakeStruct", "structs"),
+    ("ast::Function", "classParent"), // loop
     ("ast::ExprReturn", "_block"), // loop
     ("ast::ExprVar", "pBlock"), // loop
     ("ast::CaptureEntry", "at"), // ignore it for now
+    ("ast::MakeFieldDecl", "at"), // ignore it for now
     ("rtti::AnnotationArgument", "at"), // ignore it for now
 ]
 
@@ -926,6 +930,7 @@ let managed_types = [
     "ast::CallMacro",
     "ast::Function",
     "rtti::FileInfo",
+    "ast::MakeStruct",
 ];
 
 def private get_dst_type(var src_tp : TypeDeclPtr) {
@@ -956,6 +961,7 @@ def private create_string_expr(name) {
 }
 
 def private to_arr_move_args(var args : array<ExpressionPtr>; var dst_tp : TypeDeclPtr; at : LineInfo) {
+    assert(args |> length > 0);
     unsafe {
         return <- to_array_move_expr(new ExprMakeArray(values := args,
                                                        gen2 = true,
@@ -980,12 +986,23 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
             var inscope arg_expr <- convert_quote_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp.get_ptr(), idx))), src_tp, at);
             if (dst_tp.baseType != Type.tString && dst_tp != src_tp) {
                 var inscope make_str <- unsafe(reinterpret<smart_ptr<ExprMakeStruct>>(arg_expr));
+                print("EEEEEE{describe(dst_tp)}\n");
                 move_new(make_str.makeType) <| clone_type(dst_tp);
                 args |> emplace(make_str);
             } else {
                 args |> emplace(arg_expr);
             }
         }
+    }
+    if (describe(xtype) == "ast::MakeStruct") {
+        return <- new ExprCall(at = at, name := "cvt_to_mks",
+                            arguments := array<ExpressionPtr>(
+                               new ExprMakeArray(values := args,
+                                  gen2 = true,
+                                  makeType <- clone_type(dst_tp),
+                                  at = at)
+                            )
+                        )
     }
     return <- to_arr_move_args(args, dst_tp, at);
 }
@@ -1037,7 +1054,6 @@ def private convert_quote_struct_field(mod : Module?, data : uint8 const ?,
                         MakeFieldDeclFlags.cloneSemantics : MakeFieldDeclFlags.moveSemantics);
     }
     var res_loc = parent_loc;
-    res_loc.column *= 10u;
     return <- create_field_expr(name, clone(res_field), parent_loc, flags);
 }
 
@@ -1069,9 +1085,8 @@ def private convert_pointer_expr(mod; data; info; at) : ExpressionPtr {
     assume first_tstr = describe(info.firstType);
     var inscope final_type <- clone(info.firstType);
     if (first_tstr == "ast::Expression") {
-        assume annotation = unsafe(mod |> module_find_annotation(unsafe(reinterpret<ExpressionPtr>(pdata)).__rtti)).get_ptr();
-        move_new(final_type) <| new TypeDecl(baseType = Type.tHandle,
-            annotation = unsafe(reinterpret<TypeAnnotation?> annotation))
+        assume annotation = mod |> module_find_type_annotation(unsafe(reinterpret<ExpressionPtr>(pdata)).__rtti);
+        move_new(final_type) <| new TypeDecl(baseType = Type.tHandle, annotation = annotation)
     }
     var inscope subexpr <- convert_quote_expr(mod, pdata, final_type, at);
 
@@ -1128,7 +1143,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
         var field_loc = at;
         // if possible use Expression.at
         if (isExpression(info)) {
-            let fval = unsafe(reinterpret<Expression?>(data));
+            assume fval = unsafe(reinterpret<ExpressionPtr>(data));
             field_loc = fval.at;
         }
         return <- convert_quote_structure(mod, data, tstr, info, field_loc);
@@ -1139,8 +1154,8 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
 
 def convert_quote_to_expression(var arg_expr : ExpressionPtr; at : LineInfo) {
     let mod = get_module("ast");
-    assume annotation = mod |> module_find_annotation(arg_expr.__rtti);
-    var inscope tp <- new TypeDecl(baseType = Type.tHandle, annotation = unsafe(reinterpret<TypeAnnotation?> annotation));
+    assume annotation = mod |> module_find_type_annotation(arg_expr.__rtti);
+    var inscope tp <- new TypeDecl(baseType = Type.tHandle, annotation = annotation);
     tp.flags |= TypeDeclFlags.smartPtr;
     return <- new ExprAscend(subexpr <- convert_quote_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr.get_ptr())), tp, at));
 }
