@@ -2066,5 +2066,9 @@ namespace das
         addExtern<DAS_BIND_FUN(das_aot_enabled)>(*this, lib, "aot_enabled",
             SideEffects::none, "das_aot_enabled")
                 ->args({"context","at"});
+        // bitfield
+        addExtern<DAS_BIND_FUN(__bit_set)>(*this, lib, "__bit_set",
+            SideEffects::modifyArgument, "__bit_set")
+                ->args({"value","mask","on"});
     }
 }
