@@ -28,7 +28,7 @@ jobs:
       
     - name: Configure CMake
       run: cmake -B ${{ env.CONFIG_DIR }} -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_configuration }} -G "Visual Studio 17 2022"
-        
+      
     - name: Build CMake
       run: cmake --build ${{ env.CONFIG_DIR }} --config ${{ matrix.cmake_configuration }}      
           

@@ -4,7 +4,8 @@ on:
   push:
   pull_request:
   workflow_dispatch:
-
+  release:
+    types: published
 defaults:
   run:
     shell: bash
@@ -25,7 +26,7 @@ jobs:
         with:
           # All of these options are optional, so you can remove them if you are happy with the defaults
           concurrent_skipping: 'same_content'
-          do_not_skip: '["pull_request", "workflow_dispatch"]'
+          do_not_skip: '["pull_request", "workflow_dispatch", "release"]'
 
   ###########################################################
   build:
@@ -245,3 +246,21 @@ jobs:
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
         esac
+    - name: "Install binaries"
+      if: matrix.cmake_preset == 'Release'
+      shell: bash
+      run: |
+        mkdir daslang_install
+        mkdir artifacts
+        cmake --install ./build --prefix ./daslang_install --config ${{ matrix.cmake_preset }}
+        7z a artifacts/daslang-${{ matrix.target }}-${{ matrix.architecture }}.zip ./daslang_install
+    - name: "Create release"
+      if: github.event.action == 'published' && matrix.cmake_preset == 'Release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: artifacts/daslang-${{ matrix.target }}-${{ matrix.architecture }}.zip
+        asset_name: daslang-${{ matrix.target }}-${{ matrix.architecture }}.zip
+        asset_content_type: application/zip
