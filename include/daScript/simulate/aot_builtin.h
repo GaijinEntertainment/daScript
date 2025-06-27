@@ -30,6 +30,7 @@ namespace das {
     int builtin_table_size ( const Table & arr );
     int builtin_table_capacity ( const Table & arr );
     void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at );
+    vec4f builtin_table_reserve ( Context & context, SimNode_CallBase * call, vec4f * args );
     void heap_stats ( Context & context, uint64_t * bytes );
     urange64 heap_allocation_stats ( Context * context );
     uint64_t heap_allocation_count ( Context * context );

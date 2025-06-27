@@ -807,6 +807,24 @@ namespace das
         table_clear(*context, arr, at);
     }
 
+    vec4f builtin_table_reserve ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        // table, size
+        if ( !call->types ) {
+            context.throw_error_at(call->debugInfo, "missing type info");
+        }
+        auto ttype = call->types[0];
+        if ( !ttype->firstType || !ttype->secondType ) {
+            context.throw_error_at(call->debugInfo, "expecting table type");
+        }
+        Type baseType = call->types[0]->firstType->type;
+        uint32_t valueTypeSize = call->types[0]->secondType->size;
+        Table & tab = cast<Table&>::to(args[0]);
+        uint32_t newCapacity = cast<uint32_t>::to(args[1]);
+        table_reserve_impl(context, tab, baseType, newCapacity, valueTypeSize, &call->debugInfo);
+        return v_zero();
+    }
+
+
     struct HashBuilderAnnotation : ManagedStructureAnnotation <HashBuilder,false> {
         HashBuilderAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("HashBuilder", ml) {
@@ -1840,6 +1858,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",
             SideEffects::modifyArgumentAndExternal, "builtin_table_values")
                 ->args({"iterator","table","stride","context","at"});
+        addInterop<builtin_table_reserve,void,vec4f,uint32_t>(*this, lib, "__builtin_table_reserve",
+            SideEffects::modifyArgumentAndExternal, "builtin_table_reserve")
+                ->args({"table","size"});
         // array and table free
         addExtern<DAS_BIND_FUN(builtin_array_free)>(*this, lib, "__builtin_array_free",
             SideEffects::modifyArgumentAndExternal, "builtin_array_free")
