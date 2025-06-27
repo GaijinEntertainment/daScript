@@ -597,7 +597,7 @@ def empty(a : table<auto; auto> | #) : bool {
     return length(a) == 0
 }
 
-def reserve(var Tab : table<auto(keyT);auto>; newSize : int) {
+def reserve(var Tab : table<auto(keyT); auto>; newSize : int) {
     static_if (typeinfo need_lock_check(type<keyT>)) {
         _builtin_verify_locks(Tab)
     }
