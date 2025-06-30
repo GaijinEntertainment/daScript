@@ -1486,7 +1486,7 @@ class GlslExport : AstVisitor {
         }
         *writer |> write(")")
     }
-    def override canVisitMakeStructBody(expr : smart_ptr<ExprMakeStruct>) : bool {
+    def override canVisitExprMakeStructBody(expr : smart_ptr<ExprMakeStruct>) : bool {
         return false
     }
 // make array

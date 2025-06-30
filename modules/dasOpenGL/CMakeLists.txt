@@ -33,8 +33,10 @@ IF(NOT DAS_OPENGL_INCLUDED)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/image.png
         DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
     )
-    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes/orb.obj
-        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
-    )
 
+    IF ((NOT ${DAS_BGFX_DISABLED}) OR (NOT DEFINED DAS_BGFX_DISABLED))
+        install(FILES ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes/orb.obj
+            DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
+        )
+    ENDIF ()
 ENDIF()
