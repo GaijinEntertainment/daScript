@@ -121,8 +121,8 @@ class DapiDataWalker {
     def abstract afterStructureField(ps : void?; si : StructInfo; pv : void?; vi : VarInfo; last : bool) : void
     def abstract beforeTuple(ps : void?; ti : TypeInfo) : void
     def abstract afterTuple(ps : void?; ti : TypeInfo) : void
-    def abstract beforeTupleEntry(ps : void?; ti : TypeInfo; pv : void?; vi : TypeInfo; last : bool) : void
-    def abstract afterTupleEntry(ps : void?; ti : TypeInfo; pv : void?; vi : TypeInfo; last : bool) : void
+    def abstract beforeTupleEntry(ps : void?; ti : TypeInfo; pv : void?; idx : int; last : bool) : void
+    def abstract afterTupleEntry(ps : void?; ti : TypeInfo; pv : void?; idx : int; last : bool) : void
     def abstract beforeVariant(ps : void?; ti : TypeInfo) : void
     def abstract afterVariant(ps : void?; ti : TypeInfo) : void
     def abstract beforeArrayData(ps : void?; stride : uint; count : uint; ti : TypeInfo) : void

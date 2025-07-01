@@ -277,14 +277,14 @@ namespace debugapi {
                 invoke_afterTuple(context,fn_afterTuple,classPtr,ps,*ti);
             }
         }
-        virtual void beforeTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) override {
+        virtual void beforeTupleEntry ( char * ps, TypeInfo * ti, char * pv, int idx, bool last ) override {
             if ( auto fn_beforeTupleEntry = get_beforeTupleEntry(classPtr) ) {
-                invoke_beforeTupleEntry(context,fn_beforeTupleEntry,classPtr,ps,*ti,pv,*vi,last);
+                invoke_beforeTupleEntry(context,fn_beforeTupleEntry,classPtr,ps,*ti,pv,idx,last);
             }
         }
-        virtual void afterTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) override {
+        virtual void afterTupleEntry ( char * ps, TypeInfo * ti, char * pv, int idx, bool last ) override {
             if ( auto fn_afterTupleEntry = get_afterTupleEntry(classPtr) ) {
-                invoke_afterTupleEntry(context,fn_afterTupleEntry,classPtr,ps,*ti,pv,*vi,last);
+                invoke_afterTupleEntry(context,fn_afterTupleEntry,classPtr,ps,*ti,pv,idx,last);
             }
         }
         virtual bool canVisitVariant ( char * ps, TypeInfo * ti ) override {

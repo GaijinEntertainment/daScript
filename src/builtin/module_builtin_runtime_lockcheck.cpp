@@ -197,10 +197,10 @@ namespace das
         virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool ) override {
             path.pop_back();
         }
-        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, TypeInfo * vi, bool ) override {
-            path.emplace_back(PathChunk(ti,vi));
+        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, int idx, bool ) override {
+            path.emplace_back(PathChunk(ti,ti->argTypes[idx]));
         }
-        virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool ) override {
+        virtual void afterTupleEntry ( char *, TypeInfo *, char *, int, bool ) override {
             path.pop_back();
         }
         virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t index, bool ) override {

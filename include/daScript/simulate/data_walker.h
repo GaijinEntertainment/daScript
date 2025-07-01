@@ -50,8 +50,8 @@ namespace das {
         virtual void afterStructureField ( char * ps, StructInfo * si, char * pv, VarInfo * vi, bool last ) {}
         virtual void beforeTuple ( char * ps, TypeInfo * ti ) {}
         virtual void afterTuple ( char * ps, TypeInfo * ti ) {}
-        virtual void beforeTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) {}
-        virtual void afterTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) {}
+        virtual void beforeTupleEntry ( char * ps, TypeInfo * ti, char * pv, int idx, bool last ) {}
+        virtual void afterTupleEntry ( char * ps, TypeInfo * ti, char * pv, int idx, bool last ) {}
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) {}
         virtual void afterVariant ( char * ps, TypeInfo * ti ) {}
         virtual void beforeArrayData ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {}

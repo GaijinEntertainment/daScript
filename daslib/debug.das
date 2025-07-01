@@ -401,11 +401,12 @@ class DAWalker : DapiDataWalker {
         tupleIndex = 0
     }
 
-    def override beforeTupleEntry(ps : void?; ti : TypeInfo; pv : void?; vi : TypeInfo; last : bool) : void {
+    def override beforeTupleEntry(ps : void?; ti : TypeInfo; pv : void?; idx : int; last : bool) : void {
         self->startCont()
         let n = length(varsStack)
         if (n > 0) {
             var v & = unsafe(varsStack[n - 1])
+            let vi = ti.argTypes[idx]
             *v.children |> emplace(DAVariable(uid = frame.varId++, name = "{tupleIndex++}", _type = describe(vi), address = intptr(pv), size = vi.size))
             unsafe {
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
