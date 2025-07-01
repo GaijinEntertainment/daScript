@@ -42,11 +42,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [windows]
+        target: [linux, windows]
         architecture: [32, 64]
         cmake_preset: [ Release ]
 
         include:
+          - target: linux
+            runner: ubuntu-latest
+            archive_ext: tar.gz
+
           - target: windows
             runner: windows-latest
             archive_ext: zip
@@ -54,6 +58,10 @@ jobs:
           - target: windows
             build_system: cmake
             cmake_generator: Visual Studio 17 2022
+
+          - target: linux
+            build_system: cmake
+            cmake_generator: Ninja
 
           - target: windows
             architecture: 32
@@ -63,13 +71,20 @@ jobs:
             architecture: 64
             architecture_string: x64
 
+        exclude:
+          - target: linux
+            architecture: 32
+
     steps:
       - name: "SCM Checkout"
         uses: actions/checkout@v4
+
       - name: "Install CMake and Ninja"
         uses: lukka/get-cmake@latest
+
       - if: runner.os == 'Windows'
-        uses: ilammy/setup-nasm@v1
+        uses: ilammy/setup-nasm@v1 # need nasm for openssl
+
       - name: "Install: Required Dev Packages"
         run: |
           set -eux
