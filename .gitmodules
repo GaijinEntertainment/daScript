@@ -15,7 +15,7 @@
 	url = https://github.com/imp5imp5/dasMinfft.git
 [submodule "modules/dasHV"]
 	path = modules/dasHV
-	url = https://github.com/aleksisch/dasHV.git
+	url = https://github.com/borisbat/dasHV.git
 [submodule "modules/dasSFML"]
 	path = modules/dasSFML
 	url = https://github.com/borisbat/dasSFML.git
