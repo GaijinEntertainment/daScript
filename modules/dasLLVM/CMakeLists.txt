@@ -1,26 +1,14 @@
-SET(PATH_TO_LIBCLANG ${PROJECT_SOURCE_DIR}/../libclang)
-IF(NOT IS_DIRECTORY ${PATH_TO_LIBCLANG})
-	SET(DAS_LIBCLANG_DETECTED FALSE)
-	message(WARNING "can't find libclang at ${PATH_TO_LIBCLANG}")
-ELSE()
-	IF(FALSE) #"${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-		SET(DAS_LIBCLANG_DETECTED FALSE)
-		message(WARNING "No libclang on CLANG/WIN for now.")
-	ELSE()
-		SET(DAS_LIBCLANG_DETECTED TRUE)
-	ENDIF()
+IF (NOT DEFINED PATH_TO_LIBCLANG)
+	SET(PATH_TO_LIBCLANG "${PROJECT_SOURCE_DIR}/../libclang")
 ENDIF()
+find_package(LLVM 16.0.6 REQUIRED PATHS "${PATH_TO_LIBCLANG}")
 
-IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_LLVM_DISABLED)))
+IF ((NOT DAS_LLVM_INCLUDED) AND ${LLVM_FOUND} AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_LLVM_DISABLED)))
     SET(DAS_LLVM_INCLUDED TRUE)
     MESSAGE(STATUS "dasLlvm module included.")
+	MESSAGE(STATUS "LLVM found at: ${LLVM_INSTALL_PREFIX}")
 
 	SET(DAS_LLVM_DIR ${PROJECT_SOURCE_DIR}/modules/dasLLVM)
-	SET(LIBCLANG_INCLUDE ${PATH_TO_LIBCLANG}/include)
-	SET(LIBCLANG_LIB ${PATH_TO_LIBCLANG}/lib)
-
-	MESSAGE("LIBCLANG_INCLUDE at ${LIBCLANG_INCLUDE}")
-	MESSAGE("LIBCLANG_LIB at ${LIBCLANG_LIB}")
 
     LIST(APPEND CMAKE_MODULE_PATH ${DAS_LLVM_DIR})
 
@@ -131,68 +119,38 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 	ADD_MODULE_DAS(llvm daslib llvm_jit_intrin)
 	ADD_MODULE_DAS(llvm daslib llvm_jit_common)
 	ADD_LIBRARY(libDasModuleLlvm ${DAS_LLVM_MODULE_SRC} ${DAS_LLVM_MODULE_PLATFORM_SRC})
-	IF(APPLE)
-		find_package(ZSTD REQUIRED)
-		find_package(ZLIB REQUIRED)
-		find_library(Terminfo_LIBRARIES NAMES terminfo tinfo curses ncurses ncursesw)
-		file(GLOB LLVM_LIB_SRC_A
-			${LIBCLANG_LIB}/*.a
-		)
-		TARGET_LINK_LIBRARIES(libDasModuleLlvm ${LLVM_LIBRARIES}
-			${LIBCLANG_LIB}/libLTO.dylib
-			${LIBCLANG_LIB}/libRemarks.dylib
-			${LLVM_LIB_SRC_A}
-			${zstd_STATIC_LIBRARY}
-			${ZLIB_LIBRARY}
-			${Terminfo_LIBRARIES}
-		)
-	ELSEIF(UNIX)
-		file(GLOB LLVM_LIB_SRC_A
-			${LIBCLANG_LIB}/*.a
-		)
-		TARGET_LINK_LIBRARIES(libDasModuleLlvm ${LLVM_LIBRARIES}
-			${LIBCLANG_LIB}/libLTO.so
-			${LIBCLANG_LIB}/libRemarks.so
-			${LLVM_LIB_SRC_A}
-		)
-#		find_package(ZSTD REQUIRED)
-		SET(LLVM_DIR ${PATH_TO_LIBCLANG}/LIB/CMAKE/LLVM)
-		find_package(LLVM REQUIRED CONFIG)
-		link_directories("${LIBCLANG_LIB}")
-		target_link_libraries(libDasModuleLlvm "LLVMSupport;LLVMCore;LLVMIRReader")
-	ELSEIF(WIN32)
-		TARGET_LINK_LIBRARIES(libDasModuleLlvm ${LLVM_LIBRARIES}
-			${LIBCLANG_LIB}/LLVM-C.lib
-			${LIBCLANG_LIB}/Remarks.lib
-			${LIBCLANG_LIB}/LTO.lib
-		)
+
+	IF(WIN32)
+		TARGET_LINK_LIBRARIES(libDasModuleLlvm PUBLIC LLVM-C LTO Remarks)
+	ELSE()
+		TARGET_LINK_LIBRARIES(libDasModuleLlvm PUBLIC LLVM LTO Remarks)
 	ENDIF()
 	# ADD_DEPENDENCIES(libDasModuleLlvm)
-	TARGET_INCLUDE_DIRECTORIES(libDasModuleLlvm PUBLIC ${LLVM_INCLUDE_DIR} ${LIBCLANG_INCLUDE})
+	TARGET_INCLUDE_DIRECTORIES(libDasModuleLlvm PUBLIC ${LLVM_INCLUDE_DIRS})
 
 
 IF(WIN32)
 	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
     	COMMAND ${CMAKE_COMMAND} -E copy_if_different
-	        "${PATH_TO_LIBCLANG}/bin/LLVM-C.dll"
+	        "${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll"
     	    "${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LLVM-C.dll")
 	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PATH_TO_LIBCLANG}/bin/LTO.dll"
+		"${LLVM_INSTALL_PREFIX}/bin/LTO.dll"
 		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LTO.dll")
 	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PATH_TO_LIBCLANG}/bin/Remarks.dll"
+		"${LLVM_INSTALL_PREFIX}/bin/Remarks.dll"
 		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/Remarks.dll")
 		add_custom_command(TARGET libDasModuleLlvm POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PATH_TO_LIBCLANG}/bin/libclang.dll"
+		"${LLVM_INSTALL_PREFIX}/bin/libclang.dll"
 		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/libclang.dll")
 	set(DAS_CLANG_DLLS
-		${PATH_TO_LIBCLANG}/bin/LLVM-C.dll
-		${PATH_TO_LIBCLANG}/bin/LTO.dll
-		${PATH_TO_LIBCLANG}/bin/Remarks.dll
-		${PATH_TO_LIBCLANG}/bin/libclang.dll
+		${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll
+		${LLVM_INSTALL_PREFIX}/bin/LTO.dll
+		${LLVM_INSTALL_PREFIX}/bin/Remarks.dll
+		${LLVM_INSTALL_PREFIX}/bin/libclang.dll
 	)
 	install(FILES ${DAS_CLANG_DLLS}
         DESTINATION ${DAS_INSTALL_BINDIR}
