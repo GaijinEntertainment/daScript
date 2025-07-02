@@ -4,7 +4,7 @@ require daslib/templates_boost
 
 [export]
 def main {
-    var q <- qmacro_block <| $() {
+    var inscope q <- qmacro_block <| $() {
         let x = 10
         print("x = {x+1}")
         if (x != 10) {

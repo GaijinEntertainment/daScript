@@ -130,8 +130,8 @@ def gen_map_texture(var bmin, bmax : float3; _step : float2 = SDF_STEP) {
 
     if (!GEN_IN_SOFTWARE) {
         glUseProgram(map_program)
-        c_sdf := t3d
-        c_sdf_color := t3d_color
+        c_sdf := image3D(texture3D = t3d)
+        c_sdf_color := image3D(texture3D = t3d_color)
         map_effect_bind_uniform(map_program)
         glDispatchCompute(c_disp_size.x, c_disp_size.y, c_disp_size.z)
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
@@ -467,7 +467,7 @@ def main {
         glUseProgram(program)
         f_CameraNearFar = float2(0.05f, 50.0f)
         f_PixelSize = float2(1.) / float2(display_w, display_h)
-        let v_view = camera_rotation(camera_rotation_xy) * compose(float3(-camera_position, 1.), float4(0), float3(1.))
+        let v_view = camera_rotation(camera_rotation_xy) * compose(-camera_position, float4(0), float3(1.))
         let v_projection = perspective_rh_opengl(45.0f * PI / 180., aspect, f_CameraNearFar.x, f_CameraNearFar.y)
         f_Camera2World = inverse(v_projection * v_view)
         t_sdf.texture3D := t3d
