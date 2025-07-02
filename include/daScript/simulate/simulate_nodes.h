@@ -1033,6 +1033,10 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_FastCall ( const LineInfo & at ) : SimNode_FastCallAny(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
+            if ( context.fastCallDepth * sizeof(Prologue) > context.stack.free_size() ) {
+                context.throw_error_at(debugInfo, "stack overflow, fast call depth limit exceeded while calling %s", fnPtr->mangledName);
+            }
+            context.fastCallDepth ++;
             vec4f argValues[argCount ? argCount : 1];
             EvalBlock<argCount>::eval(context, arguments, argValues);
             auto aa = context.abiArg;
@@ -1040,11 +1044,16 @@ SIM_NODE_AT_VECTOR(Float, float)
             auto res = fnPtr->code->eval(context);
             context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
             context.abiArg = aa;
+            context.fastCallDepth --;
             return res;
         }
 #define EVAL_NODE(TYPE,CTYPE)\
         virtual CTYPE eval##TYPE ( Context & context ) override {                               \
-                DAS_PROFILE_NODE \
+                DAS_PROFILE_NODE                                                                \
+                if ( context.fastCallDepth * sizeof(Prologue) > context.stack.free_size() ) {   \
+                    context.throw_error_at(debugInfo, "stack overflow, fast call depth limit exceeded while calling %s", fnPtr->mangledName); \
+                }                                                                               \
+                context.fastCallDepth ++;                                                       \
                 vec4f argValues[argCount ? argCount : 1];                                       \
                 EvalBlock<argCount>::eval(context, arguments, argValues);                       \
                 auto aa = context.abiArg;                                                       \
@@ -1052,6 +1061,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 auto res = EvalTT<CTYPE>::eval(context, fnPtr->code);                           \
                 context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue); \
                 context.abiArg = aa;                                                            \
+                context.fastCallDepth --;                                                       \
                 return res;                                                                     \
         }
         DAS_EVAL_NODE
