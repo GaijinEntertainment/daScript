@@ -451,6 +451,7 @@ namespace das
         __forceinline void restart( ) {
             DAS_ASSERTF(insideContext==0,"can't reset locked context");
             stopFlags = 0;
+            fastCallDepth = 0;
             exception = nullptr;
             last_exception = nullptr;
         }
