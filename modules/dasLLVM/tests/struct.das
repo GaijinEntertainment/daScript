@@ -49,6 +49,11 @@ def make_struct_cmres {
     return Foo(a = 1, c = "bar")
 }
 
+// [jit]
+// def make_struct_with_block {
+//     return Foo(a = 1, c = "bar") <| $(var f) { f.a = 2; }
+// }
+
 [jit]
 def make_struct_cmres_with_init {
     return Foo(a = 1, c = "bar")
@@ -250,6 +255,14 @@ def test_struct(t : T?) {
         t |> equal("bar", f.c)
         t |> equal(0, f.d)
     }
+    // t |> run("make struct with block") <| @(t : T?) {
+    //     var f = make_struct_with_block()
+    //     t |> success(is_jit_function(@@make_struct_with_block))
+    //     t |> equal(2,     f.a)
+    //     t |> equal(0.0,   f.b)
+    //     t |> equal("bar", f.c)
+    //     t |> equal(0,     f.d)
+    // }
     t |> run("make struct heap with init") <| @(t : T?) {
         var f = make_struct_heap_with_init()
         t |> success(is_jit_function(@@make_struct_heap_with_init))
