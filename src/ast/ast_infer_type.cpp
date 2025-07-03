@@ -3458,10 +3458,17 @@ namespace das {
                         }
                         if ( valueType ) {
                             bool allOtherInferred = true;   // we check, if all other arguments inferred
-                            for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
-                                if ( !expr->arguments[i]->type ) {
-                                    allOtherInferred = false;
-                                    break;
+                            if ( !value->type || value->type->isAliasOrExpr() ) {
+                                allOtherInferred = false;
+                            } else {
+                                for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
+                                    if ( !expr->arguments[i]->type ) {
+                                        allOtherInferred = false;
+                                        break;
+                                    } else if ( expr->arguments[i]->type->isAliasOrExpr() ) {
+                                        allOtherInferred = false;
+                                        break;
+                                    }
                                 }
                             }
                             if ( allOtherInferred ) {
