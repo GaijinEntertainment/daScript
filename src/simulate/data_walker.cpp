@@ -68,11 +68,11 @@ namespace das {
                 auto fa = getTypeAlign(vi) - 1;
                 fieldOffset = (fieldOffset + fa) & ~fa;
                 char * pf = ps + fieldOffset;
-                beforeTupleEntry(ps, ti, pf, vi, last);
+                beforeTupleEntry(ps, ti, pf, i, last);
                 if ( cancel() ) return;
                 walk(pf, vi);
                 if ( cancel() ) return;
-                afterTupleEntry(ps, ti, pf, vi, last);
+                afterTupleEntry(ps, ti, pf, i, last);
                 if ( cancel() ) return;
                 fieldOffset += vi->size;
             }

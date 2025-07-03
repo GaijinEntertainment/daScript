@@ -338,20 +338,20 @@ public:
   __forceinline Func get_beforeTupleEntry ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeTupleEntry]);
   }
-  __forceinline void invoke_beforeTupleEntry ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti, void * const  pv, TypeInfo const  & vi, bool last ) const {
+  __forceinline void invoke_beforeTupleEntry ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti, void * const  pv, int32_t idx, bool last ) const {
     das_invoke_function<void>::invoke
-      <void *,void * const ,TypeInfo const  &,void * const ,TypeInfo const  &,bool>
+      <void *,void * const ,TypeInfo const  &,void * const ,int32_t,bool>
         (__context__,nullptr,__funcCall__,
-          self,ps,ti,pv,vi,last);
+          self,ps,ti,pv,idx,last);
   }
   __forceinline Func get_afterTupleEntry ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterTupleEntry]);
   }
-  __forceinline void invoke_afterTupleEntry ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti, void * const  pv, TypeInfo const  & vi, bool last ) const {
+  __forceinline void invoke_afterTupleEntry ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti, void * const  pv, int32_t idx, bool last ) const {
     das_invoke_function<void>::invoke
-      <void *,void * const ,TypeInfo const  &,void * const ,TypeInfo const  &,bool>
+      <void *,void * const ,TypeInfo const  &,void * const ,int32_t,bool>
         (__context__,nullptr,__funcCall__,
-          self,ps,ti,pv,vi,last);
+          self,ps,ti,pv,idx,last);
   }
   __forceinline Func get_beforeVariant ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeVariant]);

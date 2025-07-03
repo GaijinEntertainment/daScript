@@ -90,10 +90,10 @@ namespace das {
             ss << "]]";
             br();
         }
-        virtual void beforeTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool ) override {
+        virtual void beforeTupleEntry ( char *, TypeInfo *, char *, int, bool ) override {
             ss << " ";
         }
-        virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool last ) override {
+        virtual void afterTupleEntry ( char *, TypeInfo *, char *, int, bool last ) override {
             if ( !last ) {
                 ss << ";";
             }

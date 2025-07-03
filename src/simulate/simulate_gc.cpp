@@ -479,17 +479,10 @@ namespace das
         virtual void afterTuple ( char *, TypeInfo * ) override {
             popRange();
         }
-        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, TypeInfo * vi, bool ) override {
-            uint32_t VI = -1u;
-            for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
-                if ( ti->argTypes[i]==vi ) {
-                    VI = i;
-                    break;
-                }
-            }
-            history.push_back(to_string(VI));
+        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, int idx, bool ) override {
+            history.push_back(to_string(static_cast<uint32_t>(idx)));
         }
-        virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool ) override {
+        virtual void afterTupleEntry ( char *, TypeInfo *, char *, int, bool ) override {
             history.pop_back();
         }
         virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t index, bool ) override {
@@ -568,9 +561,9 @@ namespace das
                     auto fa = getTypeAlign(vi) - 1;
                     fieldOffset = (fieldOffset + fa) & ~fa;
                     char * pf = ps + fieldOffset;
-                    beforeTupleEntry(ps, ti, pf, vi, last);
+                    beforeTupleEntry(ps, ti, pf, i, last);
                     walk(pf, vi);
-                    afterTupleEntry(ps, ti, pf, vi, last);
+                    afterTupleEntry(ps, ti, pf, i, last);
                     fieldOffset += vi->size;
                 }
                 afterTuple(ps, ti);

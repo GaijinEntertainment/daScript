@@ -121,18 +121,10 @@ namespace das {
         virtual void afterTuple ( char *, TypeInfo * ) override {
             ss << "}";
         }
-        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, TypeInfo * vi, bool ) override {
-            // TODO: we can actuallyss this, right?
-            int32_t idx = -1u;
-            for ( int32_t i=0, is=ti->argCount; i!=is; ++i ) {
-                if ( ti->argTypes[i]==vi ) {
-                    idx = i;
-                    break;
-                }
-            }
+        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, int idx, bool ) override {
             ss << "\"_" << idx << "\":";
         }
-        virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool last ) override {
+        virtual void afterTupleEntry ( char *, TypeInfo *, char *, int, bool last ) override {
             if ( !last ) ss << ",";
         }
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
