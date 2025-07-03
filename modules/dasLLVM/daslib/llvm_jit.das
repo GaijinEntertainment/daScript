@@ -3503,7 +3503,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
 // ExprInvoke
-    def override canVisitLooksLikeCallArgument(expr : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) : bool {
+    def override canVisitExprLooksLikeCallArgument(expr : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) : bool {
         if (expr is ExprInvoke) {
             if (length(expr.arguments) >= 1 && expr.arguments[0] == arg && (expr as ExprInvoke).isInvokeMethod) {
                 return false
