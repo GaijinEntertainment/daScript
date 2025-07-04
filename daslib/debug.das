@@ -406,7 +406,7 @@ class DAWalker : DapiDataWalker {
         let n = length(varsStack)
         if (n > 0) {
             var v & = unsafe(varsStack[n - 1])
-            let vi = ti.argTypes[idx]
+            let vi = unsafe(ti.argTypes[idx])
             *v.children |> emplace(DAVariable(uid = frame.varId++, name = "{tupleIndex++}", _type = describe(vi), address = intptr(pv), size = vi.size))
             unsafe {
                 varsStack |> push(addr((*v.children)[length(*v.children) - 1]))
@@ -414,13 +414,13 @@ class DAWalker : DapiDataWalker {
         }
     }
 
-    def override afterTupleEntry(ps : void?; ti : TypeInfo; pv : void?; vi : TypeInfo; last : bool) : void {
+    def override afterTupleEntry(ps : void?; ti : TypeInfo; pv : void?; idx : int; last : bool) : void {
         let n = length(varsStack)
         if (n > 0) {
             var v & = unsafe(varsStack[n - 1])
             if (v.children == null) {
                 unsafe {
-                    v.value = sprint_data_fast(pv, addr(vi), print_flags_debug)
+                    v.value = sprint_data_fast(pv, ti.argTypes[idx], print_flags_debug)
                 }
             }
             if (empty(v.value)) {
