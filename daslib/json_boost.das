@@ -201,6 +201,13 @@ class private JsonReader : AstReaderMacro {
     }
 }
 
+def from_JV(v : JsonValue const explicit?; ent : auto(TT)?; defV : TT? = null) : TT? {
+    if (v == null) {
+        return defV
+    }
+    return new TT(_::from_JV(v, type<TT>))
+}
+
 [expect_any_enum(ent), template(ent)]
 def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = default<EnumT>) : EnumT {
     //! Parse a JSON value and return the corresponding native value.
