@@ -665,12 +665,12 @@ def get(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : bl
 
 // same get with []
 
-def get(Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : block<(p : valT[typeinfo dim(Tab[type<keyT>])]#&) : void>) {
+def get(Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : block<(p : valT[typeinfo dim_table_value(Tab)]#&) : void>) {
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)
         unsafe {
-            invoke(blk, *(reinterpret<valT[typeinfo dim(Tab[type<keyT>])]?#> val))
+            invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val))
         }
         __builtin_table_unlock(Tab)
         return true
@@ -679,12 +679,12 @@ def get(Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : blo
     }
 }
 
-def get(Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : block<(p : valT[typeinfo dim(Tab[type<keyT>])]&) : void>) {
+def get(Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : block<(p : valT[typeinfo dim_table_value(Tab)]&) : void>) {
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)
         unsafe {
-            invoke(blk, *(reinterpret<valT[typeinfo dim(Tab[type<keyT>])]?> val))
+            invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val))
         }
         __builtin_table_unlock(Tab)
         return true
@@ -693,12 +693,12 @@ def get(Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : bloc
     }
 }
 
-def get(var Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : block<(var p : valT[typeinfo dim(Tab[type<keyT>])]#&) : void>) {
+def get(var Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : block<(var p : valT[typeinfo dim_table_value(Tab)]#&) : void>) {
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)
         unsafe {
-            invoke(blk, *(reinterpret<valT[typeinfo dim(Tab[type<keyT>])]?#> val))
+            invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val))
         }
         __builtin_table_unlock(Tab)
         return true
@@ -707,12 +707,12 @@ def get(var Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk :
     }
 }
 
-def get(var Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : block<(var p : valT[typeinfo dim(Tab[type<keyT>])]&) : void>) {
+def get(var Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : block<(var p : valT[typeinfo dim_table_value(Tab)]&) : void>) {
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
         __builtin_table_lock(Tab)
         unsafe {
-            invoke(blk, *(reinterpret<valT[typeinfo dim(Tab[type<keyT>])]?> val))
+            invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val))
         }
         __builtin_table_unlock(Tab)
         return true
@@ -753,7 +753,7 @@ def get_value(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT {
 }
 
 [unused_argument(Tab, at)]
-def get_value(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #) : valT[typeinfo dim(Tab[type<keyT> ])] {
+def get_value(var Tab : table<auto(keyT); auto(valT)[]>; at : keyT | #) : valT[typeinfo dim_table_value(Tab)] {
     static_if (typeinfo is_void(type<valT>)) {
         concept_assert(false, "can't get value, which is void")
         return type<valT>
@@ -1042,7 +1042,7 @@ def move_to_local(var a : auto(TT)&) : TT -const -& {
 }
 
 [skip_lock_check]
-def clone(clone_src : auto(TT) | #) : TT -const -# {
+def clone(clone_src : auto(TT) ==const | #) : TT -const -# {
     unsafe {
         var clone_dest : TT -#
         clone_dest := clone_src
@@ -1051,7 +1051,25 @@ def clone(clone_src : auto(TT) | #) : TT -const -# {
 }
 
 [skip_lock_check]
-def clone_to_move(clone_src : auto(TT) | #) : TT -const -# {
+def clone(var clone_src : auto(TT) ==const | #) : TT -const -# {
+    unsafe {
+        var clone_dest : TT -#
+        clone_dest := clone_src
+        return <- clone_dest
+    }
+}
+
+[skip_lock_check]
+def clone_to_move(clone_src : auto(TT) ==const | #) : TT -const -# {
+    unsafe {
+        var clone_dest : TT -#
+        clone_dest := clone_src
+        return <- clone_dest
+    }
+}
+
+[skip_lock_check]
+def clone_to_move(var clone_src : auto(TT) ==const | #) : TT -const -# {
     unsafe {
         var clone_dest : TT -#
         clone_dest := clone_src
@@ -1107,18 +1125,57 @@ def clone(var a : table<string>; b : table<string> | #) {
     }
 }
 
-def clone(var a : table<auto(KT); auto(VT)>; b : table<KT; VT> | #) {
+def clone(var a : table<auto(KT); auto(VT)>; b : table<KT; VT> ==const | #) {
     clear(a)
     for (k, v in keys(b), values(b)) {
         unsafe(a[k]) := v
     }
 }
 
-def clone(var a : table<string; auto(VT)>; b : table<string; VT> | #) {
+def clone(var a : table<auto(KT); auto(VT)>; var b : table<KT; VT> ==const | #) {
+    clear(a)
+    for (k, v in keys(b), values(b)) {
+        unsafe(a[k]) := v
+    }
+}
+
+def clone(var a : table<string; auto(VT)>; b : table<string; VT> ==const | #) {
     clear(a)
     for (k, v in keys(b), values(b)) {
         let kk := k
         unsafe(a[kk]) := v
+    }
+}
+
+def clone(var a : table<string; auto(VT)>; var b : table<string; VT> ==const | #) {
+    clear(a)
+    for (k, v in keys(b), values(b)) {
+        let kk := k
+        unsafe(a[kk]) := v
+    }
+}
+
+
+def clone(var a : table<auto(KT); auto(VT)[]>; b : table<KT; VT[]> | #) {
+    static_if (typeinfo dim_table_value(a) != typeinfo dim_table_value(b)) {
+        concept_assert(false, "table clone: source and destination tables must have the same value type")
+    } else {
+        clear(a)
+        for (k, v in keys(b), values(b)) {
+            unsafe(a[k]) := v
+        }
+    }
+}
+
+def clone(var a : table<string; auto(VT)[]>; b : table<string; VT[]> | #) {
+    static_if (typeinfo dim_table_value(a) != typeinfo dim_table_value(b)) {
+        concept_assert(false, "table clone: source and destination tables must have the same value type")
+    } else {
+        clear(a)
+        for (k, v in keys(b), values(b)) {
+            let kk := k
+            unsafe(a[kk]) := v
+        }
     }
 }
 
@@ -1142,7 +1199,14 @@ def clone(var args; var nargs : array<smart_ptr<auto(TT)>>) {
 }
 
 [unsafe_outside_of_for, nodiscard]
-def keys(a : table<auto(keyT); auto(valT)> | #) : iterator<keyT -const> {
+def keys(a : table<auto(keyT); auto(valT)> ==const | #) : iterator<keyT -const> {
+    var it : iterator<keyT -const>
+    __builtin_table_keys(it, a, typeinfo sizeof(type<keyT>))
+    return <- it
+}
+
+[unsafe_outside_of_for, nodiscard]
+def keys(var a : table<auto(keyT); auto(valT)> ==const | #) : iterator<keyT -const> {
     var it : iterator<keyT -const>
     __builtin_table_keys(it, a, typeinfo sizeof(type<keyT>))
     return <- it
@@ -1171,16 +1235,16 @@ def values(var a : table<auto(keyT); auto(valT)> ==const | #) : iterator<valT&> 
 }
 
 [unsafe_outside_of_for, nodiscard]
-def values(a : table<auto(keyT); auto(valT)[]> ==const | #) : iterator<valT[typeinfo dim(a[type<keyT>])]& const> {
-    var it : iterator<valT[typeinfo dim(a[type<keyT>])]& const>
-    __builtin_table_values(it, a, typeinfo sizeof(type<valT[typeinfo dim(a[type<keyT>])]>))
+def values(a : table<auto(keyT); auto(valT)[]> ==const | #) : iterator<valT[typeinfo dim_table_value(a)]& const> {
+    var it : iterator<valT[typeinfo dim_table_value(a)]& const>
+    __builtin_table_values(it, a, typeinfo sizeof(type<valT[typeinfo dim_table_value(a)]>))
     return <- it
 }
 
 [unsafe_outside_of_for, nodiscard]
-def values(var a : table<auto(keyT); auto(valT)[]> ==const | #) : iterator<valT[typeinfo dim(a[type<keyT>])]&> {
-    var it : iterator<valT[typeinfo dim(a[type<keyT>])]&>
-    __builtin_table_values(it, a, typeinfo sizeof(type<valT[typeinfo dim(a[type<keyT>])]>))
+def values(var a : table<auto(keyT); auto(valT)[]> ==const | #) : iterator<valT[typeinfo dim_table_value(a)]&> {
+    var it : iterator<valT[typeinfo dim_table_value(a)]&>
+    __builtin_table_values(it, a, typeinfo sizeof(type<valT[typeinfo dim_table_value(a)]>))
     return <- it
 }
 

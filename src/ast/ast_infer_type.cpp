@@ -856,7 +856,6 @@ namespace das {
             if (!passType) {
                 return false;
             }
-            DAS_ASSERTF(passType->dimExpr.size(),"internal error. passType has [expr] which has not resolved. this should be checked outside of the inferFunctionCall");
             if ( argType->explicitConst && (argType->constant != passType->constant) ) {    // explicit const mast match
                 return false;
             }
@@ -3934,6 +3933,29 @@ namespace das {
                         return make_smart<ExprConstInt>(expr->at, expr->typeexpr->dim[0]);
                     } else {
                         error("typeinfo(dim non_array) is prohibited, " + describeType(expr->typeexpr), "", "",
+                              expr->at,CompilationError::typeinfo_dim);
+                    }
+                } else if ( expr->trait=="dim_table_value" ) {
+                    if ( !expr->typeexpr->isGoodTableType() ) {
+                        error("typeinfo(dim_table_value " + describeType(expr->typeexpr) + ") is not a table type", "", "",
+                            expr->at, CompilationError::type_not_found);
+                        return Visitor::visit(expr);
+                    }
+                    if ( !expr->typeexpr->secondType ) {
+                        error("typeinfo(dim_table_value " + describeType(expr->typeexpr) + ") is not a table type with value", "", "",
+                            expr->at, CompilationError::type_not_found);
+                        return Visitor::visit(expr);
+                    }
+                    if ( expr->typeexpr->secondType->isExprTypeAnywhere() ) {
+                        error("typeinfo(dim_table_value " + describeType(expr->typeexpr->secondType) + ") is not fully inferred, expecting resolved dim",  "", "",
+                            expr->at, CompilationError::type_not_found);
+                        return Visitor::visit(expr);
+                    }
+                    if ( expr->typeexpr->secondType->dim.size() ) {
+                        reportAstChanged();
+                        return make_smart<ExprConstInt>(expr->at, expr->typeexpr->secondType->dim[0]);
+                    } else {
+                        error("typeinfo(dim_table_value table<...,non_array>) is prohibited, " + describeType(expr->typeexpr), "", "",
                               expr->at,CompilationError::typeinfo_dim);
                     }
                 } else if ( expr->trait=="is_any_vector" ) {
