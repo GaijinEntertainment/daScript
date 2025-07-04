@@ -306,6 +306,18 @@ def public any_uint(var faker : Faker) : string {
     return re_gen(re_uint, faker.rnd)
 }
 
+def public any_enum(var faker : Faker, enum_value : auto(TT)) : TT {
+    //! Generates random enumeration value.
+    var inscope values : array<TT -const>
+    for (v in each_enum(enum_value)) {
+        values |> push(v)
+    }
+    var idx = 0u
+    faker.rnd |> next(idx)
+    idx = idx % uint(length(values))
+    return values[idx]
+}
+
 def public month(var faker : Faker) {
     //! Generates random month string.
     var month = 0u

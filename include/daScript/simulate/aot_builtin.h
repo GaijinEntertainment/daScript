@@ -174,16 +174,4 @@ namespace das {
     void builtin_main_loop ( const TBlock<bool> & block, Context * context, LineInfoArg * at );
 
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
-    inline uint64_t _builtin_hash_int8 ( int8_t value ) { return hash_uint32(uint32_t(value)); }
-    inline uint64_t _builtin_hash_uint8 ( uint8_t value ) { return hash_uint32(uint32_t(value)); }
-    inline uint64_t _builtin_hash_int16 ( int16_t value ) { return hash_uint32(uint32_t(value)); }
-    inline uint64_t _builtin_hash_uint16 ( uint16_t value ) { return hash_uint32(uint32_t(value)); }
-    inline uint64_t _builtin_hash_int32 ( int32_t value ) { return hash_uint32(value); }
-    inline uint64_t _builtin_hash_uint32 ( uint32_t value ) { return hash_uint32(value); }
-    inline uint64_t _builtin_hash_int64 ( int64_t value ) { return hash_uint64(value); }
-    inline uint64_t _builtin_hash_uint64 ( uint64_t value ) { return hash_uint64(value); }
-    inline uint64_t _builtin_hash_ptr ( void * value ) { return hash_uint64(uint64_t(value)); }
-    inline uint64_t _builtin_hash_float ( float value ) { return hash_uint32(*((uint32_t *)&value)); }
-    inline uint64_t _builtin_hash_double ( double value ) { return hash_uint64(*((uint64_t *)&value)); }
-    inline uint64_t _builtin_hash_das_string ( const string & str ) { return hash_blockz64((uint8_t *)str.c_str()); }
 }
