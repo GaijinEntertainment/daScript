@@ -1,0 +1,243 @@
+name: Release
+
+# Run only on tags and release publish
+on:
+  # push:
+  # pull_request:
+  # workflow_dispatch:
+  push:
+    tags:
+      - '*'
+  release:
+    types: prereleased
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  ###########################################################
+  pre_job:
+    ###########################################################
+    # continue-on-error: true # Uncomment once integration is finished
+    runs-on: ubuntu-latest
+    # Map a step output to a job output
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          # All of these options are optional, so you can remove them if you are happy with the defaults
+          concurrent_skipping: 'same_content'
+          do_not_skip: '["pull_request", "workflow_dispatch", "release"]'
+
+  ###########################################################
+  build:
+    ###########################################################
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux, darwin, darwin13, windows]
+        architecture: [32, 64]
+        cmake_preset: [ Release ]
+
+        include:
+          - target: linux
+            runner: ubuntu-latest
+            archive_ext: tar.gz
+
+          - target: darwin
+            runner: macos-latest # arm64
+            architecture_string: arm64
+            archive_ext: tar.gz
+
+          - target: darwin13
+            runner: macos-13 # x64
+            architecture_string: x86_64
+            archive_ext: tar.gz
+
+          - target: windows
+            runner: windows-latest
+            archive_ext: zip
+
+          - target: windows
+            build_system: cmake
+            cmake_generator: Visual Studio 17 2022
+
+          - target: darwin
+            build_system: cmake
+            cmake_generator: Ninja
+
+          - target: darwin13
+            build_system: cmake
+            cmake_generator: Ninja
+
+          - target: linux
+            build_system: cmake
+            cmake_generator: Ninja
+
+          - target: windows
+            architecture: 32
+            architecture_string: Win32
+
+          - target: windows
+            architecture: 64
+            architecture_string: x64
+
+        exclude:
+          - target: darwin
+            architecture: 32
+
+          - target: darwin13
+            architecture: 32
+
+          - target: linux
+            architecture: 32
+
+    steps:
+      - name: "SCM Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1 # need nasm for openssl
+
+      - name: "Install: Required Dev Packages"
+        run: |
+          set -eux
+          case "${{ matrix.target }}${{ matrix.architecture }}" in
+            linux64)
+              echo "MARCH=64" >> $GITHUB_ENV
+              sudo apt-get update -y
+              sudo apt-get install --no-install-recommends -y \
+                libatomic-ops-dev \
+                libglu1-mesa-dev \
+                freeglut3-dev \
+                mesa-common-dev \
+                libglfw3-dev \
+                libfreetype6-dev \
+                libudev-dev \
+                libopenal-dev \
+                libvorbis-dev \
+                libflac-dev \
+                libclang-dev \
+                libx11-dev \
+                libxrandr-dev \
+                libxcursor-dev \
+                libxinerama-dev \
+                libxi-dev
+              ;;
+            darwin1364)
+              brew install bison
+              echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
+              export LDFLAGS="-L/usr/local/opt/bison/lib"
+
+              brew install llvm@16 # install llvm for module dasLLVM
+              echo "/usr/local/opt/llvm@16/bin" >> $GITHUB_PATH # Add llvm to path
+              echo "LLVM_DIR=/usr/local/opt/llvm@16/lib/cmake/llvm" >> $GITHUB_ENV  # Help cmake
+              ;;
+            darwin64)
+              brew install bison
+              echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
+              export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
+
+              brew install llvm@16 # install llvm for module dasLLVM
+              echo "/opt/homebrew/opt/llvm@16/bin" >> $GITHUB_PATH # Add llvm to path
+              echo "LLVM_DIR=/opt/homebrew/opt/llvm@16/lib/cmake/llvm" >> $GITHUB_ENV  # Help cmake
+              ;;
+          esac
+
+      - name: "Install libclang windows"
+        if: runner.os == 'Windows'
+        run: |
+          curl -L -o llvm.7z "https://github.com/aleksisch/llvm-windows-prebuilt/releases/download/v1.0.0/win${{ matrix.architecture == 32 && '32' || '64' }}.zip"
+          7z x llvm.7z -o./modules/temp_llvm -y
+          cp -RT ./modules/temp_llvm/win*/ ./modules/libclang/
+          rm -rf ./modules/temp_llvm
+      - name: "Install libclang linux"
+        if: runner.os == 'Linux'
+        run: |
+          # Add LLVM repository
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-16 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          
+          # Install packages
+          sudo apt-get update
+          sudo apt-get install -y libclang-16-dev clang-16
+          
+          # Update linker cache
+          sudo ldconfig
+
+      - name: "Clone submodules"
+        run: |
+          git submodule update --init --recursive $(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f1 | sed 's|^|modules/|' | xargs)
+      - name: "Build: Daslang Linux with modules"
+        if: runner.os != 'Windows'
+        run: |
+          set -eux
+          mkdir build
+          ACTIVE_MODULES=$(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f2 | sed 's|^|-D|' | xargs)
+          case "${{ matrix.build_system }}" in
+            cmake)
+              case "${{ matrix.target }}${{ matrix.architecture }}" in
+                linux64)
+                  cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
+                    -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
+                  cd build
+                  ninja daslang
+                  ;;
+                *)
+                  export CXXFLAGS="-Wno-elaborated-enum-base" # glfw module fails due to mac-os includes
+
+                  CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
+                    -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+                    -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
+
+                  cd build
+                  ninja daslang
+                  ;;
+              esac
+              ;;
+          esac
+
+      - name: "Build: Daslang Windows with modules"
+        if: runner.os == 'Windows'
+        run: |
+          set -eux
+          mkdir build
+          export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
+          LIBCLANG_PATH=$(echo "$GITHUB_WORKSPACE" | sed 's/\\/\//g')/modules/libclang # It should be absolute path with no backslashes
+          ACTIVE_MODULES=$(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f2 | sed 's|^|-D|' | xargs)
+          case "${{ matrix.build_system }}" in
+            cmake)
+              cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=${{ matrix.architecture == 32 && 'x86' || 'x64' }} -A ${{ matrix.architecture_string }} \
+                $ACTIVE_MODULES -DPATH_TO_LIBCLANG="$LIBCLANG_PATH"
+              cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
+              ;;
+          esac
+
+      - name: "Install binaries"
+        if: matrix.cmake_preset == 'Release'
+        shell: bash
+        run: |
+          mkdir daslang_bundle
+          mkdir artifacts
+          cmake --install ./build --prefix ./daslang_bundle --config ${{ matrix.cmake_preset }}
+          7z a artifacts/daslang-bundle-${{ matrix.target }}-${{ matrix.architecture }}.zip ./daslang_bundle
+      - name: "Create release"
+        if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased') && matrix.cmake_preset == 'Release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: artifacts/daslang-bundle-${{ matrix.target }}-${{ matrix.architecture }}.zip
+          asset_name: daslang-bundle-${{ matrix.target }}-${{ matrix.architecture }}.zip
+          asset_content_type: application/zip
