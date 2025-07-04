@@ -151,8 +151,8 @@ def generate_wrapper(var gen : ParserGenerator) {
             parser.tabs++
         }
 
-        if (parser.$f(cache_table) |> key_exists(parser.index) && !parser.error_reporting) {
-            var result := parser.$f(cache_table)[parser.index]
+        if (parser.$f(cache_table) |> key_exists(parser.index) && !parser.error_reporting) { unsafe {
+            var result := parser.$f(cache_table)?[parser.index]
 
             if ($v(gen.tracing)) {
                 parser |> log_info <| "Got result from cache {$v(cache_table)} {parser.index}"
@@ -163,8 +163,8 @@ def generate_wrapper(var gen : ParserGenerator) {
                 parser.index = result.endpos
             }
 
-            return <- result
-        }
+            return <- *result
+        }}
 
         var result <- $c(inner_parsing_fun)(parser)
         unsafe(parser.$f(cache_table)[mark]) := result
