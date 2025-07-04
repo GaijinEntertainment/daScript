@@ -53,10 +53,12 @@ jobs:
 
           - target: darwin
             runner: macos-latest # arm64
+            architecture_string: arm64
             archive_ext: tar.gz
 
           - target: darwin13
             runner: macos-13 # x64
+            architecture_string: x86_64
             archive_ext: tar.gz
 
           - target: windows
@@ -178,7 +180,7 @@ jobs:
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               *)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
                 cd build
                 ninja daslang
                 ninja

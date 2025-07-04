@@ -53,10 +53,12 @@ jobs:
 
           - target: darwin
             runner: macos-latest # arm64
+            architecture_string: arm64
             archive_ext: tar.gz
 
           - target: darwin13
             runner: macos-13 # x64
+            architecture_string: x86_64
             archive_ext: tar.gz
 
           - target: windows
@@ -194,7 +196,7 @@ jobs:
                 *)
                   export CXXFLAGS="-Wno-elaborated-enum-base" # glfw module fails due to mac-os includes
 
-                  CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.target == 'darwin' && 'arm64' || 'x86_64' }}" \
+                  CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
                     -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
                     -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
 
