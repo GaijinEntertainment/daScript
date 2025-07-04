@@ -856,7 +856,7 @@ namespace das {
             if (!passType) {
                 return false;
             }
-            DAS_ASSERT(passType->dimExpr.size(),"internal error. passType has [expr] which has not resolved. this should be checked outside of the inferFunctionCall");
+            DAS_ASSERTF(passType->dimExpr.size(),"internal error. passType has [expr] which has not resolved. this should be checked outside of the inferFunctionCall");
             if ( argType->explicitConst && (argType->constant != passType->constant) ) {    // explicit const mast match
                 return false;
             }
