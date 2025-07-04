@@ -1,26 +1,32 @@
+options gen2
 expect 30304:4, 30305:2, 30301:2 // , 30308
 
 require _module_b
 
-var
+var {
     global_1 = "local"
     global_3 = "local"
     global_4 = "local"
+}
 
-def fun_1
+def fun_1 {
     return "local"
+}
 
-def fun_3
+def fun_3 {
     return "local"
+}
 
-def fun_4
+def fun_4 {
     return "local"
+}
 
-def fun_5
+def fun_5 {
     return "local"
+}
 
 [export]
-def test
+def test {
 
     verify(::global_1 == "local")
     verify(module_a::global_1 == "from_a")// 30305: can't locate variable module_a::global_1, not visible
@@ -47,7 +53,8 @@ def test
     //  and needs to be stand-alone in the file, or it does not get to infer at all
     // assert(int(inA one)==1)                      // 30308: enumeraiton not found inA
 
-    assert(typeinfo(sizeof type<structInA>) == 4)    // 30301: undefined type structInA
-    assert(typeinfo(sizeof type<aliasInA>) == 4)     // 30301: undefined type aliasInA
+    assert(typeinfo sizeof(type<structInA>) == 4)    // 30301: undefined type structInA
+    assert(typeinfo sizeof(type<aliasInA>) == 4)     // 30301: undefined type aliasInA
 
     return true
+}

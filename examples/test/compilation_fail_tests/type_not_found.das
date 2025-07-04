@@ -1,5 +1,7 @@
+options gen2
 expect 30301    // type_not_found
 
-def test
+def test {
     let a : wtf
     debug(a)
+}
