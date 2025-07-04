@@ -1342,6 +1342,7 @@ namespace das {
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*tupleType);
         arg0->type->constant = false;
+        arg0->type->explicitConst = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
@@ -1349,6 +1350,7 @@ namespace das {
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*tupleType);
         arg1->type->constant = true;
+        arg1->type->explicitConst = false;
         arg1->type->ref = false;
         arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
@@ -1427,6 +1429,7 @@ namespace das {
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*variantType);
         arg0->type->constant = false;
+        arg0->type->explicitConst = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
@@ -1434,6 +1437,7 @@ namespace das {
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*variantType);
         arg1->type->constant = true;
+        arg1->type->explicitConst = false;
         arg1->type->ref = false;
         arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
@@ -1552,6 +1556,7 @@ namespace das {
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*left);
         arg0->type->constant = false;
+        arg0->type->explicitConst = false;
         arg0->type->ref = true;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
@@ -1561,6 +1566,7 @@ namespace das {
         arg1->type->constant = true;
         arg1->type->ref = false;
         arg1->type->implicit = true;
+        arg1->type->explicitConst = false;
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
         block->at = at;
