@@ -1,13 +1,16 @@
+options gen2
 expect 30501:5    // cant_dereference
 
-struct Bar
+struct Bar {
     c : int
+}
 
-struct Foo
+struct Foo {
     a : int
     b : Bar?
+}
 
-def test
+def test {
     var a : int        // can't dereference not a pointer
     debug(deref(a))
     var b : void?      // can't dereference void pointer
@@ -18,5 +21,6 @@ def test
     debug(d ?? 0)   // can't dereference void pointer
     var e : int?
     debug(e ?? 1.0) // default value type mismatch
+}
 
 
