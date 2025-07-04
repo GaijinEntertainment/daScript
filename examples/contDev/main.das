@@ -86,7 +86,7 @@ def cppTypeName(info : VarInfo) {
     if (res == "") {
         res = info.isConst ? "const " : ""
         if (info.basicType == Type.tHandle) {
-            res += string(info.annotation_or_name.name) // Why do we need cast?
+            res += string(info.annotation.name)
         } elif (info.basicType == Type.tStructure) {
             res += info.structType.name
         } else {

@@ -33,10 +33,10 @@ class EvalDataWalker : DapiStackWalker {
             *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = ")
             if (vinfo.basicType == Type.tString) {
                 *W |> write("\"")
-                *W |> write(sprint_data(arg, type_info(vinfo), default<print_flags>))
+                *W |> write(sprint_data(arg, type_info(vinfo), print_flags.singleLine))
                 *W |> write("\"")
             } else {
-                *W |> write(sprint_data(arg, type_info(vinfo), default<print_flags>))
+                *W |> write(sprint_data(arg, type_info(vinfo), print_flags.singleLine))
             }
             *W |> write("\n")
         }

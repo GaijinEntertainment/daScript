@@ -41,7 +41,7 @@ class SampleStackWalker : DapiStackWalker {
     }
     def override onArgument(info : FuncInfo; index : int; vinfo : VarInfo; arg : float4) : void {
         print("\targ {vinfo.name} ")
-        print(sprint_data(arg, type_info(vinfo), default<print_flags>))
+        print(sprint_data(arg, type_info(vinfo), print_flags.singleLine))
         print("\n")
     }
     def override onVariable(inf : FuncInfo; vinfo : LocalVariableInfo; arg : void?; inScope : bool) : void {
@@ -49,7 +49,7 @@ class SampleStackWalker : DapiStackWalker {
         if (inScope) {
             if (arg != null) {
                 // walk_data(data_walker_adapter,arg,*type_info(vinfo))
-                print(sprint_data(arg, type_info(vinfo), default<print_flags>))
+                print(sprint_data(arg, type_info(vinfo), print_flags.singleLine))
             } else {
                 print("optimized out")
             }

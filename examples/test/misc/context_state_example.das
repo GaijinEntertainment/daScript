@@ -18,14 +18,14 @@ class SampleStackWalker : DapiStackWalker {
     }
     def override onArgument(info : FuncInfo; index : int; vinfo : VarInfo; arg : float4) : void {
         print("\targ {vinfo.name} ")
-        print(sprint_data(arg, type_info(vinfo), default<print_flags>))
+        print(sprint_data(arg, type_info(vinfo), print_flags.singleLine))
         print("\n")
     }
     def override onVariable(inf : FuncInfo; vinfo : LocalVariableInfo; arg : void?; inScope : bool) : void {
         print("\tvar {vinfo.name} ")
         if (inScope) {
             if (arg != null) {
-                print(sprint_data(arg, type_info(vinfo), default<print_flags>))
+                print(sprint_data(arg, type_info(vinfo), print_flags.singleLine))
             } else {
                 print("optimized out")
             }
@@ -63,7 +63,7 @@ class SampleDebugAgent : DapiDebugAgent {
     }
     def override onVariable(var ctx : Context; category, name : string; info : TypeInfo; data : void?) : void {
         unsafe {
-            let value = sprint_data(data, addr(info), default<print_flags>)
+            let value = sprint_data(data, addr(info), print_flags.singleLine)
             print("reported {category}:{name} = {value}\n")
         }
     }
