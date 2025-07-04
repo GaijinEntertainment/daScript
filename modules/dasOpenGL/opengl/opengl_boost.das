@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 
 module opengl_boost shared
 
-require opengl public
+require opengl/opengl public
 
 require daslib/safe_addr
 require daslib/contracts

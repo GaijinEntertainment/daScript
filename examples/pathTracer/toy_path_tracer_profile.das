@@ -1,3 +1,4 @@
+options gen2
 // options log
 // options logCpp
 // options log_nodes
@@ -13,7 +14,7 @@ require daslib/random
 require daslib/math_boost
 
 [export]
-def main
+def main {
     let width = 256
     let height = 256
     let kFrameCount = 1
@@ -34,11 +35,15 @@ def main
 
     var pixels : array<uint>
     pixels |> reserve(width * height)
-    for y in range(height)
-        for x in range(width)
+    for (y in range(height)) {
+        for (x in range(width)) {
             let srgb = linear_to_SRGB(float4(backbuffer[x + (height - 1 - y) * width].xyz, 1.0f))
             pixels |> push <| RGBA_TO_UCOLOR(srgb)
+        }
+    }
     let path = "{get_das_root()}/examples/pathTracer/path_tracer.png"
-    unsafe
+    unsafe {
         stbi_write_png(path, width, height, 4, addr(pixels[0]), width * 4)
         print("image saved to {path}\n")
+    }
+}

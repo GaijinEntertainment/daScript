@@ -45,7 +45,7 @@ def main {
 def into_table(var src : array<tuple<auto(K); auto(V)>>) : table<K; V> {
     var result : table<K; V>
     for (elem in src) {
-        result[elem._0] <- elem._1
+        result.insert(elem._0, elem._1)
     }
     return <- result
 }

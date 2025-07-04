@@ -1050,7 +1050,7 @@ def allExpr(arg : int) {
     var tab <- { 1 => "one", 2 => "two" };
     erase(tab, 1);
     // ExprFind
-    find(tab, 2) <| $(argX) {
+    get(tab, 2) <| $(argX) {
         print("{argX}");
     }
     // ExprKeyExists
