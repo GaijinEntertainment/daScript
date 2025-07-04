@@ -856,6 +856,7 @@ namespace das {
             if (!passType) {
                 return false;
             }
+            DAS_ASSERT(passType->dimExpr.size(),"internal error. passType has [expr] which has not resolved. this should be checked outside of the inferFunctionCall");
             if ( argType->explicitConst && (argType->constant != passType->constant) ) {    // explicit const mast match
                 return false;
             }
@@ -6621,6 +6622,9 @@ namespace das {
             }
             if ( !expr->left->type || !expr->right->type ) {
                 return Visitor::visit(expr);
+            }
+            if ( expr->left->type->isAliasOrExpr() || expr->right->type->isAliasOrExpr() ) {
+                return Visitor::visit(expr);    // failed to infer
             }
             // lets infer clone call (and instance generic if need be)
             auto opName = "_::clone";
