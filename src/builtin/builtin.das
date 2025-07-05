@@ -583,7 +583,12 @@ def remove_value(var arr : array<auto(TT)> | #; key : TT) : bool {
 }
 
 [unused_argument(a), expect_dim(a)]
-def length(a : auto | #) : int {
+def length(a : auto ==const | #) : int {
+    return typeinfo dim(a)
+}
+
+[unused_argument(a), expect_dim(a)]
+def length(var a : auto ==const | #) : int {
     return typeinfo dim(a)
 }
 
