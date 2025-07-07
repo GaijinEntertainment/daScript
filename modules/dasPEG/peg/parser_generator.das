@@ -152,7 +152,7 @@ def generate_wrapper(var gen : ParserGenerator) {
         }
 
         if (parser.$f(cache_table) |> key_exists(parser.index) && !parser.error_reporting) {
-            var result := parser.$f(cache_table)[parser.index]
+            var result := parser.$f(cache_table)?[parser.index] ?? default<$t(return_type)>;
 
             if ($v(gen.tracing)) {
                 parser |> log_info <| "Got result from cache {$v(cache_table)} {parser.index}"

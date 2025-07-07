@@ -74,8 +74,7 @@ def public go_main {
     delete decsLiveData
     appLive = false
     unsafe {
-        var ctx <- reinterpret<smart_ptr<Context>> addr(this_context())
-        appPtr := ctx
+        appPtr <- reinterpret<smart_ptr<Context>> addr(this_context())
     }
 }
 

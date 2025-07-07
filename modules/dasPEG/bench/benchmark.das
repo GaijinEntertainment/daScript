@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options relaxed_pointer_const
 options no_aot = true
 options strict_smart_pointers = true
 

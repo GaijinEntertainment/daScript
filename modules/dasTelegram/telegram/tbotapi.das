@@ -1,13 +1,8 @@
+// This file was generate by dasTelegram/telegram/generate.das
 options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-
-// OLD das restrictions
-options unsafe_table_lookup = false
-options strict_smart_pointers = false
-options relaxed_pointer_const = true
-
 
 module tbotapi shared public
 
@@ -33,29 +28,29 @@ struct update {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : update explicit) : update {
+def from_JV(v : JsonValue explicit?; t : update explicit) : update {
     var q : update
-    var vobj & = unsafe(v as _object)
-    q.update_id = _::from_JV(vobj["update_id"], type<int64>)
-    q.message = _::from_JV(vobj["message"], type<message?>)
-    q.edited_message = _::from_JV(vobj["edited_message"], type<message?>)
-    q.channel_post = _::from_JV(vobj["channel_post"], type<message?>)
-    q.edited_channel_post = _::from_JV(vobj["edited_channel_post"], type<message?>)
-    q.inline_query = _::from_JV(vobj["inline_query"], type<inlinequery?>)
-    q.chosen_inline_result = _::from_JV(vobj["chosen_inline_result"], type<choseninlineresult?>)
-    q.callback_query = _::from_JV(vobj["callback_query"], type<callbackquery?>)
-    q.shipping_query = _::from_JV(vobj["shipping_query"], type<shippingquery?>)
-    q.pre_checkout_query = _::from_JV(vobj["pre_checkout_query"], type<precheckoutquery?>)
-    q.poll = _::from_JV(vobj["poll"], type<poll?>)
-    q.poll_answer = _::from_JV(vobj["poll_answer"], type<pollanswer?>)
-    q.my_chat_member = _::from_JV(vobj["my_chat_member"], type<chatmemberupdated?>)
-    q.chat_member = _::from_JV(vobj["chat_member"], type<chatmemberupdated?>)
-    q.chat_join_request = _::from_JV(vobj["chat_join_request"], type<chatjoinrequest?>)
+    let vobj & = unsafe(v as _object)
+    q.update_id = _::from_JV(vobj?["update_id"] ?? null, type<int64>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<message?>)
+    q.edited_message = _::from_JV(vobj?["edited_message"] ?? null, type<message?>)
+    q.channel_post = _::from_JV(vobj?["channel_post"] ?? null, type<message?>)
+    q.edited_channel_post = _::from_JV(vobj?["edited_channel_post"] ?? null, type<message?>)
+    q.inline_query = _::from_JV(vobj?["inline_query"] ?? null, type<inlinequery?>)
+    q.chosen_inline_result = _::from_JV(vobj?["chosen_inline_result"] ?? null, type<choseninlineresult?>)
+    q.callback_query = _::from_JV(vobj?["callback_query"] ?? null, type<callbackquery?>)
+    q.shipping_query = _::from_JV(vobj?["shipping_query"] ?? null, type<shippingquery?>)
+    q.pre_checkout_query = _::from_JV(vobj?["pre_checkout_query"] ?? null, type<precheckoutquery?>)
+    q.poll = _::from_JV(vobj?["poll"] ?? null, type<poll?>)
+    q.poll_answer = _::from_JV(vobj?["poll_answer"] ?? null, type<pollanswer?>)
+    q.my_chat_member = _::from_JV(vobj?["my_chat_member"] ?? null, type<chatmemberupdated?>)
+    q.chat_member = _::from_JV(vobj?["chat_member"] ?? null, type<chatmemberupdated?>)
+    q.chat_join_request = _::from_JV(vobj?["chat_join_request"] ?? null, type<chatjoinrequest?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : update explicit?) : update? {
+def from_JV(v : JsonValue explicit?; t : update explicit?) : update? {
     return null if (v == null)
     var q = new update
     *q <- from_JV(v, type<update>)
@@ -120,18 +115,18 @@ struct getupdates {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getupdates explicit) : getupdates {
+def from_JV(v : JsonValue explicit?; t : getupdates explicit) : getupdates {
     var q : getupdates
-    var vobj & = unsafe(v as _object)
-    q.offset = _::from_JV(vobj["offset"], type<int64>)
-    q.limit = _::from_JV(vobj["limit"], type<int64>)
-    q.timeout = _::from_JV(vobj["timeout"], type<int64>)
-    q.allowed_updates <- _::from_JV(vobj["allowed_updates"], type<array<string>>)
+    let vobj & = unsafe(v as _object)
+    q.offset = _::from_JV(vobj?["offset"] ?? null, type<int64>)
+    q.limit = _::from_JV(vobj?["limit"] ?? null, type<int64>)
+    q.timeout = _::from_JV(vobj?["timeout"] ?? null, type<int64>)
+    q.allowed_updates <- _::from_JV(vobj?["allowed_updates"] ?? null, type<array<string>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getupdates explicit?) : getupdates? {
+def from_JV(v : JsonValue explicit?; t : getupdates explicit?) : getupdates? {
     return null if (v == null)
     var q = new getupdates
     *q <- from_JV(v, type<getupdates>)
@@ -160,21 +155,21 @@ struct setwebhook {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setwebhook explicit) : setwebhook {
+def from_JV(v : JsonValue explicit?; t : setwebhook explicit) : setwebhook {
     var q : setwebhook
-    var vobj & = unsafe(v as _object)
-    q.url = _::from_JV(vobj["url"], type<string>)
-    q.certificate = _::from_JV(vobj["certificate"], type<inputfile?>)
-    q.ip_address = _::from_JV(vobj["ip_address"], type<string>)
-    q.max_connections = _::from_JV(vobj["max_connections"], type<int64>)
-    q.allowed_updates <- _::from_JV(vobj["allowed_updates"], type<array<string>>)
-    q.drop_pending_updates = _::from_JV(vobj["drop_pending_updates"], type<bool>)
-    q.secret_token = _::from_JV(vobj["secret_token"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.url = _::from_JV(vobj?["url"] ?? null, type<string>)
+    q.certificate = _::from_JV(vobj?["certificate"] ?? null, type<inputfile?>)
+    q.ip_address = _::from_JV(vobj?["ip_address"] ?? null, type<string>)
+    q.max_connections = _::from_JV(vobj?["max_connections"] ?? null, type<int64>)
+    q.allowed_updates <- _::from_JV(vobj?["allowed_updates"] ?? null, type<array<string>>)
+    q.drop_pending_updates = _::from_JV(vobj?["drop_pending_updates"] ?? null, type<bool>)
+    q.secret_token = _::from_JV(vobj?["secret_token"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setwebhook explicit?) : setwebhook? {
+def from_JV(v : JsonValue explicit?; t : setwebhook explicit?) : setwebhook? {
     return null if (v == null)
     var q = new setwebhook
     *q <- from_JV(v, type<setwebhook>)
@@ -202,15 +197,15 @@ struct deletewebhook {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletewebhook explicit) : deletewebhook {
+def from_JV(v : JsonValue explicit?; t : deletewebhook explicit) : deletewebhook {
     var q : deletewebhook
-    var vobj & = unsafe(v as _object)
-    q.drop_pending_updates = _::from_JV(vobj["drop_pending_updates"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.drop_pending_updates = _::from_JV(vobj?["drop_pending_updates"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletewebhook explicit?) : deletewebhook? {
+def from_JV(v : JsonValue explicit?; t : deletewebhook explicit?) : deletewebhook? {
     return null if (v == null)
     var q = new deletewebhook
     *q <- from_JV(v, type<deletewebhook>)
@@ -230,14 +225,14 @@ struct getwebhookinfo {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getwebhookinfo explicit) : getwebhookinfo {
+def from_JV(v : JsonValue explicit?; t : getwebhookinfo explicit) : getwebhookinfo {
     var q : getwebhookinfo
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getwebhookinfo explicit?) : getwebhookinfo? {
+def from_JV(v : JsonValue explicit?; t : getwebhookinfo explicit?) : getwebhookinfo? {
     return null if (v == null)
     var q = new getwebhookinfo
     *q <- from_JV(v, type<getwebhookinfo>)
@@ -264,23 +259,23 @@ struct webhookinfo {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : webhookinfo explicit) : webhookinfo {
+def from_JV(v : JsonValue explicit?; t : webhookinfo explicit) : webhookinfo {
     var q : webhookinfo
-    var vobj & = unsafe(v as _object)
-    q.url = _::from_JV(vobj["url"], type<string>)
-    q.has_custom_certificate = _::from_JV(vobj["has_custom_certificate"], type<bool>)
-    q.pending_update_count = _::from_JV(vobj["pending_update_count"], type<int64>)
-    q.ip_address = _::from_JV(vobj["ip_address"], type<string>)
-    q.last_error_date = _::from_JV(vobj["last_error_date"], type<int64>)
-    q.last_error_message = _::from_JV(vobj["last_error_message"], type<string>)
-    q.last_synchronization_error_date = _::from_JV(vobj["last_synchronization_error_date"], type<int64>)
-    q.max_connections = _::from_JV(vobj["max_connections"], type<int64>)
-    q.allowed_updates <- _::from_JV(vobj["allowed_updates"], type<array<string>>)
+    let vobj & = unsafe(v as _object)
+    q.url = _::from_JV(vobj?["url"] ?? null, type<string>)
+    q.has_custom_certificate = _::from_JV(vobj?["has_custom_certificate"] ?? null, type<bool>)
+    q.pending_update_count = _::from_JV(vobj?["pending_update_count"] ?? null, type<int64>)
+    q.ip_address = _::from_JV(vobj?["ip_address"] ?? null, type<string>)
+    q.last_error_date = _::from_JV(vobj?["last_error_date"] ?? null, type<int64>)
+    q.last_error_message = _::from_JV(vobj?["last_error_message"] ?? null, type<string>)
+    q.last_synchronization_error_date = _::from_JV(vobj?["last_synchronization_error_date"] ?? null, type<int64>)
+    q.max_connections = _::from_JV(vobj?["max_connections"] ?? null, type<int64>)
+    q.allowed_updates <- _::from_JV(vobj?["allowed_updates"] ?? null, type<array<string>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : webhookinfo explicit?) : webhookinfo? {
+def from_JV(v : JsonValue explicit?; t : webhookinfo explicit?) : webhookinfo? {
     return null if (v == null)
     var q = new webhookinfo
     *q <- from_JV(v, type<webhookinfo>)
@@ -318,25 +313,25 @@ struct user {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : user explicit) : user {
+def from_JV(v : JsonValue explicit?; t : user explicit) : user {
     var q : user
-    var vobj & = unsafe(v as _object)
-    q.id = _::from_JV(vobj["id"], type<int64>)
-    q.is_bot = _::from_JV(vobj["is_bot"], type<bool>)
-    q.first_name = _::from_JV(vobj["first_name"], type<string>)
-    q.last_name = _::from_JV(vobj["last_name"], type<string>)
-    q.username = _::from_JV(vobj["username"], type<string>)
-    q.language_code = _::from_JV(vobj["language_code"], type<string>)
-    q.is_premium = _::from_JV(vobj["is_premium"], type<bool>)
-    q.added_to_attachment_menu = _::from_JV(vobj["added_to_attachment_menu"], type<bool>)
-    q.can_join_groups = _::from_JV(vobj["can_join_groups"], type<bool>)
-    q.can_read_all_group_messages = _::from_JV(vobj["can_read_all_group_messages"], type<bool>)
-    q.supports_inline_queries = _::from_JV(vobj["supports_inline_queries"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<int64>)
+    q.is_bot = _::from_JV(vobj?["is_bot"] ?? null, type<bool>)
+    q.first_name = _::from_JV(vobj?["first_name"] ?? null, type<string>)
+    q.last_name = _::from_JV(vobj?["last_name"] ?? null, type<string>)
+    q.username = _::from_JV(vobj?["username"] ?? null, type<string>)
+    q.language_code = _::from_JV(vobj?["language_code"] ?? null, type<string>)
+    q.is_premium = _::from_JV(vobj?["is_premium"] ?? null, type<bool>)
+    q.added_to_attachment_menu = _::from_JV(vobj?["added_to_attachment_menu"] ?? null, type<bool>)
+    q.can_join_groups = _::from_JV(vobj?["can_join_groups"] ?? null, type<bool>)
+    q.can_read_all_group_messages = _::from_JV(vobj?["can_read_all_group_messages"] ?? null, type<bool>)
+    q.supports_inline_queries = _::from_JV(vobj?["supports_inline_queries"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : user explicit?) : user? {
+def from_JV(v : JsonValue explicit?; t : user explicit?) : user? {
     return null if (v == null)
     var q = new user
     *q <- from_JV(v, type<user>)
@@ -393,42 +388,42 @@ struct chat {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chat explicit) : chat {
+def from_JV(v : JsonValue explicit?; t : chat explicit) : chat {
     var q : chat
-    var vobj & = unsafe(v as _object)
-    q.id = _::from_JV(vobj["id"], type<int64>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.username = _::from_JV(vobj["username"], type<string>)
-    q.first_name = _::from_JV(vobj["first_name"], type<string>)
-    q.last_name = _::from_JV(vobj["last_name"], type<string>)
-    q.is_forum = _::from_JV(vobj["is_forum"], type<bool>)
-    q.photo = _::from_JV(vobj["photo"], type<chatphoto?>)
-    q.active_usernames <- _::from_JV(vobj["active_usernames"], type<array<string>>)
-    q.emoji_status_custom_emoji_id = _::from_JV(vobj["emoji_status_custom_emoji_id"], type<string>)
-    q.bio = _::from_JV(vobj["bio"], type<string>)
-    q.has_private_forwards = _::from_JV(vobj["has_private_forwards"], type<bool>)
-    q.has_restricted_voice_and_video_messages = _::from_JV(vobj["has_restricted_voice_and_video_messages"], type<bool>)
-    q.join_to_send_messages = _::from_JV(vobj["join_to_send_messages"], type<bool>)
-    q.join_by_request = _::from_JV(vobj["join_by_request"], type<bool>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.invite_link = _::from_JV(vobj["invite_link"], type<string>)
-    q.pinned_message = _::from_JV(vobj["pinned_message"], type<message?>)
-    q.permissions = _::from_JV(vobj["permissions"], type<chatpermissions?>)
-    q.slow_mode_delay = _::from_JV(vobj["slow_mode_delay"], type<int64>)
-    q.message_auto_delete_time = _::from_JV(vobj["message_auto_delete_time"], type<int64>)
-    q.has_aggressive_anti_spam_enabled = _::from_JV(vobj["has_aggressive_anti_spam_enabled"], type<bool>)
-    q.has_hidden_members = _::from_JV(vobj["has_hidden_members"], type<bool>)
-    q.has_protected_content = _::from_JV(vobj["has_protected_content"], type<bool>)
-    q.sticker_set_name = _::from_JV(vobj["sticker_set_name"], type<string>)
-    q.can_set_sticker_set = _::from_JV(vobj["can_set_sticker_set"], type<bool>)
-    q.linked_chat_id = _::from_JV(vobj["linked_chat_id"], type<int64>)
-    q.location = _::from_JV(vobj["location"], type<chatlocation?>)
+    let vobj & = unsafe(v as _object)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<int64>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.username = _::from_JV(vobj?["username"] ?? null, type<string>)
+    q.first_name = _::from_JV(vobj?["first_name"] ?? null, type<string>)
+    q.last_name = _::from_JV(vobj?["last_name"] ?? null, type<string>)
+    q.is_forum = _::from_JV(vobj?["is_forum"] ?? null, type<bool>)
+    q.photo = _::from_JV(vobj?["photo"] ?? null, type<chatphoto?>)
+    q.active_usernames <- _::from_JV(vobj?["active_usernames"] ?? null, type<array<string>>)
+    q.emoji_status_custom_emoji_id = _::from_JV(vobj?["emoji_status_custom_emoji_id"] ?? null, type<string>)
+    q.bio = _::from_JV(vobj?["bio"] ?? null, type<string>)
+    q.has_private_forwards = _::from_JV(vobj?["has_private_forwards"] ?? null, type<bool>)
+    q.has_restricted_voice_and_video_messages = _::from_JV(vobj?["has_restricted_voice_and_video_messages"] ?? null, type<bool>)
+    q.join_to_send_messages = _::from_JV(vobj?["join_to_send_messages"] ?? null, type<bool>)
+    q.join_by_request = _::from_JV(vobj?["join_by_request"] ?? null, type<bool>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.invite_link = _::from_JV(vobj?["invite_link"] ?? null, type<string>)
+    q.pinned_message = _::from_JV(vobj?["pinned_message"] ?? null, type<message?>)
+    q.permissions = _::from_JV(vobj?["permissions"] ?? null, type<chatpermissions?>)
+    q.slow_mode_delay = _::from_JV(vobj?["slow_mode_delay"] ?? null, type<int64>)
+    q.message_auto_delete_time = _::from_JV(vobj?["message_auto_delete_time"] ?? null, type<int64>)
+    q.has_aggressive_anti_spam_enabled = _::from_JV(vobj?["has_aggressive_anti_spam_enabled"] ?? null, type<bool>)
+    q.has_hidden_members = _::from_JV(vobj?["has_hidden_members"] ?? null, type<bool>)
+    q.has_protected_content = _::from_JV(vobj?["has_protected_content"] ?? null, type<bool>)
+    q.sticker_set_name = _::from_JV(vobj?["sticker_set_name"] ?? null, type<string>)
+    q.can_set_sticker_set = _::from_JV(vobj?["can_set_sticker_set"] ?? null, type<bool>)
+    q.linked_chat_id = _::from_JV(vobj?["linked_chat_id"] ?? null, type<int64>)
+    q.location = _::from_JV(vobj?["location"] ?? null, type<chatlocation?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chat explicit?) : chat? {
+def from_JV(v : JsonValue explicit?; t : chat explicit?) : chat? {
     return null if (v == null)
     var q = new chat
     *q <- from_JV(v, type<chat>)
@@ -553,85 +548,85 @@ struct message {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : message explicit) : message {
+def from_JV(v : JsonValue explicit?; t : message explicit) : message {
     var q : message
-    var vobj & = unsafe(v as _object)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.from = _::from_JV(vobj["from"], type<user?>)
-    q.sender_chat = _::from_JV(vobj["sender_chat"], type<chat?>)
-    q.date = _::from_JV(vobj["date"], type<int64>)
-    q.chat <- _::from_JV(vobj["chat"], type<chat>)
-    q.forward_from = _::from_JV(vobj["forward_from"], type<user?>)
-    q.forward_from_chat = _::from_JV(vobj["forward_from_chat"], type<chat?>)
-    q.forward_from_message_id = _::from_JV(vobj["forward_from_message_id"], type<int64>)
-    q.forward_signature = _::from_JV(vobj["forward_signature"], type<string>)
-    q.forward_sender_name = _::from_JV(vobj["forward_sender_name"], type<string>)
-    q.forward_date = _::from_JV(vobj["forward_date"], type<int64>)
-    q.is_topic_message = _::from_JV(vobj["is_topic_message"], type<bool>)
-    q.is_automatic_forward = _::from_JV(vobj["is_automatic_forward"], type<bool>)
-    q.reply_to_message = _::from_JV(vobj["reply_to_message"], type<message?>)
-    q.via_bot = _::from_JV(vobj["via_bot"], type<user?>)
-    q.edit_date = _::from_JV(vobj["edit_date"], type<int64>)
-    q.has_protected_content = _::from_JV(vobj["has_protected_content"], type<bool>)
-    q.media_group_id = _::from_JV(vobj["media_group_id"], type<string>)
-    q.author_signature = _::from_JV(vobj["author_signature"], type<string>)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.entities <- _::from_JV(vobj["entities"], type<array<messageentity>>)
-    q.animation = _::from_JV(vobj["animation"], type<animation?>)
-    q.audio = _::from_JV(vobj["audio"], type<audio?>)
-    q.document = _::from_JV(vobj["document"], type<document?>)
-    q.photo <- _::from_JV(vobj["photo"], type<array<photosize>>)
-    q.sticker = _::from_JV(vobj["sticker"], type<sticker?>)
-    q.video = _::from_JV(vobj["video"], type<video?>)
-    q.video_note = _::from_JV(vobj["video_note"], type<videonote?>)
-    q.voice = _::from_JV(vobj["voice"], type<voice?>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.has_media_spoiler = _::from_JV(vobj["has_media_spoiler"], type<bool>)
-    q.contact = _::from_JV(vobj["contact"], type<contact?>)
-    q.dice = _::from_JV(vobj["dice"], type<dice?>)
-    q.game = _::from_JV(vobj["game"], type<game?>)
-    q.poll = _::from_JV(vobj["poll"], type<poll?>)
-    q.venue = _::from_JV(vobj["venue"], type<venue?>)
-    q.location = _::from_JV(vobj["location"], type<location?>)
-    q.new_chat_members <- _::from_JV(vobj["new_chat_members"], type<array<user>>)
-    q.left_chat_member = _::from_JV(vobj["left_chat_member"], type<user?>)
-    q.new_chat_title = _::from_JV(vobj["new_chat_title"], type<string>)
-    q.new_chat_photo <- _::from_JV(vobj["new_chat_photo"], type<array<photosize>>)
-    q.delete_chat_photo = _::from_JV(vobj["delete_chat_photo"], type<bool>)
-    q.group_chat_created = _::from_JV(vobj["group_chat_created"], type<bool>)
-    q.supergroup_chat_created = _::from_JV(vobj["supergroup_chat_created"], type<bool>)
-    q.channel_chat_created = _::from_JV(vobj["channel_chat_created"], type<bool>)
-    q.message_auto_delete_timer_changed = _::from_JV(vobj["message_auto_delete_timer_changed"], type<messageautodeletetimerchanged?>)
-    q.migrate_to_chat_id = _::from_JV(vobj["migrate_to_chat_id"], type<int64>)
-    q.migrate_from_chat_id = _::from_JV(vobj["migrate_from_chat_id"], type<int64>)
-    q.pinned_message = _::from_JV(vobj["pinned_message"], type<message?>)
-    q.invoice = _::from_JV(vobj["invoice"], type<invoice?>)
-    q.successful_payment = _::from_JV(vobj["successful_payment"], type<successfulpayment?>)
-    q.user_shared = _::from_JV(vobj["user_shared"], type<usershared?>)
-    q.chat_shared = _::from_JV(vobj["chat_shared"], type<chatshared?>)
-    q.connected_website = _::from_JV(vobj["connected_website"], type<string>)
-    q.write_access_allowed = _::from_JV(vobj["write_access_allowed"], type<writeaccessallowed?>)
-    q.passport_data = _::from_JV(vobj["passport_data"], type<passportdata?>)
-    q.proximity_alert_triggered = _::from_JV(vobj["proximity_alert_triggered"], type<proximityalerttriggered?>)
-    q.forum_topic_created = _::from_JV(vobj["forum_topic_created"], type<forumtopiccreated?>)
-    q.forum_topic_edited = _::from_JV(vobj["forum_topic_edited"], type<forumtopicedited?>)
-    q.forum_topic_closed = _::from_JV(vobj["forum_topic_closed"], type<forumtopicclosed?>)
-    q.forum_topic_reopened = _::from_JV(vobj["forum_topic_reopened"], type<forumtopicreopened?>)
-    q.general_forum_topic_hidden = _::from_JV(vobj["general_forum_topic_hidden"], type<generalforumtopichidden?>)
-    q.general_forum_topic_unhidden = _::from_JV(vobj["general_forum_topic_unhidden"], type<generalforumtopicunhidden?>)
-    q.video_chat_scheduled = _::from_JV(vobj["video_chat_scheduled"], type<videochatscheduled?>)
-    q.video_chat_started = _::from_JV(vobj["video_chat_started"], type<videochatstarted?>)
-    q.video_chat_ended = _::from_JV(vobj["video_chat_ended"], type<videochatended?>)
-    q.video_chat_participants_invited = _::from_JV(vobj["video_chat_participants_invited"], type<videochatparticipantsinvited?>)
-    q.web_app_data = _::from_JV(vobj["web_app_data"], type<webappdata?>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.from = _::from_JV(vobj?["from"] ?? null, type<user?>)
+    q.sender_chat = _::from_JV(vobj?["sender_chat"] ?? null, type<chat?>)
+    q.date = _::from_JV(vobj?["date"] ?? null, type<int64>)
+    q.chat <- _::from_JV(vobj?["chat"] ?? null, type<chat>)
+    q.forward_from = _::from_JV(vobj?["forward_from"] ?? null, type<user?>)
+    q.forward_from_chat = _::from_JV(vobj?["forward_from_chat"] ?? null, type<chat?>)
+    q.forward_from_message_id = _::from_JV(vobj?["forward_from_message_id"] ?? null, type<int64>)
+    q.forward_signature = _::from_JV(vobj?["forward_signature"] ?? null, type<string>)
+    q.forward_sender_name = _::from_JV(vobj?["forward_sender_name"] ?? null, type<string>)
+    q.forward_date = _::from_JV(vobj?["forward_date"] ?? null, type<int64>)
+    q.is_topic_message = _::from_JV(vobj?["is_topic_message"] ?? null, type<bool>)
+    q.is_automatic_forward = _::from_JV(vobj?["is_automatic_forward"] ?? null, type<bool>)
+    q.reply_to_message = _::from_JV(vobj?["reply_to_message"] ?? null, type<message?>)
+    q.via_bot = _::from_JV(vobj?["via_bot"] ?? null, type<user?>)
+    q.edit_date = _::from_JV(vobj?["edit_date"] ?? null, type<int64>)
+    q.has_protected_content = _::from_JV(vobj?["has_protected_content"] ?? null, type<bool>)
+    q.media_group_id = _::from_JV(vobj?["media_group_id"] ?? null, type<string>)
+    q.author_signature = _::from_JV(vobj?["author_signature"] ?? null, type<string>)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.entities <- _::from_JV(vobj?["entities"] ?? null, type<array<messageentity>>)
+    q.animation = _::from_JV(vobj?["animation"] ?? null, type<animation?>)
+    q.audio = _::from_JV(vobj?["audio"] ?? null, type<audio?>)
+    q.document = _::from_JV(vobj?["document"] ?? null, type<document?>)
+    q.photo <- _::from_JV(vobj?["photo"] ?? null, type<array<photosize>>)
+    q.sticker = _::from_JV(vobj?["sticker"] ?? null, type<sticker?>)
+    q.video = _::from_JV(vobj?["video"] ?? null, type<video?>)
+    q.video_note = _::from_JV(vobj?["video_note"] ?? null, type<videonote?>)
+    q.voice = _::from_JV(vobj?["voice"] ?? null, type<voice?>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.has_media_spoiler = _::from_JV(vobj?["has_media_spoiler"] ?? null, type<bool>)
+    q.contact = _::from_JV(vobj?["contact"] ?? null, type<contact?>)
+    q.dice = _::from_JV(vobj?["dice"] ?? null, type<dice?>)
+    q.game = _::from_JV(vobj?["game"] ?? null, type<game?>)
+    q.poll = _::from_JV(vobj?["poll"] ?? null, type<poll?>)
+    q.venue = _::from_JV(vobj?["venue"] ?? null, type<venue?>)
+    q.location = _::from_JV(vobj?["location"] ?? null, type<location?>)
+    q.new_chat_members <- _::from_JV(vobj?["new_chat_members"] ?? null, type<array<user>>)
+    q.left_chat_member = _::from_JV(vobj?["left_chat_member"] ?? null, type<user?>)
+    q.new_chat_title = _::from_JV(vobj?["new_chat_title"] ?? null, type<string>)
+    q.new_chat_photo <- _::from_JV(vobj?["new_chat_photo"] ?? null, type<array<photosize>>)
+    q.delete_chat_photo = _::from_JV(vobj?["delete_chat_photo"] ?? null, type<bool>)
+    q.group_chat_created = _::from_JV(vobj?["group_chat_created"] ?? null, type<bool>)
+    q.supergroup_chat_created = _::from_JV(vobj?["supergroup_chat_created"] ?? null, type<bool>)
+    q.channel_chat_created = _::from_JV(vobj?["channel_chat_created"] ?? null, type<bool>)
+    q.message_auto_delete_timer_changed = _::from_JV(vobj?["message_auto_delete_timer_changed"] ?? null, type<messageautodeletetimerchanged?>)
+    q.migrate_to_chat_id = _::from_JV(vobj?["migrate_to_chat_id"] ?? null, type<int64>)
+    q.migrate_from_chat_id = _::from_JV(vobj?["migrate_from_chat_id"] ?? null, type<int64>)
+    q.pinned_message = _::from_JV(vobj?["pinned_message"] ?? null, type<message?>)
+    q.invoice = _::from_JV(vobj?["invoice"] ?? null, type<invoice?>)
+    q.successful_payment = _::from_JV(vobj?["successful_payment"] ?? null, type<successfulpayment?>)
+    q.user_shared = _::from_JV(vobj?["user_shared"] ?? null, type<usershared?>)
+    q.chat_shared = _::from_JV(vobj?["chat_shared"] ?? null, type<chatshared?>)
+    q.connected_website = _::from_JV(vobj?["connected_website"] ?? null, type<string>)
+    q.write_access_allowed = _::from_JV(vobj?["write_access_allowed"] ?? null, type<writeaccessallowed?>)
+    q.passport_data = _::from_JV(vobj?["passport_data"] ?? null, type<passportdata?>)
+    q.proximity_alert_triggered = _::from_JV(vobj?["proximity_alert_triggered"] ?? null, type<proximityalerttriggered?>)
+    q.forum_topic_created = _::from_JV(vobj?["forum_topic_created"] ?? null, type<forumtopiccreated?>)
+    q.forum_topic_edited = _::from_JV(vobj?["forum_topic_edited"] ?? null, type<forumtopicedited?>)
+    q.forum_topic_closed = _::from_JV(vobj?["forum_topic_closed"] ?? null, type<forumtopicclosed?>)
+    q.forum_topic_reopened = _::from_JV(vobj?["forum_topic_reopened"] ?? null, type<forumtopicreopened?>)
+    q.general_forum_topic_hidden = _::from_JV(vobj?["general_forum_topic_hidden"] ?? null, type<generalforumtopichidden?>)
+    q.general_forum_topic_unhidden = _::from_JV(vobj?["general_forum_topic_unhidden"] ?? null, type<generalforumtopicunhidden?>)
+    q.video_chat_scheduled = _::from_JV(vobj?["video_chat_scheduled"] ?? null, type<videochatscheduled?>)
+    q.video_chat_started = _::from_JV(vobj?["video_chat_started"] ?? null, type<videochatstarted?>)
+    q.video_chat_ended = _::from_JV(vobj?["video_chat_ended"] ?? null, type<videochatended?>)
+    q.video_chat_participants_invited = _::from_JV(vobj?["video_chat_participants_invited"] ?? null, type<videochatparticipantsinvited?>)
+    q.web_app_data = _::from_JV(vobj?["web_app_data"] ?? null, type<webappdata?>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : message explicit?) : message? {
+def from_JV(v : JsonValue explicit?; t : message explicit?) : message? {
     return null if (v == null)
     var q = new message
     *q <- from_JV(v, type<message>)
@@ -803,15 +798,15 @@ struct messageid {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : messageid explicit) : messageid {
+def from_JV(v : JsonValue explicit?; t : messageid explicit) : messageid {
     var q : messageid
-    var vobj & = unsafe(v as _object)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : messageid explicit?) : messageid? {
+def from_JV(v : JsonValue explicit?; t : messageid explicit?) : messageid? {
     return null if (v == null)
     var q = new messageid
     *q <- from_JV(v, type<messageid>)
@@ -837,21 +832,21 @@ struct messageentity {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : messageentity explicit) : messageentity {
+def from_JV(v : JsonValue explicit?; t : messageentity explicit) : messageentity {
     var q : messageentity
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.offset = _::from_JV(vobj["offset"], type<int64>)
-    q.length = _::from_JV(vobj["length"], type<int64>)
-    q.url = _::from_JV(vobj["url"], type<string>)
-    q.user = _::from_JV(vobj["user"], type<user?>)
-    q.language = _::from_JV(vobj["language"], type<string>)
-    q.custom_emoji_id = _::from_JV(vobj["custom_emoji_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.offset = _::from_JV(vobj?["offset"] ?? null, type<int64>)
+    q.length = _::from_JV(vobj?["length"] ?? null, type<int64>)
+    q.url = _::from_JV(vobj?["url"] ?? null, type<string>)
+    q.user = _::from_JV(vobj?["user"] ?? null, type<user?>)
+    q.language = _::from_JV(vobj?["language"] ?? null, type<string>)
+    q.custom_emoji_id = _::from_JV(vobj?["custom_emoji_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : messageentity explicit?) : messageentity? {
+def from_JV(v : JsonValue explicit?; t : messageentity explicit?) : messageentity? {
     return null if (v == null)
     var q = new messageentity
     *q <- from_JV(v, type<messageentity>)
@@ -883,19 +878,19 @@ struct photosize {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : photosize explicit) : photosize {
+def from_JV(v : JsonValue explicit?; t : photosize explicit) : photosize {
     var q : photosize
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.width = _::from_JV(vobj["width"], type<int64>)
-    q.height = _::from_JV(vobj["height"], type<int64>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.width = _::from_JV(vobj?["width"] ?? null, type<int64>)
+    q.height = _::from_JV(vobj?["height"] ?? null, type<int64>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : photosize explicit?) : photosize? {
+def from_JV(v : JsonValue explicit?; t : photosize explicit?) : photosize? {
     return null if (v == null)
     var q = new photosize
     *q <- from_JV(v, type<photosize>)
@@ -927,23 +922,23 @@ struct animation {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : animation explicit) : animation {
+def from_JV(v : JsonValue explicit?; t : animation explicit) : animation {
     var q : animation
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.width = _::from_JV(vobj["width"], type<int64>)
-    q.height = _::from_JV(vobj["height"], type<int64>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
-    q.file_name = _::from_JV(vobj["file_name"], type<string>)
-    q.mime_type = _::from_JV(vobj["mime_type"], type<string>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.width = _::from_JV(vobj?["width"] ?? null, type<int64>)
+    q.height = _::from_JV(vobj?["height"] ?? null, type<int64>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<photosize?>)
+    q.file_name = _::from_JV(vobj?["file_name"] ?? null, type<string>)
+    q.mime_type = _::from_JV(vobj?["mime_type"] ?? null, type<string>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : animation explicit?) : animation? {
+def from_JV(v : JsonValue explicit?; t : animation explicit?) : animation? {
     return null if (v == null)
     var q = new animation
     *q <- from_JV(v, type<animation>)
@@ -981,23 +976,23 @@ struct audio {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : audio explicit) : audio {
+def from_JV(v : JsonValue explicit?; t : audio explicit) : audio {
     var q : audio
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.performer = _::from_JV(vobj["performer"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.file_name = _::from_JV(vobj["file_name"], type<string>)
-    q.mime_type = _::from_JV(vobj["mime_type"], type<string>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.performer = _::from_JV(vobj?["performer"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.file_name = _::from_JV(vobj?["file_name"] ?? null, type<string>)
+    q.mime_type = _::from_JV(vobj?["mime_type"] ?? null, type<string>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<photosize?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : audio explicit?) : audio? {
+def from_JV(v : JsonValue explicit?; t : audio explicit?) : audio? {
     return null if (v == null)
     var q = new audio
     *q <- from_JV(v, type<audio>)
@@ -1032,20 +1027,20 @@ struct document {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : document explicit) : document {
+def from_JV(v : JsonValue explicit?; t : document explicit) : document {
     var q : document
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
-    q.file_name = _::from_JV(vobj["file_name"], type<string>)
-    q.mime_type = _::from_JV(vobj["mime_type"], type<string>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<photosize?>)
+    q.file_name = _::from_JV(vobj?["file_name"] ?? null, type<string>)
+    q.mime_type = _::from_JV(vobj?["mime_type"] ?? null, type<string>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : document explicit?) : document? {
+def from_JV(v : JsonValue explicit?; t : document explicit?) : document? {
     return null if (v == null)
     var q = new document
     *q <- from_JV(v, type<document>)
@@ -1080,23 +1075,23 @@ struct video {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : video explicit) : video {
+def from_JV(v : JsonValue explicit?; t : video explicit) : video {
     var q : video
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.width = _::from_JV(vobj["width"], type<int64>)
-    q.height = _::from_JV(vobj["height"], type<int64>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
-    q.file_name = _::from_JV(vobj["file_name"], type<string>)
-    q.mime_type = _::from_JV(vobj["mime_type"], type<string>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.width = _::from_JV(vobj?["width"] ?? null, type<int64>)
+    q.height = _::from_JV(vobj?["height"] ?? null, type<int64>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<photosize?>)
+    q.file_name = _::from_JV(vobj?["file_name"] ?? null, type<string>)
+    q.mime_type = _::from_JV(vobj?["mime_type"] ?? null, type<string>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : video explicit?) : video? {
+def from_JV(v : JsonValue explicit?; t : video explicit?) : video? {
     return null if (v == null)
     var q = new video
     *q <- from_JV(v, type<video>)
@@ -1131,20 +1126,20 @@ struct videonote {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videonote explicit) : videonote {
+def from_JV(v : JsonValue explicit?; t : videonote explicit) : videonote {
     var q : videonote
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.length = _::from_JV(vobj["length"], type<int64>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.length = _::from_JV(vobj?["length"] ?? null, type<int64>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<photosize?>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videonote explicit?) : videonote? {
+def from_JV(v : JsonValue explicit?; t : videonote explicit?) : videonote? {
     return null if (v == null)
     var q = new videonote
     *q <- from_JV(v, type<videonote>)
@@ -1175,19 +1170,19 @@ struct voice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : voice explicit) : voice {
+def from_JV(v : JsonValue explicit?; t : voice explicit) : voice {
     var q : voice
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.mime_type = _::from_JV(vobj["mime_type"], type<string>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.mime_type = _::from_JV(vobj?["mime_type"] ?? null, type<string>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : voice explicit?) : voice? {
+def from_JV(v : JsonValue explicit?; t : voice explicit?) : voice? {
     return null if (v == null)
     var q = new voice
     *q <- from_JV(v, type<voice>)
@@ -1215,19 +1210,19 @@ struct contact {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : contact explicit) : contact {
+def from_JV(v : JsonValue explicit?; t : contact explicit) : contact {
     var q : contact
-    var vobj & = unsafe(v as _object)
-    q.phone_number = _::from_JV(vobj["phone_number"], type<string>)
-    q.first_name = _::from_JV(vobj["first_name"], type<string>)
-    q.last_name = _::from_JV(vobj["last_name"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.vcard = _::from_JV(vobj["vcard"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.phone_number = _::from_JV(vobj?["phone_number"] ?? null, type<string>)
+    q.first_name = _::from_JV(vobj?["first_name"] ?? null, type<string>)
+    q.last_name = _::from_JV(vobj?["last_name"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.vcard = _::from_JV(vobj?["vcard"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : contact explicit?) : contact? {
+def from_JV(v : JsonValue explicit?; t : contact explicit?) : contact? {
     return null if (v == null)
     var q = new contact
     *q <- from_JV(v, type<contact>)
@@ -1252,16 +1247,16 @@ struct dice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : dice explicit) : dice {
+def from_JV(v : JsonValue explicit?; t : dice explicit) : dice {
     var q : dice
-    var vobj & = unsafe(v as _object)
-    q.emoji = _::from_JV(vobj["emoji"], type<string>)
-    q.value = _::from_JV(vobj["value"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.emoji = _::from_JV(vobj?["emoji"] ?? null, type<string>)
+    q.value = _::from_JV(vobj?["value"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : dice explicit?) : dice? {
+def from_JV(v : JsonValue explicit?; t : dice explicit?) : dice? {
     return null if (v == null)
     var q = new dice
     *q <- from_JV(v, type<dice>)
@@ -1283,16 +1278,16 @@ struct polloption {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : polloption explicit) : polloption {
+def from_JV(v : JsonValue explicit?; t : polloption explicit) : polloption {
     var q : polloption
-    var vobj & = unsafe(v as _object)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.voter_count = _::from_JV(vobj["voter_count"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.voter_count = _::from_JV(vobj?["voter_count"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : polloption explicit?) : polloption? {
+def from_JV(v : JsonValue explicit?; t : polloption explicit?) : polloption? {
     return null if (v == null)
     var q = new polloption
     *q <- from_JV(v, type<polloption>)
@@ -1315,17 +1310,17 @@ struct pollanswer {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : pollanswer explicit) : pollanswer {
+def from_JV(v : JsonValue explicit?; t : pollanswer explicit) : pollanswer {
     var q : pollanswer
-    var vobj & = unsafe(v as _object)
-    q.poll_id = _::from_JV(vobj["poll_id"], type<string>)
-    q.user <- _::from_JV(vobj["user"], type<user>)
-    q.option_ids <- _::from_JV(vobj["option_ids"], type<array<int64>>)
+    let vobj & = unsafe(v as _object)
+    q.poll_id = _::from_JV(vobj?["poll_id"] ?? null, type<string>)
+    q.user <- _::from_JV(vobj?["user"] ?? null, type<user>)
+    q.option_ids <- _::from_JV(vobj?["option_ids"] ?? null, type<array<int64>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : pollanswer explicit?) : pollanswer? {
+def from_JV(v : JsonValue explicit?; t : pollanswer explicit?) : pollanswer? {
     return null if (v == null)
     var q = new pollanswer
     *q <- from_JV(v, type<pollanswer>)
@@ -1359,27 +1354,27 @@ struct poll {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : poll explicit) : poll {
+def from_JV(v : JsonValue explicit?; t : poll explicit) : poll {
     var q : poll
-    var vobj & = unsafe(v as _object)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.question = _::from_JV(vobj["question"], type<string>)
-    q._options <- _::from_JV(vobj["_options"], type<array<polloption>>)
-    q.total_voter_count = _::from_JV(vobj["total_voter_count"], type<int64>)
-    q.is_closed = _::from_JV(vobj["is_closed"], type<bool>)
-    q.is_anonymous = _::from_JV(vobj["is_anonymous"], type<bool>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.allows_multiple_answers = _::from_JV(vobj["allows_multiple_answers"], type<bool>)
-    q.correct_option_id = _::from_JV(vobj["correct_option_id"], type<int64>)
-    q.explanation = _::from_JV(vobj["explanation"], type<string>)
-    q.explanation_entities <- _::from_JV(vobj["explanation_entities"], type<array<messageentity>>)
-    q.open_period = _::from_JV(vobj["open_period"], type<int64>)
-    q.close_date = _::from_JV(vobj["close_date"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.question = _::from_JV(vobj?["question"] ?? null, type<string>)
+    q._options <- _::from_JV(vobj?["_options"] ?? null, type<array<polloption>>)
+    q.total_voter_count = _::from_JV(vobj?["total_voter_count"] ?? null, type<int64>)
+    q.is_closed = _::from_JV(vobj?["is_closed"] ?? null, type<bool>)
+    q.is_anonymous = _::from_JV(vobj?["is_anonymous"] ?? null, type<bool>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.allows_multiple_answers = _::from_JV(vobj?["allows_multiple_answers"] ?? null, type<bool>)
+    q.correct_option_id = _::from_JV(vobj?["correct_option_id"] ?? null, type<int64>)
+    q.explanation = _::from_JV(vobj?["explanation"] ?? null, type<string>)
+    q.explanation_entities <- _::from_JV(vobj?["explanation_entities"] ?? null, type<array<messageentity>>)
+    q.open_period = _::from_JV(vobj?["open_period"] ?? null, type<int64>)
+    q.close_date = _::from_JV(vobj?["close_date"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : poll explicit?) : poll? {
+def from_JV(v : JsonValue explicit?; t : poll explicit?) : poll? {
     return null if (v == null)
     var q = new poll
     *q <- from_JV(v, type<poll>)
@@ -1416,20 +1411,20 @@ struct location {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : location explicit) : location {
+def from_JV(v : JsonValue explicit?; t : location explicit) : location {
     var q : location
-    var vobj & = unsafe(v as _object)
-    q.longitude = _::from_JV(vobj["longitude"], type<float>)
-    q.latitude = _::from_JV(vobj["latitude"], type<float>)
-    q.horizontal_accuracy = _::from_JV(vobj["horizontal_accuracy"], type<float>)
-    q.live_period = _::from_JV(vobj["live_period"], type<int64>)
-    q.heading = _::from_JV(vobj["heading"], type<int64>)
-    q.proximity_alert_radius = _::from_JV(vobj["proximity_alert_radius"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.longitude = _::from_JV(vobj?["longitude"] ?? null, type<float>)
+    q.latitude = _::from_JV(vobj?["latitude"] ?? null, type<float>)
+    q.horizontal_accuracy = _::from_JV(vobj?["horizontal_accuracy"] ?? null, type<float>)
+    q.live_period = _::from_JV(vobj?["live_period"] ?? null, type<int64>)
+    q.heading = _::from_JV(vobj?["heading"] ?? null, type<int64>)
+    q.proximity_alert_radius = _::from_JV(vobj?["proximity_alert_radius"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : location explicit?) : location? {
+def from_JV(v : JsonValue explicit?; t : location explicit?) : location? {
     return null if (v == null)
     var q = new location
     *q <- from_JV(v, type<location>)
@@ -1460,21 +1455,21 @@ struct venue {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : venue explicit) : venue {
+def from_JV(v : JsonValue explicit?; t : venue explicit) : venue {
     var q : venue
-    var vobj & = unsafe(v as _object)
-    q.location <- _::from_JV(vobj["location"], type<location>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.address = _::from_JV(vobj["address"], type<string>)
-    q.foursquare_id = _::from_JV(vobj["foursquare_id"], type<string>)
-    q.foursquare_type = _::from_JV(vobj["foursquare_type"], type<string>)
-    q.google_place_id = _::from_JV(vobj["google_place_id"], type<string>)
-    q.google_place_type = _::from_JV(vobj["google_place_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.location <- _::from_JV(vobj?["location"] ?? null, type<location>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.address = _::from_JV(vobj?["address"] ?? null, type<string>)
+    q.foursquare_id = _::from_JV(vobj?["foursquare_id"] ?? null, type<string>)
+    q.foursquare_type = _::from_JV(vobj?["foursquare_type"] ?? null, type<string>)
+    q.google_place_id = _::from_JV(vobj?["google_place_id"] ?? null, type<string>)
+    q.google_place_type = _::from_JV(vobj?["google_place_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : venue explicit?) : venue? {
+def from_JV(v : JsonValue explicit?; t : venue explicit?) : venue? {
     return null if (v == null)
     var q = new venue
     *q <- from_JV(v, type<venue>)
@@ -1501,16 +1496,16 @@ struct webappdata {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : webappdata explicit) : webappdata {
+def from_JV(v : JsonValue explicit?; t : webappdata explicit) : webappdata {
     var q : webappdata
-    var vobj & = unsafe(v as _object)
-    q.data = _::from_JV(vobj["data"], type<string>)
-    q.button_text = _::from_JV(vobj["button_text"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.data = _::from_JV(vobj?["data"] ?? null, type<string>)
+    q.button_text = _::from_JV(vobj?["button_text"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : webappdata explicit?) : webappdata? {
+def from_JV(v : JsonValue explicit?; t : webappdata explicit?) : webappdata? {
     return null if (v == null)
     var q = new webappdata
     *q <- from_JV(v, type<webappdata>)
@@ -1533,17 +1528,17 @@ struct proximityalerttriggered {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : proximityalerttriggered explicit) : proximityalerttriggered {
+def from_JV(v : JsonValue explicit?; t : proximityalerttriggered explicit) : proximityalerttriggered {
     var q : proximityalerttriggered
-    var vobj & = unsafe(v as _object)
-    q.traveler <- _::from_JV(vobj["traveler"], type<user>)
-    q.watcher <- _::from_JV(vobj["watcher"], type<user>)
-    q.distance = _::from_JV(vobj["distance"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.traveler <- _::from_JV(vobj?["traveler"] ?? null, type<user>)
+    q.watcher <- _::from_JV(vobj?["watcher"] ?? null, type<user>)
+    q.distance = _::from_JV(vobj?["distance"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : proximityalerttriggered explicit?) : proximityalerttriggered? {
+def from_JV(v : JsonValue explicit?; t : proximityalerttriggered explicit?) : proximityalerttriggered? {
     return null if (v == null)
     var q = new proximityalerttriggered
     *q <- from_JV(v, type<proximityalerttriggered>)
@@ -1565,15 +1560,15 @@ struct messageautodeletetimerchanged {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : messageautodeletetimerchanged explicit) : messageautodeletetimerchanged {
+def from_JV(v : JsonValue explicit?; t : messageautodeletetimerchanged explicit) : messageautodeletetimerchanged {
     var q : messageautodeletetimerchanged
-    var vobj & = unsafe(v as _object)
-    q.message_auto_delete_time = _::from_JV(vobj["message_auto_delete_time"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.message_auto_delete_time = _::from_JV(vobj?["message_auto_delete_time"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : messageautodeletetimerchanged explicit?) : messageautodeletetimerchanged? {
+def from_JV(v : JsonValue explicit?; t : messageautodeletetimerchanged explicit?) : messageautodeletetimerchanged? {
     return null if (v == null)
     var q = new messageautodeletetimerchanged
     *q <- from_JV(v, type<messageautodeletetimerchanged>)
@@ -1595,17 +1590,17 @@ struct forumtopiccreated {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopiccreated explicit) : forumtopiccreated {
+def from_JV(v : JsonValue explicit?; t : forumtopiccreated explicit) : forumtopiccreated {
     var q : forumtopiccreated
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.icon_color = _::from_JV(vobj["icon_color"], type<int64>)
-    q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.icon_color = _::from_JV(vobj?["icon_color"] ?? null, type<int64>)
+    q.icon_custom_emoji_id = _::from_JV(vobj?["icon_custom_emoji_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopiccreated explicit?) : forumtopiccreated? {
+def from_JV(v : JsonValue explicit?; t : forumtopiccreated explicit?) : forumtopiccreated? {
     return null if (v == null)
     var q = new forumtopiccreated
     *q <- from_JV(v, type<forumtopiccreated>)
@@ -1627,14 +1622,14 @@ struct forumtopicclosed {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopicclosed explicit) : forumtopicclosed {
+def from_JV(v : JsonValue explicit?; t : forumtopicclosed explicit) : forumtopicclosed {
     var q : forumtopicclosed
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopicclosed explicit?) : forumtopicclosed? {
+def from_JV(v : JsonValue explicit?; t : forumtopicclosed explicit?) : forumtopicclosed? {
     return null if (v == null)
     var q = new forumtopicclosed
     *q <- from_JV(v, type<forumtopicclosed>)
@@ -1654,16 +1649,16 @@ struct forumtopicedited {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopicedited explicit) : forumtopicedited {
+def from_JV(v : JsonValue explicit?; t : forumtopicedited explicit) : forumtopicedited {
     var q : forumtopicedited
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.icon_custom_emoji_id = _::from_JV(vobj?["icon_custom_emoji_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopicedited explicit?) : forumtopicedited? {
+def from_JV(v : JsonValue explicit?; t : forumtopicedited explicit?) : forumtopicedited? {
     return null if (v == null)
     var q = new forumtopicedited
     *q <- from_JV(v, type<forumtopicedited>)
@@ -1684,14 +1679,14 @@ struct forumtopicreopened {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopicreopened explicit) : forumtopicreopened {
+def from_JV(v : JsonValue explicit?; t : forumtopicreopened explicit) : forumtopicreopened {
     var q : forumtopicreopened
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopicreopened explicit?) : forumtopicreopened? {
+def from_JV(v : JsonValue explicit?; t : forumtopicreopened explicit?) : forumtopicreopened? {
     return null if (v == null)
     var q = new forumtopicreopened
     *q <- from_JV(v, type<forumtopicreopened>)
@@ -1710,14 +1705,14 @@ struct generalforumtopichidden {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : generalforumtopichidden explicit) : generalforumtopichidden {
+def from_JV(v : JsonValue explicit?; t : generalforumtopichidden explicit) : generalforumtopichidden {
     var q : generalforumtopichidden
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : generalforumtopichidden explicit?) : generalforumtopichidden? {
+def from_JV(v : JsonValue explicit?; t : generalforumtopichidden explicit?) : generalforumtopichidden? {
     return null if (v == null)
     var q = new generalforumtopichidden
     *q <- from_JV(v, type<generalforumtopichidden>)
@@ -1736,14 +1731,14 @@ struct generalforumtopicunhidden {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : generalforumtopicunhidden explicit) : generalforumtopicunhidden {
+def from_JV(v : JsonValue explicit?; t : generalforumtopicunhidden explicit) : generalforumtopicunhidden {
     var q : generalforumtopicunhidden
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : generalforumtopicunhidden explicit?) : generalforumtopicunhidden? {
+def from_JV(v : JsonValue explicit?; t : generalforumtopicunhidden explicit?) : generalforumtopicunhidden? {
     return null if (v == null)
     var q = new generalforumtopicunhidden
     *q <- from_JV(v, type<generalforumtopicunhidden>)
@@ -1763,16 +1758,16 @@ struct usershared {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : usershared explicit) : usershared {
+def from_JV(v : JsonValue explicit?; t : usershared explicit) : usershared {
     var q : usershared
-    var vobj & = unsafe(v as _object)
-    q.request_id = _::from_JV(vobj["request_id"], type<int64>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.request_id = _::from_JV(vobj?["request_id"] ?? null, type<int64>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : usershared explicit?) : usershared? {
+def from_JV(v : JsonValue explicit?; t : usershared explicit?) : usershared? {
     return null if (v == null)
     var q = new usershared
     *q <- from_JV(v, type<usershared>)
@@ -1794,16 +1789,16 @@ struct chatshared {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatshared explicit) : chatshared {
+def from_JV(v : JsonValue explicit?; t : chatshared explicit) : chatshared {
     var q : chatshared
-    var vobj & = unsafe(v as _object)
-    q.request_id = _::from_JV(vobj["request_id"], type<int64>)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.request_id = _::from_JV(vobj?["request_id"] ?? null, type<int64>)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatshared explicit?) : chatshared? {
+def from_JV(v : JsonValue explicit?; t : chatshared explicit?) : chatshared? {
     return null if (v == null)
     var q = new chatshared
     *q <- from_JV(v, type<chatshared>)
@@ -1824,14 +1819,14 @@ struct writeaccessallowed {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : writeaccessallowed explicit) : writeaccessallowed {
+def from_JV(v : JsonValue explicit?; t : writeaccessallowed explicit) : writeaccessallowed {
     var q : writeaccessallowed
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : writeaccessallowed explicit?) : writeaccessallowed? {
+def from_JV(v : JsonValue explicit?; t : writeaccessallowed explicit?) : writeaccessallowed? {
     return null if (v == null)
     var q = new writeaccessallowed
     *q <- from_JV(v, type<writeaccessallowed>)
@@ -1850,15 +1845,15 @@ struct videochatscheduled {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videochatscheduled explicit) : videochatscheduled {
+def from_JV(v : JsonValue explicit?; t : videochatscheduled explicit) : videochatscheduled {
     var q : videochatscheduled
-    var vobj & = unsafe(v as _object)
-    q.start_date = _::from_JV(vobj["start_date"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.start_date = _::from_JV(vobj?["start_date"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videochatscheduled explicit?) : videochatscheduled? {
+def from_JV(v : JsonValue explicit?; t : videochatscheduled explicit?) : videochatscheduled? {
     return null if (v == null)
     var q = new videochatscheduled
     *q <- from_JV(v, type<videochatscheduled>)
@@ -1878,14 +1873,14 @@ struct videochatstarted {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videochatstarted explicit) : videochatstarted {
+def from_JV(v : JsonValue explicit?; t : videochatstarted explicit) : videochatstarted {
     var q : videochatstarted
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videochatstarted explicit?) : videochatstarted? {
+def from_JV(v : JsonValue explicit?; t : videochatstarted explicit?) : videochatstarted? {
     return null if (v == null)
     var q = new videochatstarted
     *q <- from_JV(v, type<videochatstarted>)
@@ -1904,15 +1899,15 @@ struct videochatended {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videochatended explicit) : videochatended {
+def from_JV(v : JsonValue explicit?; t : videochatended explicit) : videochatended {
     var q : videochatended
-    var vobj & = unsafe(v as _object)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videochatended explicit?) : videochatended? {
+def from_JV(v : JsonValue explicit?; t : videochatended explicit?) : videochatended? {
     return null if (v == null)
     var q = new videochatended
     *q <- from_JV(v, type<videochatended>)
@@ -1932,15 +1927,15 @@ struct videochatparticipantsinvited {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videochatparticipantsinvited explicit) : videochatparticipantsinvited {
+def from_JV(v : JsonValue explicit?; t : videochatparticipantsinvited explicit) : videochatparticipantsinvited {
     var q : videochatparticipantsinvited
-    var vobj & = unsafe(v as _object)
-    q.users <- _::from_JV(vobj["users"], type<array<user>>)
+    let vobj & = unsafe(v as _object)
+    q.users <- _::from_JV(vobj?["users"] ?? null, type<array<user>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : videochatparticipantsinvited explicit?) : videochatparticipantsinvited? {
+def from_JV(v : JsonValue explicit?; t : videochatparticipantsinvited explicit?) : videochatparticipantsinvited? {
     return null if (v == null)
     var q = new videochatparticipantsinvited
     *q <- from_JV(v, type<videochatparticipantsinvited>)
@@ -1961,16 +1956,16 @@ struct userprofilephotos {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : userprofilephotos explicit) : userprofilephotos {
+def from_JV(v : JsonValue explicit?; t : userprofilephotos explicit) : userprofilephotos {
     var q : userprofilephotos
-    var vobj & = unsafe(v as _object)
-    q.total_count = _::from_JV(vobj["total_count"], type<int64>)
-    q.photos <- _::from_JV(vobj["photos"], type<array<array<photosize>>>)
+    let vobj & = unsafe(v as _object)
+    q.total_count = _::from_JV(vobj?["total_count"] ?? null, type<int64>)
+    q.photos <- _::from_JV(vobj?["photos"] ?? null, type<array<array<photosize>>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : userprofilephotos explicit?) : userprofilephotos? {
+def from_JV(v : JsonValue explicit?; t : userprofilephotos explicit?) : userprofilephotos? {
     return null if (v == null)
     var q = new userprofilephotos
     *q <- from_JV(v, type<userprofilephotos>)
@@ -1994,18 +1989,18 @@ struct file {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : file explicit) : file {
+def from_JV(v : JsonValue explicit?; t : file explicit) : file {
     var q : file
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
-    q.file_path = _::from_JV(vobj["file_path"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
+    q.file_path = _::from_JV(vobj?["file_path"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : file explicit?) : file? {
+def from_JV(v : JsonValue explicit?; t : file explicit?) : file? {
     return null if (v == null)
     var q = new file
     *q <- from_JV(v, type<file>)
@@ -2028,15 +2023,15 @@ struct webappinfo {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : webappinfo explicit) : webappinfo {
+def from_JV(v : JsonValue explicit?; t : webappinfo explicit) : webappinfo {
     var q : webappinfo
-    var vobj & = unsafe(v as _object)
-    q.url = _::from_JV(vobj["url"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.url = _::from_JV(vobj?["url"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : webappinfo explicit?) : webappinfo? {
+def from_JV(v : JsonValue explicit?; t : webappinfo explicit?) : webappinfo? {
     return null if (v == null)
     var q = new webappinfo
     *q <- from_JV(v, type<webappinfo>)
@@ -2061,20 +2056,20 @@ struct replykeyboardmarkup {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : replykeyboardmarkup explicit) : replykeyboardmarkup {
+def from_JV(v : JsonValue explicit?; t : replykeyboardmarkup explicit) : replykeyboardmarkup {
     var q : replykeyboardmarkup
-    var vobj & = unsafe(v as _object)
-    q.keyboard <- _::from_JV(vobj["keyboard"], type<array<array<keyboardbutton>>>)
-    q.is_persistent = _::from_JV(vobj["is_persistent"], type<bool>)
-    q.resize_keyboard = _::from_JV(vobj["resize_keyboard"], type<bool>)
-    q.one_time_keyboard = _::from_JV(vobj["one_time_keyboard"], type<bool>)
-    q.input_field_placeholder = _::from_JV(vobj["input_field_placeholder"], type<string>)
-    q.selective = _::from_JV(vobj["selective"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.keyboard <- _::from_JV(vobj?["keyboard"] ?? null, type<array<array<keyboardbutton>>>)
+    q.is_persistent = _::from_JV(vobj?["is_persistent"] ?? null, type<bool>)
+    q.resize_keyboard = _::from_JV(vobj?["resize_keyboard"] ?? null, type<bool>)
+    q.one_time_keyboard = _::from_JV(vobj?["one_time_keyboard"] ?? null, type<bool>)
+    q.input_field_placeholder = _::from_JV(vobj?["input_field_placeholder"] ?? null, type<string>)
+    q.selective = _::from_JV(vobj?["selective"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : replykeyboardmarkup explicit?) : replykeyboardmarkup? {
+def from_JV(v : JsonValue explicit?; t : replykeyboardmarkup explicit?) : replykeyboardmarkup? {
     return null if (v == null)
     var q = new replykeyboardmarkup
     *q <- from_JV(v, type<replykeyboardmarkup>)
@@ -2105,21 +2100,21 @@ struct keyboardbutton {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : keyboardbutton explicit) : keyboardbutton {
+def from_JV(v : JsonValue explicit?; t : keyboardbutton explicit) : keyboardbutton {
     var q : keyboardbutton
-    var vobj & = unsafe(v as _object)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.request_user = _::from_JV(vobj["request_user"], type<keyboardbuttonrequestuser?>)
-    q.request_chat = _::from_JV(vobj["request_chat"], type<keyboardbuttonrequestchat?>)
-    q.request_contact = _::from_JV(vobj["request_contact"], type<bool>)
-    q.request_location = _::from_JV(vobj["request_location"], type<bool>)
-    q.request_poll = _::from_JV(vobj["request_poll"], type<keyboardbuttonpolltype?>)
-    q.web_app = _::from_JV(vobj["web_app"], type<webappinfo?>)
+    let vobj & = unsafe(v as _object)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.request_user = _::from_JV(vobj?["request_user"] ?? null, type<keyboardbuttonrequestuser?>)
+    q.request_chat = _::from_JV(vobj?["request_chat"] ?? null, type<keyboardbuttonrequestchat?>)
+    q.request_contact = _::from_JV(vobj?["request_contact"] ?? null, type<bool>)
+    q.request_location = _::from_JV(vobj?["request_location"] ?? null, type<bool>)
+    q.request_poll = _::from_JV(vobj?["request_poll"] ?? null, type<keyboardbuttonpolltype?>)
+    q.web_app = _::from_JV(vobj?["web_app"] ?? null, type<webappinfo?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : keyboardbutton explicit?) : keyboardbutton? {
+def from_JV(v : JsonValue explicit?; t : keyboardbutton explicit?) : keyboardbutton? {
     return null if (v == null)
     var q = new keyboardbutton
     *q <- from_JV(v, type<keyboardbutton>)
@@ -2155,17 +2150,17 @@ struct keyboardbuttonrequestuser {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : keyboardbuttonrequestuser explicit) : keyboardbuttonrequestuser {
+def from_JV(v : JsonValue explicit?; t : keyboardbuttonrequestuser explicit) : keyboardbuttonrequestuser {
     var q : keyboardbuttonrequestuser
-    var vobj & = unsafe(v as _object)
-    q.request_id = _::from_JV(vobj["request_id"], type<int64>)
-    q.user_is_bot = _::from_JV(vobj["user_is_bot"], type<bool>)
-    q.user_is_premium = _::from_JV(vobj["user_is_premium"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.request_id = _::from_JV(vobj?["request_id"] ?? null, type<int64>)
+    q.user_is_bot = _::from_JV(vobj?["user_is_bot"] ?? null, type<bool>)
+    q.user_is_premium = _::from_JV(vobj?["user_is_premium"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : keyboardbuttonrequestuser explicit?) : keyboardbuttonrequestuser? {
+def from_JV(v : JsonValue explicit?; t : keyboardbuttonrequestuser explicit?) : keyboardbuttonrequestuser? {
     return null if (v == null)
     var q = new keyboardbuttonrequestuser
     *q <- from_JV(v, type<keyboardbuttonrequestuser>)
@@ -2194,22 +2189,22 @@ struct keyboardbuttonrequestchat {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : keyboardbuttonrequestchat explicit) : keyboardbuttonrequestchat {
+def from_JV(v : JsonValue explicit?; t : keyboardbuttonrequestchat explicit) : keyboardbuttonrequestchat {
     var q : keyboardbuttonrequestchat
-    var vobj & = unsafe(v as _object)
-    q.request_id = _::from_JV(vobj["request_id"], type<int64>)
-    q.chat_is_channel = _::from_JV(vobj["chat_is_channel"], type<bool>)
-    q.chat_is_forum = _::from_JV(vobj["chat_is_forum"], type<bool>)
-    q.chat_has_username = _::from_JV(vobj["chat_has_username"], type<bool>)
-    q.chat_is_created = _::from_JV(vobj["chat_is_created"], type<bool>)
-    q.user_administrator_rights = _::from_JV(vobj["user_administrator_rights"], type<chatadministratorrights?>)
-    q.bot_administrator_rights = _::from_JV(vobj["bot_administrator_rights"], type<chatadministratorrights?>)
-    q.bot_is_member = _::from_JV(vobj["bot_is_member"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.request_id = _::from_JV(vobj?["request_id"] ?? null, type<int64>)
+    q.chat_is_channel = _::from_JV(vobj?["chat_is_channel"] ?? null, type<bool>)
+    q.chat_is_forum = _::from_JV(vobj?["chat_is_forum"] ?? null, type<bool>)
+    q.chat_has_username = _::from_JV(vobj?["chat_has_username"] ?? null, type<bool>)
+    q.chat_is_created = _::from_JV(vobj?["chat_is_created"] ?? null, type<bool>)
+    q.user_administrator_rights = _::from_JV(vobj?["user_administrator_rights"] ?? null, type<chatadministratorrights?>)
+    q.bot_administrator_rights = _::from_JV(vobj?["bot_administrator_rights"] ?? null, type<chatadministratorrights?>)
+    q.bot_is_member = _::from_JV(vobj?["bot_is_member"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : keyboardbuttonrequestchat explicit?) : keyboardbuttonrequestchat? {
+def from_JV(v : JsonValue explicit?; t : keyboardbuttonrequestchat explicit?) : keyboardbuttonrequestchat? {
     return null if (v == null)
     var q = new keyboardbuttonrequestchat
     *q <- from_JV(v, type<keyboardbuttonrequestchat>)
@@ -2240,15 +2235,15 @@ struct keyboardbuttonpolltype {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : keyboardbuttonpolltype explicit) : keyboardbuttonpolltype {
+def from_JV(v : JsonValue explicit?; t : keyboardbuttonpolltype explicit) : keyboardbuttonpolltype {
     var q : keyboardbuttonpolltype
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : keyboardbuttonpolltype explicit?) : keyboardbuttonpolltype? {
+def from_JV(v : JsonValue explicit?; t : keyboardbuttonpolltype explicit?) : keyboardbuttonpolltype? {
     return null if (v == null)
     var q = new keyboardbuttonpolltype
     *q <- from_JV(v, type<keyboardbuttonpolltype>)
@@ -2269,16 +2264,16 @@ struct replykeyboardremove {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : replykeyboardremove explicit) : replykeyboardremove {
+def from_JV(v : JsonValue explicit?; t : replykeyboardremove explicit) : replykeyboardremove {
     var q : replykeyboardremove
-    var vobj & = unsafe(v as _object)
-    q.remove_keyboard = _::from_JV(vobj["remove_keyboard"], type<bool>)
-    q.selective = _::from_JV(vobj["selective"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.remove_keyboard = _::from_JV(vobj?["remove_keyboard"] ?? null, type<bool>)
+    q.selective = _::from_JV(vobj?["selective"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : replykeyboardremove explicit?) : replykeyboardremove? {
+def from_JV(v : JsonValue explicit?; t : replykeyboardremove explicit?) : replykeyboardremove? {
     return null if (v == null)
     var q = new replykeyboardremove
     *q <- from_JV(v, type<replykeyboardremove>)
@@ -2299,15 +2294,15 @@ struct inlinekeyboardmarkup {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinekeyboardmarkup explicit) : inlinekeyboardmarkup {
+def from_JV(v : JsonValue explicit?; t : inlinekeyboardmarkup explicit) : inlinekeyboardmarkup {
     var q : inlinekeyboardmarkup
-    var vobj & = unsafe(v as _object)
-    q.inline_keyboard <- _::from_JV(vobj["inline_keyboard"], type<array<array<inlinekeyboardbutton>>>)
+    let vobj & = unsafe(v as _object)
+    q.inline_keyboard <- _::from_JV(vobj?["inline_keyboard"] ?? null, type<array<array<inlinekeyboardbutton>>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinekeyboardmarkup explicit?) : inlinekeyboardmarkup? {
+def from_JV(v : JsonValue explicit?; t : inlinekeyboardmarkup explicit?) : inlinekeyboardmarkup? {
     return null if (v == null)
     var q = new inlinekeyboardmarkup
     *q <- from_JV(v, type<inlinekeyboardmarkup>)
@@ -2335,23 +2330,23 @@ struct inlinekeyboardbutton {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinekeyboardbutton explicit) : inlinekeyboardbutton {
+def from_JV(v : JsonValue explicit?; t : inlinekeyboardbutton explicit) : inlinekeyboardbutton {
     var q : inlinekeyboardbutton
-    var vobj & = unsafe(v as _object)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.url = _::from_JV(vobj["url"], type<string>)
-    q.callback_data = _::from_JV(vobj["callback_data"], type<string>)
-    q.web_app = _::from_JV(vobj["web_app"], type<webappinfo?>)
-    q.login_url = _::from_JV(vobj["login_url"], type<loginurl?>)
-    q.switch_inline_query = _::from_JV(vobj["switch_inline_query"], type<string>)
-    q.switch_inline_query_current_chat = _::from_JV(vobj["switch_inline_query_current_chat"], type<string>)
-    q.callback_game = _::from_JV(vobj["callback_game"], type<callbackgame?>)
-    q.pay = _::from_JV(vobj["pay"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.url = _::from_JV(vobj?["url"] ?? null, type<string>)
+    q.callback_data = _::from_JV(vobj?["callback_data"] ?? null, type<string>)
+    q.web_app = _::from_JV(vobj?["web_app"] ?? null, type<webappinfo?>)
+    q.login_url = _::from_JV(vobj?["login_url"] ?? null, type<loginurl?>)
+    q.switch_inline_query = _::from_JV(vobj?["switch_inline_query"] ?? null, type<string>)
+    q.switch_inline_query_current_chat = _::from_JV(vobj?["switch_inline_query_current_chat"] ?? null, type<string>)
+    q.callback_game = _::from_JV(vobj?["callback_game"] ?? null, type<callbackgame?>)
+    q.pay = _::from_JV(vobj?["pay"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinekeyboardbutton explicit?) : inlinekeyboardbutton? {
+def from_JV(v : JsonValue explicit?; t : inlinekeyboardbutton explicit?) : inlinekeyboardbutton? {
     return null if (v == null)
     var q = new inlinekeyboardbutton
     *q <- from_JV(v, type<inlinekeyboardbutton>)
@@ -2388,18 +2383,18 @@ struct loginurl {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : loginurl explicit) : loginurl {
+def from_JV(v : JsonValue explicit?; t : loginurl explicit) : loginurl {
     var q : loginurl
-    var vobj & = unsafe(v as _object)
-    q.url = _::from_JV(vobj["url"], type<string>)
-    q.forward_text = _::from_JV(vobj["forward_text"], type<string>)
-    q.bot_username = _::from_JV(vobj["bot_username"], type<string>)
-    q.request_write_access = _::from_JV(vobj["request_write_access"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.url = _::from_JV(vobj?["url"] ?? null, type<string>)
+    q.forward_text = _::from_JV(vobj?["forward_text"] ?? null, type<string>)
+    q.bot_username = _::from_JV(vobj?["bot_username"] ?? null, type<string>)
+    q.request_write_access = _::from_JV(vobj?["request_write_access"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : loginurl explicit?) : loginurl? {
+def from_JV(v : JsonValue explicit?; t : loginurl explicit?) : loginurl? {
     return null if (v == null)
     var q = new loginurl
     *q <- from_JV(v, type<loginurl>)
@@ -2428,21 +2423,21 @@ struct callbackquery {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : callbackquery explicit) : callbackquery {
+def from_JV(v : JsonValue explicit?; t : callbackquery explicit) : callbackquery {
     var q : callbackquery
-    var vobj & = unsafe(v as _object)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.from <- _::from_JV(vobj["from"], type<user>)
-    q.message = _::from_JV(vobj["message"], type<message?>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
-    q.chat_instance = _::from_JV(vobj["chat_instance"], type<string>)
-    q.data = _::from_JV(vobj["data"], type<string>)
-    q.game_short_name = _::from_JV(vobj["game_short_name"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.from <- _::from_JV(vobj?["from"] ?? null, type<user>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<message?>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
+    q.chat_instance = _::from_JV(vobj?["chat_instance"] ?? null, type<string>)
+    q.data = _::from_JV(vobj?["data"] ?? null, type<string>)
+    q.game_short_name = _::from_JV(vobj?["game_short_name"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : callbackquery explicit?) : callbackquery? {
+def from_JV(v : JsonValue explicit?; t : callbackquery explicit?) : callbackquery? {
     return null if (v == null)
     var q = new callbackquery
     *q <- from_JV(v, type<callbackquery>)
@@ -2472,17 +2467,17 @@ struct forcereply {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forcereply explicit) : forcereply {
+def from_JV(v : JsonValue explicit?; t : forcereply explicit) : forcereply {
     var q : forcereply
-    var vobj & = unsafe(v as _object)
-    q.force_reply = _::from_JV(vobj["force_reply"], type<bool>)
-    q.input_field_placeholder = _::from_JV(vobj["input_field_placeholder"], type<string>)
-    q.selective = _::from_JV(vobj["selective"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.force_reply = _::from_JV(vobj?["force_reply"] ?? null, type<bool>)
+    q.input_field_placeholder = _::from_JV(vobj?["input_field_placeholder"] ?? null, type<string>)
+    q.selective = _::from_JV(vobj?["selective"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forcereply explicit?) : forcereply? {
+def from_JV(v : JsonValue explicit?; t : forcereply explicit?) : forcereply? {
     return null if (v == null)
     var q = new forcereply
     *q <- from_JV(v, type<forcereply>)
@@ -2507,18 +2502,18 @@ struct chatphoto {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatphoto explicit) : chatphoto {
+def from_JV(v : JsonValue explicit?; t : chatphoto explicit) : chatphoto {
     var q : chatphoto
-    var vobj & = unsafe(v as _object)
-    q.small_file_id = _::from_JV(vobj["small_file_id"], type<string>)
-    q.small_file_unique_id = _::from_JV(vobj["small_file_unique_id"], type<string>)
-    q.big_file_id = _::from_JV(vobj["big_file_id"], type<string>)
-    q.big_file_unique_id = _::from_JV(vobj["big_file_unique_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.small_file_id = _::from_JV(vobj?["small_file_id"] ?? null, type<string>)
+    q.small_file_unique_id = _::from_JV(vobj?["small_file_unique_id"] ?? null, type<string>)
+    q.big_file_id = _::from_JV(vobj?["big_file_id"] ?? null, type<string>)
+    q.big_file_unique_id = _::from_JV(vobj?["big_file_unique_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatphoto explicit?) : chatphoto? {
+def from_JV(v : JsonValue explicit?; t : chatphoto explicit?) : chatphoto? {
     return null if (v == null)
     var q = new chatphoto
     *q <- from_JV(v, type<chatphoto>)
@@ -2549,23 +2544,23 @@ struct chatinvitelink {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatinvitelink explicit) : chatinvitelink {
+def from_JV(v : JsonValue explicit?; t : chatinvitelink explicit) : chatinvitelink {
     var q : chatinvitelink
-    var vobj & = unsafe(v as _object)
-    q.invite_link = _::from_JV(vobj["invite_link"], type<string>)
-    q.creator <- _::from_JV(vobj["creator"], type<user>)
-    q.creates_join_request = _::from_JV(vobj["creates_join_request"], type<bool>)
-    q.is_primary = _::from_JV(vobj["is_primary"], type<bool>)
-    q.is_revoked = _::from_JV(vobj["is_revoked"], type<bool>)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.expire_date = _::from_JV(vobj["expire_date"], type<int64>)
-    q.member_limit = _::from_JV(vobj["member_limit"], type<int64>)
-    q.pending_join_request_count = _::from_JV(vobj["pending_join_request_count"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.invite_link = _::from_JV(vobj?["invite_link"] ?? null, type<string>)
+    q.creator <- _::from_JV(vobj?["creator"] ?? null, type<user>)
+    q.creates_join_request = _::from_JV(vobj?["creates_join_request"] ?? null, type<bool>)
+    q.is_primary = _::from_JV(vobj?["is_primary"] ?? null, type<bool>)
+    q.is_revoked = _::from_JV(vobj?["is_revoked"] ?? null, type<bool>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.expire_date = _::from_JV(vobj?["expire_date"] ?? null, type<int64>)
+    q.member_limit = _::from_JV(vobj?["member_limit"] ?? null, type<int64>)
+    q.pending_join_request_count = _::from_JV(vobj?["pending_join_request_count"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatinvitelink explicit?) : chatinvitelink? {
+def from_JV(v : JsonValue explicit?; t : chatinvitelink explicit?) : chatinvitelink? {
     return null if (v == null)
     var q = new chatinvitelink
     *q <- from_JV(v, type<chatinvitelink>)
@@ -2604,26 +2599,26 @@ struct chatadministratorrights {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatadministratorrights explicit) : chatadministratorrights {
+def from_JV(v : JsonValue explicit?; t : chatadministratorrights explicit) : chatadministratorrights {
     var q : chatadministratorrights
-    var vobj & = unsafe(v as _object)
-    q.is_anonymous = _::from_JV(vobj["is_anonymous"], type<bool>)
-    q.can_manage_chat = _::from_JV(vobj["can_manage_chat"], type<bool>)
-    q.can_delete_messages = _::from_JV(vobj["can_delete_messages"], type<bool>)
-    q.can_manage_video_chats = _::from_JV(vobj["can_manage_video_chats"], type<bool>)
-    q.can_restrict_members = _::from_JV(vobj["can_restrict_members"], type<bool>)
-    q.can_promote_members = _::from_JV(vobj["can_promote_members"], type<bool>)
-    q.can_change_info = _::from_JV(vobj["can_change_info"], type<bool>)
-    q.can_invite_users = _::from_JV(vobj["can_invite_users"], type<bool>)
-    q.can_post_messages = _::from_JV(vobj["can_post_messages"], type<bool>)
-    q.can_edit_messages = _::from_JV(vobj["can_edit_messages"], type<bool>)
-    q.can_pin_messages = _::from_JV(vobj["can_pin_messages"], type<bool>)
-    q.can_manage_topics = _::from_JV(vobj["can_manage_topics"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.is_anonymous = _::from_JV(vobj?["is_anonymous"] ?? null, type<bool>)
+    q.can_manage_chat = _::from_JV(vobj?["can_manage_chat"] ?? null, type<bool>)
+    q.can_delete_messages = _::from_JV(vobj?["can_delete_messages"] ?? null, type<bool>)
+    q.can_manage_video_chats = _::from_JV(vobj?["can_manage_video_chats"] ?? null, type<bool>)
+    q.can_restrict_members = _::from_JV(vobj?["can_restrict_members"] ?? null, type<bool>)
+    q.can_promote_members = _::from_JV(vobj?["can_promote_members"] ?? null, type<bool>)
+    q.can_change_info = _::from_JV(vobj?["can_change_info"] ?? null, type<bool>)
+    q.can_invite_users = _::from_JV(vobj?["can_invite_users"] ?? null, type<bool>)
+    q.can_post_messages = _::from_JV(vobj?["can_post_messages"] ?? null, type<bool>)
+    q.can_edit_messages = _::from_JV(vobj?["can_edit_messages"] ?? null, type<bool>)
+    q.can_pin_messages = _::from_JV(vobj?["can_pin_messages"] ?? null, type<bool>)
+    q.can_manage_topics = _::from_JV(vobj?["can_manage_topics"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatadministratorrights explicit?) : chatadministratorrights? {
+def from_JV(v : JsonValue explicit?; t : chatadministratorrights explicit?) : chatadministratorrights? {
     return null if (v == null)
     var q = new chatadministratorrights
     *q <- from_JV(v, type<chatadministratorrights>)
@@ -2654,14 +2649,14 @@ struct chatmember {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmember explicit) : chatmember {
+def from_JV(v : JsonValue explicit?; t : chatmember explicit) : chatmember {
     var q : chatmember
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmember explicit?) : chatmember? {
+def from_JV(v : JsonValue explicit?; t : chatmember explicit?) : chatmember? {
     return null if (v == null)
     var q = new chatmember
     *q <- from_JV(v, type<chatmember>)
@@ -2683,18 +2678,18 @@ struct chatmemberowner {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberowner explicit) : chatmemberowner {
+def from_JV(v : JsonValue explicit?; t : chatmemberowner explicit) : chatmemberowner {
     var q : chatmemberowner
-    var vobj & = unsafe(v as _object)
-    q.status = _::from_JV(vobj["status"], type<string>)
-    q.user <- _::from_JV(vobj["user"], type<user>)
-    q.is_anonymous = _::from_JV(vobj["is_anonymous"], type<bool>)
-    q.custom_title = _::from_JV(vobj["custom_title"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.status = _::from_JV(vobj?["status"] ?? null, type<string>)
+    q.user <- _::from_JV(vobj?["user"] ?? null, type<user>)
+    q.is_anonymous = _::from_JV(vobj?["is_anonymous"] ?? null, type<bool>)
+    q.custom_title = _::from_JV(vobj?["custom_title"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberowner explicit?) : chatmemberowner? {
+def from_JV(v : JsonValue explicit?; t : chatmemberowner explicit?) : chatmemberowner? {
     return null if (v == null)
     var q = new chatmemberowner
     *q <- from_JV(v, type<chatmemberowner>)
@@ -2732,30 +2727,30 @@ struct chatmemberadministrator {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberadministrator explicit) : chatmemberadministrator {
+def from_JV(v : JsonValue explicit?; t : chatmemberadministrator explicit) : chatmemberadministrator {
     var q : chatmemberadministrator
-    var vobj & = unsafe(v as _object)
-    q.status = _::from_JV(vobj["status"], type<string>)
-    q.user <- _::from_JV(vobj["user"], type<user>)
-    q.can_be_edited = _::from_JV(vobj["can_be_edited"], type<bool>)
-    q.is_anonymous = _::from_JV(vobj["is_anonymous"], type<bool>)
-    q.can_manage_chat = _::from_JV(vobj["can_manage_chat"], type<bool>)
-    q.can_delete_messages = _::from_JV(vobj["can_delete_messages"], type<bool>)
-    q.can_manage_video_chats = _::from_JV(vobj["can_manage_video_chats"], type<bool>)
-    q.can_restrict_members = _::from_JV(vobj["can_restrict_members"], type<bool>)
-    q.can_promote_members = _::from_JV(vobj["can_promote_members"], type<bool>)
-    q.can_change_info = _::from_JV(vobj["can_change_info"], type<bool>)
-    q.can_invite_users = _::from_JV(vobj["can_invite_users"], type<bool>)
-    q.can_post_messages = _::from_JV(vobj["can_post_messages"], type<bool>)
-    q.can_edit_messages = _::from_JV(vobj["can_edit_messages"], type<bool>)
-    q.can_pin_messages = _::from_JV(vobj["can_pin_messages"], type<bool>)
-    q.can_manage_topics = _::from_JV(vobj["can_manage_topics"], type<bool>)
-    q.custom_title = _::from_JV(vobj["custom_title"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.status = _::from_JV(vobj?["status"] ?? null, type<string>)
+    q.user <- _::from_JV(vobj?["user"] ?? null, type<user>)
+    q.can_be_edited = _::from_JV(vobj?["can_be_edited"] ?? null, type<bool>)
+    q.is_anonymous = _::from_JV(vobj?["is_anonymous"] ?? null, type<bool>)
+    q.can_manage_chat = _::from_JV(vobj?["can_manage_chat"] ?? null, type<bool>)
+    q.can_delete_messages = _::from_JV(vobj?["can_delete_messages"] ?? null, type<bool>)
+    q.can_manage_video_chats = _::from_JV(vobj?["can_manage_video_chats"] ?? null, type<bool>)
+    q.can_restrict_members = _::from_JV(vobj?["can_restrict_members"] ?? null, type<bool>)
+    q.can_promote_members = _::from_JV(vobj?["can_promote_members"] ?? null, type<bool>)
+    q.can_change_info = _::from_JV(vobj?["can_change_info"] ?? null, type<bool>)
+    q.can_invite_users = _::from_JV(vobj?["can_invite_users"] ?? null, type<bool>)
+    q.can_post_messages = _::from_JV(vobj?["can_post_messages"] ?? null, type<bool>)
+    q.can_edit_messages = _::from_JV(vobj?["can_edit_messages"] ?? null, type<bool>)
+    q.can_pin_messages = _::from_JV(vobj?["can_pin_messages"] ?? null, type<bool>)
+    q.can_manage_topics = _::from_JV(vobj?["can_manage_topics"] ?? null, type<bool>)
+    q.custom_title = _::from_JV(vobj?["custom_title"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberadministrator explicit?) : chatmemberadministrator? {
+def from_JV(v : JsonValue explicit?; t : chatmemberadministrator explicit?) : chatmemberadministrator? {
     return null if (v == null)
     var q = new chatmemberadministrator
     *q <- from_JV(v, type<chatmemberadministrator>)
@@ -2791,16 +2786,16 @@ struct chatmembermember {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmembermember explicit) : chatmembermember {
+def from_JV(v : JsonValue explicit?; t : chatmembermember explicit) : chatmembermember {
     var q : chatmembermember
-    var vobj & = unsafe(v as _object)
-    q.status = _::from_JV(vobj["status"], type<string>)
-    q.user <- _::from_JV(vobj["user"], type<user>)
+    let vobj & = unsafe(v as _object)
+    q.status = _::from_JV(vobj?["status"] ?? null, type<string>)
+    q.user <- _::from_JV(vobj?["user"] ?? null, type<user>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmembermember explicit?) : chatmembermember? {
+def from_JV(v : JsonValue explicit?; t : chatmembermember explicit?) : chatmembermember? {
     return null if (v == null)
     var q = new chatmembermember
     *q <- from_JV(v, type<chatmembermember>)
@@ -2838,32 +2833,32 @@ struct chatmemberrestricted {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberrestricted explicit) : chatmemberrestricted {
+def from_JV(v : JsonValue explicit?; t : chatmemberrestricted explicit) : chatmemberrestricted {
     var q : chatmemberrestricted
-    var vobj & = unsafe(v as _object)
-    q.status = _::from_JV(vobj["status"], type<string>)
-    q.user <- _::from_JV(vobj["user"], type<user>)
-    q.is_member = _::from_JV(vobj["is_member"], type<bool>)
-    q.can_send_messages = _::from_JV(vobj["can_send_messages"], type<bool>)
-    q.can_send_audios = _::from_JV(vobj["can_send_audios"], type<bool>)
-    q.can_send_documents = _::from_JV(vobj["can_send_documents"], type<bool>)
-    q.can_send_photos = _::from_JV(vobj["can_send_photos"], type<bool>)
-    q.can_send_videos = _::from_JV(vobj["can_send_videos"], type<bool>)
-    q.can_send_video_notes = _::from_JV(vobj["can_send_video_notes"], type<bool>)
-    q.can_send_voice_notes = _::from_JV(vobj["can_send_voice_notes"], type<bool>)
-    q.can_send_polls = _::from_JV(vobj["can_send_polls"], type<bool>)
-    q.can_send_other_messages = _::from_JV(vobj["can_send_other_messages"], type<bool>)
-    q.can_add_web_page_previews = _::from_JV(vobj["can_add_web_page_previews"], type<bool>)
-    q.can_change_info = _::from_JV(vobj["can_change_info"], type<bool>)
-    q.can_invite_users = _::from_JV(vobj["can_invite_users"], type<bool>)
-    q.can_pin_messages = _::from_JV(vobj["can_pin_messages"], type<bool>)
-    q.can_manage_topics = _::from_JV(vobj["can_manage_topics"], type<bool>)
-    q.until_date = _::from_JV(vobj["until_date"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.status = _::from_JV(vobj?["status"] ?? null, type<string>)
+    q.user <- _::from_JV(vobj?["user"] ?? null, type<user>)
+    q.is_member = _::from_JV(vobj?["is_member"] ?? null, type<bool>)
+    q.can_send_messages = _::from_JV(vobj?["can_send_messages"] ?? null, type<bool>)
+    q.can_send_audios = _::from_JV(vobj?["can_send_audios"] ?? null, type<bool>)
+    q.can_send_documents = _::from_JV(vobj?["can_send_documents"] ?? null, type<bool>)
+    q.can_send_photos = _::from_JV(vobj?["can_send_photos"] ?? null, type<bool>)
+    q.can_send_videos = _::from_JV(vobj?["can_send_videos"] ?? null, type<bool>)
+    q.can_send_video_notes = _::from_JV(vobj?["can_send_video_notes"] ?? null, type<bool>)
+    q.can_send_voice_notes = _::from_JV(vobj?["can_send_voice_notes"] ?? null, type<bool>)
+    q.can_send_polls = _::from_JV(vobj?["can_send_polls"] ?? null, type<bool>)
+    q.can_send_other_messages = _::from_JV(vobj?["can_send_other_messages"] ?? null, type<bool>)
+    q.can_add_web_page_previews = _::from_JV(vobj?["can_add_web_page_previews"] ?? null, type<bool>)
+    q.can_change_info = _::from_JV(vobj?["can_change_info"] ?? null, type<bool>)
+    q.can_invite_users = _::from_JV(vobj?["can_invite_users"] ?? null, type<bool>)
+    q.can_pin_messages = _::from_JV(vobj?["can_pin_messages"] ?? null, type<bool>)
+    q.can_manage_topics = _::from_JV(vobj?["can_manage_topics"] ?? null, type<bool>)
+    q.until_date = _::from_JV(vobj?["until_date"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberrestricted explicit?) : chatmemberrestricted? {
+def from_JV(v : JsonValue explicit?; t : chatmemberrestricted explicit?) : chatmemberrestricted? {
     return null if (v == null)
     var q = new chatmemberrestricted
     *q <- from_JV(v, type<chatmemberrestricted>)
@@ -2901,16 +2896,16 @@ struct chatmemberleft {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberleft explicit) : chatmemberleft {
+def from_JV(v : JsonValue explicit?; t : chatmemberleft explicit) : chatmemberleft {
     var q : chatmemberleft
-    var vobj & = unsafe(v as _object)
-    q.status = _::from_JV(vobj["status"], type<string>)
-    q.user <- _::from_JV(vobj["user"], type<user>)
+    let vobj & = unsafe(v as _object)
+    q.status = _::from_JV(vobj?["status"] ?? null, type<string>)
+    q.user <- _::from_JV(vobj?["user"] ?? null, type<user>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberleft explicit?) : chatmemberleft? {
+def from_JV(v : JsonValue explicit?; t : chatmemberleft explicit?) : chatmemberleft? {
     return null if (v == null)
     var q = new chatmemberleft
     *q <- from_JV(v, type<chatmemberleft>)
@@ -2933,17 +2928,17 @@ struct chatmemberbanned {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberbanned explicit) : chatmemberbanned {
+def from_JV(v : JsonValue explicit?; t : chatmemberbanned explicit) : chatmemberbanned {
     var q : chatmemberbanned
-    var vobj & = unsafe(v as _object)
-    q.status = _::from_JV(vobj["status"], type<string>)
-    q.user <- _::from_JV(vobj["user"], type<user>)
-    q.until_date = _::from_JV(vobj["until_date"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.status = _::from_JV(vobj?["status"] ?? null, type<string>)
+    q.user <- _::from_JV(vobj?["user"] ?? null, type<user>)
+    q.until_date = _::from_JV(vobj?["until_date"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberbanned explicit?) : chatmemberbanned? {
+def from_JV(v : JsonValue explicit?; t : chatmemberbanned explicit?) : chatmemberbanned? {
     return null if (v == null)
     var q = new chatmemberbanned
     *q <- from_JV(v, type<chatmemberbanned>)
@@ -2970,20 +2965,20 @@ struct chatmemberupdated {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberupdated explicit) : chatmemberupdated {
+def from_JV(v : JsonValue explicit?; t : chatmemberupdated explicit) : chatmemberupdated {
     var q : chatmemberupdated
-    var vobj & = unsafe(v as _object)
-    q.chat <- _::from_JV(vobj["chat"], type<chat>)
-    q.from <- _::from_JV(vobj["from"], type<user>)
-    q.date = _::from_JV(vobj["date"], type<int64>)
-    q.old_chat_member <- _::from_JV(vobj["old_chat_member"], type<chatmember>)
-    q.new_chat_member <- _::from_JV(vobj["new_chat_member"], type<chatmember>)
-    q.invite_link = _::from_JV(vobj["invite_link"], type<chatinvitelink?>)
+    let vobj & = unsafe(v as _object)
+    q.chat <- _::from_JV(vobj?["chat"] ?? null, type<chat>)
+    q.from <- _::from_JV(vobj?["from"] ?? null, type<user>)
+    q.date = _::from_JV(vobj?["date"] ?? null, type<int64>)
+    q.old_chat_member <- _::from_JV(vobj?["old_chat_member"] ?? null, type<chatmember>)
+    q.new_chat_member <- _::from_JV(vobj?["new_chat_member"] ?? null, type<chatmember>)
+    q.invite_link = _::from_JV(vobj?["invite_link"] ?? null, type<chatinvitelink?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatmemberupdated explicit?) : chatmemberupdated? {
+def from_JV(v : JsonValue explicit?; t : chatmemberupdated explicit?) : chatmemberupdated? {
     return null if (v == null)
     var q = new chatmemberupdated
     *q <- from_JV(v, type<chatmemberupdated>)
@@ -3015,20 +3010,20 @@ struct chatjoinrequest {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatjoinrequest explicit) : chatjoinrequest {
+def from_JV(v : JsonValue explicit?; t : chatjoinrequest explicit) : chatjoinrequest {
     var q : chatjoinrequest
-    var vobj & = unsafe(v as _object)
-    q.chat <- _::from_JV(vobj["chat"], type<chat>)
-    q.from <- _::from_JV(vobj["from"], type<user>)
-    q.user_chat_id = _::from_JV(vobj["user_chat_id"], type<int64>)
-    q.date = _::from_JV(vobj["date"], type<int64>)
-    q.bio = _::from_JV(vobj["bio"], type<string>)
-    q.invite_link = _::from_JV(vobj["invite_link"], type<chatinvitelink?>)
+    let vobj & = unsafe(v as _object)
+    q.chat <- _::from_JV(vobj?["chat"] ?? null, type<chat>)
+    q.from <- _::from_JV(vobj?["from"] ?? null, type<user>)
+    q.user_chat_id = _::from_JV(vobj?["user_chat_id"] ?? null, type<int64>)
+    q.date = _::from_JV(vobj?["date"] ?? null, type<int64>)
+    q.bio = _::from_JV(vobj?["bio"] ?? null, type<string>)
+    q.invite_link = _::from_JV(vobj?["invite_link"] ?? null, type<chatinvitelink?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatjoinrequest explicit?) : chatjoinrequest? {
+def from_JV(v : JsonValue explicit?; t : chatjoinrequest explicit?) : chatjoinrequest? {
     return null if (v == null)
     var q = new chatjoinrequest
     *q <- from_JV(v, type<chatjoinrequest>)
@@ -3068,28 +3063,28 @@ struct chatpermissions {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatpermissions explicit) : chatpermissions {
+def from_JV(v : JsonValue explicit?; t : chatpermissions explicit) : chatpermissions {
     var q : chatpermissions
-    var vobj & = unsafe(v as _object)
-    q.can_send_messages = _::from_JV(vobj["can_send_messages"], type<bool>)
-    q.can_send_audios = _::from_JV(vobj["can_send_audios"], type<bool>)
-    q.can_send_documents = _::from_JV(vobj["can_send_documents"], type<bool>)
-    q.can_send_photos = _::from_JV(vobj["can_send_photos"], type<bool>)
-    q.can_send_videos = _::from_JV(vobj["can_send_videos"], type<bool>)
-    q.can_send_video_notes = _::from_JV(vobj["can_send_video_notes"], type<bool>)
-    q.can_send_voice_notes = _::from_JV(vobj["can_send_voice_notes"], type<bool>)
-    q.can_send_polls = _::from_JV(vobj["can_send_polls"], type<bool>)
-    q.can_send_other_messages = _::from_JV(vobj["can_send_other_messages"], type<bool>)
-    q.can_add_web_page_previews = _::from_JV(vobj["can_add_web_page_previews"], type<bool>)
-    q.can_change_info = _::from_JV(vobj["can_change_info"], type<bool>)
-    q.can_invite_users = _::from_JV(vobj["can_invite_users"], type<bool>)
-    q.can_pin_messages = _::from_JV(vobj["can_pin_messages"], type<bool>)
-    q.can_manage_topics = _::from_JV(vobj["can_manage_topics"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.can_send_messages = _::from_JV(vobj?["can_send_messages"] ?? null, type<bool>)
+    q.can_send_audios = _::from_JV(vobj?["can_send_audios"] ?? null, type<bool>)
+    q.can_send_documents = _::from_JV(vobj?["can_send_documents"] ?? null, type<bool>)
+    q.can_send_photos = _::from_JV(vobj?["can_send_photos"] ?? null, type<bool>)
+    q.can_send_videos = _::from_JV(vobj?["can_send_videos"] ?? null, type<bool>)
+    q.can_send_video_notes = _::from_JV(vobj?["can_send_video_notes"] ?? null, type<bool>)
+    q.can_send_voice_notes = _::from_JV(vobj?["can_send_voice_notes"] ?? null, type<bool>)
+    q.can_send_polls = _::from_JV(vobj?["can_send_polls"] ?? null, type<bool>)
+    q.can_send_other_messages = _::from_JV(vobj?["can_send_other_messages"] ?? null, type<bool>)
+    q.can_add_web_page_previews = _::from_JV(vobj?["can_add_web_page_previews"] ?? null, type<bool>)
+    q.can_change_info = _::from_JV(vobj?["can_change_info"] ?? null, type<bool>)
+    q.can_invite_users = _::from_JV(vobj?["can_invite_users"] ?? null, type<bool>)
+    q.can_pin_messages = _::from_JV(vobj?["can_pin_messages"] ?? null, type<bool>)
+    q.can_manage_topics = _::from_JV(vobj?["can_manage_topics"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatpermissions explicit?) : chatpermissions? {
+def from_JV(v : JsonValue explicit?; t : chatpermissions explicit?) : chatpermissions? {
     return null if (v == null)
     var q = new chatpermissions
     *q <- from_JV(v, type<chatpermissions>)
@@ -3123,16 +3118,16 @@ struct chatlocation {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatlocation explicit) : chatlocation {
+def from_JV(v : JsonValue explicit?; t : chatlocation explicit) : chatlocation {
     var q : chatlocation
-    var vobj & = unsafe(v as _object)
-    q.location <- _::from_JV(vobj["location"], type<location>)
-    q.address = _::from_JV(vobj["address"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.location <- _::from_JV(vobj?["location"] ?? null, type<location>)
+    q.address = _::from_JV(vobj?["address"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : chatlocation explicit?) : chatlocation? {
+def from_JV(v : JsonValue explicit?; t : chatlocation explicit?) : chatlocation? {
     return null if (v == null)
     var q = new chatlocation
     *q <- from_JV(v, type<chatlocation>)
@@ -3156,18 +3151,18 @@ struct forumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopic explicit) : forumtopic {
+def from_JV(v : JsonValue explicit?; t : forumtopic explicit) : forumtopic {
     var q : forumtopic
-    var vobj & = unsafe(v as _object)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.icon_color = _::from_JV(vobj["icon_color"], type<int64>)
-    q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.icon_color = _::from_JV(vobj?["icon_color"] ?? null, type<int64>)
+    q.icon_custom_emoji_id = _::from_JV(vobj?["icon_custom_emoji_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forumtopic explicit?) : forumtopic? {
+def from_JV(v : JsonValue explicit?; t : forumtopic explicit?) : forumtopic? {
     return null if (v == null)
     var q = new forumtopic
     *q <- from_JV(v, type<forumtopic>)
@@ -3191,16 +3186,16 @@ struct botcommand {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommand explicit) : botcommand {
+def from_JV(v : JsonValue explicit?; t : botcommand explicit) : botcommand {
     var q : botcommand
-    var vobj & = unsafe(v as _object)
-    q.command = _::from_JV(vobj["command"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.command = _::from_JV(vobj?["command"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommand explicit?) : botcommand? {
+def from_JV(v : JsonValue explicit?; t : botcommand explicit?) : botcommand? {
     return null if (v == null)
     var q = new botcommand
     *q <- from_JV(v, type<botcommand>)
@@ -3221,14 +3216,14 @@ struct botcommandscope {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscope explicit) : botcommandscope {
+def from_JV(v : JsonValue explicit?; t : botcommandscope explicit) : botcommandscope {
     var q : botcommandscope
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscope explicit?) : botcommandscope? {
+def from_JV(v : JsonValue explicit?; t : botcommandscope explicit?) : botcommandscope? {
     return null if (v == null)
     var q = new botcommandscope
     *q <- from_JV(v, type<botcommandscope>)
@@ -3247,14 +3242,14 @@ struct determining_list_of_commands {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : determining_list_of_commands explicit) : determining_list_of_commands {
+def from_JV(v : JsonValue explicit?; t : determining_list_of_commands explicit) : determining_list_of_commands {
     var q : determining_list_of_commands
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : determining_list_of_commands explicit?) : determining_list_of_commands? {
+def from_JV(v : JsonValue explicit?; t : determining_list_of_commands explicit?) : determining_list_of_commands? {
     return null if (v == null)
     var q = new determining_list_of_commands
     *q <- from_JV(v, type<determining_list_of_commands>)
@@ -3273,15 +3268,15 @@ struct botcommandscopedefault {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopedefault explicit) : botcommandscopedefault {
+def from_JV(v : JsonValue explicit?; t : botcommandscopedefault explicit) : botcommandscopedefault {
     var q : botcommandscopedefault
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopedefault explicit?) : botcommandscopedefault? {
+def from_JV(v : JsonValue explicit?; t : botcommandscopedefault explicit?) : botcommandscopedefault? {
     return null if (v == null)
     var q = new botcommandscopedefault
     *q <- from_JV(v, type<botcommandscopedefault>)
@@ -3301,15 +3296,15 @@ struct botcommandscopeallprivatechats {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopeallprivatechats explicit) : botcommandscopeallprivatechats {
+def from_JV(v : JsonValue explicit?; t : botcommandscopeallprivatechats explicit) : botcommandscopeallprivatechats {
     var q : botcommandscopeallprivatechats
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopeallprivatechats explicit?) : botcommandscopeallprivatechats? {
+def from_JV(v : JsonValue explicit?; t : botcommandscopeallprivatechats explicit?) : botcommandscopeallprivatechats? {
     return null if (v == null)
     var q = new botcommandscopeallprivatechats
     *q <- from_JV(v, type<botcommandscopeallprivatechats>)
@@ -3329,15 +3324,15 @@ struct botcommandscopeallgroupchats {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopeallgroupchats explicit) : botcommandscopeallgroupchats {
+def from_JV(v : JsonValue explicit?; t : botcommandscopeallgroupchats explicit) : botcommandscopeallgroupchats {
     var q : botcommandscopeallgroupchats
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopeallgroupchats explicit?) : botcommandscopeallgroupchats? {
+def from_JV(v : JsonValue explicit?; t : botcommandscopeallgroupchats explicit?) : botcommandscopeallgroupchats? {
     return null if (v == null)
     var q = new botcommandscopeallgroupchats
     *q <- from_JV(v, type<botcommandscopeallgroupchats>)
@@ -3357,15 +3352,15 @@ struct botcommandscopeallchatadministrators {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopeallchatadministrators explicit) : botcommandscopeallchatadministrators {
+def from_JV(v : JsonValue explicit?; t : botcommandscopeallchatadministrators explicit) : botcommandscopeallchatadministrators {
     var q : botcommandscopeallchatadministrators
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopeallchatadministrators explicit?) : botcommandscopeallchatadministrators? {
+def from_JV(v : JsonValue explicit?; t : botcommandscopeallchatadministrators explicit?) : botcommandscopeallchatadministrators? {
     return null if (v == null)
     var q = new botcommandscopeallchatadministrators
     *q <- from_JV(v, type<botcommandscopeallchatadministrators>)
@@ -3386,16 +3381,16 @@ struct botcommandscopechat {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopechat explicit) : botcommandscopechat {
+def from_JV(v : JsonValue explicit?; t : botcommandscopechat explicit) : botcommandscopechat {
     var q : botcommandscopechat
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopechat explicit?) : botcommandscopechat? {
+def from_JV(v : JsonValue explicit?; t : botcommandscopechat explicit?) : botcommandscopechat? {
     return null if (v == null)
     var q = new botcommandscopechat
     *q <- from_JV(v, type<botcommandscopechat>)
@@ -3417,16 +3412,16 @@ struct botcommandscopechatadministrators {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopechatadministrators explicit) : botcommandscopechatadministrators {
+def from_JV(v : JsonValue explicit?; t : botcommandscopechatadministrators explicit) : botcommandscopechatadministrators {
     var q : botcommandscopechatadministrators
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopechatadministrators explicit?) : botcommandscopechatadministrators? {
+def from_JV(v : JsonValue explicit?; t : botcommandscopechatadministrators explicit?) : botcommandscopechatadministrators? {
     return null if (v == null)
     var q = new botcommandscopechatadministrators
     *q <- from_JV(v, type<botcommandscopechatadministrators>)
@@ -3449,17 +3444,17 @@ struct botcommandscopechatmember {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopechatmember explicit) : botcommandscopechatmember {
+def from_JV(v : JsonValue explicit?; t : botcommandscopechatmember explicit) : botcommandscopechatmember {
     var q : botcommandscopechatmember
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botcommandscopechatmember explicit?) : botcommandscopechatmember? {
+def from_JV(v : JsonValue explicit?; t : botcommandscopechatmember explicit?) : botcommandscopechatmember? {
     return null if (v == null)
     var q = new botcommandscopechatmember
     *q <- from_JV(v, type<botcommandscopechatmember>)
@@ -3481,15 +3476,15 @@ struct botdescription {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botdescription explicit) : botdescription {
+def from_JV(v : JsonValue explicit?; t : botdescription explicit) : botdescription {
     var q : botdescription
-    var vobj & = unsafe(v as _object)
-    q.description = _::from_JV(vobj["description"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botdescription explicit?) : botdescription? {
+def from_JV(v : JsonValue explicit?; t : botdescription explicit?) : botdescription? {
     return null if (v == null)
     var q = new botdescription
     *q <- from_JV(v, type<botdescription>)
@@ -3509,15 +3504,15 @@ struct botshortdescription {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botshortdescription explicit) : botshortdescription {
+def from_JV(v : JsonValue explicit?; t : botshortdescription explicit) : botshortdescription {
     var q : botshortdescription
-    var vobj & = unsafe(v as _object)
-    q.short_description = _::from_JV(vobj["short_description"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.short_description = _::from_JV(vobj?["short_description"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : botshortdescription explicit?) : botshortdescription? {
+def from_JV(v : JsonValue explicit?; t : botshortdescription explicit?) : botshortdescription? {
     return null if (v == null)
     var q = new botshortdescription
     *q <- from_JV(v, type<botshortdescription>)
@@ -3537,14 +3532,14 @@ struct menubutton {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : menubutton explicit) : menubutton {
+def from_JV(v : JsonValue explicit?; t : menubutton explicit) : menubutton {
     var q : menubutton
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : menubutton explicit?) : menubutton? {
+def from_JV(v : JsonValue explicit?; t : menubutton explicit?) : menubutton? {
     return null if (v == null)
     var q = new menubutton
     *q <- from_JV(v, type<menubutton>)
@@ -3563,15 +3558,15 @@ struct menubuttoncommands {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : menubuttoncommands explicit) : menubuttoncommands {
+def from_JV(v : JsonValue explicit?; t : menubuttoncommands explicit) : menubuttoncommands {
     var q : menubuttoncommands
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : menubuttoncommands explicit?) : menubuttoncommands? {
+def from_JV(v : JsonValue explicit?; t : menubuttoncommands explicit?) : menubuttoncommands? {
     return null if (v == null)
     var q = new menubuttoncommands
     *q <- from_JV(v, type<menubuttoncommands>)
@@ -3593,17 +3588,17 @@ struct menubuttonwebapp {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : menubuttonwebapp explicit) : menubuttonwebapp {
+def from_JV(v : JsonValue explicit?; t : menubuttonwebapp explicit) : menubuttonwebapp {
     var q : menubuttonwebapp
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.web_app <- _::from_JV(vobj["web_app"], type<webappinfo>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.web_app <- _::from_JV(vobj?["web_app"] ?? null, type<webappinfo>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : menubuttonwebapp explicit?) : menubuttonwebapp? {
+def from_JV(v : JsonValue explicit?; t : menubuttonwebapp explicit?) : menubuttonwebapp? {
     return null if (v == null)
     var q = new menubuttonwebapp
     *q <- from_JV(v, type<menubuttonwebapp>)
@@ -3625,15 +3620,15 @@ struct menubuttondefault {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : menubuttondefault explicit) : menubuttondefault {
+def from_JV(v : JsonValue explicit?; t : menubuttondefault explicit) : menubuttondefault {
     var q : menubuttondefault
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : menubuttondefault explicit?) : menubuttondefault? {
+def from_JV(v : JsonValue explicit?; t : menubuttondefault explicit?) : menubuttondefault? {
     return null if (v == null)
     var q = new menubuttondefault
     *q <- from_JV(v, type<menubuttondefault>)
@@ -3654,16 +3649,16 @@ struct responseparameters {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : responseparameters explicit) : responseparameters {
+def from_JV(v : JsonValue explicit?; t : responseparameters explicit) : responseparameters {
     var q : responseparameters
-    var vobj & = unsafe(v as _object)
-    q.migrate_to_chat_id = _::from_JV(vobj["migrate_to_chat_id"], type<int64>)
-    q.retry_after = _::from_JV(vobj["retry_after"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.migrate_to_chat_id = _::from_JV(vobj?["migrate_to_chat_id"] ?? null, type<int64>)
+    q.retry_after = _::from_JV(vobj?["retry_after"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : responseparameters explicit?) : responseparameters? {
+def from_JV(v : JsonValue explicit?; t : responseparameters explicit?) : responseparameters? {
     return null if (v == null)
     var q = new responseparameters
     *q <- from_JV(v, type<responseparameters>)
@@ -3684,14 +3679,14 @@ struct inputmedia {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmedia explicit) : inputmedia {
+def from_JV(v : JsonValue explicit?; t : inputmedia explicit) : inputmedia {
     var q : inputmedia
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmedia explicit?) : inputmedia? {
+def from_JV(v : JsonValue explicit?; t : inputmedia explicit?) : inputmedia? {
     return null if (v == null)
     var q = new inputmedia
     *q <- from_JV(v, type<inputmedia>)
@@ -3715,20 +3710,20 @@ struct inputmediaphoto {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediaphoto explicit) : inputmediaphoto {
+def from_JV(v : JsonValue explicit?; t : inputmediaphoto explicit) : inputmediaphoto {
     var q : inputmediaphoto
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.media = _::from_JV(vobj["media"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.media = _::from_JV(vobj?["media"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.has_spoiler = _::from_JV(vobj?["has_spoiler"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediaphoto explicit?) : inputmediaphoto? {
+def from_JV(v : JsonValue explicit?; t : inputmediaphoto explicit?) : inputmediaphoto? {
     return null if (v == null)
     var q = new inputmediaphoto
     *q <- from_JV(v, type<inputmediaphoto>)
@@ -3763,25 +3758,25 @@ struct inputmediavideo {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediavideo explicit) : inputmediavideo {
+def from_JV(v : JsonValue explicit?; t : inputmediavideo explicit) : inputmediavideo {
     var q : inputmediavideo
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.media = _::from_JV(vobj["media"], type<string>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.width = _::from_JV(vobj["width"], type<int64>)
-    q.height = _::from_JV(vobj["height"], type<int64>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.supports_streaming = _::from_JV(vobj["supports_streaming"], type<bool>)
-    q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.media = _::from_JV(vobj?["media"] ?? null, type<string>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.width = _::from_JV(vobj?["width"] ?? null, type<int64>)
+    q.height = _::from_JV(vobj?["height"] ?? null, type<int64>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.supports_streaming = _::from_JV(vobj?["supports_streaming"] ?? null, type<bool>)
+    q.has_spoiler = _::from_JV(vobj?["has_spoiler"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediavideo explicit?) : inputmediavideo? {
+def from_JV(v : JsonValue explicit?; t : inputmediavideo explicit?) : inputmediavideo? {
     return null if (v == null)
     var q = new inputmediavideo
     *q <- from_JV(v, type<inputmediavideo>)
@@ -3822,24 +3817,24 @@ struct inputmediaanimation {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediaanimation explicit) : inputmediaanimation {
+def from_JV(v : JsonValue explicit?; t : inputmediaanimation explicit) : inputmediaanimation {
     var q : inputmediaanimation
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.media = _::from_JV(vobj["media"], type<string>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.width = _::from_JV(vobj["width"], type<int64>)
-    q.height = _::from_JV(vobj["height"], type<int64>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.media = _::from_JV(vobj?["media"] ?? null, type<string>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.width = _::from_JV(vobj?["width"] ?? null, type<int64>)
+    q.height = _::from_JV(vobj?["height"] ?? null, type<int64>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.has_spoiler = _::from_JV(vobj?["has_spoiler"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediaanimation explicit?) : inputmediaanimation? {
+def from_JV(v : JsonValue explicit?; t : inputmediaanimation explicit?) : inputmediaanimation? {
     return null if (v == null)
     var q = new inputmediaanimation
     *q <- from_JV(v, type<inputmediaanimation>)
@@ -3878,23 +3873,23 @@ struct inputmediaaudio {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediaaudio explicit) : inputmediaaudio {
+def from_JV(v : JsonValue explicit?; t : inputmediaaudio explicit) : inputmediaaudio {
     var q : inputmediaaudio
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.media = _::from_JV(vobj["media"], type<string>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.performer = _::from_JV(vobj["performer"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.media = _::from_JV(vobj?["media"] ?? null, type<string>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.performer = _::from_JV(vobj?["performer"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediaaudio explicit?) : inputmediaaudio? {
+def from_JV(v : JsonValue explicit?; t : inputmediaaudio explicit?) : inputmediaaudio? {
     return null if (v == null)
     var q = new inputmediaaudio
     *q <- from_JV(v, type<inputmediaaudio>)
@@ -3930,21 +3925,21 @@ struct inputmediadocument {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediadocument explicit) : inputmediadocument {
+def from_JV(v : JsonValue explicit?; t : inputmediadocument explicit) : inputmediadocument {
     var q : inputmediadocument
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.media = _::from_JV(vobj["media"], type<string>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.disable_content_type_detection = _::from_JV(vobj["disable_content_type_detection"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.media = _::from_JV(vobj?["media"] ?? null, type<string>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.disable_content_type_detection = _::from_JV(vobj?["disable_content_type_detection"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmediadocument explicit?) : inputmediadocument? {
+def from_JV(v : JsonValue explicit?; t : inputmediadocument explicit?) : inputmediadocument? {
     return null if (v == null)
     var q = new inputmediadocument
     *q <- from_JV(v, type<inputmediadocument>)
@@ -3972,14 +3967,14 @@ struct inputfile {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputfile explicit) : inputfile {
+def from_JV(v : JsonValue explicit?; t : inputfile explicit) : inputfile {
     var q : inputfile
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputfile explicit?) : inputfile? {
+def from_JV(v : JsonValue explicit?; t : inputfile explicit?) : inputfile? {
     return null if (v == null)
     var q = new inputfile
     *q <- from_JV(v, type<inputfile>)
@@ -3998,14 +3993,14 @@ struct sending_files {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sending_files explicit) : sending_files {
+def from_JV(v : JsonValue explicit?; t : sending_files explicit) : sending_files {
     var q : sending_files
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sending_files explicit?) : sending_files? {
+def from_JV(v : JsonValue explicit?; t : sending_files explicit?) : sending_files? {
     return null if (v == null)
     var q = new sending_files
     *q <- from_JV(v, type<sending_files>)
@@ -4024,14 +4019,14 @@ struct inline_mode_objects {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inline_mode_objects explicit) : inline_mode_objects {
+def from_JV(v : JsonValue explicit?; t : inline_mode_objects explicit) : inline_mode_objects {
     var q : inline_mode_objects
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inline_mode_objects explicit?) : inline_mode_objects? {
+def from_JV(v : JsonValue explicit?; t : inline_mode_objects explicit?) : inline_mode_objects? {
     return null if (v == null)
     var q = new inline_mode_objects
     *q <- from_JV(v, type<inline_mode_objects>)
@@ -4050,14 +4045,14 @@ struct getme {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getme explicit) : getme {
+def from_JV(v : JsonValue explicit?; t : getme explicit) : getme {
     var q : getme
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getme explicit?) : getme? {
+def from_JV(v : JsonValue explicit?; t : getme explicit?) : getme? {
     return null if (v == null)
     var q = new getme
     *q <- from_JV(v, type<getme>)
@@ -4076,14 +4071,14 @@ struct logout {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : logout explicit) : logout {
+def from_JV(v : JsonValue explicit?; t : logout explicit) : logout {
     var q : logout
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : logout explicit?) : logout? {
+def from_JV(v : JsonValue explicit?; t : logout explicit?) : logout? {
     return null if (v == null)
     var q = new logout
     *q <- from_JV(v, type<logout>)
@@ -4102,14 +4097,14 @@ struct close {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : close explicit) : close {
+def from_JV(v : JsonValue explicit?; t : close explicit) : close {
     var q : close
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : close explicit?) : close? {
+def from_JV(v : JsonValue explicit?; t : close explicit?) : close? {
     return null if (v == null)
     var q = new close
     *q <- from_JV(v, type<close>)
@@ -4138,25 +4133,25 @@ struct sendmessage {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendmessage explicit) : sendmessage {
+def from_JV(v : JsonValue explicit?; t : sendmessage explicit) : sendmessage {
     var q : sendmessage
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.entities <- _::from_JV(vobj["entities"], type<array<messageentity>>)
-    q.disable_web_page_preview = _::from_JV(vobj["disable_web_page_preview"], type<bool>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.entities <- _::from_JV(vobj?["entities"] ?? null, type<array<messageentity>>)
+    q.disable_web_page_preview = _::from_JV(vobj?["disable_web_page_preview"] ?? null, type<bool>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendmessage explicit?) : sendmessage? {
+def from_JV(v : JsonValue explicit?; t : sendmessage explicit?) : sendmessage? {
     return null if (v == null)
     var q = new sendmessage
     *q <- from_JV(v, type<sendmessage>)
@@ -4188,14 +4183,14 @@ struct formatting_options {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : formatting_options explicit) : formatting_options {
+def from_JV(v : JsonValue explicit?; t : formatting_options explicit) : formatting_options {
     var q : formatting_options
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : formatting_options explicit?) : formatting_options? {
+def from_JV(v : JsonValue explicit?; t : formatting_options explicit?) : formatting_options? {
     return null if (v == null)
     var q = new formatting_options
     *q <- from_JV(v, type<formatting_options>)
@@ -4219,20 +4214,20 @@ struct forwardmessage {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forwardmessage explicit) : forwardmessage {
+def from_JV(v : JsonValue explicit?; t : forwardmessage explicit) : forwardmessage {
     var q : forwardmessage
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.from_chat_id = _::from_JV(vobj["from_chat_id"], type<string>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.from_chat_id = _::from_JV(vobj?["from_chat_id"] ?? null, type<string>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : forwardmessage explicit?) : forwardmessage? {
+def from_JV(v : JsonValue explicit?; t : forwardmessage explicit?) : forwardmessage? {
     return null if (v == null)
     var q = new forwardmessage
     *q <- from_JV(v, type<forwardmessage>)
@@ -4268,26 +4263,26 @@ struct copymessage {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : copymessage explicit) : copymessage {
+def from_JV(v : JsonValue explicit?; t : copymessage explicit) : copymessage {
     var q : copymessage
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.from_chat_id = _::from_JV(vobj["from_chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.from_chat_id = _::from_JV(vobj?["from_chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : copymessage explicit?) : copymessage? {
+def from_JV(v : JsonValue explicit?; t : copymessage explicit?) : copymessage? {
     return null if (v == null)
     var q = new copymessage
     *q <- from_JV(v, type<copymessage>)
@@ -4331,26 +4326,26 @@ struct sendphoto {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendphoto explicit) : sendphoto {
+def from_JV(v : JsonValue explicit?; t : sendphoto explicit) : sendphoto {
     var q : sendphoto
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.photo <- _::from_JV(vobj["photo"], type<inputfile>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.photo <- _::from_JV(vobj?["photo"] ?? null, type<inputfile>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.has_spoiler = _::from_JV(vobj?["has_spoiler"] ?? null, type<bool>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendphoto explicit?) : sendphoto? {
+def from_JV(v : JsonValue explicit?; t : sendphoto explicit?) : sendphoto? {
     return null if (v == null)
     var q = new sendphoto
     *q <- from_JV(v, type<sendphoto>)
@@ -4397,29 +4392,29 @@ struct sendaudio {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendaudio explicit) : sendaudio {
+def from_JV(v : JsonValue explicit?; t : sendaudio explicit) : sendaudio {
     var q : sendaudio
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.audio <- _::from_JV(vobj["audio"], type<inputfile>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.performer = _::from_JV(vobj["performer"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.audio <- _::from_JV(vobj?["audio"] ?? null, type<inputfile>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.performer = _::from_JV(vobj?["performer"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendaudio explicit?) : sendaudio? {
+def from_JV(v : JsonValue explicit?; t : sendaudio explicit?) : sendaudio? {
     return null if (v == null)
     var q = new sendaudio
     *q <- from_JV(v, type<sendaudio>)
@@ -4469,27 +4464,27 @@ struct senddocument {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : senddocument explicit) : senddocument {
+def from_JV(v : JsonValue explicit?; t : senddocument explicit) : senddocument {
     var q : senddocument
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.document <- _::from_JV(vobj["document"], type<inputfile>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.disable_content_type_detection = _::from_JV(vobj["disable_content_type_detection"], type<bool>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.document <- _::from_JV(vobj?["document"] ?? null, type<inputfile>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.disable_content_type_detection = _::from_JV(vobj?["disable_content_type_detection"] ?? null, type<bool>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : senddocument explicit?) : senddocument? {
+def from_JV(v : JsonValue explicit?; t : senddocument explicit?) : senddocument? {
     return null if (v == null)
     var q = new senddocument
     *q <- from_JV(v, type<senddocument>)
@@ -4541,31 +4536,31 @@ struct sendvideo {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendvideo explicit) : sendvideo {
+def from_JV(v : JsonValue explicit?; t : sendvideo explicit) : sendvideo {
     var q : sendvideo
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.video <- _::from_JV(vobj["video"], type<inputfile>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.width = _::from_JV(vobj["width"], type<int64>)
-    q.height = _::from_JV(vobj["height"], type<int64>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
-    q.supports_streaming = _::from_JV(vobj["supports_streaming"], type<bool>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.video <- _::from_JV(vobj?["video"] ?? null, type<inputfile>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.width = _::from_JV(vobj?["width"] ?? null, type<int64>)
+    q.height = _::from_JV(vobj?["height"] ?? null, type<int64>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.has_spoiler = _::from_JV(vobj?["has_spoiler"] ?? null, type<bool>)
+    q.supports_streaming = _::from_JV(vobj?["supports_streaming"] ?? null, type<bool>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendvideo explicit?) : sendvideo? {
+def from_JV(v : JsonValue explicit?; t : sendvideo explicit?) : sendvideo? {
     return null if (v == null)
     var q = new sendvideo
     *q <- from_JV(v, type<sendvideo>)
@@ -4620,30 +4615,30 @@ struct sendanimation {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendanimation explicit) : sendanimation {
+def from_JV(v : JsonValue explicit?; t : sendanimation explicit) : sendanimation {
     var q : sendanimation
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.animation <- _::from_JV(vobj["animation"], type<inputfile>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.width = _::from_JV(vobj["width"], type<int64>)
-    q.height = _::from_JV(vobj["height"], type<int64>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.animation <- _::from_JV(vobj?["animation"] ?? null, type<inputfile>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.width = _::from_JV(vobj?["width"] ?? null, type<int64>)
+    q.height = _::from_JV(vobj?["height"] ?? null, type<int64>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.has_spoiler = _::from_JV(vobj?["has_spoiler"] ?? null, type<bool>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendanimation explicit?) : sendanimation? {
+def from_JV(v : JsonValue explicit?; t : sendanimation explicit?) : sendanimation? {
     return null if (v == null)
     var q = new sendanimation
     *q <- from_JV(v, type<sendanimation>)
@@ -4693,26 +4688,26 @@ struct sendvoice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendvoice explicit) : sendvoice {
+def from_JV(v : JsonValue explicit?; t : sendvoice explicit) : sendvoice {
     var q : sendvoice
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.voice <- _::from_JV(vobj["voice"], type<inputfile>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.voice <- _::from_JV(vobj?["voice"] ?? null, type<inputfile>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendvoice explicit?) : sendvoice? {
+def from_JV(v : JsonValue explicit?; t : sendvoice explicit?) : sendvoice? {
     return null if (v == null)
     var q = new sendvoice
     *q <- from_JV(v, type<sendvoice>)
@@ -4755,25 +4750,25 @@ struct sendvideonote {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendvideonote explicit) : sendvideonote {
+def from_JV(v : JsonValue explicit?; t : sendvideonote explicit) : sendvideonote {
     var q : sendvideonote
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.video_note <- _::from_JV(vobj["video_note"], type<inputfile>)
-    q.duration = _::from_JV(vobj["duration"], type<int64>)
-    q.length = _::from_JV(vobj["length"], type<int64>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.video_note <- _::from_JV(vobj?["video_note"] ?? null, type<inputfile>)
+    q.duration = _::from_JV(vobj?["duration"] ?? null, type<int64>)
+    q.length = _::from_JV(vobj?["length"] ?? null, type<int64>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendvideonote explicit?) : sendvideonote? {
+def from_JV(v : JsonValue explicit?; t : sendvideonote explicit?) : sendvideonote? {
     return null if (v == null)
     var q = new sendvideonote
     *q <- from_JV(v, type<sendvideonote>)
@@ -4813,21 +4808,21 @@ struct sendmediagroup {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendmediagroup explicit) : sendmediagroup {
+def from_JV(v : JsonValue explicit?; t : sendmediagroup explicit) : sendmediagroup {
     var q : sendmediagroup
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.media <- _::from_JV(vobj["media"], type<array<inputmediaaudio>>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.media <- _::from_JV(vobj?["media"] ?? null, type<array<inputmediaaudio>>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendmediagroup explicit?) : sendmediagroup? {
+def from_JV(v : JsonValue explicit?; t : sendmediagroup explicit?) : sendmediagroup? {
     return null if (v == null)
     var q = new sendmediagroup
     *q <- from_JV(v, type<sendmediagroup>)
@@ -4865,27 +4860,27 @@ struct sendlocation {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendlocation explicit) : sendlocation {
+def from_JV(v : JsonValue explicit?; t : sendlocation explicit) : sendlocation {
     var q : sendlocation
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.latitude = _::from_JV(vobj["latitude"], type<float>)
-    q.longitude = _::from_JV(vobj["longitude"], type<float>)
-    q.horizontal_accuracy = _::from_JV(vobj["horizontal_accuracy"], type<float>)
-    q.live_period = _::from_JV(vobj["live_period"], type<int64>)
-    q.heading = _::from_JV(vobj["heading"], type<int64>)
-    q.proximity_alert_radius = _::from_JV(vobj["proximity_alert_radius"], type<int64>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.latitude = _::from_JV(vobj?["latitude"] ?? null, type<float>)
+    q.longitude = _::from_JV(vobj?["longitude"] ?? null, type<float>)
+    q.horizontal_accuracy = _::from_JV(vobj?["horizontal_accuracy"] ?? null, type<float>)
+    q.live_period = _::from_JV(vobj?["live_period"] ?? null, type<int64>)
+    q.heading = _::from_JV(vobj?["heading"] ?? null, type<int64>)
+    q.proximity_alert_radius = _::from_JV(vobj?["proximity_alert_radius"] ?? null, type<int64>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendlocation explicit?) : sendlocation? {
+def from_JV(v : JsonValue explicit?; t : sendlocation explicit?) : sendlocation? {
     return null if (v == null)
     var q = new sendlocation
     *q <- from_JV(v, type<sendlocation>)
@@ -4933,29 +4928,29 @@ struct sendvenue {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendvenue explicit) : sendvenue {
+def from_JV(v : JsonValue explicit?; t : sendvenue explicit) : sendvenue {
     var q : sendvenue
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.latitude = _::from_JV(vobj["latitude"], type<float>)
-    q.longitude = _::from_JV(vobj["longitude"], type<float>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.address = _::from_JV(vobj["address"], type<string>)
-    q.foursquare_id = _::from_JV(vobj["foursquare_id"], type<string>)
-    q.foursquare_type = _::from_JV(vobj["foursquare_type"], type<string>)
-    q.google_place_id = _::from_JV(vobj["google_place_id"], type<string>)
-    q.google_place_type = _::from_JV(vobj["google_place_type"], type<string>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.latitude = _::from_JV(vobj?["latitude"] ?? null, type<float>)
+    q.longitude = _::from_JV(vobj?["longitude"] ?? null, type<float>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.address = _::from_JV(vobj?["address"] ?? null, type<string>)
+    q.foursquare_id = _::from_JV(vobj?["foursquare_id"] ?? null, type<string>)
+    q.foursquare_type = _::from_JV(vobj?["foursquare_type"] ?? null, type<string>)
+    q.google_place_id = _::from_JV(vobj?["google_place_id"] ?? null, type<string>)
+    q.google_place_type = _::from_JV(vobj?["google_place_type"] ?? null, type<string>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendvenue explicit?) : sendvenue? {
+def from_JV(v : JsonValue explicit?; t : sendvenue explicit?) : sendvenue? {
     return null if (v == null)
     var q = new sendvenue
     *q <- from_JV(v, type<sendvenue>)
@@ -5001,25 +4996,25 @@ struct sendcontact {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendcontact explicit) : sendcontact {
+def from_JV(v : JsonValue explicit?; t : sendcontact explicit) : sendcontact {
     var q : sendcontact
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.phone_number = _::from_JV(vobj["phone_number"], type<string>)
-    q.first_name = _::from_JV(vobj["first_name"], type<string>)
-    q.last_name = _::from_JV(vobj["last_name"], type<string>)
-    q.vcard = _::from_JV(vobj["vcard"], type<string>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.phone_number = _::from_JV(vobj?["phone_number"] ?? null, type<string>)
+    q.first_name = _::from_JV(vobj?["first_name"] ?? null, type<string>)
+    q.last_name = _::from_JV(vobj?["last_name"] ?? null, type<string>)
+    q.vcard = _::from_JV(vobj?["vcard"] ?? null, type<string>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendcontact explicit?) : sendcontact? {
+def from_JV(v : JsonValue explicit?; t : sendcontact explicit?) : sendcontact? {
     return null if (v == null)
     var q = new sendcontact
     *q <- from_JV(v, type<sendcontact>)
@@ -5069,33 +5064,33 @@ struct sendpoll {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendpoll explicit) : sendpoll {
+def from_JV(v : JsonValue explicit?; t : sendpoll explicit) : sendpoll {
     var q : sendpoll
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.question = _::from_JV(vobj["question"], type<string>)
-    q._options <- _::from_JV(vobj["_options"], type<array<string>>)
-    q.is_anonymous = _::from_JV(vobj["is_anonymous"], type<bool>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.allows_multiple_answers = _::from_JV(vobj["allows_multiple_answers"], type<bool>)
-    q.correct_option_id = _::from_JV(vobj["correct_option_id"], type<int64>)
-    q.explanation = _::from_JV(vobj["explanation"], type<string>)
-    q.explanation_parse_mode = _::from_JV(vobj["explanation_parse_mode"], type<string>)
-    q.explanation_entities <- _::from_JV(vobj["explanation_entities"], type<array<messageentity>>)
-    q.open_period = _::from_JV(vobj["open_period"], type<int64>)
-    q.close_date = _::from_JV(vobj["close_date"], type<int64>)
-    q.is_closed = _::from_JV(vobj["is_closed"], type<bool>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.question = _::from_JV(vobj?["question"] ?? null, type<string>)
+    q._options <- _::from_JV(vobj?["_options"] ?? null, type<array<string>>)
+    q.is_anonymous = _::from_JV(vobj?["is_anonymous"] ?? null, type<bool>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.allows_multiple_answers = _::from_JV(vobj?["allows_multiple_answers"] ?? null, type<bool>)
+    q.correct_option_id = _::from_JV(vobj?["correct_option_id"] ?? null, type<int64>)
+    q.explanation = _::from_JV(vobj?["explanation"] ?? null, type<string>)
+    q.explanation_parse_mode = _::from_JV(vobj?["explanation_parse_mode"] ?? null, type<string>)
+    q.explanation_entities <- _::from_JV(vobj?["explanation_entities"] ?? null, type<array<messageentity>>)
+    q.open_period = _::from_JV(vobj?["open_period"] ?? null, type<int64>)
+    q.close_date = _::from_JV(vobj?["close_date"] ?? null, type<int64>)
+    q.is_closed = _::from_JV(vobj?["is_closed"] ?? null, type<bool>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendpoll explicit?) : sendpoll? {
+def from_JV(v : JsonValue explicit?; t : sendpoll explicit?) : sendpoll? {
     return null if (v == null)
     var q = new sendpoll
     *q <- from_JV(v, type<sendpoll>)
@@ -5142,22 +5137,22 @@ struct senddice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : senddice explicit) : senddice {
+def from_JV(v : JsonValue explicit?; t : senddice explicit) : senddice {
     var q : senddice
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.emoji = _::from_JV(vobj["emoji"], type<string>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.emoji = _::from_JV(vobj?["emoji"] ?? null, type<string>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : senddice explicit?) : senddice? {
+def from_JV(v : JsonValue explicit?; t : senddice explicit?) : senddice? {
     return null if (v == null)
     var q = new senddice
     *q <- from_JV(v, type<senddice>)
@@ -5188,17 +5183,17 @@ struct sendchataction {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendchataction explicit) : sendchataction {
+def from_JV(v : JsonValue explicit?; t : sendchataction explicit) : sendchataction {
     var q : sendchataction
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.action = _::from_JV(vobj["action"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.action = _::from_JV(vobj?["action"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendchataction explicit?) : sendchataction? {
+def from_JV(v : JsonValue explicit?; t : sendchataction explicit?) : sendchataction? {
     return null if (v == null)
     var q = new sendchataction
     *q <- from_JV(v, type<sendchataction>)
@@ -5222,17 +5217,17 @@ struct getuserprofilephotos {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getuserprofilephotos explicit) : getuserprofilephotos {
+def from_JV(v : JsonValue explicit?; t : getuserprofilephotos explicit) : getuserprofilephotos {
     var q : getuserprofilephotos
-    var vobj & = unsafe(v as _object)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.offset = _::from_JV(vobj["offset"], type<int64>)
-    q.limit = _::from_JV(vobj["limit"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.offset = _::from_JV(vobj?["offset"] ?? null, type<int64>)
+    q.limit = _::from_JV(vobj?["limit"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getuserprofilephotos explicit?) : getuserprofilephotos? {
+def from_JV(v : JsonValue explicit?; t : getuserprofilephotos explicit?) : getuserprofilephotos? {
     return null if (v == null)
     var q = new getuserprofilephotos
     *q <- from_JV(v, type<getuserprofilephotos>)
@@ -5254,15 +5249,15 @@ struct getfile {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getfile explicit) : getfile {
+def from_JV(v : JsonValue explicit?; t : getfile explicit) : getfile {
     var q : getfile
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getfile explicit?) : getfile? {
+def from_JV(v : JsonValue explicit?; t : getfile explicit?) : getfile? {
     return null if (v == null)
     var q = new getfile
     *q <- from_JV(v, type<getfile>)
@@ -5285,18 +5280,18 @@ struct banchatmember {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : banchatmember explicit) : banchatmember {
+def from_JV(v : JsonValue explicit?; t : banchatmember explicit) : banchatmember {
     var q : banchatmember
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.until_date = _::from_JV(vobj["until_date"], type<int64>)
-    q.revoke_messages = _::from_JV(vobj["revoke_messages"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.until_date = _::from_JV(vobj?["until_date"] ?? null, type<int64>)
+    q.revoke_messages = _::from_JV(vobj?["revoke_messages"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : banchatmember explicit?) : banchatmember? {
+def from_JV(v : JsonValue explicit?; t : banchatmember explicit?) : banchatmember? {
     return null if (v == null)
     var q = new banchatmember
     *q <- from_JV(v, type<banchatmember>)
@@ -5321,17 +5316,17 @@ struct unbanchatmember {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unbanchatmember explicit) : unbanchatmember {
+def from_JV(v : JsonValue explicit?; t : unbanchatmember explicit) : unbanchatmember {
     var q : unbanchatmember
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.only_if_banned = _::from_JV(vobj["only_if_banned"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.only_if_banned = _::from_JV(vobj?["only_if_banned"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unbanchatmember explicit?) : unbanchatmember? {
+def from_JV(v : JsonValue explicit?; t : unbanchatmember explicit?) : unbanchatmember? {
     return null if (v == null)
     var q = new unbanchatmember
     *q <- from_JV(v, type<unbanchatmember>)
@@ -5357,19 +5352,19 @@ struct restrictchatmember {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : restrictchatmember explicit) : restrictchatmember {
+def from_JV(v : JsonValue explicit?; t : restrictchatmember explicit) : restrictchatmember {
     var q : restrictchatmember
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.permissions <- _::from_JV(vobj["permissions"], type<chatpermissions>)
-    q.use_independent_chat_permissions = _::from_JV(vobj["use_independent_chat_permissions"], type<bool>)
-    q.until_date = _::from_JV(vobj["until_date"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.permissions <- _::from_JV(vobj?["permissions"] ?? null, type<chatpermissions>)
+    q.use_independent_chat_permissions = _::from_JV(vobj?["use_independent_chat_permissions"] ?? null, type<bool>)
+    q.until_date = _::from_JV(vobj?["until_date"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : restrictchatmember explicit?) : restrictchatmember? {
+def from_JV(v : JsonValue explicit?; t : restrictchatmember explicit?) : restrictchatmember? {
     return null if (v == null)
     var q = new restrictchatmember
     *q <- from_JV(v, type<restrictchatmember>)
@@ -5406,28 +5401,28 @@ struct promotechatmember {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : promotechatmember explicit) : promotechatmember {
+def from_JV(v : JsonValue explicit?; t : promotechatmember explicit) : promotechatmember {
     var q : promotechatmember
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.is_anonymous = _::from_JV(vobj["is_anonymous"], type<bool>)
-    q.can_manage_chat = _::from_JV(vobj["can_manage_chat"], type<bool>)
-    q.can_post_messages = _::from_JV(vobj["can_post_messages"], type<bool>)
-    q.can_edit_messages = _::from_JV(vobj["can_edit_messages"], type<bool>)
-    q.can_delete_messages = _::from_JV(vobj["can_delete_messages"], type<bool>)
-    q.can_manage_video_chats = _::from_JV(vobj["can_manage_video_chats"], type<bool>)
-    q.can_restrict_members = _::from_JV(vobj["can_restrict_members"], type<bool>)
-    q.can_promote_members = _::from_JV(vobj["can_promote_members"], type<bool>)
-    q.can_change_info = _::from_JV(vobj["can_change_info"], type<bool>)
-    q.can_invite_users = _::from_JV(vobj["can_invite_users"], type<bool>)
-    q.can_pin_messages = _::from_JV(vobj["can_pin_messages"], type<bool>)
-    q.can_manage_topics = _::from_JV(vobj["can_manage_topics"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.is_anonymous = _::from_JV(vobj?["is_anonymous"] ?? null, type<bool>)
+    q.can_manage_chat = _::from_JV(vobj?["can_manage_chat"] ?? null, type<bool>)
+    q.can_post_messages = _::from_JV(vobj?["can_post_messages"] ?? null, type<bool>)
+    q.can_edit_messages = _::from_JV(vobj?["can_edit_messages"] ?? null, type<bool>)
+    q.can_delete_messages = _::from_JV(vobj?["can_delete_messages"] ?? null, type<bool>)
+    q.can_manage_video_chats = _::from_JV(vobj?["can_manage_video_chats"] ?? null, type<bool>)
+    q.can_restrict_members = _::from_JV(vobj?["can_restrict_members"] ?? null, type<bool>)
+    q.can_promote_members = _::from_JV(vobj?["can_promote_members"] ?? null, type<bool>)
+    q.can_change_info = _::from_JV(vobj?["can_change_info"] ?? null, type<bool>)
+    q.can_invite_users = _::from_JV(vobj?["can_invite_users"] ?? null, type<bool>)
+    q.can_pin_messages = _::from_JV(vobj?["can_pin_messages"] ?? null, type<bool>)
+    q.can_manage_topics = _::from_JV(vobj?["can_manage_topics"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : promotechatmember explicit?) : promotechatmember? {
+def from_JV(v : JsonValue explicit?; t : promotechatmember explicit?) : promotechatmember? {
     return null if (v == null)
     var q = new promotechatmember
     *q <- from_JV(v, type<promotechatmember>)
@@ -5462,17 +5457,17 @@ struct setchatadministratorcustomtitle {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatadministratorcustomtitle explicit) : setchatadministratorcustomtitle {
+def from_JV(v : JsonValue explicit?; t : setchatadministratorcustomtitle explicit) : setchatadministratorcustomtitle {
     var q : setchatadministratorcustomtitle
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.custom_title = _::from_JV(vobj["custom_title"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.custom_title = _::from_JV(vobj?["custom_title"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatadministratorcustomtitle explicit?) : setchatadministratorcustomtitle? {
+def from_JV(v : JsonValue explicit?; t : setchatadministratorcustomtitle explicit?) : setchatadministratorcustomtitle? {
     return null if (v == null)
     var q = new setchatadministratorcustomtitle
     *q <- from_JV(v, type<setchatadministratorcustomtitle>)
@@ -5495,16 +5490,16 @@ struct banchatsenderchat {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : banchatsenderchat explicit) : banchatsenderchat {
+def from_JV(v : JsonValue explicit?; t : banchatsenderchat explicit) : banchatsenderchat {
     var q : banchatsenderchat
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.sender_chat_id = _::from_JV(vobj["sender_chat_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.sender_chat_id = _::from_JV(vobj?["sender_chat_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : banchatsenderchat explicit?) : banchatsenderchat? {
+def from_JV(v : JsonValue explicit?; t : banchatsenderchat explicit?) : banchatsenderchat? {
     return null if (v == null)
     var q = new banchatsenderchat
     *q <- from_JV(v, type<banchatsenderchat>)
@@ -5526,16 +5521,16 @@ struct unbanchatsenderchat {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unbanchatsenderchat explicit) : unbanchatsenderchat {
+def from_JV(v : JsonValue explicit?; t : unbanchatsenderchat explicit) : unbanchatsenderchat {
     var q : unbanchatsenderchat
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.sender_chat_id = _::from_JV(vobj["sender_chat_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.sender_chat_id = _::from_JV(vobj?["sender_chat_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unbanchatsenderchat explicit?) : unbanchatsenderchat? {
+def from_JV(v : JsonValue explicit?; t : unbanchatsenderchat explicit?) : unbanchatsenderchat? {
     return null if (v == null)
     var q = new unbanchatsenderchat
     *q <- from_JV(v, type<unbanchatsenderchat>)
@@ -5558,17 +5553,17 @@ struct setchatpermissions {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatpermissions explicit) : setchatpermissions {
+def from_JV(v : JsonValue explicit?; t : setchatpermissions explicit) : setchatpermissions {
     var q : setchatpermissions
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.permissions <- _::from_JV(vobj["permissions"], type<chatpermissions>)
-    q.use_independent_chat_permissions = _::from_JV(vobj["use_independent_chat_permissions"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.permissions <- _::from_JV(vobj?["permissions"] ?? null, type<chatpermissions>)
+    q.use_independent_chat_permissions = _::from_JV(vobj?["use_independent_chat_permissions"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatpermissions explicit?) : setchatpermissions? {
+def from_JV(v : JsonValue explicit?; t : setchatpermissions explicit?) : setchatpermissions? {
     return null if (v == null)
     var q = new setchatpermissions
     *q <- from_JV(v, type<setchatpermissions>)
@@ -5590,15 +5585,15 @@ struct exportchatinvitelink {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : exportchatinvitelink explicit) : exportchatinvitelink {
+def from_JV(v : JsonValue explicit?; t : exportchatinvitelink explicit) : exportchatinvitelink {
     var q : exportchatinvitelink
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : exportchatinvitelink explicit?) : exportchatinvitelink? {
+def from_JV(v : JsonValue explicit?; t : exportchatinvitelink explicit?) : exportchatinvitelink? {
     return null if (v == null)
     var q = new exportchatinvitelink
     *q <- from_JV(v, type<exportchatinvitelink>)
@@ -5622,19 +5617,19 @@ struct createchatinvitelink {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : createchatinvitelink explicit) : createchatinvitelink {
+def from_JV(v : JsonValue explicit?; t : createchatinvitelink explicit) : createchatinvitelink {
     var q : createchatinvitelink
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.expire_date = _::from_JV(vobj["expire_date"], type<int64>)
-    q.member_limit = _::from_JV(vobj["member_limit"], type<int64>)
-    q.creates_join_request = _::from_JV(vobj["creates_join_request"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.expire_date = _::from_JV(vobj?["expire_date"] ?? null, type<int64>)
+    q.member_limit = _::from_JV(vobj?["member_limit"] ?? null, type<int64>)
+    q.creates_join_request = _::from_JV(vobj?["creates_join_request"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : createchatinvitelink explicit?) : createchatinvitelink? {
+def from_JV(v : JsonValue explicit?; t : createchatinvitelink explicit?) : createchatinvitelink? {
     return null if (v == null)
     var q = new createchatinvitelink
     *q <- from_JV(v, type<createchatinvitelink>)
@@ -5663,20 +5658,20 @@ struct editchatinvitelink {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editchatinvitelink explicit) : editchatinvitelink {
+def from_JV(v : JsonValue explicit?; t : editchatinvitelink explicit) : editchatinvitelink {
     var q : editchatinvitelink
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.invite_link = _::from_JV(vobj["invite_link"], type<string>)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.expire_date = _::from_JV(vobj["expire_date"], type<int64>)
-    q.member_limit = _::from_JV(vobj["member_limit"], type<int64>)
-    q.creates_join_request = _::from_JV(vobj["creates_join_request"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.invite_link = _::from_JV(vobj?["invite_link"] ?? null, type<string>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.expire_date = _::from_JV(vobj?["expire_date"] ?? null, type<int64>)
+    q.member_limit = _::from_JV(vobj?["member_limit"] ?? null, type<int64>)
+    q.creates_join_request = _::from_JV(vobj?["creates_join_request"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editchatinvitelink explicit?) : editchatinvitelink? {
+def from_JV(v : JsonValue explicit?; t : editchatinvitelink explicit?) : editchatinvitelink? {
     return null if (v == null)
     var q = new editchatinvitelink
     *q <- from_JV(v, type<editchatinvitelink>)
@@ -5702,16 +5697,16 @@ struct revokechatinvitelink {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : revokechatinvitelink explicit) : revokechatinvitelink {
+def from_JV(v : JsonValue explicit?; t : revokechatinvitelink explicit) : revokechatinvitelink {
     var q : revokechatinvitelink
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.invite_link = _::from_JV(vobj["invite_link"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.invite_link = _::from_JV(vobj?["invite_link"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : revokechatinvitelink explicit?) : revokechatinvitelink? {
+def from_JV(v : JsonValue explicit?; t : revokechatinvitelink explicit?) : revokechatinvitelink? {
     return null if (v == null)
     var q = new revokechatinvitelink
     *q <- from_JV(v, type<revokechatinvitelink>)
@@ -5733,16 +5728,16 @@ struct approvechatjoinrequest {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : approvechatjoinrequest explicit) : approvechatjoinrequest {
+def from_JV(v : JsonValue explicit?; t : approvechatjoinrequest explicit) : approvechatjoinrequest {
     var q : approvechatjoinrequest
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : approvechatjoinrequest explicit?) : approvechatjoinrequest? {
+def from_JV(v : JsonValue explicit?; t : approvechatjoinrequest explicit?) : approvechatjoinrequest? {
     return null if (v == null)
     var q = new approvechatjoinrequest
     *q <- from_JV(v, type<approvechatjoinrequest>)
@@ -5764,16 +5759,16 @@ struct declinechatjoinrequest {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : declinechatjoinrequest explicit) : declinechatjoinrequest {
+def from_JV(v : JsonValue explicit?; t : declinechatjoinrequest explicit) : declinechatjoinrequest {
     var q : declinechatjoinrequest
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : declinechatjoinrequest explicit?) : declinechatjoinrequest? {
+def from_JV(v : JsonValue explicit?; t : declinechatjoinrequest explicit?) : declinechatjoinrequest? {
     return null if (v == null)
     var q = new declinechatjoinrequest
     *q <- from_JV(v, type<declinechatjoinrequest>)
@@ -5795,16 +5790,16 @@ struct setchatphoto {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatphoto explicit) : setchatphoto {
+def from_JV(v : JsonValue explicit?; t : setchatphoto explicit) : setchatphoto {
     var q : setchatphoto
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.photo <- _::from_JV(vobj["photo"], type<inputfile>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.photo <- _::from_JV(vobj?["photo"] ?? null, type<inputfile>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatphoto explicit?) : setchatphoto? {
+def from_JV(v : JsonValue explicit?; t : setchatphoto explicit?) : setchatphoto? {
     return null if (v == null)
     var q = new setchatphoto
     *q <- from_JV(v, type<setchatphoto>)
@@ -5825,15 +5820,15 @@ struct deletechatphoto {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletechatphoto explicit) : deletechatphoto {
+def from_JV(v : JsonValue explicit?; t : deletechatphoto explicit) : deletechatphoto {
     var q : deletechatphoto
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletechatphoto explicit?) : deletechatphoto? {
+def from_JV(v : JsonValue explicit?; t : deletechatphoto explicit?) : deletechatphoto? {
     return null if (v == null)
     var q = new deletechatphoto
     *q <- from_JV(v, type<deletechatphoto>)
@@ -5854,16 +5849,16 @@ struct setchattitle {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchattitle explicit) : setchattitle {
+def from_JV(v : JsonValue explicit?; t : setchattitle explicit) : setchattitle {
     var q : setchattitle
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchattitle explicit?) : setchattitle? {
+def from_JV(v : JsonValue explicit?; t : setchattitle explicit?) : setchattitle? {
     return null if (v == null)
     var q = new setchattitle
     *q <- from_JV(v, type<setchattitle>)
@@ -5885,16 +5880,16 @@ struct setchatdescription {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatdescription explicit) : setchatdescription {
+def from_JV(v : JsonValue explicit?; t : setchatdescription explicit) : setchatdescription {
     var q : setchatdescription
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatdescription explicit?) : setchatdescription? {
+def from_JV(v : JsonValue explicit?; t : setchatdescription explicit?) : setchatdescription? {
     return null if (v == null)
     var q = new setchatdescription
     *q <- from_JV(v, type<setchatdescription>)
@@ -5917,17 +5912,17 @@ struct pinchatmessage {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : pinchatmessage explicit) : pinchatmessage {
+def from_JV(v : JsonValue explicit?; t : pinchatmessage explicit) : pinchatmessage {
     var q : pinchatmessage
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : pinchatmessage explicit?) : pinchatmessage? {
+def from_JV(v : JsonValue explicit?; t : pinchatmessage explicit?) : pinchatmessage? {
     return null if (v == null)
     var q = new pinchatmessage
     *q <- from_JV(v, type<pinchatmessage>)
@@ -5950,16 +5945,16 @@ struct unpinchatmessage {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unpinchatmessage explicit) : unpinchatmessage {
+def from_JV(v : JsonValue explicit?; t : unpinchatmessage explicit) : unpinchatmessage {
     var q : unpinchatmessage
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unpinchatmessage explicit?) : unpinchatmessage? {
+def from_JV(v : JsonValue explicit?; t : unpinchatmessage explicit?) : unpinchatmessage? {
     return null if (v == null)
     var q = new unpinchatmessage
     *q <- from_JV(v, type<unpinchatmessage>)
@@ -5980,15 +5975,15 @@ struct unpinallchatmessages {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unpinallchatmessages explicit) : unpinallchatmessages {
+def from_JV(v : JsonValue explicit?; t : unpinallchatmessages explicit) : unpinallchatmessages {
     var q : unpinallchatmessages
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unpinallchatmessages explicit?) : unpinallchatmessages? {
+def from_JV(v : JsonValue explicit?; t : unpinallchatmessages explicit?) : unpinallchatmessages? {
     return null if (v == null)
     var q = new unpinallchatmessages
     *q <- from_JV(v, type<unpinallchatmessages>)
@@ -6008,15 +6003,15 @@ struct leavechat {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : leavechat explicit) : leavechat {
+def from_JV(v : JsonValue explicit?; t : leavechat explicit) : leavechat {
     var q : leavechat
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : leavechat explicit?) : leavechat? {
+def from_JV(v : JsonValue explicit?; t : leavechat explicit?) : leavechat? {
     return null if (v == null)
     var q = new leavechat
     *q <- from_JV(v, type<leavechat>)
@@ -6036,15 +6031,15 @@ struct getchat {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchat explicit) : getchat {
+def from_JV(v : JsonValue explicit?; t : getchat explicit) : getchat {
     var q : getchat
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchat explicit?) : getchat? {
+def from_JV(v : JsonValue explicit?; t : getchat explicit?) : getchat? {
     return null if (v == null)
     var q = new getchat
     *q <- from_JV(v, type<getchat>)
@@ -6064,15 +6059,15 @@ struct getchatadministrators {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchatadministrators explicit) : getchatadministrators {
+def from_JV(v : JsonValue explicit?; t : getchatadministrators explicit) : getchatadministrators {
     var q : getchatadministrators
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchatadministrators explicit?) : getchatadministrators? {
+def from_JV(v : JsonValue explicit?; t : getchatadministrators explicit?) : getchatadministrators? {
     return null if (v == null)
     var q = new getchatadministrators
     *q <- from_JV(v, type<getchatadministrators>)
@@ -6092,15 +6087,15 @@ struct getchatmembercount {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchatmembercount explicit) : getchatmembercount {
+def from_JV(v : JsonValue explicit?; t : getchatmembercount explicit) : getchatmembercount {
     var q : getchatmembercount
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchatmembercount explicit?) : getchatmembercount? {
+def from_JV(v : JsonValue explicit?; t : getchatmembercount explicit?) : getchatmembercount? {
     return null if (v == null)
     var q = new getchatmembercount
     *q <- from_JV(v, type<getchatmembercount>)
@@ -6121,16 +6116,16 @@ struct getchatmember {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchatmember explicit) : getchatmember {
+def from_JV(v : JsonValue explicit?; t : getchatmember explicit) : getchatmember {
     var q : getchatmember
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchatmember explicit?) : getchatmember? {
+def from_JV(v : JsonValue explicit?; t : getchatmember explicit?) : getchatmember? {
     return null if (v == null)
     var q = new getchatmember
     *q <- from_JV(v, type<getchatmember>)
@@ -6152,16 +6147,16 @@ struct setchatstickerset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatstickerset explicit) : setchatstickerset {
+def from_JV(v : JsonValue explicit?; t : setchatstickerset explicit) : setchatstickerset {
     var q : setchatstickerset
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.sticker_set_name = _::from_JV(vobj["sticker_set_name"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.sticker_set_name = _::from_JV(vobj?["sticker_set_name"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatstickerset explicit?) : setchatstickerset? {
+def from_JV(v : JsonValue explicit?; t : setchatstickerset explicit?) : setchatstickerset? {
     return null if (v == null)
     var q = new setchatstickerset
     *q <- from_JV(v, type<setchatstickerset>)
@@ -6182,15 +6177,15 @@ struct deletechatstickerset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletechatstickerset explicit) : deletechatstickerset {
+def from_JV(v : JsonValue explicit?; t : deletechatstickerset explicit) : deletechatstickerset {
     var q : deletechatstickerset
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletechatstickerset explicit?) : deletechatstickerset? {
+def from_JV(v : JsonValue explicit?; t : deletechatstickerset explicit?) : deletechatstickerset? {
     return null if (v == null)
     var q = new deletechatstickerset
     *q <- from_JV(v, type<deletechatstickerset>)
@@ -6210,14 +6205,14 @@ struct getforumtopiciconstickers {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getforumtopiciconstickers explicit) : getforumtopiciconstickers {
+def from_JV(v : JsonValue explicit?; t : getforumtopiciconstickers explicit) : getforumtopiciconstickers {
     var q : getforumtopiciconstickers
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getforumtopiciconstickers explicit?) : getforumtopiciconstickers? {
+def from_JV(v : JsonValue explicit?; t : getforumtopiciconstickers explicit?) : getforumtopiciconstickers? {
     return null if (v == null)
     var q = new getforumtopiciconstickers
     *q <- from_JV(v, type<getforumtopiciconstickers>)
@@ -6239,18 +6234,18 @@ struct createforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : createforumtopic explicit) : createforumtopic {
+def from_JV(v : JsonValue explicit?; t : createforumtopic explicit) : createforumtopic {
     var q : createforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.icon_color = _::from_JV(vobj["icon_color"], type<int64>)
-    q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.icon_color = _::from_JV(vobj?["icon_color"] ?? null, type<int64>)
+    q.icon_custom_emoji_id = _::from_JV(vobj?["icon_custom_emoji_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : createforumtopic explicit?) : createforumtopic? {
+def from_JV(v : JsonValue explicit?; t : createforumtopic explicit?) : createforumtopic? {
     return null if (v == null)
     var q = new createforumtopic
     *q <- from_JV(v, type<createforumtopic>)
@@ -6276,18 +6271,18 @@ struct editforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editforumtopic explicit) : editforumtopic {
+def from_JV(v : JsonValue explicit?; t : editforumtopic explicit) : editforumtopic {
     var q : editforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.icon_custom_emoji_id = _::from_JV(vobj?["icon_custom_emoji_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editforumtopic explicit?) : editforumtopic? {
+def from_JV(v : JsonValue explicit?; t : editforumtopic explicit?) : editforumtopic? {
     return null if (v == null)
     var q = new editforumtopic
     *q <- from_JV(v, type<editforumtopic>)
@@ -6311,16 +6306,16 @@ struct closeforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : closeforumtopic explicit) : closeforumtopic {
+def from_JV(v : JsonValue explicit?; t : closeforumtopic explicit) : closeforumtopic {
     var q : closeforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : closeforumtopic explicit?) : closeforumtopic? {
+def from_JV(v : JsonValue explicit?; t : closeforumtopic explicit?) : closeforumtopic? {
     return null if (v == null)
     var q = new closeforumtopic
     *q <- from_JV(v, type<closeforumtopic>)
@@ -6342,16 +6337,16 @@ struct reopenforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : reopenforumtopic explicit) : reopenforumtopic {
+def from_JV(v : JsonValue explicit?; t : reopenforumtopic explicit) : reopenforumtopic {
     var q : reopenforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : reopenforumtopic explicit?) : reopenforumtopic? {
+def from_JV(v : JsonValue explicit?; t : reopenforumtopic explicit?) : reopenforumtopic? {
     return null if (v == null)
     var q = new reopenforumtopic
     *q <- from_JV(v, type<reopenforumtopic>)
@@ -6373,16 +6368,16 @@ struct deleteforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deleteforumtopic explicit) : deleteforumtopic {
+def from_JV(v : JsonValue explicit?; t : deleteforumtopic explicit) : deleteforumtopic {
     var q : deleteforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deleteforumtopic explicit?) : deleteforumtopic? {
+def from_JV(v : JsonValue explicit?; t : deleteforumtopic explicit?) : deleteforumtopic? {
     return null if (v == null)
     var q = new deleteforumtopic
     *q <- from_JV(v, type<deleteforumtopic>)
@@ -6404,16 +6399,16 @@ struct unpinallforumtopicmessages {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unpinallforumtopicmessages explicit) : unpinallforumtopicmessages {
+def from_JV(v : JsonValue explicit?; t : unpinallforumtopicmessages explicit) : unpinallforumtopicmessages {
     var q : unpinallforumtopicmessages
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unpinallforumtopicmessages explicit?) : unpinallforumtopicmessages? {
+def from_JV(v : JsonValue explicit?; t : unpinallforumtopicmessages explicit?) : unpinallforumtopicmessages? {
     return null if (v == null)
     var q = new unpinallforumtopicmessages
     *q <- from_JV(v, type<unpinallforumtopicmessages>)
@@ -6435,16 +6430,16 @@ struct editgeneralforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editgeneralforumtopic explicit) : editgeneralforumtopic {
+def from_JV(v : JsonValue explicit?; t : editgeneralforumtopic explicit) : editgeneralforumtopic {
     var q : editgeneralforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.name = _::from_JV(vobj["name"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editgeneralforumtopic explicit?) : editgeneralforumtopic? {
+def from_JV(v : JsonValue explicit?; t : editgeneralforumtopic explicit?) : editgeneralforumtopic? {
     return null if (v == null)
     var q = new editgeneralforumtopic
     *q <- from_JV(v, type<editgeneralforumtopic>)
@@ -6465,15 +6460,15 @@ struct closegeneralforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : closegeneralforumtopic explicit) : closegeneralforumtopic {
+def from_JV(v : JsonValue explicit?; t : closegeneralforumtopic explicit) : closegeneralforumtopic {
     var q : closegeneralforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : closegeneralforumtopic explicit?) : closegeneralforumtopic? {
+def from_JV(v : JsonValue explicit?; t : closegeneralforumtopic explicit?) : closegeneralforumtopic? {
     return null if (v == null)
     var q = new closegeneralforumtopic
     *q <- from_JV(v, type<closegeneralforumtopic>)
@@ -6493,15 +6488,15 @@ struct reopengeneralforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : reopengeneralforumtopic explicit) : reopengeneralforumtopic {
+def from_JV(v : JsonValue explicit?; t : reopengeneralforumtopic explicit) : reopengeneralforumtopic {
     var q : reopengeneralforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : reopengeneralforumtopic explicit?) : reopengeneralforumtopic? {
+def from_JV(v : JsonValue explicit?; t : reopengeneralforumtopic explicit?) : reopengeneralforumtopic? {
     return null if (v == null)
     var q = new reopengeneralforumtopic
     *q <- from_JV(v, type<reopengeneralforumtopic>)
@@ -6521,15 +6516,15 @@ struct hidegeneralforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : hidegeneralforumtopic explicit) : hidegeneralforumtopic {
+def from_JV(v : JsonValue explicit?; t : hidegeneralforumtopic explicit) : hidegeneralforumtopic {
     var q : hidegeneralforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : hidegeneralforumtopic explicit?) : hidegeneralforumtopic? {
+def from_JV(v : JsonValue explicit?; t : hidegeneralforumtopic explicit?) : hidegeneralforumtopic? {
     return null if (v == null)
     var q = new hidegeneralforumtopic
     *q <- from_JV(v, type<hidegeneralforumtopic>)
@@ -6549,15 +6544,15 @@ struct unhidegeneralforumtopic {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unhidegeneralforumtopic explicit) : unhidegeneralforumtopic {
+def from_JV(v : JsonValue explicit?; t : unhidegeneralforumtopic explicit) : unhidegeneralforumtopic {
     var q : unhidegeneralforumtopic
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : unhidegeneralforumtopic explicit?) : unhidegeneralforumtopic? {
+def from_JV(v : JsonValue explicit?; t : unhidegeneralforumtopic explicit?) : unhidegeneralforumtopic? {
     return null if (v == null)
     var q = new unhidegeneralforumtopic
     *q <- from_JV(v, type<unhidegeneralforumtopic>)
@@ -6581,19 +6576,19 @@ struct answercallbackquery {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answercallbackquery explicit) : answercallbackquery {
+def from_JV(v : JsonValue explicit?; t : answercallbackquery explicit) : answercallbackquery {
     var q : answercallbackquery
-    var vobj & = unsafe(v as _object)
-    q.callback_query_id = _::from_JV(vobj["callback_query_id"], type<string>)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.show_alert = _::from_JV(vobj["show_alert"], type<bool>)
-    q.url = _::from_JV(vobj["url"], type<string>)
-    q.cache_time = _::from_JV(vobj["cache_time"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.callback_query_id = _::from_JV(vobj?["callback_query_id"] ?? null, type<string>)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.show_alert = _::from_JV(vobj?["show_alert"] ?? null, type<bool>)
+    q.url = _::from_JV(vobj?["url"] ?? null, type<string>)
+    q.cache_time = _::from_JV(vobj?["cache_time"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answercallbackquery explicit?) : answercallbackquery? {
+def from_JV(v : JsonValue explicit?; t : answercallbackquery explicit?) : answercallbackquery? {
     return null if (v == null)
     var q = new answercallbackquery
     *q <- from_JV(v, type<answercallbackquery>)
@@ -6619,17 +6614,17 @@ struct setmycommands {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setmycommands explicit) : setmycommands {
+def from_JV(v : JsonValue explicit?; t : setmycommands explicit) : setmycommands {
     var q : setmycommands
-    var vobj & = unsafe(v as _object)
-    q.commands <- _::from_JV(vobj["commands"], type<array<botcommand>>)
-    q.scope = _::from_JV(vobj["scope"], type<botcommandscope?>)
-    q.language_code = _::from_JV(vobj["language_code"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.commands <- _::from_JV(vobj?["commands"] ?? null, type<array<botcommand>>)
+    q.scope = _::from_JV(vobj?["scope"] ?? null, type<botcommandscope?>)
+    q.language_code = _::from_JV(vobj?["language_code"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setmycommands explicit?) : setmycommands? {
+def from_JV(v : JsonValue explicit?; t : setmycommands explicit?) : setmycommands? {
     return null if (v == null)
     var q = new setmycommands
     *q <- from_JV(v, type<setmycommands>)
@@ -6654,16 +6649,16 @@ struct deletemycommands {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletemycommands explicit) : deletemycommands {
+def from_JV(v : JsonValue explicit?; t : deletemycommands explicit) : deletemycommands {
     var q : deletemycommands
-    var vobj & = unsafe(v as _object)
-    q.scope = _::from_JV(vobj["scope"], type<botcommandscope?>)
-    q.language_code = _::from_JV(vobj["language_code"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.scope = _::from_JV(vobj?["scope"] ?? null, type<botcommandscope?>)
+    q.language_code = _::from_JV(vobj?["language_code"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletemycommands explicit?) : deletemycommands? {
+def from_JV(v : JsonValue explicit?; t : deletemycommands explicit?) : deletemycommands? {
     return null if (v == null)
     var q = new deletemycommands
     *q <- from_JV(v, type<deletemycommands>)
@@ -6687,16 +6682,16 @@ struct getmycommands {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getmycommands explicit) : getmycommands {
+def from_JV(v : JsonValue explicit?; t : getmycommands explicit) : getmycommands {
     var q : getmycommands
-    var vobj & = unsafe(v as _object)
-    q.scope = _::from_JV(vobj["scope"], type<botcommandscope?>)
-    q.language_code = _::from_JV(vobj["language_code"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.scope = _::from_JV(vobj?["scope"] ?? null, type<botcommandscope?>)
+    q.language_code = _::from_JV(vobj?["language_code"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getmycommands explicit?) : getmycommands? {
+def from_JV(v : JsonValue explicit?; t : getmycommands explicit?) : getmycommands? {
     return null if (v == null)
     var q = new getmycommands
     *q <- from_JV(v, type<getmycommands>)
@@ -6720,16 +6715,16 @@ struct setmydescription {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setmydescription explicit) : setmydescription {
+def from_JV(v : JsonValue explicit?; t : setmydescription explicit) : setmydescription {
     var q : setmydescription
-    var vobj & = unsafe(v as _object)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.language_code = _::from_JV(vobj["language_code"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.language_code = _::from_JV(vobj?["language_code"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setmydescription explicit?) : setmydescription? {
+def from_JV(v : JsonValue explicit?; t : setmydescription explicit?) : setmydescription? {
     return null if (v == null)
     var q = new setmydescription
     *q <- from_JV(v, type<setmydescription>)
@@ -6750,15 +6745,15 @@ struct getmydescription {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getmydescription explicit) : getmydescription {
+def from_JV(v : JsonValue explicit?; t : getmydescription explicit) : getmydescription {
     var q : getmydescription
-    var vobj & = unsafe(v as _object)
-    q.language_code = _::from_JV(vobj["language_code"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.language_code = _::from_JV(vobj?["language_code"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getmydescription explicit?) : getmydescription? {
+def from_JV(v : JsonValue explicit?; t : getmydescription explicit?) : getmydescription? {
     return null if (v == null)
     var q = new getmydescription
     *q <- from_JV(v, type<getmydescription>)
@@ -6779,16 +6774,16 @@ struct setmyshortdescription {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setmyshortdescription explicit) : setmyshortdescription {
+def from_JV(v : JsonValue explicit?; t : setmyshortdescription explicit) : setmyshortdescription {
     var q : setmyshortdescription
-    var vobj & = unsafe(v as _object)
-    q.short_description = _::from_JV(vobj["short_description"], type<string>)
-    q.language_code = _::from_JV(vobj["language_code"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.short_description = _::from_JV(vobj?["short_description"] ?? null, type<string>)
+    q.language_code = _::from_JV(vobj?["language_code"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setmyshortdescription explicit?) : setmyshortdescription? {
+def from_JV(v : JsonValue explicit?; t : setmyshortdescription explicit?) : setmyshortdescription? {
     return null if (v == null)
     var q = new setmyshortdescription
     *q <- from_JV(v, type<setmyshortdescription>)
@@ -6809,15 +6804,15 @@ struct getmyshortdescription {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getmyshortdescription explicit) : getmyshortdescription {
+def from_JV(v : JsonValue explicit?; t : getmyshortdescription explicit) : getmyshortdescription {
     var q : getmyshortdescription
-    var vobj & = unsafe(v as _object)
-    q.language_code = _::from_JV(vobj["language_code"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.language_code = _::from_JV(vobj?["language_code"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getmyshortdescription explicit?) : getmyshortdescription? {
+def from_JV(v : JsonValue explicit?; t : getmyshortdescription explicit?) : getmyshortdescription? {
     return null if (v == null)
     var q = new getmyshortdescription
     *q <- from_JV(v, type<getmyshortdescription>)
@@ -6838,16 +6833,16 @@ struct setchatmenubutton {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatmenubutton explicit) : setchatmenubutton {
+def from_JV(v : JsonValue explicit?; t : setchatmenubutton explicit) : setchatmenubutton {
     var q : setchatmenubutton
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
-    q.menu_button = _::from_JV(vobj["menu_button"], type<menubutton?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<int64>)
+    q.menu_button = _::from_JV(vobj?["menu_button"] ?? null, type<menubutton?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setchatmenubutton explicit?) : setchatmenubutton? {
+def from_JV(v : JsonValue explicit?; t : setchatmenubutton explicit?) : setchatmenubutton? {
     return null if (v == null)
     var q = new setchatmenubutton
     *q <- from_JV(v, type<setchatmenubutton>)
@@ -6870,15 +6865,15 @@ struct getchatmenubutton {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchatmenubutton explicit) : getchatmenubutton {
+def from_JV(v : JsonValue explicit?; t : getchatmenubutton explicit) : getchatmenubutton {
     var q : getchatmenubutton
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getchatmenubutton explicit?) : getchatmenubutton? {
+def from_JV(v : JsonValue explicit?; t : getchatmenubutton explicit?) : getchatmenubutton? {
     return null if (v == null)
     var q = new getchatmenubutton
     *q <- from_JV(v, type<getchatmenubutton>)
@@ -6899,16 +6894,16 @@ struct setmydefaultadministratorrights {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setmydefaultadministratorrights explicit) : setmydefaultadministratorrights {
+def from_JV(v : JsonValue explicit?; t : setmydefaultadministratorrights explicit) : setmydefaultadministratorrights {
     var q : setmydefaultadministratorrights
-    var vobj & = unsafe(v as _object)
-    q.rights = _::from_JV(vobj["rights"], type<chatadministratorrights?>)
-    q.for_channels = _::from_JV(vobj["for_channels"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.rights = _::from_JV(vobj?["rights"] ?? null, type<chatadministratorrights?>)
+    q.for_channels = _::from_JV(vobj?["for_channels"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setmydefaultadministratorrights explicit?) : setmydefaultadministratorrights? {
+def from_JV(v : JsonValue explicit?; t : setmydefaultadministratorrights explicit?) : setmydefaultadministratorrights? {
     return null if (v == null)
     var q = new setmydefaultadministratorrights
     *q <- from_JV(v, type<setmydefaultadministratorrights>)
@@ -6931,15 +6926,15 @@ struct getmydefaultadministratorrights {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getmydefaultadministratorrights explicit) : getmydefaultadministratorrights {
+def from_JV(v : JsonValue explicit?; t : getmydefaultadministratorrights explicit) : getmydefaultadministratorrights {
     var q : getmydefaultadministratorrights
-    var vobj & = unsafe(v as _object)
-    q.for_channels = _::from_JV(vobj["for_channels"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.for_channels = _::from_JV(vobj?["for_channels"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getmydefaultadministratorrights explicit?) : getmydefaultadministratorrights? {
+def from_JV(v : JsonValue explicit?; t : getmydefaultadministratorrights explicit?) : getmydefaultadministratorrights? {
     return null if (v == null)
     var q = new getmydefaultadministratorrights
     *q <- from_JV(v, type<getmydefaultadministratorrights>)
@@ -6959,14 +6954,14 @@ struct inline_mode_methods {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inline_mode_methods explicit) : inline_mode_methods {
+def from_JV(v : JsonValue explicit?; t : inline_mode_methods explicit) : inline_mode_methods {
     var q : inline_mode_methods
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inline_mode_methods explicit?) : inline_mode_methods? {
+def from_JV(v : JsonValue explicit?; t : inline_mode_methods explicit?) : inline_mode_methods? {
     return null if (v == null)
     var q = new inline_mode_methods
     *q <- from_JV(v, type<inline_mode_methods>)
@@ -6992,22 +6987,22 @@ struct editmessagetext {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagetext explicit) : editmessagetext {
+def from_JV(v : JsonValue explicit?; t : editmessagetext explicit) : editmessagetext {
     var q : editmessagetext
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.entities <- _::from_JV(vobj["entities"], type<array<messageentity>>)
-    q.disable_web_page_preview = _::from_JV(vobj["disable_web_page_preview"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.entities <- _::from_JV(vobj?["entities"] ?? null, type<array<messageentity>>)
+    q.disable_web_page_preview = _::from_JV(vobj?["disable_web_page_preview"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagetext explicit?) : editmessagetext? {
+def from_JV(v : JsonValue explicit?; t : editmessagetext explicit?) : editmessagetext? {
     return null if (v == null)
     var q = new editmessagetext
     *q <- from_JV(v, type<editmessagetext>)
@@ -7042,21 +7037,21 @@ struct editmessagecaption {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagecaption explicit) : editmessagecaption {
+def from_JV(v : JsonValue explicit?; t : editmessagecaption explicit) : editmessagecaption {
     var q : editmessagecaption
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagecaption explicit?) : editmessagecaption? {
+def from_JV(v : JsonValue explicit?; t : editmessagecaption explicit?) : editmessagecaption? {
     return null if (v == null)
     var q = new editmessagecaption
     *q <- from_JV(v, type<editmessagecaption>)
@@ -7088,19 +7083,19 @@ struct editmessagemedia {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagemedia explicit) : editmessagemedia {
+def from_JV(v : JsonValue explicit?; t : editmessagemedia explicit) : editmessagemedia {
     var q : editmessagemedia
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
-    q.media <- _::from_JV(vobj["media"], type<inputmedia>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
+    q.media <- _::from_JV(vobj?["media"] ?? null, type<inputmedia>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagemedia explicit?) : editmessagemedia? {
+def from_JV(v : JsonValue explicit?; t : editmessagemedia explicit?) : editmessagemedia? {
     return null if (v == null)
     var q = new editmessagemedia
     *q <- from_JV(v, type<editmessagemedia>)
@@ -7134,23 +7129,23 @@ struct editmessagelivelocation {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagelivelocation explicit) : editmessagelivelocation {
+def from_JV(v : JsonValue explicit?; t : editmessagelivelocation explicit) : editmessagelivelocation {
     var q : editmessagelivelocation
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
-    q.latitude = _::from_JV(vobj["latitude"], type<float>)
-    q.longitude = _::from_JV(vobj["longitude"], type<float>)
-    q.horizontal_accuracy = _::from_JV(vobj["horizontal_accuracy"], type<float>)
-    q.heading = _::from_JV(vobj["heading"], type<int64>)
-    q.proximity_alert_radius = _::from_JV(vobj["proximity_alert_radius"], type<int64>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
+    q.latitude = _::from_JV(vobj?["latitude"] ?? null, type<float>)
+    q.longitude = _::from_JV(vobj?["longitude"] ?? null, type<float>)
+    q.horizontal_accuracy = _::from_JV(vobj?["horizontal_accuracy"] ?? null, type<float>)
+    q.heading = _::from_JV(vobj?["heading"] ?? null, type<int64>)
+    q.proximity_alert_radius = _::from_JV(vobj?["proximity_alert_radius"] ?? null, type<int64>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagelivelocation explicit?) : editmessagelivelocation? {
+def from_JV(v : JsonValue explicit?; t : editmessagelivelocation explicit?) : editmessagelivelocation? {
     return null if (v == null)
     var q = new editmessagelivelocation
     *q <- from_JV(v, type<editmessagelivelocation>)
@@ -7183,18 +7178,18 @@ struct stopmessagelivelocation {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : stopmessagelivelocation explicit) : stopmessagelivelocation {
+def from_JV(v : JsonValue explicit?; t : stopmessagelivelocation explicit) : stopmessagelivelocation {
     var q : stopmessagelivelocation
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : stopmessagelivelocation explicit?) : stopmessagelivelocation? {
+def from_JV(v : JsonValue explicit?; t : stopmessagelivelocation explicit?) : stopmessagelivelocation? {
     return null if (v == null)
     var q = new stopmessagelivelocation
     *q <- from_JV(v, type<stopmessagelivelocation>)
@@ -7222,18 +7217,18 @@ struct editmessagereplymarkup {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagereplymarkup explicit) : editmessagereplymarkup {
+def from_JV(v : JsonValue explicit?; t : editmessagereplymarkup explicit) : editmessagereplymarkup {
     var q : editmessagereplymarkup
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : editmessagereplymarkup explicit?) : editmessagereplymarkup? {
+def from_JV(v : JsonValue explicit?; t : editmessagereplymarkup explicit?) : editmessagereplymarkup? {
     return null if (v == null)
     var q = new editmessagereplymarkup
     *q <- from_JV(v, type<editmessagereplymarkup>)
@@ -7260,17 +7255,17 @@ struct stoppoll {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : stoppoll explicit) : stoppoll {
+def from_JV(v : JsonValue explicit?; t : stoppoll explicit) : stoppoll {
     var q : stoppoll
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : stoppoll explicit?) : stoppoll? {
+def from_JV(v : JsonValue explicit?; t : stoppoll explicit?) : stoppoll? {
     return null if (v == null)
     var q = new stoppoll
     *q <- from_JV(v, type<stoppoll>)
@@ -7295,16 +7290,16 @@ struct deletemessage {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletemessage explicit) : deletemessage {
+def from_JV(v : JsonValue explicit?; t : deletemessage explicit) : deletemessage {
     var q : deletemessage
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletemessage explicit?) : deletemessage? {
+def from_JV(v : JsonValue explicit?; t : deletemessage explicit?) : deletemessage? {
     return null if (v == null)
     var q = new deletemessage
     *q <- from_JV(v, type<deletemessage>)
@@ -7339,29 +7334,29 @@ struct sticker {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sticker explicit) : sticker {
+def from_JV(v : JsonValue explicit?; t : sticker explicit) : sticker {
     var q : sticker
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.width = _::from_JV(vobj["width"], type<int64>)
-    q.height = _::from_JV(vobj["height"], type<int64>)
-    q.is_animated = _::from_JV(vobj["is_animated"], type<bool>)
-    q.is_video = _::from_JV(vobj["is_video"], type<bool>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
-    q.emoji = _::from_JV(vobj["emoji"], type<string>)
-    q.set_name = _::from_JV(vobj["set_name"], type<string>)
-    q.premium_animation = _::from_JV(vobj["premium_animation"], type<file?>)
-    q.mask_position = _::from_JV(vobj["mask_position"], type<maskposition?>)
-    q.custom_emoji_id = _::from_JV(vobj["custom_emoji_id"], type<string>)
-    q.needs_repainting = _::from_JV(vobj["needs_repainting"], type<bool>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.width = _::from_JV(vobj?["width"] ?? null, type<int64>)
+    q.height = _::from_JV(vobj?["height"] ?? null, type<int64>)
+    q.is_animated = _::from_JV(vobj?["is_animated"] ?? null, type<bool>)
+    q.is_video = _::from_JV(vobj?["is_video"] ?? null, type<bool>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<photosize?>)
+    q.emoji = _::from_JV(vobj?["emoji"] ?? null, type<string>)
+    q.set_name = _::from_JV(vobj?["set_name"] ?? null, type<string>)
+    q.premium_animation = _::from_JV(vobj?["premium_animation"] ?? null, type<file?>)
+    q.mask_position = _::from_JV(vobj?["mask_position"] ?? null, type<maskposition?>)
+    q.custom_emoji_id = _::from_JV(vobj?["custom_emoji_id"] ?? null, type<string>)
+    q.needs_repainting = _::from_JV(vobj?["needs_repainting"] ?? null, type<bool>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sticker explicit?) : sticker? {
+def from_JV(v : JsonValue explicit?; t : sticker explicit?) : sticker? {
     return null if (v == null)
     var q = new sticker
     *q <- from_JV(v, type<sticker>)
@@ -7407,21 +7402,21 @@ struct stickerset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : stickerset explicit) : stickerset {
+def from_JV(v : JsonValue explicit?; t : stickerset explicit) : stickerset {
     var q : stickerset
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.sticker_type = _::from_JV(vobj["sticker_type"], type<string>)
-    q.is_animated = _::from_JV(vobj["is_animated"], type<bool>)
-    q.is_video = _::from_JV(vobj["is_video"], type<bool>)
-    q.stickers <- _::from_JV(vobj["stickers"], type<array<sticker>>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.sticker_type = _::from_JV(vobj?["sticker_type"] ?? null, type<string>)
+    q.is_animated = _::from_JV(vobj?["is_animated"] ?? null, type<bool>)
+    q.is_video = _::from_JV(vobj?["is_video"] ?? null, type<bool>)
+    q.stickers <- _::from_JV(vobj?["stickers"] ?? null, type<array<sticker>>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<photosize?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : stickerset explicit?) : stickerset? {
+def from_JV(v : JsonValue explicit?; t : stickerset explicit?) : stickerset? {
     return null if (v == null)
     var q = new stickerset
     *q <- from_JV(v, type<stickerset>)
@@ -7452,18 +7447,18 @@ struct maskposition {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : maskposition explicit) : maskposition {
+def from_JV(v : JsonValue explicit?; t : maskposition explicit) : maskposition {
     var q : maskposition
-    var vobj & = unsafe(v as _object)
-    q.point = _::from_JV(vobj["point"], type<string>)
-    q.x_shift = _::from_JV(vobj["x_shift"], type<float>)
-    q.y_shift = _::from_JV(vobj["y_shift"], type<float>)
-    q.scale = _::from_JV(vobj["scale"], type<float>)
+    let vobj & = unsafe(v as _object)
+    q.point = _::from_JV(vobj?["point"] ?? null, type<string>)
+    q.x_shift = _::from_JV(vobj?["x_shift"] ?? null, type<float>)
+    q.y_shift = _::from_JV(vobj?["y_shift"] ?? null, type<float>)
+    q.scale = _::from_JV(vobj?["scale"] ?? null, type<float>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : maskposition explicit?) : maskposition? {
+def from_JV(v : JsonValue explicit?; t : maskposition explicit?) : maskposition? {
     return null if (v == null)
     var q = new maskposition
     *q <- from_JV(v, type<maskposition>)
@@ -7489,18 +7484,18 @@ struct inputsticker {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputsticker explicit) : inputsticker {
+def from_JV(v : JsonValue explicit?; t : inputsticker explicit) : inputsticker {
     var q : inputsticker
-    var vobj & = unsafe(v as _object)
-    q.sticker <- _::from_JV(vobj["sticker"], type<inputfile>)
-    q.emoji_list <- _::from_JV(vobj["emoji_list"], type<array<string>>)
-    q.mask_position = _::from_JV(vobj["mask_position"], type<maskposition?>)
-    q.keywords <- _::from_JV(vobj["keywords"], type<array<string>>)
+    let vobj & = unsafe(v as _object)
+    q.sticker <- _::from_JV(vobj?["sticker"] ?? null, type<inputfile>)
+    q.emoji_list <- _::from_JV(vobj?["emoji_list"] ?? null, type<array<string>>)
+    q.mask_position = _::from_JV(vobj?["mask_position"] ?? null, type<maskposition?>)
+    q.keywords <- _::from_JV(vobj?["keywords"] ?? null, type<array<string>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputsticker explicit?) : inputsticker? {
+def from_JV(v : JsonValue explicit?; t : inputsticker explicit?) : inputsticker? {
     return null if (v == null)
     var q = new inputsticker
     *q <- from_JV(v, type<inputsticker>)
@@ -7533,23 +7528,23 @@ struct sendsticker {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendsticker explicit) : sendsticker {
+def from_JV(v : JsonValue explicit?; t : sendsticker explicit) : sendsticker {
     var q : sendsticker
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.sticker <- _::from_JV(vobj["sticker"], type<inputfile>)
-    q.emoji = _::from_JV(vobj["emoji"], type<string>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.sticker <- _::from_JV(vobj?["sticker"] ?? null, type<inputfile>)
+    q.emoji = _::from_JV(vobj?["emoji"] ?? null, type<string>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendsticker explicit?) : sendsticker? {
+def from_JV(v : JsonValue explicit?; t : sendsticker explicit?) : sendsticker? {
     return null if (v == null)
     var q = new sendsticker
     *q <- from_JV(v, type<sendsticker>)
@@ -7579,15 +7574,15 @@ struct getstickerset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getstickerset explicit) : getstickerset {
+def from_JV(v : JsonValue explicit?; t : getstickerset explicit) : getstickerset {
     var q : getstickerset
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getstickerset explicit?) : getstickerset? {
+def from_JV(v : JsonValue explicit?; t : getstickerset explicit?) : getstickerset? {
     return null if (v == null)
     var q = new getstickerset
     *q <- from_JV(v, type<getstickerset>)
@@ -7607,15 +7602,15 @@ struct getcustomemojistickers {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getcustomemojistickers explicit) : getcustomemojistickers {
+def from_JV(v : JsonValue explicit?; t : getcustomemojistickers explicit) : getcustomemojistickers {
     var q : getcustomemojistickers
-    var vobj & = unsafe(v as _object)
-    q.custom_emoji_ids <- _::from_JV(vobj["custom_emoji_ids"], type<array<string>>)
+    let vobj & = unsafe(v as _object)
+    q.custom_emoji_ids <- _::from_JV(vobj?["custom_emoji_ids"] ?? null, type<array<string>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getcustomemojistickers explicit?) : getcustomemojistickers? {
+def from_JV(v : JsonValue explicit?; t : getcustomemojistickers explicit?) : getcustomemojistickers? {
     return null if (v == null)
     var q = new getcustomemojistickers
     *q <- from_JV(v, type<getcustomemojistickers>)
@@ -7637,17 +7632,17 @@ struct uploadstickerfile {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : uploadstickerfile explicit) : uploadstickerfile {
+def from_JV(v : JsonValue explicit?; t : uploadstickerfile explicit) : uploadstickerfile {
     var q : uploadstickerfile
-    var vobj & = unsafe(v as _object)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.sticker <- _::from_JV(vobj["sticker"], type<inputfile>)
-    q.sticker_format = _::from_JV(vobj["sticker_format"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.sticker <- _::from_JV(vobj?["sticker"] ?? null, type<inputfile>)
+    q.sticker_format = _::from_JV(vobj?["sticker_format"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : uploadstickerfile explicit?) : uploadstickerfile? {
+def from_JV(v : JsonValue explicit?; t : uploadstickerfile explicit?) : uploadstickerfile? {
     return null if (v == null)
     var q = new uploadstickerfile
     *q <- from_JV(v, type<uploadstickerfile>)
@@ -7675,21 +7670,21 @@ struct createnewstickerset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : createnewstickerset explicit) : createnewstickerset {
+def from_JV(v : JsonValue explicit?; t : createnewstickerset explicit) : createnewstickerset {
     var q : createnewstickerset
-    var vobj & = unsafe(v as _object)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.stickers <- _::from_JV(vobj["stickers"], type<array<inputsticker>>)
-    q.sticker_format = _::from_JV(vobj["sticker_format"], type<string>)
-    q.sticker_type = _::from_JV(vobj["sticker_type"], type<string>)
-    q.needs_repainting = _::from_JV(vobj["needs_repainting"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.stickers <- _::from_JV(vobj?["stickers"] ?? null, type<array<inputsticker>>)
+    q.sticker_format = _::from_JV(vobj?["sticker_format"] ?? null, type<string>)
+    q.sticker_type = _::from_JV(vobj?["sticker_type"] ?? null, type<string>)
+    q.needs_repainting = _::from_JV(vobj?["needs_repainting"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : createnewstickerset explicit?) : createnewstickerset? {
+def from_JV(v : JsonValue explicit?; t : createnewstickerset explicit?) : createnewstickerset? {
     return null if (v == null)
     var q = new createnewstickerset
     *q <- from_JV(v, type<createnewstickerset>)
@@ -7717,17 +7712,17 @@ struct addstickertoset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : addstickertoset explicit) : addstickertoset {
+def from_JV(v : JsonValue explicit?; t : addstickertoset explicit) : addstickertoset {
     var q : addstickertoset
-    var vobj & = unsafe(v as _object)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.sticker <- _::from_JV(vobj["sticker"], type<inputsticker>)
+    let vobj & = unsafe(v as _object)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.sticker <- _::from_JV(vobj?["sticker"] ?? null, type<inputsticker>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : addstickertoset explicit?) : addstickertoset? {
+def from_JV(v : JsonValue explicit?; t : addstickertoset explicit?) : addstickertoset? {
     return null if (v == null)
     var q = new addstickertoset
     *q <- from_JV(v, type<addstickertoset>)
@@ -7750,16 +7745,16 @@ struct setstickerpositioninset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickerpositioninset explicit) : setstickerpositioninset {
+def from_JV(v : JsonValue explicit?; t : setstickerpositioninset explicit) : setstickerpositioninset {
     var q : setstickerpositioninset
-    var vobj & = unsafe(v as _object)
-    q.sticker = _::from_JV(vobj["sticker"], type<string>)
-    q.position = _::from_JV(vobj["position"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.sticker = _::from_JV(vobj?["sticker"] ?? null, type<string>)
+    q.position = _::from_JV(vobj?["position"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickerpositioninset explicit?) : setstickerpositioninset? {
+def from_JV(v : JsonValue explicit?; t : setstickerpositioninset explicit?) : setstickerpositioninset? {
     return null if (v == null)
     var q = new setstickerpositioninset
     *q <- from_JV(v, type<setstickerpositioninset>)
@@ -7780,15 +7775,15 @@ struct deletestickerfromset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletestickerfromset explicit) : deletestickerfromset {
+def from_JV(v : JsonValue explicit?; t : deletestickerfromset explicit) : deletestickerfromset {
     var q : deletestickerfromset
-    var vobj & = unsafe(v as _object)
-    q.sticker = _::from_JV(vobj["sticker"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.sticker = _::from_JV(vobj?["sticker"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletestickerfromset explicit?) : deletestickerfromset? {
+def from_JV(v : JsonValue explicit?; t : deletestickerfromset explicit?) : deletestickerfromset? {
     return null if (v == null)
     var q = new deletestickerfromset
     *q <- from_JV(v, type<deletestickerfromset>)
@@ -7809,16 +7804,16 @@ struct setstickeremojilist {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickeremojilist explicit) : setstickeremojilist {
+def from_JV(v : JsonValue explicit?; t : setstickeremojilist explicit) : setstickeremojilist {
     var q : setstickeremojilist
-    var vobj & = unsafe(v as _object)
-    q.sticker = _::from_JV(vobj["sticker"], type<string>)
-    q.emoji_list <- _::from_JV(vobj["emoji_list"], type<array<string>>)
+    let vobj & = unsafe(v as _object)
+    q.sticker = _::from_JV(vobj?["sticker"] ?? null, type<string>)
+    q.emoji_list <- _::from_JV(vobj?["emoji_list"] ?? null, type<array<string>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickeremojilist explicit?) : setstickeremojilist? {
+def from_JV(v : JsonValue explicit?; t : setstickeremojilist explicit?) : setstickeremojilist? {
     return null if (v == null)
     var q = new setstickeremojilist
     *q <- from_JV(v, type<setstickeremojilist>)
@@ -7840,16 +7835,16 @@ struct setstickerkeywords {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickerkeywords explicit) : setstickerkeywords {
+def from_JV(v : JsonValue explicit?; t : setstickerkeywords explicit) : setstickerkeywords {
     var q : setstickerkeywords
-    var vobj & = unsafe(v as _object)
-    q.sticker = _::from_JV(vobj["sticker"], type<string>)
-    q.keywords <- _::from_JV(vobj["keywords"], type<array<string>>)
+    let vobj & = unsafe(v as _object)
+    q.sticker = _::from_JV(vobj?["sticker"] ?? null, type<string>)
+    q.keywords <- _::from_JV(vobj?["keywords"] ?? null, type<array<string>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickerkeywords explicit?) : setstickerkeywords? {
+def from_JV(v : JsonValue explicit?; t : setstickerkeywords explicit?) : setstickerkeywords? {
     return null if (v == null)
     var q = new setstickerkeywords
     *q <- from_JV(v, type<setstickerkeywords>)
@@ -7871,16 +7866,16 @@ struct setstickermaskposition {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickermaskposition explicit) : setstickermaskposition {
+def from_JV(v : JsonValue explicit?; t : setstickermaskposition explicit) : setstickermaskposition {
     var q : setstickermaskposition
-    var vobj & = unsafe(v as _object)
-    q.sticker = _::from_JV(vobj["sticker"], type<string>)
-    q.mask_position = _::from_JV(vobj["mask_position"], type<maskposition?>)
+    let vobj & = unsafe(v as _object)
+    q.sticker = _::from_JV(vobj?["sticker"] ?? null, type<string>)
+    q.mask_position = _::from_JV(vobj?["mask_position"] ?? null, type<maskposition?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickermaskposition explicit?) : setstickermaskposition? {
+def from_JV(v : JsonValue explicit?; t : setstickermaskposition explicit?) : setstickermaskposition? {
     return null if (v == null)
     var q = new setstickermaskposition
     *q <- from_JV(v, type<setstickermaskposition>)
@@ -7904,16 +7899,16 @@ struct setstickersettitle {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickersettitle explicit) : setstickersettitle {
+def from_JV(v : JsonValue explicit?; t : setstickersettitle explicit) : setstickersettitle {
     var q : setstickersettitle
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickersettitle explicit?) : setstickersettitle? {
+def from_JV(v : JsonValue explicit?; t : setstickersettitle explicit?) : setstickersettitle? {
     return null if (v == null)
     var q = new setstickersettitle
     *q <- from_JV(v, type<setstickersettitle>)
@@ -7936,17 +7931,17 @@ struct setstickersetthumbnail {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickersetthumbnail explicit) : setstickersetthumbnail {
+def from_JV(v : JsonValue explicit?; t : setstickersetthumbnail explicit) : setstickersetthumbnail {
     var q : setstickersetthumbnail
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.thumbnail = _::from_JV(vobj?["thumbnail"] ?? null, type<inputfile?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setstickersetthumbnail explicit?) : setstickersetthumbnail? {
+def from_JV(v : JsonValue explicit?; t : setstickersetthumbnail explicit?) : setstickersetthumbnail? {
     return null if (v == null)
     var q = new setstickersetthumbnail
     *q <- from_JV(v, type<setstickersetthumbnail>)
@@ -7971,16 +7966,16 @@ struct setcustomemojistickersetthumbnail {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setcustomemojistickersetthumbnail explicit) : setcustomemojistickersetthumbnail {
+def from_JV(v : JsonValue explicit?; t : setcustomemojistickersetthumbnail explicit) : setcustomemojistickersetthumbnail {
     var q : setcustomemojistickersetthumbnail
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.custom_emoji_id = _::from_JV(vobj["custom_emoji_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.custom_emoji_id = _::from_JV(vobj?["custom_emoji_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setcustomemojistickersetthumbnail explicit?) : setcustomemojistickersetthumbnail? {
+def from_JV(v : JsonValue explicit?; t : setcustomemojistickersetthumbnail explicit?) : setcustomemojistickersetthumbnail? {
     return null if (v == null)
     var q = new setcustomemojistickersetthumbnail
     *q <- from_JV(v, type<setcustomemojistickersetthumbnail>)
@@ -8001,15 +7996,15 @@ struct deletestickerset {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletestickerset explicit) : deletestickerset {
+def from_JV(v : JsonValue explicit?; t : deletestickerset explicit) : deletestickerset {
     var q : deletestickerset
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : deletestickerset explicit?) : deletestickerset? {
+def from_JV(v : JsonValue explicit?; t : deletestickerset explicit?) : deletestickerset? {
     return null if (v == null)
     var q = new deletestickerset
     *q <- from_JV(v, type<deletestickerset>)
@@ -8034,20 +8029,20 @@ struct inlinequery {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequery explicit) : inlinequery {
+def from_JV(v : JsonValue explicit?; t : inlinequery explicit) : inlinequery {
     var q : inlinequery
-    var vobj & = unsafe(v as _object)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.from <- _::from_JV(vobj["from"], type<user>)
-    q.query = _::from_JV(vobj["query"], type<string>)
-    q.offset = _::from_JV(vobj["offset"], type<string>)
-    q.chat_type = _::from_JV(vobj["chat_type"], type<string>)
-    q.location = _::from_JV(vobj["location"], type<location?>)
+    let vobj & = unsafe(v as _object)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.from <- _::from_JV(vobj?["from"] ?? null, type<user>)
+    q.query = _::from_JV(vobj?["query"] ?? null, type<string>)
+    q.offset = _::from_JV(vobj?["offset"] ?? null, type<string>)
+    q.chat_type = _::from_JV(vobj?["chat_type"] ?? null, type<string>)
+    q.location = _::from_JV(vobj?["location"] ?? null, type<location?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequery explicit?) : inlinequery? {
+def from_JV(v : JsonValue explicit?; t : inlinequery explicit?) : inlinequery? {
     return null if (v == null)
     var q = new inlinequery
     *q <- from_JV(v, type<inlinequery>)
@@ -8080,21 +8075,21 @@ struct answerinlinequery {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answerinlinequery explicit) : answerinlinequery {
+def from_JV(v : JsonValue explicit?; t : answerinlinequery explicit) : answerinlinequery {
     var q : answerinlinequery
-    var vobj & = unsafe(v as _object)
-    q.inline_query_id = _::from_JV(vobj["inline_query_id"], type<string>)
-    q.results <- _::from_JV(vobj["results"], type<array<inlinequeryresult>>)
-    q.cache_time = _::from_JV(vobj["cache_time"], type<int64>)
-    q.is_personal = _::from_JV(vobj["is_personal"], type<bool>)
-    q.next_offset = _::from_JV(vobj["next_offset"], type<string>)
-    q.switch_pm_text = _::from_JV(vobj["switch_pm_text"], type<string>)
-    q.switch_pm_parameter = _::from_JV(vobj["switch_pm_parameter"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.inline_query_id = _::from_JV(vobj?["inline_query_id"] ?? null, type<string>)
+    q.results <- _::from_JV(vobj?["results"] ?? null, type<array<inlinequeryresult>>)
+    q.cache_time = _::from_JV(vobj?["cache_time"] ?? null, type<int64>)
+    q.is_personal = _::from_JV(vobj?["is_personal"] ?? null, type<bool>)
+    q.next_offset = _::from_JV(vobj?["next_offset"] ?? null, type<string>)
+    q.switch_pm_text = _::from_JV(vobj?["switch_pm_text"] ?? null, type<string>)
+    q.switch_pm_parameter = _::from_JV(vobj?["switch_pm_parameter"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answerinlinequery explicit?) : answerinlinequery? {
+def from_JV(v : JsonValue explicit?; t : answerinlinequery explicit?) : answerinlinequery? {
     return null if (v == null)
     var q = new answerinlinequery
     *q <- from_JV(v, type<answerinlinequery>)
@@ -8120,14 +8115,14 @@ struct inlinequeryresult {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresult explicit) : inlinequeryresult {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresult explicit) : inlinequeryresult {
     var q : inlinequeryresult
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresult explicit?) : inlinequeryresult? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresult explicit?) : inlinequeryresult? {
     return null if (v == null)
     var q = new inlinequeryresult
     *q <- from_JV(v, type<inlinequeryresult>)
@@ -8156,25 +8151,25 @@ struct inlinequeryresultarticle {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultarticle explicit) : inlinequeryresultarticle {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultarticle explicit) : inlinequeryresultarticle {
     var q : inlinequeryresultarticle
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.input_message_content <- _::from_JV(vobj["input_message_content"], type<inputmessagecontent>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.url = _::from_JV(vobj["url"], type<string>)
-    q.hide_url = _::from_JV(vobj["hide_url"], type<bool>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.thumbnail_width = _::from_JV(vobj["thumbnail_width"], type<int64>)
-    q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.input_message_content <- _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.url = _::from_JV(vobj?["url"] ?? null, type<string>)
+    q.hide_url = _::from_JV(vobj?["hide_url"] ?? null, type<bool>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.thumbnail_width = _::from_JV(vobj?["thumbnail_width"] ?? null, type<int64>)
+    q.thumbnail_height = _::from_JV(vobj?["thumbnail_height"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultarticle explicit?) : inlinequeryresultarticle? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultarticle explicit?) : inlinequeryresultarticle? {
     return null if (v == null)
     var q = new inlinequeryresultarticle
     *q <- from_JV(v, type<inlinequeryresultarticle>)
@@ -8218,27 +8213,27 @@ struct inlinequeryresultphoto {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultphoto explicit) : inlinequeryresultphoto {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultphoto explicit) : inlinequeryresultphoto {
     var q : inlinequeryresultphoto
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.photo_url = _::from_JV(vobj["photo_url"], type<string>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.photo_width = _::from_JV(vobj["photo_width"], type<int64>)
-    q.photo_height = _::from_JV(vobj["photo_height"], type<int64>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.photo_url = _::from_JV(vobj?["photo_url"] ?? null, type<string>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.photo_width = _::from_JV(vobj?["photo_width"] ?? null, type<int64>)
+    q.photo_height = _::from_JV(vobj?["photo_height"] ?? null, type<int64>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultphoto explicit?) : inlinequeryresultphoto? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultphoto explicit?) : inlinequeryresultphoto? {
     return null if (v == null)
     var q = new inlinequeryresultphoto
     *q <- from_JV(v, type<inlinequeryresultphoto>)
@@ -8287,28 +8282,28 @@ struct inlinequeryresultgif {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultgif explicit) : inlinequeryresultgif {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultgif explicit) : inlinequeryresultgif {
     var q : inlinequeryresultgif
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.gif_url = _::from_JV(vobj["gif_url"], type<string>)
-    q.gif_width = _::from_JV(vobj["gif_width"], type<int64>)
-    q.gif_height = _::from_JV(vobj["gif_height"], type<int64>)
-    q.gif_duration = _::from_JV(vobj["gif_duration"], type<int64>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.thumbnail_mime_type = _::from_JV(vobj["thumbnail_mime_type"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.gif_url = _::from_JV(vobj?["gif_url"] ?? null, type<string>)
+    q.gif_width = _::from_JV(vobj?["gif_width"] ?? null, type<int64>)
+    q.gif_height = _::from_JV(vobj?["gif_height"] ?? null, type<int64>)
+    q.gif_duration = _::from_JV(vobj?["gif_duration"] ?? null, type<int64>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.thumbnail_mime_type = _::from_JV(vobj?["thumbnail_mime_type"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultgif explicit?) : inlinequeryresultgif? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultgif explicit?) : inlinequeryresultgif? {
     return null if (v == null)
     var q = new inlinequeryresultgif
     *q <- from_JV(v, type<inlinequeryresultgif>)
@@ -8358,28 +8353,28 @@ struct inlinequeryresultmpeg4gif {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultmpeg4gif explicit) : inlinequeryresultmpeg4gif {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultmpeg4gif explicit) : inlinequeryresultmpeg4gif {
     var q : inlinequeryresultmpeg4gif
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.mpeg4_url = _::from_JV(vobj["mpeg4_url"], type<string>)
-    q.mpeg4_width = _::from_JV(vobj["mpeg4_width"], type<int64>)
-    q.mpeg4_height = _::from_JV(vobj["mpeg4_height"], type<int64>)
-    q.mpeg4_duration = _::from_JV(vobj["mpeg4_duration"], type<int64>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.thumbnail_mime_type = _::from_JV(vobj["thumbnail_mime_type"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.mpeg4_url = _::from_JV(vobj?["mpeg4_url"] ?? null, type<string>)
+    q.mpeg4_width = _::from_JV(vobj?["mpeg4_width"] ?? null, type<int64>)
+    q.mpeg4_height = _::from_JV(vobj?["mpeg4_height"] ?? null, type<int64>)
+    q.mpeg4_duration = _::from_JV(vobj?["mpeg4_duration"] ?? null, type<int64>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.thumbnail_mime_type = _::from_JV(vobj?["thumbnail_mime_type"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultmpeg4gif explicit?) : inlinequeryresultmpeg4gif? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultmpeg4gif explicit?) : inlinequeryresultmpeg4gif? {
     return null if (v == null)
     var q = new inlinequeryresultmpeg4gif
     *q <- from_JV(v, type<inlinequeryresultmpeg4gif>)
@@ -8430,29 +8425,29 @@ struct inlinequeryresultvideo {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultvideo explicit) : inlinequeryresultvideo {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultvideo explicit) : inlinequeryresultvideo {
     var q : inlinequeryresultvideo
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.video_url = _::from_JV(vobj["video_url"], type<string>)
-    q.mime_type = _::from_JV(vobj["mime_type"], type<string>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.video_width = _::from_JV(vobj["video_width"], type<int64>)
-    q.video_height = _::from_JV(vobj["video_height"], type<int64>)
-    q.video_duration = _::from_JV(vobj["video_duration"], type<int64>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.video_url = _::from_JV(vobj?["video_url"] ?? null, type<string>)
+    q.mime_type = _::from_JV(vobj?["mime_type"] ?? null, type<string>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.video_width = _::from_JV(vobj?["video_width"] ?? null, type<int64>)
+    q.video_height = _::from_JV(vobj?["video_height"] ?? null, type<int64>)
+    q.video_duration = _::from_JV(vobj?["video_duration"] ?? null, type<int64>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultvideo explicit?) : inlinequeryresultvideo? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultvideo explicit?) : inlinequeryresultvideo? {
     return null if (v == null)
     var q = new inlinequeryresultvideo
     *q <- from_JV(v, type<inlinequeryresultvideo>)
@@ -8500,25 +8495,25 @@ struct inlinequeryresultaudio {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultaudio explicit) : inlinequeryresultaudio {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultaudio explicit) : inlinequeryresultaudio {
     var q : inlinequeryresultaudio
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.audio_url = _::from_JV(vobj["audio_url"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.performer = _::from_JV(vobj["performer"], type<string>)
-    q.audio_duration = _::from_JV(vobj["audio_duration"], type<int64>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.audio_url = _::from_JV(vobj?["audio_url"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.performer = _::from_JV(vobj?["performer"] ?? null, type<string>)
+    q.audio_duration = _::from_JV(vobj?["audio_duration"] ?? null, type<int64>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultaudio explicit?) : inlinequeryresultaudio? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultaudio explicit?) : inlinequeryresultaudio? {
     return null if (v == null)
     var q = new inlinequeryresultaudio
     *q <- from_JV(v, type<inlinequeryresultaudio>)
@@ -8561,24 +8556,24 @@ struct inlinequeryresultvoice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultvoice explicit) : inlinequeryresultvoice {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultvoice explicit) : inlinequeryresultvoice {
     var q : inlinequeryresultvoice
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.voice_url = _::from_JV(vobj["voice_url"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.voice_duration = _::from_JV(vobj["voice_duration"], type<int64>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.voice_url = _::from_JV(vobj?["voice_url"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.voice_duration = _::from_JV(vobj?["voice_duration"] ?? null, type<int64>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultvoice explicit?) : inlinequeryresultvoice? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultvoice explicit?) : inlinequeryresultvoice? {
     return null if (v == null)
     var q = new inlinequeryresultvoice
     *q <- from_JV(v, type<inlinequeryresultvoice>)
@@ -8624,28 +8619,28 @@ struct inlinequeryresultdocument {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultdocument explicit) : inlinequeryresultdocument {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultdocument explicit) : inlinequeryresultdocument {
     var q : inlinequeryresultdocument
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.document_url = _::from_JV(vobj["document_url"], type<string>)
-    q.mime_type = _::from_JV(vobj["mime_type"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.thumbnail_width = _::from_JV(vobj["thumbnail_width"], type<int64>)
-    q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.document_url = _::from_JV(vobj?["document_url"] ?? null, type<string>)
+    q.mime_type = _::from_JV(vobj?["mime_type"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.thumbnail_width = _::from_JV(vobj?["thumbnail_width"] ?? null, type<int64>)
+    q.thumbnail_height = _::from_JV(vobj?["thumbnail_height"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultdocument explicit?) : inlinequeryresultdocument? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultdocument explicit?) : inlinequeryresultdocument? {
     return null if (v == null)
     var q = new inlinequeryresultdocument
     *q <- from_JV(v, type<inlinequeryresultdocument>)
@@ -8695,28 +8690,28 @@ struct inlinequeryresultlocation {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultlocation explicit) : inlinequeryresultlocation {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultlocation explicit) : inlinequeryresultlocation {
     var q : inlinequeryresultlocation
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.latitude = _::from_JV(vobj["latitude"], type<float>)
-    q.longitude = _::from_JV(vobj["longitude"], type<float>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.horizontal_accuracy = _::from_JV(vobj["horizontal_accuracy"], type<float>)
-    q.live_period = _::from_JV(vobj["live_period"], type<int64>)
-    q.heading = _::from_JV(vobj["heading"], type<int64>)
-    q.proximity_alert_radius = _::from_JV(vobj["proximity_alert_radius"], type<int64>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.thumbnail_width = _::from_JV(vobj["thumbnail_width"], type<int64>)
-    q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.latitude = _::from_JV(vobj?["latitude"] ?? null, type<float>)
+    q.longitude = _::from_JV(vobj?["longitude"] ?? null, type<float>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.horizontal_accuracy = _::from_JV(vobj?["horizontal_accuracy"] ?? null, type<float>)
+    q.live_period = _::from_JV(vobj?["live_period"] ?? null, type<int64>)
+    q.heading = _::from_JV(vobj?["heading"] ?? null, type<int64>)
+    q.proximity_alert_radius = _::from_JV(vobj?["proximity_alert_radius"] ?? null, type<int64>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.thumbnail_width = _::from_JV(vobj?["thumbnail_width"] ?? null, type<int64>)
+    q.thumbnail_height = _::from_JV(vobj?["thumbnail_height"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultlocation explicit?) : inlinequeryresultlocation? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultlocation explicit?) : inlinequeryresultlocation? {
     return null if (v == null)
     var q = new inlinequeryresultlocation
     *q <- from_JV(v, type<inlinequeryresultlocation>)
@@ -8767,29 +8762,29 @@ struct inlinequeryresultvenue {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultvenue explicit) : inlinequeryresultvenue {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultvenue explicit) : inlinequeryresultvenue {
     var q : inlinequeryresultvenue
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.latitude = _::from_JV(vobj["latitude"], type<float>)
-    q.longitude = _::from_JV(vobj["longitude"], type<float>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.address = _::from_JV(vobj["address"], type<string>)
-    q.foursquare_id = _::from_JV(vobj["foursquare_id"], type<string>)
-    q.foursquare_type = _::from_JV(vobj["foursquare_type"], type<string>)
-    q.google_place_id = _::from_JV(vobj["google_place_id"], type<string>)
-    q.google_place_type = _::from_JV(vobj["google_place_type"], type<string>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.thumbnail_width = _::from_JV(vobj["thumbnail_width"], type<int64>)
-    q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.latitude = _::from_JV(vobj?["latitude"] ?? null, type<float>)
+    q.longitude = _::from_JV(vobj?["longitude"] ?? null, type<float>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.address = _::from_JV(vobj?["address"] ?? null, type<string>)
+    q.foursquare_id = _::from_JV(vobj?["foursquare_id"] ?? null, type<string>)
+    q.foursquare_type = _::from_JV(vobj?["foursquare_type"] ?? null, type<string>)
+    q.google_place_id = _::from_JV(vobj?["google_place_id"] ?? null, type<string>)
+    q.google_place_type = _::from_JV(vobj?["google_place_type"] ?? null, type<string>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.thumbnail_width = _::from_JV(vobj?["thumbnail_width"] ?? null, type<int64>)
+    q.thumbnail_height = _::from_JV(vobj?["thumbnail_height"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultvenue explicit?) : inlinequeryresultvenue? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultvenue explicit?) : inlinequeryresultvenue? {
     return null if (v == null)
     var q = new inlinequeryresultvenue
     *q <- from_JV(v, type<inlinequeryresultvenue>)
@@ -8837,25 +8832,25 @@ struct inlinequeryresultcontact {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcontact explicit) : inlinequeryresultcontact {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcontact explicit) : inlinequeryresultcontact {
     var q : inlinequeryresultcontact
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.phone_number = _::from_JV(vobj["phone_number"], type<string>)
-    q.first_name = _::from_JV(vobj["first_name"], type<string>)
-    q.last_name = _::from_JV(vobj["last_name"], type<string>)
-    q.vcard = _::from_JV(vobj["vcard"], type<string>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
-    q.thumbnail_url = _::from_JV(vobj["thumbnail_url"], type<string>)
-    q.thumbnail_width = _::from_JV(vobj["thumbnail_width"], type<int64>)
-    q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.phone_number = _::from_JV(vobj?["phone_number"] ?? null, type<string>)
+    q.first_name = _::from_JV(vobj?["first_name"] ?? null, type<string>)
+    q.last_name = _::from_JV(vobj?["last_name"] ?? null, type<string>)
+    q.vcard = _::from_JV(vobj?["vcard"] ?? null, type<string>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
+    q.thumbnail_url = _::from_JV(vobj?["thumbnail_url"] ?? null, type<string>)
+    q.thumbnail_width = _::from_JV(vobj?["thumbnail_width"] ?? null, type<int64>)
+    q.thumbnail_height = _::from_JV(vobj?["thumbnail_height"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcontact explicit?) : inlinequeryresultcontact? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcontact explicit?) : inlinequeryresultcontact? {
     return null if (v == null)
     var q = new inlinequeryresultcontact
     *q <- from_JV(v, type<inlinequeryresultcontact>)
@@ -8892,18 +8887,18 @@ struct inlinequeryresultgame {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultgame explicit) : inlinequeryresultgame {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultgame explicit) : inlinequeryresultgame {
     var q : inlinequeryresultgame
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.game_short_name = _::from_JV(vobj["game_short_name"], type<string>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.game_short_name = _::from_JV(vobj?["game_short_name"] ?? null, type<string>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultgame explicit?) : inlinequeryresultgame? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultgame explicit?) : inlinequeryresultgame? {
     return null if (v == null)
     var q = new inlinequeryresultgame
     *q <- from_JV(v, type<inlinequeryresultgame>)
@@ -8937,24 +8932,24 @@ struct inlinequeryresultcachedphoto {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedphoto explicit) : inlinequeryresultcachedphoto {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedphoto explicit) : inlinequeryresultcachedphoto {
     var q : inlinequeryresultcachedphoto
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.photo_file_id = _::from_JV(vobj["photo_file_id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.photo_file_id = _::from_JV(vobj?["photo_file_id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedphoto explicit?) : inlinequeryresultcachedphoto? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedphoto explicit?) : inlinequeryresultcachedphoto? {
     return null if (v == null)
     var q = new inlinequeryresultcachedphoto
     *q <- from_JV(v, type<inlinequeryresultcachedphoto>)
@@ -8995,23 +8990,23 @@ struct inlinequeryresultcachedgif {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedgif explicit) : inlinequeryresultcachedgif {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedgif explicit) : inlinequeryresultcachedgif {
     var q : inlinequeryresultcachedgif
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.gif_file_id = _::from_JV(vobj["gif_file_id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.gif_file_id = _::from_JV(vobj?["gif_file_id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedgif explicit?) : inlinequeryresultcachedgif? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedgif explicit?) : inlinequeryresultcachedgif? {
     return null if (v == null)
     var q = new inlinequeryresultcachedgif
     *q <- from_JV(v, type<inlinequeryresultcachedgif>)
@@ -9051,23 +9046,23 @@ struct inlinequeryresultcachedmpeg4gif {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedmpeg4gif explicit) : inlinequeryresultcachedmpeg4gif {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedmpeg4gif explicit) : inlinequeryresultcachedmpeg4gif {
     var q : inlinequeryresultcachedmpeg4gif
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.mpeg4_file_id = _::from_JV(vobj["mpeg4_file_id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.mpeg4_file_id = _::from_JV(vobj?["mpeg4_file_id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedmpeg4gif explicit?) : inlinequeryresultcachedmpeg4gif? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedmpeg4gif explicit?) : inlinequeryresultcachedmpeg4gif? {
     return null if (v == null)
     var q = new inlinequeryresultcachedmpeg4gif
     *q <- from_JV(v, type<inlinequeryresultcachedmpeg4gif>)
@@ -9103,19 +9098,19 @@ struct inlinequeryresultcachedsticker {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedsticker explicit) : inlinequeryresultcachedsticker {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedsticker explicit) : inlinequeryresultcachedsticker {
     var q : inlinequeryresultcachedsticker
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.sticker_file_id = _::from_JV(vobj["sticker_file_id"], type<string>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.sticker_file_id = _::from_JV(vobj?["sticker_file_id"] ?? null, type<string>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedsticker explicit?) : inlinequeryresultcachedsticker? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedsticker explicit?) : inlinequeryresultcachedsticker? {
     return null if (v == null)
     var q = new inlinequeryresultcachedsticker
     *q <- from_JV(v, type<inlinequeryresultcachedsticker>)
@@ -9152,24 +9147,24 @@ struct inlinequeryresultcacheddocument {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcacheddocument explicit) : inlinequeryresultcacheddocument {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcacheddocument explicit) : inlinequeryresultcacheddocument {
     var q : inlinequeryresultcacheddocument
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.document_file_id = _::from_JV(vobj["document_file_id"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.document_file_id = _::from_JV(vobj?["document_file_id"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcacheddocument explicit?) : inlinequeryresultcacheddocument? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcacheddocument explicit?) : inlinequeryresultcacheddocument? {
     return null if (v == null)
     var q = new inlinequeryresultcacheddocument
     *q <- from_JV(v, type<inlinequeryresultcacheddocument>)
@@ -9211,24 +9206,24 @@ struct inlinequeryresultcachedvideo {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedvideo explicit) : inlinequeryresultcachedvideo {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedvideo explicit) : inlinequeryresultcachedvideo {
     var q : inlinequeryresultcachedvideo
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.video_file_id = _::from_JV(vobj["video_file_id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.video_file_id = _::from_JV(vobj?["video_file_id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedvideo explicit?) : inlinequeryresultcachedvideo? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedvideo explicit?) : inlinequeryresultcachedvideo? {
     return null if (v == null)
     var q = new inlinequeryresultcachedvideo
     *q <- from_JV(v, type<inlinequeryresultcachedvideo>)
@@ -9269,23 +9264,23 @@ struct inlinequeryresultcachedvoice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedvoice explicit) : inlinequeryresultcachedvoice {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedvoice explicit) : inlinequeryresultcachedvoice {
     var q : inlinequeryresultcachedvoice
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.voice_file_id = _::from_JV(vobj["voice_file_id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.voice_file_id = _::from_JV(vobj?["voice_file_id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedvoice explicit?) : inlinequeryresultcachedvoice? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedvoice explicit?) : inlinequeryresultcachedvoice? {
     return null if (v == null)
     var q = new inlinequeryresultcachedvoice
     *q <- from_JV(v, type<inlinequeryresultcachedvoice>)
@@ -9324,22 +9319,22 @@ struct inlinequeryresultcachedaudio {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedaudio explicit) : inlinequeryresultcachedaudio {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedaudio explicit) : inlinequeryresultcachedaudio {
     var q : inlinequeryresultcachedaudio
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.audio_file_id = _::from_JV(vobj["audio_file_id"], type<string>)
-    q.caption = _::from_JV(vobj["caption"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.caption_entities <- _::from_JV(vobj["caption_entities"], type<array<messageentity>>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
-    q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.audio_file_id = _::from_JV(vobj?["audio_file_id"] ?? null, type<string>)
+    q.caption = _::from_JV(vobj?["caption"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.caption_entities <- _::from_JV(vobj?["caption_entities"] ?? null, type<array<messageentity>>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV(vobj?["input_message_content"] ?? null, type<inputmessagecontent?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inlinequeryresultcachedaudio explicit?) : inlinequeryresultcachedaudio? {
+def from_JV(v : JsonValue explicit?; t : inlinequeryresultcachedaudio explicit?) : inlinequeryresultcachedaudio? {
     return null if (v == null)
     var q = new inlinequeryresultcachedaudio
     *q <- from_JV(v, type<inlinequeryresultcachedaudio>)
@@ -9370,14 +9365,14 @@ struct inputmessagecontent {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmessagecontent explicit) : inputmessagecontent {
+def from_JV(v : JsonValue explicit?; t : inputmessagecontent explicit) : inputmessagecontent {
     var q : inputmessagecontent
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputmessagecontent explicit?) : inputmessagecontent? {
+def from_JV(v : JsonValue explicit?; t : inputmessagecontent explicit?) : inputmessagecontent? {
     return null if (v == null)
     var q = new inputmessagecontent
     *q <- from_JV(v, type<inputmessagecontent>)
@@ -9399,18 +9394,18 @@ struct inputtextmessagecontent {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputtextmessagecontent explicit) : inputtextmessagecontent {
+def from_JV(v : JsonValue explicit?; t : inputtextmessagecontent explicit) : inputtextmessagecontent {
     var q : inputtextmessagecontent
-    var vobj & = unsafe(v as _object)
-    q.message_text = _::from_JV(vobj["message_text"], type<string>)
-    q.parse_mode = _::from_JV(vobj["parse_mode"], type<string>)
-    q.entities <- _::from_JV(vobj["entities"], type<array<messageentity>>)
-    q.disable_web_page_preview = _::from_JV(vobj["disable_web_page_preview"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.message_text = _::from_JV(vobj?["message_text"] ?? null, type<string>)
+    q.parse_mode = _::from_JV(vobj?["parse_mode"] ?? null, type<string>)
+    q.entities <- _::from_JV(vobj?["entities"] ?? null, type<array<messageentity>>)
+    q.disable_web_page_preview = _::from_JV(vobj?["disable_web_page_preview"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputtextmessagecontent explicit?) : inputtextmessagecontent? {
+def from_JV(v : JsonValue explicit?; t : inputtextmessagecontent explicit?) : inputtextmessagecontent? {
     return null if (v == null)
     var q = new inputtextmessagecontent
     *q <- from_JV(v, type<inputtextmessagecontent>)
@@ -9438,20 +9433,20 @@ struct inputlocationmessagecontent {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputlocationmessagecontent explicit) : inputlocationmessagecontent {
+def from_JV(v : JsonValue explicit?; t : inputlocationmessagecontent explicit) : inputlocationmessagecontent {
     var q : inputlocationmessagecontent
-    var vobj & = unsafe(v as _object)
-    q.latitude = _::from_JV(vobj["latitude"], type<float>)
-    q.longitude = _::from_JV(vobj["longitude"], type<float>)
-    q.horizontal_accuracy = _::from_JV(vobj["horizontal_accuracy"], type<float>)
-    q.live_period = _::from_JV(vobj["live_period"], type<int64>)
-    q.heading = _::from_JV(vobj["heading"], type<int64>)
-    q.proximity_alert_radius = _::from_JV(vobj["proximity_alert_radius"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.latitude = _::from_JV(vobj?["latitude"] ?? null, type<float>)
+    q.longitude = _::from_JV(vobj?["longitude"] ?? null, type<float>)
+    q.horizontal_accuracy = _::from_JV(vobj?["horizontal_accuracy"] ?? null, type<float>)
+    q.live_period = _::from_JV(vobj?["live_period"] ?? null, type<int64>)
+    q.heading = _::from_JV(vobj?["heading"] ?? null, type<int64>)
+    q.proximity_alert_radius = _::from_JV(vobj?["proximity_alert_radius"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputlocationmessagecontent explicit?) : inputlocationmessagecontent? {
+def from_JV(v : JsonValue explicit?; t : inputlocationmessagecontent explicit?) : inputlocationmessagecontent? {
     return null if (v == null)
     var q = new inputlocationmessagecontent
     *q <- from_JV(v, type<inputlocationmessagecontent>)
@@ -9483,22 +9478,22 @@ struct inputvenuemessagecontent {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputvenuemessagecontent explicit) : inputvenuemessagecontent {
+def from_JV(v : JsonValue explicit?; t : inputvenuemessagecontent explicit) : inputvenuemessagecontent {
     var q : inputvenuemessagecontent
-    var vobj & = unsafe(v as _object)
-    q.latitude = _::from_JV(vobj["latitude"], type<float>)
-    q.longitude = _::from_JV(vobj["longitude"], type<float>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.address = _::from_JV(vobj["address"], type<string>)
-    q.foursquare_id = _::from_JV(vobj["foursquare_id"], type<string>)
-    q.foursquare_type = _::from_JV(vobj["foursquare_type"], type<string>)
-    q.google_place_id = _::from_JV(vobj["google_place_id"], type<string>)
-    q.google_place_type = _::from_JV(vobj["google_place_type"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.latitude = _::from_JV(vobj?["latitude"] ?? null, type<float>)
+    q.longitude = _::from_JV(vobj?["longitude"] ?? null, type<float>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.address = _::from_JV(vobj?["address"] ?? null, type<string>)
+    q.foursquare_id = _::from_JV(vobj?["foursquare_id"] ?? null, type<string>)
+    q.foursquare_type = _::from_JV(vobj?["foursquare_type"] ?? null, type<string>)
+    q.google_place_id = _::from_JV(vobj?["google_place_id"] ?? null, type<string>)
+    q.google_place_type = _::from_JV(vobj?["google_place_type"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputvenuemessagecontent explicit?) : inputvenuemessagecontent? {
+def from_JV(v : JsonValue explicit?; t : inputvenuemessagecontent explicit?) : inputvenuemessagecontent? {
     return null if (v == null)
     var q = new inputvenuemessagecontent
     *q <- from_JV(v, type<inputvenuemessagecontent>)
@@ -9528,18 +9523,18 @@ struct inputcontactmessagecontent {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputcontactmessagecontent explicit) : inputcontactmessagecontent {
+def from_JV(v : JsonValue explicit?; t : inputcontactmessagecontent explicit) : inputcontactmessagecontent {
     var q : inputcontactmessagecontent
-    var vobj & = unsafe(v as _object)
-    q.phone_number = _::from_JV(vobj["phone_number"], type<string>)
-    q.first_name = _::from_JV(vobj["first_name"], type<string>)
-    q.last_name = _::from_JV(vobj["last_name"], type<string>)
-    q.vcard = _::from_JV(vobj["vcard"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.phone_number = _::from_JV(vobj?["phone_number"] ?? null, type<string>)
+    q.first_name = _::from_JV(vobj?["first_name"] ?? null, type<string>)
+    q.last_name = _::from_JV(vobj?["last_name"] ?? null, type<string>)
+    q.vcard = _::from_JV(vobj?["vcard"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputcontactmessagecontent explicit?) : inputcontactmessagecontent? {
+def from_JV(v : JsonValue explicit?; t : inputcontactmessagecontent explicit?) : inputcontactmessagecontent? {
     return null if (v == null)
     var q = new inputcontactmessagecontent
     *q <- from_JV(v, type<inputcontactmessagecontent>)
@@ -9581,34 +9576,34 @@ struct inputinvoicemessagecontent {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputinvoicemessagecontent explicit) : inputinvoicemessagecontent {
+def from_JV(v : JsonValue explicit?; t : inputinvoicemessagecontent explicit) : inputinvoicemessagecontent {
     var q : inputinvoicemessagecontent
-    var vobj & = unsafe(v as _object)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.payload = _::from_JV(vobj["payload"], type<string>)
-    q.provider_token = _::from_JV(vobj["provider_token"], type<string>)
-    q.currency = _::from_JV(vobj["currency"], type<string>)
-    q.prices <- _::from_JV(vobj["prices"], type<array<labeledprice>>)
-    q.max_tip_amount = _::from_JV(vobj["max_tip_amount"], type<int64>)
-    q.suggested_tip_amounts <- _::from_JV(vobj["suggested_tip_amounts"], type<array<int64>>)
-    q.provider_data = _::from_JV(vobj["provider_data"], type<string>)
-    q.photo_url = _::from_JV(vobj["photo_url"], type<string>)
-    q.photo_size = _::from_JV(vobj["photo_size"], type<int64>)
-    q.photo_width = _::from_JV(vobj["photo_width"], type<int64>)
-    q.photo_height = _::from_JV(vobj["photo_height"], type<int64>)
-    q.need_name = _::from_JV(vobj["need_name"], type<bool>)
-    q.need_phone_number = _::from_JV(vobj["need_phone_number"], type<bool>)
-    q.need_email = _::from_JV(vobj["need_email"], type<bool>)
-    q.need_shipping_address = _::from_JV(vobj["need_shipping_address"], type<bool>)
-    q.send_phone_number_to_provider = _::from_JV(vobj["send_phone_number_to_provider"], type<bool>)
-    q.send_email_to_provider = _::from_JV(vobj["send_email_to_provider"], type<bool>)
-    q.is_flexible = _::from_JV(vobj["is_flexible"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.payload = _::from_JV(vobj?["payload"] ?? null, type<string>)
+    q.provider_token = _::from_JV(vobj?["provider_token"] ?? null, type<string>)
+    q.currency = _::from_JV(vobj?["currency"] ?? null, type<string>)
+    q.prices <- _::from_JV(vobj?["prices"] ?? null, type<array<labeledprice>>)
+    q.max_tip_amount = _::from_JV(vobj?["max_tip_amount"] ?? null, type<int64>)
+    q.suggested_tip_amounts <- _::from_JV(vobj?["suggested_tip_amounts"] ?? null, type<array<int64>>)
+    q.provider_data = _::from_JV(vobj?["provider_data"] ?? null, type<string>)
+    q.photo_url = _::from_JV(vobj?["photo_url"] ?? null, type<string>)
+    q.photo_size = _::from_JV(vobj?["photo_size"] ?? null, type<int64>)
+    q.photo_width = _::from_JV(vobj?["photo_width"] ?? null, type<int64>)
+    q.photo_height = _::from_JV(vobj?["photo_height"] ?? null, type<int64>)
+    q.need_name = _::from_JV(vobj?["need_name"] ?? null, type<bool>)
+    q.need_phone_number = _::from_JV(vobj?["need_phone_number"] ?? null, type<bool>)
+    q.need_email = _::from_JV(vobj?["need_email"] ?? null, type<bool>)
+    q.need_shipping_address = _::from_JV(vobj?["need_shipping_address"] ?? null, type<bool>)
+    q.send_phone_number_to_provider = _::from_JV(vobj?["send_phone_number_to_provider"] ?? null, type<bool>)
+    q.send_email_to_provider = _::from_JV(vobj?["send_email_to_provider"] ?? null, type<bool>)
+    q.is_flexible = _::from_JV(vobj?["is_flexible"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : inputinvoicemessagecontent explicit?) : inputinvoicemessagecontent? {
+def from_JV(v : JsonValue explicit?; t : inputinvoicemessagecontent explicit?) : inputinvoicemessagecontent? {
     return null if (v == null)
     var q = new inputinvoicemessagecontent
     *q <- from_JV(v, type<inputinvoicemessagecontent>)
@@ -9651,19 +9646,19 @@ struct choseninlineresult {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : choseninlineresult explicit) : choseninlineresult {
+def from_JV(v : JsonValue explicit?; t : choseninlineresult explicit) : choseninlineresult {
     var q : choseninlineresult
-    var vobj & = unsafe(v as _object)
-    q.result_id = _::from_JV(vobj["result_id"], type<string>)
-    q.from <- _::from_JV(vobj["from"], type<user>)
-    q.location = _::from_JV(vobj["location"], type<location?>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
-    q.query = _::from_JV(vobj["query"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.result_id = _::from_JV(vobj?["result_id"] ?? null, type<string>)
+    q.from <- _::from_JV(vobj?["from"] ?? null, type<user>)
+    q.location = _::from_JV(vobj?["location"] ?? null, type<location?>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
+    q.query = _::from_JV(vobj?["query"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : choseninlineresult explicit?) : choseninlineresult? {
+def from_JV(v : JsonValue explicit?; t : choseninlineresult explicit?) : choseninlineresult? {
     return null if (v == null)
     var q = new choseninlineresult
     *q <- from_JV(v, type<choseninlineresult>)
@@ -9690,16 +9685,16 @@ struct answerwebappquery {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answerwebappquery explicit) : answerwebappquery {
+def from_JV(v : JsonValue explicit?; t : answerwebappquery explicit) : answerwebappquery {
     var q : answerwebappquery
-    var vobj & = unsafe(v as _object)
-    q.web_app_query_id = _::from_JV(vobj["web_app_query_id"], type<string>)
-    q.result <- _::from_JV(vobj["result"], type<inlinequeryresult>)
+    let vobj & = unsafe(v as _object)
+    q.web_app_query_id = _::from_JV(vobj?["web_app_query_id"] ?? null, type<string>)
+    q.result <- _::from_JV(vobj?["result"] ?? null, type<inlinequeryresult>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answerwebappquery explicit?) : answerwebappquery? {
+def from_JV(v : JsonValue explicit?; t : answerwebappquery explicit?) : answerwebappquery? {
     return null if (v == null)
     var q = new answerwebappquery
     *q <- from_JV(v, type<answerwebappquery>)
@@ -9720,15 +9715,15 @@ struct sentwebappmessage {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sentwebappmessage explicit) : sentwebappmessage {
+def from_JV(v : JsonValue explicit?; t : sentwebappmessage explicit) : sentwebappmessage {
     var q : sentwebappmessage
-    var vobj & = unsafe(v as _object)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sentwebappmessage explicit?) : sentwebappmessage? {
+def from_JV(v : JsonValue explicit?; t : sentwebappmessage explicit?) : sentwebappmessage? {
     return null if (v == null)
     var q = new sentwebappmessage
     *q <- from_JV(v, type<sentwebappmessage>)
@@ -9775,42 +9770,42 @@ struct sendinvoice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendinvoice explicit) : sendinvoice {
+def from_JV(v : JsonValue explicit?; t : sendinvoice explicit) : sendinvoice {
     var q : sendinvoice
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.payload = _::from_JV(vobj["payload"], type<string>)
-    q.provider_token = _::from_JV(vobj["provider_token"], type<string>)
-    q.currency = _::from_JV(vobj["currency"], type<string>)
-    q.prices <- _::from_JV(vobj["prices"], type<array<labeledprice>>)
-    q.max_tip_amount = _::from_JV(vobj["max_tip_amount"], type<int64>)
-    q.suggested_tip_amounts <- _::from_JV(vobj["suggested_tip_amounts"], type<array<int64>>)
-    q.start_parameter = _::from_JV(vobj["start_parameter"], type<string>)
-    q.provider_data = _::from_JV(vobj["provider_data"], type<string>)
-    q.photo_url = _::from_JV(vobj["photo_url"], type<string>)
-    q.photo_size = _::from_JV(vobj["photo_size"], type<int64>)
-    q.photo_width = _::from_JV(vobj["photo_width"], type<int64>)
-    q.photo_height = _::from_JV(vobj["photo_height"], type<int64>)
-    q.need_name = _::from_JV(vobj["need_name"], type<bool>)
-    q.need_phone_number = _::from_JV(vobj["need_phone_number"], type<bool>)
-    q.need_email = _::from_JV(vobj["need_email"], type<bool>)
-    q.need_shipping_address = _::from_JV(vobj["need_shipping_address"], type<bool>)
-    q.send_phone_number_to_provider = _::from_JV(vobj["send_phone_number_to_provider"], type<bool>)
-    q.send_email_to_provider = _::from_JV(vobj["send_email_to_provider"], type<bool>)
-    q.is_flexible = _::from_JV(vobj["is_flexible"], type<bool>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<string>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.payload = _::from_JV(vobj?["payload"] ?? null, type<string>)
+    q.provider_token = _::from_JV(vobj?["provider_token"] ?? null, type<string>)
+    q.currency = _::from_JV(vobj?["currency"] ?? null, type<string>)
+    q.prices <- _::from_JV(vobj?["prices"] ?? null, type<array<labeledprice>>)
+    q.max_tip_amount = _::from_JV(vobj?["max_tip_amount"] ?? null, type<int64>)
+    q.suggested_tip_amounts <- _::from_JV(vobj?["suggested_tip_amounts"] ?? null, type<array<int64>>)
+    q.start_parameter = _::from_JV(vobj?["start_parameter"] ?? null, type<string>)
+    q.provider_data = _::from_JV(vobj?["provider_data"] ?? null, type<string>)
+    q.photo_url = _::from_JV(vobj?["photo_url"] ?? null, type<string>)
+    q.photo_size = _::from_JV(vobj?["photo_size"] ?? null, type<int64>)
+    q.photo_width = _::from_JV(vobj?["photo_width"] ?? null, type<int64>)
+    q.photo_height = _::from_JV(vobj?["photo_height"] ?? null, type<int64>)
+    q.need_name = _::from_JV(vobj?["need_name"] ?? null, type<bool>)
+    q.need_phone_number = _::from_JV(vobj?["need_phone_number"] ?? null, type<bool>)
+    q.need_email = _::from_JV(vobj?["need_email"] ?? null, type<bool>)
+    q.need_shipping_address = _::from_JV(vobj?["need_shipping_address"] ?? null, type<bool>)
+    q.send_phone_number_to_provider = _::from_JV(vobj?["send_phone_number_to_provider"] ?? null, type<bool>)
+    q.send_email_to_provider = _::from_JV(vobj?["send_email_to_provider"] ?? null, type<bool>)
+    q.is_flexible = _::from_JV(vobj?["is_flexible"] ?? null, type<bool>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendinvoice explicit?) : sendinvoice? {
+def from_JV(v : JsonValue explicit?; t : sendinvoice explicit?) : sendinvoice? {
     return null if (v == null)
     var q = new sendinvoice
     *q <- from_JV(v, type<sendinvoice>)
@@ -9878,34 +9873,34 @@ struct createinvoicelink {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : createinvoicelink explicit) : createinvoicelink {
+def from_JV(v : JsonValue explicit?; t : createinvoicelink explicit) : createinvoicelink {
     var q : createinvoicelink
-    var vobj & = unsafe(v as _object)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.payload = _::from_JV(vobj["payload"], type<string>)
-    q.provider_token = _::from_JV(vobj["provider_token"], type<string>)
-    q.currency = _::from_JV(vobj["currency"], type<string>)
-    q.prices <- _::from_JV(vobj["prices"], type<array<labeledprice>>)
-    q.max_tip_amount = _::from_JV(vobj["max_tip_amount"], type<int64>)
-    q.suggested_tip_amounts <- _::from_JV(vobj["suggested_tip_amounts"], type<array<int64>>)
-    q.provider_data = _::from_JV(vobj["provider_data"], type<string>)
-    q.photo_url = _::from_JV(vobj["photo_url"], type<string>)
-    q.photo_size = _::from_JV(vobj["photo_size"], type<int64>)
-    q.photo_width = _::from_JV(vobj["photo_width"], type<int64>)
-    q.photo_height = _::from_JV(vobj["photo_height"], type<int64>)
-    q.need_name = _::from_JV(vobj["need_name"], type<bool>)
-    q.need_phone_number = _::from_JV(vobj["need_phone_number"], type<bool>)
-    q.need_email = _::from_JV(vobj["need_email"], type<bool>)
-    q.need_shipping_address = _::from_JV(vobj["need_shipping_address"], type<bool>)
-    q.send_phone_number_to_provider = _::from_JV(vobj["send_phone_number_to_provider"], type<bool>)
-    q.send_email_to_provider = _::from_JV(vobj["send_email_to_provider"], type<bool>)
-    q.is_flexible = _::from_JV(vobj["is_flexible"], type<bool>)
+    let vobj & = unsafe(v as _object)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.payload = _::from_JV(vobj?["payload"] ?? null, type<string>)
+    q.provider_token = _::from_JV(vobj?["provider_token"] ?? null, type<string>)
+    q.currency = _::from_JV(vobj?["currency"] ?? null, type<string>)
+    q.prices <- _::from_JV(vobj?["prices"] ?? null, type<array<labeledprice>>)
+    q.max_tip_amount = _::from_JV(vobj?["max_tip_amount"] ?? null, type<int64>)
+    q.suggested_tip_amounts <- _::from_JV(vobj?["suggested_tip_amounts"] ?? null, type<array<int64>>)
+    q.provider_data = _::from_JV(vobj?["provider_data"] ?? null, type<string>)
+    q.photo_url = _::from_JV(vobj?["photo_url"] ?? null, type<string>)
+    q.photo_size = _::from_JV(vobj?["photo_size"] ?? null, type<int64>)
+    q.photo_width = _::from_JV(vobj?["photo_width"] ?? null, type<int64>)
+    q.photo_height = _::from_JV(vobj?["photo_height"] ?? null, type<int64>)
+    q.need_name = _::from_JV(vobj?["need_name"] ?? null, type<bool>)
+    q.need_phone_number = _::from_JV(vobj?["need_phone_number"] ?? null, type<bool>)
+    q.need_email = _::from_JV(vobj?["need_email"] ?? null, type<bool>)
+    q.need_shipping_address = _::from_JV(vobj?["need_shipping_address"] ?? null, type<bool>)
+    q.send_phone_number_to_provider = _::from_JV(vobj?["send_phone_number_to_provider"] ?? null, type<bool>)
+    q.send_email_to_provider = _::from_JV(vobj?["send_email_to_provider"] ?? null, type<bool>)
+    q.is_flexible = _::from_JV(vobj?["is_flexible"] ?? null, type<bool>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : createinvoicelink explicit?) : createinvoicelink? {
+def from_JV(v : JsonValue explicit?; t : createinvoicelink explicit?) : createinvoicelink? {
     return null if (v == null)
     var q = new createinvoicelink
     *q <- from_JV(v, type<createinvoicelink>)
@@ -9943,22 +9938,22 @@ struct answershippingquery {
     shipping_query_id : string    //! Required. Unique identifier for the query to be answered
     ok : bool    //! Required. Pass True if delivery to the specified address is possible and False if there are any problems (for example, if delivery to the specified address is not possible)
     shipping_options : array<shippingoption>    //! Optional. Required if ok is True. A JSON-serialized array of available shipping options.
-    error_message : string;    //! Optional. Required if ok is False. Error message in human readable form that explains why it is impossible to complete the order (e.g. "Sorry, delivery to your desired address is unavailable'). Telegram will display this message to the user.
+    error_message : string    //! Optional. Required if ok is False. Error message in human readable form that explains why it is impossible to complete the order (e.g. "Sorry, delivery to your desired address is unavailable'). Telegram will display this message to the user.
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answershippingquery explicit) : answershippingquery {
+def from_JV(v : JsonValue explicit?; t : answershippingquery explicit) : answershippingquery {
     var q : answershippingquery
-    var vobj & = unsafe(v as _object)
-    q.shipping_query_id = _::from_JV(vobj["shipping_query_id"], type<string>)
-    q.ok = _::from_JV(vobj["ok"], type<bool>)
-    q.shipping_options <- _::from_JV(vobj["shipping_options"], type<array<shippingoption>>)
-    q.error_message = _::from_JV(vobj["error_message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.shipping_query_id = _::from_JV(vobj?["shipping_query_id"] ?? null, type<string>)
+    q.ok = _::from_JV(vobj?["ok"] ?? null, type<bool>)
+    q.shipping_options <- _::from_JV(vobj?["shipping_options"] ?? null, type<array<shippingoption>>)
+    q.error_message = _::from_JV(vobj?["error_message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answershippingquery explicit?) : answershippingquery? {
+def from_JV(v : JsonValue explicit?; t : answershippingquery explicit?) : answershippingquery? {
     return null if (v == null)
     var q = new answershippingquery
     *q <- from_JV(v, type<answershippingquery>)
@@ -9983,17 +9978,17 @@ struct answerprecheckoutquery {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answerprecheckoutquery explicit) : answerprecheckoutquery {
+def from_JV(v : JsonValue explicit?; t : answerprecheckoutquery explicit) : answerprecheckoutquery {
     var q : answerprecheckoutquery
-    var vobj & = unsafe(v as _object)
-    q.pre_checkout_query_id = _::from_JV(vobj["pre_checkout_query_id"], type<string>)
-    q.ok = _::from_JV(vobj["ok"], type<bool>)
-    q.error_message = _::from_JV(vobj["error_message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.pre_checkout_query_id = _::from_JV(vobj?["pre_checkout_query_id"] ?? null, type<string>)
+    q.ok = _::from_JV(vobj?["ok"] ?? null, type<bool>)
+    q.error_message = _::from_JV(vobj?["error_message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : answerprecheckoutquery explicit?) : answerprecheckoutquery? {
+def from_JV(v : JsonValue explicit?; t : answerprecheckoutquery explicit?) : answerprecheckoutquery? {
     return null if (v == null)
     var q = new answerprecheckoutquery
     *q <- from_JV(v, type<answerprecheckoutquery>)
@@ -10016,16 +10011,16 @@ struct labeledprice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : labeledprice explicit) : labeledprice {
+def from_JV(v : JsonValue explicit?; t : labeledprice explicit) : labeledprice {
     var q : labeledprice
-    var vobj & = unsafe(v as _object)
-    q._label = _::from_JV(vobj["_label"], type<string>)
-    q.amount = _::from_JV(vobj["amount"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q._label = _::from_JV(vobj?["_label"] ?? null, type<string>)
+    q.amount = _::from_JV(vobj?["amount"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : labeledprice explicit?) : labeledprice? {
+def from_JV(v : JsonValue explicit?; t : labeledprice explicit?) : labeledprice? {
     return null if (v == null)
     var q = new labeledprice
     *q <- from_JV(v, type<labeledprice>)
@@ -10050,19 +10045,19 @@ struct invoice {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : invoice explicit) : invoice {
+def from_JV(v : JsonValue explicit?; t : invoice explicit) : invoice {
     var q : invoice
-    var vobj & = unsafe(v as _object)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.start_parameter = _::from_JV(vobj["start_parameter"], type<string>)
-    q.currency = _::from_JV(vobj["currency"], type<string>)
-    q.total_amount = _::from_JV(vobj["total_amount"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.start_parameter = _::from_JV(vobj?["start_parameter"] ?? null, type<string>)
+    q.currency = _::from_JV(vobj?["currency"] ?? null, type<string>)
+    q.total_amount = _::from_JV(vobj?["total_amount"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : invoice explicit?) : invoice? {
+def from_JV(v : JsonValue explicit?; t : invoice explicit?) : invoice? {
     return null if (v == null)
     var q = new invoice
     *q <- from_JV(v, type<invoice>)
@@ -10091,20 +10086,20 @@ struct shippingaddress {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : shippingaddress explicit) : shippingaddress {
+def from_JV(v : JsonValue explicit?; t : shippingaddress explicit) : shippingaddress {
     var q : shippingaddress
-    var vobj & = unsafe(v as _object)
-    q.country_code = _::from_JV(vobj["country_code"], type<string>)
-    q.state = _::from_JV(vobj["state"], type<string>)
-    q.city = _::from_JV(vobj["city"], type<string>)
-    q.street_line1 = _::from_JV(vobj["street_line1"], type<string>)
-    q.street_line2 = _::from_JV(vobj["street_line2"], type<string>)
-    q.post_code = _::from_JV(vobj["post_code"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.country_code = _::from_JV(vobj?["country_code"] ?? null, type<string>)
+    q.state = _::from_JV(vobj?["state"] ?? null, type<string>)
+    q.city = _::from_JV(vobj?["city"] ?? null, type<string>)
+    q.street_line1 = _::from_JV(vobj?["street_line1"] ?? null, type<string>)
+    q.street_line2 = _::from_JV(vobj?["street_line2"] ?? null, type<string>)
+    q.post_code = _::from_JV(vobj?["post_code"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : shippingaddress explicit?) : shippingaddress? {
+def from_JV(v : JsonValue explicit?; t : shippingaddress explicit?) : shippingaddress? {
     return null if (v == null)
     var q = new shippingaddress
     *q <- from_JV(v, type<shippingaddress>)
@@ -10132,18 +10127,18 @@ struct orderinfo {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : orderinfo explicit) : orderinfo {
+def from_JV(v : JsonValue explicit?; t : orderinfo explicit) : orderinfo {
     var q : orderinfo
-    var vobj & = unsafe(v as _object)
-    q.name = _::from_JV(vobj["name"], type<string>)
-    q.phone_number = _::from_JV(vobj["phone_number"], type<string>)
-    q.email = _::from_JV(vobj["email"], type<string>)
-    q.shipping_address = _::from_JV(vobj["shipping_address"], type<shippingaddress?>)
+    let vobj & = unsafe(v as _object)
+    q.name = _::from_JV(vobj?["name"] ?? null, type<string>)
+    q.phone_number = _::from_JV(vobj?["phone_number"] ?? null, type<string>)
+    q.email = _::from_JV(vobj?["email"] ?? null, type<string>)
+    q.shipping_address = _::from_JV(vobj?["shipping_address"] ?? null, type<shippingaddress?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : orderinfo explicit?) : orderinfo? {
+def from_JV(v : JsonValue explicit?; t : orderinfo explicit?) : orderinfo? {
     return null if (v == null)
     var q = new orderinfo
     *q <- from_JV(v, type<orderinfo>)
@@ -10170,17 +10165,17 @@ struct shippingoption {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : shippingoption explicit) : shippingoption {
+def from_JV(v : JsonValue explicit?; t : shippingoption explicit) : shippingoption {
     var q : shippingoption
-    var vobj & = unsafe(v as _object)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.prices <- _::from_JV(vobj["prices"], type<array<labeledprice>>)
+    let vobj & = unsafe(v as _object)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.prices <- _::from_JV(vobj?["prices"] ?? null, type<array<labeledprice>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : shippingoption explicit?) : shippingoption? {
+def from_JV(v : JsonValue explicit?; t : shippingoption explicit?) : shippingoption? {
     return null if (v == null)
     var q = new shippingoption
     *q <- from_JV(v, type<shippingoption>)
@@ -10208,21 +10203,21 @@ struct successfulpayment {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : successfulpayment explicit) : successfulpayment {
+def from_JV(v : JsonValue explicit?; t : successfulpayment explicit) : successfulpayment {
     var q : successfulpayment
-    var vobj & = unsafe(v as _object)
-    q.currency = _::from_JV(vobj["currency"], type<string>)
-    q.total_amount = _::from_JV(vobj["total_amount"], type<int64>)
-    q.invoice_payload = _::from_JV(vobj["invoice_payload"], type<string>)
-    q.shipping_option_id = _::from_JV(vobj["shipping_option_id"], type<string>)
-    q.order_info = _::from_JV(vobj["order_info"], type<orderinfo?>)
-    q.telegram_payment_charge_id = _::from_JV(vobj["telegram_payment_charge_id"], type<string>)
-    q.provider_payment_charge_id = _::from_JV(vobj["provider_payment_charge_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.currency = _::from_JV(vobj?["currency"] ?? null, type<string>)
+    q.total_amount = _::from_JV(vobj?["total_amount"] ?? null, type<int64>)
+    q.invoice_payload = _::from_JV(vobj?["invoice_payload"] ?? null, type<string>)
+    q.shipping_option_id = _::from_JV(vobj?["shipping_option_id"] ?? null, type<string>)
+    q.order_info = _::from_JV(vobj?["order_info"] ?? null, type<orderinfo?>)
+    q.telegram_payment_charge_id = _::from_JV(vobj?["telegram_payment_charge_id"] ?? null, type<string>)
+    q.provider_payment_charge_id = _::from_JV(vobj?["provider_payment_charge_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : successfulpayment explicit?) : successfulpayment? {
+def from_JV(v : JsonValue explicit?; t : successfulpayment explicit?) : successfulpayment? {
     return null if (v == null)
     var q = new successfulpayment
     *q <- from_JV(v, type<successfulpayment>)
@@ -10253,18 +10248,18 @@ struct shippingquery {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : shippingquery explicit) : shippingquery {
+def from_JV(v : JsonValue explicit?; t : shippingquery explicit) : shippingquery {
     var q : shippingquery
-    var vobj & = unsafe(v as _object)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.from <- _::from_JV(vobj["from"], type<user>)
-    q.invoice_payload = _::from_JV(vobj["invoice_payload"], type<string>)
-    q.shipping_address <- _::from_JV(vobj["shipping_address"], type<shippingaddress>)
+    let vobj & = unsafe(v as _object)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.from <- _::from_JV(vobj?["from"] ?? null, type<user>)
+    q.invoice_payload = _::from_JV(vobj?["invoice_payload"] ?? null, type<string>)
+    q.shipping_address <- _::from_JV(vobj?["shipping_address"] ?? null, type<shippingaddress>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : shippingquery explicit?) : shippingquery? {
+def from_JV(v : JsonValue explicit?; t : shippingquery explicit?) : shippingquery? {
     return null if (v == null)
     var q = new shippingquery
     *q <- from_JV(v, type<shippingquery>)
@@ -10293,21 +10288,21 @@ struct precheckoutquery {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : precheckoutquery explicit) : precheckoutquery {
+def from_JV(v : JsonValue explicit?; t : precheckoutquery explicit) : precheckoutquery {
     var q : precheckoutquery
-    var vobj & = unsafe(v as _object)
-    q.id = _::from_JV(vobj["id"], type<string>)
-    q.from <- _::from_JV(vobj["from"], type<user>)
-    q.currency = _::from_JV(vobj["currency"], type<string>)
-    q.total_amount = _::from_JV(vobj["total_amount"], type<int64>)
-    q.invoice_payload = _::from_JV(vobj["invoice_payload"], type<string>)
-    q.shipping_option_id = _::from_JV(vobj["shipping_option_id"], type<string>)
-    q.order_info = _::from_JV(vobj["order_info"], type<orderinfo?>)
+    let vobj & = unsafe(v as _object)
+    q.id = _::from_JV(vobj?["id"] ?? null, type<string>)
+    q.from <- _::from_JV(vobj?["from"] ?? null, type<user>)
+    q.currency = _::from_JV(vobj?["currency"] ?? null, type<string>)
+    q.total_amount = _::from_JV(vobj?["total_amount"] ?? null, type<int64>)
+    q.invoice_payload = _::from_JV(vobj?["invoice_payload"] ?? null, type<string>)
+    q.shipping_option_id = _::from_JV(vobj?["shipping_option_id"] ?? null, type<string>)
+    q.order_info = _::from_JV(vobj?["order_info"] ?? null, type<orderinfo?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : precheckoutquery explicit?) : precheckoutquery? {
+def from_JV(v : JsonValue explicit?; t : precheckoutquery explicit?) : precheckoutquery? {
     return null if (v == null)
     var q = new precheckoutquery
     *q <- from_JV(v, type<precheckoutquery>)
@@ -10336,16 +10331,16 @@ struct passportdata {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportdata explicit) : passportdata {
+def from_JV(v : JsonValue explicit?; t : passportdata explicit) : passportdata {
     var q : passportdata
-    var vobj & = unsafe(v as _object)
-    q.data <- _::from_JV(vobj["data"], type<array<encryptedpassportelement>>)
-    q.credentials <- _::from_JV(vobj["credentials"], type<encryptedcredentials>)
+    let vobj & = unsafe(v as _object)
+    q.data <- _::from_JV(vobj?["data"] ?? null, type<array<encryptedpassportelement>>)
+    q.credentials <- _::from_JV(vobj?["credentials"] ?? null, type<encryptedcredentials>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportdata explicit?) : passportdata? {
+def from_JV(v : JsonValue explicit?; t : passportdata explicit?) : passportdata? {
     return null if (v == null)
     var q = new passportdata
     *q <- from_JV(v, type<passportdata>)
@@ -10369,18 +10364,18 @@ struct passportfile {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportfile explicit) : passportfile {
+def from_JV(v : JsonValue explicit?; t : passportfile explicit) : passportfile {
     var q : passportfile
-    var vobj & = unsafe(v as _object)
-    q.file_id = _::from_JV(vobj["file_id"], type<string>)
-    q.file_unique_id = _::from_JV(vobj["file_unique_id"], type<string>)
-    q.file_size = _::from_JV(vobj["file_size"], type<int64>)
-    q.file_date = _::from_JV(vobj["file_date"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.file_id = _::from_JV(vobj?["file_id"] ?? null, type<string>)
+    q.file_unique_id = _::from_JV(vobj?["file_unique_id"] ?? null, type<string>)
+    q.file_size = _::from_JV(vobj?["file_size"] ?? null, type<int64>)
+    q.file_date = _::from_JV(vobj?["file_date"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportfile explicit?) : passportfile? {
+def from_JV(v : JsonValue explicit?; t : passportfile explicit?) : passportfile? {
     return null if (v == null)
     var q = new passportfile
     *q <- from_JV(v, type<passportfile>)
@@ -10412,24 +10407,24 @@ struct encryptedpassportelement {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : encryptedpassportelement explicit) : encryptedpassportelement {
+def from_JV(v : JsonValue explicit?; t : encryptedpassportelement explicit) : encryptedpassportelement {
     var q : encryptedpassportelement
-    var vobj & = unsafe(v as _object)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.data = _::from_JV(vobj["data"], type<string>)
-    q.phone_number = _::from_JV(vobj["phone_number"], type<string>)
-    q.email = _::from_JV(vobj["email"], type<string>)
-    q.files <- _::from_JV(vobj["files"], type<array<passportfile>>)
-    q.front_side = _::from_JV(vobj["front_side"], type<passportfile?>)
-    q.reverse_side = _::from_JV(vobj["reverse_side"], type<passportfile?>)
-    q.selfie = _::from_JV(vobj["selfie"], type<passportfile?>)
-    q.translation <- _::from_JV(vobj["translation"], type<array<passportfile>>)
-    q.hash = _::from_JV(vobj["hash"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.data = _::from_JV(vobj?["data"] ?? null, type<string>)
+    q.phone_number = _::from_JV(vobj?["phone_number"] ?? null, type<string>)
+    q.email = _::from_JV(vobj?["email"] ?? null, type<string>)
+    q.files <- _::from_JV(vobj?["files"] ?? null, type<array<passportfile>>)
+    q.front_side = _::from_JV(vobj?["front_side"] ?? null, type<passportfile?>)
+    q.reverse_side = _::from_JV(vobj?["reverse_side"] ?? null, type<passportfile?>)
+    q.selfie = _::from_JV(vobj?["selfie"] ?? null, type<passportfile?>)
+    q.translation <- _::from_JV(vobj?["translation"] ?? null, type<array<passportfile>>)
+    q.hash = _::from_JV(vobj?["hash"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : encryptedpassportelement explicit?) : encryptedpassportelement? {
+def from_JV(v : JsonValue explicit?; t : encryptedpassportelement explicit?) : encryptedpassportelement? {
     return null if (v == null)
     var q = new encryptedpassportelement
     *q <- from_JV(v, type<encryptedpassportelement>)
@@ -10466,17 +10461,17 @@ struct encryptedcredentials {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : encryptedcredentials explicit) : encryptedcredentials {
+def from_JV(v : JsonValue explicit?; t : encryptedcredentials explicit) : encryptedcredentials {
     var q : encryptedcredentials
-    var vobj & = unsafe(v as _object)
-    q.data = _::from_JV(vobj["data"], type<string>)
-    q.hash = _::from_JV(vobj["hash"], type<string>)
-    q.secret = _::from_JV(vobj["secret"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.data = _::from_JV(vobj?["data"] ?? null, type<string>)
+    q.hash = _::from_JV(vobj?["hash"] ?? null, type<string>)
+    q.secret = _::from_JV(vobj?["secret"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : encryptedcredentials explicit?) : encryptedcredentials? {
+def from_JV(v : JsonValue explicit?; t : encryptedcredentials explicit?) : encryptedcredentials? {
     return null if (v == null)
     var q = new encryptedcredentials
     *q <- from_JV(v, type<encryptedcredentials>)
@@ -10499,16 +10494,16 @@ struct setpassportdataerrors {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setpassportdataerrors explicit) : setpassportdataerrors {
+def from_JV(v : JsonValue explicit?; t : setpassportdataerrors explicit) : setpassportdataerrors {
     var q : setpassportdataerrors
-    var vobj & = unsafe(v as _object)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.errors <- _::from_JV(vobj["errors"], type<array<passportelementerror>>)
+    let vobj & = unsafe(v as _object)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.errors <- _::from_JV(vobj?["errors"] ?? null, type<array<passportelementerror>>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setpassportdataerrors explicit?) : setpassportdataerrors? {
+def from_JV(v : JsonValue explicit?; t : setpassportdataerrors explicit?) : setpassportdataerrors? {
     return null if (v == null)
     var q = new setpassportdataerrors
     *q <- from_JV(v, type<setpassportdataerrors>)
@@ -10529,14 +10524,14 @@ struct passportelementerror {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerror explicit) : passportelementerror {
+def from_JV(v : JsonValue explicit?; t : passportelementerror explicit) : passportelementerror {
     var q : passportelementerror
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerror explicit?) : passportelementerror? {
+def from_JV(v : JsonValue explicit?; t : passportelementerror explicit?) : passportelementerror? {
     return null if (v == null)
     var q = new passportelementerror
     *q <- from_JV(v, type<passportelementerror>)
@@ -10559,19 +10554,19 @@ struct passportelementerrordatafield {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrordatafield explicit) : passportelementerrordatafield {
+def from_JV(v : JsonValue explicit?; t : passportelementerrordatafield explicit) : passportelementerrordatafield {
     var q : passportelementerrordatafield
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.field_name = _::from_JV(vobj["field_name"], type<string>)
-    q.data_hash = _::from_JV(vobj["data_hash"], type<string>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.field_name = _::from_JV(vobj?["field_name"] ?? null, type<string>)
+    q.data_hash = _::from_JV(vobj?["data_hash"] ?? null, type<string>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrordatafield explicit?) : passportelementerrordatafield? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrordatafield explicit?) : passportelementerrordatafield? {
     return null if (v == null)
     var q = new passportelementerrordatafield
     *q <- from_JV(v, type<passportelementerrordatafield>)
@@ -10598,18 +10593,18 @@ struct passportelementerrorfrontside {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorfrontside explicit) : passportelementerrorfrontside {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorfrontside explicit) : passportelementerrorfrontside {
     var q : passportelementerrorfrontside
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.file_hash = _::from_JV(vobj["file_hash"], type<string>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.file_hash = _::from_JV(vobj?["file_hash"] ?? null, type<string>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorfrontside explicit?) : passportelementerrorfrontside? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorfrontside explicit?) : passportelementerrorfrontside? {
     return null if (v == null)
     var q = new passportelementerrorfrontside
     *q <- from_JV(v, type<passportelementerrorfrontside>)
@@ -10635,18 +10630,18 @@ struct passportelementerrorreverseside {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorreverseside explicit) : passportelementerrorreverseside {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorreverseside explicit) : passportelementerrorreverseside {
     var q : passportelementerrorreverseside
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.file_hash = _::from_JV(vobj["file_hash"], type<string>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.file_hash = _::from_JV(vobj?["file_hash"] ?? null, type<string>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorreverseside explicit?) : passportelementerrorreverseside? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorreverseside explicit?) : passportelementerrorreverseside? {
     return null if (v == null)
     var q = new passportelementerrorreverseside
     *q <- from_JV(v, type<passportelementerrorreverseside>)
@@ -10672,18 +10667,18 @@ struct passportelementerrorselfie {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorselfie explicit) : passportelementerrorselfie {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorselfie explicit) : passportelementerrorselfie {
     var q : passportelementerrorselfie
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.file_hash = _::from_JV(vobj["file_hash"], type<string>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.file_hash = _::from_JV(vobj?["file_hash"] ?? null, type<string>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorselfie explicit?) : passportelementerrorselfie? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorselfie explicit?) : passportelementerrorselfie? {
     return null if (v == null)
     var q = new passportelementerrorselfie
     *q <- from_JV(v, type<passportelementerrorselfie>)
@@ -10709,18 +10704,18 @@ struct passportelementerrorfile {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorfile explicit) : passportelementerrorfile {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorfile explicit) : passportelementerrorfile {
     var q : passportelementerrorfile
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.file_hash = _::from_JV(vobj["file_hash"], type<string>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.file_hash = _::from_JV(vobj?["file_hash"] ?? null, type<string>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorfile explicit?) : passportelementerrorfile? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorfile explicit?) : passportelementerrorfile? {
     return null if (v == null)
     var q = new passportelementerrorfile
     *q <- from_JV(v, type<passportelementerrorfile>)
@@ -10746,18 +10741,18 @@ struct passportelementerrorfiles {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorfiles explicit) : passportelementerrorfiles {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorfiles explicit) : passportelementerrorfiles {
     var q : passportelementerrorfiles
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.file_hashes <- _::from_JV(vobj["file_hashes"], type<array<string>>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.file_hashes <- _::from_JV(vobj?["file_hashes"] ?? null, type<array<string>>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorfiles explicit?) : passportelementerrorfiles? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorfiles explicit?) : passportelementerrorfiles? {
     return null if (v == null)
     var q = new passportelementerrorfiles
     *q <- from_JV(v, type<passportelementerrorfiles>)
@@ -10783,18 +10778,18 @@ struct passportelementerrortranslationfile {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrortranslationfile explicit) : passportelementerrortranslationfile {
+def from_JV(v : JsonValue explicit?; t : passportelementerrortranslationfile explicit) : passportelementerrortranslationfile {
     var q : passportelementerrortranslationfile
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.file_hash = _::from_JV(vobj["file_hash"], type<string>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.file_hash = _::from_JV(vobj?["file_hash"] ?? null, type<string>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrortranslationfile explicit?) : passportelementerrortranslationfile? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrortranslationfile explicit?) : passportelementerrortranslationfile? {
     return null if (v == null)
     var q = new passportelementerrortranslationfile
     *q <- from_JV(v, type<passportelementerrortranslationfile>)
@@ -10820,18 +10815,18 @@ struct passportelementerrortranslationfiles {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrortranslationfiles explicit) : passportelementerrortranslationfiles {
+def from_JV(v : JsonValue explicit?; t : passportelementerrortranslationfiles explicit) : passportelementerrortranslationfiles {
     var q : passportelementerrortranslationfiles
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.file_hashes <- _::from_JV(vobj["file_hashes"], type<array<string>>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.file_hashes <- _::from_JV(vobj?["file_hashes"] ?? null, type<array<string>>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrortranslationfiles explicit?) : passportelementerrortranslationfiles? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrortranslationfiles explicit?) : passportelementerrortranslationfiles? {
     return null if (v == null)
     var q = new passportelementerrortranslationfiles
     *q <- from_JV(v, type<passportelementerrortranslationfiles>)
@@ -10857,18 +10852,18 @@ struct passportelementerrorunspecified {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorunspecified explicit) : passportelementerrorunspecified {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorunspecified explicit) : passportelementerrorunspecified {
     var q : passportelementerrorunspecified
-    var vobj & = unsafe(v as _object)
-    q.source = _::from_JV(vobj["source"], type<string>)
-    q._type = _::from_JV(vobj["_type"], type<string>)
-    q.element_hash = _::from_JV(vobj["element_hash"], type<string>)
-    q.message = _::from_JV(vobj["message"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.source = _::from_JV(vobj?["source"] ?? null, type<string>)
+    q._type = _::from_JV(vobj?["_type"] ?? null, type<string>)
+    q.element_hash = _::from_JV(vobj?["element_hash"] ?? null, type<string>)
+    q.message = _::from_JV(vobj?["message"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : passportelementerrorunspecified explicit?) : passportelementerrorunspecified? {
+def from_JV(v : JsonValue explicit?; t : passportelementerrorunspecified explicit?) : passportelementerrorunspecified? {
     return null if (v == null)
     var q = new passportelementerrorunspecified
     *q <- from_JV(v, type<passportelementerrorunspecified>)
@@ -10898,22 +10893,22 @@ struct sendgame {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendgame explicit) : sendgame {
+def from_JV(v : JsonValue explicit?; t : sendgame explicit) : sendgame {
     var q : sendgame
-    var vobj & = unsafe(v as _object)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
-    q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
-    q.game_short_name = _::from_JV(vobj["game_short_name"], type<string>)
-    q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
-    q.protect_content = _::from_JV(vobj["protect_content"], type<bool>)
-    q.reply_to_message_id = _::from_JV(vobj["reply_to_message_id"], type<int64>)
-    q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
-    q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
+    let vobj & = unsafe(v as _object)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<int64>)
+    q.message_thread_id = _::from_JV(vobj?["message_thread_id"] ?? null, type<int64>)
+    q.game_short_name = _::from_JV(vobj?["game_short_name"] ?? null, type<string>)
+    q.disable_notification = _::from_JV(vobj?["disable_notification"] ?? null, type<bool>)
+    q.protect_content = _::from_JV(vobj?["protect_content"] ?? null, type<bool>)
+    q.reply_to_message_id = _::from_JV(vobj?["reply_to_message_id"] ?? null, type<int64>)
+    q.allow_sending_without_reply = _::from_JV(vobj?["allow_sending_without_reply"] ?? null, type<bool>)
+    q.reply_markup = _::from_JV(vobj?["reply_markup"] ?? null, type<inlinekeyboardmarkup?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : sendgame explicit?) : sendgame? {
+def from_JV(v : JsonValue explicit?; t : sendgame explicit?) : sendgame? {
     return null if (v == null)
     var q = new sendgame
     *q <- from_JV(v, type<sendgame>)
@@ -10947,20 +10942,20 @@ struct game {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : game explicit) : game {
+def from_JV(v : JsonValue explicit?; t : game explicit) : game {
     var q : game
-    var vobj & = unsafe(v as _object)
-    q.title = _::from_JV(vobj["title"], type<string>)
-    q.description = _::from_JV(vobj["description"], type<string>)
-    q.photo <- _::from_JV(vobj["photo"], type<array<photosize>>)
-    q.text = _::from_JV(vobj["text"], type<string>)
-    q.text_entities <- _::from_JV(vobj["text_entities"], type<array<messageentity>>)
-    q.animation = _::from_JV(vobj["animation"], type<animation?>)
+    let vobj & = unsafe(v as _object)
+    q.title = _::from_JV(vobj?["title"] ?? null, type<string>)
+    q.description = _::from_JV(vobj?["description"] ?? null, type<string>)
+    q.photo <- _::from_JV(vobj?["photo"] ?? null, type<array<photosize>>)
+    q.text = _::from_JV(vobj?["text"] ?? null, type<string>)
+    q.text_entities <- _::from_JV(vobj?["text_entities"] ?? null, type<array<messageentity>>)
+    q.animation = _::from_JV(vobj?["animation"] ?? null, type<animation?>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : game explicit?) : game? {
+def from_JV(v : JsonValue explicit?; t : game explicit?) : game? {
     return null if (v == null)
     var q = new game
     *q <- from_JV(v, type<game>)
@@ -10987,14 +10982,14 @@ struct callbackgame {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : callbackgame explicit) : callbackgame {
+def from_JV(v : JsonValue explicit?; t : callbackgame explicit) : callbackgame {
     var q : callbackgame
-    var vobj & = unsafe(v as _object)
+    let vobj & = unsafe(v as _object)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : callbackgame explicit?) : callbackgame? {
+def from_JV(v : JsonValue explicit?; t : callbackgame explicit?) : callbackgame? {
     return null if (v == null)
     var q = new callbackgame
     *q <- from_JV(v, type<callbackgame>)
@@ -11019,21 +11014,21 @@ struct setgamescore {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setgamescore explicit) : setgamescore {
+def from_JV(v : JsonValue explicit?; t : setgamescore explicit) : setgamescore {
     var q : setgamescore
-    var vobj & = unsafe(v as _object)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.score = _::from_JV(vobj["score"], type<int64>)
-    q.force = _::from_JV(vobj["force"], type<bool>)
-    q.disable_edit_message = _::from_JV(vobj["disable_edit_message"], type<bool>)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.score = _::from_JV(vobj?["score"] ?? null, type<int64>)
+    q.force = _::from_JV(vobj?["force"] ?? null, type<bool>)
+    q.disable_edit_message = _::from_JV(vobj?["disable_edit_message"] ?? null, type<bool>)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<int64>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : setgamescore explicit?) : setgamescore? {
+def from_JV(v : JsonValue explicit?; t : setgamescore explicit?) : setgamescore? {
     return null if (v == null)
     var q = new setgamescore
     *q <- from_JV(v, type<setgamescore>)
@@ -11062,18 +11057,18 @@ struct getgamehighscores {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getgamehighscores explicit) : getgamehighscores {
+def from_JV(v : JsonValue explicit?; t : getgamehighscores explicit) : getgamehighscores {
     var q : getgamehighscores
-    var vobj & = unsafe(v as _object)
-    q.user_id = _::from_JV(vobj["user_id"], type<int64>)
-    q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
-    q.message_id = _::from_JV(vobj["message_id"], type<int64>)
-    q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
+    let vobj & = unsafe(v as _object)
+    q.user_id = _::from_JV(vobj?["user_id"] ?? null, type<int64>)
+    q.chat_id = _::from_JV(vobj?["chat_id"] ?? null, type<int64>)
+    q.message_id = _::from_JV(vobj?["message_id"] ?? null, type<int64>)
+    q.inline_message_id = _::from_JV(vobj?["inline_message_id"] ?? null, type<string>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : getgamehighscores explicit?) : getgamehighscores? {
+def from_JV(v : JsonValue explicit?; t : getgamehighscores explicit?) : getgamehighscores? {
     return null if (v == null)
     var q = new getgamehighscores
     *q <- from_JV(v, type<getgamehighscores>)
@@ -11098,17 +11093,17 @@ struct gamehighscore {
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : gamehighscore explicit) : gamehighscore {
+def from_JV(v : JsonValue explicit?; t : gamehighscore explicit) : gamehighscore {
     var q : gamehighscore
-    var vobj & = unsafe(v as _object)
-    q.position = _::from_JV(vobj["position"], type<int64>)
-    q.user <- _::from_JV(vobj["user"], type<user>)
-    q.score = _::from_JV(vobj["score"], type<int64>)
+    let vobj & = unsafe(v as _object)
+    q.position = _::from_JV(vobj?["position"] ?? null, type<int64>)
+    q.user <- _::from_JV(vobj?["user"] ?? null, type<user>)
+    q.score = _::from_JV(vobj?["score"] ?? null, type<int64>)
     return <- q
 }
 
 [generic]
-def from_JV(var v : JsonValue explicit?; t : gamehighscore explicit?) : gamehighscore? {
+def from_JV(v : JsonValue explicit?; t : gamehighscore explicit?) : gamehighscore? {
     return null if (v == null)
     var q = new gamehighscore
     *q <- from_JV(v, type<gamehighscore>)

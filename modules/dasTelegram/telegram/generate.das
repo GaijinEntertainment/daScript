@@ -127,37 +127,41 @@ def process_type(node : xml_node; is_optional : bool = false) {
 def generate_fromJV(name : string; fields : array<tuple<field : string; _type : string>>) {
     // from value
     g_FOUT |> fprint("[generic]\n")
-    g_FOUT |> fprint("def from_JV ( var v:JsonValue explicit?; t:{name} explicit ) : {name}\n")
+    g_FOUT |> fprint("def from_JV(v : JsonValue explicit?; t : {name} explicit) : {name} \{\n")
     g_FOUT |> fprint("    var q : {name}\n")
-    g_FOUT |> fprint("    var vobj & = unsafe(v as _object)\n")
+    g_FOUT |> fprint("    let vobj & = unsafe(v as _object)\n")
     for (field in fields) {
         if (field._type == "int64" || field._type == "float" || field._type == "string" || field._type == "bool" || field._type |> ends_with("?")) {
-            g_FOUT |> fprint("    q.{field.field} = _::from_JV(vobj[\"{field.field}\"], type<{field._type}>)\n")
+            g_FOUT |> fprint("    q.{field.field} = _::from_JV(vobj?[\"{field.field}\"] ?? null, type<{field._type}>)\n")
         } else {
-            g_FOUT |> fprint("    q.{field.field} <- _::from_JV(vobj[\"{field.field}\"], type<{field._type}>)\n")
+            g_FOUT |> fprint("    q.{field.field} <- _::from_JV(vobj?[\"{field.field}\"] ?? null, type<{field._type}>)\n")
         }
     }
-    g_FOUT |> fprint("    return <- q\n\n")
+    g_FOUT |> fprint("    return <- q\n")
+    g_FOUT |> fprint("\}\n\n")
     // from pointer
     g_FOUT |> fprint("[generic]\n")
-    g_FOUT |> fprint("def from_JV ( var v:JsonValue explicit?; t:{name} explicit? ) : {name}?\n")
-    g_FOUT |> fprint("    return null if v==null\n")
+    g_FOUT |> fprint("def from_JV(v : JsonValue explicit?; t : {name} explicit?) : {name}? \{\n")
+    g_FOUT |> fprint("    return null if (v == null)\n")
     g_FOUT |> fprint("    var q = new {name}\n")
-    g_FOUT |> fprint("    *q <- from_JV(v,type<{name}>)\n")
-    g_FOUT |> fprint("    return q\n\n")
+    g_FOUT |> fprint("    *q <- from_JV(v, type<{name}>)\n")
+    g_FOUT |> fprint("    return q\n")
+    g_FOUT |> fprint("\}\n\n")
     // to value
     g_FOUT |> fprint("[generic]\n")
-    g_FOUT |> fprint("def JV ( v:{name} explicit ) : JsonValue?\n")
-    g_FOUT |> fprint("    var map: table<string; JsonValue?>\n")
+    g_FOUT |> fprint("def JV(v : {name} explicit) : JsonValue? \{\n")
+    g_FOUT |> fprint("    var map : table<string; JsonValue?>\n")
     for (field in fields) {
         if (field._type |> ends_with("?")) {
-            g_FOUT |> fprint("    if v.{field.field}!=null\n")
+            g_FOUT |> fprint("    if (v.{field.field} != null) \{\n")
             g_FOUT |> fprint("        map[\"{field.field}\"] = _::JV(v.{field.field})\n")
+            g_FOUT |> fprint("    \}\n")
         } else {
             g_FOUT |> fprint("    map[\"{field.field}\"] = _::JV(v.{field.field})\n")
         }
     }
-    g_FOUT |> fprint("    return _::JV(map)\n\n")
+    g_FOUT |> fprint("    return _::JV(map)\n")
+    g_FOUT |> fprint("\}\n\n")
 }
 
 def process_section(doc : xml_document; name : string) {
@@ -173,12 +177,13 @@ def process_section(doc : xml_document; name : string) {
         // print("<{elem.name}> = {elem.value} // {elem._type}\n")
         if (elem.name == "h4") {
             if (!any_fields && !api_call |> empty) {
-                g_FOUT |> fprint("\n    //! {comment}\n    object_{api_call}_has_no_fields:bool\n\n")
+                g_FOUT |> fprint("\n    //! {comment}\n    object_{api_call}_has_no_fields : bool\n")
+                g_FOUT |> fprint("\}\n\n")
                 generate_fromJV(api_call, array<tuple<string; string>>())
             }
             comment = ""
             api_call = elem |> child("a") |> attribute("id") |> as_string("") |> sanitize_name()
-            g_FOUT |> fprint("struct {api_call}")
+            g_FOUT |> fprint("struct {api_call} \{")
             any_fields = false
         } elif (elem.name == "p") {
             comment = "{comment} {collect_comment(elem)}"
@@ -202,18 +207,19 @@ def process_section(doc : xml_document; name : string) {
                 let is_optional = api_field_comment |> starts_with("Optional")
                 let api_field_type = process_type(field_type_node, is_optional)
                 g_FOUT |> fprint("    ")
-                g_FOUT |> fprint("{api_field} : {api_field_type}\t//! {api_field_comment}\n")
+                g_FOUT |> fprint("{api_field} : {api_field_type}    //! {api_field_comment}\n")
                 fields |> push((api_field, api_field_type))
                 tr = tr.next_sibling
             }
-            g_FOUT |> fprint("\n")
+            g_FOUT |> fprint("\}\n\n")
             generate_fromJV(api_call, fields)
             api_call = ""
         }
         elem = elem.next_sibling
     }
     if (!any_fields && !api_call |> empty) {
-        g_FOUT |> fprint("\n    //! {comment}\n    object_{api_call}_has_no_fields:bool\n\n")
+        g_FOUT |> fprint("\n    //! {comment}\n    object_{api_call}_has_no_fields : bool\n")
+        g_FOUT |> fprint("\}\n\n")
         generate_fromJV(api_call, array<tuple<string; string>>())
     }
 }
@@ -231,6 +237,8 @@ def main {
                     panic("failed to open output file\n")
                 }
                 g_FOUT = ff
+                g_FOUT |> fprint("// This file was generate by dasTelegram/telegram/generate.das\n")
+                g_FOUT |> fprint("options gen2\n")
                 g_FOUT |> fprint("options indenting = 4\n")
                 g_FOUT |> fprint("options no_unused_block_arguments = false\n")
                 g_FOUT |> fprint("options no_unused_function_arguments = false\n")
