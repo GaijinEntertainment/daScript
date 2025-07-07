@@ -416,6 +416,9 @@ namespace das
         if ( secondType ) {
             secondType->getLookupHash(hash);
         }
+        for ( auto & name : argNames ) {
+            hash = hashmix(hash, hash_block64(reinterpret_cast<const uint8_t *>(name.c_str()), name.size()));
+        }
         for ( auto & argT : argTypes ) {
             argT->getLookupHash(hash);
         }
