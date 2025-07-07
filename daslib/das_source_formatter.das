@@ -500,21 +500,23 @@ def mark_tokens_as_type(var ctx : FormatterCtx; i : int) {
         return
     }
 
-    if (ctx |> eq(pos, "[") && ctx |> eq(pos + 1, "]")) {
-        pos += 2
-    }
-
-    for (j in range(pos, length(ctx.tokens))) {
-        if (ctx |> eq(j, "-", "==") && ctx |> eq(j + 1, "const", "&", "#", "?")) {
-            pos = j + 2
-        } elif (ctx |> eq(j, "const", "&", "#", "?") || ctx |> eq(j, "implicit", "explicit")) {
-            pos = j + 1
+    var start = i;
+    while (pos < length(ctx.tokens)) {
+        if (ctx |> eq(pos, "-", "==") && ctx |> eq(pos + 1, "const", "&", "#", "?")) {
+            pos += 1 // skip -
+        } elif (ctx |> eq(pos, "const", "&", "#", "?") || ctx |> eq(pos, "implicit", "explicit")) {
+            // do nothing
+        } elif (ctx |> eq(pos, "[")) {
+            // ignore [expr] in T[expr]
+            mark_range_as_type(ctx, start, pos)
+            pos = ctx |> find_pair_square(pos + 1)
+            start = pos + 1
         } else {
             break
         }
+        pos += 1 // next token
     }
-
-    mark_range_as_type(ctx, i, pos)
+    mark_range_as_type(ctx, start, pos)
 
     if (ctx |> eq(pos, "|")) {
         ctx.tokens[pos].spaces = 1
