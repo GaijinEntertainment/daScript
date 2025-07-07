@@ -6716,6 +6716,9 @@ namespace das {
                     if ( verifyCloneFunc(fnList, expr->at) ) {
                         if ( fnList.size()==0 ) {
                             auto clf = makeClone(stt);
+                            if ( relaxedPointerConst ) {
+                                clf->arguments[1]->type->constant = true; // we clone from const, regardless
+                            }
                             clf->privateFunction = true;
                             extraFunctions.push_back(clf);
                         }
