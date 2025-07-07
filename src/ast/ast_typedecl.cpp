@@ -1480,6 +1480,7 @@ namespace das
 
     void TypeDecl::sanitize ( ) {
         isExplicit = false;
+        explicitConst = false;
         if ( firstType ) firstType->sanitize();
         if ( secondType ) secondType->sanitize();
         for ( auto & argT : argTypes ) argT->sanitize();
