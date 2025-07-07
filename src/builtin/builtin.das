@@ -465,7 +465,7 @@ def push_clone(var A : auto(CT) -# -const; b : auto(TT) | #) {
         concept_assert(false, "can't push_clone type which can't be cloned")
     } static_elif (!typeinfo can_be_placed_in_container(type<TT -#>)) {
         concept_assert(false, "can't push_clone type which can't be placed in a container")
-    } static_elif (!typeinfo builtin_function_exists(@@ < (var a : CT - # - const; var b : TT - # - const) : void > _::emplace)) {
+    } static_elif (!typeinfo builtin_function_exists(@@ < (var a : CT -# -const; var b : TT -# -const) : void > _::emplace)) {
         concept_assert(false, "can't push_clone, missing emplace({typeinfo typename(type<CT -# -const>)},{typeinfo typename(type<TT -# -const>)})")
     } else {
         unsafe {
@@ -1060,18 +1060,18 @@ def clone(var clone_src : auto(TT) ==const | #) : TT -const -# {
 }
 
 [skip_lock_check]
-def clone(clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] - const - # {
+def clone(clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -const -# {
     unsafe {
-        var clone_dest : TT[typeinfo dim(clone_src)] - #
+        var clone_dest : TT[typeinfo dim(clone_src)] -#
         clone_dest := clone_src
         return <- clone_dest
     }
 }
 
 [skip_lock_check]
-def clone(var clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] - const - # {
+def clone(var clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -const -# {
     unsafe {
-        var clone_dest : TT[typeinfo dim(clone_src)] - #
+        var clone_dest : TT[typeinfo dim(clone_src)] -#
         clone_dest := clone_src
         return <- clone_dest
     }
