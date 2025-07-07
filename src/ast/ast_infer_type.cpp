@@ -6808,6 +6808,7 @@ namespace das {
                         if ( !resType->ref && resType->isWorkhorseType() && !resType->isPointer() ) {
                             resType->constant = true;
                         }
+                        resType->sanitize();
                         reportAstChanged();
                         return true;
                     }
