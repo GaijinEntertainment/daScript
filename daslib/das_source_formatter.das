@@ -507,7 +507,7 @@ def mark_tokens_as_type(var ctx : FormatterCtx; i : int) {
     for (j in range(pos, length(ctx.tokens))) {
         if (ctx |> eq(j, "-", "==") && ctx |> eq(j + 1, "const", "&", "#", "?")) {
             pos = j + 2
-        } elif (ctx |> eq(j, "const", "&", "#", "?") || ctx |> eq(j, "implicit")) {
+        } elif (ctx |> eq(j, "const", "&", "#", "?") || ctx |> eq(j, "implicit", "explicit")) {
             pos = j + 1
         } else {
             break
