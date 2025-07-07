@@ -722,10 +722,15 @@ def mark_token_context(var ctx : FormatterCtx) {
     // functions
     for (i in range(0, length(ctx.tokens) - 3)) {
         var pos = -1
+        var need_in_func_param = true
         if (ctx |> new_line_before(i) && ctx |> eq(i, "def")) {
             pos = i + 1
         } elif (ctx |> eq(i, "$",  "@", "@@") && ctx |> eq(i + 1, "(", "[")) {
-            pos = i;
+            pos = i
+        } elif (ctx |> eq(i, "@@") && ctx |> eq(i + 1, "<")) {
+            // handle func_addr_expr with type : @@ < (a1: int, ...) : T > func_name
+            need_in_func_param = false
+            pos = i + 1
         }
 
         if (pos == -1) {
@@ -751,7 +756,7 @@ def mark_token_context(var ctx : FormatterCtx) {
             ctx.tokens[beginParams].dontAddSpacesAround = true;
             let endParams = ctx |> find_pair_paren(pos + 1);
             for (j in range(beginParams, endParams + 1)) {
-                ctx.tokens[j].isInFunctionParam = true;
+                ctx.tokens[j].isInFunctionParam = need_in_func_param;
                 if (j - 1 == beginParams || ctx |> eq(j - 1, ";") || ctx |> eq(j - 1, ",")) {
                     let colonPos = ctx |> search_token_in_line(j, ":");
                     if (colonPos > 0) {
