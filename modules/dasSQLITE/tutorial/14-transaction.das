@@ -20,7 +20,7 @@ def main {
         INSERT INTO Friends(Name) VALUES ('Tom');
         INSERT INTO Friends(Name) VALUES ('Rebecca');
         INSERT INTO Friends(Name) VALUES ('Jim');
-        INSERT INTO Friend(Name) VALUES ('Robert');
+        INSERT INTO Friends(Name) VALUES ('Robert');
         COMMIT;
     %%
     var err_msg : string

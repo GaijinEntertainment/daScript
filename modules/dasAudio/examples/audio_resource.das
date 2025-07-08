@@ -10,7 +10,7 @@ require fio
 
 def public audio_fopen(name : string; mode : string; blk : block<(f : file) : void>) {
     var fname = "{get_das_root()}/modules/dasAudio/examples/{name}"
-    var f = fopen(name, mode)
+    var f = fopen(fname, mode)
     if (f == null) {
         fname = "{get_das_root()}/examples/audio/{name}"
         f = fopen(name, mode)
