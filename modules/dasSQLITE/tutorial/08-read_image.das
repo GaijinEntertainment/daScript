@@ -7,7 +7,7 @@ require fio
 [export]
 def main {
     var db : sqlite3?
-    var rc = sqlite3_open("test.db", unsafe(addr(db)))
+    var rc = sqlite3_open("{get_das_root()}/modules/dasSQLITE/tutorial/test.db", unsafe(addr(db)))
     if (rc != SQLITE_OK) {
         to_log(LOG_ERROR, "Cannot open database: sqlite3_errmsg(db)\n")
         sqlite3_close(db)

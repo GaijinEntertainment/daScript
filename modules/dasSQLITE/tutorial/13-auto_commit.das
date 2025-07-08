@@ -19,7 +19,7 @@ def main {
         INSERT INTO Friends(Name) VALUES ('Tom');
         INSERT INTO Friends(Name) VALUES ('Rebecca');
         INSERT INTO Friends(Name) VALUES ('Jim');
-        INSERT INTO Friend(Name) VALUES ('Robert');
+        INSERT INTO Friends(Name) VALUES ('Robert');
     %%
     var err_msg : string
     rc = sqlite3_exec(db, sql, unsafe(addr(err_msg)))
