@@ -24,7 +24,7 @@ var {
 }
 
 [jit]
-def private finalize(var that : Node?& explicit - const) {
+def private finalize(var that : Node?& explicit -const) {
     unsafe {
         if (that != null) {
             finalize(*that)

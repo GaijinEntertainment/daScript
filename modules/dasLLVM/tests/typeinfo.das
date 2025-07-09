@@ -77,7 +77,7 @@ def test_type_info(t : T?) {
     t |> run("typeinfo") <| @(t : T?) {
         test_typeinfo()
         t |> success(is_jit_function(@@ < (a : int) : void > take_it))
-        t |> success(is_jit_function(@@ < (a : int ?) : void > take_it))
+        t |> success(is_jit_function(@@ < (a : int?) : void > take_it))
         t |> success(is_jit_function(@@ < (a : array<int>) : void > take_it))
         t |> success(is_jit_function(@@test_typeinfo))
     }

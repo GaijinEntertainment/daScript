@@ -20,7 +20,7 @@ struct Foo {
 [test]
 def test_null_coalescing(t : T?) {
     t |> run("null coalescing value") <| @(t : T?) {
-        t |> success(is_jit_function(@@ < (a : int ?; b : int) : void > nullc))
+        t |> success(is_jit_function(@@ < (a : int?; b : int) : void > nullc))
         var i = 13
         var pi = unsafe(addr(i))
         var pj : int?
@@ -93,10 +93,10 @@ def test_safe_at(t : T?) {
         t |> equal(42, v2)
     }
     t |> run("safe_at ptr to dim") <| @(t : T?) {
-        t |> success(is_jit_function(@@ < (a : int const[3] ?; b, c : int) : int > jit_safe_at))
+        t |> success(is_jit_function(@@ < (a : int const[3]?; b, c : int) : int > jit_safe_at))
         let i = fixed_array(1, 2, 3)
         let pi = unsafe(addr(i))
-        let p0 : int[3] ?
+        let p0 : int[3]?
         let v1 = jit_safe_at(pi, 0, 42)
         let v2 = jit_safe_at(p0, 0, 42)
         let v3 = jit_safe_at(pi, 3, 42)
@@ -115,10 +115,10 @@ def test_safe_at(t : T?) {
         t |> equal(42, v2)
     }
     t |> run("safe_at ptr to array") <| @(t : T?) {
-        t |> success(is_jit_function(@@ < (a : array<int> const ?; b, c : int) : int > jit_safe_at))
+        t |> success(is_jit_function(@@ < (a : array<int> const?; b, c : int) : int > jit_safe_at))
         let i <- [ 1, 2, 3]
         let pi = unsafe(addr(i))
-        let p0 : int[3] ?
+        let p0 : int[3]?
         let v1 = jit_safe_at(pi, 0, 42)
         let v2 = jit_safe_at(p0, 0, 42)
         let v3 = jit_safe_at(pi, 3, 42)
@@ -137,10 +137,10 @@ def test_safe_at(t : T?) {
         t |> equal(42, v2)
     }
     t |> run("safe_at ptr to table") <| @(t : T?) {
-        t |> success(is_jit_function(@@ < (a : table<int; int> const ?; b, c : int) : int > jit_safe_at))
+        t |> success(is_jit_function(@@ < (a : table<int; int> const?; b, c : int) : int > jit_safe_at))
         let i <- {0 => 1, 1 => 2, 2 => 3}
         let pi = unsafe(addr(i))
-        let p0 : int[3] ?
+        let p0 : int[3]?
         let v1 = jit_safe_at(pi, 0, 42)
         let v2 = jit_safe_at(p0, 0, 42)
         let v3 = jit_safe_at(pi, 3, 42)
