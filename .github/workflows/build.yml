@@ -44,19 +44,27 @@ jobs:
 
         include:
           - target: linux
+            release_target: linux
+            release_arch: x86_64
             runner: ubuntu-latest
             archive_ext: tar.gz
 
           - target: linux_arm
+            release_target: linux
+            release_arch: arm64
             runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
           - target: darwin
+            release_target: darwin
+            release_arch: arm64
             runner: macos-latest # arm64
             architecture_string: arm64
             archive_ext: tar.gz
 
           - target: darwin13
+            release_target: darwin
+            release_arch: x86_64
             runner: macos-13 # x64
             architecture_string: x86_64
             archive_ext: tar.gz
@@ -86,10 +94,14 @@ jobs:
             cmake_generator: Ninja
 
           - target: windows
+            release_target: windows
+            release_arch: x86
             architecture: 32
             architecture_string: Win32
 
           - target: windows
+            release_target: windows
+            release_arch: x86_64
             architecture: 64
             architecture_string: x64
 
@@ -156,6 +168,11 @@ jobs:
         repository: profelis/das-fmt     # Path to repository with das-fmt scripts
         path: das-fmt
 
+    - name: "Clone submodules"
+      if: matrix.target != 'linux_arm' # support opengl in glfw on linux arm
+      run: |
+        # Some of them will be disabled, but who cares
+        git submodule update --init --recursive $(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f1 | sed 's|^|modules/|' | xargs)
     - name: "Build: Daslang"
       run: |
         set -eux
@@ -254,8 +271,8 @@ jobs:
       run: |
         mkdir daslang_install
         mkdir artifacts
-        cmake --install ./build --prefix ./daslang_install --config ${{ matrix.cmake_preset }}
-        7z a artifacts/daslang-${{ matrix.target }}-${{ matrix.architecture }}.zip ./daslang_install
+        cmake --install ./build --prefix ./daslang_install --config ${{ matrix.cmake_preset }} --strip
+        7z a artifacts/daslang-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip ./daslang_install
     - name: "Create release"
       if: github.event.action == 'published' && matrix.cmake_preset == 'Release'
       uses: actions/upload-release-asset@v1
@@ -263,6 +280,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ github.event.release.upload_url }}
-        asset_path: artifacts/daslang-${{ matrix.target }}-${{ matrix.architecture }}.zip
-        asset_name: daslang-${{ matrix.target }}-${{ matrix.architecture }}.zip
+        asset_path: artifacts/daslang-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip
+        asset_name: daslang-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip
         asset_content_type: application/zip
