@@ -254,7 +254,7 @@ jobs:
       run: |
         mkdir daslang_install
         mkdir artifacts
-        cmake --install ./build --prefix ./daslang_install --config ${{ matrix.cmake_preset }}
+        cmake --install ./build --prefix ./daslang_install --config ${{ matrix.cmake_preset }} --strip
         7z a artifacts/daslang-${{ matrix.target }}-${{ matrix.architecture }}.zip ./daslang_install
     - name: "Create release"
       if: github.event.action == 'published' && matrix.cmake_preset == 'Release'

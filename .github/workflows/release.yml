@@ -229,7 +229,7 @@ jobs:
         run: |
           mkdir daslang_bundle
           mkdir artifacts
-          cmake --install ./build --prefix ./daslang_bundle --config ${{ matrix.cmake_preset }}
+          cmake --install ./build --prefix ./daslang_bundle --config ${{ matrix.cmake_preset }} --strip
           7z a artifacts/daslang-bundle-${{ matrix.target }}-${{ matrix.architecture }}.zip ./daslang_bundle
       - name: "Create release"
         if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased') && matrix.cmake_preset == 'Release'
