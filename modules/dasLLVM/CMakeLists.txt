@@ -1,7 +1,7 @@
 IF (NOT DEFINED PATH_TO_LIBCLANG)
 	SET(PATH_TO_LIBCLANG "${PROJECT_SOURCE_DIR}/../libclang")
 ENDIF()
-find_package(LLVM 16.0.6 REQUIRED PATHS "${PATH_TO_LIBCLANG}")
+find_package(LLVM 16.0.6 PATHS "${PATH_TO_LIBCLANG}")
 
 IF ((NOT DAS_LLVM_INCLUDED) AND ${LLVM_FOUND} AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_LLVM_DISABLED)))
     SET(DAS_LLVM_INCLUDED TRUE)
@@ -130,42 +130,33 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ${LLVM_FOUND} AND ((NOT ${DAS_LLVM_DISABLED}) OR
 
 
 IF(WIN32)
-	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
-    	COMMAND ${CMAKE_COMMAND} -E copy_if_different
-	        "${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll"
-    	    "${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LLVM-C.dll")
-	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${LLVM_INSTALL_PREFIX}/bin/LTO.dll"
-		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LTO.dll")
-	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${LLVM_INSTALL_PREFIX}/bin/Remarks.dll"
-		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/Remarks.dll")
-		add_custom_command(TARGET libDasModuleLlvm POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${LLVM_INSTALL_PREFIX}/bin/libclang.dll"
-		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/libclang.dll")
 	set(DAS_CLANG_DLLS
 		${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll
 		${LLVM_INSTALL_PREFIX}/bin/LTO.dll
 		${LLVM_INSTALL_PREFIX}/bin/Remarks.dll
 		${LLVM_INSTALL_PREFIX}/bin/libclang.dll
 	)
+	foreach(dll ${DAS_CLANG_DLLS})
+		get_filename_component(dll_name "${dll}" NAME)
+		add_custom_command(TARGET libDasModuleLlvm POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			"${dll}"
+			"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/${dll_name}"
+		)
+	endforeach()
 	install(FILES ${DAS_CLANG_DLLS}
-        DESTINATION ${DAS_INSTALL_BINDIR}
-    )
-	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/LICENSE.TXT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLVM.LICENSE)
-
-
-    file(GLOB DASLLVM_SOURCES
-		${DAS_LLVM_DIR}/daslib/*.das
-    )
-    install(FILES ${DASLLVM_SOURCES}
-        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/daslib
-    )
+			DESTINATION ${DAS_INSTALL_BINDIR}
+	)
 ENDIF()
 
+	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/LICENSE.TXT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLVM.LICENSE)
+
+	file(GLOB DASLLVM_SOURCES
+			${DAS_LLVM_DIR}/daslib/*.das
+	)
+	install(FILES ${DASLLVM_SOURCES}
+			DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/daslib
+	)
     #ADD_MODULE_DAS(cbind cbind cbind_boost)
 
 	SETUP_CPP11(libDasModuleLlvm)
