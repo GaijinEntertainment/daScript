@@ -45,9 +45,7 @@ class CaptureBlock : AstVisitor {
         }
         let vptr = get_ptr(expr.variable)
         if (!(scope |> key_exists(vptr))) {
-            unsafe {
-                captured[vptr] = reinterpret<ExprVar?> get_ptr(expr)
-            }
+            captured.insert(vptr, unsafe(reinterpret<ExprVar?>(get_ptr(expr))))
         }
     }
     def override preVisitExprLetVariable(expr : smart_ptr<ExprLet>; arg : VariablePtr; lastArg : bool) : void {

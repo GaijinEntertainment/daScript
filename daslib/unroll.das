@@ -30,35 +30,35 @@ class UnrollMacro : AstFunctionAnnotation {
     //!             n[i] = imageLoad(c_bloom_htex, xy + int2(0,i-4))
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         assert(call.arguments[0] is ExprMakeBlock)
-        unsafe {
-            var mblk = reinterpret<ExprMakeBlock?> call.arguments[0]
-            var blk = reinterpret<ExprBlock?> mblk._block
-            if (blk.finalList |> length != 0) {
-                errors := "not expecting finally section in the unroll"
-                return default<ExpressionPtr>
-            }
-            if (blk.list |> length != 1 || !(blk.list[0] is ExprFor)) {
-                errors := "expecting unroll <| for ..."
-                return default<ExpressionPtr>
-            }
-            let efor = reinterpret<ExprFor?> blk.list[0]
-            if (!(efor.sources[0] is ExprConstRange)) {
-                errors := "can only unroll for loop with range"
-                return default<ExpressionPtr>
-            }
-            let euc = reinterpret<ExprConstRange?> efor.sources[0]
-            let van = "{efor.iterators[0]}"
-            var nblk <- new ExprBlock(at = call.at)
-            for (i in euc.value) {
-                var iblk <- clone_expression(efor.body)
+        var mblk = unsafe(reinterpret<ExprMakeBlock?>(call.arguments[0]))
+        var blk = unsafe(reinterpret<ExprBlock?>(mblk._block))
+        if (blk.finalList |> length != 0) {
+            errors := "not expecting finally section in the unroll"
+            return <- default<ExpressionPtr>
+        }
+        if (blk.list |> length != 1 || !(blk.list[0] is ExprFor)) {
+            errors := "expecting unroll <| for ..."
+            return <- default<ExpressionPtr>
+        }
+        let efor = unsafe(reinterpret<ExprFor?>(blk.list[0]))
+        if (!(efor.sources[0] is ExprConstRange)) {
+            errors := "can only unroll for loop with range"
+            return <- default<ExpressionPtr>
+        }
+        let euc = unsafe(reinterpret<ExprConstRange?> efor.sources[0])
+        let van = "{efor.iterators[0]}"
+        var inscope nblk <- new ExprBlock(at = call.at)
+        for (i in euc.value) {
+            if (true) {
+                var inscope iblk <- clone_expression(efor.body)
                 remove_deref(van, iblk)
-                var rules : Template
+                var inscope rules : Template
                 rules |> replaceVariable(van) <| new ExprConstInt(at = call.at, value = i)
                 rules |> apply_template(call.at, iblk, false)
                 nblk.list |> emplace(iblk)
             }
-            return nblk
         }
+        return <- nblk
     }
 }
 
