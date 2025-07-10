@@ -8899,7 +8899,18 @@ namespace das {
             if ( !expr->func ) return false;
             if ( expr->arguments.size() != 2 ) return false;
             if ( !(expr->func->name=="clone" || (expr->func->fromGeneric && expr->func->fromGeneric->name=="clone"))  ) return false;
-            if ( !expr->arguments[1]->rtti_isCall() ) return false;
+            if ( !expr->arguments[1]->rtti_isCall() ) {
+                if ( expr->arguments[1]->rtti_isMakeStruct() ) {
+                    auto mks = static_cast<ExprMakeStruct *>(expr->arguments[1].get());
+                    if ( mks->structs.size() ==0 ) {
+                        return true; // its default<array<T>>
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
             auto call = (ExprCall *)(expr->arguments[1].get());
             if ( !call->func ) return false;
             if ( !call->func->fromGeneric ) return false;
