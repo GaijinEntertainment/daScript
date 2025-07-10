@@ -104,9 +104,7 @@ class SampleStackWalker : DapiStackWalker {
     ctxid : Context?
     def override onArgument(info : FuncInfo; index : int; vinfo : VarInfo; arg : float4) : void {
         if (vinfo.flags.ref || vinfo.flags.refType) {
-            unsafe {
-                describe_arg(*ctxid, vinfo, *reinterpret<void ??>(addr(arg)))
-            }
+            describe_arg(*ctxid, vinfo, *unsafe(reinterpret<void ??>(unsafe(addr(arg)))))
         } else {
             describe_arg(*ctxid, vinfo, unsafe(addr(arg)))
         }
@@ -116,9 +114,7 @@ class SampleStackWalker : DapiStackWalker {
             return
         }
         if (vinfo.flags.ref || vinfo.flags.refType) {
-            unsafe {
-                describe_arg(*ctxid, vinfo, *reinterpret<void ??>(arg))
-            }
+            describe_arg(*ctxid, vinfo, *unsafe(reinterpret<void ??>(arg)))
         } else {
             describe_arg(*ctxid, vinfo, arg)
         }
@@ -133,9 +129,7 @@ class ContextStateAgent : DapiDebugAgent {
     walker : SampleStackWalker?
     def ContextStateAgent {
         walker = new SampleStackWalker()
-        unsafe {
-            walker_adapter <- make_stack_walker(walker)
-        }
+        move_new(walker_adapter, make_stack_walker(walker))
     }
     def operator delete {
         unsafe {

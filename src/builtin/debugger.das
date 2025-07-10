@@ -38,9 +38,7 @@ def install_new_debug_agent(var agentPtr; category : string) {
     static_if (typeinfo is_class(*agentPtr)) {
         let agentInfo = class_info(*agentPtr)
         var inscope agentAdapter <- make_debug_agent(agentPtr, agentInfo)
-        unsafe {
-            agentPtr.thisAgent = reinterpret<DebugAgent?>(agentAdapter)
-        }
+        agentPtr.thisAgent = unsafe(reinterpret<DebugAgent?>(agentAdapter))
         install_debug_agent(agentAdapter, category)
         this_context().name := "debug agent {category}"
     } else {
@@ -52,9 +50,7 @@ def install_new_thread_local_debug_agent(var agentPtr) {
     static_if (typeinfo is_class(*agentPtr)) {
         let agentInfo = class_info(*agentPtr)
         var inscope agentAdapter <- make_debug_agent(agentPtr, agentInfo)
-        unsafe {
-            agentPtr.thisAgent = reinterpret<DebugAgent?>(agentAdapter)
-        }
+        agentPtr.thisAgent = unsafe(reinterpret<DebugAgent?>(agentAdapter))
         install_debug_agent_thread_local(agentAdapter)
         this_context().name := "thread local debug agent"
     } else {
