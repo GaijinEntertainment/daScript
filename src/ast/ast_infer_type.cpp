@@ -2090,6 +2090,14 @@ namespace das {
                       decl.at, CompilationError::cant_infer_missing_initializer );
             }
         }
+        bool hasSafeWhenUninitialized ( const AnnotationArgumentList & args ) const {
+            for ( auto & ann : args ) {
+                if ( ann.name=="safe_when_uninitialized" ) {
+                    return true;
+                }
+            }
+            return false;
+        }
         virtual void visitStructureField ( Structure * st, Structure::FieldDeclaration & decl, bool ) override {
             if ( decl.init ) st->hasInitFields = true;
             if ( decl.type && decl.type->isExprType() ) {
@@ -2154,14 +2162,7 @@ namespace das {
             }
 
             if ( noUnsafeUninitializedStructs && !st->isLambda && !decl.init && decl.type->unsafeInit() ) {
-                bool safeWhenUninitialized = false;
-                for ( auto & ann : decl.annotation ) {
-                    if ( ann.name=="safe_when_uninitialized" ) {
-                        safeWhenUninitialized = true;
-                        break;
-                    }
-                }
-                if ( !safeWhenUninitialized ) {
+                if ( !hasSafeWhenUninitialized(decl.annotation) ) {
                     error("Uninitialized field " + decl.name + " is unsafe. Use initializer syntax or @safe_when_uninitialized when intended.", "", "",
                         decl.at, CompilationError::unsafe);
                 }
@@ -2263,6 +2264,12 @@ namespace das {
     // globals
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
+            if ( noUnsafeUninitializedStructs && !var->init && var->type->unsafeInit() ) {
+                if ( !hasSafeWhenUninitialized(var->annotation) ) {
+                    error("Uninitialized variable " + var->name + " is unsafe. Use initializer syntax or @safe_when_uninitialized when intended.", "", "",
+                        var->at, CompilationError::unsafe);
+                }
+            }
             if ( checkNoGlobalVariablesAtAll && !var->generated ) {
                 error("global variables are disabled by option no_global_variables_at_all", "", "",
                       var->at, CompilationError::no_global_variables );
