@@ -117,10 +117,10 @@ namespace das::format {
             return 0;
         }
         if (comment_start != npos) {
-            const auto &maybe_comment = line.substr(comment_start);
-            const auto quotes = count(maybe_comment.begin(), maybe_comment.end(), '"');
-            if (quotes % 2 != 0) {
-                comment_start = line.size();
+            const auto code_part = line.substr(0, comment_start);
+            const auto quotes_code = count(code_part.begin(), code_part.end(), '"');
+            if (quotes_code % 2 != 0) {
+                comment_start = line.size(); // should be recursive call to find_comma_place, let's simply put to the end
             }
         }
         return line.find_last_not_of(" \t\r", comment_start == npos ? npos : comment_start - 1);
@@ -191,7 +191,10 @@ namespace das::format {
         replace_with(v2_only, start, format::get_substring(internal), end, open, close);
     }
 
-    bool skip_token(bool v2_only, LineInfo token) {
+    bool skip_token(bool v2_only, bool need_skip, LineInfo token) {
+        if (!need_skip) {
+            return false;
+        }
         auto start = format::Pos::from(token);
         auto end = format::Pos::from_last(token);
         if (start == end) {

@@ -54,7 +54,7 @@ namespace das::format {
 
     void replace_with(bool v2_only, Pos start, LineInfo internal, Pos end, const string &open, const string &close);
 
-    bool skip_token(bool v2_only, LineInfo token);
+    bool skip_token(bool v2_only, bool need_skip, LineInfo token);
 
     void wrap_par_expr(LineInfo real_expr, LineInfo info_expr);
     // wrap with parenthesis only if it is mult line expression
