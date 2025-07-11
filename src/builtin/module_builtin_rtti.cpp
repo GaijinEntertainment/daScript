@@ -427,6 +427,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(avoidNullPtr)>("avoidNullPtr");
             addProperty<DAS_BIND_MANAGED_PROP(getSizeOf)>("sizeOf", "getSizeOf");
             addProperty<DAS_BIND_MANAGED_PROP(getAlignOf)>("alignOf", "getAlignOf");
+            from("Annotation");
         }
     };
 
@@ -435,6 +436,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
             addProperty<DAS_BIND_MANAGED_PROP(fieldCount)>("fieldCount");
+            from("TypeAnnotation");
         }
     };
 
@@ -712,6 +714,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(aot)>("aot");
             addField<DAS_BIND_MANAGED_FIELD(standalone_context)>("standalone_context");
             addField<DAS_BIND_MANAGED_FIELD(aot_module)>("aot_module");
+            addField<DAS_BIND_MANAGED_FIELD(aot_macros)>("aot_macros");
             addField<DAS_BIND_MANAGED_FIELD(completion)>("completion");
             addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
             addField<DAS_BIND_MANAGED_FIELD(serialize_main_module)>("serialize_main_module");

@@ -19,6 +19,7 @@ das::FileAccessPtr get_file_access( char * pak );//link time resolved dependenci
 TextPrinter tout;
 
 static string projectFile;
+static bool aotMacros = false;
 static bool profilerRequired = false;
 static bool debuggerRequired = false;
 static bool pauseAfterErrors = false;
@@ -33,6 +34,11 @@ static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
     policies.aot = false;
     policies.aot_module = true;
+    if (aotMacros) {
+        policies.aot_macros = true;
+        policies.export_all = true; // need it for aot to export macros
+        policies.stack = 1 * 1024 * 1024; // For now, we need huge stack to aot macros
+    }
     policies.fail_on_lack_of_aot_export = true;
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
@@ -159,7 +165,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
     if ( argc<=3 ) {
-        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-standalone-context <ctx_name>] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-cross-platform] [-standalone-class <class_name>]\n";
+        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-standalone-context <ctx_name>] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform] [-standalone-class <class_name>]\n";
         return -1;
     }
     bool dryRun = false;
@@ -181,6 +187,8 @@ int das_aot_main ( int argc, char * argv[] ) {
                 das_mode = true;
             } else if ( strcmp(argv[ai],"-cross-platform")==0 ) {
                 cross_platform = true;
+            } else if ( strcmp(argv[ai],"-aot-macros")==0 ) {
+                aotMacros = true;
             } else if ( strcmp(argv[ai],"-standalone-context")==0 ) {
                 standaloneContextName = argv[ai + 1];
                 standaloneContext = true;

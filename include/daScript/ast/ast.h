@@ -1420,6 +1420,7 @@ namespace das
         bool        aot = false;                        // enable AOT
         bool        standalone_context = false;         // generate standalone context class in aot mode
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
+        bool        aot_macros = false;                 // enables aot of macro code (like 'qmacro_block')
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time

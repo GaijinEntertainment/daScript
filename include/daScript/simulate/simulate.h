@@ -885,6 +885,7 @@ namespace das
 #if DAS_ENABLE_SMART_PTR_TRACKING
         static vector<smart_ptr<ptr_ref_count>> sptrAllocations;
 #endif
+        vector<FileInfo*>  deleteUponFinish;
     };
 
     struct DebugAgentInstance {

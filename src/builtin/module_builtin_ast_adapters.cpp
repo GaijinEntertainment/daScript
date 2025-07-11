@@ -2167,6 +2167,13 @@ namespace das {
         return make_smart<CallMacroAdapter>(name,(char *)pClass,info,context);
     }
 
+    CallMacro *findModuleCallMacro ( Module * module, const char *name, Context * context, LineInfoArg * at ) {
+        auto exprCallMacro = static_cast<ExprCallMacro*>((*module->findCall(name))(*at));
+        auto res = exprCallMacro->macro;
+        delete exprCallMacro;
+        return res;
+    }
+
     void addModuleCallMacro ( Module * module, CallMacroPtr & _newM, Context * context, LineInfoArg * at ) {
         CallMacroPtr newM = das::move(_newM);
         if ( ! module->addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
@@ -2175,7 +2182,11 @@ namespace das {
             newM->module = module;
             return ecm;
         }) ) {
-            context->throw_error_at(at, "can't add call macro %s to module %s", newM->name.c_str(), module->name.c_str());
+            if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
+                // If it happened during compilation => fail.
+                // Otherwise we just adding same macro at runtime (e.g. due to aot).
+                context->throw_error_at(at, "can't add call macro %s to module %s", newM->name.c_str(), module->name.c_str());
+            }
         }
     }
 
@@ -2593,6 +2604,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(makeCallMacro)>(*this, lib,  "make_call_macro",
             SideEffects::modifyExternal, "makeCallMacro")
                 ->args({"name","class","info","context"});
+        addExtern<DAS_BIND_FUN(findModuleCallMacro)>(*this, lib,  "find_call_macro",
+            SideEffects::modifyExternal, "findModuleCallMacro")
+                ->args({"module","name","context","at"});
         addExtern<DAS_BIND_FUN(addModuleCallMacro)>(*this, lib,  "add_call_macro",
             SideEffects::modifyExternal, "addModuleCallMacro")
                 ->args({"module","annotation","context","at"});
