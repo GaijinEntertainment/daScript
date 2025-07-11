@@ -1287,6 +1287,9 @@ namespace das
             delete contextMutex;
             contextMutex = nullptr;
         }
+        for (auto &obj : deleteUponFinish) {
+            delete obj;
+        }
     }
 
     struct SimNodeRelocator : SimVisitor {

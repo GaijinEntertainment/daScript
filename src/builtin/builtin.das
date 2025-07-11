@@ -1207,6 +1207,33 @@ def clone(var args; var nargs : array<string>) {
     // delete nargs // we can make this unsafe_when_not_clone_array, or just let GC deal with it
 }
 
+[expect_any_vector(args), skip_lock_check]
+def clone(var args; var nargs : array<int>) {
+    let tot = _::length(nargs)
+    _::resize(args, tot)
+    for (i in range(tot)) {
+        args[i] := nargs[i]
+    }
+}
+
+[expect_any_vector(args), skip_lock_check]
+def clone(var args; var nargs : array<uint8>) {
+    let tot = _::length(nargs)
+    _::resize(args, tot)
+    for (i in range(tot)) {
+        args[i] := nargs[i]
+    }
+}
+
+[expect_any_vector(args), skip_lock_check]
+def clone(var args; var nargs : array<tuple<uint; uint>>) {
+    let tot = _::length(nargs)
+    _::resize(args, tot)
+    for (i in range(tot)) {
+        args[i] := nargs[i]
+    }
+}
+
 [expect_any_vector(args), skip_lock_check, unsafe_when_not_clone_array]
 def clone(var args; var nargs : array<smart_ptr<auto(TT)>>) {
     _::clear(args)

@@ -1896,6 +1896,7 @@ namespace das {
         }
         auto argV = make_smart<Variable>();
         argV->name = "__self__" + to_string(mks->at.line) + "_" + to_string(mks->at.column);
+        argV->can_shadow = mks->canShadowBlock;
         argV->type = argT;
         argV->at = mks->at;
         argV->generated = true;
