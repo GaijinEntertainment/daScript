@@ -3486,6 +3486,10 @@ namespace das {
                                 // we build _::{field.name} ( field, arg1, arg2, ... )
                                 auto callName = "_::" + methodName;
                                 auto newCall = make_smart<ExprCall>(expr->at, callName);
+                                newCall->alwaysSafe = expr->alwaysSafe;
+                                if ( value->rtti_isR2V() ) {
+                                    value = static_pointer_cast<ExprRef2Value>(value)->subexpr;
+                                }
                                 newCall->arguments.push_back(value);
                                 for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
                                     newCall->arguments.push_back(expr->arguments[i]);
