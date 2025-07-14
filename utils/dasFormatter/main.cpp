@@ -138,7 +138,7 @@ vector<TestData> test_cases() {
         {"typedef \n    A = int\n    B = string",            "typedef A = int;\ntypedef B = string;\n"},
         {"def b()/**/\n    /**/let a = 5",                   "def b()/**/ {\n    /**/let a = 5;\n}"},
         {"def b()/**/\n    /**/let a = 5",                   "def b()/**/ {\n    /**/let a = 5;\n}"},
-        {"def b() /**/{\n    let a = 5;/**/\n}",             "def b() /**/{\n    let a = 5;/**/\n}"},
+        {"def b() /**/\n    let a = 5/**/;\n",             "def b() /**/ {\n    let a = 5/**/;\n}\n"},
         {"def b(it)\n    let x = typeinfo is_iterable (it)", "def b(it) {\n    let x = typeinfo is_iterable (it);\n}"},
 
         {"class C\n"

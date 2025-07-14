@@ -266,8 +266,8 @@ extern int das_yydebug;
     BRABRAB = 415,                 /* "[["  */
     BRACBRB = 416,                 /* "[{"  */
     CBRCBRB = 417,                 /* "{{"  */
-    OPEN_BRACE = 418,              /* OPEN_BRACE  */
-    CLOSE_BRACE = 419,             /* CLOSE_BRACE  */
+    OPEN_BRACE = 418,              /* "new scope"  */
+    CLOSE_BRACE = 419,             /* "close scope"  */
     SEMICOLON = 420,               /* SEMICOLON  */
     INTEGER = 421,                 /* "integer constant"  */
     LONG_INTEGER = 422,            /* "long integer constant"  */
@@ -291,13 +291,15 @@ extern int das_yydebug;
     SEMICOLON_SQR_SQR = 440,       /* ";]]"  */
     COMMA_SQR_SQR = 441,           /* ",]]"  */
     COMMA_CUR_SQR = 442,           /* ",}]"  */
-    UNARY_MINUS = 443,             /* UNARY_MINUS  */
-    UNARY_PLUS = 444,              /* UNARY_PLUS  */
-    PRE_INC = 445,                 /* PRE_INC  */
-    PRE_DEC = 446,                 /* PRE_DEC  */
-    POST_INC = 447,                /* POST_INC  */
-    POST_DEC = 448,                /* POST_DEC  */
-    DEREF = 449                    /* DEREF  */
+    END_OF_EXPR = 443,             /* END_OF_EXPR  */
+    EMPTY = 444,                   /* EMPTY  */
+    UNARY_MINUS = 445,             /* UNARY_MINUS  */
+    UNARY_PLUS = 446,              /* UNARY_PLUS  */
+    PRE_INC = 447,                 /* PRE_INC  */
+    PRE_DEC = 448,                 /* PRE_DEC  */
+    POST_INC = 449,                /* POST_INC  */
+    POST_DEC = 450,                /* POST_DEC  */
+    DEREF = 451                    /* DEREF  */
   };
   typedef enum das_yytokentype das_yytoken_kind_t;
 #endif

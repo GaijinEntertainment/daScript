@@ -225,7 +225,9 @@ Result transform_syntax(const string &filename, const string content, format::Fo
         format::destroy();
         das_yylex_destroy(scanner);
         if (err != 0) {
-            tp << program->errors.front().at.describe() << '\n';
+            for (const auto err: program->errors) {
+                tp << err.at.describe() << '\n' << err.what << '\n';
+            }
             if (iter == 0) {
                 return {};
             }
