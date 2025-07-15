@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, darwin, darwin13, windows]
+        target: [linux, linux_arm, darwin, darwin13, windows]
         architecture: [32, 64]
         cmake_preset: [ Release ]
 
@@ -51,6 +51,12 @@ jobs:
             release_target: linux
             release_arch: x86_64
             runner: ubuntu-latest
+            archive_ext: tar.gz
+
+          - target: linux_arm
+            release_target: linux
+            release_arch: arm64
+            runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
           - target: darwin
@@ -87,6 +93,10 @@ jobs:
             build_system: cmake
             cmake_generator: Ninja
 
+          - target: linux_arm
+            build_system: cmake
+            cmake_generator: Ninja
+
           - target: windows
             release_target: windows
             release_arch: x86
@@ -109,6 +119,9 @@ jobs:
           - target: linux
             architecture: 32
 
+          - target: linux_arm
+            architecture: 32
+
     steps:
       - name: "SCM Checkout"
         uses: actions/checkout@v4
@@ -123,7 +136,7 @@ jobs:
         run: |
           set -eux
           case "${{ matrix.target }}${{ matrix.architecture }}" in
-            linux64)
+            linux64|linux_arm64)
               echo "MARCH=64" >> $GITHUB_ENV
               sudo apt-get update -y
               sudo apt-get install --no-install-recommends -y \
