@@ -392,6 +392,22 @@ namespace das {
             }
             return Visitor::visit(block);
         }
+
+    // ExprBlockExpr
+        virtual void preVisitBlockExpression(ExprBlock* block, Expression* expr) override {
+            Visitor::preVisitBlockExpression(block, expr);
+            if (!expr->rtti_isLet()) {
+                pushSp();
+            }
+        }
+
+        virtual ExpressionPtr visitBlockExpression(ExprBlock* block, Expression* expr) override {
+            if (!expr->rtti_isLet()) {
+                popSp();
+            }
+            return Visitor::visitBlockExpression(block, expr);
+        }
+
     // ExprOp1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
@@ -499,16 +515,6 @@ namespace das {
         }
 
     // ExprFor
-
-        virtual void preVisit ( ExprFor * expr ) override {
-            Visitor::preVisit(expr);
-            pushSp();
-        }
-
-        virtual ExpressionPtr visit ( ExprFor * expr ) override {
-            popSp();
-            return Visitor::visit(expr);
-        }
 
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);
