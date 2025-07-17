@@ -22,6 +22,7 @@ static string projectFile;
 static bool aotMacros = false;
 static bool profilerRequired = false;
 static bool debuggerRequired = false;
+static bool scopedStackAllocator = false;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
 static bool paranoid_validation = false;
@@ -42,6 +43,7 @@ static CodeOfPolicies getPolicies() {
     policies.fail_on_lack_of_aot_export = true;
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
+    policies.scoped_stack_allocator = scopedStackAllocator;
     return policies;
 }
 
@@ -321,6 +323,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     policies.fail_on_lack_of_aot_export = false;
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
+    policies.scoped_stack_allocator = scopedStackAllocator;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
@@ -399,6 +402,7 @@ void print_help() {
 #if DAS_SMART_PTR_ID
         << "    -track-smart-ptr <id> track smart pointer with id\n"
 #endif
+        << "    -scoped-stack-allocator  reuse stack memory once variables go out of scope"
         << "    -das-wait-debugger wait for debugger to attach\n"
         << "    -das-profiler enable profiler\n"
         << "    -das-profiler-log-file <file> set profiler log file\n"
@@ -558,6 +562,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 #endif
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
+            } else if ( cmd=="-scoped-stack-allocator") {
+                scopedStackAllocator = true;
             } else if ( cmd=="-das-profiler") {
                 profilerRequired = true;
             } else if ( cmd=="-das-profiler-log-file") {

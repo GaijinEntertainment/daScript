@@ -135,12 +135,18 @@ namespace das {
             isEverything = everything;
         }
     protected:
+        struct StackInfo {
+            const uint32_t startSegment;
+            uint32_t maxStack;
+        };
+
         ProgramPtr              program;
         FunctionPtr             func;
         uint32_t                stackTop = 0;
-        vector<uint32_t>        stackTopStack;
+        vector<StackInfo>       stackTopStack;
         vector<ExprBlock *>     blocks;
         vector<ExprBlock *>     scopes;
+        uint32_t                makeBlockDepth = 0;
         bool                    log = false;
         bool                    log_var_scope = false;
         bool                    optimize = false;
@@ -172,6 +178,29 @@ namespace das {
             stackTop += (size + 0xf) & ~0xf;
             return result;
         }
+
+        void pushSp() {
+            if (program->policies.scoped_stack_allocator) {
+                stackTopStack.emplace_back(StackInfo{stackTop, stackTop});
+            }
+        }
+
+        StackInfo popSp() {
+            if (!program->policies.scoped_stack_allocator) {
+                return {stackTop, stackTop};
+            }
+            stackTopStack.back().maxStack = max(stackTopStack.back().maxStack, stackTop);
+            const auto top = stackTopStack.back();
+            stackTopStack.pop_back();
+            if (!stackTopStack.empty()) {
+                stackTopStack.back().maxStack = max(stackTopStack.back().maxStack, top.maxStack);
+            }
+            if (makeBlockDepth == 0) {
+                stackTop = top.startSegment; // reduce stackTop => reuse space
+            }
+            return top;
+        }
+
     // structure
         virtual bool canVisitStructure ( Structure * st ) override {
             return !st->isTemplate;     // not a thing with templates
@@ -188,6 +217,7 @@ namespace das {
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             var->initStackSize = 0;
             stackTop = sizeof(Prologue);
+            pushSp();
             if ( var->init  ) {
                 if ( var->init->rtti_isMakeLocal() ) {
                     uint32_t sz = sizeof(void *);
@@ -218,22 +248,26 @@ namespace das {
             }
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
-            var->initStackSize = stackTop;
-            program->globalInitStackSize = das::max(program->globalInitStackSize, stackTop);
+            auto top = popSp();
+            var->initStackSize = top.maxStack;
+            program->globalInitStackSize = das::max(program->globalInitStackSize, top.maxStack);
             return Visitor::visitGlobalLet(var);
         }
     // function
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
             func = f;
-            func->totalStackSize = stackTop = sizeof(Prologue);
+            stackTop = sizeof(Prologue);
+            pushSp();
             if ( log ) {
                 if (!func->used) logs << "unused ";
                 logs << func->describe() << "\n";
             }
         }
         virtual FunctionPtr visit ( Function * that ) override {
-            func->totalStackSize = das::max(func->totalStackSize, stackTop);
+            auto top = popSp();
+            func->totalStackSize = top.maxStack;
+            DAS_ASSERT(stackTopStack.empty());
             // detecting fastcall
             func->fastCall = false;
             if ( !program->getDebugger() && !program->getProfiler() && !noFastCall ) {
@@ -343,9 +377,12 @@ namespace das {
                         << "\tblock arguments, line " << block->at.line << "\n";
                 }
             }
+            pushSp();
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
-            block->stackVarBottom = allocateStack(0);
+            auto top = inStruct ? stackTop : popSp().maxStack;
+            block->stackVarBottom = top;
+
             if ( inStruct ) {
                 return Visitor::visit(block);
             }
@@ -355,6 +392,22 @@ namespace das {
             }
             return Visitor::visit(block);
         }
+
+    // ExprBlockExpr
+        virtual void preVisitBlockExpression(ExprBlock* block, Expression* expr) override {
+            Visitor::preVisitBlockExpression(block, expr);
+            if (!expr->rtti_isLet()) {
+                pushSp();
+            }
+        }
+
+        virtual ExpressionPtr visitBlockExpression(ExprBlock* block, Expression* expr) override {
+            if (!expr->rtti_isLet()) {
+                popSp();
+            }
+            return Visitor::visitBlockExpression(block, expr);
+        }
+
     // ExprOp1
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
@@ -367,7 +420,15 @@ namespace das {
                     << "\top1, line " << expr->at.line << "\n";
                 }
             }
+            pushSp();
         }
+        virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprOp2
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
@@ -380,7 +441,15 @@ namespace das {
                         << "\top2, line " << expr->at.line << "\n";
                 }
             }
+            pushSp();
         }
+        virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprCall
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
@@ -411,7 +480,16 @@ namespace das {
                     }
                 }
             }
+            pushSp();
         }
+
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            if (!inStruct && expr->func != nullptr) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprInvoke
         virtual void preVisit ( ExprInvoke * expr ) override {
             Visitor::preVisit(expr);
@@ -426,8 +504,18 @@ namespace das {
                     }
                 }
             }
+            pushSp();
         }
+
+        virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprFor
+
         virtual void preVisitForStack ( ExprFor * expr ) override {
             Visitor::preVisitForStack(expr);
             if ( inStruct ) return;
@@ -494,9 +582,18 @@ namespace das {
                     }
                 }
             }
+            pushSp(); // Free everything allocated to init let (not let itself)
         }
+        virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return var;
+        }
+
     // ExprMakeBlock
         virtual void preVisit ( ExprMakeBlock * expr ) override {
+            makeBlockDepth++;
             Visitor::preVisit(expr);
             if ( inStruct ) return;
             auto sz = uint32_t(sizeof(Block));
@@ -511,7 +608,17 @@ namespace das {
                     blk->hasMakeBlock = true;
                 }
             }
+            // pushSp();
         }
+
+        virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
+            makeBlockDepth--;
+            // if (!inStruct) {
+            //     popSp(); // Variables inside block and regular ones share stack.
+            // }
+            return Visitor::visit(expr);
+        }
+
     // ExprAscend
         virtual void preVisit ( ExprAscend * expr ) override {
             Visitor::preVisit(expr);
@@ -527,7 +634,16 @@ namespace das {
                 auto mkl = static_pointer_cast<ExprMakeLocal>(expr->subexpr);
                 mkl->setRefSp(true, false, expr->stackTop, 0);
             }
+            pushSp();
         }
+
+        virtual ExpressionPtr visit ( ExprAscend * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprMakeStructure
         virtual void preVisit ( ExprMakeStruct * expr ) override {
             Visitor::preVisit(expr);
@@ -543,7 +659,16 @@ namespace das {
                 expr->doesNotNeedSp = false;
                 expr->doesNotNeedInit = false;
             }
+            pushSp();
         }
+
+        virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprMakeArray
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
@@ -559,7 +684,16 @@ namespace das {
                 expr->doesNotNeedSp = false;
                 expr->doesNotNeedInit = false;
             }
+            pushSp();
         }
+
+        virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprMakeTuple
         virtual void preVisit ( ExprMakeTuple * expr ) override {
             Visitor::preVisit(expr);
@@ -575,7 +709,16 @@ namespace das {
                 expr->doesNotNeedSp = false;
                 expr->doesNotNeedInit = false;
             }
+            pushSp();
         }
+
+        virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprMakeVariant
         virtual void preVisit ( ExprMakeVariant * expr ) override {
             Visitor::preVisit(expr);
@@ -591,7 +734,15 @@ namespace das {
                 expr->doesNotNeedSp = false;
                 expr->doesNotNeedInit = false;
             }
+            pushSp();
         }
+        virtual ExpressionPtr visit ( ExprMakeVariant * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // New
         virtual void preVisit ( ExprNew * expr ) override {
             Visitor::preVisit(expr);
@@ -604,7 +755,15 @@ namespace das {
                     << "\tNEW " << expr->typeexpr->describe() << ", line " << expr->at.line << "\n";
                 }
             }
+            pushSp();
         }
+        virtual ExpressionPtr visit ( ExprNew * expr ) override {
+            if (!inStruct) {
+                popSp();
+            }
+            return Visitor::visit(expr);
+        }
+
     // ExprCopy
         virtual void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
@@ -637,7 +796,13 @@ namespace das {
                     cll->doesNotNeedSp = false;
                 }
             }
+            pushSp();
         }
+        virtual ExpressionPtr visit ( ExprCopy * expr ) override {
+            if (!inStruct) { popSp(); }
+            return Visitor::visit(expr);
+        }
+
     // ExprMove
         virtual void preVisit ( ExprMove * expr ) override {
             Visitor::preVisit(expr);
@@ -670,7 +835,13 @@ namespace das {
                     cll->doesNotNeedSp = false;
                 }
             }
+            pushSp();
         }
+        virtual ExpressionPtr visit ( ExprMove * expr ) override {
+            if (!inStruct) { popSp(); }
+            return Visitor::visit(expr);
+        }
+
     };
 
     class AllocateConstString : public Visitor {
