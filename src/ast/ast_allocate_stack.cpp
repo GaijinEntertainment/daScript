@@ -180,10 +180,15 @@ namespace das {
         }
 
         void pushSp() {
-            stackTopStack.emplace_back(StackInfo{stackTop, stackTop});
+            if (program->policies.scoped_stack_allocator) {
+                stackTopStack.emplace_back(StackInfo{stackTop, stackTop});
+            }
         }
 
         StackInfo popSp() {
+            if (!program->policies.scoped_stack_allocator) {
+                return {stackTop, stackTop};
+            }
             stackTopStack.back().maxStack = max(stackTopStack.back().maxStack, stackTop);
             const auto top = stackTopStack.back();
             stackTopStack.pop_back();
