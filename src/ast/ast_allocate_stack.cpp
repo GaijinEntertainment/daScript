@@ -9,8 +9,7 @@ namespace das {
     public:
         VarCMRes( const ProgramPtr & prog, bool everything ) {
             program = prog;
-            isEverything = everything
-;
+            isEverything = everything;
         }
     protected:
         vector<ExprBlock *>     blocks;
@@ -128,6 +127,7 @@ namespace das {
             log_var_scope = prog->options.getBoolOption("log_var_scope");
             optimize = prog->getOptimize();
             noFastCall = prog->options.getBoolOption("no_fast_call", prog->policies.no_fast_call);
+            scopedStackAllocator = prog->options.getBoolOption("scoped_stack_allocator", prog->policies.scoped_stack_allocator);
             if( log ) {
                 logs << "\nSTACK INFORMATION in " << prog->thisModule->name << ":\n";
             }
@@ -155,6 +155,7 @@ namespace das {
         bool                    noFastCall = false;
         bool                    isPermanent = false;
         bool                    isEverything = false;
+        bool                    scopedStackAllocator = false;
     protected:
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
@@ -180,13 +181,13 @@ namespace das {
         }
 
         void pushSp() {
-            if (program->policies.scoped_stack_allocator) {
+            if (scopedStackAllocator) {
                 stackTopStack.emplace_back(StackInfo{stackTop, stackTop});
             }
         }
 
         StackInfo popSp() {
-            if (!program->policies.scoped_stack_allocator) {
+            if (!scopedStackAllocator) {
                 return {stackTop, stackTop};
             }
             stackTopStack.back().maxStack = max(stackTopStack.back().maxStack, stackTop);

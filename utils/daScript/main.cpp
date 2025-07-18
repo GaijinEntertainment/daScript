@@ -22,7 +22,7 @@ static string projectFile;
 static bool aotMacros = false;
 static bool profilerRequired = false;
 static bool debuggerRequired = false;
-static bool scopedStackAllocator = false;
+static bool scopedStackAllocator = true;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
 static bool paranoid_validation = false;

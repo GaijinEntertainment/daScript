@@ -1486,7 +1486,7 @@ namespace das
         bool log_compile_time = false;                  // if true, then compile time will be printed at the end of the compilation
         bool log_total_compile_time = false;            // if true, then detailed compile time will be printed at the end of the compilation
         bool no_fast_call = false;                      // disable fastcall
-        bool scoped_stack_allocator = false;            // reuse stack memory after variables out of scope
+        bool scoped_stack_allocator = true;             // reuse stack memory after variables out of scope
     // debugger
         //  when enabled
         //      1. disables [fastcall]

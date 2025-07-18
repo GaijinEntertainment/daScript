@@ -874,6 +874,7 @@ namespace das {
         "fusion",                       Type::tBool,
         "remove_unused_symbols",        Type::tBool,
         "no_fast_call",                 Type::tBool,
+        "scoped_stack_allocator",       Type::tBool,
     // language
         "always_export_initializer",    Type::tBool,
         "infer_time_folding",           Type::tBool,
