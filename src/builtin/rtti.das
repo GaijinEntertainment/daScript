@@ -145,6 +145,37 @@ def public class_info(cl) : StructInfo const? {
     }
 }
 
+def public type_info(cl) : TypeInfo const? {
+    static_if (typeinfo is_pointer(cl)) {
+        if (cl == null) {
+            return null
+        }
+        static_if (typeinfo is_class(*cl)) {
+            unsafe {
+                return (reinterpret<TypeInfo const?>((*cl).__rtti))
+            }
+        } else {
+            concept_assert(false, "not a pointer to a class")
+            return null
+        }
+    } static_elif (typeinfo is_class(cl)) {
+        unsafe {
+            return reinterpret<TypeInfo const?>(cl.__rtti)
+        }
+    } static_elif (typeinfo is_lambda(cl)) {
+        unsafe {
+            var l = reinterpret<int8 ??> addr(cl)
+            if (l == null) {
+                return null
+            }
+            return reinterpret<TypeInfo const ??>(l[0] - 16)
+        }
+    } else {
+        concept_assert(false, "this type does not have class info. its not a class or a lambda with options rtti")
+        return null
+    }
+}
+
 [generic]
 def type_info(vinfo : LocalVariableInfo) : TypeInfo const? {
     unsafe {
