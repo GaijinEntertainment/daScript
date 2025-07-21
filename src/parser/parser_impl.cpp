@@ -1095,18 +1095,36 @@ namespace das {
     }
 
     Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt ) {
-        if ( fncall->rtti_isCallLikeExpr() ) {
-            auto pCall = (ExprLooksLikeCall *) fncall;
+        Expression * pipeCall = fncall->tail();
+        if ( pipeCall->rtti_isCallLikeExpr() ) {
+            auto pCall = (ExprLooksLikeCall *) pipeCall;
             pCall->arguments.push_back(arg);
             return fncall;
-        } else if ( fncall->rtti_isVar() ) {
-            auto pVar = (ExprVar *) fncall;
+        } else if ( pipeCall->rtti_isVar() ) {
+            // a += b <| c
+            auto pVar = (ExprVar *) pipeCall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
-            delete pVar;
             pCall->arguments.push_back(arg);
-            return pCall;
+            if ( !fncall->swap_tail(pVar,pCall) ) {
+                delete pVar;
+                return pCall;
+            } else {
+                return fncall;
+            }
+        } else if ( pipeCall->rtti_isMakeStruct() ) {
+            auto pMS = (ExprMakeStruct *) pipeCall;
+            if ( pMS->block ) {
+                das_yyerror(scanner,"can't pipe into make " + pMS->type->describe() + ". it already has where closure",
+                    locAt,CompilationError::cant_pipe);
+                delete arg;
+            } else {
+                pMS->block = arg;
+            }
+            return fncall;
         } else {
-            das_yyerror(scanner,"can only lpipe into a function call",locAt,CompilationError::cant_pipe);
+            das_yyerror(scanner,"can only pipe into function call or make type",
+                locAt,CompilationError::cant_pipe);
+            delete arg;
             return fncall;
         }
     }
