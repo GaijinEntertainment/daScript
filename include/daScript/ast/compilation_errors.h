@@ -128,6 +128,7 @@ namespace das
     ,   not_expecting_return_value              =   32102       // def blah:void ... return 12
     ,   invalid_return_semantics                =   32103       // return <- required
     ,   invalid_yield                           =   32104       // yield in block, yield in non generator, etc
+    ,   invalid_generator_finalizer             =   32105       // generator with unspecified finalizer
 
     ,   unsupported_read_macro                  =   33100       // #what ""
     ,   unsupported_call_macro                  =   33101       // apply failed etc
