@@ -4409,7 +4409,15 @@ class LlvmJitVisitor : AstVisitor {
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildFNeg(g_builder, sexpr, ""))
             } else {
-                failed_E(expr, "unsupported ~ type {opType}")
+                failed_E(expr, "unsupported - type {opType}")
+            }
+        } elif (expr.op == "+") {
+            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+                setE(expr, sexpr)
+            } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
+                setE(expr, sexpr)
+            } else {
+                failed_E(expr, "unsupported + type {opType}")
             }
         } else {
             failed_E(expr, "unsupported unary operator {expr.op}")
