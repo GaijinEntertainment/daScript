@@ -1439,7 +1439,7 @@ class LlvmJitVisitor : AstVisitor {
                 setE(expr, ptr_idx)
             }
         } else {
-            failed("unsupported visitExprAt type {describe(subExprT)}")
+            failed("unsupported visitExprAt type {describe(subExprT)} {describe(expr.at)}")
         }
         return expr
     }
@@ -1528,7 +1528,7 @@ class LlvmJitVisitor : AstVisitor {
             setE(expr, res)
         } else {
             setE(expr, LLVMConstNull(type_to_llvm_type(expr._type)))
-            failed("unsupported visitExprSafeAt type {describe(subExprT)}")
+            failed("unsupported visitExprSafeAt type {describe(subExprT)} {describe(expr.at)}")
         }
         return expr
     }
@@ -1636,6 +1636,21 @@ class LlvmJitVisitor : AstVisitor {
         make_call(expr, false)
     }
 
+    def isNumeric(opType: TypeDeclPtr) {
+        return opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt));
+    }
+
+    def isEnumeration(opType: TypeDeclPtr) {
+        return (opType.baseType == Type.tEnumeration ||
+               opType.baseType == Type.tEnumeration8 ||
+               opType.baseType == Type.tEnumeration16 ||
+               opType.baseType == Type.tEnumeration64)
+    }
+
+    def isBinary(opType: TypeDeclPtr) {
+        return isNumeric(opType) || isEnumeration(opType)
+    }
+
     def visitExprOp2_NonMonade(var expr : smart_ptr<ExprOp2>) {
         var left = getE(expr.left)
         var right = getE(expr.right)
@@ -1661,7 +1676,7 @@ class LlvmJitVisitor : AstVisitor {
             right = build_broadcast_vector(g_builder, shiftType, right)
         }
         if (expr.op == "+") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 setE(expr, LLVMBuildAdd(g_builder, left, right, ""))
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildFAdd(g_builder, left, right, ""))
@@ -1671,7 +1686,7 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported + type {describe(opType)}")
             }
         } elif (expr.op == "+=") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildAdd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFAdd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
@@ -1681,7 +1696,7 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported += type {describe(opType)}")
             }
         } elif (expr.op == "-") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 setE(expr, LLVMBuildSub(g_builder, left, right, ""))
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildFSub(g_builder, left, right, ""))
@@ -1689,7 +1704,7 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported - type {describe(opType)}")
             }
         } elif (expr.op == "-=") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildSub(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFSub(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
@@ -1697,7 +1712,7 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported -= type {describe(opType)}")
             }
         } elif (expr.op == "*") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 setE(expr, LLVMBuildMul(g_builder, left, right, ""))
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildFMul(g_builder, left, right, ""))
@@ -1705,7 +1720,7 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported * type {describe(opType)}")
             }
         } elif (expr.op == "*=") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildMul(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFMul(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
@@ -1884,37 +1899,37 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported >>> type {opType}")
             }
         } elif (expr.op == "&") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isBinary(opType)) {
                 setE(expr, LLVMBuildAnd(g_builder, left, right, ""))
             } else {
                 failed_E(expr, "unsupported & type {opType}")
             }
         } elif (expr.op == "&=") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isBinary(opType)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildAnd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } else {
                 failed_E(expr, "unsupported &= type {opType}")
             }
         } elif (expr.op == "|") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isBinary(opType)) {
                 setE(expr, LLVMBuildOr(g_builder, left, right, ""))
             } else {
                 failed_E(expr, "unsupported | type {opType}")
             }
         } elif (expr.op == "|=") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isBinary(opType)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildOr(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } else {
                 failed_E(expr, "unsupported |= type {opType}")
             }
         } elif (expr.op == "^") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isBinary(opType)) {
                 setE(expr, LLVMBuildXor(g_builder, left, right, ""))
             } else {
                 failed_E(expr, "unsupported ^ type {opType}")
             }
         } elif (expr.op == "^=") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isBinary(opType)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildXor(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } else {
                 failed_E(expr, "unsupported ^= type {opType}")
@@ -1959,6 +1974,11 @@ class LlvmJitVisitor : AstVisitor {
                     monad_result = LLVMBuildAlloca(g_builder, LLVMInt1Type(), "{expr.op}_at_{int(expr.at.line)}_")
                 }
                 monad_cond = getE(expr.left)
+                if (isEnumeration(expr.left._type)) {
+                    monad_cond = LLVMBuildTruncOrBitCast(g_builder, getE(expr.left), LLVMInt1Type(), "if enum to_bool")
+                } else {
+                    monad_cond = getE(expr.left);
+                }
             } else {
                 monad_result = getE(expr.left)
                 monad_cond = LLVMBuildLoad2(g_builder, LLVMInt1Type(), monad_result, "")
@@ -4369,7 +4389,7 @@ class LlvmJitVisitor : AstVisitor {
             var expr_t = base_type_to_llvm_type(opType.baseType)
             var sexpr_v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), sexpr, uint(expr.subexpr._type.alignOf), "")
             var res_v : LLVMOpaqueValue?
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 res_v = LLVMBuildAdd(g_builder, sexpr_v, LLVMConstInt(expr_t, 1ul, 0), "")
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 res_v = LLVMBuildFAdd(g_builder, sexpr_v, LLVMConstReal(expr_t, 1.lf), "")
@@ -4382,7 +4402,7 @@ class LlvmJitVisitor : AstVisitor {
             var expr_t = base_type_to_llvm_type(opType.baseType)
             var sexpr_v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), sexpr, uint(expr.subexpr._type.alignOf), "")
             var res_v : LLVMOpaqueValue?
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 res_v = LLVMBuildSub(g_builder, sexpr_v, LLVMConstInt(expr_t, 1ul, 0), "")
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 res_v = LLVMBuildFSub(g_builder, sexpr_v, LLVMConstReal(expr_t, 1.lf), "")
@@ -4392,7 +4412,7 @@ class LlvmJitVisitor : AstVisitor {
             LLVMBuildStoreAligned(g_builder, res_v, sexpr, uint(expr.subexpr._type.alignOf))
             setE(expr, sexpr_v)
         } elif (expr.op == "~") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isBinary(opType)) {
                 setE(expr, LLVMBuildNot(g_builder, sexpr, ""))
             } else {
                 failed_E(expr, "unsupported ~ type {opType}")
@@ -4404,12 +4424,20 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported ! type {opType}")
             }
         } elif (expr.op == "-") {
-            if (opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))) {
+            if (isNumeric(opType)) {
                 setE(expr, LLVMBuildNeg(g_builder, sexpr, ""))
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildFNeg(g_builder, sexpr, ""))
             } else {
-                failed_E(expr, "unsupported ~ type {opType}")
+                failed_E(expr, "unsupported - type {opType}")
+            }
+        } elif (expr.op == "+") {
+            if (isNumeric(opType)) {
+                setE(expr, sexpr)
+            } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
+                setE(expr, sexpr)
+            } else {
+                failed_E(expr, "unsupported + type {opType}")
             }
         } else {
             failed_E(expr, "unsupported unary operator {expr.op}")
@@ -5109,9 +5137,9 @@ class LlvmJitVisitor : AstVisitor {
         } elif (etype.isHandle) {
             var inscope tp <- get_underlying_value_type(etype)
             if (tp == null) {
-                failed("internal integration error.`get_underlying_value_type` returned null for {describe(etype)}")
+                failed("internal integration error.`get_underlying_value_type` returned null for {describe(etype)} {describe(expr.at)}");
             } elif (!tp.isWorkhorseType) {
-                failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)}")
+                failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)} {describe(expr.at)}")
             }
             tres = cast_from_vec4f_workhorse(tp, expr, v4f)
         } elif (etype.isPointer) {
