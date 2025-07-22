@@ -1640,8 +1640,15 @@ class LlvmJitVisitor : AstVisitor {
         return opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt));
     }
 
+    def isEnumeration(opType: TypeDeclPtr) {
+        return (opType.baseType == Type.tEnumeration ||
+               opType.baseType == Type.tEnumeration8 ||
+               opType.baseType == Type.tEnumeration16 ||
+               opType.baseType == Type.tEnumeration64)
+    }
+
     def isBinary(opType: TypeDeclPtr) {
-        return isNumeric(opType) || opType.baseType == Type.tEnumeration || opType.baseType == Type.tEnumeration8 || opType.baseType == Type.tEnumeration16
+        return isNumeric(opType) || isEnumeration(opType)
     }
 
     def visitExprOp2_NonMonade(var expr : smart_ptr<ExprOp2>) {
@@ -1967,6 +1974,11 @@ class LlvmJitVisitor : AstVisitor {
                     monad_result = LLVMBuildAlloca(g_builder, LLVMInt1Type(), "{expr.op}_at_{int(expr.at.line)}_")
                 }
                 monad_cond = getE(expr.left)
+                if (isEnumeration(expr.left._type)) {
+                    monad_cond = LLVMBuildTruncOrBitCast(g_builder, getE(expr.left), LLVMInt1Type(), "if enum to_bool")
+                } else {
+                    monad_cond = getE(expr.left);
+                }
             } else {
                 monad_result = getE(expr.left)
                 monad_cond = LLVMBuildLoad2(g_builder, LLVMInt1Type(), monad_result, "")
