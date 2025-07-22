@@ -1439,7 +1439,7 @@ class LlvmJitVisitor : AstVisitor {
                 setE(expr, ptr_idx)
             }
         } else {
-            failed("unsupported visitExprAt type {describe(subExprT)}")
+            failed("unsupported visitExprAt type {describe(subExprT)} {describe(expr.at)}")
         }
         return expr
     }
@@ -1528,7 +1528,7 @@ class LlvmJitVisitor : AstVisitor {
             setE(expr, res)
         } else {
             setE(expr, LLVMConstNull(type_to_llvm_type(expr._type)))
-            failed("unsupported visitExprSafeAt type {describe(subExprT)}")
+            failed("unsupported visitExprSafeAt type {describe(subExprT)} {describe(expr.at)}")
         }
         return expr
     }
@@ -5125,9 +5125,9 @@ class LlvmJitVisitor : AstVisitor {
         } elif (etype.isHandle) {
             var inscope tp <- get_underlying_value_type(etype)
             if (tp == null) {
-                failed("internal integration error.`get_underlying_value_type` returned null for {describe(etype)}")
+                failed("internal integration error.`get_underlying_value_type` returned null for {describe(etype)} {describe(expr.at)}");
             } elif (!tp.isWorkhorseType) {
-                failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)}")
+                failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)} {describe(expr.at)}")
             }
             tres = cast_from_vec4f_workhorse(tp, expr, v4f)
         } elif (etype.isPointer) {
