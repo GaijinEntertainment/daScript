@@ -940,7 +940,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprNew(expr : smart_ptr<ExprNew>) : ExpressionPtr {
-        if (expr.typeexpr.baseType == Type.tHandle) {
+        if (expr.typeexpr.isHandle) {
             let fn_new_handle = get_new_handle_function(expr.typeexpr)
             if (fn_new_handle == null) {
                 setE(expr, LLVMConstNull(LLVMPointerType(LLVMVoidType(), 0u)))
@@ -1526,6 +1526,29 @@ class LlvmJitVisitor : AstVisitor {
                 return LLVMConstNull(resType)
             }
             setE(expr, res)
+        } elif (subExprT.isVectorType || (subExprT.isPointer && subExprT.firstType.isVectorType)) {
+            var if_not_null = !subExprT.isVectorType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
+            var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
+            var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
+            var res = build_select(if_not_null, resType) <| $() {
+                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, LLVMConstInt(LLVMInt32Type(), uint64(subExprT.vectorDim), 0), "dim_range")
+                var subRes = build_select(if_range, resType) <| $() {
+                    if (expr.atFlags.r2v) {
+                        var lvec = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type),
+                            tsrc, uint(subExprT.alignOf), "vector_at")
+                        return LLVMBuildExtractElement(g_builder, lvec, tidx, "vector_at_r2v")
+                    } else {
+                        return build_array_index(tsrc, tidx, expr._type, "vector_at")
+                    }
+                }
+                lpipe <| $() {
+                    return LLVMConstNull(resType)
+                }
+                return subRes
+            }
+            lpipe <| $() {
+                return LLVMConstNull(resType)
+            }
         } else {
             setE(expr, LLVMConstNull(type_to_llvm_type(expr._type)))
             failed("unsupported visitExprSafeAt type {describe(subExprT)} {describe(expr.at)}")
@@ -1636,18 +1659,18 @@ class LlvmJitVisitor : AstVisitor {
         make_call(expr, false)
     }
 
-    def isNumeric(opType: TypeDeclPtr) {
+    def isNumeric(opType : TypeDeclPtr) {
         return opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt));
     }
 
-    def isEnumeration(opType: TypeDeclPtr) {
+    def isEnumeration(opType : TypeDeclPtr) {
         return (opType.baseType == Type.tEnumeration ||
                opType.baseType == Type.tEnumeration8 ||
                opType.baseType == Type.tEnumeration16 ||
                opType.baseType == Type.tEnumeration64)
     }
 
-    def isBinary(opType: TypeDeclPtr) {
+    def isBinary(opType : TypeDeclPtr) {
         return isNumeric(opType) || isEnumeration(opType)
     }
 
@@ -3198,7 +3221,7 @@ class LlvmJitVisitor : AstVisitor {
         )
     }
 
-    def get_llvm_type_for_varinto() : LLVMTypeRef {
+    def get_llvm_type_for_varinfo() : LLVMTypeRef {
         let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
         return LLVMStructType() <| fixed_array(
         // Typeinfo fields
@@ -3272,7 +3295,7 @@ class LlvmJitVisitor : AstVisitor {
 /////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////
 
-    def create_enumvalueinfo_global_array(ei : EnumValueInfo ??; len : int) {
+    def create_enumvalueinfo_global_array(ei : EnumValueInfo ??; len : uint) {
         var array_init : array<LLVMValueRef>
         let ty = get_llvm_type_for_enumvalueinfo()
         for (i in range(len)) {
@@ -3285,9 +3308,7 @@ class LlvmJitVisitor : AstVisitor {
                 array_init |> push <| LLVMConstNamedStruct(ty, unsafe(addr(init_fields[0])), 2u)
             }
         }
-
-        let my_struct_array_type = LLVMArrayType(ty, len |> uint())
-        return LLVMConstArray(my_struct_array_type, unsafe(addr(array_init[0])), len |> uint())
+        return LLVMConstArray(ty, unsafe(addr(array_init[0])), len)
     }
 
     def get_typeinfo_fields(ti : TypeInfo?) : array<LLVMValueRef> {
@@ -3320,14 +3341,14 @@ class LlvmJitVisitor : AstVisitor {
         init_values |> push <| LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(), 0u))
         init_values |> push <| LLVMConstInt(LLVMInt32Type(), vi.offset       |> uint64(), 0)
         init_values |> push <| LLVMConstInt(LLVMInt32Type(), vi.nextGcField  |> uint64(), 0)
-        let ty = get_llvm_type_for_varinto()
+        let ty = get_llvm_type_for_varinfo()
         return LLVMConstNamedStruct(ty, unsafe(addr(init_values[0])), init_values |> length |> uint())
     }
 
-    def create_struct_fields_global_array(ei : VarInfo ??; len : int) {
+    def create_struct_fields_global_array(ei : VarInfo ??; len : uint) {
         // not cached, probably don't need it
         var array_init : array<LLVMValueRef>
-        let ty = get_llvm_type_for_varinto()
+        let ty = get_llvm_type_for_varinfo()
         for (i in range(len)) {
             let varinfo = g_mod |> LLVMAddGlobal(ty, "varinfo")
             varinfo |> LLVMSetInitializer <| get_value_for_varinfo(unsafe(ei[i]))
@@ -3346,12 +3367,12 @@ class LlvmJitVisitor : AstVisitor {
             return enuminfo_cache[ei]
         }
         var ty = get_llvm_type_for_enuminfo()
-        var struct_info_global = LLVMAddGlobal(g_mod, ty, "" /* no name */)
+        var struct_info_global = LLVMAddGlobal(g_mod, ty, "enuminfo_{ei.module_name}_{ei.name}")
         enuminfo_cache[ei] = struct_info_global
         var init_values <- [
             get_string_constant_ptr(g_builder, ei.name),
             get_string_constant_ptr(g_builder, ei.module_name),
-            create_enumvalueinfo_global_array(ei.fields, ei.count |> int()),
+            create_enumvalueinfo_global_array(ei.fields, ei.count),
             LLVMConstInt(LLVMInt32Type(), ei.count |> uint64(), 0),
             LLVMConstInt(LLVMInt64Type(), ei.hash     |> uint64(), 0)
         ]
@@ -3370,7 +3391,7 @@ class LlvmJitVisitor : AstVisitor {
         var init_values <- [
             get_string_constant_ptr(g_builder, si.name),
             get_string_constant_ptr(g_builder, si.module_name),
-            create_struct_fields_global_array(si.fields, si.count |> int()),
+            create_struct_fields_global_array(si.fields, si.count),
             LLVMConstPointerNull(void_ptr), // NOTE: annotations are not used right now
 
             LLVMConstInt(LLVMInt64Type(), si.hash     |> uint64(), 0),
@@ -3397,23 +3418,27 @@ class LlvmJitVisitor : AstVisitor {
         return tinfo_global
     }
 
-    def create_argtypes_array(argtypes : TypeInfo ??; len : int) {
+    def create_argtypes_array(argtypes : TypeInfo ??; len : uint) {
         var array_init : array<LLVMValueRef>
         let ty = get_llvm_type_for_typeinfo()
+        if (len == 0u) {
+            return LLVMConstPointerNull(ty);
+        }
         for (i in range(len)) {
             unsafe {
                 let evi = argtypes[i] |> create_type_info_global()
                 array_init |> push <| unsafe(reinterpret<LLVMValueRef>(evi))
             }
         }
-        let tinfo_array_ty = LLVMArrayType(ty, len |> uint())
+        let element_t = LLVMPointerType(LLVMVoidType(), 0u);
+        let tinfo_array_ty = LLVMArrayType(element_t, len)
         var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argtypes")
-        global |> LLVMSetInitializer <| LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
+        global |> LLVMSetInitializer <| LLVMConstArray(element_t, unsafe(addr(array_init[0])), len)
         return global
     }
 
-    def create_argnames_array(argnames : string const?; len : int) {
-        if (len == 0) {
+    def create_argnames_array(argnames : string const?; len : uint) {
+        if (len == 0u) {
             return LLVMConstPointerNull(LLVMPointerType(LLVMInt8Type(), 0u))
         }
         var array_init : array<LLVMValueRef>
@@ -3423,9 +3448,9 @@ class LlvmJitVisitor : AstVisitor {
                 array_init |> push <| get_string_constant_ptr(g_builder, argnames[i])
             }
         }
-        let tinfo_array_ty = LLVMArrayType(ty, len |> uint())
+        let tinfo_array_ty = LLVMArrayType(ty, len)
         var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argnames")
-        global |> LLVMSetInitializer <| LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
+        global |> LLVMSetInitializer <| LLVMConstArray(ty, unsafe(addr(array_init[0])), len)
         return global
     }
 
@@ -3458,13 +3483,13 @@ class LlvmJitVisitor : AstVisitor {
             initValues[1] = create_type_info_global(info.firstType)
             initValues[2] = create_type_info_global(info.secondType)
         } elif (info.basicType == Type.tTuple || info.basicType == Type.tVariant) {
-            var aa = create_argtypes_array(info.argTypes, info.argCount |> int())
-            var an = create_argnames_array(info.argNames, info.argNames == null ? 0 : info.argCount |> int())
+            var aa = create_argtypes_array(info.argTypes, info.argCount)
+            var an = create_argnames_array(info.argNames, info.argNames == null ? 0u : info.argCount)
             initValues[3] = aa
             initValues[4] = an
         } elif (info.basicType == Type.tFunction || info.basicType == Type.tLambda || info.basicType == Type.tBlock) {
-            var aa = create_argtypes_array(info.argTypes, info.argCount |> int())
-            var an = create_argnames_array(info.argNames, info.argCount |> int())
+            var aa = create_argtypes_array(info.argTypes, info.argCount)
+            var an = create_argnames_array(info.argNames, info.argCount)
             initValues[1] = create_type_info_global(info.firstType)
             initValues[3] = aa
             initValues[4] = an
@@ -3769,7 +3794,7 @@ class LlvmJitVisitor : AstVisitor {
         }
         var mks_ptr : LLVMOpaqueValue?
         var needMemset = true
-        if (expr.subexpr._type.baseType == Type.tHandle) {
+        if (expr.subexpr._type.isHandle) {
             let fn_new_handle = get_new_handle_function(expr.subexpr._type)
             if (fn_new_handle == null) {
                 setE(expr, LLVMConstNull(LLVMPointerType(LLVMVoidType(), 0u)))
@@ -4104,6 +4129,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprField(expr : smart_ptr<ExprField>) : ExpressionPtr {
+        var field_ptr : LLVMOpaqueValue?;
         if (expr.value._type.isBitfield) {
             let mask = 1u << uint(expr.fieldIndex)
             let mand = LLVMBuildAnd(g_builder, getE(expr.value), LLVMConstInt(LLVMInt32Type(), uint64(mask), 0), "")
@@ -4115,73 +4141,56 @@ class LlvmJitVisitor : AstVisitor {
             lpipe <| $() {
                 return LLVMConstInt(LLVMInt1Type(), uint64(0), 0)
             }
-            setE(expr, res)
-        } elif (expr.field == null && expr.fieldIndex == -1) {
-            let field_offset = expr.annotation |> get_handled_type_field_offset(string(expr.name))
-            if (field_offset == -1U) {
-                setE(expr, LLVMGetUndef(type_to_llvm_type(expr._type)))
-                failed_E(expr, "field {expr.name} offset is -1")
-                return expr
-            }
-            var val_ptr = getE(expr.value)
-            if (expr.value._type.isPointer && !expr.derefFlags.unsafeDeref) {
-                check_ptr_zero(val_ptr, expr.at)
-            }
-            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
-            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr._type), "{describe(expr.value._type,false,false,false)}.{expr.name}")
-            if (expr.fieldFlags.r2v) {
-                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
-            } else {
-                setE(expr, field_ptr)
-            }
-        } elif (expr.value._type.isTuple) {
-            assert(expr.fieldIndex != -1)
-            var val_ptr = getE(expr.value)
-            if (expr.value._type.isPointer && !expr.derefFlags.unsafeDeref) {
-                check_ptr_zero(val_ptr, expr.at)
-            }
-            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            let field_offset = get_tuple_field_offset(expr.value._type, expr.fieldIndex)
-            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
-            let argName = tuple_field_name(expr.value._type, expr.fieldIndex)
-            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
-            if (expr.fieldFlags.r2v) {
-                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
-            } else {
-                setE(expr, field_ptr)
-            }
-        } elif (expr.value._type.isVariant) {
-            assert(expr.fieldIndex != -1)
-            var val_ptr = getE(expr.value)
-            if (expr.value._type.isPointer && !expr.derefFlags.unsafeDeref) {
-                check_ptr_zero(val_ptr, expr.at)
-            }
-            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            let field_offset = get_variant_field_offset(expr.value._type, expr.fieldIndex)
-            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
-            let argName = variant_field_name(expr.value._type, expr.fieldIndex)
-            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
-            if (expr.fieldFlags.r2v) {
-                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
-            } else {
-                setE(expr, field_ptr)
-            }
+            field_ptr = res
         } else {
-            assert(expr.field != null)
+            var field_offset = 0U
+            var field_type : TypeDeclPtr
+            var field_name : string;
             var val_ptr = getE(expr.value)
             if (expr.value._type.isPointer && !expr.derefFlags.unsafeDeref) {
                 check_ptr_zero(val_ptr, expr.at)
             }
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.field.offset), 0), "")
-            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.field._type), "{describe(expr.value._type,false,false,false)}.{expr.field.name}")
-            if (expr.fieldFlags.r2v) {
-                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
+            if (expr.field == null && expr.fieldIndex == -1) {
+                field_offset = expr.annotation |> get_handled_type_field_offset(string(expr.name))
+                if (field_offset == -1U) {
+                    setE(expr, LLVMGetUndef(type_to_llvm_type(expr._type)))
+                    failed_E(expr, "field {expr.name} offset is -1")
+                    return expr
+                }
+                field_type := expr._type;
+                field_name = "{describe(expr.value._type,false,false,false)}.{expr.name}";
+            } elif (expr.value._type.isTuple || (expr.value._type.isPointer && expr.value._type.firstType.isTuple)) {
+                assert(expr.fieldIndex != -1)
+                assume tt = expr.value._type.isPointer ? expr.value._type.firstType : expr.value._type;
+                field_offset = get_tuple_field_offset(tt, expr.fieldIndex) |> uint()
+                let argName = tuple_field_name(tt, expr.fieldIndex)
+                field_type := tt.argTypes[expr.fieldIndex];
+                field_name = "{describe(tt,false,false,false)}.{argName}";
+            } elif (expr.value._type.isVariant || (expr.value._type.isPointer && expr.value._type.firstType.isVariant)) {
+                assume tv = expr.value._type.isPointer ? expr.value._type.firstType : expr.value._type;
+                assert(expr.fieldIndex != -1)
+                field_offset = get_variant_field_offset(tv, expr.fieldIndex) |> uint()
+                let argName = variant_field_name(tv, expr.fieldIndex)
+                field_type := tv.argTypes[expr.fieldIndex];
+                field_name = "{describe(tv,false,false,false)}.{argName}";
             } else {
-                setE(expr, field_ptr)
+                assert(expr.field != null)
+                field_offset = expr.field.offset |> uint();
+                field_type := expr.field._type
+                field_name = "{describe(expr.value._type,false,false,false)}.{expr.field.name}"
             }
+            field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(field_type), field_name)
         }
+
+        if (expr.fieldFlags.r2v) {
+            assert(!expr.value._type.isBitfield) // todo: remove once sure it correct
+            setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
+        } else {
+            setE(expr, field_ptr)
+        }
+
         return expr
     }
 
@@ -4634,7 +4643,7 @@ class LlvmJitVisitor : AstVisitor {
         thisFunc = null
     }
 
-    def make_block_funcion(expr : smart_ptr<ExprMakeBlock>; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
+    def make_block_function(expr : smart_ptr<ExprMakeBlock>; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
         var astVisitor = new LlvmJitVisitor(expr.at, jit_context, false, g_di_builder, di_cu)
         var fmna : string
         unsafe {
@@ -4736,7 +4745,7 @@ class LlvmJitVisitor : AstVisitor {
         LLVMBuildStore(g_builder, blkv, blk)
 
         // make block function
-        var blk_make = make_block_funcion(expr, captured, first_field_index, this_block_type)
+        var blk_make = make_block_function(expr, captured, first_field_index, this_block_type)
 
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
@@ -5707,6 +5716,7 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
+            // print("{LLVMPrintModuleToString(g_mod)}\n");
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
