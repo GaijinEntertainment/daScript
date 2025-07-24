@@ -1636,18 +1636,18 @@ class LlvmJitVisitor : AstVisitor {
         make_call(expr, false)
     }
 
-    def isNumeric(opType: TypeDeclPtr) {
+    def isNumeric(opType : TypeDeclPtr) {
         return opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt));
     }
 
-    def isEnumeration(opType: TypeDeclPtr) {
+    def isEnumeration(opType : TypeDeclPtr) {
         return (opType.baseType == Type.tEnumeration ||
                opType.baseType == Type.tEnumeration8 ||
                opType.baseType == Type.tEnumeration16 ||
                opType.baseType == Type.tEnumeration64)
     }
 
-    def isBinary(opType: TypeDeclPtr) {
+    def isBinary(opType : TypeDeclPtr) {
         return isNumeric(opType) || isEnumeration(opType)
     }
 
@@ -3198,7 +3198,7 @@ class LlvmJitVisitor : AstVisitor {
         )
     }
 
-    def get_llvm_type_for_varinto() : LLVMTypeRef {
+    def get_llvm_type_for_varinfo() : LLVMTypeRef {
         let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
         return LLVMStructType() <| fixed_array(
         // Typeinfo fields
@@ -3272,7 +3272,7 @@ class LlvmJitVisitor : AstVisitor {
 /////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////
 
-    def create_enumvalueinfo_global_array(ei : EnumValueInfo ??; len : int) {
+    def create_enumvalueinfo_global_array(ei : EnumValueInfo ??; len : uint) {
         var array_init : array<LLVMValueRef>
         let ty = get_llvm_type_for_enumvalueinfo()
         for (i in range(len)) {
@@ -3285,9 +3285,7 @@ class LlvmJitVisitor : AstVisitor {
                 array_init |> push <| LLVMConstNamedStruct(ty, unsafe(addr(init_fields[0])), 2u)
             }
         }
-
-        let my_struct_array_type = LLVMArrayType(ty, len |> uint())
-        return LLVMConstArray(my_struct_array_type, unsafe(addr(array_init[0])), len |> uint())
+        return LLVMConstArray(ty, unsafe(addr(array_init[0])), len)
     }
 
     def get_typeinfo_fields(ti : TypeInfo?) : array<LLVMValueRef> {
@@ -3320,14 +3318,14 @@ class LlvmJitVisitor : AstVisitor {
         init_values |> push <| LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(), 0u))
         init_values |> push <| LLVMConstInt(LLVMInt32Type(), vi.offset       |> uint64(), 0)
         init_values |> push <| LLVMConstInt(LLVMInt32Type(), vi.nextGcField  |> uint64(), 0)
-        let ty = get_llvm_type_for_varinto()
+        let ty = get_llvm_type_for_varinfo()
         return LLVMConstNamedStruct(ty, unsafe(addr(init_values[0])), init_values |> length |> uint())
     }
 
-    def create_struct_fields_global_array(ei : VarInfo ??; len : int) {
+    def create_struct_fields_global_array(ei : VarInfo ??; len : uint) {
         // not cached, probably don't need it
         var array_init : array<LLVMValueRef>
-        let ty = get_llvm_type_for_varinto()
+        let ty = get_llvm_type_for_varinfo()
         for (i in range(len)) {
             let varinfo = g_mod |> LLVMAddGlobal(ty, "varinfo")
             varinfo |> LLVMSetInitializer <| get_value_for_varinfo(unsafe(ei[i]))
@@ -3346,12 +3344,12 @@ class LlvmJitVisitor : AstVisitor {
             return enuminfo_cache[ei]
         }
         var ty = get_llvm_type_for_enuminfo()
-        var struct_info_global = LLVMAddGlobal(g_mod, ty, "" /* no name */)
+        var struct_info_global = LLVMAddGlobal(g_mod, ty, "enuminfo_{ei.module_name}_{ei.name}")
         enuminfo_cache[ei] = struct_info_global
         var init_values <- [
             get_string_constant_ptr(g_builder, ei.name),
             get_string_constant_ptr(g_builder, ei.module_name),
-            create_enumvalueinfo_global_array(ei.fields, ei.count |> int()),
+            create_enumvalueinfo_global_array(ei.fields, ei.count),
             LLVMConstInt(LLVMInt32Type(), ei.count |> uint64(), 0),
             LLVMConstInt(LLVMInt64Type(), ei.hash     |> uint64(), 0)
         ]
@@ -3370,7 +3368,7 @@ class LlvmJitVisitor : AstVisitor {
         var init_values <- [
             get_string_constant_ptr(g_builder, si.name),
             get_string_constant_ptr(g_builder, si.module_name),
-            create_struct_fields_global_array(si.fields, si.count |> int()),
+            create_struct_fields_global_array(si.fields, si.count),
             LLVMConstPointerNull(void_ptr), // NOTE: annotations are not used right now
 
             LLVMConstInt(LLVMInt64Type(), si.hash     |> uint64(), 0),
@@ -3397,23 +3395,27 @@ class LlvmJitVisitor : AstVisitor {
         return tinfo_global
     }
 
-    def create_argtypes_array(argtypes : TypeInfo ??; len : int) {
+    def create_argtypes_array(argtypes : TypeInfo ??; len : uint) {
         var array_init : array<LLVMValueRef>
         let ty = get_llvm_type_for_typeinfo()
+        if (len == 0u) {
+            return LLVMConstPointerNull(ty);
+        }
         for (i in range(len)) {
             unsafe {
                 let evi = argtypes[i] |> create_type_info_global()
                 array_init |> push <| unsafe(reinterpret<LLVMValueRef>(evi))
             }
         }
-        let tinfo_array_ty = LLVMArrayType(ty, len |> uint())
+        let element_t = LLVMPointerType(LLVMVoidType(), 0u);
+        let tinfo_array_ty = LLVMArrayType(element_t, len)
         var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argtypes")
-        global |> LLVMSetInitializer <| LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
+        global |> LLVMSetInitializer <| LLVMConstArray(element_t, unsafe(addr(array_init[0])), len)
         return global
     }
 
-    def create_argnames_array(argnames : string const?; len : int) {
-        if (len == 0) {
+    def create_argnames_array(argnames : string const?; len : uint) {
+        if (len == 0u) {
             return LLVMConstPointerNull(LLVMPointerType(LLVMInt8Type(), 0u))
         }
         var array_init : array<LLVMValueRef>
@@ -3423,9 +3425,9 @@ class LlvmJitVisitor : AstVisitor {
                 array_init |> push <| get_string_constant_ptr(g_builder, argnames[i])
             }
         }
-        let tinfo_array_ty = LLVMArrayType(ty, len |> uint())
+        let tinfo_array_ty = LLVMArrayType(ty, len)
         var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argnames")
-        global |> LLVMSetInitializer <| LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
+        global |> LLVMSetInitializer <| LLVMConstArray(ty, unsafe(addr(array_init[0])), len)
         return global
     }
 
@@ -3458,13 +3460,13 @@ class LlvmJitVisitor : AstVisitor {
             initValues[1] = create_type_info_global(info.firstType)
             initValues[2] = create_type_info_global(info.secondType)
         } elif (info.basicType == Type.tTuple || info.basicType == Type.tVariant) {
-            var aa = create_argtypes_array(info.argTypes, info.argCount |> int())
-            var an = create_argnames_array(info.argNames, info.argNames == null ? 0 : info.argCount |> int())
+            var aa = create_argtypes_array(info.argTypes, info.argCount)
+            var an = create_argnames_array(info.argNames, info.argNames == null ? 0u : info.argCount)
             initValues[3] = aa
             initValues[4] = an
         } elif (info.basicType == Type.tFunction || info.basicType == Type.tLambda || info.basicType == Type.tBlock) {
-            var aa = create_argtypes_array(info.argTypes, info.argCount |> int())
-            var an = create_argnames_array(info.argNames, info.argCount |> int())
+            var aa = create_argtypes_array(info.argTypes, info.argCount)
+            var an = create_argnames_array(info.argNames, info.argCount)
             initValues[1] = create_type_info_global(info.firstType)
             initValues[3] = aa
             initValues[4] = an
@@ -4634,7 +4636,7 @@ class LlvmJitVisitor : AstVisitor {
         thisFunc = null
     }
 
-    def make_block_funcion(expr : smart_ptr<ExprMakeBlock>; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
+    def make_block_function(expr : smart_ptr<ExprMakeBlock>; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
         var astVisitor = new LlvmJitVisitor(expr.at, jit_context, false, g_di_builder, di_cu)
         var fmna : string
         unsafe {
@@ -4736,7 +4738,7 @@ class LlvmJitVisitor : AstVisitor {
         LLVMBuildStore(g_builder, blkv, blk)
 
         // make block function
-        var blk_make = make_block_funcion(expr, captured, first_field_index, this_block_type)
+        var blk_make = make_block_function(expr, captured, first_field_index, this_block_type)
 
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
@@ -5707,6 +5709,7 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
+            // print("{LLVMPrintModuleToString(g_mod)}\n");
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
