@@ -1526,6 +1526,29 @@ class LlvmJitVisitor : AstVisitor {
                 return LLVMConstNull(resType)
             }
             setE(expr, res)
+        } elif (subExprT.isVectorType || (subExprT.isPointer && subExprT.firstType.isVectorType)) {
+            var if_not_null = !subExprT.isVectorType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
+            var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
+            var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
+            var res = build_select(if_not_null, resType) <| $() {
+                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, LLVMConstInt(LLVMInt32Type(), uint64(subExprT.vectorDim), 0), "dim_range")
+                var subRes = build_select(if_range, resType) <| $() {
+                    if (expr.atFlags.r2v) {
+                        var lvec = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type),
+                            tsrc, uint(subExprT.alignOf), "vector_at")
+                        return LLVMBuildExtractElement(g_builder, lvec, tidx, "vector_at_r2v")
+                    } else {
+                        return build_array_index(tsrc, tidx, expr._type, "vector_at")
+                    }
+                }
+                lpipe <| $() {
+                    return LLVMConstNull(resType)
+                }
+                return subRes
+            }
+            lpipe <| $() {
+                return LLVMConstNull(resType)
+            }
         } else {
             setE(expr, LLVMConstNull(type_to_llvm_type(expr._type)))
             failed("unsupported visitExprSafeAt type {describe(subExprT)} {describe(expr.at)}")
