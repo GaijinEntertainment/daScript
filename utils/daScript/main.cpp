@@ -402,7 +402,7 @@ void print_help() {
 #if DAS_SMART_PTR_ID
         << "    -track-smart-ptr <id> track smart pointer with id\n"
 #endif
-        << "    -scoped-stack-allocator  reuse stack memory once variables go out of scope"
+        << "    -linear-stack-allocator  disable scoped stack allocator\n"
         << "    -das-wait-debugger wait for debugger to attach\n"
         << "    -das-profiler enable profiler\n"
         << "    -das-profiler-log-file <file> set profiler log file\n"
@@ -562,8 +562,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 #endif
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
-            } else if ( cmd=="-scoped-stack-allocator") {
-                scopedStackAllocator = true;
+            } else if ( cmd=="-linear-stack-allocator") {
+                scopedStackAllocator = false;
             } else if ( cmd=="-das-profiler") {
                 profilerRequired = true;
             } else if ( cmd=="-das-profiler-log-file") {
