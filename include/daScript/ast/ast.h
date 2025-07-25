@@ -1130,6 +1130,7 @@ namespace das
         ExprCallFactory * findCall ( const string & name ) const;
         __forceinline bool isVisibleDirectly ( Module * objModule ) const {
             if ( objModule==this ) return true;
+            if ( objModule->visibleEverywhere ) return true;
             return requireModule.find(objModule) != requireModule.end();
         }
         bool compileBuiltinModule ( const string & name, unsigned char * str, unsigned int str_len );//will replace last symbol to 0
@@ -1219,6 +1220,7 @@ namespace das
                 bool    isSolidContext : 1;
                 bool    doNotAllowUnsafe : 1;
                 bool    wasParsedNameless : 1;
+                bool    visibleEverywhere : 1;
             };
             uint32_t        moduleFlags = 0;
         };
