@@ -221,7 +221,8 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ModuleFlags";
         ft->argNames = {
-            "builtIn", "promoted", "isPublic", "isModule", "isSolidContext", "doNotAllowUnsafe"
+            "builtIn", "promoted", "isPublic", "isModule", "isSolidContext", "doNotAllowUnsafe",
+            "wasParsedNameless", "visibleEverywhere"
         };
         return ft;
     }

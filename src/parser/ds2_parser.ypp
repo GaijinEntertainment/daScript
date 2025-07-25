@@ -425,6 +425,7 @@
 %type <b>                   kwd_let_var_or_nothing
 %type <b>                   is_public_module
 %type <b>                   optional_shared
+%type <b>                   optional_not_required
 %type <b>                   optional_sealed
 %type <i>                   block_or_lambda
 %type <b>                   optional_ref
@@ -604,11 +605,17 @@ module_name
     |   NAME[name]  { $$ = $name; }
     ;
 
+optional_not_required
+    :   { $$ = false; }
+    |   '!' DAS_INSCOPE { $$ = true; }
+    ;
+
 module_declaration
-    :   DAS_MODULE  module_name[name] optional_shared[mtype] optional_public_or_private_module[ispub] {
+    :   DAS_MODULE  module_name[name] optional_shared[mtype] optional_public_or_private_module[ispub] optional_not_required[notreq] {
         yyextra->g_Program->thisModuleName = *$name;
         yyextra->g_Program->thisModule->isPublic = $ispub;
         yyextra->g_Program->thisModule->isModule = true;
+        yyextra->g_Program->thisModule->visibleEverywhere = $notreq;
         if ( yyextra->g_Program->thisModule->name.empty() ) {
             yyextra->g_Program->library.renameModule(yyextra->g_Program->thisModule.get(),*$name);
         } else if ( yyextra->g_Program->thisModule->name != *$name ){
