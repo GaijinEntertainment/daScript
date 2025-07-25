@@ -5579,10 +5579,10 @@ namespace das {
             }
             return true;
         }
-        ExpressionPtr promoteToProperty ( ExprField * expr, const ExpressionPtr & right ) {
+        ExpressionPtr promoteToProperty ( ExprField * expr, const ExpressionPtr & right, const string & opName="clone" ) {
             if ( !expr->no_promotion && expr->value->type ) {
                 if ( right ) {
-                    if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,right) ) return cloneSet;
+                    if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`"+opName,expr->at,expr->value,right) ) return cloneSet;
                     auto valT = expr->value->type;
                     if ( valT->isPointer() && valT->firstType ) {
                         auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
@@ -5590,7 +5590,7 @@ namespace das {
                         TypeDecl::applyAutoContracts(derefV->type,valT->firstType);
                         derefV->type->ref = true;
                         derefV->type->constant |= valT->constant;
-                        if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,right) ) return cloneSet;
+                        if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`"+opName,expr->at,derefV,right) ) return cloneSet;
                     }
                 } else {
                     if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
@@ -6269,7 +6269,10 @@ namespace das {
                     }
                 } else if ( expr->left->rtti_isField() ) {
                     ExprField * efield = (ExprField*)(expr->left.get());
-                    if ( auto propGet = promoteToProperty(efield, nullptr) ) {    // we need both get and set
+                    if ( auto propSetOp = promoteToProperty(efield, expr->right, expr->op) ) {
+                        removeR2v(propSetOp);
+                        return propSetOp;    // we need only set
+                    } else if ( auto propGet = promoteToProperty(efield, nullptr) ) {    // we need both get and set
                         auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
                         opRight->type = make_smart<TypeDecl>(*expr->right->type);
                         if ( auto cloneSet = promoteToProperty(efield, opRight) ) {
