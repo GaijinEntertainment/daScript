@@ -312,6 +312,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
             addField<DAS_BIND_MANAGED_FIELD(annotationData)>("annotationData");
             addField<DAS_BIND_MANAGED_FIELD(annotationDataSid)>("annotationDataSid");
+            addField<DAS_BIND_MANAGED_FIELD(inFunction)>("inFunction");
             addFieldEx ( "blockFlags", "blockFlags", offsetof(ExprBlock, blockFlags), makeExprBlockFlags() );
         }
     };
