@@ -410,7 +410,7 @@ class LlvmJitVisitor : AstVisitor {
         thisFunc = null
     }
 
-    def build_wrapper_funcion(fnmna : string; arguments : dasvector`smart_ptr`Variable; var result : TypeDeclPtr; isCmres : bool; captureType : LLVMOpaqueType?; at : LineInfo) {
+    def build_wrapper_function(fnmna : string; arguments : dasvector`smart_ptr`Variable; var result : TypeDeclPtr; isCmres : bool; captureType : LLVMOpaqueType?; at : LineInfo) {
         var wentry = LLVMAppendBasicBlock(wfunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         var wargs : array<LLVMOpaqueValue?>
@@ -585,7 +585,7 @@ class LlvmJitVisitor : AstVisitor {
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(fnmna, fun.arguments, fun.result, isCMRES(fun), null, fun.at)
+        build_wrapper_function(fnmna, fun.arguments, fun.result, isCMRES(fun), null, fun.at)
         build_function_entry(fun.at, intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations, fun.arguments)
         process_labels(fun.body)
@@ -1081,6 +1081,15 @@ class LlvmJitVisitor : AstVisitor {
 
     def build_call_params(expr : smart_ptr<ExprCallFunc>; extern_func : Function? = null) {
         var params : array<LLVMOpaqueValue?>
+
+        let maybe_to_vec4f = $(a: ExpressionPtr, arg: VariablePtr) {
+            var src = getE(a)
+            if (arg._type.baseType == Type.anyArgument) {
+                return cast_ptr_to_vec4f(src);
+            } else {
+                return src
+            }
+        }
         for (a, ai in expr.arguments, count()) {
             if (a._type.baseType == Type.fakeContext) {
                 params |> push(get_context_param())
@@ -1090,17 +1099,17 @@ class LlvmJitVisitor : AstVisitor {
             } elif (a._type.baseType == Type.tPointer) {
                 assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
-                var ptrValue = LLVMBuildPointerCast(g_builder, getE(a), ptrType, "arg_{funcArg.name}_ptr")
+                var ptrValue = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "arg_{funcArg.name}_ptr")
                 params |> push(ptrValue)
             } elif (a._type.baseType == Type.tStructure) {// possibly inherited structure
                 assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
-                var ptrValue = LLVMBuildPointerCast(g_builder, getE(a), ptrType, "arg_{funcArg.name}_struct")
+                var ptrValue = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "arg_{funcArg.name}_struct")
                 params |> push(ptrValue)
-            } elif ((a._type.baseType == Type.tArray || a._type.baseType == Type.tTable) && (extern_func != null)) {
+            } elif ((a._type.baseType == Type.tArray || a._type.baseType == Type.tTable || a._type.dim |> length != 0) && (extern_func != null)) {
                 assume funcArg = expr.func.arguments[ai]
-                var destType = type_to_llvm_abi_type(funcArg._type)
-                var arg = LLVMBuildPointerCast(g_builder, getE(a), destType, "any_array_{funcArg.name}_ptr")
+                var ptrType = type_to_llvm_abi_type(funcArg._type)
+                var arg = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "any_array_{funcArg.name}_ptr")
                 params |> push(arg)
             } else {
                 params |> push(getE(a))
@@ -4057,7 +4066,7 @@ class LlvmJitVisitor : AstVisitor {
             } else {
                 setE(expr, arg)
             }
-        } elif (expr.varFlags.local) {// local varaibels
+        } elif (expr.varFlags.local) { // local variables
             var var_ptr = getV(expr.variable)
             if (expr.variable.flags.aliasCMRES) {
                 pass
@@ -4070,7 +4079,7 @@ class LlvmJitVisitor : AstVisitor {
             } else {
                 setE(expr, var_ptr)
             }
-        } elif (expr.varFlags.argument) {// arguments
+        } elif (expr.varFlags.argument) { // arguments
             var tryV = tryGetV(expr.variable)
             if (tryV != null) {
                 if (expr.varFlags.r2v) {
@@ -4081,12 +4090,8 @@ class LlvmJitVisitor : AstVisitor {
                 return expr
             }
             var arg = LLVMGetParam(ffunc, uint(expr.argumentIndex))
-            if (expr.varFlags.r2v) {
-                if (varType.flags.ref) {
-                    setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), arg, uint(expr._type.alignOf), "arg_var_ref_r2v_{expr.variable.name}"))
-                } else {
-                    setE(expr, arg)
-                }
+            if (expr.varFlags.r2v && varType.flags.ref) {
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), arg, uint(expr._type.alignOf), "arg_var_ref_r2v_{expr.variable.name}"))
             } else {
                 setE(expr, arg)
             }
@@ -4627,7 +4632,7 @@ class LlvmJitVisitor : AstVisitor {
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
+        build_wrapper_function(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
         build_function_entry(expr.at, intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations, thisBlock.arguments)
         process_labels(expr)
@@ -5138,11 +5143,11 @@ class LlvmJitVisitor : AstVisitor {
 
     def cast_from_vec4f(expr : ExpressionPtr; etype : TypeDeclPtr; v4f : LLVMOpaqueValue?) {
         var tres : LLVMOpaqueValue?
-        if (etype.isWorkhorseType) {
-            tres = cast_from_vec4f_workhorse(etype, expr, v4f)
-        } elif (etype.isRef) {
+        if (etype.isRef) {
             var ptr_type = LLVMPointerType(type_to_llvm_type(etype), 0u)
             tres = cast_from_vec4f_ptr(v4f, ptr_type)
+        } elif (etype.isWorkhorseType) {
+            tres = cast_from_vec4f_workhorse(etype, expr, v4f)
         } elif (etype.isHandle) {
             var inscope tp <- get_underlying_value_type(etype)
             if (tp == null) {
