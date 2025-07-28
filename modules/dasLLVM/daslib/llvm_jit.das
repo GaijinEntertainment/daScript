@@ -410,7 +410,7 @@ class LlvmJitVisitor : AstVisitor {
         thisFunc = null
     }
 
-    def build_wrapper_funcion(fnmna : string; arguments : dasvector`smart_ptr`Variable; var result : TypeDeclPtr; isCmres : bool; captureType : LLVMOpaqueType?; at : LineInfo) {
+    def build_wrapper_function(fnmna : string; arguments : dasvector`smart_ptr`Variable; var result : TypeDeclPtr; isCmres : bool; captureType : LLVMOpaqueType?; at : LineInfo) {
         var wentry = LLVMAppendBasicBlock(wfunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         var wargs : array<LLVMOpaqueValue?>
@@ -585,7 +585,7 @@ class LlvmJitVisitor : AstVisitor {
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(fnmna, fun.arguments, fun.result, isCMRES(fun), null, fun.at)
+        build_wrapper_function(fnmna, fun.arguments, fun.result, isCMRES(fun), null, fun.at)
         build_function_entry(fun.at, intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations, fun.arguments)
         process_labels(fun.body)
@@ -4057,7 +4057,7 @@ class LlvmJitVisitor : AstVisitor {
             } else {
                 setE(expr, arg)
             }
-        } elif (expr.varFlags.local) {// local varaibels
+        } elif (expr.varFlags.local) { // local variables
             var var_ptr = getV(expr.variable)
             if (expr.variable.flags.aliasCMRES) {
                 pass
@@ -4070,7 +4070,7 @@ class LlvmJitVisitor : AstVisitor {
             } else {
                 setE(expr, var_ptr)
             }
-        } elif (expr.varFlags.argument) {// arguments
+        } elif (expr.varFlags.argument) { // arguments
             var tryV = tryGetV(expr.variable)
             if (tryV != null) {
                 if (expr.varFlags.r2v) {
@@ -4081,12 +4081,8 @@ class LlvmJitVisitor : AstVisitor {
                 return expr
             }
             var arg = LLVMGetParam(ffunc, uint(expr.argumentIndex))
-            if (expr.varFlags.r2v) {
-                if (varType.flags.ref) {
-                    setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), arg, uint(expr._type.alignOf), "arg_var_ref_r2v_{expr.variable.name}"))
-                } else {
-                    setE(expr, arg)
-                }
+            if (expr.varFlags.r2v && varType.flags.ref) {
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), arg, uint(expr._type.alignOf), "arg_var_ref_r2v_{expr.variable.name}"))
             } else {
                 setE(expr, arg)
             }
@@ -4627,7 +4623,7 @@ class LlvmJitVisitor : AstVisitor {
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
+        build_wrapper_function(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
         build_function_entry(expr.at, intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations, thisBlock.arguments)
         process_labels(expr)
