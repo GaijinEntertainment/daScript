@@ -5143,11 +5143,11 @@ class LlvmJitVisitor : AstVisitor {
 
     def cast_from_vec4f(expr : ExpressionPtr; etype : TypeDeclPtr; v4f : LLVMOpaqueValue?) {
         var tres : LLVMOpaqueValue?
-        if (etype.isWorkhorseType) {
-            tres = cast_from_vec4f_workhorse(etype, expr, v4f)
-        } elif (etype.isRef) {
+        if (etype.isRef) {
             var ptr_type = LLVMPointerType(type_to_llvm_type(etype), 0u)
             tres = cast_from_vec4f_ptr(v4f, ptr_type)
+        } elif (etype.isWorkhorseType) {
+            tres = cast_from_vec4f_workhorse(etype, expr, v4f)
         } elif (etype.isHandle) {
             var inscope tp <- get_underlying_value_type(etype)
             if (tp == null) {
