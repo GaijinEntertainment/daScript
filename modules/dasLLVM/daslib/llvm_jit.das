@@ -1082,7 +1082,7 @@ class LlvmJitVisitor : AstVisitor {
     def build_call_params(expr : smart_ptr<ExprCallFunc>; extern_func : Function? = null) {
         var params : array<LLVMOpaqueValue?>
 
-        let maybe_to_vec4f = $(a: ExpressionPtr, arg: VariablePtr) {
+        let maybe_to_vec4f = $(a : ExpressionPtr, arg : VariablePtr) {
             var src = getE(a)
             if (arg._type.baseType == Type.anyArgument) {
                 return cast_ptr_to_vec4f(src);
