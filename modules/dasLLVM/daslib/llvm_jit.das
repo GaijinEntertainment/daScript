@@ -1120,11 +1120,9 @@ class LlvmJitVisitor : AstVisitor {
 
     def get_function_addr(func : Function?) {
         var MNH_ADDR : uint64
-        unsafe {
-            let mangled_name = get_mangled_name(func)
-            let MNH = hash(mangled_name)
-            MNH_ADDR = get_function_address(MNH, *jit_context)
-        }
+        let mangled_name = get_mangled_name(func)
+        let MNH = hash(mangled_name)
+        MNH_ADDR = get_function_address(MNH, *jit_context)
         return MNH_ADDR
     }
 
@@ -3308,14 +3306,12 @@ class LlvmJitVisitor : AstVisitor {
         var array_init : array<LLVMValueRef>
         let ty = get_llvm_type_for_enumvalueinfo()
         for (i in range(len)) {
-            unsafe {
-                let evi & = ei[i]
-                var init_fields = fixed_array(
-                    get_string_constant_ptr(g_builder, evi.name),
-                    LLVMConstInt(LLVMInt64Type(), evi.value  |> uint64(), 0)
-                )
-                array_init |> push <| LLVMConstNamedStruct(ty, unsafe(addr(init_fields[0])), 2u)
-            }
+            assume evi = unsafe(ei[i])
+            var init_fields = fixed_array(
+                get_string_constant_ptr(g_builder, evi.name),
+                LLVMConstInt(LLVMInt64Type(), evi.value  |> uint64(), 0)
+            )
+            array_init |> push <| LLVMConstNamedStruct(ty, unsafe(addr(init_fields[0])), 2u)
         }
         return LLVMConstArray(ty, unsafe(addr(array_init[0])), len)
     }
@@ -3434,10 +3430,8 @@ class LlvmJitVisitor : AstVisitor {
             return LLVMConstPointerNull(ty);
         }
         for (i in range(len)) {
-            unsafe {
-                let evi = argtypes[i] |> create_type_info_global()
-                array_init |> push <| unsafe(reinterpret<LLVMValueRef>(evi))
-            }
+            let evi = unsafe(argtypes[i]) |> create_type_info_global()
+            array_init |> push <| unsafe(reinterpret<LLVMValueRef>(evi))
         }
         let element_t = LLVMPointerType(LLVMVoidType(), 0u);
         let tinfo_array_ty = LLVMArrayType(element_t, len)
@@ -3453,9 +3447,7 @@ class LlvmJitVisitor : AstVisitor {
         var array_init : array<LLVMValueRef>
         var ty = LLVMPointerType(LLVMInt8Type(), 0u)
         for (i in range(len)) {
-            unsafe {
-                array_init |> push <| get_string_constant_ptr(g_builder, argnames[i])
-            }
+            array_init |> push <| get_string_constant_ptr(g_builder, unsafe(argnames[i]))
         }
         let tinfo_array_ty = LLVMArrayType(ty, len)
         var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argnames")
@@ -4653,25 +4645,25 @@ class LlvmJitVisitor : AstVisitor {
         var fmna : string
         unsafe {
             astVisitor.adapter <- make_visitor(*astVisitor)
-            fmna = (*astVisitor)->pre_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block, thisFunc, captureType)
-            var cblk = (*astVisitor)->before_function_entry()
-            var carg = (*astVisitor)->get_capture_param()
-            carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
-            for (c, ai in captured, count()) {
-                var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai + first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
-                if (c.eref) {
-                    var arg_t = LLVMPointerType(type_to_llvm_type(c.variable._type), 0u)
-                    var arg_p = LLVMBuildAlloca(astVisitor.g_builder, arg_t, "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}_var")
-                    LLVMBuildStore(astVisitor.g_builder, arg_i, arg_p)
-                    (*astVisitor)->setV_ptr(c.variable, arg_p)
-                } else {
-                    (*astVisitor)->setV_ptr(c.variable, arg_i)
-                }
-            }
-            (*astVisitor)->after_function_entry(cblk)
-            visit(expr._block, astVisitor.adapter)
-            (*astVisitor)->post_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block)
         }
+        fmna = (*astVisitor)->pre_make_block(unsafe(reinterpret<smart_ptr<ExprBlock>> expr._block), thisFunc, captureType)
+        var cblk = (*astVisitor)->before_function_entry()
+        var carg = (*astVisitor)->get_capture_param()
+        carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
+        for (c, ai in captured, count()) {
+            var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai + first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
+            if (c.eref) {
+                var arg_t = LLVMPointerType(type_to_llvm_type(c.variable._type), 0u)
+                var arg_p = LLVMBuildAlloca(astVisitor.g_builder, arg_t, "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}_var")
+                LLVMBuildStore(astVisitor.g_builder, arg_i, arg_p)
+                (*astVisitor)->setV_ptr(c.variable, arg_p)
+            } else {
+                (*astVisitor)->setV_ptr(c.variable, arg_i)
+            }
+        }
+        (*astVisitor)->after_function_entry(cblk)
+        visit(expr._block, astVisitor.adapter)
+        (*astVisitor)->post_make_block(unsafe(reinterpret<smart_ptr<ExprBlock>> expr._block))
         let result = LLVMGetNamedFunction(g_mod, fmna)
         let impl = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
         astVisitor.adapter := null
@@ -5743,12 +5735,10 @@ class JIT_LLVM : AstSimulateMacro {
                 let MNH = hash(mangled_name)
                 var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
                 var gen = generate_llvm_code(mangled_name)
-                unsafe {
-                    if (gen != null) {
-                        gen |> instrument_jit(simfun, *ctx)
-                    } else {
-                        remove_jit(simfun)
-                    }
+                if (gen != null) {
+                    gen |> unsafe(instrument_jit(simfun, *ctx))
+                } else {
+                    unsafe(remove_jit(simfun))
                 }
             }
             finalize_jit()

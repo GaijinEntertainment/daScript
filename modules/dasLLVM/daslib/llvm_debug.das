@@ -46,23 +46,21 @@ def isLLVMOpaqueBlockPtr(vinfo) {
 }
 
 def describe_arg(var ctxid : Context; vinfo; arg : void?) : void {
-    unsafe {
-        let parg = reinterpret<void ??> arg
-        if (parg == null || *parg == null) {
-            report_to_debugger(ctxid, "llvm_debug", vinfo.name, null)
-            return
-        }
-        if (isLLVMOpaqueValuePtr(vinfo)) {
-            let pexpression = reinterpret<LLVMOpaqueValue ??> arg
-            report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
-        } elif (isLLVMOpaqueTypePtr(vinfo)) {
-            let pexpression = reinterpret<LLVMOpaqueType ??> arg
-            report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
-        } elif (isLLVMOpaqueBlockPtr(vinfo)) {
-            let pexpression = reinterpret<LLVMOpaqueBasicBlock ??> arg
-            report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
-            report_to_debugger(ctxid, "llvm_debug", "{vinfo.name}.detail", describe(LLVMBasicBlockAsValue(*pexpression)))
-        }
+    let parg = unsafe(reinterpret<void ??> arg)
+    if (parg == null || *parg == null) {
+        report_to_debugger(ctxid, "llvm_debug", vinfo.name, null)
+        return
+    }
+    if (isLLVMOpaqueValuePtr(vinfo)) {
+        let pexpression = unsafe(reinterpret<LLVMOpaqueValue ??> arg)
+        report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+    } elif (isLLVMOpaqueTypePtr(vinfo)) {
+        let pexpression = unsafe(reinterpret<LLVMOpaqueType ??> arg)
+        report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+    } elif (isLLVMOpaqueBlockPtr(vinfo)) {
+        let pexpression = unsafe(reinterpret<LLVMOpaqueBasicBlock ??> arg)
+        report_to_debugger(ctxid, "llvm_debug", vinfo.name, describe(*pexpression))
+        report_to_debugger(ctxid, "llvm_debug", "{vinfo.name}.detail", describe(LLVMBasicBlockAsValue(*pexpression)))
     }
 }
 
@@ -70,9 +68,7 @@ class SampleStackWalker : DapiStackWalker {
     ctxid : Context?
     def override onArgument(info : FuncInfo; index : int; vinfo : VarInfo; arg : float4) : void {
         if (vinfo.flags.ref || vinfo.flags.refType) {
-            unsafe {
-                describe_arg(*ctxid, vinfo, *reinterpret<void ??>(addr(arg)))
-            }
+            describe_arg(*ctxid, vinfo, *unsafe(reinterpret<void ??>(unsafe(addr(arg)))))
         } else {
             describe_arg(*ctxid, vinfo, unsafe(addr(arg)))
         }
@@ -82,9 +78,7 @@ class SampleStackWalker : DapiStackWalker {
             return
         }
         if (vinfo.flags.ref || vinfo.flags.refType) {
-            unsafe {
-                describe_arg(*ctxid, vinfo, *reinterpret<void ??>(arg))
-            }
+            describe_arg(*ctxid, vinfo, *unsafe(reinterpret<void ??>(arg)))
         } else {
             describe_arg(*ctxid, vinfo, arg)
         }
