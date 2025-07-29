@@ -4141,7 +4141,7 @@ class LlvmJitVisitor : AstVisitor {
             field_ptr = res
         } else {
             var field_offset = 0U
-            var field_type : TypeDeclPtr
+            var field_type : LLVMOpaqueType?
             var field_name : string;
             var val_ptr = getE(expr.value)
             if (expr.value._type.isPointer && !expr.derefFlags.unsafeDeref) {
@@ -4155,30 +4155,30 @@ class LlvmJitVisitor : AstVisitor {
                     failed_E(expr, "field {expr.name} offset is -1")
                     return expr
                 }
-                field_type := expr._type;
+                field_type = get_type_pointer(expr._type);
                 field_name = "{describe(expr.value._type,false,false,false)}.{expr.name}";
             } elif (expr.value._type.isTuple || (expr.value._type.isPointer && expr.value._type.firstType.isTuple)) {
                 assert(expr.fieldIndex != -1)
                 assume tt = expr.value._type.isPointer ? expr.value._type.firstType : expr.value._type;
                 field_offset = get_tuple_field_offset(tt, expr.fieldIndex) |> uint()
                 let argName = tuple_field_name(tt, expr.fieldIndex)
-                field_type := tt.argTypes[expr.fieldIndex];
+                field_type = get_type_pointer(tt.argTypes[expr.fieldIndex]);
                 field_name = "{describe(tt,false,false,false)}.{argName}";
             } elif (expr.value._type.isVariant || (expr.value._type.isPointer && expr.value._type.firstType.isVariant)) {
                 assume tv = expr.value._type.isPointer ? expr.value._type.firstType : expr.value._type;
                 assert(expr.fieldIndex != -1)
                 field_offset = get_variant_field_offset(tv, expr.fieldIndex) |> uint()
                 let argName = variant_field_name(tv, expr.fieldIndex)
-                field_type := tv.argTypes[expr.fieldIndex];
+                field_type = get_type_pointer(tv.argTypes[expr.fieldIndex]);
                 field_name = "{describe(tv,false,false,false)}.{argName}";
             } else {
                 assert(expr.field != null)
                 field_offset = expr.field.offset |> uint();
-                field_type := expr.field._type
+                field_type = get_type_pointer(expr.field._type)
                 field_name = "{describe(expr.value._type,false,false,false)}.{expr.field.name}"
             }
             field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
-            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(field_type), field_name)
+            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, field_type, field_name)
         }
 
         if (expr.fieldFlags.r2v) {
