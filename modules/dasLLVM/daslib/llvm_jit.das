@@ -2739,7 +2739,7 @@ class LlvmJitVisitor : AstVisitor {
         v_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset + field_offset), 0), "[{index}].{decl.name}")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.makeType.argTypes[field_index]), "")
         if (decl.value |> isMakeLocal) {
-            pass // do nothign. we already taken care of makeLocal in preVisitExprMakeVariantField
+            pass // do nothing. we already taken care of makeLocal in preVisitExprMakeVariantField
         } elif (isCall2CMRES(decl.value)) {
             pass // do nothing. we already handle this in preVisitExprMakeVariantField
         } else {
@@ -3847,7 +3847,7 @@ class LlvmJitVisitor : AstVisitor {
         assume subT = expr.subexpr._type
         if (ect.isRef && subT.isRef) {
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect), 0u), "")
-        } elif (ect.isPointer && subT.isPointer) {
+        } elif (ect.isPointer && (subT.isPointer || subT.isRefType)) {
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
         } elif (length(ect.dim) != 0 && subT.isPointer) {
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect), 0u), "")
