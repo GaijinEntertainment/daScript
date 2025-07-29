@@ -976,6 +976,16 @@ namespace das {
                            CompilationError::module_not_found);
                 return res;
             }
+            for ( const auto & mod : req) {
+                if (mod.moduleName == modName) {
+                    auto res = make_smart<Program>();
+                    TextWriter err;
+                    err << "Module '" << modName << "' required for another builtin module (probably debugger/profiler/jit is enabled). Disable conflicting builtin modules.\n";
+                    res->error(err.str(), logs.str(), "", LineInfo(),
+                               CompilationError::module_not_found);
+                    return res;
+                }
+            }
             for ( auto & mod : req ) {
                 if ( libGroup.findModule(mod.moduleName) ) {
                     continue;
