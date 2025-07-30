@@ -486,7 +486,7 @@ class LlvmJitVisitor : AstVisitor {
             LLVMPointerType(LLVMInt8Type(), 0u), LLVMInt32Type(), LLVMInt32Type(), LLVMInt32Type(), LLVMInt32Type()
         )
         let line_info_type = LLVMStructType(unsafe(addr(line_info_members[0])), line_info_members |> length() |> uint(), 0)
-        let line_info_global = LLVMAddGlobal(g_mod, line_info_type, "" /* no name */)
+        let line_info_global = LLVMAddGlobal(g_mod, line_info_type, "li_{int(at.line)}_{int(at.column)}")
         var init_values =  fixed_array(g_builder |> LLVMBuildPointerCast(dummy, uint8_ptr, ""),
             LLVMConstInt(LLVMInt32Type(), at.column |> uint64(), 0),
             LLVMConstInt(LLVMInt32Type(), at.line |> uint64(), 0),
@@ -508,7 +508,7 @@ class LlvmJitVisitor : AstVisitor {
         let line_info_ptr_type = uint8_ptr
         // print("Type of LineInfoPtrType : '{LineInfoPtrType |> describe}'\n")
         // print("Type of ptrToLineInfoGlobal : '{ptrToLineInfoGlobal |> LLVMTypeOf() |> describe()}'\n")
-        let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, "" /* no name */)
+        let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, "li_ptr" /* no name */)
         LLVMSetInitializer(line_info_ptr_global, line_info_global)
         return line_info_ptr_global
     }
@@ -1456,6 +1456,7 @@ class LlvmJitVisitor : AstVisitor {
         var tsrc = getE(expr.subexpr)
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
+        var res: LLVMOpaqueValue?;
         if (subExprT.dim |> length != 0 || (subExprT.isPointer && subExprT.firstType.dim |> length != 0)) {
             var inscope etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT)
             assume vec = etype.dim
@@ -1466,7 +1467,7 @@ class LlvmJitVisitor : AstVisitor {
             vec |> resize(vec |> length - 1)
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
             var if_not_null = subExprT.dim |> length == 0 ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
-            var res = build_select(if_not_null, resType) <| $() {
+            res = build_select(if_not_null, resType) <| $() {
                 var maxIdx = LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0)
                 var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, maxIdx, "dim_range")
                 var subRes = build_select(if_range, resType) <| $() {
@@ -1480,12 +1481,11 @@ class LlvmJitVisitor : AstVisitor {
             lpipe <| $() {
                 return LLVMConstNull(resType)
             }
-            setE(expr, res)
         } elif (subExprT.isGoodArrayType || (subExprT.isPointer && subExprT.firstType.isGoodArrayType)) {
             var if_not_null = !subExprT.isGoodArrayType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
             var inscope etype := subExprT.isPointer ? subExprT.firstType.firstType : subExprT.firstType
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
-            var res = build_select(if_not_null, resType) <| $() {
+            res = build_select(if_not_null, resType) <| $() {
                 var inscope arr_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
                 var arr = LLVMBuildLoad2(g_builder, type_to_llvm_type(arr_ty), tsrc, "arr")
                 var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
@@ -1502,12 +1502,11 @@ class LlvmJitVisitor : AstVisitor {
             lpipe <| $() {
                 return LLVMConstNull(resType)
             }
-            setE(expr, res)
         } elif (subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)) {
             var if_not_null = !subExprT.isGoodTableType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
             var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
             var resType = LLVMPointerType(type_to_llvm_type(etype.secondType), 0u)
-            var res = build_select(if_not_null, resType) <| $() {
+            res = build_select(if_not_null, resType) <| $() {
                 var inscope tab_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
                 var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(tab_ty), tsrc, "tab")
                 var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(), 0u), "tab_ptr")
@@ -1532,13 +1531,12 @@ class LlvmJitVisitor : AstVisitor {
             lpipe <| $() {
                 return LLVMConstNull(resType)
             }
-            setE(expr, res)
         } elif (subExprT.isVectorType || (subExprT.isPointer && subExprT.firstType.isVectorType)) {
             var if_not_null = !subExprT.isVectorType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
             var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
-            var res = build_select(if_not_null, resType) <| $() {
-                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, LLVMConstInt(LLVMInt32Type(), uint64(subExprT.vectorDim), 0), "dim_range")
+            res = build_select(if_not_null, resType) <| $() {
+                var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, LLVMConstInt(LLVMInt32Type(), uint64(etype.vectorDim), 0), "dim_range")
                 var subRes = build_select(if_range, resType) <| $() {
                     if (expr.atFlags.r2v) {
                         var lvec = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type),
@@ -1557,9 +1555,10 @@ class LlvmJitVisitor : AstVisitor {
                 return LLVMConstNull(resType)
             }
         } else {
-            setE(expr, LLVMConstNull(type_to_llvm_type(expr._type)))
+            res = LLVMConstNull(type_to_llvm_type(expr._type))
             failed("unsupported visitExprSafeAt type {describe(subExprT)} {describe(expr.at)}")
         }
+        setE(expr, res)
         return expr
     }
 
@@ -3279,12 +3278,12 @@ class LlvmJitVisitor : AstVisitor {
             LLVMInt64Type())
     }
 
-    def get_llvm_type_for_enuminfo() : LLVMTypeRef {
+    def get_llvm_type_for_enuminfo(len: uint) : LLVMTypeRef {
         let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
         return LLVMStructType() <| fixed_array(
             void_ptr,        // const char* name
             void_ptr,        // const char* module_name
-            void_ptr,        // EnumValueInfo **  fields
+            LLVMArrayType(get_llvm_type_for_enumvalueinfo(), len),        // EnumValueInfo **  fields
             LLVMInt32Type(), // uint32_t count
             LLVMInt64Type())
     }
@@ -3372,7 +3371,7 @@ class LlvmJitVisitor : AstVisitor {
         if (enuminfo_cache |> key_exists <| ei) {
             return enuminfo_cache[ei]
         }
-        var ty = get_llvm_type_for_enuminfo()
+        var ty = get_llvm_type_for_enuminfo(ei.count)
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "enuminfo_{ei.module_name}_{ei.name}")
         enuminfo_cache[ei] = struct_info_global
         var init_values <- [
@@ -3380,7 +3379,7 @@ class LlvmJitVisitor : AstVisitor {
             get_string_constant_ptr(g_builder, ei.module_name),
             create_enumvalueinfo_global_array(ei.fields, ei.count),
             LLVMConstInt(LLVMInt32Type(), ei.count |> uint64(), 0),
-            LLVMConstInt(LLVMInt64Type(), ei.hash     |> uint64(), 0)
+            LLVMConstInt(LLVMInt64Type(), ei.hash  |> uint64(), 0)
         ]
         struct_info_global |> LLVMSetInitializer() <| make_initializer(ty, init_values)
         return struct_info_global
@@ -3391,7 +3390,7 @@ class LlvmJitVisitor : AstVisitor {
             return structinfo_cache[si]
         }
         var ty = get_llvm_type_for_structinfo()
-        var struct_info_global = LLVMAddGlobal(g_mod, ty, "" /* no name */)
+        var struct_info_global = LLVMAddGlobal(g_mod, ty, "si_{si.name}")
         structinfo_cache[si] = struct_info_global
         var void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
         var init_values <- [
@@ -3426,9 +3425,8 @@ class LlvmJitVisitor : AstVisitor {
 
     def create_argtypes_array(argtypes : TypeInfo ??; len : uint) {
         var array_init : array<LLVMValueRef>
-        let ty = get_llvm_type_for_typeinfo()
         if (len == 0u) {
-            return LLVMConstPointerNull(ty);
+            return LLVMConstPointerNull(LLVMPointerType(LLVMInt8Type(), 0u))
         }
         for (i in range(len)) {
             let evi = unsafe(argtypes[i]) |> create_type_info_global()
@@ -3504,7 +3502,7 @@ class LlvmJitVisitor : AstVisitor {
         }
 
         var type_info_type = get_llvm_type_for_typeinfo()
-        let type_info_global = LLVMAddGlobal(g_mod, type_info_type, "" /* no name */)
+        let type_info_global = LLVMAddGlobal(g_mod, type_info_type, "ti")
 
         typeinfo_cache[ti] = type_info_global
 
