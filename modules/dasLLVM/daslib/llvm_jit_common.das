@@ -527,9 +527,7 @@ def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void
     // Find the target using the triple
     var target : LLVMTarget?
     let error : string?
-    unsafe {
-        LLVMGetTargetFromTriple(triple, addr(target), error)
-    }
+    LLVMGetTargetFromTriple(triple, unsafe(addr(target)), error)
 
     let targetMachine = LLVMCreateTargetMachine(
         target,
