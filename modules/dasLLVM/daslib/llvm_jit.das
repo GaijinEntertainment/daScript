@@ -3180,7 +3180,8 @@ class LlvmJitVisitor : AstVisitor {
             failed_E(expr, "missing function pointer for {expr.func.name}")
         }
         var rfun = LLVMGetUndef(g_t_function)
-        rfun = LLVMBuildInsertValue(g_builder, rfun, LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0), 0u, "")
+        let fn_ptr = LLVMBuildIntToPtr(g_builder, LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0), LLVMPointerType(g_t_simFunction, 0u), "")
+        rfun = LLVMBuildInsertValue(g_builder, rfun, fn_ptr, 0u, "")
         setE(expr, rfun)
     }
 
