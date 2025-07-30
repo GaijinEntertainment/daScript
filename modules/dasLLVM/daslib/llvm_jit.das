@@ -3839,16 +3839,16 @@ class LlvmJitVisitor : AstVisitor {
         if (ect.isRef && subT.isRef) {
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect), 0u), "")
         } elif (ect.isPointer && (subT.isPointer || subT.isRefType)) {
-            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
+            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "cast_p")
         } elif (length(ect.dim) != 0 && subT.isPointer) {
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect), 0u), "")
         } elif (ect.isInteger && (ect.baseType == Type.tInt64 || ect.baseType == Type.tUInt64) && subT.isPointer) {
-            res = LLVMBuildPtrToInt(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
-        } elif (ect.isPointer && subT.isInteger) {
-            res = LLVMBuildIntToPtr(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
+            res = LLVMBuildPtrToInt(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "cast_p_i")
+        } elif ((ect.isPointer || ect.isString) && subT.isInteger) {
+            res = LLVMBuildIntToPtr(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "cast_i_p")
         } elif (!ect.isRefType && !subT.isRefType) {
             if (ect.sizeOf == subT.sizeOf) {
-                res = LLVMBuildBitCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
+                res = LLVMBuildBitCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "cast_r")
             } else {
                 res = LLVMGetUndef(type_to_llvm_type(ect))
                 failed_E(expr, "cast<{describe(expr.castType)}> is not supported, bitcast size mismatch")
@@ -4245,7 +4245,7 @@ class LlvmJitVisitor : AstVisitor {
     def override visitExprSwizzle(expr : smart_ptr<ExprSwizzle>) : ExpressionPtr {
         var val = getE(expr.value)
         if (expr._type.flags.ref) {
-            var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "")
+            var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "swizzle_ref")
             val_ptr = LLVMBuildGEP2(g_builder, base_type_to_llvm_type(expr.value._type.vectorBaseType),
                     val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, get_type_pointer(expr._type), "")
@@ -4259,7 +4259,7 @@ class LlvmJitVisitor : AstVisitor {
                 }
             }
             if (expr.value._type.flags.ref && isSequencial) {
-                var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "")
+                var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "swizzle")
                 val_ptr = LLVMBuildGEP2(g_builder, base_type_to_llvm_type(expr.value._type.vectorBaseType),
                         val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, get_type_pointer(expr._type), "")
@@ -5712,7 +5712,7 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
-            // print("{LLVMPrintModuleToString(g_mod)}\n");
+            print("{LLVMPrintModuleToString(g_mod)}\n");
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
