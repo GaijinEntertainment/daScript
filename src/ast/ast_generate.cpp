@@ -1153,6 +1153,11 @@ namespace das {
         return blk;
     }
 
+    bool srcNeedTempVar ( Expression * src, TypeDecl * type ) {
+        if ( !type->isRef() ) return false;
+        return src->rtti_isCallLikeExpr() || src->rtti_isMakeLocal();
+    }
+
     ExpressionPtr replaceGeneratorFor ( ExprFor * expr, const FunctionPtr & func ) {
         auto begin_loop_label = func->totalGenLabel ++;
         auto mid_loop_label = func->totalGenLabel ++;
@@ -1199,6 +1204,23 @@ namespace das {
             const string & srcVarName = expr->iterators[si];
             const auto & src = expr->sources[si];
             const auto & iterv = expr->iteratorVariables[si];
+            // if its a temp ref type, we need to create a temp variable
+            smart_ptr<ExprLet> tempLet;
+            if ( srcNeedTempVar(src.get(), src->type.get()) ) {
+                tempLet = make_smart<ExprLet>();
+                tempLet->at = expr->at;
+                tempLet->atInit = expr->at;
+                tempLet->visibility = expr->visibility;
+                auto svar = make_smart<Variable>();
+                svar->generated = true;
+                svar->at = expr->at;
+                svar->name = srcName + "_temp_var";
+                svar->type = make_smart<TypeDecl>(Type::autoinfer);
+                svar->init_via_move = true;
+                svar->init = src->clone();
+                tempLet->variables.push_back(svar);
+                blk->list.push_back(tempLet);
+            }
             // let src0 = each(blah) or let src0 = blah if its iterator
             auto seqt = make_smart<ExprLet>();
             seqt->at = expr->at;
@@ -1216,7 +1238,11 @@ namespace das {
                 auto ceach = make_smart<ExprCall>(expr->at, "each");
                 ceach->generated = true;
                 ceach->alwaysSafe = true;
-                ceach->arguments.push_back(src->clone());
+                if ( tempLet ) {
+                    ceach->arguments.push_back(make_smart<ExprVar>(expr->at, srcName + "_temp_var"));
+                } else {
+                    ceach->arguments.push_back(src->clone());
+                }
                 svar->init = ceach;
             }
             seqt->variables.push_back(svar);
