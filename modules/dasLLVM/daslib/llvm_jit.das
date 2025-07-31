@@ -3472,7 +3472,8 @@ class LlvmJitVisitor : AstVisitor {
             //      info->annotation_or_name =  ((TypeAnnotation*)(intptr_t(annName)|1));
             let one = LLVMConstInt(LLVMInt64Type(), 1 |> uint64(), 0)
             let ptrToInt = LLVMBuildPtrToInt(g_builder, llvm_resolvent, LLVMInt64Type(), "ptrToInt")
-            let modifiedPtr = LLVMBuildOr(g_builder, ptrToInt, one, "modifiedPtr")
+            // Or constexpr are forbidden. Since we have alignment we can use add.
+            let modifiedPtr = LLVMBuildAdd(g_builder, ptrToInt, one, "modifiedPtr")
             let intToPtr = LLVMBuildIntToPtr(g_builder, modifiedPtr, LLVMPointerType(LLVMVoidType(), 0u), "intToPtr")
 
             initValues[0] = intToPtr
