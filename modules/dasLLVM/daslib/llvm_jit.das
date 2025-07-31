@@ -60,6 +60,28 @@ struct SLabel {
     blk : LLVMOpaqueBasicBlock?
 }
 
+def isExprOp2_Func(expr : smart_ptr<ExprOp2>) {
+    if (!expr.func.flags.builtIn) {
+        return true
+    }
+    if (expr.left._type.isHandle || expr.right._type.isHandle) {
+        return true
+    }
+    return false
+}
+
+def isExprOp1_Func(expr : smart_ptr<ExprOp1>) {
+    if (!expr.func.flags.builtIn) {
+        return true
+    }
+    if (expr.subexpr._type.isHandle) {
+        return true
+    }
+    return false
+}
+
+
+
 [macro]
 class LlvmJitVisitor : AstVisitor {
     adapter : smart_ptr<VisitorAdapter>
@@ -1978,16 +2000,6 @@ class LlvmJitVisitor : AstVisitor {
         } else {
             failed_E(expr, "unsupported binary operator {expr.op}")
         }
-    }
-
-    def isExprOp2_Func(expr : smart_ptr<ExprOp2>) {
-        if (!expr.func.flags.builtIn) {
-            return true
-        }
-        if (expr.left._type.isHandle || expr.right._type.isHandle) {
-            return true
-        }
-        return false
     }
 
     def override preVisitExprOp2Right(expr : smart_ptr<ExprOp2>; right : ExpressionPtr) : void {
@@ -4367,16 +4379,6 @@ class LlvmJitVisitor : AstVisitor {
     }
 
 // ExprOp1
-    def isExprOp1_Func(expr : smart_ptr<ExprOp1>) {
-        if (!expr.func.flags.builtIn) {
-            return true
-        }
-        if (expr.subexpr._type.isHandle) {
-            return true
-        }
-        return false
-    }
-
     def visitExprOp1_Func(var expr : smart_ptr<ExprOp1>) {
         expr.arguments |> resize(1)
         expr.arguments[0] := expr.subexpr
@@ -5657,6 +5659,32 @@ class DisableJitVisitor : AstVisitor {
             disable = true
         }
     }
+
+    def disable_builtin_call(expr: smart_ptr<ExprCallFunc>) {
+        if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
+            if (!has_intrinsic(expr)) {
+                print("disable fn {expr.func.name}\n");
+                disable = true
+            }
+        }
+    }
+
+    def override preVisitExprOp1(expr: smart_ptr<ExprOp1>) : void {
+        if (isExprOp1_Func(expr)) {
+            disable_builtin_call(expr)
+        }
+    }
+
+
+    def override preVisitExprOp2(expr: smart_ptr<ExprOp2>) : void {
+        if (isExprOp2_Func(expr)) {
+            disable_builtin_call(expr)
+        }
+    }
+
+    def override preVisitExprCall(expr: smart_ptr<ExprCall>) : void {
+        disable_builtin_call(expr)
+    }
 }
 
 [simulate_macro(name="jit_llvm")]
@@ -5712,7 +5740,7 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
-            print("{LLVMPrintModuleToString(g_mod)}\n");
+            // print("{LLVMPrintModuleToString(g_mod)}\n");
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
