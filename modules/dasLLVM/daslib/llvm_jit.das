@@ -60,6 +60,28 @@ struct SLabel {
     blk : LLVMOpaqueBasicBlock?
 }
 
+def isExprOp2_Func(expr : smart_ptr<ExprOp2>) {
+    if (!expr.func.flags.builtIn) {
+        return true
+    }
+    if (expr.left._type.isHandle || expr.right._type.isHandle) {
+        return true
+    }
+    return false
+}
+
+def isExprOp1_Func(expr : smart_ptr<ExprOp1>) {
+    if (!expr.func.flags.builtIn) {
+        return true
+    }
+    if (expr.subexpr._type.isHandle) {
+        return true
+    }
+    return false
+}
+
+
+
 [macro]
 class LlvmJitVisitor : AstVisitor {
     adapter : smart_ptr<VisitorAdapter>
@@ -1082,37 +1104,29 @@ class LlvmJitVisitor : AstVisitor {
     def build_call_params(expr : smart_ptr<ExprCallFunc>; extern_func : Function? = null) {
         var params : array<LLVMOpaqueValue?>
 
-        let maybe_to_vec4f = $(a : ExpressionPtr, arg : VariablePtr) {
-            var src = getE(a)
-            if (arg._type.baseType == Type.anyArgument) {
-                return cast_ptr_to_vec4f(src);
-            } else {
-                return src
-            }
-        }
         for (a, ai in expr.arguments, count()) {
-            if (a._type.baseType == Type.fakeContext) {
+            assume funcArg = expr.func.arguments[ai]
+            assume src = getE(a);
+            if (funcArg._type.baseType == Type.anyArgument) {
+                params |> push(cast_to_vec4f(a._type, src))
+            } elif (a._type.baseType == Type.fakeContext) {
                 params |> push(get_context_param())
             } elif (a._type.baseType == Type.fakeLineInfo) {
-                var pinfo = getE(a)
-                params |> push(pinfo)
+                params |> push(src)
             } elif (a._type.baseType == Type.tPointer) {
-                assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
-                var ptrValue = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "arg_{funcArg.name}_ptr")
+                var ptrValue = LLVMBuildPointerCast(g_builder, src, ptrType, "arg_{funcArg.name}_ptr")
                 params |> push(ptrValue)
             } elif (a._type.baseType == Type.tStructure) {// possibly inherited structure
-                assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
-                var ptrValue = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "arg_{funcArg.name}_struct")
+                var ptrValue = LLVMBuildPointerCast(g_builder, src, ptrType, "arg_{funcArg.name}_struct")
                 params |> push(ptrValue)
             } elif ((a._type.baseType == Type.tArray || a._type.baseType == Type.tTable || a._type.dim |> length != 0) && (extern_func != null)) {
-                assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
-                var arg = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "any_array_{funcArg.name}_ptr")
+                var arg = LLVMBuildPointerCast(g_builder, src, ptrType, "any_array_{funcArg.name}_ptr")
                 params |> push(arg)
             } else {
-                params |> push(getE(a))
+                params |> push(src)
             }
         }
         return <- params
@@ -1978,16 +1992,6 @@ class LlvmJitVisitor : AstVisitor {
         } else {
             failed_E(expr, "unsupported binary operator {expr.op}")
         }
-    }
-
-    def isExprOp2_Func(expr : smart_ptr<ExprOp2>) {
-        if (!expr.func.flags.builtIn) {
-            return true
-        }
-        if (expr.left._type.isHandle || expr.right._type.isHandle) {
-            return true
-        }
-        return false
     }
 
     def override preVisitExprOp2Right(expr : smart_ptr<ExprOp2>; right : ExpressionPtr) : void {
@@ -3468,7 +3472,8 @@ class LlvmJitVisitor : AstVisitor {
             //      info->annotation_or_name =  ((TypeAnnotation*)(intptr_t(annName)|1));
             let one = LLVMConstInt(LLVMInt64Type(), 1 |> uint64(), 0)
             let ptrToInt = LLVMBuildPtrToInt(g_builder, llvm_resolvent, LLVMInt64Type(), "ptrToInt")
-            let modifiedPtr = LLVMBuildOr(g_builder, ptrToInt, one, "modifiedPtr")
+            // Or constexpr are forbidden. Since we have alignment we can use add.
+            let modifiedPtr = LLVMBuildAdd(g_builder, ptrToInt, one, "modifiedPtr")
             let intToPtr = LLVMBuildIntToPtr(g_builder, modifiedPtr, LLVMPointerType(LLVMVoidType(), 0u), "intToPtr")
 
             initValues[0] = intToPtr
@@ -4367,16 +4372,6 @@ class LlvmJitVisitor : AstVisitor {
     }
 
 // ExprOp1
-    def isExprOp1_Func(expr : smart_ptr<ExprOp1>) {
-        if (!expr.func.flags.builtIn) {
-            return true
-        }
-        if (expr.subexpr._type.isHandle) {
-            return true
-        }
-        return false
-    }
-
     def visitExprOp1_Func(var expr : smart_ptr<ExprOp1>) {
         expr.arguments |> resize(1)
         expr.arguments[0] := expr.subexpr
@@ -5657,6 +5652,32 @@ class DisableJitVisitor : AstVisitor {
             disable = true
         }
     }
+
+    def disable_builtin_call(expr: smart_ptr<ExprCallFunc>) {
+        if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
+            if (!has_intrinsic(expr)) {
+                print("disable fn {expr.func.name}\n");
+                disable = true
+            }
+        }
+    }
+
+    def override preVisitExprOp1(expr: smart_ptr<ExprOp1>) : void {
+        if (isExprOp1_Func(expr)) {
+            disable_builtin_call(expr)
+        }
+    }
+
+
+    def override preVisitExprOp2(expr: smart_ptr<ExprOp2>) : void {
+        if (isExprOp2_Func(expr)) {
+            disable_builtin_call(expr)
+        }
+    }
+
+    def override preVisitExprCall(expr: smart_ptr<ExprCall>) : void {
+        disable_builtin_call(expr)
+    }
 }
 
 [simulate_macro(name="jit_llvm")]
@@ -5712,7 +5733,7 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
-            print("{LLVMPrintModuleToString(g_mod)}\n");
+            // print("{LLVMPrintModuleToString(g_mod)}\n");
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }

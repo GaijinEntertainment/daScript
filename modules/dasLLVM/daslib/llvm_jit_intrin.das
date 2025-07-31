@@ -107,6 +107,15 @@ let g_intrin_lookup <- {
     "math::normalize" => @@intrinsic_math_normalize
 }
 
+def public has_intrinsic(expr : smart_ptr<ExprCallFunc>) {
+    var result = false
+    let call_name = "{expr.func._module.name}::{expr.func.name}"
+    g_intrin_lookup |> get(call_name) <| $(pfun) {
+        result = true
+    }
+    return result
+}
+
 def public lookup_intinsic(g_builder : LLVMOpaqueBuilder?; expr : smart_ptr<ExprCallFunc>; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var result :  LLVMOpaqueValue?
     let call_name = "{expr.func._module.name}::{expr.func.name}"
