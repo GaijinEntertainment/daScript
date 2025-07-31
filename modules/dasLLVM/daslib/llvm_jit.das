@@ -1104,37 +1104,29 @@ class LlvmJitVisitor : AstVisitor {
     def build_call_params(expr : smart_ptr<ExprCallFunc>; extern_func : Function? = null) {
         var params : array<LLVMOpaqueValue?>
 
-        let maybe_to_vec4f = $(a : ExpressionPtr, arg : VariablePtr) {
-            var src = getE(a)
-            if (arg._type.baseType == Type.anyArgument) {
-                return cast_ptr_to_vec4f(src);
-            } else {
-                return src
-            }
-        }
         for (a, ai in expr.arguments, count()) {
-            if (a._type.baseType == Type.fakeContext) {
+            assume funcArg = expr.func.arguments[ai]
+            assume src = getE(a);
+            if (funcArg._type.baseType == Type.anyArgument) {
+                params |> push(cast_to_vec4f(a._type, src))
+            } elif (a._type.baseType == Type.fakeContext) {
                 params |> push(get_context_param())
             } elif (a._type.baseType == Type.fakeLineInfo) {
-                var pinfo = getE(a)
-                params |> push(pinfo)
+                params |> push(src)
             } elif (a._type.baseType == Type.tPointer) {
-                assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
-                var ptrValue = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "arg_{funcArg.name}_ptr")
+                var ptrValue = LLVMBuildPointerCast(g_builder, src, ptrType, "arg_{funcArg.name}_ptr")
                 params |> push(ptrValue)
             } elif (a._type.baseType == Type.tStructure) {// possibly inherited structure
-                assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
-                var ptrValue = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "arg_{funcArg.name}_struct")
+                var ptrValue = LLVMBuildPointerCast(g_builder, src, ptrType, "arg_{funcArg.name}_struct")
                 params |> push(ptrValue)
             } elif ((a._type.baseType == Type.tArray || a._type.baseType == Type.tTable || a._type.dim |> length != 0) && (extern_func != null)) {
-                assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
-                var arg = LLVMBuildPointerCast(g_builder, maybe_to_vec4f(a, funcArg), ptrType, "any_array_{funcArg.name}_ptr")
+                var arg = LLVMBuildPointerCast(g_builder, src, ptrType, "any_array_{funcArg.name}_ptr")
                 params |> push(arg)
             } else {
-                params |> push(getE(a))
+                params |> push(src)
             }
         }
         return <- params
