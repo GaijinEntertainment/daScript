@@ -1114,7 +1114,10 @@ namespace das {
                 ss << "    /* skipping " << decl.name << ", from " << from->name << " */";
                 return;
             }
-            ss << "    " << describeCppType(decl.type) << " " << decl.name << ";";
+            const auto typeStr = describeCppType(decl.type, CpptSubstitureRef::no,
+                CpptSkipRef::no, CpptSkipConst::yes);
+            // We can't have const fields in aot due to absence of default ctor for such classes.
+            ss << "    " << typeStr << " " << decl.name << ";";
             if ( decl.parentType ) {
                 ss << " /* from " << from->name << " */";
             }

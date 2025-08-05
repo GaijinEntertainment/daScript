@@ -1083,7 +1083,7 @@ class CppAot : AstVisitor {
         if (that.flags.cppLayout && from != reinterpret<Structure const?>(that.get_ptr())) {
             write(*ss, "    /* skipping {decl.name}, from {from.name} */");
         } else {
-            write(*ss, "    {describeCppType(decl._type, DescribeConfig(cross_platform=cross_platform))} {decl.name};");
+            write(*ss, "    {describeCppType(decl._type, DescribeConfig(cross_platform=cross_platform,skip_const = true))} {decl.name};");
             if (decl.flags.parentType) {
                 write(*ss, " /* from {from.name} */");
             }
