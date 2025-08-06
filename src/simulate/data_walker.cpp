@@ -84,16 +84,18 @@ namespace das {
         if ( canVisitVariant(ps,ti) ) {
             beforeVariant(ps, ti);
             if ( cancel() ) return;
-            int32_t fidx = *((int32_t *)ps);
-            DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
-            int fieldOffset = getTypeBaseSize(Type::tInt);
-            TypeInfo * vi = ti->argTypes[fidx];
-            auto fa = getTypeAlign(ti) - 1;
-            fieldOffset = (fieldOffset + fa) & ~fa;
-            char * pf = ps + fieldOffset;
-            if ( cancel() ) return;
-            walk(pf, vi);
-            if ( cancel() ) return;
+            if (ti->argCount != 0) {
+                int32_t fidx = *((int32_t *)ps);
+                DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
+                int fieldOffset = getTypeBaseSize(Type::tInt);
+                TypeInfo * vi = ti->argTypes[fidx];
+                auto fa = getTypeAlign(ti) - 1;
+                fieldOffset = (fieldOffset + fa) & ~fa;
+                char * pf = ps + fieldOffset;
+                if ( cancel() ) return;
+                walk(pf, vi);
+                if ( cancel() ) return;
+            }
             afterVariant(ps, ti);
         }
     }
