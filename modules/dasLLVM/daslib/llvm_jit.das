@@ -1125,6 +1125,14 @@ class LlvmJitVisitor : AstVisitor {
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var arg = LLVMBuildPointerCast(g_builder, src, ptrType, "any_array_{funcArg.name}_ptr")
                 params |> push(arg)
+            } elif (extern_func != null && extern_func.moreFlags.needStringCast && a._type.isString && !a._type.flags.ref) {
+                // Wrap extern string for extern functions. Empty string in das is null.
+                var res = LLVMBuildSelect(g_builder,
+                    LLVMBuildIsNull(g_builder, src, ""),
+                        get_string_constant_ptr(g_builder, ""),
+                        src,
+                    "wrap_str")
+                params |> push(res)
             } else {
                 params |> push(src)
             }
@@ -5733,7 +5741,7 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
-            // print("{LLVMPrintModuleToString(g_mod)}\n");
+            print("{LLVMPrintModuleToString(g_mod)}\n");
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
