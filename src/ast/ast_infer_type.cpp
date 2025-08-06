@@ -9117,6 +9117,10 @@ namespace das {
     // StringBuilder
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
             auto res = Expression::autoDereference(expr);
+            if (expr->type && expr->type->isVoid()) {
+                error("argument of format string should not be `void`", "", "",
+                    expr->at, CompilationError::expecting_return_value);
+            }
             if ( expr->constexpression ) {
                 return evalAndFoldString(res.get());
             } else {
