@@ -312,12 +312,20 @@ namespace das {
                         error("tuple element can't be a reference: '" + describeType(argType) + "'", "", "",
                               argType->at,CompilationError::invalid_type);
                     }
+                    if ( argType->isVoid() ) {
+                        error("tuple element can't be void", "", "",
+                              argType->at,CompilationError::invalid_type);
+                    }
                     verifyType(argType);
                 }
             } else if ( decl->baseType==Type::tVariant ) {
                 for ( auto & argType : decl->argTypes ) {
                     if ( argType->ref ) {
                         error("variant element can't be a reference: '" + describeType(argType) + "'", "", "",
+                              argType->at,CompilationError::invalid_type);
+                    }
+                    if ( argType->isVoid() ) {
+                        error("variant element can't be void", "", "",
                               argType->at,CompilationError::invalid_type);
                     }
                     verifyType(argType);
@@ -9885,6 +9893,7 @@ namespace das {
                 expr->makeType = mkt;
             } else {
                 expr->makeType = make_smart<TypeDecl>(Type::tTuple);
+                expr->makeType->at = expr->at;
                 for ( auto & val : expr->values ) {
                     auto valT = make_smart<TypeDecl>(*val->type);
                     valT->ref = false;
