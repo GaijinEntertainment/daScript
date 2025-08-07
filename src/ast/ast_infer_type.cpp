@@ -7237,7 +7237,11 @@ namespace das {
                 }
                 return;
             }
-            assume.push_back(expr);
+        }
+
+        virtual ExpressionPtr visit ( ExprAssume * expr ) override {
+            assume.emplace_back(expr);
+            return expr;
         }
     // ExprWith
         virtual void preVisit ( ExprWith * expr ) override {
