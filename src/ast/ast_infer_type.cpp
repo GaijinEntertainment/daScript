@@ -4905,7 +4905,8 @@ namespace das {
                     }
                 }
                 else {
-                    if ( expr->typeexpr->baseType==Type::tStructure && !expr->typeexpr->structType->hasAnyInitializers() ) {
+                    if ( expr->typeexpr->baseType==Type::tStructure &&
+                         !expr->typeexpr->structType->hasAnyInitializers() && expr->arguments.empty() ) {
                         expr->initializer = false;
                         reportAstChanged();
                     }
