@@ -2820,7 +2820,9 @@ class LlvmJitVisitor : AstVisitor {
             }
         }
         let stride = expr.makeType.stride
-        if (!expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride != 0) {
+        let emptyEmbeddedTuple = expr.makeType.baseType == Type.tTuple && length(expr.structs) == 0
+        let partiallyInitStruct = !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields
+        if ((partiallyInitStruct || emptyEmbeddedTuple) && stride != 0) {
             let total = int(expr.structs |> length)
             let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
