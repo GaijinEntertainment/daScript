@@ -270,6 +270,15 @@ namespace das {
         }
         virtual void preVisitExpression ( Expression * expr ) override {
             if ( expr->alwaysSafe && expr->userSaidItsSafe && !expr->generated ) {
+                if (func == nullptr) {
+                    // we're in global scope
+                    anyUnsafe = true;
+                    if ( checkUnsafe ) {
+                        program->error("unsafe in global initializer.", "unsafe are prohibited by CodeOfPolicies", "",
+                            expr->at, CompilationError::unsafe_function);
+                    }
+                    return;
+                }
                 auto origin = func->getOrigin();
                 if ( !(origin && origin->generated) && !func->generated )
                 {
@@ -652,6 +661,7 @@ namespace das {
         }
         virtual void preVisit ( ExprUnsafe * expr ) override {
             if ( !expr->generated ) {
+                DAS_ASSERTF(func, "internal compiler error: ExprUnsafe should always be inside function");
                 auto origin = func->getOrigin();
                 if ( !(origin && origin->generated) && !func->generated )
                 {

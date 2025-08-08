@@ -312,12 +312,20 @@ namespace das {
                         error("tuple element can't be a reference: '" + describeType(argType) + "'", "", "",
                               argType->at,CompilationError::invalid_type);
                     }
+                    if ( argType->isVoid() ) {
+                        error("tuple element can't be void", "", "",
+                              argType->at,CompilationError::invalid_type);
+                    }
                     verifyType(argType);
                 }
             } else if ( decl->baseType==Type::tVariant ) {
                 for ( auto & argType : decl->argTypes ) {
                     if ( argType->ref ) {
                         error("variant element can't be a reference: '" + describeType(argType) + "'", "", "",
+                              argType->at,CompilationError::invalid_type);
+                    }
+                    if ( argType->isVoid() ) {
+                        error("variant element can't be void", "", "",
                               argType->at,CompilationError::invalid_type);
                     }
                     verifyType(argType);
@@ -4905,7 +4913,8 @@ namespace das {
                     }
                 }
                 else {
-                    if ( expr->typeexpr->baseType==Type::tStructure && !expr->typeexpr->structType->hasAnyInitializers() ) {
+                    if ( expr->typeexpr->baseType==Type::tStructure &&
+                         !expr->typeexpr->structType->hasAnyInitializers() && expr->arguments.empty() ) {
                         expr->initializer = false;
                         reportAstChanged();
                     }
@@ -7236,7 +7245,11 @@ namespace das {
                 }
                 return;
             }
-            assume.push_back(expr);
+        }
+
+        virtual ExpressionPtr visit ( ExprAssume * expr ) override {
+            assume.emplace_back(expr);
+            return expr;
         }
     // ExprWith
         virtual void preVisit ( ExprWith * expr ) override {
@@ -9117,6 +9130,10 @@ namespace das {
     // StringBuilder
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
             auto res = Expression::autoDereference(expr);
+            if (expr->type && expr->type->isVoid()) {
+                error("argument of format string should not be `void`", "", "",
+                    expr->at, CompilationError::expecting_return_value);
+            }
             if ( expr->constexpression ) {
                 return evalAndFoldString(res.get());
             } else {
@@ -9876,6 +9893,7 @@ namespace das {
                 expr->makeType = mkt;
             } else {
                 expr->makeType = make_smart<TypeDecl>(Type::tTuple);
+                expr->makeType->at = expr->at;
                 for ( auto & val : expr->values ) {
                     auto valT = make_smart<TypeDecl>(*val->type);
                     valT->ref = false;
