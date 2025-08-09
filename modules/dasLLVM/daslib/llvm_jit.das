@@ -1125,6 +1125,14 @@ class LlvmJitVisitor : AstVisitor {
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var arg = LLVMBuildPointerCast(g_builder, src, ptrType, "any_array_{funcArg.name}_ptr")
                 params |> push(arg)
+            } elif (extern_func != null && extern_func.moreFlags.needStringCast && a._type.isString && !a._type.flags.ref) {
+                // Wrap string argument for extern functions. Empty string in das is null.
+                var res = LLVMBuildSelect(g_builder,
+                    LLVMBuildIsNull(g_builder, src, ""),
+                        get_string_constant_ptr(g_builder, ""),
+                        src,
+                    "wrap_str")
+                params |> push(res)
             } else {
                 params |> push(src)
             }
@@ -1470,7 +1478,7 @@ class LlvmJitVisitor : AstVisitor {
         var tsrc = getE(expr.subexpr)
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
-        var res: LLVMOpaqueValue?;
+        var res : LLVMOpaqueValue?;
         if (subExprT.dim |> length != 0 || (subExprT.isPointer && subExprT.firstType.dim |> length != 0)) {
             var inscope etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT)
             assume vec = etype.dim
@@ -2812,7 +2820,9 @@ class LlvmJitVisitor : AstVisitor {
             }
         }
         let stride = expr.makeType.stride
-        if (!expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride != 0) {
+        let emptyEmbeddedTuple = expr.makeType.baseType == Type.tTuple && length(expr.structs) == 0
+        let partiallyInitStruct = !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields
+        if ((partiallyInitStruct || emptyEmbeddedTuple) && stride != 0) {
             let total = int(expr.structs |> length)
             let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
@@ -3282,7 +3292,7 @@ class LlvmJitVisitor : AstVisitor {
             LLVMInt64Type())
     }
 
-    def get_llvm_type_for_enuminfo(len: uint) : LLVMTypeRef {
+    def get_llvm_type_for_enuminfo(len : uint) : LLVMTypeRef {
         let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
         return LLVMStructType() <| fixed_array(
             void_ptr,        // const char* name
@@ -5653,7 +5663,7 @@ class DisableJitVisitor : AstVisitor {
         }
     }
 
-    def disable_builtin_call(expr: smart_ptr<ExprCallFunc>) {
+    def disable_builtin_call(expr : smart_ptr<ExprCallFunc>) {
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
             if (!has_intrinsic(expr)) {
                 print("disable fn {expr.func.name}\n");
@@ -5662,20 +5672,20 @@ class DisableJitVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprOp1(expr: smart_ptr<ExprOp1>) : void {
+    def override preVisitExprOp1(expr : smart_ptr<ExprOp1>) : void {
         if (isExprOp1_Func(expr)) {
             disable_builtin_call(expr)
         }
     }
 
 
-    def override preVisitExprOp2(expr: smart_ptr<ExprOp2>) : void {
+    def override preVisitExprOp2(expr : smart_ptr<ExprOp2>) : void {
         if (isExprOp2_Func(expr)) {
             disable_builtin_call(expr)
         }
     }
 
-    def override preVisitExprCall(expr: smart_ptr<ExprCall>) : void {
+    def override preVisitExprCall(expr : smart_ptr<ExprCall>) : void {
         disable_builtin_call(expr)
     }
 }
