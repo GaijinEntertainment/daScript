@@ -105,11 +105,40 @@ namespace das
         enum { value = is_pointer<T>::value || is_smart_ptr<T>::value };
     };
 
+    template <typename TT>
+    struct is_workhorse_type {
+        enum {
+            value =
+                    is_enum<TT>::value
+                ||  is_pointer<TT>::value
+                ||  is_arithmetic<TT>::value
+                ||  is_same<TT,bool>::value
+                ||  is_same<TT,Bitfield>::value
+                ||  is_same<TT,range>::value
+                ||  is_same<TT,urange>::value
+                ||  is_same<TT,range64>::value
+                ||  is_same<TT,urange64>::value
+                ||  is_same<TT,int2>::value
+                ||  is_same<TT,int3>::value
+                ||  is_same<TT,int4>::value
+                ||  is_same<TT,uint2>::value
+                ||  is_same<TT,uint3>::value
+                ||  is_same<TT,uint4>::value
+                ||  is_same<TT,float2>::value
+                ||  is_same<TT,float3>::value
+                ||  is_same<TT,float4>::value
+        };
+    };
+
     template <typename CType, bool Pointer, bool IsEnum, typename Result, typename ...Args>
     struct ImplCallStaticFunctionImpl {
-        static __forceinline CType call( Result (*fn)(Args...), Context & context, SimNode ** ) {
-            context.throw_error("internal integration error");
-            return CType();
+        static __forceinline CType call( Result (*fn)(Args...), Context & context, SimNode ** args ) {
+            if constexpr ( !is_workhorse_type<Result>::value && is_constructible<CType, Result>::value ) {
+                return CType(CallStaticFunction<Result,Args...>(fn,context,args));
+            } else {
+                context.throw_error("internal integration error");
+                return CType();
+            }
         }
     };
 
