@@ -3841,6 +3841,8 @@ class LlvmJitVisitor : AstVisitor {
         if (expr.ascendFlags.useStackRef) {
             let stackref_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             setE(expr.subexpr, stackref_ptr)
+        } elif (!expr.subexpr._type.isHandle) {
+            call2cmres[get_ptr(expr.subexpr)] = mks_ptr
         }
         mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, type_to_llvm_type(expr._type), "")
         setE(expr, mks_ptr)
