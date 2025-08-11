@@ -6,10 +6,14 @@ namespace das {
 
     struct Time {
         time_t time;
+
+        operator int64_t () const {
+            return int64_t(time);
+        }
     };
 
     template <>
-    struct cast <Time> {
+    struct cast<Time> {
         static __forceinline Time to ( vec4f x )               { union { Time t; vec4f vec; } T; T.vec = x; return T.t; }
         static __forceinline vec4f from ( Time x )             { union { Time t; vec4f vec; } T; T.t = x; return T.vec; }
     };

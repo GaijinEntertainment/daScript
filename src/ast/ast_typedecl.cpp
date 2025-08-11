@@ -26,6 +26,16 @@ namespace das
     {
     }
 
+    Type TypeDecl::getR2VType() const {
+        if ( baseType==Type::tHandle ) {
+            auto valueType = annotation->makeValueType();
+            DAS_ASSERTF(valueType, "internal integration error. handle type %s has no value type", annotation->name.c_str());
+            return valueType->baseType;
+        } else {
+            return baseType;
+        }
+    }
+
     bool TypeDecl::isClass() const { // CANT BE INLINED DUE TO STRUCT TYPE
         return isStructure() && structType && structType->isClass;
     }

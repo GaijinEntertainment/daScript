@@ -107,9 +107,13 @@ namespace das
 
     template <typename CType, bool Pointer, bool IsEnum, typename Result, typename ...Args>
     struct ImplCallStaticFunctionImpl {
-        static __forceinline CType call( Result (*fn)(Args...), Context & context, SimNode ** ) {
-            context.throw_error("internal integration error");
-            return CType();
+        static __forceinline CType call( Result (*fn)(Args...), Context & context, SimNode ** args ) {
+            if constexpr ( !is_workhorse_type<Result>::value && is_constructible<CType, Result>::value ) {
+                return CType(CallStaticFunction<Result,Args...>(fn,context,args));
+            } else {
+                context.throw_error("internal integration error");
+                return CType();
+            }
         }
     };
 

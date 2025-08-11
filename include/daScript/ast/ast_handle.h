@@ -292,9 +292,6 @@ namespace das
         __forceinline StructureField & addField ( const string & na, const string & cppNa = "" ) {
             return addFieldEx ( na, cppNa.empty() ? na : cppNa, off, makeType<TT>(*mlib) );
         }
-        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(OT)));
-        }
         virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return GenCloneNode<OT>::simulateClone(context,at,l,r);
         }
@@ -734,12 +731,6 @@ namespace das
         virtual size_t getSizeOf() const override { return sizeof(OT); }
         virtual size_t getAlignOf() const override { return alignof(OT); }
         virtual bool isRefType() const override { return false; }
-        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code->makeNode<SimNode_Set<OT>>(at, l, r);
-        }
-        virtual SimNode * simulateRef2Value ( Context & context, const LineInfo & at, SimNode * l ) const override {
-            return context.code->makeNode<SimNode_Ref2Value<OT>>(at, l);
-        }
         virtual SimNode * simulateNullCoalescing ( Context & context, const LineInfo & at, SimNode * s, SimNode * dv ) const override {
             return context.code->makeNode<SimNode_NullCoalescing<OT>>(at,s,dv);
         }
