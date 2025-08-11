@@ -63,6 +63,13 @@ variant Terminal {
 typedef Nonterminal = string
 
 
+
+struct Alternative {
+    rule : Rule_?
+    action : ExpressionPtr
+}
+
+
 variant Rule {
     seq : array<Rule_?>       // rule(R1, R2, R3)
     alt : array<Alternative>  // seq <| {...} ; seq <| {...}; etc
@@ -101,8 +108,3 @@ struct Definition {
     rule : Rule
 }
 
-
-struct Alternative {
-    rule : Rule_?
-    action : ExpressionPtr
-}
