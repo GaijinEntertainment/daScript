@@ -20,6 +20,13 @@ namespace das
     };
 
     template <>
+    struct KeyCompare <vec4f> {
+        __forceinline bool operator () ( const vec4f & a, const vec4f & b ) {
+            return v_signmask(v_cmp_eq(a, b)) == 0xF;
+        }
+    };
+
+    template <>
     struct KeyCompare <char *> {
         __forceinline bool operator () ( const char * a, const char * b ) {
             if ( a==b ) return true;
