@@ -226,6 +226,42 @@ __forceinline int32_t testCallLine ( das::LineInfoArg * arg ) { return arg ? arg
 
 void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context, das::LineInfoArg * lineinfo );
 
+struct BigEntityId {
+    union {
+        uint32_t    value[4];
+        vec4f       v_value;
+    };
+    __forceinline BigEntityId() {
+        v_value = v_zero();
+    }
+    __forceinline BigEntityId(const BigEntityId & t) {
+        v_value = t.v_value;
+    }
+    __forceinline BigEntityId & operator = ( const BigEntityId & t ) {
+        v_value = t.v_value;
+        return *this;
+    }
+    __forceinline BigEntityId(vec4f v) {
+        v_value = v;
+    }
+    __forceinline operator vec4f () const {
+        return v_value;
+    }
+};
+
+namespace das {
+    template <>
+    struct cast<BigEntityId> {
+        static __forceinline BigEntityId to ( vec4f x )            { BigEntityId id; id.v_value = x; return id; }
+        static __forceinline vec4f from ( BigEntityId x )          { return x.v_value; }
+    };
+    template <> struct WrapType<BigEntityId> {
+        enum { value = true };
+        typedef vec4f type;
+        typedef vec4f rettype;
+    };
+}
+
 struct EntityId {
     int32_t value = 0;
     EntityId() : value(0) {}

@@ -394,6 +394,22 @@ public:
     virtual bool isIndexMutable ( const TypeDeclPtr & ) const override { return true; }
 };
 
+MAKE_TYPE_FACTORY(BigEntityId,BigEntityId);
+
+struct BigEntityIdAnnotation final: das::ManagedValueAnnotation <BigEntityId> {
+    BigEntityIdAnnotation(ModuleLibrary & mlib) : ManagedValueAnnotation  (mlib,"BigEntityId","BigEntityId") {}
+    virtual void walk ( das::DataWalker & walker, void * data ) override {
+        if ( !walker.reading ) {
+            const BigEntityId * t = (BigEntityId *) data;
+            auto value = int4(t->value[0], t->value[1], t->value[2], t->value[3]);
+            walker.Int4(value);
+        }
+    }
+    virtual bool isLocal() const override { return true; }
+    virtual bool hasNonTrivialCtor() const override { return false; }
+    virtual bool canBePlacedInContainer() const override { return true; }
+};
+
 MAKE_TYPE_FACTORY(EntityId,EntityId);
 
 struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
@@ -597,6 +613,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // table mojo
     addExtern<DAS_BIND_FUN(tableMojo)>(*this, lib, "tableMojo",
         SideEffects::modifyExternal, "tableMojo");
+    // BigEntityId
+    addAnnotation(make_smart<BigEntityIdAnnotation>(lib));
     // EntityId
     addAnnotation(make_smart<EntityIdAnnotation>(lib));
     addExtern<DAS_BIND_FUN(make_invalid_id)>(*this, lib, "make_invalid_id",

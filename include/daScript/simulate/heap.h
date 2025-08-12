@@ -544,6 +544,10 @@ namespace das {
             case Type::tFunction:       return makeNode<NodeType<Func>>(args...);
             case Type::tLambda:         return makeNode<NodeType<Lambda>>(args...);
             case Type::tDouble:         return makeNode<NodeType<double>>(args...);
+
+            // this interesting case is used when we pass by value managed types, where underlying type is vec4f
+            case Type::anyArgument:     return makeNode<NodeType<vec4f>>(args...);
+
             default:
                 DAS_ASSERTF(0, "we should not even be here. we are calling makeValueNode on an uspported baseType."
                               "likely new by-value builtin type been added.");
