@@ -2329,7 +2329,7 @@ class LlvmJitVisitor : AstVisitor {
     def before_else(expr : smart_ptr<ExprIfThenElse>) : void {
         var blk & = unsafe(ite2blocks[get_expr_ptr(expr)])
         if (!current_block_terminates()) {
-            LLVMBuildBr(g_builder, ite2blocks[get_expr_ptr(expr)].if_end)
+            LLVMBuildBr(g_builder, blk.if_end)
         } else {
             blk.if_true_terminates = true
         }
@@ -2664,7 +2664,7 @@ class LlvmJitVisitor : AstVisitor {
                 }
             }
         }
-        // now, final block if there is anythign there
+        // now, final block if there is anything there
         if (length(body.finalList) != 0) {
             visit_finally(body, adapter)
         }
@@ -4412,7 +4412,8 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported ++ type {opType}")
             }
             LLVMBuildStoreAligned(g_builder, res_v, sexpr, uint(expr.subexpr._type.alignOf))
-            setE(expr, sexpr_v)
+            let is_prefix = expr.op == "++" ? true : false;
+            setE(expr, is_prefix ? res_v : sexpr_v)
         } elif (expr.op == "---" || expr.op == "--") {
             var expr_t = base_type_to_llvm_type(opType.baseType)
             var sexpr_v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), sexpr, uint(expr.subexpr._type.alignOf), "")
@@ -4425,7 +4426,8 @@ class LlvmJitVisitor : AstVisitor {
                 failed_E(expr, "unsupported -- type {opType}")
             }
             LLVMBuildStoreAligned(g_builder, res_v, sexpr, uint(expr.subexpr._type.alignOf))
-            setE(expr, sexpr_v)
+            let is_prefix = expr.op == "--" ? true : false;
+            setE(expr, is_prefix ? res_v : sexpr_v)
         } elif (expr.op == "~") {
             if (isBinary(opType)) {
                 setE(expr, LLVMBuildNot(g_builder, sexpr, ""))
@@ -5748,7 +5750,7 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
-            print("{LLVMPrintModuleToString(g_mod)}\n");
+            // print("{LLVMPrintModuleToString(g_mod)}\n");
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
