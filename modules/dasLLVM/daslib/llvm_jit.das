@@ -3605,6 +3605,7 @@ class LlvmJitVisitor : AstVisitor {
             FUNC = LLVMBuildLoad2(g_builder, g_t_function, FUNC, "FUNC")
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION.SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
+            check_ptr_zero(SIMFUNCTION, expr.at, "invoke null method")
             var params : array<LLVMOpaqueValue?>
             params |> push(SIMFUNCTION)
             params |> push(args)
@@ -3628,6 +3629,7 @@ class LlvmJitVisitor : AstVisitor {
             var FUNC = getE(expr.arguments[0])
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION.SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
+            check_ptr_zero(SIMFUNCTION, expr.at, "invoke null function")
             var params : array<LLVMOpaqueValue?>
             params |> push(SIMFUNCTION)
             params |> push(args)
@@ -3676,6 +3678,7 @@ class LlvmJitVisitor : AstVisitor {
         } elif (blockT.isGoodBlockType) {
             var args = build_array_of_arguments(expr.arguments, true)
             var blk = getE(expr.arguments[0])
+            check_ptr_zero(blk, expr.at, "invoke null block")
             var params : array<LLVMOpaqueValue?>
             params |> push(blk)
             params |> push(args)
@@ -5745,7 +5748,7 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
-            // print("{LLVMPrintModuleToString(g_mod)}\n");
+            print("{LLVMPrintModuleToString(g_mod)}\n");
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
