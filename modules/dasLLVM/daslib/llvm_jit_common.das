@@ -746,7 +746,7 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
     } elif (t.baseType == Type.tIterator) {
         res = g_t_sequence
     } elif (t.baseType == Type.tBlock) {
-        res = LLVMPointerType(g_t_block, 0u)
+        res = g_t_block
     } elif (t.baseType == Type.tArray) {
         // array type
         var array_fields <- fixed_array(

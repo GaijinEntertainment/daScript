@@ -803,11 +803,7 @@ class LlvmJitVisitor : AstVisitor {
             vptrtype = LLVMPointerType(vtype, 0u)
         } else {
             vtype = type_to_llvm_type(arg._type)
-            if (arg._type.isGoodBlockType) {
-                vptrtype = vtype
-            } else {
-                vptrtype = get_type_pointer(arg._type)
-            }
+            vptrtype = get_type_pointer(arg._type)
         }
         var v_ptr : LLVMOpaqueValue?
         if (arg.flags.aliasCMRES) {
@@ -4692,7 +4688,7 @@ class LlvmJitVisitor : AstVisitor {
         var captured <- capture_block(expr._block)
         // build block type
         var blk_fields <- build_block_type()
-        blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 8u))
+        blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 10u))
         var first_field_index = length(blk_fields)
         for (c in captured) {
             if (c.variable._type.isGoodBlockType) {
