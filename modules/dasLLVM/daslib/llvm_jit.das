@@ -4573,7 +4573,11 @@ class LlvmJitVisitor : AstVisitor {
                         var temp_load = LLVMBuildLoad2(g_builder, subPtrType, getE(expr.subexpr), "return_cmres_temp_load_")
                         setE(expr.subexpr, temp_load)
                     }
-                    build_copy(get_cmres_param(), expr.subexpr)
+                    if (expr.returnFlags.moveSemantics) {
+                        build_move(get_cmres_param(), expr.subexpr, true)
+                    } else {
+                        build_copy(get_cmres_param(), expr.subexpr)
+                    }
                 }
                 LLVMBuildRetVoid(g_builder)
             } elif (returnType.isPointer && (expr.subexpr is ExprConstPtr)) {// return null
