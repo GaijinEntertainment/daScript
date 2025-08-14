@@ -74,7 +74,8 @@
 
 
 #ifdef _EMSCRIPTEN_VER
-    typedef struct _IO_FILE { char __x; } FILE;
+    // bbatkin: as of 8/14/2025 this seem to no longer be needed, but leaving it here for now
+    // typedef struct _IO_FILE { char __x; } FILE;
 #endif
 
 #include <math.h>
