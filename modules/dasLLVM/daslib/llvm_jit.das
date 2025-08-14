@@ -4695,11 +4695,7 @@ class LlvmJitVisitor : AstVisitor {
         blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 10u))
         var first_field_index = length(blk_fields)
         for (c in captured) {
-            if (c.variable._type.isGoodBlockType) {
-                blk_fields |> push(type_to_llvm_type(c.variable._type))
-            } else {
-                blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
-            }
+            blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
         }
         var this_block_type = LLVMStructType(blk_fields)
         // allocate block, set captured fields
