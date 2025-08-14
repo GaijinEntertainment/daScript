@@ -19,6 +19,7 @@ def test {
     }
     var t <- foo(a)
     assert(length(a) == 0)
+    assert(length(t) == 20)
     for (x, y in range(-10, 10), t) {
         assert(abs(x) == y)
     }
