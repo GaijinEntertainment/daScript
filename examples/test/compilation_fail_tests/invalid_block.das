@@ -1,5 +1,5 @@
 options gen2
-expect 30801, 30304:2, 32102, 32101, 30102  // invalid_block
+expect 30801, 30304:4, 32102, 32101, 30102  // invalid_block
 
 def take_any(b : block) {
     invoke(b)
@@ -33,11 +33,11 @@ def test : bool {
     take_any() <| $ : void {// 32102: not expecting return value
         return 13
     }
-    take_any() <| $ : int {// 32101: expecting return value
-        return
+    take_any() <| $ : int { // 30304: no matching functions or generics: take_any(block<int> const)
+        return              // 32101: expecting return value
     }
-    take_any() <| $ : int {// 30102: incompatible return type, expecting int vs float
-        return 13.0
+    take_any() <| $ : int { // 30304: no matching functions or generics: take_any(block<int> const)
+        return 13.0         // 30102: incompatible return type, expecting int vs float
     }
     return true
 }
