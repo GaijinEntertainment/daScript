@@ -141,8 +141,12 @@ namespace das
                 // if the WrapType is the same as Result, we are missing WrapType implementation, or its not included
                 context.throw_error("internal integration error, missing WrapType implementation or it's not included");
                 return CType();
-            } else {
+            } if constexpr ( !is_workhorse_type<Result>::value ) {
                 // we should never be here, since we are asking for a WrapResult which is not the same as CType
+                context.throw_error("internal integration error. WrapType is not the same as CType");
+                return CType();
+            } else {
+                // this is workhorse <-> workhorse cross-pollination. somehow. like wrong node implementation or something
                 context.throw_error("internal integration error");
                 return CType();
             }
