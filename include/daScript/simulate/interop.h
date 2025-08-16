@@ -133,9 +133,16 @@ namespace das
     template <typename CType, bool Pointer, bool IsEnum, typename Result, typename ...Args>
     struct ImplCallStaticFunctionImpl {
         static __forceinline CType call( Result (*fn)(Args...), Context & context, SimNode ** args ) {
-            if constexpr ( !is_workhorse_type<Result>::value && is_constructible<CType, Result>::value ) {
-                return CType(CallStaticFunction<Result,Args...>(fn,context,args));
+            using WrapResult = typename WrapType<Result>::rettype;
+            if constexpr ( !is_workhorse_type<Result>::value && is_same<WrapResult,CType>::value) {
+                // if we match a WrapType, we can call it directly (with just the cast)
+                return static_cast<CType>(CallStaticFunction<Result,Args...>(fn,context,args));
+            } else if constexpr ( !is_workhorse_type<Result>::value && is_same<WrapResult,Result>::value ) {
+                // if the WrapType is the same as Result, we are missing WrapType implementation, or its not included
+                context.throw_error("internal integration error, missing WrapType implementation or it's not included");
+                return CType();
             } else {
+                // we should never be here, since we are asking for a WrapResult which is not the same as CType
                 context.throw_error("internal integration error");
                 return CType();
             }
