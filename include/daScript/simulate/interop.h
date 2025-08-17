@@ -4,7 +4,8 @@
 #include "daScript/simulate/simulate_visit_op.h"
 
 #ifndef DAS_INTEROP_DETAILS
-#define DAS_INTEROP_DETAILS 1
+// enabling it requires removing -fno-rtti from CMakeCommon.txt and such
+#define DAS_INTEROP_DETAILS 0
 #endif
 
 namespace das
