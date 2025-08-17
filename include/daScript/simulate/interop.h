@@ -3,6 +3,11 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
+#ifndef DAS_INTEROP_DETAILS
+// enabling it requires removing -fno-rtti from CMakeCommon.txt and such
+#define DAS_INTEROP_DETAILS 0
+#endif
+
 namespace das
 {
     template <typename TT>
@@ -133,10 +138,36 @@ namespace das
     template <typename CType, bool Pointer, bool IsEnum, typename Result, typename ...Args>
     struct ImplCallStaticFunctionImpl {
         static __forceinline CType call( Result (*fn)(Args...), Context & context, SimNode ** args ) {
-            if constexpr ( !is_workhorse_type<Result>::value && is_constructible<CType, Result>::value ) {
-                return CType(CallStaticFunction<Result,Args...>(fn,context,args));
+            using WrapResult = typename WrapType<Result>::rettype;
+            if constexpr ( !is_workhorse_type<Result>::value && is_same<WrapResult,CType>::value) {
+                // if we match a WrapType, we can call it directly (with just the cast)
+                return static_cast<CType>(CallStaticFunction<Result,Args...>(fn,context,args));
+            } else if constexpr ( !is_workhorse_type<Result>::value && is_same<WrapResult,Result>::value ) {
+                // if the WrapType is the same as Result, we are missing WrapType implementation, or its not included
+                #if DAS_INTEROP_DETAILS
+                    context.throw_error_ex("internal integration error, missing WrapType implementation %s or it's not included",
+                        typeid(WrapResult).name());
+                #else
+                    context.throw_error("internal integration error, missing WrapType implementation or it's not included");
+                #endif
+                return CType();
+            } if constexpr ( !is_workhorse_type<Result>::value ) {
+                // we should never be here, since we are asking for a WrapResult which is not the same as CType
+                #if DAS_INTEROP_DETAILS
+                    context.throw_error_ex("internal integration error. WrapType %s is not the same as CType %s",
+                                        typeid(WrapResult).name(), typeid(CType).name());
+                #else
+                    context.throw_error("internal integration error, WrapType is not the same as CType");
+                #endif
+                return CType();
             } else {
-                context.throw_error("internal integration error");
+                // this is workhorse <-> workhorse cross-pollination. somehow. like wrong node implementation or something
+                #if DAS_INTEROP_DETAILS
+                    context.throw_error_ex("internal integration error. %s <-> %s workhorse cross-pollination",
+                                            typeid(WrapResult).name(), typeid(CType).name());
+                #else
+                    context.throw_error("internal integration error, workhorse cross-pollination");
+                #endif
                 return CType();
             }
         }
