@@ -2457,7 +2457,7 @@ class LlvmJitVisitor : AstVisitor {
         // add variable to be looked up
         var vtype = type_to_llvm_type(svar._type)
         var vptrtype = get_type_pointer(svar._type)
-        if (svar._type.isRef) {
+        if (svar._type.flags.ref) {
             vtype = vptrtype
             vptrtype = LLVMPointerType(vptrtype, 0u)
         }
