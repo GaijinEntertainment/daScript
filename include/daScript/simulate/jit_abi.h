@@ -70,7 +70,7 @@ struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
     static typename WrapType<RetT>::rettype static_call (typename WrapType<Args>::type... args ) {
         typedef typename WrapRetType<RetT>::type (* FuncType)(typename WrapArgType<Args>::type...);
         auto fnPtr = reinterpret_cast<FuncType>(fn);
-        return (typename WrapType<RetT>::rettype) fnPtr(args...);   // note explicit cast
+        return static_cast<typename WrapType<RetT>::rettype>(fnPtr(args...));   // note explicit cast
     };
     static void * get_builtin_address() { return (void *) &static_call; }
 };
