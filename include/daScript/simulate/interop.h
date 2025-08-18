@@ -151,7 +151,7 @@ namespace das
                     context.throw_error("internal integration error, missing WrapType implementation or it's not included");
                 #endif
                 return CType();
-            } if constexpr ( !is_workhorse_type<Result>::value ) {
+            } else if constexpr ( !is_workhorse_type<Result>::value ) {
                 // we should never be here, since we are asking for a WrapResult which is not the same as CType
                 #if DAS_INTEROP_DETAILS
                     context.throw_error_ex("internal integration error. WrapType %s is not the same as CType %s",
