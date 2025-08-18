@@ -53,8 +53,37 @@ SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
 SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
-class Point3 { public: float x, y, z; };
+class Point3 {
+public:
+    float x, y, z;
+    explicit operator vec3f() const { return v_make_vec3f(x, y, z); };
+};
 
+
+namespace das {
+    class Point3_WrapArg : public Point3
+    {
+    public:
+        Point3_WrapArg(vec3f t) : Point3() {
+            using Extractor = vec_extract<float>;
+            x = Extractor::x(t);
+            y = Extractor::y(t);
+            z = Extractor::z(t);
+        }
+    };
+
+    template <>
+    struct WrapArgType<Point3>
+    {
+        typedef Point3_WrapArg type;
+    };
+
+    template <> struct WrapType<Point3> {
+        enum { value = true };
+        typedef vec3f type;
+        typedef vec3f rettype;
+    };
+}
 template <> struct das::das_alias<Point3> : das::das_alias_vec<Point3,float3> {};
 
 typedef das::vector<Point3> Point3Array;

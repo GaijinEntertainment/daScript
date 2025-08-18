@@ -917,7 +917,7 @@ namespace debugapi {
             auto simFn = invCtx->findFunction(fn);
             if ( !simFn ) {
                 exAt = call->debugInfo;
-                exText = string("pinvoke can't find ") + fn + " function";
+                exText = string("pinvoke can't find '") + fn + "' function";
                 return;
             }
             if ( simFn->debugInfo->count!=uint32_t(call->nArguments-2) ) {
