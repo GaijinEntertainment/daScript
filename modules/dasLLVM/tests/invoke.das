@@ -150,7 +150,7 @@ def test_ref(t : T?) {
         t |> equal(1, g_A)
         t |> equal(2.0, g_B)
     }
-    t |> run("invoke null") <| @(t: T?) {
+    t |> run("invoke null") <| @(t : T?) {
         try {
             test_invoke_call(default<function<(a : int; b : float) : int>>);
             panic("unreachable")

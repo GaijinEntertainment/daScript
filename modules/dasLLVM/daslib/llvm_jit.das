@@ -957,17 +957,21 @@ class LlvmJitVisitor : AstVisitor {
         return new_handle
     }
 
+    def alloc_handle_type(typeexpr : TypeDeclPtr) : LLVMOpaqueValue? {
+        assert(typeexpr.isHandle)
+        let fn_new_handle = get_new_handle_function(typeexpr)
+        if (fn_new_handle == null) {
+            return LLVMConstNull(LLVMPointerType(LLVMVoidType(), 0u))
+        }
+        var params = [get_context_param()]
+        var mangled_name = typeexpr |> get_mangled_name()
+        var typ = g_fn_types[("new`handle`{mangled_name}")]
+        return LLVMBuildCall2(g_builder, typ, fn_new_handle, params, "new`handle`{describe(typeexpr)}")
+    }
+
     def override visitExprNew(expr : smart_ptr<ExprNew>) : ExpressionPtr {
         if (expr.typeexpr.isHandle) {
-            let fn_new_handle = get_new_handle_function(expr.typeexpr)
-            if (fn_new_handle == null) {
-                setE(expr, LLVMConstNull(LLVMPointerType(LLVMVoidType(), 0u)))
-                return expr
-            }
-            var params = [get_context_param()]
-            var mangled_name = expr.typeexpr |> get_mangled_name()
-            var typ = g_fn_types[("new`handle`{mangled_name}")]
-            var new_ptr = LLVMBuildCall2(g_builder, typ, fn_new_handle, params, "new`handle`{describe(expr.typeexpr)}")
+            var new_ptr = alloc_handle_type(expr.typeexpr)
             check_ptr_zero(new_ptr, expr.at, "new returned null")
             new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(expr.typeexpr), 0u), "")
             setE(expr, new_ptr)
@@ -981,7 +985,16 @@ class LlvmJitVisitor : AstVisitor {
                 build_fixed_loop(count) <| $(var index : LLVMOpaqueValue?) {
                     var elem_type = dim_element_type_to_llvm_type(expr._type)
                     var elem = LLVMBuildGEP2(g_builder, elem_type, arr, index, "")
-                    var new_ptr = new_entry(expr)
+                    var new_ptr : LLVMOpaqueValue?;
+                    if (expr.typeexpr.baseType == Type.tHandle) {
+                        var inscope elemT = clone_type(expr.typeexpr)
+                        elemT.dim |> clear() // hack to get correct ptr to ctor
+                        new_ptr = alloc_handle_type(elemT)
+                        check_ptr_zero(new_ptr, expr.at, "new returned null")
+                        new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(elemT), 0u), "")
+                    } else {
+                        new_ptr = new_entry(expr)
+                    }
                     LLVMBuildStore(g_builder, new_ptr, elem)
                 }
                 setE(expr, arr)
@@ -3809,15 +3822,7 @@ class LlvmJitVisitor : AstVisitor {
         var mks_ptr : LLVMOpaqueValue?
         var needMemset = true
         if (expr.subexpr._type.isHandle) {
-            let fn_new_handle = get_new_handle_function(expr.subexpr._type)
-            if (fn_new_handle == null) {
-                setE(expr, LLVMConstNull(LLVMPointerType(LLVMVoidType(), 0u)))
-                return
-            }
-            var params = [get_context_param()]
-            var mangled_name = expr.subexpr._type |> get_mangled_name()
-            var typ = g_fn_types[("new`handle`{mangled_name}")]
-            mks_ptr = LLVMBuildCall2(g_builder, typ, fn_new_handle, params, "new`handle`{describe(expr.subexpr._type)}")
+            mks_ptr = alloc_handle_type(expr.subexpr._type)
             needMemset = false
         } else {
             mks_ptr = build_alloc(bytes, false)
