@@ -1733,6 +1733,8 @@ class LlvmJitVisitor : AstVisitor {
         // note: we need to handle shift operations
         // the way we do it, is we expand scalar up to vector type
         if (expr.op == "<<" || expr.op == ">>" || expr.op == ">>>" || expr.op == "<<<" || expr.op == "<<=" || expr.op == ">>=" || expr.op == ">>>=" || expr.op == "<<<=") {
+            // Create a mask value: (sizeof(element_type) * 8) - 1
+            right = LLVMBuildAnd(g_builder, right, LLVMConstInt(LLVMInt32Type(), uint64((opType.sizeOf * 8) - 1), 0), "")
             right = build_broadcast_vector(g_builder, shiftType, right)
         }
         if (expr.op == "+") {
