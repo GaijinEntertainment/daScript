@@ -2713,6 +2713,20 @@ namespace das {
     // ExprRef2Value
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
+            // infer r2v(type<Foo...>)
+            if ( expr->subexpr->rtti_isTypeDecl() ) {
+                if ( expr->subexpr->type->isWorkhorseType() ) {
+                    reportAstChanged();
+                    auto ewsType = make_smart<TypeDecl>(*(expr->subexpr->type));
+                    ewsType->ref = false;
+                    auto ews = Program::makeConst(expr->at, ewsType, v_zero());
+                    ews->type = ewsType;
+                    return ews;
+                } else {
+                    error("can't dereference a type<" + describeType(expr->subexpr->type) + ">",  "", "",
+                        expr->at, CompilationError::invalid_type);
+                }
+            }
             // infer
             if ( !expr->subexpr->type->isRef() ) {
                 if ( expr->subexpr->rtti_isConstant() ) {
