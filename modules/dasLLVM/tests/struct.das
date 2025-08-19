@@ -46,7 +46,7 @@ def struct_ctor_call {
 
 [jit]
 def make_struct_cmres {
-    return Foo(a = 1, c = "bar")
+    return Foo(uninitialized a = 1, c = "bar")
 }
 
 // [jit]
@@ -61,7 +61,7 @@ def make_struct_cmres_with_init {
 
 [jit]
 def make_struct_heap {
-    return new Foo(a = 1, c = "bar")
+    return new Foo(uninitialized a = 1, c = "bar")
 }
 
 [jit]
@@ -71,7 +71,7 @@ def make_struct_heap_with_init {
 
 [jit]
 def make_struct_with_substruct_cmres {
-    return Bar(a = 1, foo = Foo(a = 2, b = 3.), b = 4)
+    return Bar(a = 1, foo = Foo(uninitialized a = 2, b = 3.), b = 4)
 }
 
 [jit]
@@ -81,7 +81,7 @@ def make_struct_with_substruct_cmres_with_init {
 
 [jit]
 def make_struct_with_substruct_heap {
-    return new Bar(a = 1, foo = Foo(a = 2, b = 3.), b = 4)
+    return new Bar(a = 1, foo = Foo(uninitialized a = 2, b = 3.), b = 4)
 }
 
 [jit]
@@ -103,8 +103,8 @@ def make_struct_on_stack(which : bool) {
 
 [jit]
 def make_struct_with_substruct_on_stack(which : bool) {
-    var a = Bar(a = 1, foo = Foo(a = 2, b = 3.), b = 4)
-    var b = Bar(a = 2, foo = Foo(a = 3, b = 4.), b = 5)
+    var a = Bar(a = 1, foo = Foo(uninitialized a = 2, b = 3.), b = 4)
+    var b = Bar(a = 2, foo = Foo(uninitialized a = 3, b = 4.), b = 5)
     return which ? a : b
 }
 

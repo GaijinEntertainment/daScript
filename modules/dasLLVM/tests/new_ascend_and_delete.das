@@ -20,6 +20,15 @@ def test_ascend(t : T?) {
 }
 
 [jit]
+def test_ascend_cmres(t : T?) {
+    var f = new array<int>(1, 2)
+    t |> equal(*f |> length(), 2)
+    for (a, b in *f, [1, 2]) {
+        t |> equal(a, b)
+    }
+}
+
+[jit]
 def test_delete(t : T?; var f : FancyClass?) {
     unsafe {
         delete f
@@ -34,6 +43,9 @@ def test_new_and_ascend_delete(t : T?) {
     }
     t |> run("ascend") <| @(t : T?) {
         test_ascend(t)
+    }
+    t |> run("ascend_cmres") <| @(t : T?) {
+        test_ascend_cmres(t)
     }
     t |> run("delete") <| @(t : T?) {
         test_delete(t, new FancyClass())
