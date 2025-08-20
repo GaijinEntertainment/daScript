@@ -364,11 +364,13 @@ class LlvmJitVisitor : AstVisitor {
         var noalias_attr = LLVMGetEnumAttribute("noalias")
         var nocapture_attr = LLVMGetEnumAttribute("nocapture")
         for (a, ai in arguments, ucount()) {
+            var param = LLVMGetParam(ffunc, ai)
             if (a._type.isRef) {
-                LLVMSetParamAlignment(LLVMGetParam(ffunc, ai), uint(a._type.alignOf))
+                LLVMSetParamAlignment(param, uint(a._type.alignOf))
             } elif (a._type.isPointer && a._type.firstType != null) {
-                LLVMSetParamAlignment(LLVMGetParam(ffunc, ai), uint(a._type.firstType.alignOf))
+                LLVMSetParamAlignment(param, uint(a._type.firstType.alignOf))
             }
+            LLVMSetValueName(param, string(a.name))
             if ((a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant) {
                 LLVMAddAttributeToFunctionArgument(ffunc, ai, readonly_attr)
             }
@@ -5753,7 +5755,13 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
-            // print("{LLVMPrintModuleToString(g_mod)}\n");
+            if (false) {
+                // Let's remove unused attributes before we print IR.
+                var pm = LLVMCreatePassManager()
+                LLVMAddGlobalDCEPass(pm)
+                LLVMRunPassManager(pm, g_mod)
+                print("{LLVMPrintModuleToString(g_mod)}\n");
+            }
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
