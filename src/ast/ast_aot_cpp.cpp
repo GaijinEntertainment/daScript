@@ -1589,6 +1589,7 @@ namespace das {
             if ( isalpha(that->op[0]) ) return true;
             if ( that->op=="/" || that->op=="%" ) return true;
             if ( that->op=="<<<" || that->op==">>>" || that->op=="<<<=" || that->op==">>>=" ) return true;
+            if ( that->op=="<<" || that->op==">>" || that->op=="<<=" || that->op==">>=" ) return true;
             return that->type->isPolicyType() || that->left->type->isPolicyType() || that->right->type->isPolicyType();
         }
         const TypeDeclPtr & opPolicyBase ( ExprOp2 * that ) const {
@@ -1643,7 +1644,8 @@ namespace das {
                 }
                 outPolicy(pt);
                 ss << "::" << opPolicyName(that) << "(";
-                if ( isRefPolicyOp(that) ) {
+                // If first arg is reference and it's vector types or string we pass it as char*
+                if ( isRefPolicyOp(that) && (pt->isVectorType() || pt->isString()) ) {
                     ss << "(char *)&(";
                 } else if ( policyArgNeedCast(pt, that->left->type) ) {
                     if (that->left->type->isRefType()) {
@@ -1665,7 +1667,7 @@ namespace das {
                 CallFunc_preVisitCallArg(that, that->right.get(), true);
             } else if ( isOpPolicy(that) ) {
                 auto pt = opPolicyBase(that);
-                if ( isRefPolicyOp(that) ) {
+                if ( isRefPolicyOp(that) && (pt->isVectorType() || pt->isString()) ) {
                     ss << ")";
                 } else if ( policyArgNeedCast(pt, that->left->type) ) {
                     if (that->left->type->isRefType()) {
