@@ -871,7 +871,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
 // ExprNew
-    def check_ptr_zero(tsrc : LLVMOpaqueValue?; at : LineInfo; message : string = "dereferencing null pointer") {
+    def check_zero(tsrc : LLVMOpaqueValue?) {
         var check_null_ptr = LLVMAppendBasicBlock(ffunc, "check_null_ptr")
         var check_true = LLVMAppendBasicBlock(ffunc, "check_true")
         var check_end = LLVMAppendBasicBlock(ffunc, "check_end")
@@ -880,8 +880,23 @@ class LlvmJitVisitor : AstVisitor {
         var cond = LLVMBuildIsNull(g_builder, tsrc, "null_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
+        return check_end
+    }
+
+    def check_ptr_zero(tsrc : LLVMOpaqueValue?; at : LineInfo; message : string = "dereferencing null pointer") {
+        var check_end = check_zero(tsrc)
         build_exception(message, at)
         LLVMBuildBr(g_builder, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_end)
+    }
+
+    def check_ptr_zero_and_return(tsrc : LLVMOpaqueValue?; ret_val : LLVMOpaqueValue? = null) {
+        var check_end = check_zero(tsrc)
+        if (ret_val == null) {
+            LLVMBuildRetVoid(g_builder)
+        } else {
+            LLVMBuildRet(g_builder, ret_val)
+        }
         LLVMPositionBuilderAtEnd(g_builder, check_end)
     }
 
@@ -3894,7 +3909,8 @@ class LlvmJitVisitor : AstVisitor {
             LLVMSetAlignment(args, 16u)
             args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "delete lambda args ptr")
         }
-        check_ptr_zero(lmb, at, "invoke null lambda")
+        check_ptr_zero_and_return(lmb)
+
         // build arguments (1, and its 'capture')
         let ai = 0
         var arg_ptr = LLVMBuildGEP2(g_builder, LLVMFloat4Type(), args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
