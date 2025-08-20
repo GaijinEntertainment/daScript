@@ -2806,7 +2806,6 @@ class LlvmJitVisitor : AstVisitor {
             var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
             var typ = g_fn_types[("{fmna} implementation")]
             var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
-            setE(expr, cmresEval)
         } else {
             var MNH_ADDR = get_function_addr(expr_func)
             if (MNH_ADDR == 0ul) {
@@ -2820,7 +2819,6 @@ class LlvmJitVisitor : AstVisitor {
             var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
             var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
             var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
-            setE(expr, cmresEval)
         }
     }
 
