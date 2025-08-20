@@ -3045,8 +3045,8 @@ namespace das {
                     expr->at, CompilationError::invalid_argument_type);
             }
 
-            // check if we can give more info this early
-            if ( expr->arguments[0]->rtti_isConstant() ) {
+            // check if we can give more info this early (buy only if we are already reporting errors)
+            if ( verbose && expr->arguments[0]->rtti_isConstant() ) {
                 bool pass = ((ExprConstBool *)(expr->arguments[0].get()))->getValue();
                 if ( !pass ) {
                     bool iscf = expr->name=="concept_assert";
