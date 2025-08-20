@@ -3044,6 +3044,40 @@ namespace das {
                 error("static assert comment must be string constant",  "", "",
                     expr->at, CompilationError::invalid_argument_type);
             }
+
+            // check if we can give more info this early
+            if ( expr->arguments[0]->rtti_isConstant() ) {
+                bool pass = ((ExprConstBool *)(expr->arguments[0].get()))->getValue();
+                if ( !pass ) {
+                    bool iscf = expr->name=="concept_assert";
+                    string message;
+                    if ( expr->arguments.size()==2 && expr->arguments[1]->rtti_isConstant() ) {
+                        message = ((ExprConstString *)(expr->arguments[1].get()))->getValue();
+                        if ( message.empty() ) {
+                            message = iscf ? "concept assert failed" : "static assert failed";
+                        }
+                    } else {
+                        message = iscf ? "static assert failed" : "concept failed";
+                    }
+                    if ( iscf ) {
+                        LineInfo atC = expr->at;
+                        string extra;
+                        if ( func ) {
+                            extra = "\nconcept_assert at " + expr->at.describe();
+                            extra += func->getLocationExtra();
+                            atC = func->getConceptLocation(atC);
+                        }
+                        program->error(message, extra,"",atC, CompilationError::concept_failed);
+                    } else {
+                        string extra;
+                        if ( func ) {
+                            extra = func->getLocationExtra();
+                        }
+                        program->error(message, extra,"",expr->at, CompilationError::static_assert_failed);
+                    }
+                }
+            }
+
             expr->type = make_smart<TypeDecl>(Type::tVoid);
             return Visitor::visit(expr);
         }
