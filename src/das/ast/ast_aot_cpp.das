@@ -1598,7 +1598,7 @@ class CppAot : AstVisitor {
             }
             outPolicy(pt);
             write(*ss, "::{opPolicyName(that)}(");
-            if (isRefPolicyOp(that)) {
+            if (isRefPolicyOp(that) && (pt.isVectorType || pt.isString)) {
                 write(*ss, "(char *)&(");
             } elif (policyArgNeedCast(pt, that.left._type)) {
                 let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
@@ -1625,7 +1625,7 @@ class CppAot : AstVisitor {
             CallFunc_preVisitCallArg(that, that.right, true);
         } elif (isOpPolicy2(that)) {
             assume pt = opPolicyBase(that);
-            if (isRefPolicyOp(that)) {
+            if (isRefPolicyOp(that) && (pt.isVectorType || pt.isString)) {
                 write(*ss, ")");
             } elif (policyArgNeedCast(pt, that.left._type)) {
                 if (that.left._type.isRefType) {

@@ -72,8 +72,8 @@ namespace  das {
         static __forceinline TT BinAnd ( TT a, TT b, Context &, LineInfo * ) { return a & b; }
         static __forceinline TT BinOr  ( TT a, TT b, Context &, LineInfo * ) { return a | b; }
         static __forceinline TT BinXor ( TT a, TT b, Context &, LineInfo * ) { return a ^ b; }
-        static __forceinline TT BinShl ( TT a, TT b, Context &, LineInfo * ) { return a << b; }
-        static __forceinline TT BinShr ( TT a, TT b, Context &, LineInfo * ) { return a >> b; }
+        static __forceinline TT BinShl ( TT a, TT b, Context &, LineInfo * ) { return a << (b & (BITS - 1)); }
+        static __forceinline TT BinShr ( TT a, TT b, Context &, LineInfo * ) { return a >> (b & (BITS - 1)); }
         static __forceinline TT BinRotl ( TT _a, TT _b, Context &, LineInfo * ) {
             auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
@@ -87,8 +87,8 @@ namespace  das {
         static __forceinline void SetBinAnd ( TT & a, TT b, Context &, LineInfo * ) { a &= b; }
         static __forceinline void SetBinOr  ( TT & a, TT b, Context &, LineInfo * ) { a |= b; }
         static __forceinline void SetBinXor ( TT & a, TT b, Context &, LineInfo * ) { a ^= b; }
-        static __forceinline void SetBinShl ( TT & a, TT b, Context &, LineInfo * ) { a <<= b; }
-        static __forceinline void SetBinShr ( TT & a, TT b, Context &, LineInfo * ) { a >>= b; }
+        static __forceinline void SetBinShl ( TT & a, TT b, Context &, LineInfo * ) { a <<= b & (BITS - 1); }
+        static __forceinline void SetBinShr ( TT & a, TT b, Context &, LineInfo * ) { a >>= b & (BITS - 1); }
         static __forceinline void SetBinRotl ( TT & _a, TT _b, Context &, LineInfo * ) {
             auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
@@ -482,10 +482,12 @@ namespace  das {
         }
         static __forceinline vec4f BinShl ( vec4f a, vec4f b, Context &, LineInfo * ) {
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
+            shift &= (sizeof(shift) * 8) - 1;
             return v_cast_vec4f(v_sll(v_cast_vec4i(a),shift));
         }
         static __forceinline vec4f BinShr ( vec4f a, vec4f b, Context &, LineInfo * ) {
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
+            shift &= (sizeof(shift) * 8) - 1;
             return v_cast_vec4f(v_sra(v_cast_vec4i(a),shift));
         }
         static __forceinline void SetAdd  ( char * a, vec4f b, Context &, LineInfo * ) {
@@ -531,11 +533,13 @@ namespace  das {
         static __forceinline void SetBinShl  ( char * a, vec4f b, Context &, LineInfo * ) {
             TT * pa = (TT *)a;
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
+            shift &= (sizeof(shift) * 8) - 1;
             *pa = cast<TT>::to (v_cast_vec4f(v_sll(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
         }
         static __forceinline void SetBinShr  ( char * a, vec4f b, Context &, LineInfo * ) {
             TT * pa = (TT *)a;
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
+            shift &= (sizeof(shift) * 8) - 1;
             *pa = cast<TT>::to (v_cast_vec4f(v_sra(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
         }
         // vector-scalar
@@ -617,6 +621,7 @@ namespace  das {
         }
         static __forceinline vec4f BinShr ( vec4f a, vec4f b, Context &, LineInfo * ) {
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
+            shift &= (sizeof(shift) * 8) - 1;
             return v_cast_vec4f(v_srl(v_cast_vec4i(a),shift));
         }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & context, LineInfo * at ) {
@@ -642,6 +647,7 @@ namespace  das {
         static __forceinline void SetBinShr  ( char * a, vec4f b, Context &, LineInfo * ) {
             TT * pa = (TT *)a;
             int32_t shift = v_extract_xi(v_cast_vec4i(b));
+            shift &= (sizeof(shift) * 8) - 1;
             *pa = cast<TT>::to (v_cast_vec4f(v_srl(v_cast_vec4i(cast<TT>::from(*pa)), shift)));
         }
         // vector-scalar
