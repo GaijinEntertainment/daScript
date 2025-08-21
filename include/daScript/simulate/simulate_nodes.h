@@ -2967,14 +2967,23 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             auto R = EvalTT<TT>::eval(context, r);  // right, then left
             TT * pl = (TT *) l->evalPtr(context);
-            if constexpr (alignment_of<TT>::value == 16 && sizeof(TT) == 16) {
-                v_stu(pl, R);
-            } else {
-                *pl = R;
-            }
+            *pl = R;
             return v_zero();
         }
         SimNode * l, * r;
+    };
+
+    template <>
+    struct SimNode_Set<vec4f> : SimNode_Set<float4> {
+        SimNode_Set(const LineInfo & at, SimNode * ll, SimNode * rr)
+            : SimNode_Set<float4>(at, ll, rr) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            auto R =r->eval(context);
+            auto pl = l->evalPtr(context);
+            v_stu(pl, R);
+            return v_zero();
+        }
     };
 
     // COPY REFERENCE VALUE
