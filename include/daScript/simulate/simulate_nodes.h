@@ -2973,6 +2973,19 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * l, * r;
     };
 
+    template <>
+    struct SimNode_Set<vec4f> : SimNode_Set<float4> {
+        SimNode_Set(const LineInfo & at, SimNode * ll, SimNode * rr)
+            : SimNode_Set<float4>(at, ll, rr) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            auto R =r->eval(context);
+            auto pl = l->evalPtr(context);
+            v_stu(pl, R);
+            return v_zero();
+        }
+    };
+
     // COPY REFERENCE VALUE
     struct SimNode_CopyRefValue : SimNode {
         SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, size_t sz)
