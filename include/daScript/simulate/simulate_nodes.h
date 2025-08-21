@@ -2967,7 +2967,11 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             auto R = EvalTT<TT>::eval(context, r);  // right, then left
             TT * pl = (TT *) l->evalPtr(context);
-            *pl = R;
+            if constexpr (alignment_of<TT>::value == 16 && sizeof(TT) == 16) {
+                v_stu(pl, R);
+            } else {
+                *pl = R;
+            }
             return v_zero();
         }
         SimNode * l, * r;
