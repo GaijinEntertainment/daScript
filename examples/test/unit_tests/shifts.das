@@ -40,8 +40,15 @@ def test_rotational_shifts {
     // === Scalar 32-bit rotation ===
     assert(0x12345678 <<< uint(_4)  == 0x23456781)
     assert(0x12345678 <<< uint(_36) == 0x23456781)
+    assert(0x12345678 <<< uint(_0) == 0x12345678)
+    assert(0x12345678 >>> uint(_0) == 0x12345678)
 
     var x1 = 0x12345678
+    x1 >>>= uint(_0)
+    assert(x1 == 0x12345678)
+    x1 <<<= uint(_0)
+    assert(x1 == 0x12345678)
+
     x1 >>>= uint(_4)
     assert(x1 == 0x81234567)
     var x2 = 0x12345678

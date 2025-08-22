@@ -77,12 +77,12 @@ namespace  das {
         static __forceinline TT BinRotl ( TT _a, TT _b, Context &, LineInfo * ) {
             auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
-            return (a << b) | (a >> (BITS - b));
+            return (a << b) | (a >> ((BITS - b) & (BITS-1)));
         }
         static __forceinline TT BinRotr ( TT _a, TT _b, Context &, LineInfo * ) {
             auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
-            return (a >> b) | (a << (BITS - b));
+            return (a >> b) | (a << ((BITS - b) & (BITS-1)));
         }
         static __forceinline void SetBinAnd ( TT & a, TT b, Context &, LineInfo * ) { a &= b; }
         static __forceinline void SetBinOr  ( TT & a, TT b, Context &, LineInfo * ) { a |= b; }
@@ -92,12 +92,12 @@ namespace  das {
         static __forceinline void SetBinRotl ( TT & _a, TT _b, Context &, LineInfo * ) {
             auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
-            _a = TT((a << b) | (a >> (BITS - b)));
+            _a = TT((a << b) | (a >> ((BITS - b) & (BITS-1))));
         }
         static __forceinline void SetBinRotr ( TT & _a, TT _b, Context &, LineInfo * ) {
             auto a = (UTT)_a; auto b = (UTT)_b;
             b &= (BITS-1);
-            _a = TT((a >> b) | (a << (BITS - b)));
+            _a = TT((a >> b) | (a << ((BITS - b) & (BITS-1))));
         }
         static __forceinline void SetMod    ( TT & a, TT b, Context & context, LineInfo * at ) {
             if ( b==0 ) context.throw_error_at(at, "division by zero in modulo");
