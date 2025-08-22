@@ -729,7 +729,7 @@ namespace das
         virtual bool isPod() const override { return true; }
         virtual bool isRawPod() const override { return true; }
         virtual size_t getSizeOf() const override { return sizeof(OT); }
-        virtual size_t getAlignOf() const override { return alignof(OT); }
+        virtual size_t getAlignOf() const override { return max(alignof(typename WrapType<OT>::type), alignof(OT)); }
         virtual bool isRefType() const override { return false; }
         virtual SimNode * simulateNullCoalescing ( Context & context, const LineInfo & at, SimNode * s, SimNode * dv ) const override {
             return context.code->makeNode<SimNode_NullCoalescing<OT>>(at,s,dv);
