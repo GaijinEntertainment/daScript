@@ -2386,10 +2386,11 @@ class LlvmJitVisitor : AstVisitor {
     }
 
 // ExprFor
-    def build_array_lock(array_ptr : LLVMOpaqueValue?) {
+    def build_array_lock(array_ptr : LLVMOpaqueValue?; at: LineInfo) {
         var params = fixed_array(
             LLVMBuildPointerCast(g_builder, array_ptr, LLVMPointerType(LLVMVoidType(), 0u), ""),             // array
-            get_context_param()
+            get_context_param(),
+            get_line_info_ptr(at),
         )
         var typ = g_fn_types[FN_JIT_ARRAY_LOCK]
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_LOCK), params, "")
@@ -2553,7 +2554,7 @@ class LlvmJitVisitor : AstVisitor {
                 LLVMBuildStore(g_builder, LLVMConstInt(LLVMInt1Type(), 0ul, 0), lblk.need_loop) // need loop, no
                 LLVMBuildBr(g_builder, okay)
                 LLVMPositionBuilderAtEnd(g_builder, okay)
-                build_array_lock(getE(ssrc))
+                build_array_lock(getE(ssrc), expr.at)
                 var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
                 LLVMBuildStore(g_builder, data, getV(svar))
                 var tail = LLVMBuildSub(g_builder, size, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")

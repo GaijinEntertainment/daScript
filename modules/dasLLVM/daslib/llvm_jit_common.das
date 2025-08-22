@@ -298,7 +298,7 @@ def public init_jit {
     // void jit_array_lock ( Array & array, Context * context )
     var jit_array_lock = LLVMAddFunctionWithType(g_mod, FN_JIT_ARRAY_LOCK,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(), 0u),
-            fixed_array<LLVMTypeRef>(LLVMPointerType(LLVMVoidType(), 0u), LLVMPointerType(LLVMVoidType(), 0u))))
+            fixed_array<LLVMTypeRef>(LLVMPointerType(LLVMVoidType(), 0u), LLVMPointerType(LLVMVoidType(), 0u), LLVMPointerType(LLVMVoidType(), 0u))))
     LLVMAddGlobalMapping(g_engine, jit_array_lock, get_jit_array_lock())
     LLVMAddAttributesToFunction(jit_array_lock, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_array_lock, urange(0, 2), nocapture)
