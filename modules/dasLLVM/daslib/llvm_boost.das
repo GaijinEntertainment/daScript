@@ -226,6 +226,7 @@ def LLVMVerifyModule(mod : LLVMOpaqueModule?; action : LLVMVerifierFailureAction
         }
         return false
     }
+    LLVMDisposeMessage(error) // Here we have 1 byte message anyway
     return true
 }
 

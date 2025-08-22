@@ -364,11 +364,13 @@ class LlvmJitVisitor : AstVisitor {
         var noalias_attr = LLVMGetEnumAttribute("noalias")
         var nocapture_attr = LLVMGetEnumAttribute("nocapture")
         for (a, ai in arguments, ucount()) {
+            var param = LLVMGetParam(ffunc, ai)
             if (a._type.isRef) {
-                LLVMSetParamAlignment(LLVMGetParam(ffunc, ai), uint(a._type.alignOf))
+                LLVMSetParamAlignment(param, uint(a._type.alignOf))
             } elif (a._type.isPointer && a._type.firstType != null) {
-                LLVMSetParamAlignment(LLVMGetParam(ffunc, ai), uint(a._type.firstType.alignOf))
+                LLVMSetParamAlignment(param, uint(a._type.firstType.alignOf))
             }
+            LLVMSetValueName(param, string(a.name))
             if ((a._type.isRef || a._type.isPointer || a._type.isString) && a._type.flags.constant) {
                 LLVMAddAttributeToFunctionArgument(ffunc, ai, readonly_attr)
             }
@@ -869,7 +871,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
 // ExprNew
-    def check_ptr_zero(tsrc : LLVMOpaqueValue?; at : LineInfo; message : string = "dereferencing null pointer") {
+    def check_zero(tsrc : LLVMOpaqueValue?) {
         var check_null_ptr = LLVMAppendBasicBlock(ffunc, "check_null_ptr")
         var check_true = LLVMAppendBasicBlock(ffunc, "check_true")
         var check_end = LLVMAppendBasicBlock(ffunc, "check_end")
@@ -878,8 +880,23 @@ class LlvmJitVisitor : AstVisitor {
         var cond = LLVMBuildIsNull(g_builder, tsrc, "null_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
+        return check_end
+    }
+
+    def check_ptr_zero(tsrc : LLVMOpaqueValue?; at : LineInfo; message : string = "dereferencing null pointer") {
+        var check_end = check_zero(tsrc)
         build_exception(message, at)
         LLVMBuildBr(g_builder, check_end)
+        LLVMPositionBuilderAtEnd(g_builder, check_end)
+    }
+
+    def check_ptr_zero_and_return(tsrc : LLVMOpaqueValue?; ret_val : LLVMOpaqueValue? = null) {
+        var check_end = check_zero(tsrc)
+        if (ret_val == null) {
+            LLVMBuildRetVoid(g_builder)
+        } else {
+            LLVMBuildRet(g_builder, ret_val)
+        }
         LLVMPositionBuilderAtEnd(g_builder, check_end)
     }
 
@@ -1733,6 +1750,8 @@ class LlvmJitVisitor : AstVisitor {
         // note: we need to handle shift operations
         // the way we do it, is we expand scalar up to vector type
         if (expr.op == "<<" || expr.op == ">>" || expr.op == ">>>" || expr.op == "<<<" || expr.op == "<<=" || expr.op == ">>=" || expr.op == ">>>=" || expr.op == "<<<=") {
+            // Create a mask value: (sizeof(element_type) * 8) - 1
+            right = LLVMBuildAnd(g_builder, right, LLVMConstInt(LLVMInt32Type(), uint64((opType.sizeOf * 8) - 1), 0), "")
             right = build_broadcast_vector(g_builder, shiftType, right)
         }
         if (expr.op == "+") {
@@ -2367,10 +2386,11 @@ class LlvmJitVisitor : AstVisitor {
     }
 
 // ExprFor
-    def build_array_lock(array_ptr : LLVMOpaqueValue?) {
+    def build_array_lock(array_ptr : LLVMOpaqueValue?; at: LineInfo) {
         var params = fixed_array(
             LLVMBuildPointerCast(g_builder, array_ptr, LLVMPointerType(LLVMVoidType(), 0u), ""),             // array
-            get_context_param()
+            get_context_param(),
+            get_line_info_ptr(at),
         )
         var typ = g_fn_types[FN_JIT_ARRAY_LOCK]
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_LOCK), params, "")
@@ -2534,7 +2554,7 @@ class LlvmJitVisitor : AstVisitor {
                 LLVMBuildStore(g_builder, LLVMConstInt(LLVMInt1Type(), 0ul, 0), lblk.need_loop) // need loop, no
                 LLVMBuildBr(g_builder, okay)
                 LLVMPositionBuilderAtEnd(g_builder, okay)
-                build_array_lock(getE(ssrc))
+                build_array_lock(getE(ssrc), expr.at)
                 var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
                 LLVMBuildStore(g_builder, data, getV(svar))
                 var tail = LLVMBuildSub(g_builder, size, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
@@ -2787,7 +2807,6 @@ class LlvmJitVisitor : AstVisitor {
             var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
             var typ = g_fn_types[("{fmna} implementation")]
             var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
-            setE(expr, cmresEval)
         } else {
             var MNH_ADDR = get_function_addr(expr_func)
             if (MNH_ADDR == 0ul) {
@@ -2801,7 +2820,6 @@ class LlvmJitVisitor : AstVisitor {
             var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
             var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
             var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
-            setE(expr, cmresEval)
         }
     }
 
@@ -3890,7 +3908,8 @@ class LlvmJitVisitor : AstVisitor {
             LLVMSetAlignment(args, 16u)
             args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "delete lambda args ptr")
         }
-        check_ptr_zero(lmb, at, "invoke null lambda")
+        check_ptr_zero_and_return(lmb)
+
         // build arguments (1, and its 'capture')
         let ai = 0
         var arg_ptr = LLVMBuildGEP2(g_builder, LLVMFloat4Type(), args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
@@ -5751,7 +5770,13 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
             }
-            // print("{LLVMPrintModuleToString(g_mod)}\n");
+            if (false) {
+                // Let's remove unused attributes before we print IR.
+                var pm = LLVMCreatePassManager()
+                LLVMAddGlobalDCEPass(pm)
+                LLVMRunPassManager(pm, g_mod)
+                print("{LLVMPrintModuleToString(g_mod)}\n");
+            }
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
             }
