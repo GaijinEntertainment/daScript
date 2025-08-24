@@ -33,7 +33,14 @@ def test {
 }
 
 [export]
+def delete_null_lambda() {
+    var lmb = default<lambda>;
+    delete lmb // aot do not compiles without tmp variable
+}
+
+[export]
 def main {
     test()
+    delete_null_lambda()
 }
 

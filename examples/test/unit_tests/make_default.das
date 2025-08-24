@@ -25,6 +25,12 @@ def test {
     assert(t_enum == DefEnum.foo)
     let t_array <- array<int>()
     assert(length(t_array) == 0)
+    let t_array_struct = array struct<DefStruct>((x = 1), (x = 2))
+    assert(length(t_array_struct) == 2)
+    assert(t_array_struct[0].x == 1)
+    assert(t_array_struct[1].x == 2)
+    assert(t_array_struct[0].y == 0.0)
+    assert(t_array_struct[1].y == 0.0)
     return true
 }
 
