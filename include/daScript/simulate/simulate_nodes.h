@@ -2519,7 +2519,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             TT * pR = (TT *) subexpr->evalPtr(context);
-            return cast<TT>::from(*pR);
+            return pR ? cast<TT>::from(*pR) : vec4f{};
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE (Context & context) override {     \
