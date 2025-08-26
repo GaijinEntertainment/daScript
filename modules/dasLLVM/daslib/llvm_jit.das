@@ -779,12 +779,14 @@ class LlvmJitVisitor : AstVisitor {
     def isCall2CMRES(expr : ExpressionPtr) {
         return false if (!(expr is ExprCall))
         let call = expr as ExprCall
-        return false if (!isCMRES(call.func))
+        return false if (!isCMRES(call.func) || call.cmresAlias)
         return call.doesNotNeedSp || call.stackTop == 0u
     }
 
     def isInvoke2CMRES(expr : ExpressionPtr) {
-        return (expr is ExprInvoke) && isCMRESType(expr._type)
+        return false if (!(expr is ExprInvoke))
+        let inv = expr as ExprInvoke
+        return !inv.cmresAlias && isCMRESType(inv._type)
     }
 
     def make_call_to_cmres(expr : ExpressionPtr; v_ptr : LLVMOpaqueValue?) {
@@ -1371,12 +1373,13 @@ class LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, check_end)
     }
 
-    def build_table_at(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+    def build_table_at(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
         var params = fixed_array(
             tab,                                                        // table ptr
             key,                                                        // key
             LLVMConstInt(LLVMInt32Type(), uint64(valueTypeSize), 0),    // valueTypeSize
-            get_context_param()
+            get_context_param(),
+            get_line_info_ptr(at)
         )
         var tab_fun = LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_AT(ttype))
         if (tab_fun == null) {
@@ -1471,7 +1474,7 @@ class LlvmJitVisitor : AstVisitor {
                 var inscope uvt <- get_underlying_value_type(subExprT.firstType)
                 keyType = uvt.baseType
             }
-            var at_tab = build_table_at(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+            var at_tab = build_table_at(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf, expr.at)
             var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(expr.subexpr._type), tsrc, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE.DATA), "table.data")
             var ptr_idx = LLVMBuildGEP2(g_builder, type_to_llvm_type(expr._type), data, at_tab, "table_at")
@@ -2386,7 +2389,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
 // ExprFor
-    def build_array_lock(array_ptr : LLVMOpaqueValue?; at: LineInfo) {
+    def build_array_lock(array_ptr : LLVMOpaqueValue?; at : LineInfo) {
         var params = fixed_array(
             LLVMBuildPointerCast(g_builder, array_ptr, LLVMPointerType(LLVMVoidType(), 0u), ""),             // array
             get_context_param(),
@@ -3777,7 +3780,7 @@ class LlvmJitVisitor : AstVisitor {
             var inscope uvt <- get_underlying_value_type(subExprT.firstType)
             keyType = uvt.baseType
         }
-        var res = build_table_at(keyType, tab_ptr, tidx, 0)
+        var res = build_table_at(keyType, tab_ptr, tidx, 0, expr.at)
         setE(expr, res)
         return expr
     }
@@ -4809,7 +4812,8 @@ class LlvmJitVisitor : AstVisitor {
 
 // ExprTypeDecl
     def override visitExprTypeDecl(expr : smart_ptr<ExprTypeDecl>) : ExpressionPtr {
-        setE(expr, LLVMGetUndef(type_to_llvm_abi_type(expr._type)))
+        // replace with undef once ExprTypeDecl usage forbidden in runtime
+        setE(expr, LLVMConstNull(type_to_llvm_abi_type(expr._type)))
         return expr
     }
 
@@ -5614,7 +5618,7 @@ def private generate_llvm(ctx : Context?; fn : FunctionPtr) {
         // debug("dll_function_aot_hash: {dll_function_aot_hash}")
         var written_hash = unsafe(reinterpret<uint64?>(dll_function_aot_hash))
         if (written_hash != null && get_function_aot_hash(fn |> get_ptr) == *written_hash) {
-            debug("function {get_mangled_name(fn)} taken from the dll with aot_hash {*written_hash}")
+            debug("function '{get_mangled_name(fn)}' taken from the dll with aot_hash {*written_hash}")
             return
         }
     }
@@ -5791,6 +5795,8 @@ class JIT_LLVM : AstSimulateMacro {
                         g_dynamic_lib_handle |> close_dynamic_library()
                         g_dynamic_lib_handle = null
                     }
+                } else {
+                    save_modules2mnh()
                 }
             }
             for (fun in funcs) {

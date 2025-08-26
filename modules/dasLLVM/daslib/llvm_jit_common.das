@@ -317,7 +317,8 @@ def public init_jit {
                 fixed_array<LLVMTypeRef>(LLVMPointerType(LLVMVoidType(), 0u),   // table ptr
                 base_type_to_llvm_type(t),                          // key
                 LLVMInt32Type(),                                    // valueTypeSize
-                LLVMPointerType(LLVMVoidType(), 0u)                 // context
+                LLVMPointerType(LLVMVoidType(), 0u),                // context
+                LLVMPointerType(LLVMVoidType(), 0u),                // at
                 )))
         LLVMAddGlobalMapping(g_engine, jit_table_at, get_jit_table_at(unsafe(reinterpret<int> t)))
         LLVMAddAttributesToFunction(jit_table_at, fixed_array(nounwind, willreturn))
