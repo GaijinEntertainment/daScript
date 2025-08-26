@@ -130,6 +130,9 @@ def test : bool {
     tab_bool |> insert(false, -1)
     assert(key_exists(tab_bool, false))
 
+    var tab_rng = {0 .. 5};
+    assert(key_exists(tab_rng, 0 .. 5))
+
     var tab_int : table<int; int>
     assert(!key_exists(tab_int, -1))
     tab_int |> insert(-1, -1)
