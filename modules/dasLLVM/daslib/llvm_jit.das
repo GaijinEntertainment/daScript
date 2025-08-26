@@ -1371,12 +1371,13 @@ class LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, check_end)
     }
 
-    def build_table_at(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
+    def build_table_at(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
         var params = fixed_array(
             tab,                                                        // table ptr
             key,                                                        // key
             LLVMConstInt(LLVMInt32Type(), uint64(valueTypeSize), 0),    // valueTypeSize
-            get_context_param()
+            get_context_param(),
+            get_line_info_ptr(at)
         )
         var tab_fun = LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_AT(ttype))
         if (tab_fun == null) {
@@ -1471,7 +1472,7 @@ class LlvmJitVisitor : AstVisitor {
                 var inscope uvt <- get_underlying_value_type(subExprT.firstType)
                 keyType = uvt.baseType
             }
-            var at_tab = build_table_at(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+            var at_tab = build_table_at(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf, expr.at)
             var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(expr.subexpr._type), tsrc, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE.DATA), "table.data")
             var ptr_idx = LLVMBuildGEP2(g_builder, type_to_llvm_type(expr._type), data, at_tab, "table_at")
@@ -3777,7 +3778,7 @@ class LlvmJitVisitor : AstVisitor {
             var inscope uvt <- get_underlying_value_type(subExprT.firstType)
             keyType = uvt.baseType
         }
-        var res = build_table_at(keyType, tab_ptr, tidx, 0)
+        var res = build_table_at(keyType, tab_ptr, tidx, 0, expr.at)
         setE(expr, res)
         return expr
     }
