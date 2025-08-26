@@ -85,6 +85,7 @@ namespace das {
             :  AstExprLikeCallAnnotation<ExprInvoke> ("ExprInvoke", ml) {
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
             addField<DAS_BIND_MANAGED_FIELD(doesNotNeedSp)>("doesNotNeedSp");
+            addField<DAS_BIND_MANAGED_FIELD(cmresAlias)>("cmresAlias");
             addField<DAS_BIND_MANAGED_FIELD(isInvokeMethod)>("isInvokeMethod");
             addProperty<DAS_BIND_MANAGED_PROP(isCopyOrMove)>("isCopyOrMove");
         }
