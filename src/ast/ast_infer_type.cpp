@@ -2715,16 +2715,18 @@ namespace das {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             // infer r2v(type<Foo...>)
             if ( expr->subexpr->rtti_isTypeDecl() ) {
+                reportAstChanged();
                 if ( expr->subexpr->type->isWorkhorseType() ) {
-                    reportAstChanged();
                     auto ewsType = make_smart<TypeDecl>(*(expr->subexpr->type));
                     ewsType->ref = false;
                     auto ews = Program::makeConst(expr->at, ewsType, v_zero());
                     ews->type = ewsType;
                     return ews;
                 } else {
-                    error("can't dereference a type<" + describeType(expr->subexpr->type) + ">",  "", "",
-                        expr->at, CompilationError::invalid_type);
+                    auto mks = make_smart<ExprMakeStruct>(expr->at);
+                    mks->makeType = expr->subexpr->type;
+                    mks->useInitializer = false;
+                    return mks;
                 }
             }
             // infer
