@@ -779,12 +779,14 @@ class LlvmJitVisitor : AstVisitor {
     def isCall2CMRES(expr : ExpressionPtr) {
         return false if (!(expr is ExprCall))
         let call = expr as ExprCall
-        return false if (!isCMRES(call.func))
+        return false if (!isCMRES(call.func) || call.cmresAlias)
         return call.doesNotNeedSp || call.stackTop == 0u
     }
 
     def isInvoke2CMRES(expr : ExpressionPtr) {
-        return (expr is ExprInvoke) && isCMRESType(expr._type)
+        return false if (!(expr is ExprInvoke))
+        let inv = expr as ExprInvoke
+        return !inv.cmresAlias && isCMRESType(inv._type)
     }
 
     def make_call_to_cmres(expr : ExpressionPtr; v_ptr : LLVMOpaqueValue?) {
