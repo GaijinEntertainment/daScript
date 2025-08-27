@@ -38,8 +38,8 @@ def test(hmap : auto(HashMapType); randomNumbers) {
 def main {
     print("test09 - insert {TOTAL_RANDOM_NUMBERS} unique random numbers, then find and summ them up\n")
     var randomNumbers <- generate_unique_positive_random_numbers()
-    profile_test("table<int;int>", type<table<int; int>>, randomNumbers)
-    profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
-    profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
+    profile_test("table<int;int>", default<table<int; int>>, randomNumbers)
+    profile_test("TCuckooHashMap<int,int>", default<CuckooHashMap_test>, randomNumbers)
+    profile_test("TFlatHashMap<int,int>", default<FlatHashMap_test>, randomNumbers)
 }
 

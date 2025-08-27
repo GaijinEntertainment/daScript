@@ -40,10 +40,10 @@ def main {
     for (n in range(32768)) {
         randomNumbers[n] = n
     }
-    profile_test("table<int;int>", type<table<int; int>>, randomNumbers)
-    profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
-    profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
-    profile_test("TFlatHashMap<int,int> with hash(t)->t pathalogical", type<PathalogicalFlatHashMap_test>, randomNumbers)
+    profile_test("table<int;int>", default<table<int; int>>, randomNumbers)
+    profile_test("TCuckooHashMap<int,int>", default<CuckooHashMap_test>, randomNumbers)
+    profile_test("TFlatHashMap<int,int>", default<FlatHashMap_test>, randomNumbers)
+    profile_test("TFlatHashMap<int,int> with hash(t)->t pathalogical", default<PathalogicalFlatHashMap_test>, randomNumbers)
 }
 
 
