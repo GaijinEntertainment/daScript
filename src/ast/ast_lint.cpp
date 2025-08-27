@@ -186,6 +186,14 @@ namespace das {
             noWritingToNameless = prog->options.getBoolOption("no_writing_to_nameless", prog->policies.no_writing_to_nameless);
             alwaysCallSuper = prog->options.getBoolOption("always_call_super", prog->policies.always_call_super);
         }
+    public:
+        void reportUnsafeTypeExpressions() {
+            for ( auto expr : usedTypeExprs ) {
+                program->error("type expression result is used, and not just passed",
+                    "consider default<" + expr->type->describe() + ">", "",
+                        expr->at, CompilationError::invalid_type);
+            }
+        }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
             if ( !checkOnlyFastAot ) return;
@@ -563,6 +571,38 @@ namespace das {
                 }
             }
         }
+        virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
+            Visitor::visit(expr);
+            if ( expr->isInvokeMethod ) {
+                auto arg0 = expr->arguments[0].get();
+                if ( arg0->rtti_isR2V() ) {
+                    arg0 = static_cast<ExprRef2Value*>(arg0)->subexpr.get();
+                }
+                if ( arg0->rtti_isField() ) {
+                    auto field = static_cast<ExprField*>(arg0);
+                    if ( field->value->rtti_isTypeDecl() ) {
+                        usedTypeExprs.erase(field->value.get());
+                    }
+                }
+            }
+            return expr;
+        }
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            Visitor::visit(expr);
+            if ( expr->func ) {
+                size_t argIndex = 0;
+                for ( auto & arg : expr->func->arguments ) {
+                    if ( arg->isAccessUnused() ) {
+                        auto & earg = expr->arguments[argIndex];
+                        if ( earg->rtti_isTypeDecl() ) {
+                            usedTypeExprs.erase(earg.get());
+                        }
+                    }
+                    ++argIndex;
+                }
+            }
+            return expr;
+        }
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
@@ -803,11 +843,17 @@ namespace das {
                     mks->at, CompilationError::unspecified);
             }
         }
+        virtual void preVisit ( ExprTypeDecl * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->alwaysSafe ) return;
+            usedTypeExprs.insert(expr);
+        }
     public:
         ProgramPtr program;
         Function * func = nullptr;
         Variable * globalVar = nullptr;
         bool anyUnsafe = false;
+        das_hash_set<Expression *> usedTypeExprs;
     };
 
     struct Option {
@@ -928,6 +974,7 @@ namespace das {
         // lint it
         LintVisitor lintV(this);
         visit(lintV);
+        lintV.reportUnsafeTypeExpressions();
         unsafe = lintV.anyUnsafe;
         // check for invalid options
         das_map<string,Type> ao;

@@ -57,9 +57,9 @@ def test(hmap : auto(SlotMapType); randomNumbers) {
 def main {
     print("test11 - insert {TOTAL_RANDOM_NUMBERS} unique random numbers into slotmap\n")
     var randomNumbers <- generate_unique_positive_random_numbers()
-    profile_test("table<int;int>", type<SlotMapAdapter_Table>, randomNumbers)
-    profile_test("TCuckooHashMap<int,int>", type<SlotMapAdapter_CuckooHashMap>, randomNumbers)
-    profile_test("TFlatHashMap<int,int>", type<SlotMapAdapter_FlatHashMap>, randomNumbers)
-    profile_test("TFlatHashMap<int,int> with hash(x)->x", type<SlotMapAdapter_FlatHashMap0>, randomNumbers)
+    profile_test("table<int;int>", default<SlotMapAdapter_Table>, randomNumbers)
+    profile_test("TCuckooHashMap<int,int>", default<SlotMapAdapter_CuckooHashMap>, randomNumbers)
+    profile_test("TFlatHashMap<int,int>", default<SlotMapAdapter_FlatHashMap>, randomNumbers)
+    profile_test("TFlatHashMap<int,int> with hash(x)->x", default<SlotMapAdapter_FlatHashMap0>, randomNumbers)
 }
 

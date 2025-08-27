@@ -194,7 +194,7 @@ def private append_iterator(arch_name : string; var qloop : smart_ptr<ExprFor>; 
         var inscope ftype <- clone_type(a._type)
         ftype.flags &= ~TypeDeclFlags.constant
         ftype.flags &= ~TypeDeclFlags.ref
-        qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), type<$t(ftype)>))
+        qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>)))
     }
     return true
 }
@@ -214,7 +214,7 @@ def private append_index_lookup(arch_name : string; var qblock : smart_ptr<ExprB
         var inscope ftype <- clone_type(a._type)
         ftype.flags &= ~TypeDeclFlags.constant
         ftype.flags &= ~TypeDeclFlags.ref
-        move(iget, get_ptr(qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), type<$t(ftype)>)[entity_index])))
+        move(iget, get_ptr(qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>))[entity_index])))
     }
     var inscope vlet <- new ExprLet(at = a.at, atInit = a.at)
     vlet.genFlags |= ExprGenFlags.alwaysSafe

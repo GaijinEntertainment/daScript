@@ -34,10 +34,10 @@ def hash_inline(i : int) : uint64 {
 [export]
 def main {
     print("test02 - insert 600000 elements in a hash map 25 times, with clear inbetween\n")
-    profile_test("table<int;int>", type<table<int; int>>, 0)
-    profile_test("TCuckooHashMap<int,int> hash(x)->x/hash", type<CuckooHashMap_test>, 0)
-    profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, 0)
-    profile_test("TFlatHashMap<int,int> with hash intrinsic", type<FlatHashMap_test_inline>, 0)
-    profile_test("TFlatHashMap<int,int> with hash(x)->x", type<FlatHashMap_test0>, 0)
+    profile_test("table<int;int>", default<table<int; int>>, 0)
+    profile_test("TCuckooHashMap<int,int> hash(x)->x/hash", default<CuckooHashMap_test>, 0)
+    profile_test("TFlatHashMap<int,int>", default<FlatHashMap_test>, 0)
+    profile_test("TFlatHashMap<int,int> with hash intrinsic", default<FlatHashMap_test_inline>, 0)
+    profile_test("TFlatHashMap<int,int> with hash(x)->x", default<FlatHashMap_test0>, 0)
 }
 
