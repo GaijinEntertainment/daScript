@@ -32,6 +32,7 @@ require llvm/llvm_debug
 
 var modules2mnh : table<Module?; array<string>>
 var created_fileinfos : table<FileInfo?; FileInfo?>
+var active_filenames : table<string>
 
 [macro_function]
 def private get_expr_ptr(expr : ExpressionPtr) {
@@ -78,6 +79,68 @@ def isExprOp1_Func(expr : smart_ptr<ExprOp1>) {
         return true
     }
     return false
+}
+
+[macro_function]
+def get_file_info_global(g_builder : LLVMOpaqueBuilder?; name : string) : LLVMOpaqueValue? {
+    let sz = typeinfo sizeof(type<FileInfo>)
+    let file_info_type = LLVMArrayType(LLVMInt8Type(), uint(sz))
+    let filename_var = "fileinfo_{name}"
+    var fileInfo = LLVMGetNamedGlobal(g_mod, filename_var)
+    if (fileInfo == null) {
+        fileInfo = LLVMAddGlobal(g_mod, file_info_type, filename_var)
+        var zero = LLVMConstInt(LLVMInt8Type(), 0 |> uint64(), 0)
+        var zeros : array<LLVMValueRef>
+        for (i in range(sz)) {
+            zeros |> push(zero)
+        }
+        let zeroInitializer = LLVMConstArray(LLVMInt8Type(), unsafe(addr(zeros[0])), sz |> uint())
+        LLVMSetInitializer(fileInfo, zeroInitializer)
+        active_filenames |> insert(name)
+    }
+    return fileInfo
+}
+
+/*
+ * Initialize all file info names, fileInfo content still empty.
+ * @names for all names will be create FileInfo ptr with correct filename
+ */
+[macro_function]
+def generate_fileinfo_constructor(names : table<string>) {
+    var g_builder = LLVMCreateBuilder()
+    defer <| ${
+        LLVMDisposeBuilder(g_builder)
+    }
+
+    let functionType = LLVMFunctionType(LLVMVoidType(), null, 0u, 0)
+    let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
+
+    let entry = LLVMAppendBasicBlock(constructor, "entry")
+    LLVMPositionBuilderAtEnd(g_builder, entry)
+
+    let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
+    var initializeFuncType = LLVMFunctionType(LLVMVoidType(),
+        fixed_array<LLVMTypeRef>(
+            LLVMPointerType(LLVMVoidType(), 0u),
+            LLVMPointerType(LLVMInt8Type(), 0u), // filename
+        )
+    )
+    var initializeFunc = LLVMAddFunctionWithType(g_mod, "jit_initialize_fileinfo", initializeFuncType)
+    LLVMAddGlobalMapping(g_engine, initializeFunc, get_jit_initialize_fileinfo())
+
+    for (name in keys(names)) {
+        var variable = LLVMGetNamedGlobal(g_mod, "fileinfo_{name}");
+        assert(variable != null)
+        var callArgs = array<LLVMValueRef>(
+            g_builder |> LLVMBuildPointerCast(variable, void_ptr, ""),
+            get_string_constant_ptr(g_builder, name)
+        );
+        var typ = g_fn_types["jit_initialize_fileinfo"]
+        LLVMBuildCall2(g_builder, typ, initializeFunc, callArgs, "")
+    }
+    LLVMBuildRetVoid(g_builder)
+
+    return constructor
 }
 
 
@@ -481,29 +544,6 @@ class LlvmJitVisitor : AstVisitor {
         }
     }
 
-    def get_first_element_addr(dummy : LLVMOpaqueValue?; typ : LLVMTypeRef) {
-        let zero = LLVMConstInt(LLVMInt32Type(), 0 |> uint64(), 0)
-        var indices = fixed_array(zero, zero)
-        return g_builder |> LLVMBuildGEP2(typ, dummy, unsafe(addr(indices[0])), 2u, "")
-    }
-
-    def get_file_info_global() {
-        let sz = typeinfo sizeof(type<FileInfo>)
-        let file_info_type = LLVMArrayType(LLVMInt8Type(), uint(sz))
-        var dummy = LLVMGetNamedGlobal(g_mod, "fileinfo_dummy")
-        if (dummy == null) {
-            dummy = LLVMAddGlobal(g_mod, file_info_type, "fileinfo_dummy")
-            var zero = LLVMConstInt(LLVMInt8Type(), 0 |> uint64(), 0)
-            var zeros : array<LLVMValueRef>
-            for (i in range(sz)) {
-                zeros |> push(zero)
-            }
-            let zeroInitializer = LLVMConstArray(LLVMInt8Type(), unsafe(addr(zeros[0])), sz |> uint())
-            LLVMSetInitializer(dummy, zeroInitializer)
-        }
-        return dummy |> get_first_element_addr(LLVMArrayType(LLVMInt8Type(), uint(sz)))
-    }
-
     def create_line_info_global(at : LineInfo; dummy : LLVMOpaqueValue?) {
         let uint8_ptr = LLVMPointerType(LLVMInt8Type(), 0u)
         var line_info_members = fixed_array(
@@ -527,7 +567,6 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def create_line_info_ptr_global(line_info_global : LLVMOpaqueValue?) {
-        // let ptr_to_line_info_global = get_first_element_addr(line_info_global)
         let uint8_ptr = LLVMPointerType(LLVMPointerType(LLVMInt8Type(), 0u), 0u)
         let line_info_ptr_type = uint8_ptr
         // print("Type of LineInfoPtrType : '{LineInfoPtrType |> describe}'\n")
@@ -545,8 +584,8 @@ class LlvmJitVisitor : AstVisitor {
 
     def get_line_info_ptr(at : LineInfo) {
         let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
-        let dummy = get_file_info_global()
-        let line_info_global = create_line_info_global(at, dummy)
+        let fi = get_file_info_global(g_builder, string(at.fileInfo.name))
+        let line_info_global = create_line_info_global(at, fi)
         let line_info_ptr_global = create_line_info_ptr_global(line_info_global)
         instrument_and_map_global(at, line_info_ptr_global)
         var loaded_ptr = LLVMBuildLoad2(g_builder, void_ptr, line_info_ptr_global, "")
@@ -3462,7 +3501,6 @@ class LlvmJitVisitor : AstVisitor {
 
     def create_enum_global_pointer(si : EnumInfo?) {
         var tinfo_global = create_enuminfo_global(si)
-        // var tinfo_global_ptr = tinfo_global |> get_first_element_addr()
         g_engine |> LLVMAddGlobalMapping(tinfo_global, si)
         return tinfo_global
     }
@@ -5059,28 +5097,6 @@ class LlvmJitVisitor : AstVisitor {
 // misc
 ///////
 
-    def generate_fileinfo_constructor() {
-        let functionType = LLVMFunctionType(LLVMVoidType(), null, 0u, 0)
-        let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
-
-        let entry = LLVMAppendBasicBlock(constructor, "entry")
-        LLVMPositionBuilderAtEnd(g_builder, entry)
-
-        let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
-        var firstElementPtr = g_builder |> LLVMBuildPointerCast(get_file_info_global(), void_ptr, "")
-        var callArgs : array<LLVMValueRef>; callArgs |> push(firstElementPtr)
-
-        let initializeFuncType = LLVMFunctionType(LLVMVoidType(), fixed_array<LLVMTypeRef>(LLVMPointerType(LLVMVoidType(), 0u)))
-        let initializeFunc = LLVMAddFunctionWithType(g_mod, "jit_initialize_fileinfo", initializeFuncType)
-        LLVMAddGlobalMapping(g_engine, initializeFunc, get_jit_initialize_fileinfo())
-
-        var typ = g_fn_types["jit_initialize_fileinfo"]
-        LLVMBuildCall2(g_builder, typ, initializeFunc, callArgs, "")
-        LLVMBuildRetVoid(g_builder)
-
-        return constructor
-    }
-
     def cast_from_vec4f_ptr(v4f : LLVMOpaqueValue?; ptr_type : LLVMOpaqueType?) : LLVMOpaqueValue? {
         var tres : LLVMOpaqueValue?
         if (typeinfo sizeof(type<void?>) == 8) {
@@ -5453,6 +5469,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 }
 
+
 [macro_function]
 def private get_llvm_function_type(func : FunctionPtr) {
     var arg_types : array<LLVMOpaqueType?>
@@ -5508,8 +5525,9 @@ def private restore_modules2mnh() {
 
 [macro_function]
 def private restore_fileinfo_dummy() {
-    var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_dummy")
-    jit_initialize_fileinfo(sym)
+    panic("Is it even called somewhere?")
+    // var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_dummy")
+    // jit_initialize_fileinfo(symm)
 }
 
 def private create_fileinfo(addr_ : void?) {
@@ -5763,13 +5781,12 @@ class JIT_LLVM : AstSimulateMacro {
             for (fun in funcs) {
                 fake_visitor->add_llvm_functions(fun)
             }
-            if (LLVM_ENABLE_DLL_LOADING) {
-                // initialize fileinfo
-                fake_visitor->generate_fileinfo_constructor() |> add_constructor_function()
-                g_dynamic_lib_handle = load_dynamic_library(JIT_DLL_OUTPUT)
-            }
             unsafe {
                 delete fake_visitor
+            }
+            if (LLVM_ENABLE_DLL_LOADING) {
+                // initialize fileinfo
+                g_dynamic_lib_handle = load_dynamic_library(JIT_DLL_OUTPUT)
             }
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
@@ -5786,6 +5803,8 @@ class JIT_LLVM : AstSimulateMacro {
             }
             optimize_llvm_module()
             if (LLVM_ENABLE_DLL_LOADING) {
+                generate_fileinfo_constructor(active_filenames) |> add_constructor_function()
+                active_filenames = table<string>();
                 if (g_dynamic_lib_handle != null) {
                     if (g_loading_from_dll) {// had no problems with changed semantic hash
                         restore_modules2mnh()

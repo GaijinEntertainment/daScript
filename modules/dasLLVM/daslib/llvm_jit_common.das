@@ -601,7 +601,7 @@ def public build_string_constant(message : string) {
     }
     let msg_size = uint(length(message))
     var strType = LLVMArrayType(LLVMInt8Type(), msg_size + 1u)
-    var str = LLVMAddGlobal(g_mod, strType, "")
+    var str = LLVMAddGlobal(g_mod, strType, "{message}")
     LLVMSetInitializer(str, LLVMConstString(message, msg_size, 0))
     LLVMSetGlobalConstant(str, 1)
     LLVMSetLinkage(str, LLVMLinkage.LLVMPrivateLinkage)
