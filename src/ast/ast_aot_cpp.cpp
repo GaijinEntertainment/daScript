@@ -3114,8 +3114,8 @@ namespace das {
                     if ( einv->isInvokeMethod ) {
                         if ( call->arguments[0]->rtti_isField() ) {
                             auto field = static_pointer_cast<ExprField>(call->arguments[0]);
-                            methodOffset = field->field->offset;
-                            methodName = field->field->name;
+                            methodOffset = field->field()->offset;
+                            methodName = field->field()->name;
                         } else {
                             DAS_FATAL_ERROR("internal error. expected field");
                         }

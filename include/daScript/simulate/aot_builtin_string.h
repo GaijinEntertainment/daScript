@@ -158,7 +158,7 @@ namespace das {
     uint64_t builtin_build_hash_T ( TT && block, Context * /*context*/, LineInfoArg * /*at*/ ) {
         StringBuilderWriter writer;
         block(writer);
-        return hash_block64((const uint8_t *)writer.c_str(),writer.tellp());
+        return hash_block64((const uint8_t *)writer.c_str(),size_t(writer.tellp()));
     }
 
     inline uint64_t builtin_build_hash_T ( const Block &block, Context * context, LineInfoArg * at ) {

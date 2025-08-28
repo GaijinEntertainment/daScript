@@ -280,10 +280,11 @@ namespace das
         virtual bool rtti_isField() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void markNoDiscard() override;
+        Structure::FieldDeclaration * field() const;
         ExpressionPtr   value;
         string          name;
         LineInfo        atField;
-        const Structure::FieldDeclaration * field = nullptr;
+        Structure::FieldDeclarationRef fieldRef;
         int             fieldIndex = -1;
         TypeAnnotationPtr annotation;
         union {

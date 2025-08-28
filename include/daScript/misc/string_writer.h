@@ -144,7 +144,7 @@ namespace das {
         virtual void output() override {
             auto newPos = tellp();
             if (newPos != pos) {
-                string st(data() + pos, newPos - pos);
+                string st(data() + pos, size_t(newPos - pos));
                 logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
                 useMarker = false;
                 clear();

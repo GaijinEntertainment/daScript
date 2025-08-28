@@ -238,6 +238,15 @@ namespace das
             }
             void serialize ( AstSerializer & ser );
         };
+        struct FieldDeclarationRef {
+            Structure *            owner = nullptr;
+            int32_t                index = -1;
+            __forceinline FieldDeclaration * operator -> () const { return &owner->fields[index]; }
+            __forceinline FieldDeclaration & operator * () const { return owner->fields[index]; }
+            __forceinline FieldDeclaration * get() const { return (index >= 0 && owner != nullptr) ? &owner->fields[index] : nullptr; }
+            __forceinline operator bool() const { return index>=0 && owner!=nullptr; }
+            __forceinline bool operator ! () const { return index<0 || owner==nullptr; }
+        };
     public:
         Structure() {}
         Structure ( const string & n ) : name(n) {}
@@ -245,6 +254,7 @@ namespace das
         bool isCompatibleCast ( const Structure & castS ) const;
         const FieldDeclaration * findField ( const string & name ) const;
         const Structure * findFieldParent ( const string & name ) const;
+        FieldDeclarationRef findFieldRef ( const string & name ) const;
         int getSizeOf() const;
         uint64_t getSizeOf64() const;
         int getAlignOf() const;

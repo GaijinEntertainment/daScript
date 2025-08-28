@@ -5642,7 +5642,7 @@ namespace das {
     // ExprField
         bool verifyPrivateFieldLookup ( ExprField * expr ) {
             // lets verify private field lookup
-            if ( expr->field && expr->field->privateField ) {
+            if ( expr->field() && expr->field()->privateField ) {
                 bool canLookup = false;
                 if ( func && func->isClassMethod ) {
                     TypeDecl selfT(func->classParent);
@@ -5783,8 +5783,8 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 } else if ( valT->firstType->isStructure() ) {
-                    expr->field = valT->firstType->structType->findField(expr->name);
-                    if ( !expr->field && valT->firstType->structType->hasStaticMembers ) {
+                    expr->fieldRef = valT->firstType->structType->findFieldRef(expr->name);
+                    if ( !expr->fieldRef && valT->firstType->structType->hasStaticMembers ) {
                         auto fname = valT->firstType->structType->name + "`" + expr->name;
                         if ( auto pVar = valT->firstType->structType->module->findVariable(fname) ) {
                             if ( pVar->static_class_member ) {
@@ -5838,8 +5838,8 @@ namespace das {
                     expr->annotation = valT->annotation;
                     expr->type = expr->annotation->makeFieldType(expr->name, valT->constant);
                 } else if ( valT->isStructure() ) {
-                    expr->field = valT->structType->findField(expr->name);
-                    if ( !expr->field && valT->structType->hasStaticMembers ) {
+                    expr->fieldRef = valT->structType->findFieldRef(expr->name);
+                    if ( !expr->fieldRef && valT->structType->hasStaticMembers ) {
                         auto fname = valT->structType->name + "`" + expr->name;
                         if ( auto pVar = valT->structType->module->findVariable(fname) ) {
                             if ( pVar->static_class_member ) {
@@ -5880,15 +5880,15 @@ namespace das {
                 return Visitor::visit(expr);
             }
             // handle
-            if ( expr->field ) {
-                TypeDecl::clone(expr->type,expr->field->type);
+            if ( expr->fieldRef ) {
+                TypeDecl::clone(expr->type,expr->fieldRef->type);
                 expr->type->ref = true;
                 expr->type->constant |= valT->constant;
                 if ( valT->isPointer() && valT->firstType ) {
                     expr->type->constant |= valT->firstType->constant;
                 }
                 if ( !expr->ignoreCaptureConst ) {
-                    expr->type->constant |= expr->field->capturedConstant;
+                    expr->type->constant |= expr->fieldRef->capturedConstant;
                 }
             } else if ( expr->fieldIndex!=-1 ) {
                 if ( valT->isBitfield() ) {
@@ -5970,13 +5970,13 @@ namespace das {
                 auto safeAs = make_smart<ExprSafeAsVariant>(expr->at, expr->value, expr->name);
                 return safeAs;
             } else if ( valT->firstType->structType ) {
-                expr->field = valT->firstType->structType->findField(expr->name);
-                if ( !expr->field ) {
+                expr->fieldRef = valT->firstType->structType->findFieldRef(expr->name);
+                if ( !expr->fieldRef ) {
                     error("can't safe get field '" + expr->name + "'", "", "",
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                TypeDecl::clone(expr->type,expr->field->type);
+                TypeDecl::clone(expr->type,expr->fieldRef->type);
             } else if ( valT->firstType->isHandle() ) {
                 expr->annotation = valT->firstType->annotation;
                 expr->type = expr->annotation->makeSafeFieldType(expr->name, valT->constant);
