@@ -976,6 +976,9 @@ namespace das
         FunctionPtr fromGeneric = nullptr;
         uint64_t hash = 0;
         uint64_t aotHash = 0;
+
+        bool isFullyInferred = false;
+
 #if DAS_MACRO_SANITIZER
     public:
         void* operator new ( size_t count ) { return das_aligned_alloc16(count); }

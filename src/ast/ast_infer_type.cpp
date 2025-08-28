@@ -113,6 +113,7 @@ namespace das {
         bool                    relaxedPointerConst = false;
         bool                    unsafeTableLookup = false;
         Module *                thisModule = nullptr;
+        size_t                  beforeFunctionErrors = 0;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -146,12 +147,19 @@ namespace das {
                 program->error(err,extra,fixme,at,cerr);
             }
         }
+        void notInferred() {
+            if ( func ) {
+                func->isFullyInferred = false;
+            }
+        }
         void reportAstChanged() {
             needRestart = true;
+            notInferred();
         }
         virtual void reportFolding() override {
             FoldingVisitor::reportFolding();
             needRestart = true;
+            notInferred();
         }
         string describeType ( const TypeDeclPtr & decl ) const {
             return verbose ? decl->describe() : "";
@@ -2424,7 +2432,12 @@ namespace das {
             return false;
         }
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+        #if 0
+            return !fun->isTemplate;         // we don't do a thing with templates
+        #else
+            return !fun->isTemplate             // we don't do a thing with templates
+                && !(fun->isFullyInferred);     // and if its fully inferred - we do nada as well
+        #endif
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -2432,6 +2445,8 @@ namespace das {
             unsafeDepth = 0;
             func = f;
             func->hasReturn = false;
+            func->isFullyInferred = true;
+            beforeFunctionErrors = program->errors.size();
             if ( !standaloneContext ) {
                 func->noAot |= disableAot;
             }
@@ -2551,7 +2566,11 @@ namespace das {
                 func->copyOnReturn = false;
                 func->moveOnReturn = false;
             }
-            // if any of this asserts failed, there is logic error in how we pop
+            // if there were errors, we are not fully inferred
+            if ( beforeFunctionErrors != program->errors.size() ) {
+                notInferred();
+            }
+            // if any of this asserts failed, we have a logic error in how we pop
             DAS_ASSERT(loop.size()==0);
             DAS_ASSERT(scopes.size()==0);
             DAS_ASSERT(blocks.size()==0);
@@ -4573,6 +4592,8 @@ namespace das {
                             if ( !program->addFunction(fnDel) ) {
                                 reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                                 return Visitor::visit(expr);
+                            } else {
+                                reportAstChanged();
                             }
                         } else if ( ptrf.size() > 1 ) {
                             string candidates = verbose ? program->describeCandidates(ptrf) : "";
@@ -7916,6 +7937,7 @@ namespace das {
                     auto lname = stype->name;
                     auto newFinalizer = generateStructureFinalizer(stype);
                     finFunc->body = newFinalizer->body;
+                    finFunc->isFullyInferred = false;
                 }
                 // ---
                 reportAstChanged();
@@ -8647,6 +8669,7 @@ namespace das {
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, Function * lookupFunction = nullptr, bool failOnMissingCtor = true, bool visCheck = true ) {
             vector<TypeDeclPtr> types;
             if (!inferArguments(types, expr->arguments)) {
+                notInferred();
                 return nullptr;
             }
             MatchingFunctions functions, generics;
@@ -9181,9 +9204,14 @@ namespace das {
     // StringBuilder
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
             auto res = Expression::autoDereference(expr);
-            if (expr->type && expr->type->isVoid()) {
-                error("argument of format string should not be `void`", "", "",
-                    expr->at, CompilationError::expecting_return_value);
+            if (expr->type) {
+                if ( expr->type->isVoid() ) {
+                    error("argument of format string should not be `void`", "", "",
+                        expr->at, CompilationError::expecting_return_value);
+                } else if ( expr->type->isAutoOrAlias() ) {
+                    error("argument of format string can't be `auto` or alias", "", "",
+                        expr->at, CompilationError::invalid_type);
+                }
             }
             if ( expr->constexpression ) {
                 return evalAndFoldString(res.get());
@@ -10323,6 +10351,7 @@ namespace das {
                 if ( hash != mnh ) {
                     refreshFunctions.emplace_back(make_tuple(fn.get(), hash, mnh));
                     fn->lookup.clear();
+                    fn->isFullyInferred = false;
                 }
             });
             for ( auto rfn : refreshFunctions ) {
