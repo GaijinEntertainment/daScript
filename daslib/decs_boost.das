@@ -453,6 +453,7 @@ class DecsQueryMacro : AstCallMacro {
         assert(length(qres.list) == 1 && length(qres.finalList) == 0)
         var inscope rqres <- qres.list[0]
         qres := null
+        rqres.genFlags.alwaysSafe = true
         return <- rqres
     }
 }

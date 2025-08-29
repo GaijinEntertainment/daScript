@@ -274,10 +274,10 @@ extern "C" {
         context->to_out(at, tw.str().c_str());
     }
 
-    void jit_initialize_fileinfo ( void * dummy ) {
+    void jit_initialize_fileinfo ( void * dummy, const char *filename ) {
         new (dummy) FileInfo();
         auto fileInfoPtr = reinterpret_cast<FileInfo*>(dummy);
-        fileInfoPtr->name = "jit_generated_fileinfo";
+        fileInfoPtr->name = filename;
     }
 
     void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at ) {

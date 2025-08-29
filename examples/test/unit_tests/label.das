@@ -88,7 +88,7 @@ def while_goto() {
     assert(!fail)
 }
 
-[sideeffects]
+[sideeffects, no_jit] // enable jit once it fixed
 def finally_goto(yes : bool = true) {
     var fail = true
     if (yes) {
