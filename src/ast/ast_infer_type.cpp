@@ -52,6 +52,7 @@ namespace das {
     class InferTypes : public FoldingVisitor {
     public:
         InferTypes( const ProgramPtr & prog ) : FoldingVisitor(prog ) {
+            debugInferFlag = prog->options.getBoolOption("debug_infer_flag", prog->policies.debug_infer_flag);
             enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding",true);
             disableAot = prog->options.getBoolOption("no_aot",false);
             multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
@@ -112,6 +113,7 @@ namespace das {
         bool                    relaxedAssign = false;
         bool                    relaxedPointerConst = false;
         bool                    unsafeTableLookup = false;
+        bool                    debugInferFlag = false;
         Module *                thisModule = nullptr;
         size_t                  beforeFunctionErrors = 0;
     public:
@@ -147,19 +149,14 @@ namespace das {
                 program->error(err,extra,fixme,at,cerr);
             }
         }
-        void notInferred() {
-            if ( func ) {
-                func->isFullyInferred = false;
-            }
-        }
         void reportAstChanged() {
             needRestart = true;
-            notInferred();
+            if ( func ) func->notInferred();
         }
         virtual void reportFolding() override {
             FoldingVisitor::reportFolding();
             needRestart = true;
-            notInferred();
+            if ( func ) func->notInferred();
         }
         string describeType ( const TypeDeclPtr & decl ) const {
             return verbose ? decl->describe() : "";
@@ -2432,12 +2429,12 @@ namespace das {
             return false;
         }
         virtual bool canVisitFunction ( Function * fun ) override {
-        #if 0
-            return !fun->isTemplate;         // we don't do a thing with templates
-        #else
-            return !fun->isTemplate             // we don't do a thing with templates
-                && !(fun->isFullyInferred);     // and if its fully inferred - we do nada as well
-        #endif
+            if ( debugInferFlag ) {
+                return !fun->isTemplate;         // we don't do a thing with templates
+            } else {
+                return !fun->isTemplate             // we don't do a thing with templates
+                    && !(fun->isFullyInferred);     // and if its fully inferred - we do nada as well
+            }
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -2568,7 +2565,22 @@ namespace das {
             }
             // if there were errors, we are not fully inferred
             if ( beforeFunctionErrors != program->errors.size() ) {
-                notInferred();
+                func->notInferred();
+            }
+            // now, for some debugging
+            if ( debugInferFlag ) {
+                if ( func->isFullyInferred ) {
+                    TextWriter srcCode;
+                    srcCode << *func;
+                    if ( !func->inferredSource.empty() ) {
+                        if ( func->inferredSource != srcCode.c_str() ) {
+                            program->error("fully inferred function has changed\nbefore:\n" + func->inferredSource + "\nafter:\n" + srcCode.c_str(),
+                                "", "", func->at, CompilationError::unspecified );
+                        }
+                    } else {
+                        func->inferredSource = srcCode.c_str();
+                    }
+                }
             }
             // if any of this asserts failed, we have a logic error in how we pop
             DAS_ASSERT(loop.size()==0);
@@ -7937,7 +7949,7 @@ namespace das {
                     auto lname = stype->name;
                     auto newFinalizer = generateStructureFinalizer(stype);
                     finFunc->body = newFinalizer->body;
-                    finFunc->isFullyInferred = false;
+                    finFunc->notInferred();
                 }
                 // ---
                 reportAstChanged();
@@ -8669,7 +8681,7 @@ namespace das {
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, Function * lookupFunction = nullptr, bool failOnMissingCtor = true, bool visCheck = true ) {
             vector<TypeDeclPtr> types;
             if (!inferArguments(types, expr->arguments)) {
-                notInferred();
+                if ( func ) func->notInferred();
                 return nullptr;
             }
             MatchingFunctions functions, generics;
@@ -10351,7 +10363,7 @@ namespace das {
                 if ( hash != mnh ) {
                     refreshFunctions.emplace_back(make_tuple(fn.get(), hash, mnh));
                     fn->lookup.clear();
-                    fn->isFullyInferred = false;
+                    fn->notInferred();
                 }
             });
             for ( auto rfn : refreshFunctions ) {

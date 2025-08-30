@@ -43,7 +43,7 @@ class AddHeartbeat : AstVisitor {
         var inscope expr <- qmacro(heartbeat())
         body.list |> emplace(expr, 0)
         astChanged = true
-        func.isFullyInferred = false
+        func.not_inferred()
     }
     def override preVisitFunction(var fun : FunctionPtr) {
         func = get_ptr(fun)

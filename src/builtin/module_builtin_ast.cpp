@@ -454,6 +454,11 @@ namespace das {
         }
     }
 
+    void notInferred ( Function * func, Context * context, LineInfoArg * at ) {
+        if ( !func ) context->throw_error_at(at,"expecting function");
+        func->notInferred();
+    }
+
     char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context, LineInfoArg * at ) {
         if ( !func ) context->throw_error_at(at,"expecting function");
         return context->allocateString(func->getMangledName(),at);
@@ -1118,6 +1123,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(get_expression_annotation)>(*this, lib,  "get_expression_annotation",
             SideEffects::none, "get_expression_annotation")
                 ->args({"expr","context","line"});
+        // not inferred function
+        addExtern<DAS_BIND_FUN(notInferred)>(*this, lib,  "not_inferred",
+            SideEffects::modifyArgumentAndExternal, "notInferred")
+                ->args({"function","context","line"});
         // type conversion functions
         addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
             SideEffects::none, "ast_das_to_string")

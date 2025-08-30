@@ -1062,9 +1062,7 @@ namespace das {
                 }
                 if ( anyNeedRelocate ) {
                     anyWork = true;
-                    if ( func ) {
-                        func->isFullyInferred = false;
-                    }
+                    if ( func ) func->notInferred();
                     vector<ExpressionPtr> afterThisExpression;
                     for ( auto & var : expr->variables ) {
                         if ( var->init ) {

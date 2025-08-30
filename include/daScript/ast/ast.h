@@ -861,6 +861,7 @@ namespace das
         FunctionPtr getOrigin() const;
         Function * getOriginPtr() const;
         void serialize ( AstSerializer & ser );
+        void notInferred();
     public:
         AnnotationList      annotations;
         string              name;
@@ -988,6 +989,7 @@ namespace das
         uint64_t aotHash = 0;
 
         bool isFullyInferred = false;
+        string inferredSource;
 
 #if DAS_MACRO_SANITIZER
     public:
@@ -1506,6 +1508,7 @@ namespace das
         //      2. invoke of blocks will have extra prologue overhead
         //      3. context always has context mutex
         bool debugger = false;
+        bool debug_infer_flag = false;  // set this to true to debug macros for missing "not_inferred"
         string debug_module;
     // profiler
         // only enabled if profiler is disabled

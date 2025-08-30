@@ -637,7 +637,7 @@ namespace das {
                 program->buildAccessFlags(logs);    // this is used by the lint pass
                 if ( program->patchAnnotations() ) {
                     program->thisModule->functions.foreach([&](auto && fn) {
-                        fn->isFullyInferred = false;
+                        fn->notInferred();
                     });
                     goto restartInfer;
                 }
