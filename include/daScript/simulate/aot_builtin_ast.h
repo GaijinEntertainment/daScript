@@ -510,6 +510,7 @@ namespace das {
     char * get_mangled_name_v ( smart_ptr_raw<Variable> var, Context * context, LineInfoArg * at );
     char * get_mangled_name_b ( smart_ptr_raw<ExprBlock> expr, Context * context, LineInfoArg * at );
     TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
+    void notInferred ( Function * func, Context * context, LineInfoArg * at );
     void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line );
     bool isExprLikeCall ( const ExpressionPtr & expr );
     bool isExprConst ( const ExpressionPtr & expr );

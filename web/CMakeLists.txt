@@ -609,10 +609,11 @@ FOREACH(inF IN LISTS AotDaslibList)
 ENDFOREACH()
 
 set(StandaloneFilesList
-        ../src/das/ast/ast_print.das
-        ../src/das/ast/ast_aot_cpp.das
-        ../src/das/ast/aot_constants.das
-        ../src/das/ast/standalone_contexts.das
+    # # aot das-mode temporary disabled
+    # src/das/ast/ast_print.das
+    # src/das/ast/ast_aot_cpp.das
+    # src/das/ast/aot_constants.das
+    # src/das/ast/standalone_contexts.das
 )
 
 FOREACH(inF IN LISTS StandaloneFilesList)

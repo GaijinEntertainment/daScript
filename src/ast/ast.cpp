@@ -372,6 +372,18 @@ namespace das {
         return align;
     }
 
+    Structure::FieldDeclarationRef Structure::findFieldRef ( const string & fieldName ) const {
+        auto pField = findField(fieldName);
+        if ( pField ) {
+            FieldDeclarationRef ref;
+            ref.owner = const_cast<Structure *>(this);
+            ref.index = int32_t(pField - &fields[0]);
+            return ref;
+        } else {
+            return FieldDeclarationRef{};
+        }
+    }
+
     const Structure::FieldDeclaration * Structure::findField ( const string & na ) const {
         if ( fieldLookup.size()==fields.size() ) {
             auto it = fieldLookup.find(na);
@@ -1797,6 +1809,10 @@ namespace das {
         return vis.visit(this);
     }
 
+    Structure::FieldDeclaration * ExprField::field() const {
+        return fieldRef.get();
+    }
+
     ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprField>(expr);
         Expression::clone(cexpr);
@@ -1804,7 +1820,7 @@ namespace das {
         if ( value) {
             cexpr->value = value->clone();
         }
-        cexpr->field = field;
+        cexpr->fieldRef = fieldRef;
         cexpr->fieldIndex = fieldIndex;
         cexpr->unsafeDeref = unsafeDeref;
         cexpr->ignoreCaptureConst = ignoreCaptureConst;

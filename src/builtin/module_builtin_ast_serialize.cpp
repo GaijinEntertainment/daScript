@@ -117,7 +117,7 @@ namespace das {
                 throw_formatted_error("too many candidates for structure '%s'", name.c_str());
             }
         // set the missing field field
-            *field = struct_.front()->findField(fieldname);
+            *field = struct_.front()->findFieldRef(fieldname);
         }
         fieldRefs.clear();
     }
@@ -1400,8 +1400,7 @@ namespace das {
             if ( !has_field ) return;
             Module * module = nullptr; ser << module;
             string mangledName; ser << mangledName;
-            field = ( Structure::FieldDeclaration * ) 1;
-            ser.fieldRefs.emplace_back(&field, module, das::move(mangledName), name);
+            ser.fieldRefs.emplace_back(&fieldRef, module, das::move(mangledName), name);
         }
     }
 
@@ -2298,7 +2297,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 56;
+        static constexpr uint32_t currentVersion = 57;
         return currentVersion;
     }
 

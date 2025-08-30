@@ -780,6 +780,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_fast_call)>("no_fast_call");
         // debugger
             addField<DAS_BIND_MANAGED_FIELD(debugger)>("debugger");
+            addField<DAS_BIND_MANAGED_FIELD(debug_infer_flag)>("debug_infer_flag");
             addField<DAS_BIND_MANAGED_FIELD(debug_module)>("debug_module");
         // profiler
             addField<DAS_BIND_MANAGED_FIELD(profiler)>("profiler");

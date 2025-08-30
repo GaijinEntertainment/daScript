@@ -314,7 +314,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(value)>("value");
             this->template addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             this->template addField<DAS_BIND_MANAGED_FIELD(atField)>("atField");
-            this->template addField<DAS_BIND_MANAGED_FIELD(field)>("field");
+            this->template addProperty<decltype(&EXPR::field), &EXPR::field>("field");
             this->template addField<DAS_BIND_MANAGED_FIELD(fieldIndex)>("fieldIndex");
             this->template addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             this->addFieldEx ( "derefFlags", "derefFlags", offsetof(ExprField, derefFlags), makeExprFieldDerefFlags() );

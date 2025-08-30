@@ -1023,6 +1023,14 @@ namespace das {
 
     class RelocatePotentiallyUninitialized : public Visitor {
     protected:
+        virtual void preVisit ( Function * f ) override {
+            Visitor::preVisit(f);
+            func = f;
+        }
+        virtual FunctionPtr visit ( Function * that ) override {
+            func = nullptr;
+            return Visitor::visit(that);
+        }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
             scopes.push_back(block);
@@ -1054,6 +1062,7 @@ namespace das {
                 }
                 if ( anyNeedRelocate ) {
                     anyWork = true;
+                    if ( func ) func->notInferred();
                     vector<ExpressionPtr> afterThisExpression;
                     for ( auto & var : expr->variables ) {
                         if ( var->init ) {
@@ -1096,6 +1105,7 @@ namespace das {
     protected:
         vector<ExprBlock *> scopes;
         vector<vector<ExpressionPtr>> onTopOfTheBlock;
+        Function * func = nullptr;
     public:
         bool anyWork = false;
     };

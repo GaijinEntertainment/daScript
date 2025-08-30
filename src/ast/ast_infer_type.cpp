@@ -52,6 +52,7 @@ namespace das {
     class InferTypes : public FoldingVisitor {
     public:
         InferTypes( const ProgramPtr & prog ) : FoldingVisitor(prog ) {
+            debugInferFlag = prog->options.getBoolOption("debug_infer_flag", prog->policies.debug_infer_flag);
             enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding",true);
             disableAot = prog->options.getBoolOption("no_aot",false);
             multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
@@ -112,7 +113,9 @@ namespace das {
         bool                    relaxedAssign = false;
         bool                    relaxedPointerConst = false;
         bool                    unsafeTableLookup = false;
+        bool                    debugInferFlag = false;
         Module *                thisModule = nullptr;
+        size_t                  beforeFunctionErrors = 0;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -148,10 +151,12 @@ namespace das {
         }
         void reportAstChanged() {
             needRestart = true;
+            if ( func ) func->notInferred();
         }
         virtual void reportFolding() override {
             FoldingVisitor::reportFolding();
             needRestart = true;
+            if ( func ) func->notInferred();
         }
         string describeType ( const TypeDeclPtr & decl ) const {
             return verbose ? decl->describe() : "";
@@ -2424,7 +2429,12 @@ namespace das {
             return false;
         }
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            if ( debugInferFlag ) {
+                return !fun->isTemplate;         // we don't do a thing with templates
+            } else {
+                return !fun->isTemplate             // we don't do a thing with templates
+                    && !(fun->isFullyInferred);     // and if its fully inferred - we do nada as well
+            }
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -2432,6 +2442,8 @@ namespace das {
             unsafeDepth = 0;
             func = f;
             func->hasReturn = false;
+            func->isFullyInferred = true;
+            beforeFunctionErrors = program->errors.size();
             if ( !standaloneContext ) {
                 func->noAot |= disableAot;
             }
@@ -2551,7 +2563,26 @@ namespace das {
                 func->copyOnReturn = false;
                 func->moveOnReturn = false;
             }
-            // if any of this asserts failed, there is logic error in how we pop
+            // if there were errors, we are not fully inferred
+            if ( beforeFunctionErrors != program->errors.size() ) {
+                func->notInferred();
+            }
+            // now, for some debugging
+            if ( debugInferFlag ) {
+                if ( func->isFullyInferred ) {
+                    TextWriter srcCode;
+                    srcCode << *func;
+                    if ( !func->inferredSource.empty() ) {
+                        if ( func->inferredSource != srcCode.c_str() ) {
+                            program->error("fully inferred function has changed\nbefore:\n" + func->inferredSource + "\nafter:\n" + srcCode.c_str(),
+                                "", "", func->at, CompilationError::unspecified );
+                        }
+                    } else {
+                        func->inferredSource = srcCode.c_str();
+                    }
+                }
+            }
+            // if any of this asserts failed, we have a logic error in how we pop
             DAS_ASSERT(loop.size()==0);
             DAS_ASSERT(scopes.size()==0);
             DAS_ASSERT(blocks.size()==0);
@@ -4573,6 +4604,8 @@ namespace das {
                             if ( !program->addFunction(fnDel) ) {
                                 reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                                 return Visitor::visit(expr);
+                            } else {
+                                reportAstChanged();
                             }
                         } else if ( ptrf.size() > 1 ) {
                             string candidates = verbose ? program->describeCandidates(ptrf) : "";
@@ -5621,7 +5654,7 @@ namespace das {
     // ExprField
         bool verifyPrivateFieldLookup ( ExprField * expr ) {
             // lets verify private field lookup
-            if ( expr->field && expr->field->privateField ) {
+            if ( expr->field() && expr->field()->privateField ) {
                 bool canLookup = false;
                 if ( func && func->isClassMethod ) {
                     TypeDecl selfT(func->classParent);
@@ -5762,8 +5795,8 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 } else if ( valT->firstType->isStructure() ) {
-                    expr->field = valT->firstType->structType->findField(expr->name);
-                    if ( !expr->field && valT->firstType->structType->hasStaticMembers ) {
+                    expr->fieldRef = valT->firstType->structType->findFieldRef(expr->name);
+                    if ( !expr->fieldRef && valT->firstType->structType->hasStaticMembers ) {
                         auto fname = valT->firstType->structType->name + "`" + expr->name;
                         if ( auto pVar = valT->firstType->structType->module->findVariable(fname) ) {
                             if ( pVar->static_class_member ) {
@@ -5817,8 +5850,8 @@ namespace das {
                     expr->annotation = valT->annotation;
                     expr->type = expr->annotation->makeFieldType(expr->name, valT->constant);
                 } else if ( valT->isStructure() ) {
-                    expr->field = valT->structType->findField(expr->name);
-                    if ( !expr->field && valT->structType->hasStaticMembers ) {
+                    expr->fieldRef = valT->structType->findFieldRef(expr->name);
+                    if ( !expr->fieldRef && valT->structType->hasStaticMembers ) {
                         auto fname = valT->structType->name + "`" + expr->name;
                         if ( auto pVar = valT->structType->module->findVariable(fname) ) {
                             if ( pVar->static_class_member ) {
@@ -5859,15 +5892,15 @@ namespace das {
                 return Visitor::visit(expr);
             }
             // handle
-            if ( expr->field ) {
-                TypeDecl::clone(expr->type,expr->field->type);
+            if ( expr->fieldRef ) {
+                TypeDecl::clone(expr->type,expr->fieldRef->type);
                 expr->type->ref = true;
                 expr->type->constant |= valT->constant;
                 if ( valT->isPointer() && valT->firstType ) {
                     expr->type->constant |= valT->firstType->constant;
                 }
                 if ( !expr->ignoreCaptureConst ) {
-                    expr->type->constant |= expr->field->capturedConstant;
+                    expr->type->constant |= expr->fieldRef->capturedConstant;
                 }
             } else if ( expr->fieldIndex!=-1 ) {
                 if ( valT->isBitfield() ) {
@@ -5949,13 +5982,13 @@ namespace das {
                 auto safeAs = make_smart<ExprSafeAsVariant>(expr->at, expr->value, expr->name);
                 return safeAs;
             } else if ( valT->firstType->structType ) {
-                expr->field = valT->firstType->structType->findField(expr->name);
-                if ( !expr->field ) {
+                expr->fieldRef = valT->firstType->structType->findFieldRef(expr->name);
+                if ( !expr->fieldRef ) {
                     error("can't safe get field '" + expr->name + "'", "", "",
                         expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
                 }
-                TypeDecl::clone(expr->type,expr->field->type);
+                TypeDecl::clone(expr->type,expr->fieldRef->type);
             } else if ( valT->firstType->isHandle() ) {
                 expr->annotation = valT->firstType->annotation;
                 expr->type = expr->annotation->makeSafeFieldType(expr->name, valT->constant);
@@ -7916,6 +7949,7 @@ namespace das {
                     auto lname = stype->name;
                     auto newFinalizer = generateStructureFinalizer(stype);
                     finFunc->body = newFinalizer->body;
+                    finFunc->notInferred();
                 }
                 // ---
                 reportAstChanged();
@@ -8647,6 +8681,7 @@ namespace das {
         FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric, Function * lookupFunction = nullptr, bool failOnMissingCtor = true, bool visCheck = true ) {
             vector<TypeDeclPtr> types;
             if (!inferArguments(types, expr->arguments)) {
+                if ( func ) func->notInferred();
                 return nullptr;
             }
             MatchingFunctions functions, generics;
@@ -9181,9 +9216,14 @@ namespace das {
     // StringBuilder
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder *, Expression * expr, bool ) override {
             auto res = Expression::autoDereference(expr);
-            if (expr->type && expr->type->isVoid()) {
-                error("argument of format string should not be `void`", "", "",
-                    expr->at, CompilationError::expecting_return_value);
+            if (expr->type) {
+                if ( expr->type->isVoid() ) {
+                    error("argument of format string should not be `void`", "", "",
+                        expr->at, CompilationError::expecting_return_value);
+                } else if ( expr->type->isAutoOrAlias() ) {
+                    error("argument of format string can't be `auto` or alias", "", "",
+                        expr->at, CompilationError::invalid_type);
+                }
             }
             if ( expr->constexpression ) {
                 return evalAndFoldString(res.get());
@@ -10323,6 +10363,7 @@ namespace das {
                 if ( hash != mnh ) {
                     refreshFunctions.emplace_back(make_tuple(fn.get(), hash, mnh));
                     fn->lookup.clear();
+                    fn->notInferred();
                 }
             });
             for ( auto rfn : refreshFunctions ) {

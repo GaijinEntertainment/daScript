@@ -129,6 +129,11 @@ namespace das
         };
     };
 
+    void Function::notInferred() {
+        inferredSource.clear();
+        isFullyInferred = false;
+    }
+
     FunctionPtr Function::setDeprecated(const string & message) {
         deprecated = true; // this is instead of apply above
         AnnotationDeclarationPtr decl = make_smart<AnnotationDeclaration>();

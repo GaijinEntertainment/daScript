@@ -238,6 +238,15 @@ namespace das
             }
             void serialize ( AstSerializer & ser );
         };
+        struct FieldDeclarationRef {
+            Structure *            owner = nullptr;
+            int32_t                index = -1;
+            __forceinline FieldDeclaration * operator -> () const { return &owner->fields[index]; }
+            __forceinline FieldDeclaration & operator * () const { return owner->fields[index]; }
+            __forceinline FieldDeclaration * get() const { return (index >= 0 && owner != nullptr) ? &owner->fields[index] : nullptr; }
+            __forceinline operator bool() const { return index>=0 && owner!=nullptr; }
+            __forceinline bool operator ! () const { return index<0 || owner==nullptr; }
+        };
     public:
         Structure() {}
         Structure ( const string & n ) : name(n) {}
@@ -245,6 +254,7 @@ namespace das
         bool isCompatibleCast ( const Structure & castS ) const;
         const FieldDeclaration * findField ( const string & name ) const;
         const Structure * findFieldParent ( const string & name ) const;
+        FieldDeclarationRef findFieldRef ( const string & name ) const;
         int getSizeOf() const;
         uint64_t getSizeOf64() const;
         int getAlignOf() const;
@@ -851,6 +861,7 @@ namespace das
         FunctionPtr getOrigin() const;
         Function * getOriginPtr() const;
         void serialize ( AstSerializer & ser );
+        void notInferred();
     public:
         AnnotationList      annotations;
         string              name;
@@ -976,6 +987,10 @@ namespace das
         FunctionPtr fromGeneric = nullptr;
         uint64_t hash = 0;
         uint64_t aotHash = 0;
+
+        bool isFullyInferred = false;
+        string inferredSource;
+
 #if DAS_MACRO_SANITIZER
     public:
         void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
@@ -1493,6 +1508,7 @@ namespace das
         //      2. invoke of blocks will have extra prologue overhead
         //      3. context always has context mutex
         bool debugger = false;
+        bool debug_infer_flag = false;  // set this to true to debug macros for missing "not_inferred"
         string debug_module;
     // profiler
         // only enabled if profiler is disabled

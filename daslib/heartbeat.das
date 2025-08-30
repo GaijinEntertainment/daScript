@@ -32,6 +32,7 @@ def public heartbeat() {
 
 class AddHeartbeat : AstVisitor {
     astChanged : bool = false
+    @do_not_delete func : Function?
     def heartbeatBlock(var body : ExprBlock?) {
         if (length(body.list) == 0) {
             return
@@ -42,12 +43,18 @@ class AddHeartbeat : AstVisitor {
         var inscope expr <- qmacro(heartbeat())
         body.list |> emplace(expr, 0)
         astChanged = true
+        func.not_inferred()
+    }
+    def override preVisitFunction(var fun : FunctionPtr) {
+        func = get_ptr(fun)
     }
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         if (fun.body == null || !(fun.body is ExprBlock)) {
+            func = null
             return <- fun
         }
         heartbeatBlock(fun.body as ExprBlock)
+        func = null
         return <- fun
     }
     def override visitExprFor(var expr : smart_ptr<ExprFor>) : ExpressionPtr {

@@ -312,7 +312,7 @@ namespace das {
                 ss << "\n";
             }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
-            if ( fn->addr ) { ss << "[addr]\n"; }
+            // if ( fn->addr ) { ss << "[addr]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->init ) { ss << "[init" << (fn->lateInit ? "(late)" : "") << "]\n"; }
             if ( fn->macroInit ) { ss << "[macro_init]\n"; }

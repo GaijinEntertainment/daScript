@@ -187,7 +187,7 @@ namespace das {
         lock_guard<mutex> guard(pmut);
         uint64_t newPos = tellp();
         if (newPos != pos) {
-            string st(data() + pos, newPos - pos);
+            string st(data() + pos, size_t(newPos - pos));
             printf("%s", st.c_str());
             fflush(stdout);
             pos = newPos;

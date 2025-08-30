@@ -1242,13 +1242,13 @@ namespace das
             bool foundOffset = false;
             if ( arguments[0]->rtti_isField() ) {
                 auto field = static_pointer_cast<ExprField>(arguments[0]);
-                methodOffset = field->field->offset;
+                methodOffset = field->fieldRef->offset;
                 foundOffset = true;
             } else if ( arguments[0]->rtti_isR2V() ) {
                 auto eR2V = static_pointer_cast<ExprRef2Value>(arguments[0]);
                 if ( eR2V->subexpr->rtti_isField() ) {
                     auto field = static_pointer_cast<ExprField>(eR2V->subexpr);
-                    methodOffset = field->field->offset;
+                    methodOffset = field->fieldRef->offset;
                     foundOffset = true;
                 }
             }
@@ -1987,7 +1987,7 @@ namespace das
             return nullptr;
         }
         int fieldOffset = -1;
-        if ( !field && fieldIndex==-1 ) {
+        if ( !fieldRef && fieldIndex==-1 ) {
             fieldOffset = (int) annotation->getFieldOffset(name);
         } else if ( fieldIndex != - 1 ) {
             if ( value->type->isPointer() ) {
@@ -2004,9 +2004,9 @@ namespace das
                 }
             }
         } else {
-            DAS_ASSERTF(field, "field can't be null");
-            if (!field) return nullptr;
-            fieldOffset = field->offset;
+            DAS_ASSERTF(fieldRef, "field can't be null");
+            if (!fieldRef) return nullptr;
+            fieldOffset = fieldRef->offset;
         }
         DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
         if (value->type->isPointer()) {
@@ -2082,7 +2082,7 @@ namespace das
                     fieldOffset = value->type->firstType->getTupleFieldOffset(fieldIndex);
                 }
             } else {
-                fieldOffset = field->offset;
+                fieldOffset = fieldRef->offset;
             }
             DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
         }
