@@ -1699,7 +1699,7 @@ class LlvmJitVisitor : AstVisitor {
         return LLVMRealPredicate.LLVMRealOEQ
     }
 
-    def check_divide_by_0(right : LLVMOpaqueValue?; at : LineInfo; opType : TypeDeclPtr) {
+    def check_divide_by_0(right : LLVMOpaqueValue?; at : LineInfo; opType : TypeDeclPtr, op: string) {
         var check_div_0 = LLVMAppendBasicBlock(ffunc, "check_div_0")
         var check_true = LLVMAppendBasicBlock(ffunc, "check_true")
         var check_end = LLVMAppendBasicBlock(ffunc, "check_end")
@@ -1709,7 +1709,11 @@ class LlvmJitVisitor : AstVisitor {
         let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, right, zero, "cmp_is_zero")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
-        build_exception("division by zero", at)
+        if (op == "%" || op == "%=") {
+            build_exception("division by zero in modulo", at)
+        } else {
+            build_exception("division by zero", at)
+        }
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_end)
     }
@@ -1853,7 +1857,7 @@ class LlvmJitVisitor : AstVisitor {
             // for integer division we check division by zero
             if (opType.isInteger && expr.left._type.isInteger) {
                 if (!isExprIntNZ(expr.right)) {
-                    check_divide_by_0(right, expr.at, opType)
+                    check_divide_by_0(right, expr.at, opType, string(expr.op))
                 }
             }
             if (expr.op == "/") {
