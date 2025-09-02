@@ -1,0 +1,30 @@
+name: Download and Run das-fmt on LLVM
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  download-and-run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+
+      - name: Download daslang binary
+        run: |
+          wget "https://github.com/GaijinEntertainment/daScript/releases/download/v0.5.9.1/daslang-linux-x86_64.zip" -O daslang.zip
+          unzip daslang.zip
+          chmod +x ./daslang_install/bin/daslang
+
+      - name: Clone das-fmt repos
+        uses: actions/checkout@master
+        with:
+          repository: profelis/das-fmt     # Path to repository with das-fmt scripts
+          path: das-fmt
+      - name: Run formatter
+        run: |
+          set -eux
+          ./daslang_install/bin/daslang ./das-fmt/dasfmt.das -- --path ./daslib --verify
