@@ -989,9 +989,9 @@ namespace das
             stringHeap = make_smart<LinearStringAllocator>();
         }
         heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
-        heap->setLimit ( options.getUInt64Option("heap_size_limit", policies.max_heap_allocated) );
+        heap->setLimit ( options.getUInt64OptionEx("heap_size_limit", "max_heap_allocated", policies.max_heap_allocated) );
         stringHeap->setInitialSize ( options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) );
-        stringHeap->setLimit ( options.getUInt64Option("string_heap_size_limit", policies.max_string_heap_allocated) );
+        stringHeap->setLimit ( options.getUInt64OptionEx("string_heap_size_limit", "max_string_heap_allocated", policies.max_string_heap_allocated) );
         constStringHeap = make_shared<ConstStringAllocator>();
         totalVariables = totalVars;
         if ( globalStringHeapSize ) {

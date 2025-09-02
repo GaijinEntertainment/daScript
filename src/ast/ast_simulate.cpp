@@ -3186,9 +3186,9 @@ namespace das
             context.stringHeap = make_smart<LinearStringAllocator>();
         }
         context.heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
-        context.heap->setLimit ( options.getUInt64Option("heap_size_limit", policies.max_heap_allocated) );
+        context.heap->setLimit ( options.getUInt64OptionEx("heap_size_limit", "max_heap_allocated", policies.max_heap_allocated) );
         context.stringHeap->setInitialSize ( options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) );
-        context.stringHeap->setLimit ( options.getUInt64Option("string_heap_size_limit", policies.max_string_heap_allocated) );
+        context.stringHeap->setLimit ( options.getUInt64OptionEx("string_heap_size_limit", "max_string_heap_allocated", policies.max_string_heap_allocated) );
         context.constStringHeap = make_shared<ConstStringAllocator>();
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);

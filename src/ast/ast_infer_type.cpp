@@ -10282,10 +10282,10 @@ namespace das {
         bool anyMacrosDidWork = false;
         bool anyMacrosFailedToInfer = false;
         int pass = 0;
-        int  maxPasses = options.getIntOption("max_infer_passes", policies.max_infer_passes);
+        int32_t maxInferPasses = options.getIntOption("max_infer_passes", policies.max_infer_passes);
         if ( failed() ) goto failed_to_infer;
         do {
-            if ( pass++ >= maxPasses ) goto failed_to_infer;
+            if ( pass++ >= maxInferPasses ) goto failed_to_infer;
             anyMacrosDidWork = false;
             anyMacrosFailedToInfer = false;
             auto modMacro = [&](Module * mod) -> bool {    // we run all macros for each module
@@ -10333,26 +10333,26 @@ namespace das {
             inferTypesDirty(logs, true);
             reportingInferErrors = false;
         }
-        if ( pass >= maxPasses ) {
-            error("type inference exceeded maximum allowed number of passes ("+to_string(maxPasses)+")\n"
+        if ( pass >= maxInferPasses ) {
+            error("type inference exceeded maximum allowed number of passes ("+to_string(maxInferPasses)+")\n"
                     "this is likely due to a macro continuesly beeing applied", "", "",
                 LineInfo(), CompilationError::too_many_infer_passes);
         }
     }
 
     void Program::inferTypesDirty(TextWriter & logs, bool verbose) {
-        const bool log = options.getBoolOption("log_infer_passes",false);
         int pass = 0;
-        int  maxPasses = options.getIntOption("max_infer_passes", policies.max_infer_passes);
-        if ( log ) {
+        int32_t maxInferPasses = options.getIntOption("max_infer_passes", policies.max_infer_passes);
+        bool logInferPasses = options.getBoolOption("log_infer_passes",false);
+        if ( logInferPasses ) {
             logs << "INITIAL CODE:\n" << *this;
         }
-        for ( pass = 0; pass < maxPasses; ++pass ) {
+        for ( pass = 0; pass < maxInferPasses; ++pass ) {
             if ( macroException ) break;
             failToCompile = false;
             errors.clear();
             InferTypes context(this);
-            context.verbose = verbose || log;
+            context.verbose = verbose || logInferPasses;
             visit(context);
             for ( auto efn : context.extraFunctions ) {
                 addFunction(efn);
@@ -10383,7 +10383,7 @@ namespace das {
             };
             Module::foreach(modMacro);
             library.foreach(modMacro, "*");
-            if ( log ) {
+            if ( logInferPasses ) {
                 logs << "PASS " << pass << ":\n" << *this;
                 sort(errors.begin(), errors.end());
                 for (auto & err : errors) {
@@ -10394,8 +10394,8 @@ namespace das {
             if ( context.finished() ) break;
         }
     failedIt:;
-        if (pass == maxPasses) {
-            error("type inference exceeded maximum allowed number of passes ("+to_string(maxPasses)+")\n"
+        if (pass == maxInferPasses) {
+            error("type inference exceeded maximum allowed number of passes ("+to_string(maxInferPasses)+")\n"
                     "this is likely due to a loop in the type system", "", "",
                 LineInfo(), CompilationError::too_many_infer_passes);
         }

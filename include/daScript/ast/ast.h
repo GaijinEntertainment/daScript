@@ -118,6 +118,7 @@ namespace das
         bool getBoolOption(const string & name, bool def = false) const;
         int32_t getIntOption(const string & name, int32_t def = false) const;
         uint64_t getUInt64Option(const string & name, uint64_t def = false) const;
+        uint64_t getUInt64OptionEx (const string & name, const string & name2, uint64_t def = false) const;
         void serialize ( AstSerializer & ser );
     };
 
@@ -1433,82 +1434,82 @@ namespace das
 
     struct CodeOfPolicies {
         bool        aot = false;                        // enable AOT
-        bool        standalone_context = false;         // generate standalone context class in aot mode
+        /*option*/ bool        standalone_context = false;         // generate standalone context class in aot mode
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
         bool        aot_macros = false;                 // enables aot of macro code (like 'qmacro_block')
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time
         bool        keep_alive = false;                 // produce keep-alive noodes
-        bool        very_safe_context = false;          // context is very safe (does not release old memory from array or table grow, leaves it to GC)
+        /*option*/ bool        very_safe_context = false;          // context is very safe (does not release old memory from array or table grow, leaves it to GC)
     // error reporting
         int32_t     always_report_candidates_threshold = 6; // always report candidates if there are less than this number
     // infer passes
-        int32_t     max_infer_passes = 50;              // maximum number of infer passes
+        /*option*/ int32_t     max_infer_passes = 50;              // maximum number of infer passes
     // memory
-        uint32_t    stack = 16*1024;                    // 0 for unique stack
-        bool        intern_strings = false;             // use string interning lookup for regular string heap
-        bool        persistent_heap = false;
-        bool        multiple_contexts = false;          // code supports context safety
-        uint32_t    heap_size_hint = 65536;
-        uint32_t    string_heap_size_hint = 65536;
-        bool        solid_context = false;              // all access to varable and function lookup to be context-dependent (via index)
+        /*option*/ uint32_t    stack = 16*1024;                    // 0 for unique stack
+        /*option*/ bool        intern_strings = false;             // use string interning lookup for regular string heap
+        /*option*/ bool        persistent_heap = false;
+        /*option*/ bool        multiple_contexts = false;          // code supports context safety
+        /*option*/ uint32_t    heap_size_hint = 65536;
+        /*option*/ uint32_t    string_heap_size_hint = 65536;
+        /*option*/ bool        solid_context = false;              // all access to varable and function lookup to be context-dependent (via index)
                                                         // this is slightly faster, but prohibits AOT or patches
         bool        macro_context_persistent_heap = true;   // if true, then persistent heap is used for macro context
         bool        macro_context_collect = false;          // GC collect macro context after major passes
         uint64_t    max_static_variables_size = 0x100000000;   // 4GB
-        uint64_t    max_heap_allocated = 0;
-        uint64_t    max_string_heap_allocated = 0;
+        /*option*/ uint64_t    max_heap_allocated = 0;
+        /*option*/ uint64_t    max_string_heap_allocated = 0;
     // rtti
-        bool rtti = false;                              // create extended RTTI
+        /*option*/ bool rtti = false;                              // create extended RTTI
     // language
-        bool unsafe_table_lookup = true;                // table lookup (tab[key]) to be unsafe
-        bool relaxed_pointer_const = false;             // allow const correctness to be relaxed on pointers
+        /*option*/ bool unsafe_table_lookup = true;                // table lookup (tab[key]) to be unsafe
+        /*option*/ bool relaxed_pointer_const = false;             // allow const correctness to be relaxed on pointers
         bool version_2_syntax = false;                  // use syntax version 2
         bool gen2_make_syntax = false;                  // only new make syntax is allowed (no [[...]] or [{...}])
-        bool relaxed_assign = true;                     // allow = to <- substitution, in certain expressions
+        /*option*/ bool relaxed_assign = true;                     // allow = to <- substitution, in certain expressions
         bool no_unsafe = false;
         bool local_ref_is_unsafe = true;                // var a & = ... unsafe. should be
-        bool no_global_variables = false;
-        bool no_global_variables_at_all = false;
-        bool no_global_heap = false;
-        bool only_fast_aot = false;
-        bool aot_order_side_effects = false;
-        bool no_unused_function_arguments = false;
-        bool no_unused_block_arguments = false;
+        /*option*/ bool no_global_variables = false;
+        /*option*/ bool no_global_variables_at_all = false;
+        /*option*/ bool no_global_heap = false;
+        /*option*/ bool only_fast_aot = false;
+        /*option*/ bool aot_order_side_effects = false;
+        /*option*/ bool no_unused_function_arguments = false;
+        /*option*/ bool no_unused_block_arguments = false;
         bool allow_block_variable_shadowing = false;
         bool allow_local_variable_shadowing = false;
         bool allow_shared_lambda = false;
         bool ignore_shared_modules = false;
         bool default_module_public = true;              // by default module is 'public', not 'private'
-        bool no_deprecated = false;
-        bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
-        bool strict_smart_pointers = true;              // collection of tests for smart pointers, like van inscope for any local, etc
-        bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
-        bool strict_unsafe_delete = false;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
+        /*option*/ bool no_deprecated = false;
+        /*option*/ bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
+        /*option*/ bool strict_smart_pointers = true;              // collection of tests for smart pointers, like van inscope for any local, etc
+        /*option*/ bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
+        /*option*/ bool strict_unsafe_delete = false;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
         bool no_members_functions_in_struct = false;    // structures can't have member functions
-        bool no_local_class_members = true;             // members of the class can't be classes
-        bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
-        bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
-        bool no_unsafe_uninitialized_structures = true; // if true, then unsafe uninitialized structures are not allowed
-        bool strict_properties = false;                 // if true, then properties are strict, i.e. a.prop = b does not get promoted to a.prop := b
-        bool no_writing_to_nameless = true;             // if true, then writing to nameless variables (intermediate on the stack) is not allowed
-        bool always_call_super = false;                  // if true, then super() needs to be called from every class constructor
+        /*option*/ bool no_local_class_members = true;             // members of the class can't be classes
+        /*option*/ bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
+        /*option*/ bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
+        /*option*/ bool no_unsafe_uninitialized_structures = true; // if true, then unsafe uninitialized structures are not allowed
+        /*option*/ bool strict_properties = false;                 // if true, then properties are strict, i.e. a.prop = b does not get promoted to a.prop := b
+        /*option*/ bool no_writing_to_nameless = true;             // if true, then writing to nameless variables (intermediate on the stack) is not allowed
+        /*option*/ bool always_call_super = false;                  // if true, then super() needs to be called from every class constructor
     // environment
-        bool no_optimizations = false;                  // disable optimizations, regardless of settings
+        /*options*/ bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
-        bool log_compile_time = false;                  // if true, then compile time will be printed at the end of the compilation
-        bool log_total_compile_time = false;            // if true, then detailed compile time will be printed at the end of the compilation
-        bool no_fast_call = false;                      // disable fastcall
-        bool scoped_stack_allocator = true;             // reuse stack memory after variables out of scope
+        /*option*/ bool log_compile_time = false;                  // if true, then compile time will be printed at the end of the compilation
+        /*option*/ bool log_total_compile_time = false;            // if true, then detailed compile time will be printed at the end of the compilation
+        /*option*/ bool no_fast_call = false;                      // disable fastcall
+        /*option*/ bool scoped_stack_allocator = true;             // reuse stack memory after variables out of scope
     // debugger
         //  when enabled
         //      1. disables [fastcall]
         //      2. invoke of blocks will have extra prologue overhead
         //      3. context always has context mutex
         bool debugger = false;
-        bool debug_infer_flag = false;  // set this to true to debug macros for missing "not_inferred"
+        /*option*/ bool debug_infer_flag = false;  // set this to true to debug macros for missing "not_inferred"
         string debug_module;
     // profiler
         // only enabled if profiler is disabled
@@ -1520,7 +1521,7 @@ namespace das
         bool jit = false;
         string jit_module;
     // pinvoke
-        bool threadlock_context = false;               // has context mutex
+        /*option*/ bool threadlock_context = false;               // has context mutex
     };
 
     struct CommentReader : public ptr_ref_count {

@@ -880,15 +880,19 @@ namespace das {
         "very_safe_context",            Type::tBool,
         "no_writing_to_nameless",       Type::tBool,
         "always_call_super",            Type::tBool,
+        "strict_unsafe_delete",         Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
         "multiple_contexts",            Type::tBool,
+        "standalone_context",           Type::tBool,
         "persistent_heap",              Type::tBool,
         "heap_size_hint",               Type::tInt,
         "heap_size_limit",              Type::tInt,
+        "max_heap_allocated",           Type::tInt,
         "string_heap_size_hint",        Type::tInt,
         "string_heap_size_limit",       Type::tInt,
+        "max_string_heap_allocated",    Type::tInt,
         "gc",                           Type::tBool,
         "solid_context",                Type::tBool,    // we will not have AOT or patches
     // aot
@@ -920,13 +924,14 @@ namespace das {
         "print_ref",                    Type::tBool,
         "print_var_access",             Type::tBool,
         "print_c_style",                Type::tBool,
-        "print_func_use",               Type::tBool,
+        "print_use",                    Type::tBool,
         "gen2_make_syntax",             Type::tBool,
         "relaxed_assign",               Type::tBool,
     // rtti
         "rtti",                         Type::tBool,
     // optimization
         "optimize",                     Type::tBool,
+        "no_optimization",              Type::tBool,
         "fusion",                       Type::tBool,
         "remove_unused_symbols",        Type::tBool,
         "no_fast_call",                 Type::tBool,
@@ -942,6 +947,7 @@ namespace das {
         "unsafe_table_lookup",          Type::tBool,
     // debugger
         "debugger",                     Type::tBool,
+        "debug_infer_flag",             Type::tBool,
     // profiler
         "profiler",                     Type::tBool,
     // runtime checks
