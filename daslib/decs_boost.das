@@ -217,6 +217,7 @@ def private append_index_lookup(arch_name : string; var qblock : smart_ptr<ExprB
         ftype.flags &= ~TypeDeclFlags.constant
         ftype.flags &= ~TypeDeclFlags.ref
         move(iget, get_ptr(qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>))[entity_index])))
+        force_generated(iget, true)
     }
     var inscope vlet <- new ExprLet(at = a.at, atInit = a.at)
     vlet.genFlags |= ExprGenFlags.alwaysSafe
