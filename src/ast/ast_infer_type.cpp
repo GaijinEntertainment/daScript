@@ -3062,7 +3062,10 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprStaticAssert * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()<1 || expr->arguments.size()>2  ) {
                 error("static_assert(expr) or static_assert(expr,string)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
@@ -3122,7 +3125,10 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()<1 || expr->arguments.size()>2  ) {
                 error("assert(expr) or assert(expr,string)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
@@ -3163,7 +3169,10 @@ namespace das {
         }
     // ExprDebug
         virtual ExpressionPtr visit ( ExprDebug * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()<1 || expr->arguments.size()>2 ) {
                 error("debug(expr) or debug(expr,string)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
@@ -3179,7 +3188,10 @@ namespace das {
         }
     // ExprMemZero
         virtual ExpressionPtr visit ( ExprMemZero * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()!=1 ) {
                 error("memzero(ref expr)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
@@ -3779,7 +3791,10 @@ namespace das {
 
     // ExprSetInsert
         virtual ExpressionPtr visit ( ExprSetInsert * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()!=2 ) {
                 error("insert(table,key)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
@@ -3803,7 +3818,10 @@ namespace das {
         }
     // ExprErase
         virtual ExpressionPtr visit ( ExprErase * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()!=2 ) {
                 error("eraseKey(table,key)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
@@ -3827,7 +3845,10 @@ namespace das {
         }
     // ExprFind
         virtual ExpressionPtr visit ( ExprFind * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()!=2 ) {
                 error("findKey(table,key)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
@@ -3853,7 +3874,10 @@ namespace das {
         }
     // ExprKeyExists
         virtual ExpressionPtr visit ( ExprKeyExists * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( expr->arguments.size()!=2 ) {
                 error("keyExists(table,key)",  "", "",
                     expr->at, CompilationError::invalid_argument_count);
@@ -4909,7 +4933,10 @@ namespace das {
             return Visitor::visitNewArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             if ( !expr->typeexpr ) {
                 error("new type did not infer", "", "",
                     expr->at, CompilationError::type_not_found);
@@ -8200,7 +8227,10 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
-            if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
 
             vector<TypeDeclPtr> nonNamedTypes;
             if (!inferArguments(nonNamedTypes, expr->nonNamedArguments)) {
@@ -9049,7 +9079,10 @@ namespace das {
         }
 
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            if (expr->argumentsFailedToInfer) return Visitor::visit(expr);
+            if ( expr->argumentsFailedToInfer ) {
+                if ( func ) func->notInferred();
+                return Visitor::visit(expr);
+            }
             expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get();
             if ( expr->func && expr->func->fromGeneric ) expr->genericFunction = true;
             if ( expr->aliasSubstitution  ) {
