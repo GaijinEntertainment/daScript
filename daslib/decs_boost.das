@@ -194,7 +194,9 @@ def private append_iterator(arch_name : string; var qloop : smart_ptr<ExprFor>; 
         var inscope ftype <- clone_type(a._type)
         ftype.flags &= ~TypeDeclFlags.constant
         ftype.flags &= ~TypeDeclFlags.ref
-        qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>)))
+        var inscope it <- qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>)))
+        force_generated(it, true)
+        qloop.sources |> emplace <| it
     }
     return true
 }
