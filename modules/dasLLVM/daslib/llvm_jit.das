@@ -1699,7 +1699,7 @@ class LlvmJitVisitor : AstVisitor {
         return LLVMRealPredicate.LLVMRealOEQ
     }
 
-    def check_divide_by_0(right : LLVMOpaqueValue?; at : LineInfo; opType : TypeDeclPtr, op: string) {
+    def check_divide_by_0(right : LLVMOpaqueValue?; at : LineInfo; opType : TypeDeclPtr, op : string) {
         var check_div_0 = LLVMAppendBasicBlock(ffunc, "check_div_0")
         var check_true = LLVMAppendBasicBlock(ffunc, "check_true")
         var check_end = LLVMAppendBasicBlock(ffunc, "check_end")
