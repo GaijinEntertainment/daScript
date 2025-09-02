@@ -1699,7 +1699,7 @@ class LlvmJitVisitor : AstVisitor {
         return LLVMRealPredicate.LLVMRealOEQ
     }
 
-    def check_divide_by_0(right : LLVMOpaqueValue?; at : LineInfo; opType : TypeDeclPtr) {
+    def check_divide_by_0(right : LLVMOpaqueValue?; at : LineInfo; opType : TypeDeclPtr, op: string) {
         var check_div_0 = LLVMAppendBasicBlock(ffunc, "check_div_0")
         var check_true = LLVMAppendBasicBlock(ffunc, "check_true")
         var check_end = LLVMAppendBasicBlock(ffunc, "check_end")
@@ -1709,7 +1709,11 @@ class LlvmJitVisitor : AstVisitor {
         let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, right, zero, "cmp_is_zero")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
-        build_exception("division by zero", at)
+        if (op == "%" || op == "%=") {
+            build_exception("division by zero in modulo", at)
+        } else {
+            build_exception("division by zero", at)
+        }
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_end)
     }
@@ -1793,7 +1797,8 @@ class LlvmJitVisitor : AstVisitor {
         // the way we do it, is we expand scalar up to vector type
         if (expr.op == "<<" || expr.op == ">>" || expr.op == ">>>" || expr.op == "<<<" || expr.op == "<<=" || expr.op == ">>=" || expr.op == ">>>=" || expr.op == "<<<=") {
             // Create a mask value: (sizeof(element_type) * 8) - 1
-            right = LLVMBuildAnd(g_builder, right, LLVMConstInt(LLVMInt32Type(), uint64((opType.sizeOf * 8) - 1), 0), "")
+            verify(isNumeric(opType))
+            right = LLVMBuildAnd(g_builder, right, LLVMConstInt(type_to_llvm_type(opType), uint64((opType.sizeOf * 8) - 1), 0), "")
             right = build_broadcast_vector(g_builder, shiftType, right)
         }
         if (expr.op == "+") {
@@ -1852,7 +1857,7 @@ class LlvmJitVisitor : AstVisitor {
             // for integer division we check division by zero
             if (opType.isInteger && expr.left._type.isInteger) {
                 if (!isExprIntNZ(expr.right)) {
-                    check_divide_by_0(right, expr.at, opType)
+                    check_divide_by_0(right, expr.at, opType, string(expr.op))
                 }
             }
             if (expr.op == "/") {
@@ -3949,8 +3954,10 @@ class LlvmJitVisitor : AstVisitor {
             LLVMSetAlignment(args, 16u)
             args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "delete lambda args ptr")
         }
-        check_ptr_zero_and_return(lmb)
-
+        var is_zero = check_zero(lmb)
+        var end = LLVMAppendBasicBlock(ffunc, "end")
+        LLVMBuildBr(g_builder, end)
+        LLVMPositionBuilderAtEnd(g_builder, is_zero)
         // build arguments (1, and its 'capture')
         let ai = 0
         var arg_ptr = LLVMBuildGEP2(g_builder, LLVMFloat4Type(), args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
@@ -3969,6 +3976,8 @@ class LlvmJitVisitor : AstVisitor {
         var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL)
         var typ = g_fn_types[FN_JIT_CALL_OR_FASTCALL]
         LLVMBuildCall2(g_builder, typ, func, params, "delete_lambda")
+        LLVMBuildBr(g_builder, end)
+        LLVMPositionBuilderAtEnd(g_builder, end)
     }
 
     def get_delete_handle_function(t : TypeDeclPtr) : LLVMOpaqueValue? {
@@ -5202,6 +5211,10 @@ class LlvmJitVisitor : AstVisitor {
         } elif (etype.isPointer) {
             var ptr_type = type_to_llvm_type(etype)
             tres = cast_from_vec4f_ptr(v4f, ptr_type)
+        } elif (etype.baseType == Type.tFunction) {
+            let int_vector = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(), 2u), "vec_to_int_vector")
+            let func_bits = LLVMBuildExtractElement(g_builder, int_vector, LLVMConstInt(LLVMInt64Type(), 0ul, 0), "func_bits")
+            tres = LLVMBuildIntToPtr(g_builder, func_bits, LLVMPointerType(LLVMInt8Type(), 0u), "function_ptr")
         } elif (etype.baseType == Type.tLambda) {
             tres = cast_from_vec4f_ptr(v4f, LLVMPointerType(LLVMVoidType(), 0u))
         } else {

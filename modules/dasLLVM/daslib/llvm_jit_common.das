@@ -15,7 +15,6 @@ require daslib/ast_boost
 require daslib/strings
 require daslib/defer
 require daslib/enum_trait
-require fio
 require jit
 
 let public LLVM_JIT_ENABLED = true || llvm_config::llvm_jit_enabled()
