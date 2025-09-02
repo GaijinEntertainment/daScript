@@ -3252,7 +3252,12 @@ namespace das {
     }
 
     bool Program::getOptimize() const {
-        return !policies.no_optimizations && options.getBoolOption("optimize",true);
+        if ( policies.no_optimizations ) return false;
+        auto arg = options.find("optimize",Type::tBool);
+        if ( arg ) return arg->bValue;
+        arg = options.find("no_optimization",Type::tBool);
+        if ( arg ) return !arg->bValue;
+        return true;
     }
 
     bool Program::getDebugger() const {

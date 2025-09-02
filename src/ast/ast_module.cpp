@@ -65,6 +65,13 @@ namespace das {
         return arg ? uint64_t(arg->iValue) : def;
     }
 
+    uint64_t AnnotationArgumentList::getUInt64OptionEx(const string & name, const string & name2, uint64_t def) const {
+        auto arg = find(name, Type::tInt);
+        if (arg) return uint64_t(arg->iValue);
+        arg = find(name2, Type::tInt);
+        return arg ? uint64_t(arg->iValue) : def;
+    }
+
     // MODULE
 
     void Module::addDependency ( Module * mod, bool pub ) {
