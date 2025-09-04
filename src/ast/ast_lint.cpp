@@ -862,39 +862,12 @@ namespace das {
     } g_allOptions [] = {
     // lint
         "lint",                         Type::tBool,
-        "only_fast_aot",                Type::tBool,
-        "aot_order_side_effects",       Type::tBool,
-        "no_global_heap",               Type::tBool,
-        "no_global_variables",          Type::tBool,
-        "no_global_variables_at_all",   Type::tBool,
-        "no_unused_function_arguments", Type::tBool,
-        "no_unused_block_arguments",    Type::tBool,
-        "no_deprecated",                Type::tBool,
-        "no_aliasing",                  Type::tBool,
-        "strict_smart_pointers",        Type::tBool,
-        "no_init",                      Type::tBool,
-        "no_local_class_members",       Type::tBool,
-        "report_invisible_functions",   Type::tBool,
-        "report_private_functions",     Type::tBool,
-        "strict_properties",            Type::tBool,
-        "very_safe_context",            Type::tBool,
         "no_writing_to_nameless",       Type::tBool,
         "always_call_super",            Type::tBool,
-        "strict_unsafe_delete",         Type::tBool,
     // memory
-        "stack",                        Type::tInt,
-        "intern_strings",               Type::tBool,
-        "multiple_contexts",            Type::tBool,
-        "standalone_context",           Type::tBool,
-        "persistent_heap",              Type::tBool,
-        "heap_size_hint",               Type::tInt,
         "heap_size_limit",              Type::tInt,
-        "max_heap_allocated",           Type::tInt,
-        "string_heap_size_hint",        Type::tInt,
         "string_heap_size_limit",       Type::tInt,
-        "max_string_heap_allocated",    Type::tInt,
         "gc",                           Type::tBool,
-        "solid_context",                Type::tBool,    // we will not have AOT or patches
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,
@@ -914,8 +887,6 @@ namespace das {
         "log_aot",                      Type::tBool,
         "log_infer_passes",             Type::tBool,
         "log_require",                  Type::tBool,
-        "log_compile_time",             Type::tBool,
-        "log_total_compile_time",       Type::tBool,
         "log_generics",                 Type::tBool,
         "log_mn_hash",                  Type::tBool,
         "log_gmn_hash",                 Type::tBool,
@@ -925,36 +896,21 @@ namespace das {
         "print_var_access",             Type::tBool,
         "print_c_style",                Type::tBool,
         "print_use",                    Type::tBool,
-        "gen2_make_syntax",             Type::tBool,
-        "relaxed_assign",               Type::tBool,
-    // rtti
-        "rtti",                         Type::tBool,
     // optimization
         "optimize",                     Type::tBool,
         "no_optimization",              Type::tBool,
         "fusion",                       Type::tBool,
         "remove_unused_symbols",        Type::tBool,
-        "no_fast_call",                 Type::tBool,
         "scoped_stack_allocator",       Type::tBool,
     // language
         "always_export_initializer",    Type::tBool,
         "infer_time_folding",           Type::tBool,
         "disable_run",                  Type::tBool,
-        "max_infer_passes",             Type::tInt,
         "indenting",                    Type::tInt,
         "no_unsafe_uninitialized_structures", Type::tBool,
-        "relaxed_pointer_const",        Type::tBool,
-        "unsafe_table_lookup",          Type::tBool,
-    // debugger
-        "debugger",                     Type::tBool,
-        "debug_infer_flag",             Type::tBool,
-    // profiler
-        "profiler",                     Type::tBool,
     // runtime checks
         "skip_lock_checks",             Type::tBool,
         "skip_module_lock_checks",      Type::tBool,
-    // pinvoke
-        "threadlock_context",           Type::tBool,
     // version_2_syntax
         "gen2",                         Type::tBool,
     };
@@ -969,6 +925,8 @@ namespace das {
         }
         DAS_VERIFYF(!failed, "verifyOptions failed");
     }
+
+    vector<pair<string,Type>> getCodeOfPolicyOptions();
 
     void Program::lint ( TextWriter & /*logs*/, ModuleGroup & libGroup ) {
         if (!options.getBoolOption("lint", true)) {
@@ -985,7 +943,22 @@ namespace das {
         // check for invalid options
         das_map<string,Type> ao;
         for ( const auto & opt : g_allOptions ) {
-            ao[opt.name] = opt.type;
+            auto it = ao.find(opt.name);
+            if ( it != ao.end() ) {
+                error("internal error: option '" + string(opt.name) + "' is already defined",
+                    "", "", LineInfo(), CompilationError::internal_error);
+            } else {
+                ao[opt.name] = opt.type;
+            }
+        }
+        for ( const auto & opt : getCodeOfPolicyOptions() ) {
+            auto it = ao.find(opt.first);
+            if ( it != ao.end() ) {
+                error("internal error: option '" + opt.first + "' is already defined",
+                    "", "", LineInfo(), CompilationError::internal_error);
+            } else {
+                ao[opt.first] = opt.second;
+            }
         }
         for ( const auto & opt : options ) {
             Type optT = Type::none;

@@ -173,5 +173,6 @@ namespace das
 
     ,   missing_node                            =   50100       // handled type requires simulateGetXXX
     ,   missing_aot                             =   50101       // AOT hash function missing
+    ,   internal_error                          =   59999       // internal error
     };
 }
