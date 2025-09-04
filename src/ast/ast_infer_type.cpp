@@ -338,6 +338,10 @@ namespace das {
             }
         }
 
+        bool jitEnabled() const {
+            return program->policies.jit && (!func || !func->requestNoJit);
+        }
+
         void propagateTempType ( const TypeDeclPtr & parentType, TypeDeclPtr & subexprType ) {
             if ( subexprType->isTempType() ) {
                 if ( parentType->temporary ) subexprType->temporary = true;   // array<int?># -> int?#
@@ -1300,7 +1304,7 @@ namespace das {
                 if ( itFnList ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( pFn->jitOnly && !program->policies.jit ) continue;
+                        if ( pFn->jitOnly && !jitEnabled() ) continue;
                         if ( pFn->isTemplate ) continue;
                         if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn) ) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
@@ -1360,7 +1364,7 @@ namespace das {
                     if ( itFnList ) {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
-                            if ( pFn->jitOnly && !program->policies.jit ) continue;
+                            if ( pFn->jitOnly && !jitEnabled() ) continue;
                             if ( pFn->isTemplate ) continue;
                             if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
@@ -1388,7 +1392,7 @@ namespace das {
                     if ( itFnList ) {
                         auto & goodFunctions = itFnList->second;
                         for ( auto & pFn : goodFunctions ) {
-                            if ( pFn->jitOnly && !program->policies.jit ) continue;
+                            if ( pFn->jitOnly && !jitEnabled() ) continue;
                             if ( pFn->isTemplate ) continue;
                             if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn) ) ) {
                                 if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
@@ -6914,7 +6918,7 @@ namespace das {
         }
     // ExprTryCatch
         ExpressionPtr visit ( ExprTryCatch * expr ) override {
-            if ( program->policies.jit ) {
+            if ( jitEnabled() ) {
                 auto tryBlock = make_smart<ExprMakeBlock>(expr->try_block->at,expr->try_block);
                 ((ExprBlock *)tryBlock->block.get())->returnType = make_smart<TypeDecl>(Type::autoinfer);
                 auto catchBlock = make_smart<ExprMakeBlock>(expr->catch_block->at,expr->catch_block);
@@ -7553,7 +7557,7 @@ namespace das {
             markNoDiscard(that);
         }
         virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
-            if ( program->policies.jit & that->type && (
+            if ( jitEnabled() & that->type && (
                     (that->type->isHandle() && that->type->annotation->isIterable()) ||
                     (that->type->isString())
              )) {

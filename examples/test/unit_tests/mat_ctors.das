@@ -98,7 +98,7 @@ def test_any(var t : auto(mat)) {
     assert(ops)
 }
 
-[sideeffects]
+[sideeffects, no_jit] // assert-verify warning caused by wrong effects of jit index access function
 def test_r2v {
     var m : float4x4
     m[0] = float4(1, 2, 3, 4)

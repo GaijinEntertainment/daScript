@@ -70,6 +70,11 @@ check_cxx_source_runs("${SSE2_TEST_SOURCE}" SSE2_SUPPORTED)
 ENDIF()
 
 MACRO(SETUP_COMPILER)
+    IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        # GNU uses strict aliasing optimizations too hard, which breaks our code
+        ADD_COMPILE_OPTIONS(-Wno-strict-aliasing) # disable warnings
+        ADD_COMPILE_OPTIONS(-fno-strict-aliasing) # disable strict aliasing optimizations
+    ENDIF()
     IF(EMSCRIPTEN)
         ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof")
