@@ -801,7 +801,11 @@ namespace das {
         auto cop = make_smart<CodeOfPoliciesAnnotation>(dummy);
         for ( auto & f : cop->fields ) {
             if ( f.second.decl->isWorkhorseType() ) {
-                options.push_back({ f.first, f.second.decl->baseType});
+                auto bT = f.second.decl->baseType;
+                switch ( bT ) {
+                    case Type::tUInt:   bT = Type::tInt; break;
+                }
+                options.push_back({f.first,bT});
             }
         }
         return options;
