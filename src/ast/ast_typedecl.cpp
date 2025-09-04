@@ -2063,7 +2063,7 @@ namespace das
 
     bool TypeDecl::isAutoArrayResolved() const {
         for ( auto di : dim ) {
-            if ( di==TypeDecl::dimAuto ) {
+            if ( di==TypeDecl::dimAuto || di==TypeDecl::dimConst ) {
                 return false;
             }
         }
@@ -2071,7 +2071,7 @@ namespace das
     }
 
     bool TypeDecl::isAuto() const {
-        // auto is auto.... or auto....?
+        // auto is auto.... or auto....?5
         // also dim[] is aito
         for (auto di : dim) {
             if (di == TypeDecl::dimAuto) {

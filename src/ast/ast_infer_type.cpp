@@ -5924,6 +5924,11 @@ namespace das {
             }
             // handle
             if ( expr->fieldRef ) {
+                if ( expr->fieldRef->type->isAliasOrExpr() ) {
+                    error("undefined field type '" + describeType(expr->fieldRef->type) + "'",
+                        reportInferAliasErrors(expr->fieldRef->type), "", expr->at, CompilationError::type_not_found);
+                    return Visitor::visit(expr);
+                }
                 TypeDecl::clone(expr->type,expr->fieldRef->type);
                 expr->type->ref = true;
                 expr->type->constant |= valT->constant;
@@ -6017,6 +6022,10 @@ namespace das {
                 if ( !expr->fieldRef ) {
                     error("can't safe get field '" + expr->name + "'", "", "",
                         expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                } else if ( expr->fieldRef->type->isAliasOrExpr() ) {
+                    error("undefined safe field type '" + describeType(expr->fieldRef->type) + "'",
+                        reportInferAliasErrors(expr->fieldRef->type), "", expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
                 TypeDecl::clone(expr->type,expr->fieldRef->type);
