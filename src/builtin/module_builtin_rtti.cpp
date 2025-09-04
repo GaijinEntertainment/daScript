@@ -794,6 +794,19 @@ namespace das {
         virtual bool isLocal() const override { return true; }
     };
 
+    vector<pair<string,Type>> getCodeOfPolicyOptions() {
+        vector<pair<string,Type>> options;
+        Module dummyMod;
+        ModuleLibrary dummy(&dummyMod);
+        auto cop = make_smart<CodeOfPoliciesAnnotation>(dummy);
+        for ( auto & f : cop->fields ) {
+            if ( f.second.decl->isWorkhorseType() ) {
+                options.push_back({ f.first, f.second.decl->baseType});
+            }
+        }
+        return options;
+    }
+
 
     struct DebugInfoHelperAnnotation : ManagedStructureAnnotation<DebugInfoHelper> {
         DebugInfoHelperAnnotation(ModuleLibrary & ml)
