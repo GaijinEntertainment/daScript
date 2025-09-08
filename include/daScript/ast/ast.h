@@ -1446,6 +1446,7 @@ namespace das
         int32_t     always_report_candidates_threshold = 6; // always report candidates if there are less than this number
     // infer passes
         /*option*/ int32_t     max_infer_passes = 50;              // maximum number of infer passes
+        bool verify_infer_types = false;                       // verify inferred types (to see if there is internal consistency). note - this adds errors to failing tests
     // memory
         /*option*/ uint32_t    stack = 16*1024;                    // 0 for unique stack
         /*option*/ bool        intern_strings = false;             // use string interning lookup for regular string heap
@@ -1591,6 +1592,7 @@ namespace das
         void inferTypesDirty(TextWriter & logs, bool verbose);
         bool relocatePotentiallyUninitialized(TextWriter & logs);
         void lint (TextWriter & logs, ModuleGroup & libGroup );
+        void inferLint(TextWriter & logs);
         void checkSideEffects();
         void foldUnsafe();
         bool optimizationRefFolding();

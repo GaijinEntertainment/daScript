@@ -10429,6 +10429,7 @@ namespace das {
             };
             Module::foreach(modMacro);
             library.foreach(modMacro, "*");
+            inferLint(logs);
             if ( logInferPasses ) {
                 logs << "PASS " << pass << ":\n" << *this;
                 sort(errors.begin(), errors.end());
