@@ -1,305 +1,4 @@
-// LINQ
-// requirement:
-//  - types can be moved, and kept in the container or the collection
-
-// OPERATIONS
-//  Sorting Data
-//      Reverse - Reverses the order of elements in an iterator
-//      Order - Sorts the elements of an iterator
-//      OrderDescending - Sorts the elements of an iterator in descending order
-//      OrderBy - Sorts the elements of an iterator
-//      OrderByDescending - Sorts the elements of an iterator in descending order
-//  Set operations
-//      Distinct - Returns distinct elements from an iterator
-//  Concatenation Operations
-//      Concat - Concatenates two iterators
-//  Aggregation Operations
-//      Count - Counts elements in an iterator
-//      LongCount - Counts elements in an iterator, using a long integer
-//  Filtering data
-//      Where - Filters elements in an iterator
-//  Partitioning data
-//      Skip - Skips the first `n` elements of an iterator
-//      SkipWhile - Skips all elements of an iterator while the predicate is true
-//      Take - Takes the first `n` elements of an iterator or range of elements in the iterator
-//      TakeWhile - Takes elements from an iterator while the predicate is true
-//  Converting sequence
-//      ToArray - Converts an iterator to an array
-//      ToSequence - Converts an array to an iterator
-//      MoveToSequence - Moves an array to an iterator
-// Comparators and keys
-//      Less - Compares two values, returns true if first is less than second
-//      UniqueKey - Generates a unique key for a value
-
-// TODO:
-//      change to stable-sort?
-
-def ToSequence(a : array<auto(TT)>) : iterator<TT -const -&> {
-    //! Converts an array to an iterator
-    var b := a
-    return MoveToSequence(b)
-}
-
-def MoveToSequence(var a : array<auto(TT)>) : iterator<TT -const -&> {
-    //! Converts an array to an iterator, captures input
-    return generator<TT -const -&> capture(<- a) () <| $ {
-        for (it in a) {
-            yield it
-        }
-        delete a
-        return false
-    }
-}
-
-def ToArray(var a : iterator<auto(TT)>) : array<TT -const -&> {
-    //! Converts an iterator to an array
-    var result : array<TT -const -&>
-    for (it in a) {
-        result.push_clone(it)
-    }
-    return <- result
-}
-
-def Concat(var a, b : iterator<auto(TT)>) : iterator<TT> {
-    //! Concatenates two iterators
-    return generator<TT> capture(<- a, <- b) () <| $ {
-        for (itA in a) {
-            yield itA
-        }
-        for (itB in b) {
-            yield itB
-        }
-        return false
-    }
-}
-
-def Reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
-    //! Reverses an iterator
-    return generator<TT -const -&> capture(<- a) () <| $ {
-        var buffer : array<TT -const -&>
-        for (it in a) {
-            buffer.push_clone(it)
-        }
-        let len = buffer.length()
-        for (i in 0..len) {
-            yield buffer[len - i - 1]
-        }
-        delete buffer
-        return false
-    }
-}
-
-def Order(var a : iterator<auto(TT)>; fun : auto(SortT)) : iterator<TT -const -&> {
-    //! Sorts an iterator
-    var arr <- ToArray(a)
-    sort(arr, $(v1, v2) => fun(v1, v2))
-    return MoveToSequence(arr)
-}
-
-def OrderDescending(var a : iterator<auto(TT)>; fun : auto(SortT)) : iterator<TT -const -&> {
-    //! Sorts an iterator in descending order
-    var arr <- ToArray(a)
-    sort(arr, $(v1, v2) => fun(v2, v1))
-    return MoveToSequence(arr)
-}
-
-def Less(a, b) : bool {
-    return a < b
-}
-
-def Less(a, b : tuple<auto(TT)>) : bool {
-    return a._0 < b._0
-}
-
-def Less(a, b : tuple<auto(TT), auto(UU)>) : bool {
-    return true if (a._0 < b._0)
-    return false if (a._0 > b._0)
-    return a._1 < b._1
-}
-
-def Less(a, b : tuple<auto(TT), auto(UU), auto(VV)>) : bool {
-    return true if (a._0 < b._0)
-    return false if (a._0 > b._0)
-    return true if (a._1 < b._1)
-    return false if (a._1 > b._1)
-    return a._2 < b._2
-}
-
-def Less(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>) : bool {
-    return true if (a._0 < b._0)
-    return false if (a._0 > b._0)
-    return true if (a._1 < b._1)
-    return false if (a._1 > b._1)
-    return true if (a._2 < b._2)
-    return false if (a._2 > b._2)
-    return a._3 < b._3
-}
-
-def OrderBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
-    //! Sorts an iterator
-    var arr <- ToArray(a)
-    sort(arr, $(v1, v2) => _::Less(key(v1), key(v2)))
-    return MoveToSequence(arr)
-}
-
-def OrderByDescending(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
-    //! Sorts an iterator in descending order
-    var arr <- ToArray(a)
-    sort(arr, $(v1, v2) => _::Less(key(v2), key(v1)))
-    return MoveToSequence(arr)
-}
-
-def UniqueKey(a) {
-    ///! generates unique key of workhorse type for the value
-    static_if (typeinfo is_workhorse(a)) {
-        return a
-    } else {
-        return "{a}"
-    }
-}
-
-def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
-    //! Returns distinct elements from an iterator
-    return generator<TT -const -&> capture(<- a) () <| $ {
-        var seen : table<typedecl(UniqueKey(type<TT>))>
-        for (it in a) {
-            let k = UniqueKey(it)
-            if (!seen.key_exists(k)) {
-                yield it
-                seen.insert(k)
-            }
-        }
-        delete seen
-        return false
-    }
-}
-
-def DistinctBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
-    //! Returns distinct elements from an iterator based on a key
-    // TODO: specialize with const value vs var value of key, which can be captured.
-    var seen : table<typedecl(UniqueKey(key(type<TT>)))>
-    var buffer : array<TT -const -&>
-    for (it in a) {
-        let k = UniqueKey(key(it))
-        if (!seen.key_exists(k)) {
-            buffer.push_clone(it)
-            seen.insert(k)
-        }
-    }
-    delete seen
-    return buffer.MoveToSequence()
-
-}
-
-def Count(var a : iterator<auto(TT)>) : int {
-    //! Counts elements in an iterator
-    var count = 0
-    for (it in a) {
-        count ++
-    }
-    return count
-}
-
-def LongCount(var a : iterator<auto(TT)>) : int64 {
-    //! Counts elements in an iterator, using a long integer
-    var count = 0l
-    for (it in a) {
-        count ++
-    }
-    return count
-}
-
-def Where(var src : iterator<auto(TT)>; predicate) : iterator<TT -& -const> {
-    //! Filters elements in an iterator based on a predicate
-    // TODO: specialize with const value vs var value of predicate, which can be captured.
-    var buffer : array<TT -& -const>
-    for (x in src) {
-        if (predicate(x)) {
-            buffer.push_clone(x)
-        }
-    }
-    return buffer.MoveToSequence()
-}
-
-def Skip(var src : iterator<auto(TT)>; var total : int) {
-    //! Yields all but the first `total` elements
-    return <- generator<TT -&> capture(<- src) () <| $() {
-        for (x in src) {
-            if (total > 0) {
-                total --
-                continue
-            }
-            yield x
-        }
-        return false
-    }
-}
-
-def SkipWhile(var src : iterator<auto(TT)>; predicate) {
-    //! Skips all elements of an iterator while the predicate is true
-    // TODO: specialize with const value vs var value of predicate, which can be captured.
-    var buffer : array<TT -& -const>
-    var skipping = true
-    for (x in src) {
-        if (skipping) {
-            if (predicate(x)) {
-                continue
-            } else {
-                skipping = false
-            }
-        }
-        buffer.push_clone(x)
-    }
-    return buffer.MoveToSequence()
-}
-
-def Take(var src : iterator<auto(TT)>; var total : int) {
-    //! Yields only the first `total` elements
-    return <- generator<TT -&> capture(<- src) () <| $() {
-        for (x in src) {
-            if (total <= 0) {
-                break
-            }
-            total --
-            yield x
-        }
-        return false
-    }
-}
-
-def Take(var src : iterator<auto(TT)>; interval : range) {
-    //! Yields only the elements of an iterator within a specified range
-    return <- generator<TT -&> capture(<- src) () <| $() {
-        var count = 0
-        for (x in src) {
-            if (count >= interval.x && count < interval.y) {
-                yield x
-            } elif (count >= interval.y) {
-                break
-            }
-            count ++
-        }
-        return false
-    }
-}
-
-def TakeWhile(var src : iterator<auto(TT)>; predicate) {
-    //! Yields only the elements of an iterator while the predicate is true
-    var buffer : array<TT -& -const>
-    var taking = true
-    for (x in src) {
-        if (taking) {
-            if (predicate(x)) {
-                buffer.push_clone(x)
-            } else {
-                taking = false
-            }
-        }
-    }
-    return buffer.MoveToSequence()
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////
+require daslib/linq
 
 def test_concat() {
     var query <- Concat(
@@ -516,6 +215,73 @@ def test_take() {
     }
 }
 
+def test_min() {
+    var numbers <- [
+        5, 3, 8, 1, 4
+    ]
+    var query_n = Min(
+        numbers.ToSequence()
+    )
+    assert(query_n == 1)
+
+    var query <- MinBy(
+        people.ToSequence(),
+        $(p : Person) => (p.name, p.age)
+    )
+    assert(query.name == "Alice")
+    assert(query.age == 25)
+
+    var rquery <- MinBy(
+        people.ToSequence(),
+        $(p : Person) => (p.age, p.name)
+    )
+    assert(rquery.name == "Bob")
+    assert(rquery.age == 20)
+}
+
+def test_max() {
+    var numbers <- [
+        5, 3, 8, 1, 4
+    ]
+    var query_n = Max(
+        numbers.ToSequence()
+    )
+    assert(query_n == 8)
+
+    var query <- MaxBy(
+        people.ToSequence(),
+        $(p : Person) => (p.name, p.age)
+    )
+    assert(query.name == "Charlie")
+    assert(query.age == 35)
+
+    var rquery <- MaxBy(
+        people.ToSequence(),
+        $(p : Person) => (p.age, p.name)
+    )
+    assert(rquery.name == "Charlie")
+    assert(rquery.age == 35)
+}
+
+def test_sum() {
+    var query = Sum(
+        [iterator for(x in 0..5); x]
+    )
+    assert(query == 15)
+}
+
+def test_average() {
+    var query = Average(
+        [iterator for(x in 0..5); x]
+    )
+    assert(query == 2)
+
+    var queryf = Average(
+        [iterator for(x in 0..5); float(x)]
+    )
+    assert(queryf == 2.0)
+}
+
 [export]
 def main() {
     test_concat()
@@ -528,5 +294,7 @@ def main() {
     test_count()
     test_where()
     test_skip()
+    test_min()
+    test_max()
 }
 
