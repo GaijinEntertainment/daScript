@@ -1001,5 +1001,30 @@ namespace das {
             return true;
         },"*");
     }
+
+    class InferLintVisitor : public Visitor {
+    public:
+        InferLintVisitor ( const ProgramPtr & prog ) : program(prog) {
+        }
+    public:
+        virtual ExpressionPtr visitExpression ( Expression * expr ) override {
+            if ( !expr->type ) return expr;
+            if ( expr->rtti_isTypeDecl() ) return expr;
+            if ( expr->type->isAliasOrExpr() ) {
+                program->error("internal error. leaking alias or expression type",expr->type->describe(),"",
+                    expr->at,CompilationError::internal_error);
+            }
+            return expr;
+        }
+    public:
+        ProgramPtr program;
+
+    };
+
+    void Program::inferLint(TextWriter &) {
+        if ( !policies.verify_infer_types ) return;
+        InferLintVisitor lintV(this);
+        visit(lintV);
+    }
 }
 
