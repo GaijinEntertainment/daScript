@@ -575,7 +575,7 @@ def public finalize_jit {
     }
 }
 
-[finalize]
+[finalize, no_jit] // no_jit is necessary!
 def private finalize_all_jit {
     for (je in g_all_engines) {
         LLVMDisposeExecutionEngine(je.engine); je.engine = null
@@ -824,7 +824,8 @@ def public build_broadcast_vector(builder : LLVMOpaqueBuilder?; opType : TypeDec
 }
 
 def public LLVMBuildLoadData2Aligned(builder : LLVMOpaqueBuilder?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; alignment : uint; name : string) {
-    if (LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment != 16u && LLVMIsVector3(typ)) {
+    if (!LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment != 16u && LLVMIsVector3(typ)) {
+        // slow path
         return LLVMBuildLoadVector3(builder, typ, ptr, name)
     } else {
         return LLVMBuildLoad2Aligned(builder, typ, ptr, alignment, name)

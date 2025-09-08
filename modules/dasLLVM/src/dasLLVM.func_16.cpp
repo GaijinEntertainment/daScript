@@ -76,10 +76,6 @@ void Module_dasLLVM::initFunctions_16() {
 	makeExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,unsigned int) , LLVMGetAggregateElement , SimNode_ExtFuncCall >(lib,"LLVMGetAggregateElement","LLVMGetAggregateElement")
 		->args({"C","Idx"})
 		->addToModule(*this, SideEffects::worstDefault);
-// from D:\Work\libclang\include\llvm-c/Core.h:2157:18
-	makeExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,unsigned int) , LLVMGetElementAsConstant , SimNode_ExtFuncCall >(lib,"LLVMGetElementAsConstant","LLVMGetElementAsConstant")
-		->args({"C","idx"})
-		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\llvm-c/Core.h:2165:14
 	makeExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue **,unsigned int) , LLVMConstVector , SimNode_ExtFuncCall >(lib,"LLVMConstVector","LLVMConstVector")
 		->args({"ScalarConstantVals","Size"})
