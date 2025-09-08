@@ -9,14 +9,17 @@
 //      OrderDescending - Sorts the elements of an iterator in descending order
 //      OrderBy - Sorts the elements of an iterator
 //      OrderByDescending - Sorts the elements of an iterator in descending order
+//  Set operations
+//      Distinct - Returns distinct elements from an iterator
 //  Concatenation Operations
 //      Concat - Concatenates two iterators
 //  Converting sequence
 //      ToArray - Converts an iterator to an array
 //      ToSequence - Converts an array to an iterator
 //      MoveToSequence - Moves an array to an iterator
-// Comparators
+// Comparators and keys
 //      Less - Compares two values, returns true if first is less than second
+//      UniqueKey - Generates a unique key for a value
 
 // TODO:
 //      change to stable-sort?
@@ -125,16 +128,60 @@ def Less(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>) : bool {
 def OrderBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Sorts an iterator
     var arr <- ToArray(a)
-    sort(arr, $(v1, v2) => Less(key(v1), key(v2)))
+    sort(arr, $(v1, v2) => _::Less(key(v1), key(v2)))
     return MoveToSequence(arr)
 }
 
 def OrderByDescending(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Sorts an iterator in descending order
     var arr <- ToArray(a)
-    sort(arr, $(v1, v2) => Less(key(v2), key(v1)))
+    sort(arr, $(v1, v2) => _::Less(key(v2), key(v1)))
     return MoveToSequence(arr)
 }
+
+def UniqueKey(a) {
+    ///! generates unique key of workhorse type for the value
+    static_if (typeinfo is_workhorse(a)) {
+        return a
+    } else {
+        return "{a}"
+    }
+}
+
+def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns distinct elements from an iterator
+    return generator<TT -const -&> capture(<- a) () <| $ {
+        var seen : table<typedecl(UniqueKey(type<TT>))>
+        for (it in a) {
+            let k = UniqueKey(it)
+            if (!seen.key_exists(k)) {
+                yield it
+                seen.insert(k)
+            }
+        }
+        delete seen
+        return false
+    }
+}
+
+def DistinctBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
+    //! Returns distinct elements from an iterator based on a key
+    // this one runs filter first, because it can't capture it
+    var seen : table<typedecl(UniqueKey(key(type<TT>)))>
+    var buffer : array<TT -const -&>
+    for (it in a) {
+        let k = UniqueKey(key(it))
+        if (!seen.key_exists(k)) {
+            buffer.push_clone(it)
+            seen.insert(k)
+        }
+    }
+    delete seen
+    return buffer.MoveToSequence()
+
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 def test_concat() {
     var query <- Concat(
@@ -170,6 +217,30 @@ struct Person {
     age : int
 }
 
+var people <- [
+    Person(name = "Alice", age = 30),
+    Person(name = "Bob", age = 25),
+    Person(name = "Charlie", age = 35),
+    Person(name = "Bob", age = 20),
+    Person(name = "Alice", age = 25)
+]
+
+var sorted <- [
+    Person(name = "Alice", age = 25),
+    Person(name = "Alice", age = 30),
+    Person(name = "Bob", age = 20),
+    Person(name = "Bob", age = 25),
+    Person(name = "Charlie", age = 35)
+]
+
+var sorted_r <- [
+    Person(name = "Charlie", age = 35),
+    Person(name = "Bob", age = 25),
+    Person(name = "Bob", age = 20),
+    Person(name = "Alice", age = 30),
+    Person(name = "Alice", age = 25)
+]
+
 def test_orderby() {
     var numbers <- [
         5, 3, 8, 1, 4
@@ -178,46 +249,25 @@ def test_orderby() {
         numbers.ToSequence(),
         $(n : int) => n
     )
-    var expected_n <- [1, 3, 4, 5, 8]
+    var sorted_n <- [1, 3, 4, 5, 8]
     for (n, i in query_n, 0..4) {
-        assert(n == expected_n[i])
+        assert(n == sorted_n[i])
     }
-    var people <- [
-        Person(name = "Alice", age = 30),
-        Person(name = "Bob", age = 25),
-        Person(name = "Charlie", age = 35),
-        Person(name = "Bob", age = 20),
-        Person(name = "Alice", age = 25)
-    ]
     var query <- OrderBy(
         people.ToSequence(),
         $(p : Person) => (p.name, p.age)
     )
-    var expected <- [
-        Person(name = "Alice", age = 25),
-        Person(name = "Alice", age = 30),
-        Person(name = "Bob", age = 20),
-        Person(name = "Bob", age = 25),
-        Person(name = "Charlie", age = 35)
-    ]
     for (p, i in query, 0..5) {
-        assert(p.name == expected[i].name)
-        assert(p.age == expected[i].age)
+        assert(p.name == sorted[i].name)
+        assert(p.age == sorted[i].age)
     }
     var rquery <- OrderByDescending(
         people.ToSequence(),
         $(p : Person) => (p.name, p.age)
     )
-    var expected_r <- [
-        Person(name = "Charlie", age = 35),
-        Person(name = "Bob", age = 25),
-        Person(name = "Bob", age = 20),
-        Person(name = "Alice", age = 30),
-        Person(name = "Alice", age = 25)
-    ]
     for (p, i in rquery, 0..5) {
-        assert(p.name == expected_r[i].name)
-        assert(p.age == expected_r[i].age)
+        assert(p.name == sorted_r[i].name)
+        assert(p.age == sorted_r[i].age)
     }
 }
 
@@ -227,48 +277,47 @@ def test_order() {
     ]
     var query_n <- Order(
         numbers.ToSequence(),
-        $(a,b : int) => a<b
+        $(a, b : int) => a < b
     )
-    var expected_n <- [1, 3, 4, 5, 8]
+    var sorted_n <- [1, 3, 4, 5, 8]
     for (n, i in query_n, 0..4) {
-        assert(n == expected_n[i])
+        assert(n == sorted_n[i])
     }
-    var people <- [
-        Person(name = "Alice", age = 30),
-        Person(name = "Bob", age = 25),
-        Person(name = "Charlie", age = 35),
-        Person(name = "Bob", age = 20),
-        Person(name = "Alice", age = 25)
-    ]
     var query <- Order(
         people.ToSequence(),
-        $(a,b : Person) => Less((a.name, a.age), (b.name, b.age))
+        $(a, b : Person) => Less((a.name, a.age), (b.name, b.age))
     )
-    var expected <- [
-        Person(name = "Alice", age = 25),
-        Person(name = "Alice", age = 30),
-        Person(name = "Bob", age = 20),
-        Person(name = "Bob", age = 25),
-        Person(name = "Charlie", age = 35)
-    ]
     for (p, i in query, 0..5) {
-        assert(p.name == expected[i].name)
-        assert(p.age == expected[i].age)
+        assert(p.name == sorted[i].name)
+        assert(p.age == sorted[i].age)
     }
     var rquery <- OrderDescending(
         people.ToSequence(),
-        $(a,b : Person) => Less((a.name, a.age), (b.name, b.age))
+        $(a, b : Person) => Less((a.name, a.age), (b.name, b.age))
     )
-    var expected_r <- [
-        Person(name = "Charlie", age = 35),
-        Person(name = "Bob", age = 25),
-        Person(name = "Bob", age = 20),
-        Person(name = "Alice", age = 30),
-        Person(name = "Alice", age = 25)
-    ]
     for (p, i in rquery, 0..5) {
-        assert(p.name == expected_r[i].name)
-        assert(p.age == expected_r[i].age)
+        assert(p.name == sorted_r[i].name)
+        assert(p.age == sorted_r[i].age)
+    }
+}
+
+def test_distinct() {
+    var query <- Distinct(
+        [iterator for(x in 0..5); x]
+    )
+    for (c, i in query, 0..5) {
+        assert(c == i)
+    }
+}
+
+def test_distinctby() {
+    var query <- DistinctBy(
+        people.ToSequence(),
+        $(p : Person) => p.name
+    )
+    var distinct_names <- ["Alice", "Bob", "Charlie"]
+    for (qn, dn in query, distinct_names) {
+        assert(qn.name  == dn)
     }
 }
 
@@ -279,5 +328,7 @@ def main() {
     test_toarray()
     test_orderby()
     test_order()
+    test_distinct()
+    test_distinctby()
 }
 
