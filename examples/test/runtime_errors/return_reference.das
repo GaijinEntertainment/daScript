@@ -4,7 +4,7 @@ options gen2
 
 options no_aot
 
-[sideeffects]
+[sideeffects, no_jit]
 def ret_unsafe_ref : int & {
     var t = 2
     unsafe {
