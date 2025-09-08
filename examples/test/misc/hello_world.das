@@ -13,6 +13,16 @@
 //      Distinct - Returns distinct elements from an iterator
 //  Concatenation Operations
 //      Concat - Concatenates two iterators
+//  Aggregation Operations
+//      Count - Counts elements in an iterator
+//      LongCount - Counts elements in an iterator, using a long integer
+//  Filtering data
+//      Where - Filters elements in an iterator
+//  Partitioning data
+//      Skip - Skips the first `n` elements of an iterator
+//      SkipWhile - Skips all elements of an iterator while the predicate is true
+//      Take - Takes the first `n` elements of an iterator or range of elements in the iterator
+//      TakeWhile - Takes elements from an iterator while the predicate is true
 //  Converting sequence
 //      ToArray - Converts an iterator to an array
 //      ToSequence - Converts an array to an iterator
@@ -166,7 +176,7 @@ def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
 
 def DistinctBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Returns distinct elements from an iterator based on a key
-    // this one runs filter first, because it can't capture it
+    // TODO: specialize with const value vs var value of key, which can be captured.
     var seen : table<typedecl(UniqueKey(key(type<TT>)))>
     var buffer : array<TT -const -&>
     for (it in a) {
@@ -179,6 +189,114 @@ def DistinctBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     delete seen
     return buffer.MoveToSequence()
 
+}
+
+def Count(var a : iterator<auto(TT)>) : int {
+    //! Counts elements in an iterator
+    var count = 0
+    for (it in a) {
+        count ++
+    }
+    return count
+}
+
+def LongCount(var a : iterator<auto(TT)>) : int64 {
+    //! Counts elements in an iterator, using a long integer
+    var count = 0l
+    for (it in a) {
+        count ++
+    }
+    return count
+}
+
+def Where(var src : iterator<auto(TT)>; predicate) : iterator<TT -& -const> {
+    //! Filters elements in an iterator based on a predicate
+    // TODO: specialize with const value vs var value of predicate, which can be captured.
+    var buffer : array<TT -& -const>
+    for (x in src) {
+        if (predicate(x)) {
+            buffer.push_clone(x)
+        }
+    }
+    return buffer.MoveToSequence()
+}
+
+def Skip(var src : iterator<auto(TT)>; var total : int) {
+    //! Yields all but the first `total` elements
+    return <- generator<TT -&> capture(<- src) () <| $() {
+        for ( x in src) {
+            if (total > 0) {
+                total --
+                continue
+            }
+            yield x
+        }
+        return false
+    }
+}
+
+def SkipWhile(var src : iterator<auto(TT)>; predicate) {
+    //! Skips all elements of an iterator while the predicate is true
+    // TODO: specialize with const value vs var value of predicate, which can be captured.
+    var buffer : array<TT -& -const>
+    var skipping = true
+    for (x in src) {
+        if (skipping ) {
+            if (predicate(x)) {
+                continue
+            } else {
+                skipping = false
+            }
+        }
+        buffer.push_clone(x)
+    }
+    return buffer.MoveToSequence()
+}
+
+def Take(var src : iterator<auto(TT)>; var total : int) {
+    //! Yields only the first `total` elements
+    return <- generator<TT -&> capture(<- src) () <| $() {
+        for ( x in src) {
+            if (total <= 0) {
+                break
+            }
+            total --
+            yield x
+        }
+        return false
+    }
+}
+
+def Take(var src : iterator<auto(TT)>; interval : range) {
+    //! Yields only the elements of an iterator within a specified range
+    return <- generator<TT -&> capture(<- src) () <| $() {
+        var count = 0
+        for (x in src) {
+            if (count >= interval.x && count < interval.y) {
+                yield x
+            } elif (count >= interval.y) {
+                break
+            }
+            count ++
+        }
+        return false
+    }
+}
+
+def TakeWhile(var src : iterator<auto(TT)>; predicate) {
+    //! Yields only the elements of an iterator while the predicate is true
+    var buffer : array<TT -& -const>
+    var taking = true
+    for (x in src) {
+        if (taking) {
+            if (predicate(x)) {
+                buffer.push_clone(x)
+            } else {
+                taking = false
+            }
+        }
+    }
+    return buffer.MoveToSequence()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -321,6 +439,83 @@ def test_distinctby() {
     }
 }
 
+def test_count() {
+    ///! Counts elements in an iterator
+    var total = Count(
+        [iterator for(x in 0..5); x]
+    )
+    assert(total == 5) // its 5, because the range is 0..5 and range iteration goes up to but not including
+
+    var ltotal = LongCount(
+        [iterator for(x in 0..5); x]
+    )
+    assert(ltotal == 5l)
+}
+
+def test_where() {
+    var query <- Where(
+        [iterator for(x in 0..5); x],
+        $(x : int) => x % 2 == 0
+    )
+    for (c, i in query, 0..3) {
+        assert(c == i * 2)
+    }
+    var qp <- Where(
+        people.ToSequence(),
+        $(p : Person) => p.age >= 30
+    )
+    var count = 0
+    for (p in qp) {
+        assert(p.age >= 30)
+        count ++
+    }
+    assert(count == 2)
+}
+
+def test_skip() {
+    var query <- Skip(
+        [iterator for(x in 0..5); x],
+        2
+    )
+    for (c, i in query, 0..3) {
+        assert(c == i + 2)
+    }
+
+    var query_skip <- SkipWhile(
+        [iterator for(x in 0..5); x],
+        $(x : int) => x < 3
+    )
+    for (c, i in query_skip, 0..2) {
+        assert(c == i + 3)
+    }
+}
+
+def test_take() {
+    var query <- Take(
+        [iterator for(x in 0..5); x],
+        3
+    )
+    for (c, i in query, 0..2) {
+        assert(c == i)
+    }
+
+    var query_take_while <- TakeWhile(
+        [iterator for(x in 0..5); x],
+        $(x : int) => x < 3
+    )
+    for (c, i in query_take_while, 0..2) {
+        assert(c == i)
+    }
+
+    var query_take_range <- Take(
+        [iterator for(x in 0..5); x],
+        1..4
+    )
+    for (c, i in query_take_range, 0..2) {
+        assert(c == i + 1)
+    }
+}
+
 [export]
 def main() {
     test_concat()
@@ -330,5 +525,8 @@ def main() {
     test_order()
     test_distinct()
     test_distinctby()
+    test_count()
+    test_where()
+    test_skip()
 }
 
