@@ -385,6 +385,7 @@ namespace das {
         if ( ptrType->firstType && ptrType->firstType->isClass() ) {
             if ( ptrType->firstType->structType->macroInterface ) pFunc->macroFunction = true;
             auto sizvar = make_smart<ExprLet>();              // let __size = class_rtti_size(__this)
+            sizvar->at = at;
             auto vsiz = make_smart<Variable>();
             vsiz->at = at;
             vsiz->name = "__size";
@@ -518,6 +519,7 @@ namespace das {
             with->with = make_smart<ExprPtr2Ref>(block->at, THISVAR);
             with->with->generated = true;
             auto bbl = make_smart<ExprBlock>();
+            bbl->at = block->at;
             with->body = bbl;
             with->body->at = block->at;
             bbl->list.reserve(block->finalList.size());     // copy finally section of the block body
