@@ -224,7 +224,7 @@ def Where(var src : iterator<auto(TT)>; predicate) : iterator<TT -& -const> {
 def Skip(var src : iterator<auto(TT)>; var total : int) {
     //! Yields all but the first `total` elements
     return <- generator<TT -&> capture(<- src) () <| $() {
-        for ( x in src) {
+        for (x in src) {
             if (total > 0) {
                 total --
                 continue
@@ -241,7 +241,7 @@ def SkipWhile(var src : iterator<auto(TT)>; predicate) {
     var buffer : array<TT -& -const>
     var skipping = true
     for (x in src) {
-        if (skipping ) {
+        if (skipping) {
             if (predicate(x)) {
                 continue
             } else {
@@ -256,7 +256,7 @@ def SkipWhile(var src : iterator<auto(TT)>; predicate) {
 def Take(var src : iterator<auto(TT)>; var total : int) {
     //! Yields only the first `total` elements
     return <- generator<TT -&> capture(<- src) () <| $() {
-        for ( x in src) {
+        for (x in src) {
             if (total <= 0) {
                 break
             }
