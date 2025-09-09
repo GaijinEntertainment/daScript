@@ -515,6 +515,68 @@ def test_groupjoin() {
     }
 }
 
+def test_union() {
+    var query <- Union(
+        [iterator for(x in 0..5); x],
+        [iterator for(x in 3..8); x]
+    )
+    var expected <- [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    for (c, e in query, expected) {
+        assert(c == e)
+    }
+    var qcomplex <- Union(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        [iterator for(x in 3..8); ComplexType(a = [x, x * 10])]
+    )
+    var expected_complex <- [
+        (0, 0),
+        (1, 10),
+        (2, 20),
+        (3, 30),
+        (4, 40),
+        (5, 50),
+        (6, 60),
+        (7, 70),
+        (8, 80)
+    ]
+    for (c, e in qcomplex, expected_complex) {
+        assert(c.a[0] == e._0)
+        assert(c.a[1] == e._1)
+    }
+}
+
+def test_unionby() {
+    var query <- UnionBy(
+        [iterator for(x in 0..5); x],
+        [iterator for(x in 3..8); x],
+        $(x : int) => x
+    )
+    var expected <- [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    for (c, e in query, expected) {
+        assert(c == e)
+    }
+    var qcomplex <- UnionBy(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        [iterator for(x in 3..8); ComplexType(a = [x, x * 10])],
+        $(c : ComplexType) => c.a[0]
+    )
+    var expected_complex <- [
+        (0, 0),
+        (1, 10),
+        (2, 20),
+        (3, 30),
+        (4, 40),
+        (5, 50),
+        (6, 60),
+        (7, 70),
+        (8, 80)
+    ]
+    for (c, e in qcomplex, expected_complex) {
+        assert(c.a[0] == e._0)
+        assert(c.a[1] == e._1)
+    }
+}
+
 [export]
 def main() {
     test_concat()
@@ -531,4 +593,5 @@ def main() {
     test_max()
     test_join()
     test_groupjoin()
+    test_union()
 }

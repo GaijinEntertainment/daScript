@@ -19,6 +19,9 @@ module linq shared public
 //      OrderByDescending - Sorts the elements of an iterator in descending order
 //  Set operations
 //      Distinct - Returns distinct elements from an iterator
+//      DistinctBy - Returns distinct elements from an iterator by key
+//      Union - Returns the union of two iterators
+//      UnionBy - Returns the union of two iterators by key
 //  Concatenation Operations
 //      Concat - Concatenates two iterators
 //  Aggregation Operations
@@ -513,3 +516,48 @@ def GroupJoin(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya
     return buffer.ToSequence()
 }
 
+[skip_lock_check]
+def Union(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two iterators
+    var buffer : array<TT -const -&>
+    var seen : table<typedecl(UniqueKey(type<TT>))>
+    for (ita in srca) {
+        let k = UniqueKey(ita)
+        if (!seen.key_exists(k)) {
+            buffer.push_clone(ita)
+            seen.insert(k)
+        }
+    }
+    for (itb in srcb) {
+        let k = UniqueKey(itb)
+        if (!seen.key_exists(k)) {
+            buffer.push_clone(itb)
+            seen.insert(k)
+        }
+    }
+    delete seen
+    return buffer.MoveToSequence()
+}
+
+[skip_lock_check]
+def UnionBy(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) : iterator<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two iterators by key
+    var buffer : array<TT -const -&>
+    var seen : table<typedecl(UniqueKey(key(type<TT>)))>
+    for (ita in srca) {
+        let k = UniqueKey(key(ita))
+        if (!seen.key_exists(k)) {
+            buffer.push_clone(ita)
+            seen.insert(k)
+        }
+    }
+    for (itb in srcb) {
+        let k = UniqueKey(key(itb))
+        if (!seen.key_exists(k)) {
+            buffer.push_clone(itb)
+            seen.insert(k)
+        }
+    }
+    delete seen
+    return buffer.MoveToSequence()
+}
