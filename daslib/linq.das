@@ -28,6 +28,9 @@ module linq shared public
 //      IntersectBy - Returns elements that are present in both iterators by key
 //  Concatenation Operations
 //      Concat - Concatenates two iterators
+//  Generation Operations
+//      Empty - Returns an empty iterator of a default type
+//      DefaultEmpty - Returns the elements of the iterator, or a default value if the iterator is empty
 //  Aggregation Operations
 //      Count - Counts elements in an iterator
 //      LongCount - Counts elements in an iterator, using a long integer
@@ -38,6 +41,7 @@ module linq shared public
 //      Sum - Sums the elements in an iterator
 //      SumBy - Sums the elements in an iterator by a key
 //      Average - Averages the elements in an iterator
+//      Aggregate - Aggregates the elements in an iterator
 //  Filtering data
 //      Where - Filters elements in an iterator
 //  Partitioning data
@@ -470,6 +474,25 @@ def MaxBy(var src : iterator<auto(TT)>; key) : TT -& -const {
 }
 
 [skip_lock_check]
+def Aggregate(var src : iterator<auto(TT)>; seed : TT-&; func) : TT -const -& {
+    //! Aggregates elements in an iterator using a seed and a function
+    var acc : TT -& -const
+    static_if (typeinfo can_copy(seed)) {
+        acc = seed
+    } else {
+        acc <- clone_to_move(seed)
+    }
+    for (x in src) {
+        static_if (typeinfo can_copy(x)) {
+            acc = func(acc, x)
+        } else {
+            acc <- func(acc, clone_to_move(x))
+        }
+    }
+    return <- acc
+}
+
+[skip_lock_check]
 def Sum(var src : iterator<auto(TT)>) : TT -const -& {
     //! Sums elements in an iterator
     var total : TT -const -&
@@ -694,5 +717,37 @@ def Contains(var src : iterator<auto(TT)>; element : TT -&) : bool {
         }
     }
     return false
+}
+
+[skip_lock_check,unused_argument(typ)]
+def Empty(var typ : auto(TT)) : iterator<TT -const -&> {
+    //! Returns an empty iterator of the specified type
+    var it : iterator<TT -const -&>
+    return <- it
+}
+
+[skip_lock_check]
+def DefaultEmpty(var src : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns the elements of the iterator, or a default value if the iterator is empty
+    return generator<TT -const -&> capture(<-src) () <| $ {
+        var found = false
+        for (it in src) {
+            found = true
+            static_if (typeinfo can_copy(it)) {
+                yield it
+            } else {
+                yield <- clone_to_move(it)
+            }
+        }
+        if (!found) {
+            var t : TT -const -&
+            static_if (typeinfo can_copy(t)) {
+                yield t
+            } else {
+                yield <- clone_to_move(t)
+            }
+        }
+        return false
+    }
 }
 

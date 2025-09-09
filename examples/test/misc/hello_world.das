@@ -794,6 +794,61 @@ def test_groupby() {
     }
 }
 
+def test_aggregate() {
+    var query = Aggregate(
+        [iterator for(x in 0..5); x],
+        0,
+        $(acc, x : int) => acc + x
+    )
+    assert(query == 15)
+    var qcomplex = Aggregate(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        ComplexType(a = [0, 0]),
+        $(acc, x : ComplexType) => ComplexType(a = [acc.a[0] + x.a[0], acc.a[1] + x.a[1]])
+    )
+    assert(qcomplex.a[0] == 15)
+    assert(qcomplex.a[1] == 150)
+}
+
+def test_defaultempty() {
+    var query = DefaultEmpty(
+        [iterator for(x in 0..5); x]
+    )
+    var expected = [0, 1, 2, 3, 4, 5]
+    for (c, e in query, expected) {
+        assert(c == e)
+    }
+    var q2 = DefaultEmpty(
+        [iterator for(x in 0..0); x]
+    )
+    var expected2 = [0]
+    for (c, e in q2, expected2) {
+        assert(c == e)
+    }
+    var qcomplex = DefaultEmpty(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+    )
+    var expected_complex = [
+        (0, 0),
+        (1, 10),
+        (2, 20),
+        (3, 30),
+        (4, 40),
+        (5, 50)
+    ]
+    for (c, e in qcomplex, expected_complex) {
+        assert(c.a[0] == e._0)
+        assert(c.a[1] == e._1)
+    }
+}
+
+def test_empty() {
+    var query = Empty(type<int>)
+    verify(empty(query))
+    var qcomplex = Empty(type<ComplexType>)
+    verify(empty(qcomplex))
+}
+
 [export]
 def main() {
     test_concat()
@@ -821,4 +876,6 @@ def main() {
     test_contains()
     test_groupby()
     test_totable()
+    test_empty()
+    test_defaultempty()
 }
