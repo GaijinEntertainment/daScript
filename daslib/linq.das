@@ -44,6 +44,9 @@ module linq shared public
 //  Join operations
 //      Join - Joins two iterators based on a key (inner join)
 //      GroupJoin - Joins two iterators based on a key, passing a sequence of the second iterator to the result (group join)
+//  Querying data
+//      Any - Returns true if the iterator has at least one element
+//      All - Returns true if all elements in the iterator satisfy the predicate
 //  Converting sequence
 //      ToArray - Converts an iterator to an array
 //      ToSequence - Converts an array to an iterator
@@ -560,4 +563,25 @@ def UnionBy(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) :
     }
     delete seen
     return buffer.MoveToSequence()
+}
+
+
+[skip_lock_check]
+def Any(var src : iterator<auto(TT)>) : bool {
+    //! Returns true if the iterator has at least one element
+    for (it in src) {
+        return true
+    }
+    return false
+}
+
+[skip_lock_check]
+def All(var src : iterator<auto(TT)>; predicate) : bool {
+    //! Returns true if all elements in the iterator satisfy the predicate
+    for (it in src) {
+        if (!predicate(it)) {
+            return false
+        }
+    }
+    return true
 }

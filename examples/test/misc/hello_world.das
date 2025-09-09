@@ -577,6 +577,30 @@ def test_unionby() {
     }
 }
 
+def test_any() {
+    var query = Any(
+        [iterator for(x in 0..5); x]
+    )
+    assert(query == true)
+    var qcomplex = Any(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+    )
+    assert(qcomplex == true)
+}
+
+def test_all() {
+    var query = All(
+        [iterator for(x in 0..5); x],
+        $(x : int) => x < 5
+    )
+    assert(query == true)
+    var qcomplex = All(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        $(c : ComplexType) => c.a[0] < 5
+    )
+    assert(qcomplex == true)
+}
+
 [export]
 def main() {
     test_concat()
@@ -594,4 +618,7 @@ def main() {
     test_join()
     test_groupjoin()
     test_union()
+    test_unionby()
+    test_any()
+    test_all()
 }
