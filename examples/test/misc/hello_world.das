@@ -22,6 +22,15 @@ struct ComplexType { // this one can't be copied
         }
         return true
     }
+
+    def operator !=(b : ComplexType) : bool {
+        for (i, j in a, b.a) {
+            if (i != j) {
+                return true
+            }
+        }
+        return false
+    }
 }
 
 
@@ -875,6 +884,45 @@ def test_repeat() {
     }
 }
 
+def test_sequenceequal() {
+    var query = SequenceEqual(
+        [iterator for(x in 0..5); x],
+        [iterator for(x in 0..5); x]
+    )
+    assert(query == true)
+    var qneq = SequenceEqual(
+        [iterator for(x in 0..5); x],
+        [iterator for(x in 0..5); x + 1]
+    )
+    assert(qneq == false)
+    var qcomplex = SequenceEqual(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+    )
+    assert(qcomplex == true)
+}
+
+def test_sequenceequalby() {
+    var query = SequenceEqualBy(
+        [iterator for(x in 0..5); x],
+        [iterator for(x in 0..5); x],
+        $(x : int) => x
+    )
+    assert(query == true)
+    var qneq = SequenceEqualBy(
+        [iterator for(x in 0..5); x],
+        [iterator for(x in 0..5); x + 1],
+        $(x : int) => x
+    )
+    assert(qneq == false)
+    var qcomplex = SequenceEqualBy(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 9])],
+        $(x : ComplexType) => x.a[0]
+    )
+    assert(qcomplex == true)
+}
+
 [export]
 def main() {
     test_concat()
@@ -906,4 +954,6 @@ def main() {
     test_defaultempty()
     test_range()
     test_repeat()
+    test_sequenceequal()
+    test_sequenceequalby()
 }

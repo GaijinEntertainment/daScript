@@ -68,6 +68,8 @@ module linq shared public
 // Comparators and keys
 //      Less - Compares two values, returns true if first is less than second
 //      UniqueKey - Generates a unique key for a value
+//      SequenceEqual - Checks if two sequences are equal
+//      SequenceEqualBy - Checks if two sequences are equal by key
 
 // TODO:
 //      change to stable-sort?
@@ -754,8 +756,8 @@ def DefaultEmpty(var src : iterator<auto(TT)>) : iterator<TT -const -&> {
 
 def Range(start : int; count : int) : iterator<int> {
     //! Generates a sequence of integers within a specified range
-    return generator<int> () <| $ {
-        for (i in start..start+count) {
+    return generator<int>() <| $ {
+        for (i in start..start + count) {
             yield i
         }
         return false
@@ -764,7 +766,7 @@ def Range(start : int; count : int) : iterator<int> {
 
 def Repeat(element : auto(TT); count : int) : iterator<TT -const -&> {
     //! Generates a sequence that contains one repeated value
-    return generator<TT -const -&> capture(:=element) () <| $ {
+    return generator<TT -const -&> capture(:= element) () <| $ {
         for (i in 0..count) {
             static_if (typeinfo can_copy(element)) {
                 yield element
@@ -774,4 +776,24 @@ def Repeat(element : auto(TT); count : int) : iterator<TT -const -&> {
         }
         return false
     }
+}
+
+def SequenceEqual(var first : iterator<auto(TT)>; var second : iterator<auto(TT)>) : bool {
+    //! Checks if two sequences are equal
+    for (f, s in first, second) {
+        if (f != s) {
+            return false
+        }
+    }
+    return true
+}
+
+def SequenceEqualBy(var first : iterator<auto(TT)>; var second : iterator<auto(TT)>; key) : bool {
+    //! Checks if two sequences are equal by key
+    for (f, s in first, second) {
+        if (key(f) != key(s)) {
+            return false
+        }
+    }
+    return true
 }
