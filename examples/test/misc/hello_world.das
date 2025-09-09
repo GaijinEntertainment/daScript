@@ -849,6 +849,32 @@ def test_empty() {
     verify(empty(qcomplex))
 }
 
+def test_range() {
+    var query = Range(0, 5)
+    var expected = [0, 1, 2, 3, 4, 5]
+    for (c, e in query, expected) {
+        assert(c == e)
+    }
+}
+
+def test_repeat() {
+    var query = Repeat(42, 5)
+    var expected = [42, 42, 42, 42, 42]
+    for (c, e in query, expected) {
+        assert(c == e)
+    }
+    var qcomplex = Repeat(ComplexType(a = [1, 2]), 3)
+    var expected_complex = [
+        (1, 2),
+        (1, 2),
+        (1, 2)
+    ]
+    for (c, e in qcomplex, expected_complex) {
+        assert(c.a[0] == e._0)
+        assert(c.a[1] == e._1)
+    }
+}
+
 [export]
 def main() {
     test_concat()
@@ -878,4 +904,6 @@ def main() {
     test_totable()
     test_empty()
     test_defaultempty()
+    test_range()
+    test_repeat()
 }

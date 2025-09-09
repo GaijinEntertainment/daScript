@@ -31,6 +31,8 @@ module linq shared public
 //  Generation Operations
 //      Empty - Returns an empty iterator of a default type
 //      DefaultEmpty - Returns the elements of the iterator, or a default value if the iterator is empty
+//      Range - Generates a sequence of integers within a specified range
+//      Repeat - Generates a sequence that contains one repeated value
 //  Aggregation Operations
 //      Count - Counts elements in an iterator
 //      LongCount - Counts elements in an iterator, using a long integer
@@ -474,7 +476,7 @@ def MaxBy(var src : iterator<auto(TT)>; key) : TT -& -const {
 }
 
 [skip_lock_check]
-def Aggregate(var src : iterator<auto(TT)>; seed : TT-&; func) : TT -const -& {
+def Aggregate(var src : iterator<auto(TT)>; seed : TT -&; func) : TT -const -& {
     //! Aggregates elements in an iterator using a seed and a function
     var acc : TT -& -const
     static_if (typeinfo can_copy(seed)) {
@@ -719,17 +721,16 @@ def Contains(var src : iterator<auto(TT)>; element : TT -&) : bool {
     return false
 }
 
-[skip_lock_check,unused_argument(typ)]
+[skip_lock_check, unused_argument(typ)]
 def Empty(var typ : auto(TT)) : iterator<TT -const -&> {
     //! Returns an empty iterator of the specified type
-    var it : iterator<TT -const -&>
-    return <- it
+    return <- default<iterator<TT -const -&>>
 }
 
 [skip_lock_check]
 def DefaultEmpty(var src : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns the elements of the iterator, or a default value if the iterator is empty
-    return generator<TT -const -&> capture(<-src) () <| $ {
+    return generator<TT -const -&> capture(<- src) () <| $ {
         var found = false
         for (it in src) {
             found = true
@@ -751,3 +752,26 @@ def DefaultEmpty(var src : iterator<auto(TT)>) : iterator<TT -const -&> {
     }
 }
 
+def Range(start : int; count : int) : iterator<int> {
+    //! Generates a sequence of integers within a specified range
+    return generator<int> () <| $ {
+        for (i in start..start+count) {
+            yield i
+        }
+        return false
+    }
+}
+
+def Repeat(element : auto(TT); count : int) : iterator<TT -const -&> {
+    //! Generates a sequence that contains one repeated value
+    return generator<TT -const -&> capture(:=element) () <| $ {
+        for (i in 0..count) {
+            static_if (typeinfo can_copy(element)) {
+                yield element
+            } else {
+                yield <- clone_to_move(element)
+            }
+        }
+        return false
+    }
+}
