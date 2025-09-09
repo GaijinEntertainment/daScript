@@ -3307,6 +3307,7 @@ namespace das {
                                     auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
                                     if ( func && func->requestNoJit ) jitFlags |= generator_nojit;
                                     auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, generator_needYield | jitFlags, program);
+                                    if ( func && func->skipLockCheck ) pFn->skipLockCheck = true;
                                     if ( program->addFunction(pFn) ) {
                                         auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                         if ( program->addFunction(pFnFin) ) {
@@ -3437,6 +3438,7 @@ namespace das {
                                 auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
                                 if ( func && func->requestNoJit ) jitFlags |= generator_nojit;
                                 auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, jitFlags, program);
+                                if ( func && func->skipLockCheck ) pFn->skipLockCheck = true;
                                 if ( program->addFunction(pFn) ) {
                                     auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                     if ( program->addFunction(pFnFin) ) {

@@ -5,6 +5,7 @@ options no_unused_function_arguments = false
 
 module linq shared public
 
+
 // LINQ
 // requirement:
 //  - types can be moved, and kept in the container or the collection
@@ -51,12 +52,14 @@ module linq shared public
 // TODO:
 //      change to stable-sort?
 
+[skip_lock_check]
 def ToSequence(a : array<auto(TT)>) : iterator<TT -const -&> {
     //! Converts an array to an iterator
     var b := a
     return MoveToSequence(b)
 }
 
+[skip_lock_check]
 def MoveToSequence(var a : array<auto(TT)>) : iterator<TT -const -&> {
     //! Converts an array to an iterator, captures input
     return generator<TT -const -&> capture(<- a) () <| $ {
@@ -68,6 +71,7 @@ def MoveToSequence(var a : array<auto(TT)>) : iterator<TT -const -&> {
     }
 }
 
+[skip_lock_check]
 def ToArray(var a : iterator<auto(TT)>) : array<TT -const -&> {
     //! Converts an iterator to an array
     var result : array<TT -const -&>
@@ -77,6 +81,7 @@ def ToArray(var a : iterator<auto(TT)>) : array<TT -const -&> {
     return <- result
 }
 
+[skip_lock_check]
 def Concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Concatenates two iterators
     return generator<TT -const -&> capture(<- a, <- b) () <| $ {
@@ -98,6 +103,7 @@ def Concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
     }
 }
 
+[skip_lock_check]
 def Reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Reverses an iterator
     return generator<TT -const -&> capture(<- a) () <| $ {
@@ -114,6 +120,7 @@ def Reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     }
 }
 
+[skip_lock_check]
 def Order(var a : iterator<auto(TT)>; fun : auto(SortT)) : iterator<TT -const -&> {
     //! Sorts an iterator
     var arr <- ToArray(a)
@@ -121,6 +128,7 @@ def Order(var a : iterator<auto(TT)>; fun : auto(SortT)) : iterator<TT -const -&
     return MoveToSequence(arr)
 }
 
+[skip_lock_check]
 def OrderDescending(var a : iterator<auto(TT)>; fun : auto(SortT)) : iterator<TT -const -&> {
     //! Sorts an iterator in descending order
     var arr <- ToArray(a)
@@ -160,6 +168,7 @@ def Less(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>) : bool {
     return a._3 < b._3
 }
 
+[skip_lock_check]
 def OrderBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Sorts an iterator
     var arr <- ToArray(a)
@@ -167,6 +176,7 @@ def OrderBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     return MoveToSequence(arr)
 }
 
+[skip_lock_check]
 def OrderByDescending(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Sorts an iterator in descending order
     var arr <- ToArray(a)
@@ -183,6 +193,7 @@ def UniqueKey(a) {
     }
 }
 
+[skip_lock_check]
 def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns distinct elements from an iterator
     return generator<TT -const -&> capture(<- a) () <| $ {
@@ -203,6 +214,7 @@ def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     }
 }
 
+[skip_lock_check]
 def DistinctBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Returns distinct elements from an iterator based on a key
     // TODO: specialize with const value vs var value of key, which can be captured.
@@ -220,6 +232,7 @@ def DistinctBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
 
 }
 
+[skip_lock_check]
 def Count(var a : iterator<auto(TT)>) : int {
     //! Counts elements in an iterator
     var count = 0
@@ -229,6 +242,7 @@ def Count(var a : iterator<auto(TT)>) : int {
     return count
 }
 
+[skip_lock_check]
 def LongCount(var a : iterator<auto(TT)>) : int64 {
     //! Counts elements in an iterator, using a long integer
     var count = 0l
@@ -238,6 +252,7 @@ def LongCount(var a : iterator<auto(TT)>) : int64 {
     return count
 }
 
+[skip_lock_check]
 def Where(var src : iterator<auto(TT)>; predicate) : iterator<TT -& -const> {
     //! Filters elements in an iterator based on a predicate
     // TODO: specialize with const value vs var value of predicate, which can be captured.
@@ -250,6 +265,7 @@ def Where(var src : iterator<auto(TT)>; predicate) : iterator<TT -& -const> {
     return buffer.MoveToSequence()
 }
 
+[skip_lock_check]
 def Skip(var src : iterator<auto(TT)>; var total : int) {
     //! Yields all but the first `total` elements
     return <- generator<TT -&> capture(<- src) () <| $() {
@@ -268,6 +284,7 @@ def Skip(var src : iterator<auto(TT)>; var total : int) {
     }
 }
 
+[skip_lock_check]
 def SkipWhile(var src : iterator<auto(TT)>; predicate) {
     //! Skips all elements of an iterator while the predicate is true
     // TODO: specialize with const value vs var value of predicate, which can be captured.
@@ -286,6 +303,7 @@ def SkipWhile(var src : iterator<auto(TT)>; predicate) {
     return buffer.MoveToSequence()
 }
 
+[skip_lock_check]
 def Take(var src : iterator<auto(TT)>; var total : int) {
     //! Yields only the first `total` elements
     return <- generator<TT -&> capture(<- src) () <| $() {
@@ -304,6 +322,7 @@ def Take(var src : iterator<auto(TT)>; var total : int) {
     }
 }
 
+[skip_lock_check]
 def Take(var src : iterator<auto(TT)>; interval : range) {
     //! Yields only the elements of an iterator within a specified range
     return <- generator<TT -&> capture(<- src) () <| $() {
@@ -320,6 +339,7 @@ def Take(var src : iterator<auto(TT)>; interval : range) {
     }
 }
 
+[skip_lock_check]
 def TakeWhile(var src : iterator<auto(TT)>; predicate) {
     //! Yields only the elements of an iterator while the predicate is true
     var buffer : array<TT -& -const>
@@ -336,6 +356,7 @@ def TakeWhile(var src : iterator<auto(TT)>; predicate) {
     return buffer.MoveToSequence()
 }
 
+[skip_lock_check]
 def Min(var src : iterator<auto(TT)>) : TT -& -const {
     //! Finds the minimum element in an iterator
     var minn : TT -& -const
@@ -348,9 +369,10 @@ def Min(var src : iterator<auto(TT)>) : TT -& -const {
             minn = x
         }
     }
-    return minn
+    return <- minn
 }
 
+[skip_lock_check]
 def MinBy(var src : iterator<auto(TT)>; key) : TT -& -const {
     //! Finds the minimum element in an iterator by key
     var minn : TT -& -const
@@ -374,6 +396,7 @@ def MinBy(var src : iterator<auto(TT)>; key) : TT -& -const {
     return <- minn
 }
 
+[skip_lock_check]
 def Max(var src : iterator<auto(TT)>) : TT -& -const {
     //! Finds the maximum element in an iterator
     var maxx : TT -& -const
@@ -397,6 +420,7 @@ def Max(var src : iterator<auto(TT)>) : TT -& -const {
     return <- maxx
 }
 
+[skip_lock_check]
 def MaxBy(var src : iterator<auto(TT)>; key) : TT -& -const {
     //! Finds the maximum element in an iterator by key
     var maxx : TT -& -const
@@ -420,6 +444,7 @@ def MaxBy(var src : iterator<auto(TT)>; key) : TT -& -const {
     return <- maxx
 }
 
+[skip_lock_check]
 def Sum(var src : iterator<auto(TT)>) : TT -const -& {
     //! Sums elements in an iterator
     var total : TT -const -&
@@ -429,6 +454,7 @@ def Sum(var src : iterator<auto(TT)>) : TT -const -& {
     return <- total
 }
 
+[skip_lock_check]
 def Average(var src : iterator<auto(TT)>) : TT -const -& {
     //! Averages elements in an iterator
     var total : TT -const -&
@@ -468,6 +494,7 @@ def Join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, key
     return buffer.ToSequence()
 }
 
+[skip_lock_check]
 def GroupJoin(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<iterator<TB -const -&>>)) -const -&> {
     // we pass TA, and sequence of TB to 'result'
     var tableb : table<typedecl(UniqueKey(keyb(type<TB>))); array<TB -const -&>>
@@ -485,3 +512,4 @@ def GroupJoin(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya
     delete tableb
     return buffer.ToSequence()
 }
+
