@@ -81,10 +81,18 @@ def Concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Concatenates two iterators
     return generator<TT -const -&> capture(<- a, <- b) () <| $ {
         for (itA in a) {
-            yield itA
+            static_if (typeinfo can_copy(itA)) {
+                yield itA
+            } else {
+                yield <- clone_to_move(itA)
+            }
         }
         for (itB in b) {
-            yield itB
+            static_if (typeinfo can_copy(itB)) {
+                yield itB
+            } else {
+                yield <- clone_to_move(itB)
+            }
         }
         return false
     }
@@ -99,7 +107,7 @@ def Reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
         }
         let len = buffer.length()
         for (i in 0..len) {
-            yield buffer[len - i - 1]
+            yield <- buffer[len - i - 1]
         }
         delete buffer
         return false
@@ -182,7 +190,11 @@ def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
         for (it in a) {
             let k = UniqueKey(it)
             if (!seen.key_exists(k)) {
-                yield it
+                static_if (typeinfo can_copy(it)) {
+                    yield it
+                } else {
+                    yield <- clone_to_move(it)
+                }
                 seen.insert(k)
             }
         }
@@ -246,7 +258,11 @@ def Skip(var src : iterator<auto(TT)>; var total : int) {
                 total --
                 continue
             }
-            yield x
+            static_if (typeinfo can_copy(x)) {
+                yield x
+            } else {
+                yield <- clone_to_move(x)
+            }
         }
         return false
     }
@@ -278,7 +294,11 @@ def Take(var src : iterator<auto(TT)>; var total : int) {
                 break
             }
             total --
-            yield x
+            static_if (typeinfo can_copy(x)) {
+                yield x
+            } else {
+                yield <- clone_to_move(x)
+            }
         }
         return false
     }
@@ -337,13 +357,21 @@ def MinBy(var src : iterator<auto(TT)>; key) : TT -& -const {
     var first : bool = true
     for (x in src) {
         if (first) {
-            minn = x
+            static_if (typeinfo can_copy(x)) {
+                minn = x
+            } else {
+                minn <- clone_to_move(x)
+            }
             first = false
         } elif (_::Less(key(x), key(minn))) {
-            minn = x
+            static_if (typeinfo can_copy(x)) {
+                minn = x
+            } else {
+                minn <- clone_to_move(x)
+            }
         }
     }
-    return minn
+    return <- minn
 }
 
 def Max(var src : iterator<auto(TT)>) : TT -& -const {
@@ -352,13 +380,21 @@ def Max(var src : iterator<auto(TT)>) : TT -& -const {
     var first : bool = true
     for (x in src) {
         if (first) {
-            maxx = x
+            static_if (typeinfo can_copy(x)) {
+                maxx = x
+            } else {
+                maxx <- clone_to_move(x)
+            }
             first = false
         } elif (_::Less(maxx, x)) {
-            maxx = x
+            static_if (typeinfo can_copy(x)) {
+                maxx = x
+            } else {
+                maxx <- clone_to_move(x)
+            }
         }
     }
-    return maxx
+    return <- maxx
 }
 
 def MaxBy(var src : iterator<auto(TT)>; key) : TT -& -const {
@@ -367,13 +403,21 @@ def MaxBy(var src : iterator<auto(TT)>; key) : TT -& -const {
     var first : bool = true
     for (x in src) {
         if (first) {
-            maxx = x
+            static_if (typeinfo can_copy(x)) {
+                maxx = x
+            } else {
+                maxx <- clone_to_move(x)
+            }
             first = false
         } elif (_::Less(key(maxx), key(x))) {
-            maxx = x
+            static_if (typeinfo can_copy(x)) {
+                maxx = x
+            } else {
+                maxx <- clone_to_move(x)
+            }
         }
     }
-    return maxx
+    return <- maxx
 }
 
 def Sum(var src : iterator<auto(TT)>) : TT -const -& {
@@ -394,7 +438,11 @@ def Average(var src : iterator<auto(TT)>) : TT -const -& {
         count ++
     }
     if (count != 0ul) {
-        total /= TT(count)
+        static_if (typeinfo is_workhorse(type<TT>)) {
+            total /= TT(count)
+        } else {
+            total /= count
+        }
     }
     return <- total
 }
