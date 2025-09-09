@@ -282,6 +282,66 @@ def test_average() {
     assert(queryf == 2.0)
 }
 
+struct Pet {
+    name : string
+    owner : Person
+}
+
+let magnus = Person(name = "Hedlund, Magnus")
+let terry = Person(name = "Adams, Terry")
+let charlotte = Person(name = "Weiss, Charlotte")
+let barley = Pet(name = "Barley", owner = terry)
+let boots = Pet(name = "Boots", owner = terry)
+let whiskers = Pet(name = "Whiskers", owner = charlotte)
+let daisy = Pet(name = "Daisy", owner = magnus)
+let persons <- [
+    magnus, terry, charlotte
+]
+let pets <- [
+    barley, boots, whiskers, daisy
+]
+
+def test_join() {
+    var query <- Join(
+        persons.ToSequence(),
+        pets.ToSequence(),
+        $(p : Person) => p,
+        $(pet : Pet) => pet.owner,
+        $(p : Person, pet : Pet) => (p.name, pet.name)
+    )
+    var expected <- [
+        ("Hedlund, Magnus", "Daisy"),
+        ("Adams, Terry", "Barley"),
+        ("Adams, Terry", "Boots"),
+        ("Weiss, Charlotte", "Whiskers")
+    ]
+    for (c, e in query, expected) {
+        assert(c._0 == e._0 && c._1 == e._1)
+    }
+}
+
+def test_groupjoin() {
+    var query <- GroupJoin(
+        persons.ToSequence(),
+        pets.ToSequence(),
+        $(p : Person) => p.name,
+        $(pet : Pet) => pet.owner.name,
+        $(p : Person, var pets : iterator<Pet>) => (p.name, pets.ToArray())
+    )
+    var expected <- [
+        ("Hedlund, Magnus", [daisy]),
+        ("Adams, Terry", [barley, boots]),
+        ("Weiss, Charlotte", [whiskers])
+    ]
+    for (c, e in query, expected) {
+        assert(c._0 == e._0)
+        for (p1, p2 in c._1, e._1) {
+            assert(p1.name == p2.name)
+            assert(p1.owner.name == p2.owner.name)
+        }
+    }
+}
+
 [export]
 def main() {
     test_concat()
@@ -296,5 +356,6 @@ def main() {
     test_skip()
     test_min()
     test_max()
+    test_join()
+    test_groupjoin()
 }
-

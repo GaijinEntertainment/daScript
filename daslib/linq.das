@@ -37,6 +37,9 @@ module linq shared public
 //      SkipWhile - Skips all elements of an iterator while the predicate is true
 //      Take - Takes the first `n` elements of an iterator or range of elements in the iterator
 //      TakeWhile - Takes elements from an iterator while the predicate is true
+//  Join operations
+//      Join - Joins two iterators based on a key (inner join)
+//      GroupJoin - Joins two iterators based on a key, passing a sequence of the second iterator to the result (group join)
 //  Converting sequence
 //      ToArray - Converts an iterator to an array
 //      ToSequence - Converts an array to an iterator
@@ -58,7 +61,7 @@ def MoveToSequence(var a : array<auto(TT)>) : iterator<TT -const -&> {
     //! Converts an array to an iterator, captures input
     return generator<TT -const -&> capture(<- a) () <| $ {
         for (it in a) {
-            yield it
+            yield <- it
         }
         delete a
         return false
@@ -74,9 +77,9 @@ def ToArray(var a : iterator<auto(TT)>) : array<TT -const -&> {
     return <- result
 }
 
-def Concat(var a, b : iterator<auto(TT)>) : iterator<TT> {
+def Concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Concatenates two iterators
-    return generator<TT> capture(<- a, <- b) () <| $ {
+    return generator<TT -const -&> capture(<- a, <- b) () <| $ {
         for (itA in a) {
             yield itA
         }
@@ -394,4 +397,43 @@ def Average(var src : iterator<auto(TT)>) : TT -const -& {
         total /= TT(count)
     }
     return <- total
+}
+
+[skip_lock_check]
+def Join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    //! Joins two iterators based on matching keys (inner join)
+    var tableb : table<typedecl(UniqueKey(keyb(type<TB>))); array<TB -const -&>>
+    for (itb in srcb) {
+        let k = UniqueKey(keyb(itb))
+        unsafe(tableb[k]).push_clone(itb)
+    }
+    var buffer : array<typedecl(result(type<TA>, type<TB>)) -const -&>
+    for (ita in srca) {
+        let k = UniqueKey(keya(ita))
+        tableb.get(k, $(arr){
+            for (itb in arr) {
+                buffer.push_clone(result(ita, itb))
+            }
+        })
+    }
+    delete tableb
+    return buffer.ToSequence()
+}
+
+def GroupJoin(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<iterator<TB -const -&>>)) -const -&> {
+    // we pass TA, and sequence of TB to 'result'
+    var tableb : table<typedecl(UniqueKey(keyb(type<TB>))); array<TB -const -&>>
+    for (itb in srcb) {
+        let k = UniqueKey(keyb(itb))
+        unsafe(tableb[k]).push_clone(itb)
+    }
+    var buffer : array<typedecl(result(type<TA>, type<iterator<TB -const -&>>)) -const -&>
+    for (ita in srca) {
+        let k = UniqueKey(keya(ita))
+        tableb.get(k, $(var arr){
+            buffer.push_clone(result(ita, arr.ToSequence()))
+        })
+    }
+    delete tableb
+    return buffer.ToSequence()
 }
