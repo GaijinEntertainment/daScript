@@ -22,6 +22,10 @@ module linq shared public
 //      DistinctBy - Returns distinct elements from an iterator by key
 //      Union - Returns the union of two iterators
 //      UnionBy - Returns the union of two iterators by key
+//      Except - Returns elements from the first iterator that are not in the second iterator
+//      ExceptBy - Returns elements from the first iterator that are not in the second iterator by key
+//      Intersect - Returns elements that are present in both iterators
+//      IntersectBy - Returns elements that are present in both iterators by key
 //  Concatenation Operations
 //      Concat - Concatenates two iterators
 //  Aggregation Operations
@@ -47,8 +51,12 @@ module linq shared public
 //  Querying data
 //      Any - Returns true if the iterator has at least one element
 //      All - Returns true if all elements in the iterator satisfy the predicate
+//      Contains - Returns true if the element is present in the iterator
+//  Grouping data
+//      GroupBy - Groups elements in an iterator by a key
 //  Converting sequence
 //      ToArray - Converts an iterator to an array
+//      ToTable - Converts an iterator to a table
 //      ToSequence - Converts an array to an iterator
 //      MoveToSequence - Moves an array to an iterator
 // Comparators and keys
@@ -88,6 +96,20 @@ def ToArray(var a : iterator<auto(TT)>) : array<TT -const -&> {
 }
 
 [skip_lock_check]
+def ToTable(var a : iterator<auto(TT)>; key; elementSelector) : table<typedecl(UniqueKey(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&> {
+    var result : table<typedecl(UniqueKey(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&>
+    for (it in a) {
+        let k = key(it)
+        static_if (typeinfo can_copy(it)) {
+            unsafe(result[UniqueKey(k)]) = elementSelector(it)
+        } else {
+            unsafe(result[UniqueKey(k)]) <- clone_to_move(elementSelector(it))
+        }
+    }
+    return <- result
+}
+
+[skip_lock_check]
 def Concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Concatenates two iterators
     return generator<TT -const -&> capture(<- a, <- b) () <| $ {
@@ -113,7 +135,7 @@ def Concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
 def Reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Reverses an iterator
     return generator<TT -const -&> capture(<- a) () <| $ {
-        var buffer : array<TT -const -&>
+        var inscope buffer : array<TT -const -&>
         for (it in a) {
             buffer.push_clone(it)
         }
@@ -121,7 +143,6 @@ def Reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
         for (i in 0..len) {
             yield <- buffer[len - i - 1]
         }
-        delete buffer
         return false
     }
 }
@@ -203,7 +224,7 @@ def UniqueKey(a) {
 def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns distinct elements from an iterator
     return generator<TT -const -&> capture(<- a) () <| $ {
-        var seen : table<typedecl(UniqueKey(type<TT>))>
+        var inscope seen : table<typedecl(UniqueKey(type<TT>))>
         for (it in a) {
             let k = UniqueKey(it)
             if (!seen.key_exists(k)) {
@@ -215,7 +236,6 @@ def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
                 seen.insert(k)
             }
         }
-        delete seen
         return false
     }
 }
@@ -224,7 +244,7 @@ def Distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
 def DistinctBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Returns distinct elements from an iterator based on a key
     // TODO: specialize with const value vs var value of key, which can be captured.
-    var seen : table<typedecl(UniqueKey(key(type<TT>)))>
+    var inscope seen : table<typedecl(UniqueKey(key(type<TT>)))>
     var buffer : array<TT -const -&>
     for (it in a) {
         let k = UniqueKey(key(it))
@@ -233,7 +253,6 @@ def DistinctBy(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
             seen.insert(k)
         }
     }
-    delete seen
     return buffer.MoveToSequence()
 
 }
@@ -482,7 +501,7 @@ def Average(var src : iterator<auto(TT)>) : TT -const -& {
 [skip_lock_check]
 def Join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
     //! Joins two iterators based on matching keys (inner join)
-    var tableb : table<typedecl(UniqueKey(keyb(type<TB>))); array<TB -const -&>>
+    var inscope tableb : table<typedecl(UniqueKey(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
         let k = UniqueKey(keyb(itb))
         unsafe(tableb[k]).push_clone(itb)
@@ -496,14 +515,13 @@ def Join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, key
             }
         })
     }
-    delete tableb
     return buffer.ToSequence()
 }
 
 [skip_lock_check]
 def GroupJoin(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<iterator<TB -const -&>>)) -const -&> {
     // we pass TA, and sequence of TB to 'result'
-    var tableb : table<typedecl(UniqueKey(keyb(type<TB>))); array<TB -const -&>>
+    var inscope tableb : table<typedecl(UniqueKey(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
         let k = UniqueKey(keyb(itb))
         unsafe(tableb[k]).push_clone(itb)
@@ -515,7 +533,26 @@ def GroupJoin(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya
             buffer.push_clone(result(ita, arr.ToSequence()))
         })
     }
-    delete tableb
+    return buffer.ToSequence()
+}
+
+[skip_lock_check]
+def GroupBy(var source : iterator<auto(TT)>; key; elementSelector; resultSelector)  {
+    //! Groups the elements of an iterator according to a specified key selector function
+    var tab : table<typedecl(UniqueKey(key(type<TT>))); tuple<typedecl(key(type<TT>)), array<typedecl(elementSelector(type<TT>)) -const -&>>>
+    for (it in source) {
+        let kIT = key(it)
+        let k = UniqueKey(kIT)
+        if (tab.key_exists(k)) {
+            unsafe(tab[k])._1.push_clone(elementSelector(it))
+        } else {
+            unsafe(tab[k]) = (kIT, [elementSelector(it)])
+        }
+    }
+    var buffer : array<typedecl(resultSelector(type<typedecl(key(type<TT>))>, type<iterator<typedecl(elementSelector(type<TT>)) -const -&>>)) -const -&>
+    for (it in values(tab)) {
+        buffer.push_clone(resultSelector(it._0, it._1.ToSequence()))
+    }
     return buffer.ToSequence()
 }
 
@@ -523,7 +560,7 @@ def GroupJoin(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya
 def Union(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns distinct elements from the concatenation of two iterators
     var buffer : array<TT -const -&>
-    var seen : table<typedecl(UniqueKey(type<TT>))>
+    var inscope seen : table<typedecl(UniqueKey(type<TT>))>
     for (ita in srca) {
         let k = UniqueKey(ita)
         if (!seen.key_exists(k)) {
@@ -538,7 +575,6 @@ def Union(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterat
             seen.insert(k)
         }
     }
-    delete seen
     return buffer.MoveToSequence()
 }
 
@@ -546,7 +582,7 @@ def Union(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterat
 def UnionBy(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Returns distinct elements from the concatenation of two iterators by key
     var buffer : array<TT -const -&>
-    var seen : table<typedecl(UniqueKey(key(type<TT>)))>
+    var inscope seen : table<typedecl(UniqueKey(key(type<TT>)))>
     for (ita in srca) {
         let k = UniqueKey(key(ita))
         if (!seen.key_exists(k)) {
@@ -561,7 +597,6 @@ def UnionBy(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) :
             seen.insert(k)
         }
     }
-    delete seen
     return buffer.MoveToSequence()
 }
 
@@ -585,3 +620,79 @@ def All(var src : iterator<auto(TT)>; predicate) : bool {
     }
     return true
 }
+
+[skip_lock_check]
+def Except(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns elements from the first iterator that are not in the second iterator
+    var inscope seen : table<typedecl(UniqueKey(type<TT>))>
+    for (it in exclude) {
+        seen.insert(UniqueKey(it))
+    }
+    var buffer : array<TT -const -&>
+    for (it in src) {
+        if (!seen.key_exists(UniqueKey(it))) {
+            buffer.push_clone(it)
+        }
+    }
+    return buffer.MoveToSequence()
+}
+
+[skip_lock_check]
+def ExceptBy(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>; key) : iterator<TT -const -&> {
+    //! Returns elements from the first iterator that are not in the second iterator by key
+    var inscope seen : table<typedecl(UniqueKey(key(type<TT>)))>
+    for (it in exclude) {
+        seen.insert(UniqueKey(key(it)))
+    }
+    var buffer : array<TT -const -&>
+    for (it in src) {
+        if (!seen.key_exists(UniqueKey(key(it)))) {
+            buffer.push_clone(it)
+        }
+    }
+    return buffer.MoveToSequence()
+}
+
+[skip_lock_check]
+def Intersect(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns elements that are present in both iterators
+    var inscope seen : table<typedecl(UniqueKey(type<TT>))>
+    for (it in srca) {
+        seen.insert(UniqueKey(it))
+    }
+    var buffer : array<TT -const -&>
+    for (it in srcb) {
+        if (seen.key_exists(UniqueKey(it))) {
+            buffer.push_clone(it)
+        }
+    }
+    return buffer.MoveToSequence()
+}
+
+[skip_lock_check]
+def IntersectBy(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) : iterator<TT -const -&> {
+    //! Returns elements that are present in both iterators by key
+    var inscope seen : table<typedecl(UniqueKey(key(type<TT>)))>
+    for (it in srca) {
+        seen.insert(UniqueKey(key(it)))
+    }
+    var buffer : array<TT -const -&>
+    for (it in srcb) {
+        if (seen.key_exists(UniqueKey(key(it)))) {
+            buffer.push_clone(it)
+        }
+    }
+    return buffer.MoveToSequence()
+}
+
+[skip_lock_check]
+def Contains(var src : iterator<auto(TT)>; element : TT -&) : bool {
+    //! Returns true if the element is present in the iterator
+    for (it in src) {
+        if (it == element) {
+            return true
+        }
+    }
+    return false
+}
+
