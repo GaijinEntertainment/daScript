@@ -232,6 +232,17 @@ def LLVMVerifyModule(mod : LLVMOpaqueModule?; action : LLVMVerifierFailureAction
     return true
 }
 
+def LLVMVerifyFunction(fn : LLVMOpaqueValue?; action : LLVMVerifierFailureAction; fail : bool) {
+    if (LLVMVerifyFunction(fn, action) != 0) {
+        if (fail) {
+            panic("Failed to verify")
+        } else {
+        }
+        return false
+    }
+    return true
+}
+
 def LLVMCreateJITCompilerForModule(var engine : LLVMExecutionEngineRef&; mod : LLVMOpaqueModule?; optlevel : uint = 2u) {
     var error : string
     if (LLVMCreateJITCompilerForModule(unsafe(addr(engine)), mod, optlevel, safe_addr(error)) != 0) {

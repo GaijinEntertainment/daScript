@@ -695,6 +695,8 @@ def public type_to_llvm_abi_type(t : TypeDeclPtr) {
         return type_to_llvm_type(t)
     } elif (t.isVoid) {
         return LLVMVoidType()
+    } elif (t.isAnyType) {
+        return LLVMFloat4Type()
     } elif (t.baseType == Type.fakeContext || t.baseType == Type.fakeLineInfo) {
         return LLVMPointerType(LLVMVoidType(), 0u)
     } elif (t.baseType == Type.tHandle) {
@@ -780,6 +782,8 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
         res = LLVMStructType(table_fields)
     } elif (t.isVoid) {
         res = LLVMVoidType()
+    } elif (t.isAnyType) {
+        res = LLVMFloat4Type()
     } elif (t.isHandle) {
         if (t.isRefType) {
             res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))

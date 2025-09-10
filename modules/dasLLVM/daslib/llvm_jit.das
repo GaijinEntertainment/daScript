@@ -5,6 +5,7 @@ options no_unused_function_arguments = false
 options strict_smart_pointers = false
 options relaxed_pointer_const
 options unsafe_table_lookup = false
+options no_global_variables = false
 
 module llvm_jit shared private
 
@@ -551,7 +552,7 @@ class LlvmJitVisitor : AstVisitor {
         )
         let line_info_type = LLVMStructType(unsafe(addr(line_info_members[0])), line_info_members |> length() |> uint(), 0)
         let line_info_global = LLVMAddGlobal(g_mod, line_info_type, "li_{int(at.line)}_{int(at.column)}")
-        var init_values =  fixed_array(g_builder |> LLVMBuildPointerCast(dummy, uint8_ptr, ""),
+        var init_values = fixed_array(g_builder |> LLVMBuildPointerCast(dummy, uint8_ptr, ""),
             LLVMConstInt(LLVMInt32Type(), at.column |> uint64(), 0),
             LLVMConstInt(LLVMInt32Type(), at.line |> uint64(), 0),
             LLVMConstInt(LLVMInt32Type(), at.last_column |> uint64(), 0),
@@ -5687,8 +5688,8 @@ def private generate_llvm(ctx : Context?; fn : FunctionPtr) {
 
 [macro_function]
 def private generate_llvm_code(fmna : string) {
-    return null if (is_in_completion() || is_compiling_macros() || is_folding())
-    return null if (g_failed)
+    verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
+    assert(!g_failed)
     var code = LLVMGetFunctionAddress(g_engine, fmna)
     return unsafe(reinterpret<void?> code) if (code != 0ul)
     if (g_dynamic_lib_handle != null) {
@@ -5811,6 +5812,17 @@ class JIT_LLVM : AstSimulateMacro {
             }
             for (fun in funcs) {
                 generate_llvm(ctx, fun)
+                let fnmna = get_mangled_name(fun)
+                var fn_impl = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
+                var fn = LLVMGetNamedFunction(g_mod, fnmna)
+                if (!LLVMVerifyFunction(fn_impl, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
+                    let maybe_mod = prog.thisModuleName |> length() == 0 ? "" : "in module {prog.thisModuleName}"
+                    panic("Internal jit error. Failed to get IR of '{fun.name} implementation' {maybe_mod}.\n")
+                }
+                if (!LLVMVerifyFunction(fn, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
+                    let maybe_mod = prog.thisModuleName |> length() == 0 ? "" : "in module {prog.thisModuleName}"
+                    panic("Internal jit error. Failed to get IR of '{fun.name}' in module {maybe_mod}.\n")
+                }
             }
             if (false) {
                 // Let's remove unused attributes before we print IR.
@@ -5821,6 +5833,10 @@ class JIT_LLVM : AstSimulateMacro {
             }
             if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                 g_failed = true
+            }
+            if (g_failed) {
+                var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
+                panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
             }
             optimize_llvm_module()
             if (LLVM_ENABLE_DLL_LOADING) {
