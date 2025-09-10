@@ -56,7 +56,7 @@ def Equal(a, b : array<int>) : bool {
 [test]
 def test_concat(t : T?) {
     t |> run("basic concat") <| @(t : T?) {
-        var query = Concat(
+        var query = concat(
             [iterator for(x in 0..5); x],
             [iterator for(x in 5..10); x]
         )
@@ -65,7 +65,7 @@ def test_concat(t : T?) {
         }
     }
     t |> run("complex type concat") <| @(t : T?) {
-        var qcomplex = Concat(
+        var qcomplex = concat(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 5..10); ComplexType(a = [x, x * 10])]
         )
@@ -78,7 +78,7 @@ def test_concat(t : T?) {
 [test]
 def test_reverse(t : T?) {
     t |> run("basic reverse") <| @(t : T?) {
-        var query = Reverse(
+        var query = reverse(
             [iterator for(x in 0..5); x]
         )
         for (c, i in query, 0..5) {
@@ -86,7 +86,7 @@ def test_reverse(t : T?) {
         }
     }
     t |> run("complex type reverse") <| @(t : T?) {
-        var qcomplex = Reverse(
+        var qcomplex = reverse(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         for (c, i in qcomplex, 0..5) {
@@ -96,51 +96,31 @@ def test_reverse(t : T?) {
 }
 
 [test]
-def test_toarray(t : T?) {
-    t |> run("basic toarray") <| @(t : T?) {
-        var query = ToArray(
-            [iterator for(x in 0..5); x]
-        )
-        for (c, i in query, 0..5) {
-            t |> equal(c, i)
-        }
-    }
-    t |> run("complex type toarray") <| @(t : T?) {
-        var qcomplex = ToArray(
-            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
-        )
-        for (c, i in qcomplex, 0..5) {
-            t |> success(c.a.Equal([i, i * 10]))
-        }
-    }
-}
-
-[test]
 def test_totable(t : T?) {
     t |> run("basic totable") <| @(t : T?) {
-        var query = ToTable(
+        var query = to_table(
             [iterator for(x in 0..5); x],
             $(x : int) => x,
             $(x : int) => x * 10
         )
         var expected = { 0 => 0, 1 => 10, 2 => 20, 3 => 30, 4 => 40 }
         for (ek, ev in keys(expected), values(expected)) {
-            let found = query.get(UniqueKey(ek), $(v) {
+            let found = query.get(unique_key(ek), $(v) {
                 t |> equal(ev, v)
             })
             t |> success(found)
         }
     }
     t |> run("complex type totable") <| @(t : T?) {
-        var qcomplex = ToTable(
+        var qcomplex = to_table(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => (c.a[0], c.a[1]),
             $(c : ComplexType) => (c.a[0] * 2, c.a[1] * 2)
         )
         var expected = { 0 => 0, 1 => 10, 2 => 20, 3 => 30, 4 => 40 }
         for (ek, ev in keys(expected), values(expected)) {
-            let k = UniqueKey((ek, ek * 10))
-            let found = qcomplex.get(UniqueKey(k), $(v) {
+            let k = unique_key((ek, ek * 10))
+            let found = qcomplex.get(k, $(v) {
                 t |> equal(v._0, ek * 2)
                 t |> equal(v._1, ek * 2 * 10)
             })
@@ -184,8 +164,8 @@ def test_orderby(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
-        var query_n = OrderBy(
-            numbers.ToSequence(),
+        var query_n = order_by(
+            numbers.to_sequence(),
             $(n : int) => n
         )
         var sorted_n = [1, 3, 4, 5, 8]
@@ -194,8 +174,8 @@ def test_orderby(t : T?) {
         }
     }
     t |> run("complex orderby") <| @(t : T?) {
-        var query = OrderBy(
-            people.ToSequence(),
+        var query = order_by(
+            people.to_sequence(),
             $(p : Person) => (p.name, p.age)
         )
         for (p, i in query, 0..5) {
@@ -204,8 +184,8 @@ def test_orderby(t : T?) {
         }
     }
     t |> run("reverse orderby") <| @(t : T?) {
-        var rquery = OrderByDescending(
-            people.ToSequence(),
+        var rquery = order_by_descending(
+            people.to_sequence(),
             $(p : Person) => (p.name, p.age)
         )
         for (p, i in rquery, 0..5) {
@@ -214,7 +194,7 @@ def test_orderby(t : T?) {
         }
     }
     t |> run("complex orderby") <| @(t : T?) {
-        var qcomplex = OrderBy(
+        var qcomplex = order_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => (c.a[0], c.a[1])
         )
@@ -223,7 +203,7 @@ def test_orderby(t : T?) {
         }
     }
     t |> run("reverse complex orderby") <| @(t : T?) {
-        var qcomplex_r = OrderByDescending(
+        var qcomplex_r = order_by_descending(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => (c.a[0], c.a[1])
         )
@@ -239,8 +219,8 @@ def test_order(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
-        var query_n = Order(
-            numbers.ToSequence(),
+        var query_n = order(
+            numbers.to_sequence(),
             $(a, b : int) => a < b
         )
         var sorted_n = [1, 3, 4, 5, 8]
@@ -249,9 +229,9 @@ def test_order(t : T?) {
         }
     }
     t |> run("complex order") <| @(t : T?) {
-        var query = Order(
-            people.ToSequence(),
-            $(a, b : Person) => Less((a.name, a.age), (b.name, b.age))
+        var query = order(
+            people.to_sequence(),
+            $(a, b : Person) => less((a.name, a.age), (b.name, b.age))
         )
         for (p, i in query, 0..5) {
             t |> equal(p.name, sorted[i].name)
@@ -259,9 +239,9 @@ def test_order(t : T?) {
         }
     }
     t |> run("reverse order") <| @(t : T?) {
-        var rquery = OrderDescending(
-            people.ToSequence(),
-            $(a, b : Person) => Less((a.name, a.age), (b.name, b.age))
+        var rquery = order_descending(
+            people.to_sequence(),
+            $(a, b : Person) => less((a.name, a.age), (b.name, b.age))
         )
         for (p, i in rquery, 0..5) {
             t |> equal(p.name, sorted_r[i].name)
@@ -269,18 +249,18 @@ def test_order(t : T?) {
         }
     }
     t |> run("complex order") <| @(t : T?) {
-        var qcomplex = Order(
+        var qcomplex = order(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(a, b : ComplexType) => Less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
+            $(a, b : ComplexType) => less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
         )
         for (c, i in qcomplex, 0..5) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
     t |> run("reverse complex order") <| @(t : T?) {
-        var qcomplex_r = OrderDescending(
+        var qcomplex_r = order_descending(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(a, b : ComplexType) => Less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
+            $(a, b : ComplexType) => less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
         )
         for (c, i in qcomplex_r, 0..5) {
             t |> success(c.a.Equal([4 - i, (4 - i) * 10]))
@@ -291,7 +271,7 @@ def test_order(t : T?) {
 [test]
 def test_distinct(t : T?) {
     t |> run("basic distinct") <| @(t : T?) {
-        var query = Distinct(
+        var query = distinct(
             [iterator for(x in 0..5); x]
         )
         for (c, i in query, 0..5) {
@@ -299,7 +279,7 @@ def test_distinct(t : T?) {
         }
     }
     t |> run("complex distinct") <| @(t : T?) {
-        var qcomplex = Distinct(
+        var qcomplex = distinct(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         for (c, i in qcomplex, 0..5) {
@@ -311,8 +291,8 @@ def test_distinct(t : T?) {
 [test]
 def test_distinctby(t : T?) {
     t |> run("basic distinct by") <| @(t : T?) {
-        var query = DistinctBy(
-            people.ToSequence(),
+        var query = distinct_by(
+            people.to_sequence(),
             $(p : Person) => p.name
         )
         var distinct_names = ["Alice", "Bob", "Charlie"]
@@ -321,7 +301,7 @@ def test_distinctby(t : T?) {
         }
     }
     t |> run("complex distinct by") <| @(t : T?) {
-        var qcomplex = DistinctBy(
+        var qcomplex = distinct_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => (c.a[0], c.a[1])
         )
@@ -334,19 +314,19 @@ def test_distinctby(t : T?) {
 [test]
 def test_count(t : T?) {
     t |> run("basic count") <| @(t : T?) {
-        var total = Count(
+        var total = count(
             [iterator for(x in 0..5); x]
         )
         t |> equal(total, 5) // its 5, because the range is 0..5 and range iteration goes up to but not including
     }
     t |> run("long count") <| @(t : T?) {
-        var ltotal = LongCount(
+        var ltotal = long_count(
             [iterator for(x in 0..5); x]
         )
         t |> equal(ltotal, 5l)
     }
     t |> run("complex long count") <| @(t : T?) {
-        var totalComplex = LongCount(
+        var totalComplex = long_count(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         t |> equal(totalComplex, 5l)
@@ -356,7 +336,7 @@ def test_count(t : T?) {
 [test]
 def test_where(t : T?) {
     t |> run("basic where") <| @(t : T?) {
-        var query = Where(
+        var query = where_(
             [iterator for(x in 0..5); x],
             $(x : int) => x % 2 == 0
         )
@@ -365,8 +345,8 @@ def test_where(t : T?) {
         }
     }
     t |> run("people where") <| @(t : T?) {
-        var qp = Where(
-            people.ToSequence(),
+        var qp = where_(
+            people.to_sequence(),
             $(p : Person) => p.age >= 30
         )
         var count = 0
@@ -377,7 +357,7 @@ def test_where(t : T?) {
         t |> equal(count, 2)
     }
     t |> run("complex where") <| @(t : T?) {
-        var qcomplex = Where(
+        var qcomplex = where_(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0] % 2 == 0
         )
@@ -390,7 +370,7 @@ def test_where(t : T?) {
 [test]
 def test_skip(t : T?) {
     t |> run("basic skip") <| @(t : T?) {
-        var query = Skip(
+        var query = skip(
             [iterator for(x in 0..5); x],
             2
         )
@@ -399,7 +379,7 @@ def test_skip(t : T?) {
         }
     }
     t |> run("skip while") <| @(t : T?) {
-        var query_skip = SkipWhile(
+        var query_skip = skip_while(
             [iterator for(x in 0..5); x],
             $(x : int) => x < 3
         )
@@ -408,7 +388,7 @@ def test_skip(t : T?) {
         }
     }
     t |> run("complex skip") <| @(t : T?) {
-        var qcomplex = Skip(
+        var qcomplex = skip(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             2
         )
@@ -417,7 +397,7 @@ def test_skip(t : T?) {
         }
     }
     t |> run("complex skip while") <| @(t : T?) {
-        var qcomplex_skip_while = SkipWhile(
+        var qcomplex_skip_while = skip_while(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0] < 3
         )
@@ -430,7 +410,7 @@ def test_skip(t : T?) {
 [test]
 def test_take(t : T?) {
     t |> run("basic take") <| @(t : T?) {
-        var query = Take(
+        var query = take(
             [iterator for(x in 0..5); x],
             3
         )
@@ -439,7 +419,7 @@ def test_take(t : T?) {
         }
     }
     t |> run("complex take while") <| @(t : T?) {
-        var query_take_while = TakeWhile(
+        var query_take_while = take_while(
             [iterator for(x in 0..5); x],
             $(x : int) => x < 3
         )
@@ -448,7 +428,7 @@ def test_take(t : T?) {
         }
     }
     t |> run("complex take range") <| @(t : T?) {
-        var query_take_range = Take(
+        var query_take_range = take(
             [iterator for(x in 0..5); x],
             1..4
         )
@@ -457,7 +437,7 @@ def test_take(t : T?) {
         }
     }
     t |> run("complex take") <| @(t : T?) {
-        var qcomplex = Take(
+        var qcomplex = take(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             3
         )
@@ -466,7 +446,7 @@ def test_take(t : T?) {
         }
     }
     t |> run("complex take while") <| @(t : T?) {
-        var qcomplex_take_while = TakeWhile(
+        var qcomplex_take_while = take_while(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0] < 3
         )
@@ -482,29 +462,29 @@ def test_min(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
-        var query_n = Min(
-            numbers.ToSequence()
+        var query_n = min(
+            numbers.to_sequence()
         )
         t |> equal(query_n, 1)
     }
     t |> run("complex min by") <| @(t : T?) {
-        var query = MinBy(
-            people.ToSequence(),
+        var query = min_by(
+            people.to_sequence(),
             $(p : Person) => (p.name, p.age)
         )
         t |> equal(query.name, "Alice")
         t |> equal(query.age, 25)
     }
     t |> run("complex min by") <| @(t : T?) {
-        var rquery = MinBy(
-            people.ToSequence(),
+        var rquery = min_by(
+            people.to_sequence(),
             $(p : Person) => (p.age, p.name)
         )
         t |> equal(rquery.name, "Bob")
         t |> equal(rquery.age, 20)
     }
     t |> run("complex min by") <| @(t : T?) {
-        var qcomplex = MinBy(
+        var qcomplex = min_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => (c.a[0], c.a[1])
         )
@@ -518,29 +498,29 @@ def test_max(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
-        var query_n = Max(
-            numbers.ToSequence()
+        var query_n = max(
+            numbers.to_sequence()
         )
         t |> equal(query_n, 8)
     }
     t |> run("complex max by") <| @(t : T?) {
-        var query = MaxBy(
-            people.ToSequence(),
+        var query = max_by(
+            people.to_sequence(),
             $(p : Person) => (p.name, p.age)
         )
         t |> equal(query.name, "Charlie")
         t |> equal(query.age, 35)
     }
     t |> run("complex max by") <| @(t : T?) {
-        var rquery = MaxBy(
-            people.ToSequence(),
+        var rquery = max_by(
+            people.to_sequence(),
             $(p : Person) => (p.age, p.name)
         )
         t |> equal(rquery.name, "Charlie")
         t |> equal(rquery.age, 35)
     }
     t |> run("complex max by") <| @(t : T?) {
-        var qcomplex = MaxBy(
+        var qcomplex = max_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => (c.a[0], c.a[1])
         )
@@ -551,13 +531,13 @@ def test_max(t : T?) {
 [test]
 def test_sum(t : T?) {
     t |> run("basic sum") <| @(t : T?) {
-        var query = Sum(
+        var query = sum(
             [iterator for(x in 0..5); x]
         )
         t |> equal(query, 10)
     }
     t |> run("complex sum") <| @(t : T?) {
-        var qcomplex = Sum(
+        var qcomplex = sum(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         t |> success(qcomplex.a.Equal([10, 100]))
@@ -567,19 +547,19 @@ def test_sum(t : T?) {
 [test]
 def test_average(t : T?) {
     t |> run("basic average") <| @(t : T?) {
-        var query = Average(
+        var query = average(
             [iterator for(x in 0..5); x]
         )
         t |> equal(query, 2)
     }
     t |> run("complex average") <| @(t : T?) {
-        var queryf = Average(
+        var queryf = average(
             [iterator for(x in 0..5); float(x)]
         )
         t |> equal(queryf, 2.0)
     }
     t |> run("complex average") <| @(t : T?) {
-        var qcomplex = Average(
+        var qcomplex = average(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         t |> success(qcomplex.a.Equal([2, 20]))
@@ -609,9 +589,9 @@ let pets = [
 [test]
 def test_join(t : T?) {
     t |> run("basic join") <| @(t : T?) {
-        var query = Join(
-            persons.ToSequence(),
-            pets.ToSequence(),
+        var query = join(
+            persons.to_sequence(),
+            pets.to_sequence(),
             $(p : Person) => p,
             $(pet : Pet) => pet.owner,
             $(p : Person, pet : Pet) => (p.name, pet.name)
@@ -628,7 +608,7 @@ def test_join(t : T?) {
         }
     }
     t |> run("complex join") <| @(t : T?) {
-        var qcomplex = Join(
+        var qcomplex = join(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0],
@@ -652,12 +632,12 @@ def test_join(t : T?) {
 [test]
 def test_groupjoin(t : T?) {
     t |> run("basic group join") <| @(t : T?) {
-        var query = GroupJoin(
-            persons.ToSequence(),
-            pets.ToSequence(),
+        var query = group_join(
+            persons.to_sequence(),
+            pets.to_sequence(),
             $(p : Person) => p.name,
             $(pet : Pet) => pet.owner.name,
-            $(p : Person, var pets : iterator<Pet>) => (p.name, pets.ToArray())
+            $(p : Person, var pets : iterator<Pet>) => (p.name, pets.to_array())
         )
         var expected = [
             ("Hedlund, Magnus", [daisy]),
@@ -673,12 +653,12 @@ def test_groupjoin(t : T?) {
         }
     }
     t |> run("complex group join") <| @(t : T?) {
-        var qcomplex = GroupJoin(
+        var qcomplex = group_join(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0],
             $(c : ComplexType) => c.a[1] / 10,
-            $(c : ComplexType, var pets : iterator<ComplexType>) => (c.a[0], pets.ToArray())
+            $(c : ComplexType, var pets : iterator<ComplexType>) => (c.a[0], pets.to_array())
         )
         var expected_complex = [
             (0, [ComplexType(a = [0, 0])]),
@@ -700,7 +680,7 @@ def test_groupjoin(t : T?) {
 [test]
 def test_union(t : T?) {
     t |> run("basic union") <| @(t : T?) {
-        var query = Union(
+        var query = union(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x]
         )
@@ -710,7 +690,7 @@ def test_union(t : T?) {
         }
     }
     t |> run("complex union") <| @(t : T?) {
-        var qcomplex = Union(
+        var qcomplex = union(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])]
         )
@@ -735,7 +715,7 @@ def test_union(t : T?) {
 [test]
 def test_unionby(t : T?) {
     t |> run("basic union by") <| @(t : T?) {
-        var query = UnionBy(
+        var query = union_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x],
             $(x : int) => x
@@ -746,7 +726,7 @@ def test_unionby(t : T?) {
         }
     }
     t |> run("complex union by") <| @(t : T?) {
-        var qcomplex = UnionBy(
+        var qcomplex = union_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0]
@@ -772,13 +752,13 @@ def test_unionby(t : T?) {
 [test]
 def test_any(t : T?) {
     t |> run("basic any") <| @(t : T?) {
-        var query = Any(
+        var query = any(
             [iterator for(x in 0..5); x]
         )
         t |> success(query)
     }
     t |> run("complex any") <| @(t : T?) {
-        var qcomplex = Any(
+        var qcomplex = any(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         t |> success(qcomplex)
@@ -788,14 +768,14 @@ def test_any(t : T?) {
 [test]
 def test_all(t : T?) {
     t |> run("basic all") <| @(t : T?) {
-        var query = All(
+        var query = all(
             [iterator for(x in 0..5); x],
             $(x : int) => x < 5
         )
         t |> success(query)
     }
     t |> run("complex all") <| @(t : T?) {
-        var qcomplex = All(
+        var qcomplex = all(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0] < 5
         )
@@ -806,7 +786,7 @@ def test_all(t : T?) {
 [test]
 def test_except(t : T?) {
     t |> run("basic except") <| @(t : T?) {
-        var query = Except(
+        var query = except(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x]
         )
@@ -816,7 +796,7 @@ def test_except(t : T?) {
         }
     }
     t |> run("complex except") <| @(t : T?) {
-        var qcomplex = Except(
+        var qcomplex = except(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])]
         )
@@ -835,7 +815,7 @@ def test_except(t : T?) {
 [test]
 def test_exceptby(t : T?) {
     t |> run("basic except by") <| @(t : T?) {
-        var query = ExceptBy(
+        var query = except_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x],
             $(x : int) => x
@@ -846,7 +826,7 @@ def test_exceptby(t : T?) {
         }
     }
     t |> run("complex except by") <| @(t : T?) {
-        var qcomplex = ExceptBy(
+        var qcomplex = except_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0]
@@ -866,7 +846,7 @@ def test_exceptby(t : T?) {
 [test]
 def test_intersect(t : T?) {
     t |> run("basic intersect") <| @(t : T?) {
-        var query = Intersect(
+        var query = intersect(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x]
         )
@@ -876,7 +856,7 @@ def test_intersect(t : T?) {
         }
     }
     t |> run("complex intersect") <| @(t : T?) {
-        var qcomplex = Intersect(
+        var qcomplex = intersect(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])]
         )
@@ -895,7 +875,7 @@ def test_intersect(t : T?) {
 [test]
 def test_intersectby(t : T?) {
     t |> run("basic intersect by") <| @(t : T?) {
-        var query = IntersectBy(
+        var query = intersect_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x],
             $(x : int) => x
@@ -906,7 +886,7 @@ def test_intersectby(t : T?) {
         }
     }
     t |> run("complex intersect by") <| @(t : T?) {
-        var qcomplex = IntersectBy(
+        var qcomplex = intersect_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0]
@@ -926,14 +906,14 @@ def test_intersectby(t : T?) {
 [test]
 def test_contains(t : T?) {
     t |> run("basic contains") <| @(t : T?) {
-        var query = Contains(
+        var query = contains(
             [iterator for(x in 0..5); x],
             3
         )
         t |> success(query)
     }
     t |> run("complex contains") <| @(t : T?) {
-        var qcomplex = Contains(
+        var qcomplex = contains(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             ComplexType(a = [3, 30])
         )
@@ -944,13 +924,13 @@ def test_contains(t : T?) {
 [test]
 def test_groupby(t : T?) {
     t |> run("basic group by") <| @(t : T?) {
-        var query = GroupBy(
-            pets.ToSequence(),
+        var query = group_by(
+            pets.to_sequence(),
             $(pet : Pet) => floor(pet.age),
             $(pet : Pet) => pet.age,
             $(baseAge : float, var ages : iterator<float>) {
-                var inscope aa = ages.ToArray()
-                return (baseAge, aa.length(), aa.ToSequence().Min(), aa.ToSequence().Max())
+                var inscope aa = ages.to_array()
+                return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
             }
         )
         var expected = [
@@ -966,13 +946,13 @@ def test_groupby(t : T?) {
         }
     }
     t |> run("complex group by") <| @(t : T?) {
-        var qcomplex = GroupBy(
+        var qcomplex = group_by(
             [iterator for(x in 0..5); ComplexType(a = [x % 2, x * 10])],
             $(c : ComplexType) => c.a[0],
             $(c : ComplexType) => c.a[1],
             $(base : int, var vals : iterator<int>) {
-                var inscope aa = vals.ToArray()
-                return (base, aa.length(), aa.ToSequence().Min(), aa.ToSequence().Max())
+                var inscope aa = vals.to_array()
+                return (base, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
             }
         )
         var expected_complex = [
@@ -991,7 +971,7 @@ def test_groupby(t : T?) {
 [test]
 def test_aggregate(t : T?) {
     t |> run("basic aggregate") <| @(t : T?) {
-        var query = Aggregate(
+        var query = aggregate(
             [iterator for(x in 0..5); x],
             0,
             $(acc, x : int) => acc + x
@@ -999,7 +979,7 @@ def test_aggregate(t : T?) {
         t |> equal(query, 10)
     }
     t |> run("complex aggregate") <| @(t : T?) {
-        var qcomplex = Aggregate(
+        var qcomplex = aggregate(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             ComplexType(a = [0, 0]),
             $(acc, x : ComplexType) => ComplexType(a = [acc.a[0] + x.a[0], acc.a[1] + x.a[1]])
@@ -1012,7 +992,7 @@ def test_aggregate(t : T?) {
 [test]
 def test_defaultempty(t : T?) {
     t |> run("basic default empty") <| @(t : T?) {
-        var query = DefaultEmpty(
+        var query = default_empty(
             [iterator for(x in 0..5); x]
         )
         var expected = [0, 1, 2, 3, 4, 5]
@@ -1021,7 +1001,7 @@ def test_defaultempty(t : T?) {
         }
     }
     t |> run("empty default") <| @(t : T?) {
-        var q2 = DefaultEmpty(
+        var q2 = default_empty(
             [iterator for(x in 0..0); x]
         )
         var expected2 = [0]
@@ -1030,7 +1010,7 @@ def test_defaultempty(t : T?) {
         }
     }
     t |> run("complex default") <| @(t : T?) {
-        var qcomplex = DefaultEmpty(
+        var qcomplex = default_empty(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         var expected_complex = [
@@ -1051,19 +1031,19 @@ def test_defaultempty(t : T?) {
 [test]
 def test_empty(t : T?) {
     t |> run("basic empty") <| @(t : T?) {
-        var query = Empty(type<int>)
+        var query = empty(type<int>)
         verify(empty(query))
     }
     t |> run("complex empty") <| @(t : T?) {
-        var qcomplex = Empty(type<ComplexType>)
+        var qcomplex = empty(type<ComplexType>)
         verify(empty(qcomplex))
     }
 }
 
 [test]
 def test_range(t : T?) {
-    t |> run("basic range") <| @(t : T?) {
-        var query = Range(0, 5)
+    t |> run("basic range_sequence") <| @(t : T?) {
+        var query = range_sequence(0, 5)
         var expected = [0, 1, 2, 3, 4, 5]
         for (c, e in query, expected) {
             t |> equal(c, e)
@@ -1074,14 +1054,14 @@ def test_range(t : T?) {
 [test]
 def test_repeat(t : T?) {
     t |> run("basic repeat") <| @(t : T?) {
-        var query = Repeat(42, 5)
+        var query = repeat(42, 5)
         var expected = [42, 42, 42, 42, 42]
         for (c, e in query, expected) {
             t |> equal(c, e)
         }
     }
     t |> run("complex repeat") <| @(t : T?) {
-        var qcomplex = Repeat(ComplexType(a = [1, 2]), 3)
+        var qcomplex = repeat(ComplexType(a = [1, 2]), 3)
         var expected_complex = [
             (1, 2),
             (1, 2),
@@ -1097,21 +1077,21 @@ def test_repeat(t : T?) {
 [test]
 def test_sequenceequal(t : T?) {
     t |> run("basic sequence equal") <| @(t : T?) {
-        var query = SequenceEqual(
+        var query = sequence_equal(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..5); x]
         )
         t |> success(query)
     }
     t |> run("basic sequence not equal") <| @(t : T?) {
-        var qneq = SequenceEqual(
+        var qneq = sequence_equal(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..5); x + 1]
         )
         t |> success(!qneq)
     }
     t |> run("complex sequence equal") <| @(t : T?) {
-        var qcomplex = SequenceEqual(
+        var qcomplex = sequence_equal(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
@@ -1122,7 +1102,7 @@ def test_sequenceequal(t : T?) {
 [test]
 def test_sequenceequalby(t : T?) {
     t |> run("basic sequence equal by") <| @(t : T?) {
-        var query = SequenceEqualBy(
+        var query = sequence_equal_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..5); x],
             $(x : int) => x
@@ -1130,7 +1110,7 @@ def test_sequenceequalby(t : T?) {
         t |> success(query)
     }
     t |> run("basic sequence not equal by") <| @(t : T?) {
-        var qneq = SequenceEqualBy(
+        var qneq = sequence_equal_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..5); x + 1],
             $(x : int) => x
@@ -1138,7 +1118,7 @@ def test_sequenceequalby(t : T?) {
         t |> success(!qneq)
     }
     t |> run("complex sequence not equal by") <| @(t : T?) {
-        var qcomplex = SequenceEqualBy(
+        var qcomplex = sequence_equal_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 9])],
             $(x : ComplexType) => x.a[0]
@@ -1150,14 +1130,14 @@ def test_sequenceequalby(t : T?) {
 [test]
 def test_elementat(t : T?) {
     t |> run("basic element at") <| @(t : T?) {
-        var query = ElementAt(
+        var query = element_at(
             [iterator for(x in 0..5); x],
             2
         )
         t |> equal(query, 2)
     }
     t |> run("complex element at") <| @(t : T?) {
-        var qcomplex = ElementAt(
+        var qcomplex = element_at(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             3
         )
@@ -1169,14 +1149,14 @@ def test_elementat(t : T?) {
 [test]
 def test_elementatordefault(t : T?) {
     t |> run("basic element at or default") <| @(t : T?) {
-        var query = ElementAtOrDefault(
+        var query = element_at_or_default(
             [iterator for(x in 0..5); x],
             2
         )
         t |> equal(query, 2)
     }
     t |> run("complex element at or default") <| @(t : T?) {
-        var qcomplex = ElementAtOrDefault(
+        var qcomplex = element_at_or_default(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             3
         )
@@ -1188,13 +1168,13 @@ def test_elementatordefault(t : T?) {
 [test]
 def test_first(t : T?) {
     t |> run("basic first") <| @(t : T?) {
-        var query = First(
+        var query = first(
             [iterator for(x in 0..5); x]
         )
         t |> equal(query, 0)
     }
     t |> run("complex first") <| @(t : T?) {
-        var qcomplex = First(
+        var qcomplex = first(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         t |> equal(qcomplex.a[0], 0)
@@ -1205,14 +1185,14 @@ def test_first(t : T?) {
 [test]
 def test_firstordefault(t : T?) {
     t |> run("basic first or default") <| @(t : T?) {
-        var query = FirstOrDefault(
+        var query = first_or_default(
             [iterator for(x in 0..5); x],
             -1
         )
         t |> equal(query, 0)
     }
     t |> run("complex first or default") <| @(t : T?) {
-        var qcomplex = FirstOrDefault(
+        var qcomplex = first_or_default(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             ComplexType(a = [0, 0])
         )
@@ -1220,14 +1200,14 @@ def test_firstordefault(t : T?) {
         t |> equal(qcomplex.a[1], 0)
     }
     t |> run("default first or default") <| @(t : T?) {
-        var qdefault = FirstOrDefault(
+        var qdefault = first_or_default(
             [iterator for(x in 0..0); x],
             -1
         )
         t |> equal(qdefault, -1)
     }
     t |> run("complex first or default") <| @(t : T?) {
-        var qcomplex = FirstOrDefault(
+        var qcomplex = first_or_default(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             ComplexType(a = [0, 0])
         )
@@ -1239,13 +1219,13 @@ def test_firstordefault(t : T?) {
 [test]
 def test_last(t : T?) {
     t |> run("basic last") <| @(t : T?) {
-        var query = Last(
+        var query = last(
             [iterator for(x in 0..5); x]
         )
         t |> equal(query, 4)
     }
     t |> run("complex last") <| @(t : T?) {
-        var qcomplex = Last(
+        var qcomplex = last(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         t |> equal(qcomplex.a[0], 4)
@@ -1256,21 +1236,21 @@ def test_last(t : T?) {
 [test]
 def test_lastordefault(t : T?) {
     t |> run("basic last or default") <| @(t : T?) {
-        var query = LastOrDefault(
+        var query = last_or_default(
             [iterator for(x in 0..5); x],
             -1
         )
         t |> equal(query, 4)
     }
     t |> run("default last or default") <| @(t : T?) {
-        var qdefault = LastOrDefault(
+        var qdefault = last_or_default(
             [iterator for(x in 0..0); x],
             -1
         )
         t |> equal(qdefault, -1)
     }
     t |> run("complex last or default") <| @(t : T?) {
-        var qcomplex = LastOrDefault(
+        var qcomplex = last_or_default(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             ComplexType(a = [0, 0])
         )
@@ -1282,19 +1262,19 @@ def test_lastordefault(t : T?) {
 [test]
 def test_single(t : T?) {
     t |> run("basic single") <| @(t : T?) {
-        var query = Single(
+        var query = single(
             [iterator for(x in 0..1); x]
         )
         t |> equal(query, 0)
     }
     t |> run("basic single not") <| @(t : T?) {
-        var qone = Single(
+        var qone = single(
             [iterator for(x in 1..2); x]
         )
         t |> equal(qone, 1)
     }
     t |> run("complex single") <| @(t : T?) {
-        var qcomplex = Single(
+        var qcomplex = single(
             [iterator for(x in 0..1); ComplexType(a = [x, x * 10])]
         )
         t |> equal(qcomplex.a[0], 0)
@@ -1305,21 +1285,21 @@ def test_single(t : T?) {
 [test]
 def test_singleordefault(t : T?) {
     t |> run("basic single or default") <| @(t : T?) {
-        var query = SingleOrDefault(
+        var query = single_or_default(
             [iterator for(x in 0..5); x],
             -1
         )
         t |> equal(query, -1)
     }
     t |> run("basic single or default not") <| @(t : T?) {
-        var qone = SingleOrDefault(
+        var qone = single_or_default(
             [iterator for(x in 0..1); x],
             -1
         )
         t |> equal(qone, 0)
     }
     t |> run("complex single or default not") <| @(t : T?) {
-        var qcomplex = SingleOrDefault(
+        var qcomplex = single_or_default(
             [iterator for(x in 2..3); ComplexType(a = [x, x * 10])],
             ComplexType(a = [-1, -1])
         )
