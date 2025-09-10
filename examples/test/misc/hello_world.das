@@ -923,6 +923,131 @@ def test_sequenceequalby() {
     assert(qcomplex == true)
 }
 
+def test_elementat() {
+    var query = ElementAt(
+        [iterator for(x in 0..5); x],
+        2
+    )
+    assert(query == 2)
+    var qcomplex = ElementAt(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        3
+    )
+    assert(qcomplex.a[0] == 3)
+    assert(qcomplex.a[1] == 30)
+}
+
+def test_elementatordefault() {
+    var query = ElementAtOrDefault(
+        [iterator for(x in 0..5); x],
+        2
+    )
+    assert(query == 2)
+    var qcomplex = ElementAtOrDefault(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        3
+    )
+    assert(qcomplex.a[0] == 3)
+    assert(qcomplex.a[1] == 30)
+}
+
+def test_first() {
+    var query = First(
+        [iterator for(x in 0..5); x]
+    )
+    assert(query == 0)
+    var qcomplex = First(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+    )
+    assert(qcomplex.a[0] == 0)
+    assert(qcomplex.a[1] == 0)
+}
+
+def test_firstordefault() {
+    var query = FirstOrDefault(
+        [iterator for(x in 0..5); x],
+        -1
+    )
+    assert(query == 0)
+    var qdefault = FirstOrDefault(
+        [iterator for(x in 0..0); x],
+        -1
+    )
+    assert(qdefault == -1)
+    var qcomplex = FirstOrDefault(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        ComplexType(a = [0, 0])
+    )
+    assert(qcomplex.a[0] == 0)
+    assert(qcomplex.a[1] == 0)
+}
+
+def test_last() {
+    var query = Last(
+        [iterator for(x in 0..5); x]
+    )
+    assert(query == 4)
+    var qcomplex = Last(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+    )
+    assert(qcomplex.a[0] == 4)
+    assert(qcomplex.a[1] == 40)
+}
+
+def test_lastordefault() {
+    var query = LastOrDefault(
+        [iterator for(x in 0..5); x],
+        -1
+    )
+    assert(query == 4)
+    var qdefault = LastOrDefault(
+        [iterator for(x in 0..0); x],
+        -1
+    )
+    assert(qdefault == -1)
+    var qcomplex = LastOrDefault(
+        [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+        ComplexType(a = [0, 0])
+    )
+    assert(qcomplex.a[0] == 4)
+    assert(qcomplex.a[1] == 40)
+}
+
+def test_single() {
+    var query = Single(
+        [iterator for(x in 0..1); x]
+    )
+    assert(query == 0)
+    var qone = Single(
+        [iterator for(x in 1..2); x]
+    )
+    assert(qone == 1)
+    var qcomplex = Single(
+        [iterator for(x in 0..1); ComplexType(a = [x, x * 10])]
+    )
+    assert(qcomplex.a[0] == 0)
+    assert(qcomplex.a[1] == 0)
+}
+
+def test_singleordefault() {
+    var query = SingleOrDefault(
+        [iterator for(x in 0..5); x],
+        -1
+    )
+    assert(query == -1)
+    var qone = SingleOrDefault(
+        [iterator for(x in 0..1); x],
+        -1
+    )
+    assert(qone == 0)
+    var qcomplex = SingleOrDefault(
+        [iterator for(x in 2..3); ComplexType(a = [x, x * 10])],
+        ComplexType(a = [-1, -1])
+    )
+    assert(qcomplex.a[0] == 2)
+    assert(qcomplex.a[1] == 20)
+}
+
 [export]
 def main() {
     test_concat()
@@ -956,4 +1081,10 @@ def main() {
     test_repeat()
     test_sequenceequal()
     test_sequenceequalby()
+    test_elementat()
+    test_elementatordefault()
+    test_first()
+    test_firstordefault()
+    test_last()
+    test_lastordefault()
 }

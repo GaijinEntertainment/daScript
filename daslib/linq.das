@@ -60,6 +60,15 @@ module linq shared public
 //      Contains - Returns true if the element is present in the iterator
 //  Grouping data
 //      GroupBy - Groups elements in an iterator by a key
+//  Element operations
+//      ElementAt - Returns the element at the specified index
+//      ElementAtOrDefault - Returns the element at the specified index, or a default value if the index is out of range
+//      First - Returns the first element in an iterator
+//      FirstOrDefault - Returns the first element in an iterator, or a default value if the iterator is empty
+//      Last - Returns the last element in an iterator
+//      LastOrDefault - Returns the last element in an iterator, or a default value if the iterator is empty
+//      Single - Returns the only element of an iterator, and throws if there is not exactly one element
+//      SingleOrDefault - Returns the only element of an iterator, or a default value if there is not exactly one element
 //  Converting sequence
 //      ToArray - Converts an iterator to an array
 //      ToTable - Converts an iterator to a table
@@ -796,4 +805,164 @@ def SequenceEqualBy(var first : iterator<auto(TT)>; var second : iterator<auto(T
         }
     }
     return true
+}
+
+def ElementAt(var src : iterator<auto(TT)>; index : int) : TT -const -& {
+    //! Returns the element at the specified index
+    panic("element index out of range") if (index < 0)
+    var i = 0
+    for (it in src) {
+        if (i == index) {
+            static_if (typeinfo can_copy(it)) {
+                return it
+            } else {
+                return <- clone_to_move(it)
+            }
+        }
+        i ++
+    }
+    panic("element index out of range")
+    var t : TT -const -&
+    return <- t
+}
+
+def ElementAtOrDefault(var src : iterator<auto(TT)>; index : int) : TT -const -& {
+    //! Returns the element at the specified index, or a default value if the index is out of range
+    if (index < 0) {
+        var t : TT -const -&
+        return <- t
+    }
+    var i = 0
+    for (it in src) {
+        if (i == index) {
+            static_if (typeinfo can_copy(it)) {
+                return it
+            } else {
+                return <- clone_to_move(it)
+            }
+        }
+        i ++
+    }
+    var t : TT -const -&
+    return <- t
+}
+
+def First(var src : iterator<auto(TT)>) : TT -const -& {
+    //! Returns the first element of an iterator
+    for (it in src) {
+        static_if (typeinfo can_copy(it)) {
+            return it
+        } else {
+            return <- clone_to_move(it)
+        }
+    }
+    panic("sequence contains no elements")
+    var t : TT -const -&
+    return <- t
+}
+
+def FirstOrDefault(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -const -& {
+    //! Returns the first element of an iterator, or a default value if the iterator is empty
+    for (it in src) {
+        static_if (typeinfo can_copy(it)) {
+            return it
+        } else {
+            return <- clone_to_move(it)
+        }
+    }
+    static_if (typeinfo can_copy(defaultValue)) {
+        return defaultValue
+    } else {
+        return <- clone_to_move(defaultValue)
+    }
+}
+
+def Last(var src : iterator<auto(TT)>) : TT -const -& {
+    //! Returns the last element of an iterator
+    var found = false
+    var last : TT -const -&
+    for (it in src) {
+        found = true
+        static_if (typeinfo can_copy(it)) {
+            last = it
+        } else {
+            last <- clone_to_move(it)
+        }
+    }
+    if (!found) {
+        panic("sequence contains no elements")
+    }
+    return <- last
+}
+
+def LastOrDefault(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -const -& {
+    //! Returns the last element of an iterator, or a default value if the iterator is empty
+    var found = false
+    var last : TT -const -&
+    for (it in src) {
+        found = true
+        static_if (typeinfo can_copy(it)) {
+            last = it
+        } else {
+            last <- clone_to_move(it)
+        }
+    }
+    if (!found) {
+        static_if (typeinfo can_copy(defaultValue)) {
+            return defaultValue
+        } else {
+            return <- clone_to_move(defaultValue)
+        }
+    }
+    return <- last
+}
+
+def Single(var src : iterator<auto(TT)>) : TT -const -& {
+    //! Returns the only element of an iterator, and throws if there is not exactly one element
+    var found = false
+    var single : TT -const -&
+    for (it in src) {
+        if (found) {
+            panic("sequence contains more than one element")
+        }
+        found = true
+        static_if (typeinfo can_copy(it)) {
+            single = it
+        } else {
+            single <- clone_to_move(it)
+        }
+    }
+    if (!found) {
+        panic("sequence contains no elements")
+    }
+    return <- single
+}
+
+def SingleOrDefault(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -const -& {
+    //! Returns the only element of an iterator, or a default value if there is not exactly one element
+    var found = false
+    var single : TT -const -&
+    for (it in src) {
+        if (found) {
+            static_if (typeinfo can_copy(defaultValue)) {
+                return defaultValue
+            } else {
+                return <- clone_to_move(defaultValue)
+            }
+        }
+        found = true
+        static_if (typeinfo can_copy(it)) {
+            single = it
+        } else {
+            single <- clone_to_move(it)
+        }
+    }
+    if (!found) {
+        static_if (typeinfo can_copy(defaultValue)) {
+            return defaultValue
+        } else {
+            return <- clone_to_move(defaultValue)
+        }
+    }
+    return <- single
 }
