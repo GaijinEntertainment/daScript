@@ -2716,6 +2716,16 @@ namespace das {
                     }
                 }
             }
+            scopes.back()->hasExitByLabel = true;
+            for ( const auto & scp : scopes.back()->list ) {
+                if ( scp->rtti_isLabel() ) {
+                    auto lab = static_pointer_cast<ExprLabel>(scp);
+                    if ( lab->label == expr->label ) {
+                        scopes.back()->hasExitByLabel = false;
+                        break;
+                    }
+                }
+            }
             if ( !expr->subexpr && !findLabel(expr->label) ) {
                 error("can't find label " + to_string(expr->label),  "", "",
                     expr->at, CompilationError::invalid_label);

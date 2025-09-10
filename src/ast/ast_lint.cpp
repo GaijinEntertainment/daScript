@@ -195,6 +195,11 @@ namespace das {
             }
         }
     protected:
+
+        bool jitEnabled() const {
+            return program->policies.jit && (!func || !func->requestNoJit);
+        }
+
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
             if ( !checkOnlyFastAot ) return;
             if ( _func && _func->builtIn ) {
@@ -552,6 +557,21 @@ namespace das {
                     }
                 }
             }
+            if (expr->name == "builtin_try_recover") {
+                DAS_ASSERTF(expr->arguments.size() == 4,
+                    "builtin_try_recover somehow called with wrong number of arguments = %lu (%lu), expected 2.",
+                    expr->arguments.size() - 2, expr->arguments.size());
+                if (!expr->arguments.at(0)->rtti_isMakeBlock() ||
+                    !expr->arguments.at(1)->rtti_isMakeBlock()) {
+                    program->error("builtin_try_recover shouldn't be called directly.",
+                        "", "Use `try { ... } recover { ... }` instead.",
+                        expr->at, CompilationError::invalid_argument_type );
+                } else if (exprReturns(static_pointer_cast<ExprMakeBlock>(expr->arguments.front())->block)) {
+                    program->error("try { ... } recover { ... } can't have return inside in jit mode",
+                        "This feature is not implemented yet.", "",
+                        expr->at, CompilationError::not_expecting_return_value );
+                }
+            }
             for ( size_t i=0, is=expr->arguments.size(); i!=is; ++i ) {
                 const auto & arg = expr->arguments[i];
                 const auto & funArg = expr->func->arguments[i];
@@ -806,6 +826,10 @@ namespace das {
                             block->at, CompilationError::not_all_paths_return_value);
                     }
                 }
+            }
+            if (jitEnabled() && !block->finalList.empty() && block->hasExitByLabel) {
+                program->error("jit blocks can't have finally and goto", "", "",
+                    block->at, CompilationError::invalid_label);
             }
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {

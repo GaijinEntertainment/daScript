@@ -211,6 +211,7 @@ namespace das
                 bool            hasMakeBlock : 1;           // if this block has make block inside
                 bool            hasEarlyOut : 1;            // this block has return, or other blocks with return
                 bool            forLoop : 1;                // this block is a for loop
+                bool            hasExitByLabel : 1;         // whether we have goto outside of block
             };
             uint32_t            blockFlags = 0;
         };
