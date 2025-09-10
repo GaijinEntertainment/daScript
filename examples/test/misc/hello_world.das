@@ -4,6 +4,7 @@ require math
 struct ComplexType { // this one can't be copied
     a : array<int>
     def operator +=(b : ComplexType) {  // we need this one for Sum and Average
+        a.resize(b.a.length())
         for (i, j in a, b.a) {
             i += j
         }
@@ -441,7 +442,7 @@ def test_sum() {
     var query = Sum(
         [iterator for(x in 0..5); x]
     )
-    assert(query == 15)
+    assert(query == 10)
     var qcomplex = Sum(
         [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
     )
@@ -809,14 +810,14 @@ def test_aggregate() {
         0,
         $(acc, x : int) => acc + x
     )
-    assert(query == 15)
+    assert(query == 10)
     var qcomplex = Aggregate(
         [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
         ComplexType(a = [0, 0]),
         $(acc, x : ComplexType) => ComplexType(a = [acc.a[0] + x.a[0], acc.a[1] + x.a[1]])
     )
-    assert(qcomplex.a[0] == 15)
-    assert(qcomplex.a[1] == 150)
+    assert(qcomplex.a[0] == 10)
+    assert(qcomplex.a[1] == 100)
 }
 
 def test_defaultempty() {
@@ -1087,4 +1088,6 @@ def main() {
     test_firstordefault()
     test_last()
     test_lastordefault()
+    test_sum()
+    test_aggregate()
 }
