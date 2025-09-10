@@ -763,6 +763,7 @@ def DefaultEmpty(var src : iterator<auto(TT)>) : iterator<TT -const -&> {
     }
 }
 
+[skip_lock_check]
 def Range(start : int; count : int) : iterator<int> {
     //! Generates a sequence of integers within a specified range
     return generator<int>() <| $ {
@@ -773,6 +774,7 @@ def Range(start : int; count : int) : iterator<int> {
     }
 }
 
+[skip_lock_check]
 def Repeat(element : auto(TT); count : int) : iterator<TT -const -&> {
     //! Generates a sequence that contains one repeated value
     return generator<TT -const -&> capture(:= element) () <| $ {
@@ -787,6 +789,7 @@ def Repeat(element : auto(TT); count : int) : iterator<TT -const -&> {
     }
 }
 
+[skip_lock_check]
 def SequenceEqual(var first : iterator<auto(TT)>; var second : iterator<auto(TT)>) : bool {
     //! Checks if two sequences are equal
     for (f, s in first, second) {
@@ -797,6 +800,7 @@ def SequenceEqual(var first : iterator<auto(TT)>; var second : iterator<auto(TT)
     return true
 }
 
+[skip_lock_check]
 def SequenceEqualBy(var first : iterator<auto(TT)>; var second : iterator<auto(TT)>; key) : bool {
     //! Checks if two sequences are equal by key
     for (f, s in first, second) {
@@ -807,6 +811,7 @@ def SequenceEqualBy(var first : iterator<auto(TT)>; var second : iterator<auto(T
     return true
 }
 
+[skip_lock_check]
 def ElementAt(var src : iterator<auto(TT)>; index : int) : TT -const -& {
     //! Returns the element at the specified index
     panic("element index out of range") if (index < 0)
@@ -826,6 +831,7 @@ def ElementAt(var src : iterator<auto(TT)>; index : int) : TT -const -& {
     return <- t
 }
 
+[skip_lock_check]
 def ElementAtOrDefault(var src : iterator<auto(TT)>; index : int) : TT -const -& {
     //! Returns the element at the specified index, or a default value if the index is out of range
     if (index < 0) {
@@ -847,6 +853,7 @@ def ElementAtOrDefault(var src : iterator<auto(TT)>; index : int) : TT -const -&
     return <- t
 }
 
+[skip_lock_check]
 def First(var src : iterator<auto(TT)>) : TT -const -& {
     //! Returns the first element of an iterator
     for (it in src) {
@@ -861,6 +868,7 @@ def First(var src : iterator<auto(TT)>) : TT -const -& {
     return <- t
 }
 
+[skip_lock_check]
 def FirstOrDefault(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -const -& {
     //! Returns the first element of an iterator, or a default value if the iterator is empty
     for (it in src) {
@@ -877,6 +885,7 @@ def FirstOrDefault(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -con
     }
 }
 
+[skip_lock_check]
 def Last(var src : iterator<auto(TT)>) : TT -const -& {
     //! Returns the last element of an iterator
     var found = false
@@ -895,6 +904,7 @@ def Last(var src : iterator<auto(TT)>) : TT -const -& {
     return <- last
 }
 
+[skip_lock_check]
 def LastOrDefault(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -const -& {
     //! Returns the last element of an iterator, or a default value if the iterator is empty
     var found = false
@@ -917,6 +927,7 @@ def LastOrDefault(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -cons
     return <- last
 }
 
+[skip_lock_check]
 def Single(var src : iterator<auto(TT)>) : TT -const -& {
     //! Returns the only element of an iterator, and throws if there is not exactly one element
     var found = false
@@ -938,6 +949,7 @@ def Single(var src : iterator<auto(TT)>) : TT -const -& {
     return <- single
 }
 
+[skip_lock_check]
 def SingleOrDefault(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -const -& {
     //! Returns the only element of an iterator, or a default value if there is not exactly one element
     var found = false
