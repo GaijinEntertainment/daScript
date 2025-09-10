@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options no_global_variables = false
 
 module llvm_boost shared
 
@@ -41,6 +42,7 @@ def LLVMBuildLoadVector3(builder : LLVMOpaqueBuilder?; var typ : LLVMOpaqueType?
     verify(LLVMGetVectorSize(typ) == 3u)
     let elemT = LLVMGetElementType(typ)
     var ld = LLVMBuildLoad2(builder, LLVMVectorType(elemT, 4u), ptr, name)
+    LLVMSetVolatile(ld, 1)
     LLVMSetAlignment(ld, 4u)
     var x = LLVMBuildExtractElement(builder, ld, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
     var y = LLVMBuildExtractElement(builder, ld, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
