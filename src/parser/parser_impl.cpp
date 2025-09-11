@@ -53,18 +53,15 @@ namespace das {
             return argList;
         }
 
-        auto arg = arguments;
+        ExpressionPtr arg = arguments; // `arguments` will be freed by smart ptr destructor
         while ( arg->rtti_isSequence() ) {
-            auto pSeq = static_cast<ExprSequence *>(arg);
+            auto pSeq = static_pointer_cast<ExprSequence>(arg);
             DAS_ASSERT(!pSeq->right->rtti_isSequence());
             argList.push_back(pSeq->right);
-            arg = pSeq->left.get();
+            arg = pSeq->left;
         }
         argList.emplace_back(arg);
         reverse(argList.begin(),argList.end());
-        if (arguments->rtti_isSequence()) {
-            delete arguments;
-        }
         return argList;
     }
 
