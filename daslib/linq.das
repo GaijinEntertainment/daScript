@@ -161,7 +161,7 @@ def reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
 }
 
 [skip_lock_check]
-def order(var a : iterator<auto(TT)>; fun : auto(SortT)) : iterator<TT -const -&> {
+def order(var a : iterator<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) : iterator<TT -const -&> {
     //! Sorts an iterator
     var arr <- to_array(a)
     sort(arr, $(v1, v2) => fun(v1, v2))
@@ -169,7 +169,7 @@ def order(var a : iterator<auto(TT)>; fun : auto(SortT)) : iterator<TT -const -&
 }
 
 [skip_lock_check]
-def order_descending(var a : iterator<auto(TT)>; fun : auto(SortT)) : iterator<TT -const -&> {
+def order_descending(var a : iterator<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) : iterator<TT -const -&> {
     //! Sorts an iterator in descending order
     var arr <- to_array(a)
     sort(arr, $(v1, v2) => fun(v2, v1))
@@ -291,7 +291,7 @@ def long_count(var a : iterator<auto(TT)>) : int64 {
 }
 
 [skip_lock_check]
-def where_(var src : iterator<auto(TT)>; predicate) : iterator<TT -& -const> {
+def where_(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
     //! Filters elements in an iterator based on a predicate
     // TODO: specialize with const value vs var value of predicate, which can be captured.
     var buffer : array<TT -& -const>
@@ -323,7 +323,7 @@ def skip(var src : iterator<auto(TT)>; var total : int) {
 }
 
 [skip_lock_check]
-def skip_while(var src : iterator<auto(TT)>; predicate) {
+def skip_while(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) {
     //! Skips all elements of an iterator while the predicate is true
     // TODO: specialize with const value vs var value of predicate, which can be captured.
     var buffer : array<TT -& -const>
@@ -378,7 +378,7 @@ def take(var src : iterator<auto(TT)>; interval : range) {
 }
 
 [skip_lock_check]
-def take_while(var src : iterator<auto(TT)>; predicate) {
+def take_while(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) {
     //! Yields only the elements of an iterator while the predicate is true
     var buffer : array<TT -& -const>
     var taking = true
@@ -483,7 +483,7 @@ def max_by(var src : iterator<auto(TT)>; key) : TT -& -const {
 }
 
 [skip_lock_check]
-def aggregate(var src : iterator<auto(TT)>; seed : TT -&; func) : TT -const -& {
+def aggregate(var src : iterator<auto(TT)>; seed : TT -&; func : block<(acc : TT -&, x : TT -&) : TT -&>) : TT -const -& {
     //! Aggregates elements in an iterator using a seed and a function
     var acc : TT -& -const
     static_if (typeinfo can_copy(seed)) {
@@ -643,7 +643,7 @@ def any(var src : iterator<auto(TT)>) : bool {
 }
 
 [skip_lock_check]
-def all(var src : iterator<auto(TT)>; predicate) : bool {
+def all(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
     //! Returns true if all elements in the iterator satisfy the predicate
     for (it in src) {
         if (!predicate(it)) {

@@ -21,7 +21,7 @@ def test_skip(t : T?) {
     t |> run("skip while") <| @(t : T?) {
         var query_skip = skip_while(
             [iterator for(x in 0..5); x],
-            $(x : int) => x < 3
+            $(x) => x < 3
         )
         for (c, i in query_skip, 0..2) {
             t |> equal(c, i + 3)
@@ -39,7 +39,7 @@ def test_skip(t : T?) {
     t |> run("complex skip while") <| @(t : T?) {
         var qcomplex_skip_while = skip_while(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => c.a[0] < 3
+            $(c) => c.a[0] < 3
         )
         for (c, i in qcomplex_skip_while, 0..2) {
             t |> success(c.a.Equal([i + 3, (i + 3) * 10]))
@@ -61,7 +61,7 @@ def test_take(t : T?) {
     t |> run("complex take while") <| @(t : T?) {
         var query_take_while = take_while(
             [iterator for(x in 0..5); x],
-            $(x : int) => x < 3
+            $(x) => x < 3
         )
         for (c, i in query_take_while, 0..2) {
             t |> equal(c, i)
@@ -88,7 +88,7 @@ def test_take(t : T?) {
     t |> run("complex take while") <| @(t : T?) {
         var qcomplex_take_while = take_while(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => c.a[0] < 3
+            $(c) => c.a[0] < 3
         )
         for (c, i in qcomplex_take_while, 0..2) {
             t |> success(c.a.Equal([i, i * 10]))

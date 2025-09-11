@@ -28,14 +28,14 @@ def test_all(t : T?) {
     t |> run("basic all") <| @(t : T?) {
         var query = all(
             [iterator for(x in 0..5); x],
-            $(x : int) => x < 5
+            $(x) => x < 5
         )
         t |> success(query)
     }
     t |> run("complex all") <| @(t : T?) {
         var qcomplex = all(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => c.a[0] < 5
+            $(c) => c.a[0] < 5
         )
         t |> success(qcomplex)
     }

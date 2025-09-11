@@ -90,7 +90,7 @@ def test_order(t : T?) {
         ]
         var query_n = order(
             numbers.to_sequence(),
-            $(a, b : int) => a < b
+            $(a, b) => a < b
         )
         var sorted_n = [1, 3, 4, 5, 8]
         for (n, i in query_n, 0..4) {
@@ -100,7 +100,7 @@ def test_order(t : T?) {
     t |> run("complex order") <| @(t : T?) {
         var query = order(
             people.to_sequence(),
-            $(a, b : Person) => less((a.name, a.age), (b.name, b.age))
+            $(a, b) => less((a.name, a.age), (b.name, b.age))
         )
         for (p, i in query, 0..5) {
             t |> equal(p.name, sorted[i].name)
@@ -110,7 +110,7 @@ def test_order(t : T?) {
     t |> run("reverse order") <| @(t : T?) {
         var rquery = order_descending(
             people.to_sequence(),
-            $(a, b : Person) => less((a.name, a.age), (b.name, b.age))
+            $(a, b) => less((a.name, a.age), (b.name, b.age))
         )
         for (p, i in rquery, 0..5) {
             t |> equal(p.name, sorted_r[i].name)
@@ -120,7 +120,7 @@ def test_order(t : T?) {
     t |> run("complex order") <| @(t : T?) {
         var qcomplex = order(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(a, b : ComplexType) => less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
+            $(a, b) => less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
         )
         for (c, i in qcomplex, 0..5) {
             t |> success(c.a.Equal([i, i * 10]))
@@ -129,7 +129,7 @@ def test_order(t : T?) {
     t |> run("reverse complex order") <| @(t : T?) {
         var qcomplex_r = order_descending(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(a, b : ComplexType) => less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
+            $(a, b) => less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
         )
         for (c, i in qcomplex_r, 0..5) {
             t |> success(c.a.Equal([4 - i, (4 - i) * 10]))

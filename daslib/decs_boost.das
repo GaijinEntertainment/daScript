@@ -569,3 +569,72 @@ class DecsEcsMacro : AstFunctionAnnotation {
         return true
     }
 }
+
+[call_macro(name="from_decs")]
+class FromDecsMacro : AstCallMacro {
+    //! This macro converts a DECS query into an iterator<tuple<...>>. For example::
+    //!     let it = from_decs($(index:int; text:string){})
+    //!     for (item in it) {
+    //!         // process item
+    //!         print("Entity {item.index}: {item.text}\n")
+    //!     }
+    //! Internally it generates the following code::
+    //!     let it = invoke($() {
+    //!         var res : array<tuple<int,string>>
+    //!         query($(index:int; text:string) {
+    //!             res |> push((index, text))
+    //!         })
+    //!         return res.to_sequence()
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        macro_verify(length(expr.arguments) == 1, prog, expr.at, "expecting from_decs($(block_with_arguments))")
+        macro_verify(expr.arguments[0] is ExprMakeBlock, prog, expr.at, "expecting from_decs($(block_with_arguments))")
+        let mblk = expr.arguments[0] as ExprMakeBlock
+        let qblk = mblk._block as ExprBlock
+        macro_verify(length(qblk.arguments) != 0, prog, expr.at, "expecting from_decs($(block_with_arguments)), arguments are missing")
+        for (arg in qblk.arguments) {
+            macro_verify(!arg._type.isAutoOrAlias, prog, expr.at, "argument types are not fully inferred")
+        }
+        // tuple type
+        var inscope tupleType <- new TypeDecl(baseType = Type.tTuple, at = expr.at)
+        tupleType.argNames.resize(qblk.arguments.length())
+        for (arg, idx in qblk.arguments, count()) {
+            tupleType.argTypes |> emplace_new(clone_type(arg._type))
+            tupleType.argTypes[idx].flags &= ~TypeDeclFlags.ref
+            tupleType.argTypes[idx].flags &= ~TypeDeclFlags.constant
+            tupleType.argNames[idx] := arg.name
+
+        }
+        // tuple to push
+        var inscope mkTuple = new ExprMakeTuple(at = expr.at)
+        for (arg in qblk.arguments) {
+            mkTuple.values |> emplace_new <| new ExprVar(at = arg.at, name := arg.name)
+        }
+        // block with arguments
+        var inscope qblock = qmacro(${
+            res |> push($e(mkTuple))
+        })
+        var qba = qblock as ExprMakeBlock
+        var qbb = qba._block as ExprBlock
+        qbb.blockFlags |= ExprBlockFlags.isClosure
+        for (arg, idx in qblk.arguments, count()) {
+            qbb.arguments |> emplace_new <| new Variable(at = arg.at,
+                name := arg.name,
+                _type <- clone_type(arg._type),
+                init <- clone_expression(arg.init)
+            )
+            qbb.arguments[idx]._type.flags &= ~TypeDeclFlags.ref
+            qbb.arguments[idx]._type.flags |= TypeDeclFlags.constant
+        }
+        // call macro query
+        var inscope callquery = make_call(expr.at, "query")
+        (callquery as ExprCallMacro).arguments |> emplace_new <| clone_expression(qblock)
+        // final output
+        return <- qmacro(
+            invoke(${
+                var res : array<$t(tupleType)>
+                $e(callquery)
+                return res.to_sequence()
+            })
+        )
+    }
+}
