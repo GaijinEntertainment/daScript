@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options no_global_variables = false
 
 module llvm_boost shared
 
@@ -41,6 +42,7 @@ def LLVMBuildLoadVector3(builder : LLVMOpaqueBuilder?; var typ : LLVMOpaqueType?
     verify(LLVMGetVectorSize(typ) == 3u)
     let elemT = LLVMGetElementType(typ)
     var ld = LLVMBuildLoad2(builder, LLVMVectorType(elemT, 4u), ptr, name)
+    LLVMSetVolatile(ld, 1)
     LLVMSetAlignment(ld, 4u)
     var x = LLVMBuildExtractElement(builder, ld, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
     var y = LLVMBuildExtractElement(builder, ld, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
@@ -183,6 +185,10 @@ def LLVMIntPtrType : LLVMOpaqueType ? {
     }
 }
 
+def LLVMVoidPtrType : LLVMOpaqueType ? {
+    return LLVMPointerType(LLVMInt8Type(), 0u)
+}
+
 def LLVMFunctionType(var ret_type : LLVMTypeRef; var param_types : LLVMTypeRef[]; isVariadic : bool = false) {
     return LLVMFunctionType(ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
 }
@@ -206,8 +212,8 @@ def LLVMInteropFunctionType {
     if (interop_fn_type == null) {
         interop_fn_type = LLVMFunctionType(LLVMFloat4Type(),
             fixed_array<LLVMTypeRef>(
-                LLVMPointerType(LLVMVoidType(), 0u),
-                LLVMPointerType(LLVMVoidType(), 0u),
+                LLVMVoidPtrType(),
+                LLVMVoidPtrType(),
                 LLVMPointerType(LLVMFloat4Type(), 0u)
             ))
     }
@@ -227,6 +233,17 @@ def LLVMVerifyModule(mod : LLVMOpaqueModule?; action : LLVMVerifierFailureAction
         return false
     }
     LLVMDisposeMessage(error) // Here we have 1 byte message anyway
+    return true
+}
+
+def LLVMVerifyFunction(fn : LLVMOpaqueValue?; action : LLVMVerifierFailureAction; fail : bool) {
+    if (LLVMVerifyFunction(fn, action) != 0) {
+        if (fail) {
+            panic("Failed to verify")
+        } else {
+        }
+        return false
+    }
     return true
 }
 

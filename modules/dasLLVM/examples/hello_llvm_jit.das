@@ -11,7 +11,7 @@ def main {
     var mod = LLVMModuleCreateWithName("my_module")
     // NOTE: we are making this example compatible with upcomming JIT, i.e. function signature is that of a JIT function
     // Context * context, vec4f * args, void * CMRES
-    var ret_type = LLVMFunctionType(LLVMFloat4Type(), fixed_array<LLVMTypeRef>(LLVMPointerType(LLVMVoidType(), 0u), LLVMPointerType(LLVMFloat4Type(), 0u), LLVMPointerType(LLVMVoidType(), 0u)))
+    var ret_type = LLVMFunctionType(LLVMFloat4Type(), fixed_array<LLVMTypeRef>(LLVMVoidPtrType(), LLVMPointerType(LLVMFloat4Type(), 0u), LLVMVoidPtrType()))
     var sum = LLVMAddFunction(mod, "sum", ret_type)
     var entry = LLVMAppendBasicBlock(sum, "entry")
     var builder = LLVMCreateBuilder()
