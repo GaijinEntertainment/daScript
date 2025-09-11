@@ -3544,6 +3544,22 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
+    // find call macro
+        ExprLooksLikeCall * makeCallMacro ( const LineInfo & at, const string & funcName ) {
+            vector<ExprCallFactory *> ptr;
+            Module * currentModule = thisModule;
+            if ( func && func->fromGeneric ) {
+                currentModule = func->getOrigin()->module;
+            }
+            program->library.foreach([&](Module * pm) -> bool {
+                if ( currentModule->isVisibleDirectly(pm) ) {
+                    if ( auto pp = pm->findCall(funcName) ) {
+                        ptr.push_back(pp);
+                    }
+                }
+                return true;
+            }, "*");
+        }
     // ExprInvoke
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             if ( expr->argumentsFailedToInfer ) {
@@ -3617,6 +3633,14 @@ namespace das {
                                     reportAstChanged();
                                     return newCall;
                                 }
+                            }
+                            if ( auto mcall = program->makeCall(expr->at, methodName) ) {
+                                mcall->arguments.push_back(value);
+                                for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
+                                    mcall->arguments.push_back(expr->arguments[i]);
+                                }
+                                reportAstChanged();
+                                return mcall;
                             }
                         }
                     }

@@ -1,5 +1,5 @@
 options gen2
-require daslib/linq
+require daslib/linq_boost
 require daslib/decs_boost
 
 [export]
@@ -14,11 +14,15 @@ def main {
     commit()
     var all = (
         from_decs($(index : int; text : string){})
+            ._where(_._0 % 2 == 0)
             .reverse()
-            .where_($(t) => t._0 % 2 == 0)
             .to_array()
     )
+
     for (a in all) {
         print("index {a.index} text '{a.text}'\n")
     }
 }
+
+
+
