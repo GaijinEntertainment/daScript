@@ -3,7 +3,7 @@ require daslib/linq
 require dastest/testing_boost public
 require math
 
-require daslib/linq
+require daslib/linq_boost
 
 require _common
 
@@ -26,16 +26,16 @@ def test_any(t : T?) {
 [test]
 def test_all(t : T?) {
     t |> run("basic all") <| @(t : T?) {
-        var query = all(
+        var query = _all(
             [iterator for(x in 0..5); x],
-            $(x) => x < 5
+            _ < 5
         )
         t |> success(query)
     }
     t |> run("complex all") <| @(t : T?) {
-        var qcomplex = all(
+        var qcomplex = _all(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c) => c.a[0] < 5
+            _.a[0] < 5
         )
         t |> success(qcomplex)
     }

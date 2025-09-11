@@ -5,86 +5,87 @@ options no_unused_function_arguments = false
 
 module linq shared public
 
+/*
+LINQ
+requirement:
+ - types can be moved, and kept in the container or the collection
 
-// LINQ
-// requirement:
-//  - types can be moved, and kept in the container or the collection
-
-// OPERATIONS
-//  Sorting Data
-//      reverse - Reverses the order of elements in an iterator
-//      order - Sorts the elements of an iterator
-//      order_descending - Sorts the elements of an iterator in descending order
-//      order_by - Sorts the elements of an iterator
-//      order_by_descending - Sorts the elements of an iterator in descending order
-//  Set operations
-//      distinct - Returns distinct elements from an iterator
-//      distinct_by - Returns distinct elements from an iterator by key
-//      union - Returns the union of two iterators
-//      union_by - Returns the union of two iterators by key
-//      except - Returns elements from the first iterator that are not in the second iterator
-//      except_by - Returns elements from the first iterator that are not in the second iterator by key
-//      intersect - Returns elements that are present in both iterators
-//      intersect_by - Returns elements that are present in both iterators by key
-//  Concatenation Operations
-//      append - Appends an element to the end of an iterator
-//      prepend - Prepends an element to the beginning of an iterator
-//      concat - Concatenates two iterators
-//  Generation Operations
-//      empty - Returns an empty iterator of a default type
-//      default_empty - Returns the elements of the iterator, or a default value if the iterator is empty
-//      range_sequence - Generates a sequence of integers within a specified range
-//      repeat - Generates a sequence that contains one repeated value
-//  Aggregation Operations
-//      count - Counts elements in an iterator
-//      long_count - Counts elements in an iterator, using a long integer
-//      min - Finds the minimum element in an iterator
-//      min_by - Finds the minimum element in an iterator by a key
-//      max - Finds the maximum element in an iterator
-//      max_by - Finds the maximum element in an iterator by a key
-//      sum - Sums the elements in an iterator
-//      sum_by - Sums the elements in an iterator by a key
-//      average - Averages the elements in an iterator
-//      aggregate - Aggregates the elements in an iterator
-//  Filtering data
-//      where_ - Filters elements in an iterator
-//  Partitioning data
-//      skip - Skips the first `n` elements of an iterator
-//      skip_while - Skips all elements of an iterator while the predicate is true
-//      take - Takes the first `n` elements of an iterator or range of elements in the iterator
-//      take_while - Takes elements from an iterator while the predicate is true
-//      chunk - Splits an iterator into chunks of a specified size
-//  Join operations
-//      join - Joins two iterators based on a key (inner join)
-//      group_join - Joins two iterators based on a key, passing a sequence of the second iterator to the result (group join)
-//  Querying data
-//      any - Returns true if the iterator has at least one element
-//      all - Returns true if all elements in the iterator satisfy the predicate
-//      contains - Returns true if the element is present in the iterator
-//  Grouping data
-//      group_by - Groups elements in an iterator by a key
-//  Element operations
-//      element_at - Returns the element at the specified index
-//      element_at_or_default - Returns the element at the specified index, or a default value if the index is out of range
-//      first - Returns the first element in an iterator
-//      first_or_default - Returns the first element in an iterator, or a default value if the iterator is empty
-//      last - Returns the last element in an iterator
-//      last_or_default - Returns the last element in an iterator, or a default value if the iterator is empty
-//      single - Returns the only element of an iterator, and throws if there is not exactly one element
-//      single_or_default - Returns the only element of an iterator, or a default value if there is not exactly one element
-// Transform operations
-//      select - Projects each element of an iterator into a new form
-//      select_many - Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
-//      zip - Merges iterators into an iterator of tuples
-// Converting sequence
-//      to_table - Converts an iterator to a table
-//      to_sequence - Converts an array to an iterator
-//      move_to_sequence - Moves an array to an iterator
-// Comparators and keys
-//      less - Compares two values, returns true if first is less than second
-//      unique_key - Generates a unique key for a value
-//      sequence_equal - Checks if two sequences are equal
-//      sequence_equal_by - Checks if two sequences are equal by key
+OPERATIONS
+Sorting data
+     reverse - Reverses the order of elements in an iterator
+     order - Sorts the elements of an iterator
+     order_descending - Sorts the elements of an iterator in descending order
+     order_by - Sorts the elements of an iterator
+     order_by_descending - Sorts the elements of an iterator in descending order
+Set operations
+     distinct - Returns distinct elements from an iterator
+     distinct_by - Returns distinct elements from an iterator by key
+     union - Returns the union of two iterators
+     union_by - Returns the union of two iterators by key
+     except - Returns elements from the first iterator that are not in the second iterator
+     except_by - Returns elements from the first iterator that are not in the second iterator by key
+     intersect - Returns elements that are present in both iterators
+     intersect_by - Returns elements that are present in both iterators by key
+Concatenation operations
+     append - Appends an element to the end of an iterator
+     prepend - Prepends an element to the beginning of an iterator
+     concat - Concatenates two iterators
+Generation operations
+     empty - Returns an empty iterator of a default type
+     default_empty - Returns the elements of the iterator, or a default value if the iterator is empty
+     range_sequence - Generates a sequence of integers within a specified range
+     repeat - Generates a sequence that contains one repeated value
+Aggregation operations
+     count - Counts elements in an iterator
+     long_count - Counts elements in an iterator, using a long integer
+     min - Finds the minimum element in an iterator
+     min_by - Finds the minimum element in an iterator by a key
+     max - Finds the maximum element in an iterator
+     max_by - Finds the maximum element in an iterator by a key
+     sum - Sums the elements in an iterator
+     sum_by - Sums the elements in an iterator by a key
+     average - Averages the elements in an iterator
+     aggregate - Aggregates the elements in an iterator
+Filtering data
+     where_ - Filters elements in an iterator
+Partitioning data
+     skip - Skips the first `n` elements of an iterator
+     skip_while - Skips all elements of an iterator while the predicate is true
+     take - Takes the first `n` elements of an iterator or range of elements in the iterator
+     take_while - Takes elements from an iterator while the predicate is true
+     chunk - Splits an iterator into chunks of a specified size
+Join operations
+     join - Joins two iterators based on a key (inner join)
+     group_join - Joins two iterators based on a key, passing a sequence of the second iterator to the result (group join)
+Querying data
+     any - Returns true if the iterator has at least one element
+     all - Returns true if all elements in the iterator satisfy the predicate
+     contains - Returns true if the element is present in the iterator
+Grouping data
+     group_by - Groups elements in an iterator by a key
+Element operations
+     element_at - Returns the element at the specified index
+     element_at_or_default - Returns the element at the specified index, or a default value if the index is out of range
+     first - Returns the first element in an iterator
+     first_or_default - Returns the first element in an iterator, or a default value if the iterator is empty
+     last - Returns the last element in an iterator
+     last_or_default - Returns the last element in an iterator, or a default value if the iterator is empty
+     single - Returns the only element of an iterator, and throws if there is not exactly one element
+     single_or_default - Returns the only element of an iterator, or a default value if there is not exactly one element
+Transform operations
+     select - Projects each element of an iterator into a new form
+     select_many - Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
+     zip - Merges iterators into an iterator of tuples
+Converting sequence
+     to_table - Converts an iterator to a table
+     to_sequence - Converts an array to an iterator
+     move_to_sequence - Moves an array to an iterator
+Comparators and keys
+     less - Compares two values, returns true if first is less than second
+     unique_key - Generates a unique key for a value
+     sequence_equal - Checks if two sequences are equal
+     sequence_equal_by - Checks if two sequences are equal by key
+*/
 
 // TODO:
 //      change to stable-sort?

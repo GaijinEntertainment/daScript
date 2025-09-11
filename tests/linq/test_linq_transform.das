@@ -3,7 +3,7 @@ require daslib/linq
 require dastest/testing_boost public
 require math
 
-require daslib/linq
+require daslib/linq_boost
 require math
 
 
@@ -13,9 +13,9 @@ require _common
 def test_select_transform(t : T?) {
     t |> run("basic select_transform") <| @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
-        var query = select(
+        var query = _select(
             chars.to_sequence(),
-            $(s : string) => (s, s + s)
+            (_, _ + _)
         )
         for (i, ch, q in 0..5, chars, query) {
             t |> equal(ch, q._0)
@@ -23,9 +23,9 @@ def test_select_transform(t : T?) {
         }
     }
     t |> run("complex select_transform") <| @(t : T?) {
-        var qcomplex = select(
+        var qcomplex = _select(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => (c.a[0], c.a[1])
+            (_.a[0], _.a[1])
         )
         for (i, q in 0..5, qcomplex) {
             t |> equal(q._0, i)

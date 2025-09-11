@@ -3,7 +3,7 @@ require daslib/linq
 require dastest/testing_boost public
 require math
 
-require daslib/linq
+require daslib/linq_boost
 
 require _common
 
@@ -41,25 +41,25 @@ def test_min(t : T?) {
         t |> equal(query_n, 1)
     }
     t |> run("complex min by") <| @(t : T?) {
-        var query = min_by(
+        var query = _min_by(
             people.to_sequence(),
-            $(p : Person) => (p.name, p.age)
+            (_.name, _.age)
         )
         t |> equal(query.name, "Alice")
         t |> equal(query.age, 25)
     }
     t |> run("complex min by") <| @(t : T?) {
-        var rquery = min_by(
+        var rquery = _min_by(
             people.to_sequence(),
-            $(p : Person) => (p.age, p.name)
+            (_.age, _.name)
         )
         t |> equal(rquery.name, "Bob")
         t |> equal(rquery.age, 20)
     }
     t |> run("complex min by") <| @(t : T?) {
-        var qcomplex = min_by(
+        var qcomplex = _min_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => (c.a[0], c.a[1])
+            (_.a[0], _.a[1])
         )
         t |> success(qcomplex.a.Equal([0, 0]))
     }
@@ -77,25 +77,25 @@ def test_max(t : T?) {
         t |> equal(query_n, 8)
     }
     t |> run("complex max by") <| @(t : T?) {
-        var query = max_by(
+        var query = _max_by(
             people.to_sequence(),
-            $(p : Person) => (p.name, p.age)
+            (_.name, _.age)
         )
         t |> equal(query.name, "Charlie")
         t |> equal(query.age, 35)
     }
     t |> run("complex max by") <| @(t : T?) {
-        var rquery = max_by(
+        var rquery = _max_by(
             people.to_sequence(),
-            $(p : Person) => (p.age, p.name)
+            (_.age, _.name)
         )
         t |> equal(rquery.name, "Charlie")
         t |> equal(rquery.age, 35)
     }
     t |> run("complex max by") <| @(t : T?) {
-        var qcomplex = max_by(
+        var qcomplex = _max_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => (c.a[0], c.a[1])
+            (_.a[0], _.a[1])
         )
         t |> success(qcomplex.a.Equal([4, 40]))
     }
