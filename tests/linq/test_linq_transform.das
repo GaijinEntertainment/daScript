@@ -145,3 +145,64 @@ def test_selectmany_collsel(t : T?) {
     }
 }
 
+[test]
+def test_zip(t : T?) {
+    t |> run("basic zip") <| @(t : T?) {
+        var query = zip(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 10..15); x]
+        )
+        var expected = [
+            (0, 10),
+            (1, 11),
+            (2, 12),
+            (3, 13),
+            (4, 14),
+            (5, 15)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+        }
+    }
+    t |> run("complex zip") <| @(t : T?) {
+        var qcomplex = zip(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 10..15); x * 2],
+            $(x, y : int) => (x, y)
+        )
+        var expected_complex = [
+            (0, 20),
+            (1, 22),
+            (2, 24),
+            (3, 26),
+            (4, 28)
+        ]
+        for (c, e in qcomplex, expected_complex) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+        }
+    }
+    t |> run("complex zip with complex types") <| @(t : T?) {
+        var qcomplex = zip(
+            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+            [iterator for(x in 10..15); ComplexType(a = [x, x * 20])],
+            $(x, y : ComplexType) => (x.a[0], x.a[1], y.a[0], y.a[1])
+        )
+        var expected_complex = [
+            (0, 0,  10, 200),
+            (1, 10, 11, 220),
+            (2, 20, 12, 240),
+            (3, 30, 13, 260),
+            (4, 40, 14, 280)
+        ]
+        for (c, e in qcomplex, expected_complex) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+            t |> equal(c._2, e._2)
+            t |> equal(c._3, e._3)
+        }
+    }
+}
+
+

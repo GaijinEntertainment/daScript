@@ -75,6 +75,7 @@ module linq shared public
 // Transform operations
 //      select - Projects each element of an iterator into a new form
 //      select_many - Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
+//      zip - Merges iterators into an iterator of tuples
 // Converting sequence
 //      to_table - Converts an iterator to a table
 //      to_sequence - Converts an array to an iterator
@@ -1082,6 +1083,26 @@ def select_many(var src : iterator<auto(TT)>; collection_selector; result_select
         for (innerIt in collection_selector(it)) {
             buffer.push_clone(result_selector(innerIt))
         }
+    }
+    return buffer.move_to_sequence()
+}
+
+[skip_lock_check]
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : iterator<tuple<TT -const -&, UU -const -&>> {
+    //! Merges two iterators into an iterator of tuples
+    var buffer : array<tuple<TT -const -&, UU -const -&>>
+    for (itA, itB in a, b) {
+        buffer.emplace((itA, itB))
+    }
+    return buffer.move_to_sequence()
+}
+
+[skip_lock_check]
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_selector) : iterator<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges two iterators into an iterator using a result selector function
+    var buffer : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&>
+    for (itA, itB in a, b) {
+        buffer.push_clone(result_selector(itA, itB))
     }
     return buffer.move_to_sequence()
 }
