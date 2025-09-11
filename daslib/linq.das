@@ -27,6 +27,8 @@ module linq shared public
 //      intersect - Returns elements that are present in both iterators
 //      intersect_by - Returns elements that are present in both iterators by key
 //  Concatenation Operations
+//      append - Appends an element to the end of an iterator
+//      prepend - Prepends an element to the beginning of an iterator
 //      concat - Concatenates two iterators
 //  Generation Operations
 //      empty - Returns an empty iterator of a default type
@@ -51,6 +53,7 @@ module linq shared public
 //      skip_while - Skips all elements of an iterator while the predicate is true
 //      take - Takes the first `n` elements of an iterator or range of elements in the iterator
 //      take_while - Takes elements from an iterator while the predicate is true
+//      chunk - Splits an iterator into chunks of a specified size
 //  Join operations
 //      join - Joins two iterators based on a key (inner join)
 //      group_join - Joins two iterators based on a key, passing a sequence of the second iterator to the result (group join)
@@ -69,7 +72,9 @@ module linq shared public
 //      last_or_default - Returns the last element in an iterator, or a default value if the iterator is empty
 //      single - Returns the only element of an iterator, and throws if there is not exactly one element
 //      single_or_default - Returns the only element of an iterator, or a default value if there is not exactly one element
-//  Converting sequence
+// Transform operations
+//      select - Projects each element of an iterator into a new form
+// Converting sequence
 //      to_table - Converts an iterator to a table
 //      to_sequence - Converts an array to an iterator
 //      move_to_sequence - Moves an array to an iterator
@@ -966,4 +971,84 @@ def single_or_default(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -
         }
     }
     return <- single
+}
+
+[skip_lock_check]
+def prepend(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
+    //! Prepends a value to the beginning of an iterator
+    return generator<TT -const -&> capture(<- it, := value) () <| $ {
+        static_if (typeinfo can_copy(value)) {
+            yield value
+        } else {
+            yield <- clone_to_move(value)
+        }
+        for (x in it) {
+            static_if (typeinfo can_copy(x)) {
+                yield x
+            } else {
+                yield <- clone_to_move(x)
+            }
+        }
+        return false
+    }
+}
+
+[skip_lock_check]
+def append(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
+    //! Appends a value to the end of an iterator
+    return generator<TT -const -&> capture(<- it, := value) () <| $ {
+        for (x in it) {
+            static_if (typeinfo can_copy(x)) {
+                yield x
+            } else {
+                yield <- clone_to_move(x)
+            }
+        }
+        static_if (typeinfo can_copy(value)) {
+            yield value
+        } else {
+            yield <- clone_to_move(value)
+        }
+        return false
+    }
+}
+
+[skip_lock_check]
+def select(var src : iterator<auto(TT)>) : iterator<tuple<int, TT -const -&>> {
+    //! Projects each element of an iterator into a new form
+    var buffer : array<tuple<int, TT -const -&>>
+    for (it, index in src, count()) {
+        buffer.emplace((index, it))
+    }
+    return buffer.move_to_sequence()
+}
+
+[skip_lock_check]
+def select(var src : iterator<auto(TT)>; selector) : iterator<typedecl(selector(type<TT>)) -const -&> {
+    //! Projects each element of an iterator into a new form using a selector function
+    var buffer : array<typedecl(selector(type<TT>)) -const -&>
+    for (it in src) {
+        buffer.push_clone(selector(it))
+    }
+    return buffer.move_to_sequence()
+}
+
+[skip_lock_check]
+def chunk(var src : iterator<auto(TT)>; size : int) : iterator<iterator<TT -const -&>> {
+    //! Splits an iterator into chunks of a specified size
+    panic("chunk size must be greater than 0") if (size <= 0)
+    return generator<iterator<TT -const -&>> capture(<- src, := size) () <| $ {
+        var inscope buffer : array<TT -const -&>
+        for (it in src) {
+            buffer.push_clone(it)
+            if (buffer.length() == size) {
+                yield <- buffer.to_sequence()
+                buffer.clear()
+            }
+        }
+        if (buffer.length() > 0) {
+            yield <- buffer.to_sequence()
+        }
+        return false
+    }
 }
