@@ -3,7 +3,7 @@ require daslib/linq
 require dastest/testing_boost public
 require math
 
-require daslib/linq
+require daslib/linq_boost
 
 require _common
 
@@ -30,9 +30,9 @@ def test_distinct(t : T?) {
 [test]
 def test_distinctby(t : T?) {
     t |> run("basic distinct by") <| @(t : T?) {
-        var query = distinct_by(
+        var query = _distinct_by(
             people.to_sequence(),
-            $(p : Person) => p.name
+            _.name
         )
         var distinct_names = ["Alice", "Bob", "Charlie"]
         for (qn, dn in query, distinct_names) {
@@ -40,9 +40,9 @@ def test_distinctby(t : T?) {
         }
     }
     t |> run("complex distinct by") <| @(t : T?) {
-        var qcomplex = distinct_by(
+        var qcomplex = _distinct_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => (c.a[0], c.a[1])
+            (_.a[0], _.a[1])
         )
         for (c, i in qcomplex, 0..5) {
             t |> success(c.a.Equal([i, i * 10]))
@@ -88,10 +88,10 @@ def test_union(t : T?) {
 [test]
 def test_unionby(t : T?) {
     t |> run("basic union by") <| @(t : T?) {
-        var query = union_by(
+        var query = _union_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x],
-            $(x : int) => x
+            _
         )
         var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
         for (c, e in query, expected) {
@@ -99,10 +99,10 @@ def test_unionby(t : T?) {
         }
     }
     t |> run("complex union by") <| @(t : T?) {
-        var qcomplex = union_by(
+        var qcomplex = _union_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => c.a[0]
+            _.a[0]
         )
         var expected_complex = [
             (0, 0),
@@ -154,10 +154,10 @@ def test_except(t : T?) {
 [test]
 def test_exceptby(t : T?) {
     t |> run("basic except by") <| @(t : T?) {
-        var query = except_by(
+        var query = _except_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x],
-            $(x : int) => x
+            _
         )
         var expected = [0, 1, 2]
         for (c, e in query, expected) {
@@ -165,10 +165,10 @@ def test_exceptby(t : T?) {
         }
     }
     t |> run("complex except by") <| @(t : T?) {
-        var qcomplex = except_by(
+        var qcomplex = _except_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => c.a[0]
+            _.a[0]
         )
         var expected_complex = [
             (0, 0),
@@ -214,10 +214,10 @@ def test_intersect(t : T?) {
 [test]
 def test_intersectby(t : T?) {
     t |> run("basic intersect by") <| @(t : T?) {
-        var query = intersect_by(
+        var query = _intersect_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 3..8); x],
-            $(x : int) => x
+            _
         )
         var expected = [3, 4, 5]
         for (c, e in query, expected) {
@@ -225,10 +225,10 @@ def test_intersectby(t : T?) {
         }
     }
     t |> run("complex intersect by") <| @(t : T?) {
-        var qcomplex = intersect_by(
+        var qcomplex = _intersect_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 3..8); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => c.a[0]
+            _.a[0]
         )
         var expected_complex = [
             (3, 30),

@@ -3,7 +3,7 @@ require daslib/linq
 require dastest/testing_boost public
 require math
 
-require daslib/linq
+require daslib/linq_boost
 
 require _common
 
@@ -33,9 +33,9 @@ def test_orderby(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
-        var query_n = order_by(
+        var query_n = _order_by(
             numbers.to_sequence(),
-            $(n : int) => n
+            _
         )
         var sorted_n = [1, 3, 4, 5, 8]
         for (n, i in query_n, 0..4) {
@@ -43,9 +43,9 @@ def test_orderby(t : T?) {
         }
     }
     t |> run("complex orderby") <| @(t : T?) {
-        var query = order_by(
+        var query = _order_by(
             people.to_sequence(),
-            $(p : Person) => (p.name, p.age)
+            (_.name, _.age)
         )
         for (p, i in query, 0..5) {
             t |> equal(p.name, sorted[i].name)
@@ -53,9 +53,9 @@ def test_orderby(t : T?) {
         }
     }
     t |> run("reverse orderby") <| @(t : T?) {
-        var rquery = order_by_descending(
+        var rquery = _order_by_descending(
             people.to_sequence(),
-            $(p : Person) => (p.name, p.age)
+            (_.name, _.age)
         )
         for (p, i in rquery, 0..5) {
             t |> equal(p.name, sorted_r[i].name)
@@ -63,18 +63,18 @@ def test_orderby(t : T?) {
         }
     }
     t |> run("complex orderby") <| @(t : T?) {
-        var qcomplex = order_by(
+        var qcomplex = _order_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => (c.a[0], c.a[1])
+            (_.a[0], _.a[1])
         )
         for (c, i in qcomplex, 0..5) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
     t |> run("reverse complex orderby") <| @(t : T?) {
-        var qcomplex_r = order_by_descending(
+        var qcomplex_r = _order_by_descending(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => (c.a[0], c.a[1])
+            (_.a[0], _.a[1])
         )
         for (c, i in qcomplex_r, 0..5) {
             t |> success(c.a.Equal([4 - i, (4 - i) * 10]))

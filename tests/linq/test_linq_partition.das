@@ -3,7 +3,7 @@ require daslib/linq
 require dastest/testing_boost public
 require math
 
-require daslib/linq
+require daslib/linq_boost
 
 require _common
 
@@ -19,9 +19,9 @@ def test_skip(t : T?) {
         }
     }
     t |> run("skip while") <| @(t : T?) {
-        var query_skip = skip_while(
+        var query_skip = _skip_while(
             [iterator for(x in 0..5); x],
-            $(x) => x < 3
+            _ < 3
         )
         for (c, i in query_skip, 0..2) {
             t |> equal(c, i + 3)
@@ -37,9 +37,9 @@ def test_skip(t : T?) {
         }
     }
     t |> run("complex skip while") <| @(t : T?) {
-        var qcomplex_skip_while = skip_while(
+        var qcomplex_skip_while = _skip_while(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c) => c.a[0] < 3
+            _.a[0] < 3
         )
         for (c, i in qcomplex_skip_while, 0..2) {
             t |> success(c.a.Equal([i + 3, (i + 3) * 10]))
@@ -59,9 +59,9 @@ def test_take(t : T?) {
         }
     }
     t |> run("complex take while") <| @(t : T?) {
-        var query_take_while = take_while(
+        var query_take_while = _take_while(
             [iterator for(x in 0..5); x],
-            $(x) => x < 3
+            _ < 3
         )
         for (c, i in query_take_while, 0..2) {
             t |> equal(c, i)
@@ -86,9 +86,9 @@ def test_take(t : T?) {
         }
     }
     t |> run("complex take while") <| @(t : T?) {
-        var qcomplex_take_while = take_while(
+        var qcomplex_take_while = _take_while(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c) => c.a[0] < 3
+            _.a[0] < 3
         )
         for (c, i in qcomplex_take_while, 0..2) {
             t |> success(c.a.Equal([i, i * 10]))

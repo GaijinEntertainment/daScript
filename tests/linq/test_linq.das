@@ -3,7 +3,7 @@ require daslib/linq
 require dastest/testing_boost public
 require math
 
-require daslib/linq
+require daslib/linq_boost
 
 require _common
 
@@ -46,18 +46,18 @@ def test_totable(t : T?) {
 [test]
 def test_where(t : T?) {
     t |> run("basic where") <| @(t : T?) {
-        var query = where_(
+        var query = _where(
             [iterator for(x in 0..5); x],
-            $(x : int) => x % 2 == 0
+            _ % 2 == 0
         )
         for (c, i in query, 0..3) {
             t |> equal(c, i * 2)
         }
     }
     t |> run("people where") <| @(t : T?) {
-        var qp = where_(
+        var qp = _where(
             people.to_sequence(),
-            $(p : Person) => p.age >= 30
+            _.age >= 30
         )
         var count = 0
         for (p in qp) {
@@ -67,9 +67,9 @@ def test_where(t : T?) {
         t |> equal(count, 2)
     }
     t |> run("complex where") <| @(t : T?) {
-        var qcomplex = where_(
+        var qcomplex = _where(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
-            $(c : ComplexType) => c.a[0] % 2 == 0
+            _.a[0] % 2 == 0
         )
         for (c, i in qcomplex, 0..3) {
             t |> equal(c.a[0], i * 2)
@@ -152,26 +152,26 @@ def test_sequenceequal(t : T?) {
 [test]
 def test_sequenceequalby(t : T?) {
     t |> run("basic sequence equal by") <| @(t : T?) {
-        var query = sequence_equal_by(
+        var query = _sequence_equal_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..5); x],
-            $(x : int) => x
+            _
         )
         t |> success(query)
     }
     t |> run("basic sequence not equal by") <| @(t : T?) {
-        var qneq = sequence_equal_by(
+        var qneq = _sequence_equal_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..5); x + 1],
-            $(x : int) => x
+            _
         )
         t |> success(!qneq)
     }
     t |> run("complex sequence not equal by") <| @(t : T?) {
-        var qcomplex = sequence_equal_by(
+        var qcomplex = _sequence_equal_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 9])],
-            $(x : ComplexType) => x.a[0]
+            _.a[0]
         )
         t |> success(qcomplex)
     }
