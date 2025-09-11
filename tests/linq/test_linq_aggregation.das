@@ -145,7 +145,7 @@ def test_aggregate(t : T?) {
         var query = aggregate(
             [iterator for(x in 0..5); x],
             0,
-            $(acc, x : int) => acc + x
+            $(acc, x) => acc + x
         )
         t |> equal(query, 10)
     }
@@ -153,7 +153,7 @@ def test_aggregate(t : T?) {
         var qcomplex = aggregate(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             ComplexType(a = [0, 0]),
-            $(acc, x : ComplexType) => ComplexType(a = [acc.a[0] + x.a[0], acc.a[1] + x.a[1]])
+            $(acc, x) => ComplexType(a = [acc.a[0] + x.a[0], acc.a[1] + x.a[1]])
         )
         t |> equal(qcomplex.a[0], 10)
         t |> equal(qcomplex.a[1], 100)
