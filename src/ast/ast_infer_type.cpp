@@ -3559,6 +3559,15 @@ namespace das {
                 }
                 return true;
             }, "*");
+            if ( ptr.size()==1 ) {
+                return (*ptr.back())(at);
+            } else if ( ptr.size()>1 ) {
+                error("ambiguous call macro " + funcName,  "", "",
+                    at, CompilationError::function_not_found);
+                return nullptr;
+            } else {
+                return nullptr;
+            }
         }
     // ExprInvoke
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
@@ -3634,7 +3643,7 @@ namespace das {
                                     return newCall;
                                 }
                             }
-                            if ( auto mcall = program->makeCall(expr->at, methodName) ) {
+                            if ( auto mcall = makeCallMacro(expr->at, methodName) ) {
                                 mcall->arguments.push_back(value);
                                 for ( size_t i=2; i!=expr->arguments.size(); ++i ) {
                                     mcall->arguments.push_back(expr->arguments[i]);

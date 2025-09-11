@@ -3,7 +3,7 @@ require daslib/linq
 require dastest/testing_boost public
 require math
 
-require daslib/linq
+require daslib/linq_boost
 require daslib/decs_boost
 
 [test]
@@ -19,7 +19,7 @@ def test_from_decs(t : T?) {
     t |> run("from_decs simple") <| @(t : T?) {
         var qq = (
             from_decs($(index : int; text : string){})
-                .where_($(v) => v.index < 2)
+                ._where(_.index < 2)
                 .reverse()
                 .to_array()
         )

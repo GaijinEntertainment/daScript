@@ -152,26 +152,26 @@ def test_sequenceequal(t : T?) {
 [test]
 def test_sequenceequalby(t : T?) {
     t |> run("basic sequence equal by") <| @(t : T?) {
-        var query = sequence_equal_by(
+        var query = _sequence_equal_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..5); x],
-            $(x : int) => x
+            _
         )
         t |> success(query)
     }
     t |> run("basic sequence not equal by") <| @(t : T?) {
-        var qneq = sequence_equal_by(
+        var qneq = _sequence_equal_by(
             [iterator for(x in 0..5); x],
             [iterator for(x in 0..5); x + 1],
-            $(x : int) => x
+            _
         )
         t |> success(!qneq)
     }
     t |> run("complex sequence not equal by") <| @(t : T?) {
-        var qcomplex = sequence_equal_by(
+        var qcomplex = _sequence_equal_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 9])],
-            $(x : ComplexType) => x.a[0]
+            _.a[0]
         )
         t |> success(qcomplex)
     }
