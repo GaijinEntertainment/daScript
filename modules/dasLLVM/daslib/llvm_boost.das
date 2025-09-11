@@ -185,6 +185,10 @@ def LLVMIntPtrType : LLVMOpaqueType ? {
     }
 }
 
+def LLVMVoidPtrType : LLVMOpaqueType ? {
+    return LLVMPointerType(LLVMInt8Type(), 0u)
+}
+
 def LLVMFunctionType(var ret_type : LLVMTypeRef; var param_types : LLVMTypeRef[]; isVariadic : bool = false) {
     return LLVMFunctionType(ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
 }
@@ -208,8 +212,8 @@ def LLVMInteropFunctionType {
     if (interop_fn_type == null) {
         interop_fn_type = LLVMFunctionType(LLVMFloat4Type(),
             fixed_array<LLVMTypeRef>(
-                LLVMPointerType(LLVMVoidType(), 0u),
-                LLVMPointerType(LLVMVoidType(), 0u),
+                LLVMVoidPtrType(),
+                LLVMVoidPtrType(),
                 LLVMPointerType(LLVMFloat4Type(), 0u)
             ))
     }
