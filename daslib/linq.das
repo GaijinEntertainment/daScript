@@ -74,6 +74,7 @@ module linq shared public
 //      single_or_default - Returns the only element of an iterator, or a default value if there is not exactly one element
 // Transform operations
 //      select - Projects each element of an iterator into a new form
+//      select_many - Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
 // Converting sequence
 //      to_table - Converts an iterator to a table
 //      to_sequence - Converts an array to an iterator
@@ -1024,11 +1025,11 @@ def select(var src : iterator<auto(TT)>) : iterator<tuple<int, TT -const -&>> {
 }
 
 [skip_lock_check]
-def select(var src : iterator<auto(TT)>; selector) : iterator<typedecl(selector(type<TT>)) -const -&> {
+def select(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(type<TT>)) -const -&> {
     //! Projects each element of an iterator into a new form using a selector function
-    var buffer : array<typedecl(selector(type<TT>)) -const -&>
+    var buffer : array<typedecl(result_selector(type<TT>)) -const -&>
     for (it in src) {
-        buffer.push_clone(selector(it))
+        buffer.push_clone(result_selector(it))
     }
     return buffer.move_to_sequence()
 }
@@ -1051,4 +1052,36 @@ def chunk(var src : iterator<auto(TT)>; size : int) : iterator<iterator<TT -cons
         }
         return false
     }
+}
+
+[unused_argument(src)]
+def private iter_type(var src : iterator<auto(TT)>) : TT -const -& {
+    //! this type trait is used to extract the type of elements in an iterator
+    var t : TT -const -&
+    return <- t
+}
+
+
+[skip_lock_check]
+def select_many(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
+    //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
+    var buffer : array<typedecl(result_selector(iter_type(type<TT>))) -const -&>
+    for (it in src) {
+        for (innerIt in it) {
+            buffer.push_clone(result_selector(innerIt))
+        }
+    }
+    return buffer.move_to_sequence()
+}
+
+[skip_lock_check]
+def select_many(var src : iterator<auto(TT)>; collection_selector; result_selector) : iterator<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
+    var buffer : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&>
+    for (it in src) {
+        for (innerIt in collection_selector(it)) {
+            buffer.push_clone(result_selector(innerIt))
+        }
+    }
+    return buffer.move_to_sequence()
 }

@@ -55,3 +55,93 @@ def test_select(t : T?) {
         }
     }
 }
+
+[test]
+def test_selectmany(t : T?) {
+    t |> run("basic selectmany") <| @(t : T?) {
+        var seq_seq = [
+            ["a", "b", "c"].to_sequence(),
+            ["d", "e", "f"].to_sequence(),
+            ["g", "h", "i"].to_sequence()
+        ]
+        var query = select_many(
+            seq_seq.to_sequence(),
+            $(s : string) => "{s}_{s}"
+        )
+        var expected = [
+            "a_a", "b_b", "c_c",
+            "d_d", "e_e", "f_f",
+            "g_g", "h_h", "i_i"
+        ]
+        for (i, q in expected, query) {
+            t |> equal(i, q)
+        }
+    }
+    t |> run("complex selectmany") <| @(t : T?) {
+        var seq_seq = [
+            [ComplexType(a = [1, 10]), ComplexType(a = [2, 20])].to_sequence(),
+            [ComplexType(a = [3, 30]), ComplexType(a = [4, 40])].to_sequence(),
+            [ComplexType(a = [5, 50]), ComplexType(a = [6, 60])].to_sequence()
+        ]
+        var query = select_many(
+            seq_seq.to_sequence(),
+            $(c : ComplexType) => (c.a[0], c.a[1])
+        )
+        var expected = [
+            (1, 10), (2, 20),
+            (3, 30), (4, 40),
+            (5, 50), (6, 60)
+        ]
+        for (i, q in expected, query) {
+            t |> equal(i._0, q._0)
+            t |> equal(i._1, q._1)
+        }
+    }
+}
+
+[test]
+def test_selectmany_collsel(t : T?) {
+    t |> run("basic selectmany with collection selector") <| @(t : T?) {
+        var chars = ["a", "b", "c", "d", "e"]
+        var query = select_many(
+            chars.to_sequence(),
+            $(s : string) => [s, s + s].to_sequence(),
+            $(s : string) => "{s}_{s}"
+        )
+        var expected = [
+            "a_a", "aa_aa",
+            "b_b", "bb_bb",
+            "c_c", "cc_cc",
+            "d_d", "dd_dd",
+            "e_e", "ee_ee"
+        ]
+        for (i, q in expected, query) {
+            t |> equal(i, q)
+        }
+    }
+    t |> run("complex selectmany with collection selector") <| @(t : T?) {
+        var seq_seq = [
+            ComplexType(a = [1, 10]),
+            ComplexType(a = [2, 20]),
+            ComplexType(a = [3, 30])
+        ]
+        var query = select_many(
+            seq_seq.to_sequence(),
+            $(c : ComplexType) => [
+                ComplexType(a = [c.a[0], c.a[1]]),
+                ComplexType(a = [c.a[0] * 10, c.a[1] * 10])
+            ].to_sequence(),
+            $(c : ComplexType) => (c.a[0], c.a[1])
+        )
+        var expected = [
+            (1, 10), (10, 100),
+            (2, 20), (20, 200),
+            (3, 30), (30, 300)
+        ]
+        for (i, q in expected, query) {
+            t |> equal(i._0, q._0)
+            t |> equal(i._1, q._1)
+        }
+    }
+}
+
