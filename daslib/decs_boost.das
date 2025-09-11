@@ -627,15 +627,14 @@ class FromDecsMacro : AstCallMacro {
         }
         // call macro query
         var inscope callquery = make_call(expr.at, "query")
-        (callquery as ExprCallMacro).arguments |> emplace_new <| qblock
+        (callquery as ExprCallMacro).arguments |> emplace_new <| clone_expression(qblock)
         // final output
-        var inscope qresult = qmacro(
+        return <- qmacro(
             invoke(${
                 var res : array<$t(tupleType)>
                 $e(callquery)
                 return res.to_sequence()
             })
         )
-        return <- qresult
     }
 }
