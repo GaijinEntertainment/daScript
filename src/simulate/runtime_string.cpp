@@ -441,7 +441,7 @@ namespace das
         auto it = st;
         auto itend = st + stlen;
         if ( ROW>1 ) {
-            while ( *it && it!=itend ) {
+            while ( it!=itend && *it ) {
                 auto CH = *it++;
                 if ( CH=='\n' ) {
                     row++;
@@ -453,7 +453,7 @@ namespace das
         if ( row!=ROW ) return "";
         auto beginOfLine = it;
         for (;;) {
-            if (*it == 0 || it == itend)
+            if (it == itend || *it == 0)
             {
                 text << "\n";
                 break;
@@ -478,7 +478,7 @@ namespace das
         }
         it = beginOfLine;
         const char * tail = it + COL;
-        while ( *it && it!=tail && it!=itend ) {
+        while ( it!=tail && it!=itend && *it ) {
             auto CH = *it++;
             if ( CH=='\t' ) {
                 int tcol = (col + TAB) & ~(TAB-1);
