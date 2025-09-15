@@ -5734,6 +5734,16 @@ class DisableJitVisitor : AstVisitor {
         }
     }
 
+    def override preVisitExprForBody(expr : smart_ptr<ExprFor>) : void {
+        for (svar, ssrc in expr.iteratorVariables, expr.sources) {
+            if (ssrc._type.isRange || ssrc._type.dim |> length != 0 || ssrc._type.isGoodArrayType || ssrc._type.isIterator) {
+            } else {
+                disable = true
+                return
+            }
+        }
+    }
+
     def disable_builtin_call(expr : smart_ptr<ExprCallFunc>) {
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
             if (!has_intrinsic(expr)) {
