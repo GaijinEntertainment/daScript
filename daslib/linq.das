@@ -12,74 +12,74 @@ requirement:
 
 OPERATIONS
 Sorting data
-     reverse - Reverses the order of elements in an iterator
-     order - Sorts the elements of an iterator
-     order_descending - Sorts the elements of an iterator in descending order
-     order_by - Sorts the elements of an iterator
-     order_by_descending - Sorts the elements of an iterator in descending order
+     reverse - Reverses the order of elements in an iterable
+     order - Sorts the elements of an iterable
+     order_descending - Sorts the elements of an iterable in descending order
+     order_by - Sorts the elements of an iterable
+     order_by_descending - Sorts the elements of an iterable in descending order
 Set operations
-     distinct - Returns distinct elements from an iterator
-     distinct_by - Returns distinct elements from an iterator by key
-     union - Returns the union of two iterators
-     union_by - Returns the union of two iterators by key
-     except - Returns elements from the first iterator that are not in the second iterator
-     except_by - Returns elements from the first iterator that are not in the second iterator by key
-     intersect - Returns elements that are present in both iterators
-     intersect_by - Returns elements that are present in both iterators by key
+     distinct - Returns distinct elements from an iterable
+     distinct_by - Returns distinct elements from an iterable by key
+     union - Returns the union of two iterables
+     union_by - Returns the union of two iterables by key
+     except - Returns elements from the first iterable that are not in the second iterable
+     except_by - Returns elements from the first iterable that are not in the second iterable by key
+     intersect - Returns elements that are present in both iterables
+     intersect_by - Returns elements that are present in both iterables by key
 Concatenation operations
-     append - Appends an element to the end of an iterator
-     prepend - Prepends an element to the beginning of an iterator
-     concat - Concatenates two iterators
+     append - Appends an element to the end of an iterable
+     prepend - Prepends an element to the beginning of an iterable
+     concat - Concatenates two iterables
 Generation operations
-     empty - Returns an empty iterator of a default type
-     default_empty - Returns the elements of the iterator, or a default value if the iterator is empty
+     empty - Returns an empty iterable of a default type
+     default_empty - Returns the elements of the iterable, or a default value if the iterable is empty
      range_sequence - Generates a sequence of integers within a specified range
      repeat - Generates a sequence that contains one repeated value
 Aggregation operations
-     count - Counts elements in an iterator
-     long_count - Counts elements in an iterator, using a long integer
-     min - Finds the minimum element in an iterator
-     min_by - Finds the minimum element in an iterator by a key
-     max - Finds the maximum element in an iterator
-     max_by - Finds the maximum element in an iterator by a key
-     sum - Sums the elements in an iterator
-     sum_by - Sums the elements in an iterator by a key
-     average - Averages the elements in an iterator
-     aggregate - Aggregates the elements in an iterator
+     count - Counts elements in an iterable
+     long_count - Counts elements in an iterable, using a long integer
+     min - Finds the minimum element in an iterable
+     min_by - Finds the minimum element in an iterable by a key
+     max - Finds the maximum element in an iterable
+     max_by - Finds the maximum element in an iterable by a key
+     sum - Sums the elements in an iterable
+     sum_by - Sums the elements in an iterable by a key
+     average - Averages the elements in an iterable
+     aggregate - Aggregates the elements in an iterable
 Filtering data
-     where_ - Filters elements in an iterator
+     where_, where_to_array, where_to_sequence - Filters elements in an iterable
 Partitioning data
-     skip - Skips the first `n` elements of an iterator
-     skip_while - Skips all elements of an iterator while the predicate is true
-     take - Takes the first `n` elements of an iterator or range of elements in the iterator
-     take_while - Takes elements from an iterator while the predicate is true
-     chunk - Splits an iterator into chunks of a specified size
+     skip - Skips the first `n` elements of an iterable
+     skip_while - Skips all elements of an iterable while the predicate is true
+     take - Takes the first `n` elements of an iterable or range of elements in the iterable
+     take_while - Takes elements from an iterable while the predicate is true
+     chunk - Splits an iterable into chunks of a specified size
 Join operations
-     join - Joins two iterators based on a key (inner join)
-     group_join - Joins two iterators based on a key, passing a sequence of the second iterator to the result (group join)
+     join - Joins two iterables based on a key (inner join)
+     group_join - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
 Querying data
-     any - Returns true if the iterator has at least one element
-     all - Returns true if all elements in the iterator satisfy the predicate
-     contains - Returns true if the element is present in the iterator
+     any - Returns true if the iterable has at least one element
+     all - Returns true if all elements in the iterable satisfy the predicate
+     contains - Returns true if the element is present in the iterable
 Grouping data
-     group_by - Groups elements in an iterator by a key
+     group_by - Groups elements in an iterable by a key
 Element operations
      element_at - Returns the element at the specified index
      element_at_or_default - Returns the element at the specified index, or a default value if the index is out of range
-     first - Returns the first element in an iterator
-     first_or_default - Returns the first element in an iterator, or a default value if the iterator is empty
-     last - Returns the last element in an iterator
-     last_or_default - Returns the last element in an iterator, or a default value if the iterator is empty
-     single - Returns the only element of an iterator, and throws if there is not exactly one element
-     single_or_default - Returns the only element of an iterator, or a default value if there is not exactly one element
+     first - Returns the first element in an iterable
+     first_or_default - Returns the first element in an iterable, or a default value if the iterable is empty
+     last - Returns the last element in an iterable
+     last_or_default - Returns the last element in an iterable, or a default value if the iterable is empty
+     single - Returns the only element of an iterable, and throws if there is not exactly one element
+     single_or_default - Returns the only element of an iterable, or a default value if there is not exactly one element
 Transform operations
-     select - Projects each element of an iterator into a new form
-     select_many - Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
-     zip - Merges iterators into an iterator of tuples
+     select, select_to_array, select_to_sequence - Projects each element of an iterable into a new form
+     select_many - Projects each element of an iterable to an iterable and flattens the resulting iterables into one iterable
+     zip - Merges iterables into an iterable of tuples
 Converting sequence
-     to_table - Converts an iterator to a table
-     to_sequence - Converts an array to an iterator
-     move_to_sequence - Moves an array to an iterator
+     to_table - Converts an iterable to a table
+     to_sequence - Converts an array to an iterable
+     move_to_sequence - Moves an array to an iterable
 Comparators and keys
      less - Compares two values, returns true if first is less than second
      unique_key - Generates a unique key for a value
@@ -291,17 +291,41 @@ def long_count(var a : iterator<auto(TT)>) : int64 {
     return count
 }
 
-[skip_lock_check]
-def where_(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
+[skip_lock_check, unused_argument(tt)]
+def private linq_where(var src; tt : auto(TT); len : int; predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
     //! Filters elements in an iterator based on a predicate
-    // TODO: specialize with const value vs var value of predicate, which can be captured.
     var buffer : array<TT -& -const>
+    buffer.reserve(len)
     for (x in src) {
         if (predicate(x)) {
             buffer.push_clone(x)
         }
     }
-    return buffer.move_to_sequence()
+    return <- buffer
+}
+
+[skip_lock_check]
+def where_(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
+    //! Filters elements in an iterator based on a predicate
+    return <- linq_where(src, type<TT -& -const>, 0, predicate).move_to_sequence()
+}
+
+[skip_lock_check]
+def where_(var src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
+    //! Filters elements in an array based on a predicate
+    return <- linq_where(src, type<TT -& -const>, length(src), predicate)
+}
+
+[skip_lock_check]
+def where_to_array(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
+    //! Filters elements in an iterator based on a predicate and returns an array
+    return <- linq_where(src, type<TT -& -const>, 0, predicate)
+}
+
+[skip_lock_check]
+def where_to_sequence(var src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
+    //! Filters elements in an array based on a predicate and returns an iterator
+    return <- linq_where(src, type<TT -& -const>, length(src), predicate).move_to_sequence()
 }
 
 [skip_lock_check]
@@ -1016,24 +1040,69 @@ def append(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> 
     }
 }
 
-[skip_lock_check]
-def select(var src : iterator<auto(TT)>) : iterator<tuple<int, TT -const -&>> {
-    //! Projects each element of an iterator into a new form
+[skip_lock_check, unused_argument(tt)]
+def private linq_select_indexed(var src; tt : auto(TT)) : array<tuple<int, TT -const -&>> {
+    //! Projects each element of an iterator into a new form with its index
     var buffer : array<tuple<int, TT -const -&>>
     for (it, index in src, count()) {
         buffer.emplace((index, it))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
+}
+
+[skip_lock_check]
+def select(var src : iterator<auto(TT)>) : iterator<tuple<int, TT -const -&>> {
+    //! Projects each element of an iterator into a new form
+    return <- linq_select_indexed(src, type<TT -const -&>).move_to_sequence()
+}
+
+[skip_lock_check]
+def select(var src : array<auto(TT)>) : array<tuple<int, TT -const -&>> {
+    //! Projects each element of an array into a new form
+    return <- linq_select_indexed(src, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def select_to_array(var src : iterator<auto(TT)>) : array<tuple<int, TT -const -&>> {
+    //! Projects each element of an iterator into a new form and returns an array
+    return <- linq_select_indexed(src, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def select_to_sequence(var src : array<auto(TT)>) : iterator<tuple<int, TT -const -&>> {
+    //! Projects each element of an array into a new form and returns an iterator
+    return <- linq_select_indexed(src, type<TT -const -&>).move_to_sequence()
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private linq_select(var src; tt : auto(TT); len : int; selector) : array<typedecl(selector(type<TT>)) -const -&> {
+    //! Projects each element of an iterator into a new form using a selector function
+    var buffer : array<typedecl(selector(type<TT>)) -const -&>
+    buffer.reserve(len)
+    for (it in src) {
+        buffer.push_clone(selector(it))
+    }
+    return <- buffer
 }
 
 [skip_lock_check]
 def select(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(type<TT>)) -const -&> {
-    //! Projects each element of an iterator into a new form using a selector function
-    var buffer : array<typedecl(result_selector(type<TT>)) -const -&>
-    for (it in src) {
-        buffer.push_clone(result_selector(it))
-    }
-    return buffer.move_to_sequence()
+    return <- linq_select(src, type<TT -const -&>, 0, result_selector).move_to_sequence()
+}
+
+[skip_lock_check]
+def select(var src : array<auto(TT)>; result_selector) : array<typedecl(result_selector(type<TT>)) -const -&> {
+    return <- linq_select(src, type<TT -const -&>, length(src), result_selector)
+}
+
+[skip_lock_check]
+def select_to_array(var src : iterator<auto(TT)>; result_selector) : array<typedecl(result_selector(type<TT>)) -const -&> {
+    return <- linq_select(src, type<TT -const -&>, 0, result_selector)
+}
+
+[skip_lock_check]
+def select_to_sequence(var src : array<auto(TT)>; result_selector) : iterator<typedecl(result_selector(type<TT>)) -const -&> {
+    return <- linq_select(src, type<TT -const -&>, length(src), result_selector).move_to_sequence()
 }
 
 [skip_lock_check]

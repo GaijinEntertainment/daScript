@@ -32,6 +32,38 @@ def test_select_transform(t : T?) {
             t |> equal(q._1, i * 10)
         }
     }
+    t |> run("select transform to sequence") <| @(t : T?) {
+        var chars = ["a", "b", "c", "d", "e"]
+        var query = _select_to_sequence(
+            chars,
+            (_, _ + _)
+        )
+        for (i, ch, q in 0..5, chars, query) {
+            t |> equal(ch, q._0)
+            t |> equal(ch + ch, q._1)
+        }
+    }
+    t |> run("complex select_transform to sequence") <| @(t : T?) {
+        var qcomplex = _select_to_sequence(
+            [for (x in 0..5); ComplexType(a = [x, x * 10])],
+            (_.a[0], _.a[1])
+        )
+        for (i, q in 0..5, qcomplex) {
+            t |> equal(q._0, i)
+            t |> equal(q._1, i * 10)
+        }
+    }
+    t |> run("select_transform to array") <| @(t : T?) {
+        var chars = ["a", "b", "c", "d", "e"]
+        var query = _select_to_array(
+            chars.to_sequence(),
+            (_, _ + _)
+        )
+        for (i, ch, q in 0..5, chars, query) {
+            t |> equal(ch, q._0)
+            t |> equal(ch + ch, q._1)
+        }
+    }
 }
 
 [test]
@@ -48,6 +80,42 @@ def test_select(t : T?) {
         var qcomplex = select(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
+        for (i, q in 0..5, qcomplex) {
+            t |> equal(q._0, i)
+            t |> equal(q._1.a[0], i)
+            t |> equal(q._1.a[1], i * 10)
+        }
+    }
+    t |> run("select to array") <| @(t : T?) {
+        var chars = ["a", "b", "c", "d", "e"]
+        var query = select(chars.to_sequence()).to_array()
+        for (i, ch, q in 0..5, chars, query) {
+            t |> equal(i, q._0)
+            t |> equal(ch, q._1)
+        }
+    }
+    t |> run("complex select to array") <| @(t : T?) {
+        var qcomplex = select(
+            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+        ).to_array()
+        for (i, q in 0..5, qcomplex) {
+            t |> equal(q._0, i)
+            t |> equal(q._1.a[0], i)
+            t |> equal(q._1.a[1], i * 10)
+        }
+    }
+    t |> run("select to sequence") <| @(t : T?) {
+        var chars = ["a", "b", "c", "d", "e"]
+        var query = select(chars).to_sequence()
+        for (i, ch, q in 0..5, chars, query) {
+            t |> equal(i, q._0)
+            t |> equal(ch, q._1)
+        }
+    }
+    t |> run("complex select to sequence") <| @(t : T?) {
+        var qcomplex = select(
+            [for (x in 0..5); ComplexType(a = [x, x * 10])]
+        ).to_sequence()
         for (i, q in 0..5, qcomplex) {
             t |> equal(q._0, i)
             t |> equal(q._1.a[0], i)

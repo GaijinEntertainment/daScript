@@ -75,6 +75,42 @@ def test_where(t : T?) {
             t |> equal(c.a[0], i * 2)
         }
     }
+    t |> run("basic where from array") <| @(t : T?) {
+        var query = _where(
+            [0, 1, 2, 3, 4],
+            _ % 2 == 0
+        )
+        for (c, i in query, 0..3) {
+            t |> equal(c, i * 2)
+        }
+    }
+    t |> run("complex where from array") <| @(t : T?) {
+        var qcomplex = _where(
+            [ComplexType(a = [0, 0]), ComplexType(a = [1, 10]), ComplexType(a = [2, 20]), ComplexType(a = [3, 30]), ComplexType(a = [4, 40])],
+            _.a[0] % 2 == 0
+        )
+        for (c, i in qcomplex, 0..3) {
+            t |> equal(c.a[0], i * 2)
+        }
+    }
+    t |> run("where to array") <| @(t : T?) {
+        var query = _where_to_array(
+            [iterator for(x in 0..5); x],
+            _ % 2 == 0
+        )
+        for (c, i in query, 0..3) {
+            t |> equal(c, i * 2)
+        }
+    }
+    t |> run("where to sequence") <| @(t : T?) {
+        var query = _where_to_sequence(
+            [for (x in 0..5); x],
+            _ % 2 == 0
+        )
+        for (c, i in query, 0..3) {
+            t |> equal(c, i * 2)
+        }
+    }
 }
 
 [test]

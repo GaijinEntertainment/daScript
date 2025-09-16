@@ -54,12 +54,14 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         // verifying arguments
         macro_verify(call.arguments |> length == 2, prog, call.at, "expecting {predName}(iterator, predicate)")
-        macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting iterator")
-        macro_verify(call.arguments[0]._type.isIterator, prog, call.at, "expecting iterator")
-        macro_verify(!call.arguments[0]._type.firstType.isAutoOrAlias, prog, call.at, "iterator type cannot be auto or alias")
+        assume arg0 = call.arguments[0]
+        assume arg0type = call.arguments[0]._type
+        macro_verify(arg0type != null, prog, call.at, "input argument is not inferred yet")
+        macro_verify(arg0type.isIterator || arg0type.isGoodArrayType, prog, call.at, "expecting iterator or array")
+        macro_verify(!arg0type.firstType.isAutoOrAlias, prog, call.at, "iterable type cannot be auto or alias")
         // replacing function
-        var inscope iterType <- clone_iterator_type(call.arguments[0]._type)
-        var inscope res <- qmacro($c(predName)($e(call.arguments[0]), $(_ : $t(iterType)) => $e(call.arguments[1])))
+        var inscope iterType <- clone_iterator_type(arg0type)
+        var inscope res <- qmacro($c(predName)($e(arg0), $(_ : $t(iterType)) => $e(call.arguments[1])))
         res.force_at(call.at)
         return <- res
     }
@@ -70,9 +72,29 @@ class private LinqWhere : AstCallMacro_LinqPred2 {
     override predName = "where_"
 }
 
+[call_macro(name="_where_to_array")]
+class private LinqWhereToArray : AstCallMacro_LinqPred2 {
+    override predName = "where_to_array"
+}
+
+[call_macro(name="_where_to_sequence")]
+class private LinqWhereToSequence : AstCallMacro_LinqPred2 {
+    override predName = "where_to_sequence"
+}
+
 [call_macro(name="_select")]
 class private LinqSelect : AstCallMacro_LinqPred2 {
     override predName = "select"
+}
+
+[call_macro(name="_select_to_array")]
+class private LinqSelectToArray : AstCallMacro_LinqPred2 {
+    override predName = "select_to_array"
+}
+
+[call_macro(name="_select_to_sequence")]
+class private LinqSelectToSequence : AstCallMacro_LinqPred2 {
+    override predName = "select_to_sequence"
 }
 
 [call_macro(name="_min_by")]
@@ -199,7 +221,7 @@ def private fold_linq_cond(var expr : ExpressionPtr; argName : string) : Express
 [macro_function]
 def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
     //! fold the following sequence
-    //!   src.optional to_array_move().optional to_sequence().where(...).optional to_array()
+    //!   src.optional to_array_move().optional to_sequence().where(...).optional select().optional to_array()
     //! into comprehension. remove unnecessary to_array_move/to_sequence
     //! if to_array() is present, then output is array comprehension, otherwise iterator comprehension
     var inscope res : ExpressionPtr
@@ -208,11 +230,12 @@ def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
     // check for to_array(foo)
     var e_to_array = top.is_call_or_generic_arg0("to_array", "$")
     top = e_to_array != null ? e_to_array : top
+    // check for select
+    var e_select = top.is_call_or_generic("select", "linq")
+    top = e_select != null ? e_select.arguments[0].get_ptr() : top
     // check for where(foo)
     var e_where = top.is_call_or_generic("where_", "linq")
-    return <- res if (e_where == null)
-    top = e_where.arguments[0].get_ptr()
-    var inscope where_cond <- fold_linq_cond(e_where.arguments[1], "it")
+    top = e_where != null ? e_where.arguments[0].get_ptr() : top
     // source is iterable
     return <- res if (top._type == null || !top._type.isIterator)
     var inscope iterType <- clone_type(top._type.firstType)
@@ -224,11 +247,21 @@ def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
     top = e_to_array_move != null ? e_to_array_move : top
     // output is array or iterator
     var inscope top_e <- clone_expression(unsafe(reinterpret<ExpressionPtr>(top)))
-    if (e_to_array != null) {
-        return <- qmacro([for (it in $e(top_e)); it; where $e(where_cond)])
+    var inscope select_e : ExpressionPtr
+    if (e_select != null) {
+        select_e |> move_new <| fold_linq_cond(e_select.arguments[1], "it")
     } else {
-        return <- qmacro([iterator for(it in $e(top_e)); it; where $e(where_cond)])
+        select_e |> move_new <| new ExprVar(name := "it", at = expr.at, _type := iterType)
     }
+    // if to_array was present, then array comprehension, otherwise iterator comprehension
+    var inscope comprehension : smart_ptr<ExprArrayComprehension>
+    comprehension |> move_new <| qmacro([for (it in $e(top_e)); $e(select_e)])
+    if (e_where != null) {
+        comprehension.exprWhere |> move_new <| fold_linq_cond(e_where.arguments[1], "it")
+    }
+    comprehension.generatorSyntax = e_to_array == null
+    comprehension.force_at(expr.at)
+    return <- comprehension
 }
 
 [call_macro(name="_fold")]
