@@ -237,7 +237,7 @@ def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
     var e_where = top.is_call_or_generic("where_", "linq")
     top = e_where != null ? e_where.arguments[0].get_ptr() : top
     // source is iterable
-    return <- res if (top._type == null || !top._type.isIterator)
+    return <- res if (top._type == null || !(top._type.isIterator || top._type.isGoodArrayType))
     var inscope iterType <- clone_type(top._type.firstType)
     // now, let's check for to_sequence(foo), and skip
     var e_to_sequence = top.is_call_or_generic_arg0("to_sequence", "linq")
@@ -256,11 +256,13 @@ def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
     // if to_array was present, then array comprehension, otherwise iterator comprehension
     var inscope comprehension : smart_ptr<ExprArrayComprehension>
     comprehension |> move_new <| qmacro([for (it in $e(top_e)); $e(select_e)])
+    comprehension.force_at(expr.at)
     if (e_where != null) {
         comprehension.exprWhere |> move_new <| fold_linq_cond(e_where.arguments[1], "it")
     }
-    comprehension.generatorSyntax = e_to_array == null
-    comprehension.force_at(expr.at)
+    let input_is_sequence = e_to_sequence != null || top._type.isIterator
+    let output_is_array = e_to_array != null
+    comprehension.generatorSyntax = input_is_sequence && !output_is_array
     return <- comprehension
 }
 
@@ -270,7 +272,10 @@ class private LinqFold : AstCallMacro {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
         var inscope res <- fold_linq_where_expr(call.arguments[0])
-        return <- (call.arguments[0]) if (res == null)  // could not fold 'where', means we let it just fall in place
+        if (res == null) {
+            prog |> macro_error(call.at, "cannot fold LINQ expression")
+            return <- call
+        }
         res.force_at(call.at)
         return <- res
     }
