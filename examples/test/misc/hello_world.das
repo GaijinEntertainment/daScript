@@ -1,28 +1,20 @@
-options gen2
 require daslib/linq_boost
-require daslib/decs_boost
 
 [export]
-def main {
-    for (i in 0..10) {
-        create_entity <| @(eid, cmp) {
-            cmp.eid := eid
-            cmp.index := i
-            cmp.text := "{i}_{i*10}"
-        }
-    }
-    commit()
-    var all = (
-        from_decs($(index : int; text : string){})
-            ._where(_._0 % 2 == 0)
-            .reverse()
-            .to_array()
-    )
+def main() {
+    var t = ([1,2,3,4,5].to_sequence()
+        ._where( _ <= 3)
+        .to_array()
+        ._fold())   // this one folds into comprehension
+    debug(t)
 
-    for (a in all) {
-        print("index {a.index} text '{a.text}'\n")
-    }
+    var tt = ([1,2,3,4,5].to_sequence()
+        .min()  // this one does not fold for now
+        ._fold())
+    debug(tt)
 }
+
+options log
 
 
 

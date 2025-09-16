@@ -155,3 +155,93 @@ class private LinqIntersectBy : AstCallMacro_LinqPredII2 {
 class private LinqUnionBy : AstCallMacro_LinqPredII2 {
     override predName = "union_by"
 }
+
+def private is_call_or_generic(var expr : Expression?, name, moduleName : string) : ExprCall? {
+    if (expr is ExprCall) {
+        var call = expr as ExprCall
+        if (call.func.name == name && call.func._module.name == moduleName) {
+            return call
+        } elif (call.func.fromGeneric != null && call.func.fromGeneric.name == name && call.func.fromGeneric._module.name == moduleName) {
+            return call
+        }
+    }
+    return null
+}
+
+def private is_call_or_generic_arg0(var expr : Expression?, name, moduleName : string) : Expression? {
+    //! returns null if not to_array, otherwise returns the argument of to_array
+    var call = expr.is_call_or_generic(name, moduleName)
+    return call.arguments[0].get_ptr() if (call != null)
+    return null
+}
+
+def private fold_linq_cond(var expr : ExpressionPtr; argName : string) : ExpressionPtr {
+    // if its a block with a single argument and a single return
+    // we rename argument to specified value, and give back the return value
+    // otherwise its an invoke
+    if (expr is ExprMakeBlock) {
+        var mblk = expr as ExprMakeBlock
+        var blk = mblk._block as ExprBlock
+        if (blk.arguments |> length == 1 && blk.list |> length == 1 && blk.list[0] is ExprReturn) {
+            var ret = blk.list[0] as ExprReturn
+            if (ret.subexpr != null) {
+                var inscope res <- clone_expression(ret.subexpr)
+                var inscope rules : Template
+                rules |> renameVariable(string(blk.arguments[0].name), argName)
+                apply_template(rules, res.at, res)
+                return <- res
+            }
+        }
+    }
+    return <- qmacro(invoke($e(expr), $i(argName)))
+}
+
+[macro_function]
+def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
+    //! fold the following sequence
+    //!   src.optional to_array_move().optional to_sequence().where(...).optional to_array()
+    //! into comprehension. remove unnecessary to_array_move/to_sequence
+    //! if to_array() is present, then output is array comprehension, otherwise iterator comprehension
+    var inscope res : ExpressionPtr
+    //! fold src.where(...).to_array()
+    var top : Expression? = expr.get_ptr()
+    // check for to_array(foo)
+    var e_to_array = top.is_call_or_generic_arg0("to_array", "$")
+    top = e_to_array != null ? e_to_array : top
+    // check for where(foo)
+    var e_where = top.is_call_or_generic("where_", "linq")
+    return <- res if (e_where == null)
+    top = e_where.arguments[0].get_ptr()
+    var inscope where_cond <- fold_linq_cond(e_where.arguments[1], "it")
+    // source is iterable
+    return <- res if (top._type == null || !top._type.isIterator)
+    var inscope iterType <- clone_type(top._type.firstType)
+    // now, let's check for to_sequence(foo), and skip
+    var e_to_sequence = top.is_call_or_generic_arg0("to_sequence", "linq")
+    top = e_to_sequence != null ? e_to_sequence : top
+    // to_array_move(foo), and skip
+    var e_to_array_move = top.is_call_or_generic_arg0("to_array_move", "$")
+    top = e_to_array_move != null ? e_to_array_move : top
+    // output is array or iterator
+    var inscope top_e <- clone_expression(unsafe(reinterpret<ExpressionPtr>(top)))
+    if (e_to_array != null) {
+        return <- qmacro([for (it in $e(top_e)); it; where $e(where_cond)])
+    } else {
+        return <- qmacro([iterator for(it in $e(top_e)); it; where $e(where_cond)])
+    }
+}
+
+[call_macro(name="_fold")]
+class private LinqFold : AstCallMacro {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
+        macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
+        var inscope res <- fold_linq_where_expr(call.arguments[0])
+        return <- (call.arguments[0]) if (res == null)  // could not fold 'where', means we let it just fall in place
+        res.force_at(call.at)
+        return <- res
+    }
+}
+
+
+
