@@ -5171,7 +5171,7 @@ class LlvmJitVisitor : AstVisitor {
             vec = LLVMBuildInsertElement(g_builder, vec, y, types.ConstI32(1ul), "")
             vec = LLVMBuildInsertElement(g_builder, vec, z, types.ConstI32(2ul), "vec4f_to_float3")
             return vec
-        } elif (bt == Type.tFloat4) {
+        } elif (bt == Type.tFloat4 || bt == Type.anyArgument) {
             return v4f
         } elif (bt == Type.tInt2 || bt == Type.tUInt2 || bt == Type.tRange || bt == Type.tURange) {
             var vec = LLVMGetUndef(types.LLVMFloat2Type())
@@ -5208,7 +5208,9 @@ class LlvmJitVisitor : AstVisitor {
 
     def cast_from_vec4f(expr : ExpressionPtr; etype : TypeDeclPtr; v4f : LLVMOpaqueValue?) {
         var tres : LLVMOpaqueValue?
-        if (etype.isRef) {
+        if (etype.baseType == Type.anyArgument) {
+            tres = v4f
+        } elif (etype.isRef) {
             var ptr_type = LLVMPointerType(type_to_llvm_type(etype), 0u)
             tres = cast_from_vec4f_ptr(v4f, ptr_type)
         } elif (etype.isWorkhorseType) {
@@ -5295,6 +5297,8 @@ class LlvmJitVisitor : AstVisitor {
             } else {
                 failed("unsupported workhorse cast_to_vec4f cast {describe(etype)} aka {etype.baseType}")
             }
+        } elif (etype.baseType == Type.anyArgument) {
+            tres = tsrc
         } elif (etype.isFunction) {
             assert(typeinfo sizeof(type<void?>) == 8)
             var vvec = LLVMGetUndef(LLVMVectorType(types.t_int64, 2u))
@@ -5745,17 +5749,6 @@ class DisableJitVisitor : AstVisitor {
                 disable = true
                 return
             }
-        }
-    }
-
-    def override preVisitExprAt(expr : smart_ptr<ExprFor>) : void {
-        if (subExprT.isPointer) {
-        } elif (subExprT.dim |> length != 0) {
-        } elif (subExprT.isGoodArrayType) {
-        } elif (subExprT.isGoodTableType) {
-        } elif (subExprT.isVectorType) {
-        } else {
-            disable = true
         }
     }
 
