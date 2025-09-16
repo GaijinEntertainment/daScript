@@ -3512,6 +3512,73 @@ def dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
 
 }
 
+class ArgsConverter : AstVisitor {
+    private arg_id : uint = 0u
+    private ss : StringBuilderWriter ?
+    private cross_platform : bool
+
+    def ArgsConverter(var ss_ : StringBuilderWriter ?; cp : bool) { ss = ss_; cross_platform = cp; }
+
+    def override canVisitFunction(fun : Function?) {
+        if (fun.flags.noAot) return false;
+        if (fun.moreFlags.isTemplate) return false;
+        return true;
+    }
+
+    def override preVisitFunction ( fn : FunctionPtr) {
+        write(*ss, "static vec4f __wrap_{aotFuncName(fn.get_ptr())} ( Context * __context__ ) \{\n")
+        assert(arg_id == 0u)
+    }
+
+    def override preVisitFunctionArgument ( fn : FunctionPtr, arg : VariablePtr, last : bool ) {
+        // arg
+        var type_name = build_string() <| $(writer) {
+            if (isLocalVec(arg._type)) {
+                describeLocalCppType(unsafe(addr(writer)), arg._type, cross_platform)
+            } else {
+                write(writer, describeCppType(arg._type, DescribeConfig(cross_platform = cross_platform)))
+            }
+            if (arg._type.isRefType) {
+                write(writer, " & ")
+            }
+        }
+        write(*ss, "    {type_name} arg_{aotSuffixNameEx(arg.name, "")} = cast_aot_arg<{type_name}")
+        write(*ss, ">::to(*__context__,__context__->abiArguments()[{arg_id}]);\n")
+        arg_id++
+    }
+
+    def override visitFunction ( fn : FunctionPtr ) {
+        let is_cmres = fn.flags.copyOnReturn || fn.flags.moveOnReturn
+
+        arg_id = 0u
+        write(*ss, "    ")
+        if (!fn.result.isVoid && !is_cmres) {
+            write(*ss, "return cast<")
+            describeLocalCppType(ss, fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes)
+            write(*ss, ">::from(")
+        }
+        if (is_cmres) {
+            write(*ss, "*((")
+            describeLocalCppType(ss,fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes)
+            write(*ss, " *) __context__->abiCMRES) = ")
+        }
+        write(*ss, "{aotFuncName(fn.get_ptr())}(__context__")
+        for (arg in fn.arguments) {
+            write(*ss, ", arg_{aotSuffixNameEx(arg.name, "")}")
+        }
+        write(*ss, ")")
+        if (!fn.result.isVoid && !is_cmres) {
+            write(*ss, ");\n")
+        } else {
+            write(*ss, ";\n")
+            write(*ss, "    return v_zero();\n")
+        }
+        write(*ss, "}\n")
+        return fn;
+    }
+
+}
+
 def new_cpp_aot(var ss : StringBuilderWriter?; program : ProgramPtr) {
     var cpp_aot = new CppAot(ss = ss, program := program)
 }
@@ -3547,24 +3614,37 @@ def collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool; is_all
 
 def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, all_modules : bool = false) {
     let fnn = collectProgramUsedFunctions(program, all_modules, false);
-    if (headers) {
-        write(*logs, "\nvoid registerAot ( AotLibrary & aotLib )\n\{\n");
-    }
+    let visitor = new ArgsConverter(logs, cross_platform);
+    var inscope adapter_marker <- make_visitor(*visitor)
+    visit(program, adapter_marker);
+
     var funInit = false;
-    for (fn in fnn) {
-        if (!all_modules && fn._module != program.getThisModule)
-            continue;
-        if (fn.flags.init) {
+    for ( fn in fnn ) {
+        if ( fn.flags.init ) {
             funInit = true;
         }
-        let semH = fn.aotHash;
-        write(*logs, "    aotLib[0x{semH:x}] = +[](Context & ctx) -> SimNode* \{\n");
-        write(*logs, "        return ctx.code->makeNode<AutoSimNode_Aot");
+    }
+    if ( context.totalVariables != 0 || funInit ) {
+        write(*logs, "static vec4f __wrap___init_script ( Context * __context__ ) \{\n")
+        write(*logs, "    __init_script(__context__, cast_aot_arg<bool>::to(*__context__,__context__->abiArguments()[0]));\n")
+        write(*logs, "    return v_zero();\n")
+        write(*logs, "\};\n")
+    }
+
+    if (headers) {
+        write(*logs, "\nvoid registerAot ( AotLibrary & aotLib )\n\{\n")
+    } else {
+        write(*logs, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n")
+    }
+    for (fn in fnn) {
+        let semH = fn.aotHash
+        write(*logs, "    aotLib[0x{semH:x}] = +[](Context & ctx) -> SimNode* \{\n")
+        write(*logs, "        return ctx.code->makeNode<SimNode_Aot")
         if (fn.flags.copyOnReturn || fn.flags.moveOnReturn) {
-            write(*logs, "CMRES");
+            write(*logs, "CMRES")
         }
-        write(*logs, "<&{aotFuncName(fn)}>>()");
-        write(*logs, ";\n    \};\n");
+        write(*logs, "<&{aotFuncName(fn)}>>()")
+        write(*logs, ">((void*)&{aotFuncName(fn)}, &__wrap_{aotFuncName(fn)});\n    \};\n")
     }
 
     if (context.totalVariables != 0 || funInit) {

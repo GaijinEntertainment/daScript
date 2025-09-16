@@ -3630,6 +3630,77 @@ namespace das {
         }
     };
 
+    class ArgsConverter : public Visitor {
+        TextWriter ss;
+        size_t arg_id = 0;
+    public:
+        explicit ArgsConverter() {}
+
+        string str() {
+            return std::move(ss.str());
+        }
+
+        // function
+        virtual bool canVisitFunction ( Function * fun ) override {
+            if ( fun->noAot ) return false;
+            if ( fun->isTemplate ) return false;
+            return true;
+        }
+        void preVisit ( Function * fn) override {
+            Visitor::preVisit(fn);
+            ss << "static vec4f __wrap_" << aotFuncName(fn) << " ( Context * __context__ ) {\n";
+            assert(arg_id == 0);
+        }
+
+        void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
+            Visitor::preVisitArgument(fn,arg,last);
+            // arg
+            TextWriter type_str;
+            if (isLocalVec(arg->type)) {
+                describeLocalCppType(type_str, arg->type);
+            } else {
+                type_str << describeCppType(arg->type);
+            }
+            if (arg->type->isRefType()) {
+                type_str << " & ";
+            }
+            string type_name = type_str.str();
+            ss << "    " << type_name << " arg_" << aotSuffixNameEx(arg->name, "") << " = " << "cast_aot_arg<" << type_name;
+            ss << ">::to(*__context__,__context__->abiArguments()[" << arg_id << "]);\n";
+            arg_id++;
+        }
+
+        FunctionPtr visit ( Function * fn ) override {
+            const auto is_cmres = fn->copyOnReturn || fn->moveOnReturn;
+
+            arg_id = 0;
+            ss << "    ";
+            if (!fn->result->isVoid() && !is_cmres) {
+                ss << "return cast<";
+                describeLocalCppType(ss,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
+                ss << ">::from(";
+            }
+            if (is_cmres) {
+                ss << "*((";
+                describeLocalCppType(ss,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
+                ss << " *) __context__->abiCMRES) = ";
+            }
+            ss << aotFuncName(fn) << "(__context__";
+            for (const auto arg : fn->arguments) {
+                ss << ", arg_" << aotSuffixNameEx(arg->name, "");
+            }
+            ss << ")";
+            if (!fn->result->isVoid() && !is_cmres) {
+                ss << ");\n";
+            } else {
+                ss << ";\n";
+                ss << "    return v_zero();\n";
+            }
+            ss << "}\n";
+            return Visitor::visit(fn);
+        }
+    };
+
     uint64_t Context::getInitSemanticHash() {
         const uint64_t fnv_prime = 1099511628211ul;
         uint64_t hash = globalsSize ^ sharedSize;
@@ -3698,32 +3769,56 @@ namespace das {
 
     void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers, bool allModules ) {
         const auto fnn = collectUsedFunctions(library.modules, totalFunctions, getThisModule(), allModules);
-        if ( headers ) {
-            logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
-        }
+        auto visitor = ArgsConverter();
+        visit(visitor);
+        logs << visitor.str();
+
         bool funInit = false;
         for ( const auto fn : fnn ) {
             if ( fn->init ) {
                 funInit = true;
             }
-            uint64_t semH = fn->aotHash;
-            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
-            logs << "        return ctx.code->makeNode<AutoSimNode_Aot";
-            if ( fn->copyOnReturn || fn->moveOnReturn ) {
-                logs << "CMRES";
+        }
+        if ( context.totalVariables || funInit ) {
+            logs << "static vec4f __wrap___init_script ( Context * __context__ ) {\n";
+            logs << "    __init_script(__context__, cast_aot_arg<bool>::to(*__context__,__context__->abiArguments()[0]));\n";
+            logs << "    return v_zero();\n";
+            logs << "};\n";
+        }
+
+        if (!fnn.empty()) {
+            logs << "\n#pragma optimize(\"\", off)\n"; // Let's disable any optimizations. It helps on MSVC to compile faster
+            // We should duplicate fields of AotFactory to reduce comptime.
+            logs << "struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };\n";
+            logs << "static AotFunction functions[] = {\n";
+            for ( const auto fn : fnn ) {
+                logs << "    { 0x" << HEX << fn->aotHash << DEC << ", "
+                     << ( fn->copyOnReturn || fn->moveOnReturn ? "true" : "false") << ", "
+                     << "(void*)&" << aotFuncName(fn) << ", &__wrap_" << aotFuncName(fn) << " },\n";
             }
-            logs << "<&" << aotFuncName(fn) << ">>();\n    };\n";
+            logs << "};\n";
+            logs << "#pragma optimize(\"\", on)\n"; // Enable optimizations back
+        }
+        if ( headers ) {
+            logs << "\nvoid registerAot ( AotLibrary & aotLib ) \n{\n";
+        } else {
+            logs << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
+        }
+        if (!fnn.empty()) {
+            logs << "    for (const auto &[hash, cmres, fn1, fn2] : functions) {\n";
+            logs << "        aotLib.emplace(hash, AotFactory(cmres, fn1, fn2));\n";
+            logs << "    }\n";
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
             semH = getInitSemanticHashWithDep(semH);
             logs << "    // [[ init script ]]\n";
-            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
-            logs << "        ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();\n";
-            logs << "        return ctx.aotInitScript;\n";
-            logs << "    };\n";
+            logs << "    aotLib.emplace(0x" << HEX << semH << DEC << ", AotFactory(false, (void*)&__init_script, &__wrap___init_script));\n";
         }
         if ( headers ) {
+            logs << "}\n";
+        } else {
+            logs << "    resolveTypeInfoAnnotations();\n";
             logs << "}\n";
         }
     }
@@ -3973,10 +4068,7 @@ namespace das {
     }
 
     void dumpRegisterAot(TextWriter &tw, ProgramPtr program, Context &context, bool allModules) {
-        tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
         program->registerAotCpp(tw, context, false, allModules);
-        tw << "    resolveTypeInfoAnnotations();\n";
-        tw << "};\n";
         tw << "\n";
         tw << "static AotListBase impl(registerAotFunctions);\n";
     }

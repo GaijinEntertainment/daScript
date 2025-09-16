@@ -601,7 +601,7 @@ set(AotDaslibList
         ../daslib/random.das
         ../daslib/math_boost.das
 
-        ../src/das/ast/printer_flags_visitor.das
+        # ../src/das/ast/printer_flags_visitor.das
 )
 SET(AOT_GENERATED_SRC)
 FOREACH(inF IN LISTS AotDaslibList)

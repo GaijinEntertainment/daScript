@@ -1818,79 +1818,41 @@ namespace das {
         }
     };
 
-    template <typename R, typename ...Arg, size_t... I>
-    __forceinline R CallAotStaticFunction ( R (* fn) (Arg...), Context & ctx, index_sequence<I...> ) {
-        return fn(cast_aot_arg<Arg>::to(ctx,ctx.abiArguments()[I?I-1:0])...);
-    }
-
-    template <typename FunctionType>
-    struct ImplAotStaticFunction;
-
-    template <typename R, typename ...Arg>
-    struct ImplAotStaticFunction<R (*)(Arg...)> {
-        static __forceinline vec4f call ( R (*fn) (Arg...), Context & ctx ) {
-            return cast<R>::from(
-                CallAotStaticFunction<R,Arg...>(fn,ctx,make_index_sequence<sizeof...(Arg)>())
-            );
-        }
-    };
-
-    template <typename ...Arg>
-    struct ImplAotStaticFunction<void (*)(Arg...)> {
-        static __forceinline vec4f call ( void (*fn) (Arg...), Context & ctx ) {
-            CallAotStaticFunction<void,Arg...>(fn,ctx,make_index_sequence<sizeof...(Arg)>());
-            return v_zero();
-        }
-    };
-
-    template <typename FunctionType>
-    struct ImplAotStaticFunctionCMRES;
-
-    template <typename R, typename ...Arg>
-    struct ImplAotStaticFunctionCMRES<R (*)(Arg...)> {
-        static __forceinline void call ( R (*fn) (Arg...), Context & ctx ) {
-            using result = typename remove_const<R>::type;
-            *((result *) ctx.abiCMRES) = CallAotStaticFunction<R,Arg...>(fn,ctx,make_index_sequence<sizeof...(Arg)>());
-        }
-    };
-
-    template <typename FuncT, FuncT fn>
     struct SimNode_Aot : SimNode_CallBase {
-        __forceinline SimNode_Aot ( ) : SimNode_CallBase(LineInfo(),"") {
-            aotFunction = (void*) fn;
+        vec4f(*wrapAotFunction)(Context*);
+        __forceinline SimNode_Aot ( void* fn, vec4f(*wrappedFn)(Context*) ) : SimNode_CallBase(LineInfo(),"") {
+            aotFunction = fn;
+            wrapAotFunction = wrappedFn;
         }
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f * aa = context.abiArg;
             vec4f stub[1];
             if ( !aa ) context.abiArg = stub;
-            auto res = ImplAotStaticFunction<FuncT>::call(*fn, context);
+            auto res = wrapAotFunction(&context);
             context.abiArg = aa;
             context.abiResult() = res;
             return res;
         }
     };
 
-    template <auto fn>
-    using AutoSimNode_Aot = SimNode_Aot<decltype(fn), fn>;
-
-    template <typename FuncT, FuncT fn>
     struct SimNode_AotCMRES : SimNode_CallBase {
-        __forceinline SimNode_AotCMRES ( ) : SimNode_CallBase(LineInfo(),"") {}
+        vec4f(*wrapAotFunction)(Context*);
+        __forceinline SimNode_AotCMRES ( void* fn, vec4f(*wrappedFn)(Context*) ) : SimNode_CallBase(LineInfo(),"") {
+            aotFunction = fn;
+            wrapAotFunction = wrappedFn;
+        }
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             vec4f * aa = context.abiArg;
             vec4f stub[1];
             if ( !aa ) context.abiArg = stub;
-            ImplAotStaticFunctionCMRES<FuncT>::call(*fn, context);
+            wrapAotFunction(&context);
             context.abiArg = aa;
             context.abiResult() = cast<void *>::from(context.abiCMRES);
             return context.abiResult();
         }
     };
-
-    template <auto fn>
-    using AutoSimNode_AotCMRES = SimNode_AotCMRES<decltype(fn), fn>;
 
 #ifdef _MSC_VER
 #pragma warning(push)
