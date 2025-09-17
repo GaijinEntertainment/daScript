@@ -1002,7 +1002,7 @@ namespace das {
     public:
         CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl, bool cross_platform )
             : program(prog), collector(cl), cross_platform(cross_platform) {
-            helper.rtti = program->options.getBoolOption("rtti",false);
+            helper.rtti = program->options.getBoolOption("rtti",program->policies.rtti);
             prologue = program->options.getBoolOption("aot_prologue",false) ||
                 program->getDebugger();
             solidContext = program->policies.solid_context || program->options.getBoolOption("solid_context",false);
