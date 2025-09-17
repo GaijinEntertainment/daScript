@@ -501,7 +501,46 @@ def typeInfoName(info : TypeInfo?) {
     return "__type_info__{info.hash:x}";
 }
 
+class DebugVarCache {
+    private argNamesCache : table<string; string>
+    private info2Name : table<string; string>
+
+    def emplace(name : string, value : string) : tuple<string, bool> {
+        let success = !(argNamesCache |> key_exists(value))
+        if (success) {
+            argNamesCache |> insert(value, name)
+        }
+        var res_val : string;
+        info2Name |> insert(name, value)
+        verify(argNamesCache |> get(name) <| $(val) {
+            info2Name |> insert(name, val)
+            res_val = val
+        })
+        return tuple(res_val, success)
+    }
+
+    def get(k : string) : string {
+        return info2Name.get_value(k);
+    }
+
+    def contains(k : string) : bool {
+        return argNamesCache |> key_exists(k);
+    }
+
+    def empty() : bool {
+        return argNamesCache |> empty();
+    }
+
+    def clear() {
+        argNamesCache |> clear();
+        info2Name |> clear();
+    }
+}
+
+
 class AotDebugInfoHelper {
+    private info2Name  = new DebugVarCache()
+    private info2TypeName = new DebugVarCache()
     helper : smart_ptr<DebugInfoHelper> <- new DebugInfoHelper(uninitialized);
     cross_platform : bool = false
 
@@ -518,7 +557,11 @@ class AotDebugInfoHelper {
             let dims = (range(info.argCount) |> each()
                         |> map(@(i : int) { unsafe { return "\"{info.argNames[i]}\""; } })
                         |> join(", "))
-            write(*writer, "const char * {typeInfoName(info)}_arg_names{suffix}[{info.argCount:d}] = \{ {dims} \};\n");
+            let name = "{typeInfoName(info)}_arg_names{suffix}"
+            let (_, succ) = info2Name.emplace(name, dims)
+            if (succ) {
+                write(*writer, "const char * {name}[{info.argCount:d}] = \{ {dims} \};\n");
+            }
         }
     }
     def writeArgTypes(var writer : StringBuilderWriter?; info : TypeInfo?; suffix : string = "") {
@@ -526,26 +569,22 @@ class AotDebugInfoHelper {
             let dims = (range(info.argCount) |> each()
                         |> map(@(i : int) { unsafe { return "&{typeInfoName(info.argTypes[i])}"; } })
                         |> join(", "))
-            write(*writer, "TypeInfo * {typeInfoName(info)}_arg_types{suffix}[{info.argCount:d}] = \{ {dims} \};\n");
+            let name = "{typeInfoName(info)}_arg_types{suffix}"
+            let (_, succ) = info2TypeName.emplace(name, dims)
+            if (succ) {
+                write(*writer, "TypeInfo * {name}[{info.argCount:d}] = \{ {dims} \};\n");
+            }
         }
     }
 
     def str() {
         return build_string() <| $(var writer) {
+            verify(info2Name.empty() && info2TypeName.empty())
             helper |> debug_helper_iter_structs($(name, ti) {
                 write(writer, "extern StructInfo {structInfoName(ti)};\n");
             });
             helper |> debug_helper_iter_types($(name, ti){
                 write(writer, "extern TypeInfo {typeInfoName(ti)};\n");
-            })
-            helper |> debug_helper_iter_vars($(name, ti){
-                write(writer, "extern VarInfo {varInfoName(ti)};\n");
-            })
-            helper |> debug_helper_iter_funcs($(name, ti){
-                write(writer, "extern FuncInfo {funcInfoName(ti)};\n");
-            })
-            helper |> debug_helper_iter_enums($(name, ti){
-                write(writer, "extern EnumInfo {enumInfoName(ti)};\n");
             })
             write(writer, "\n");
             helper |> debug_helper_iter_enums($(name, ti){
@@ -580,6 +619,8 @@ class AotDebugInfoHelper {
             write(writer, "        ann.resolveAnnotation();\n")
             write(writer, "    \}\n")
             write(writer, "\}\n\n")
+            info2Name.clear();
+            info2TypeName.clear();
         }
     }
 
@@ -728,13 +769,14 @@ class AotDebugInfoHelper {
 
             write_sep();
             if (info.argCount > 0u && info.argTypes != null) {
-                write(writer, "(TypeInfo **){typeInfoName(info)}_arg_types{suffix}");
+                let name = "{typeInfoName(info)}_arg_types{suffix}"
+                write(writer, "(TypeInfo **){info2TypeName.get(name)}")
             } else {
                 write(writer, "nullptr");
             }
             write_sep();
             if (info.argCount > 0u && info.argNames != null) {
-                write(writer, "{typeInfoName(info)}_arg_names{suffix}");
+                write(writer, info2Name.get("{typeInfoName(info)}_arg_names{suffix}"))
             } else {
                 write(writer, "nullptr");
             }
@@ -3514,10 +3556,10 @@ def dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
 
 class ArgsConverter : AstVisitor {
     private arg_id : uint = 0u
-    private ss : StringBuilderWriter ?
+    private ss : StringBuilderWriter?
     private cross_platform : bool
 
-    def ArgsConverter(var ss_ : StringBuilderWriter ?; cp : bool) { ss = ss_; cross_platform = cp; }
+    def ArgsConverter(var ss_ : StringBuilderWriter?; cp : bool) { ss = ss_; cross_platform = cp; }
 
     def override canVisitFunction(fun : Function?) {
         if (fun.flags.noAot) return false;
@@ -3525,12 +3567,12 @@ class ArgsConverter : AstVisitor {
         return true;
     }
 
-    def override preVisitFunction ( fn : FunctionPtr) {
+    def override preVisitFunction(fn : FunctionPtr) {
         write(*ss, "static vec4f __wrap_{aotFuncName(fn.get_ptr())} ( Context * __context__ ) \{\n")
         assert(arg_id == 0u)
     }
 
-    def override preVisitFunctionArgument ( fn : FunctionPtr, arg : VariablePtr, last : bool ) {
+    def override preVisitFunctionArgument(fn : FunctionPtr, arg : VariablePtr, last : bool) {
         // arg
         var type_name = build_string() <| $(writer) {
             if (isLocalVec(arg._type)) {
@@ -3547,7 +3589,7 @@ class ArgsConverter : AstVisitor {
         arg_id++
     }
 
-    def override visitFunction ( fn : FunctionPtr ) {
+    def override visitFunction(fn : FunctionPtr) {
         let is_cmres = fn.flags.copyOnReturn || fn.flags.moveOnReturn
 
         arg_id = 0u
@@ -3559,7 +3601,7 @@ class ArgsConverter : AstVisitor {
         }
         if (is_cmres) {
             write(*ss, "*((")
-            describeLocalCppType(ss,fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes)
+            describeLocalCppType(ss, fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes)
             write(*ss, " *) __context__->abiCMRES) = ")
         }
         write(*ss, "{aotFuncName(fn.get_ptr())}(__context__")
@@ -3619,12 +3661,12 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
     visit(program, adapter_marker);
 
     var funInit = false;
-    for ( fn in fnn ) {
-        if ( fn.flags.init ) {
+    for (fn in fnn) {
+        if (fn.flags.init) {
             funInit = true;
         }
     }
-    if ( context.totalVariables != 0 || funInit ) {
+    if (context.totalVariables != 0 || funInit) {
         write(*logs, "static vec4f __wrap___init_script ( Context * __context__ ) \{\n")
         write(*logs, "    __init_script(__context__, cast_aot_arg<bool>::to(*__context__,__context__->abiArguments()[0]));\n")
         write(*logs, "    return v_zero();\n")

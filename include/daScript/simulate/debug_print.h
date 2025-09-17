@@ -1,7 +1,6 @@
 #pragma once
 
 #include "daScript/simulate/data_walker.h"
-#include "daScript/simulate/heap.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/simulate.h"
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <daScript/simulate/simulate.h>
+
 namespace  das {
 
     class Context;
