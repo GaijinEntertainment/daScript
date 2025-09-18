@@ -543,6 +543,7 @@ namespace das {
         program->needMacroModule = false;
         program->policies = policies;
         program->thisModuleGroup = &libGroup;
+        program->thisModule->fileName = fileName;
         program->thisModuleName = program->thisModule->name;
         libGroup.foreach([&](Module * pm){
             program->library.addModule(pm);
