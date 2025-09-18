@@ -222,7 +222,7 @@ namespace das {
         ft->alias = "ModuleFlags";
         ft->argNames = {
             "builtIn", "promoted", "isPublic", "isModule", "isSolidContext", "doNotAllowUnsafe",
-            "wasParsedNameless", "visibleEverywhere"
+            "wasParsedNameless", "visibleEverywhere", "skipLockCheck"
         };
         return ft;
     }
