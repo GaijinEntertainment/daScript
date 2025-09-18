@@ -779,17 +779,13 @@ options_declaration
                 yyextra->das_gen2_make_syntax = opt.bValue;
             }
         }
-        if ( yyextra->g_Program->options.size() ) {
-            for ( auto & opt : *$list ) {
-                if ( yyextra->g_Access->isOptionAllowed(opt.name, yyextra->g_Program->thisModuleName) ) {
-                    yyextra->g_Program->options.push_back(opt);
-                } else {
-                    das_yyerror(scanner,"option " + opt.name + " is not allowed here",
-                        tokAt(scanner,@list), CompilationError::invalid_option);
-                }
+        for ( auto & opt : *$list ) {
+            if ( yyextra->g_Access->isOptionAllowed(opt.name, yyextra->g_Program->thisModule->fileName) ) {
+                yyextra->g_Program->options.push_back(opt);
+            } else {
+                das_yyerror(scanner,"option " + opt.name + " is not allowed here",
+                    tokAt(scanner,@list), CompilationError::invalid_option);
             }
-        } else {
-            swap ( yyextra->g_Program->options, *$list );
         }
         delete $list;
     }
