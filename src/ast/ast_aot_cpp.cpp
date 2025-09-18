@@ -2588,7 +2588,7 @@ namespace das {
             if ( ptr2ref->unsafeDeref ) {
                 ss << "))";
             } else {
-                ss << ")";
+                ss << ",__FILE__,__LINE__)";
             }
             return Visitor::visit(ptr2ref);
         }
