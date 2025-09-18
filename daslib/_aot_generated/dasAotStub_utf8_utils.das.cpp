@@ -5,6 +5,8 @@
 #include "daScript/simulate/aot_library.h"
 
  // require builtin
+#include "daScript/simulate/bin_serializer.h"
+#include "daScript/simulate/runtime_profile.h"
  // require math
 #include "daScript/simulate/aot_builtin_math.h"
  // require strings
@@ -50,17 +52,13 @@ namespace das {
 namespace _anon_2135218099027497698 {
 
 // unused enumeration ConversionResult
-extern TypeInfo __type_info__4ac1d999a882997b;
-extern TypeInfo __type_info__5ee52699b9679f52;
 extern TypeInfo __type_info__af90fe4c864e9d52;
 extern TypeInfo __type_info__37d36026a6078a42;
+extern TypeInfo __type_info__9b3fbfdbc965601f;
+extern TypeInfo __type_info__b208477a53cb453e;
 extern TypeInfo __type_info__af63e84c860200f0;
 extern TypeInfo __type_info__af5be84c85f468f0;
 extern TypeInfo __type_info__af63eb4c86020609;
-extern VarInfo __var_info__1f33941668547bfd;
-extern VarInfo __var_info__3aefdf5fd38bc810;
-extern FuncInfo __func_info__5f4b6da70ca496e2;
-extern FuncInfo __func_info__2f76c7f7dd4f0b27;
 
 VarInfo __func_info__5f4b6da70ca496e2_field_0 =  { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 41058, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x1f33941668547bfd), "arr", 0, 0 };
 VarInfo * __func_info__5f4b6da70ca496e2_fields[1] =  { &__func_info__5f4b6da70ca496e2_field_0 };
@@ -68,10 +66,10 @@ FuncInfo __func_info__5f4b6da70ca496e2 = {"invoke block<(arr:array<uint8> const#
 VarInfo __func_info__2f76c7f7dd4f0b27_field_0 =  { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 41058, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x3aefdf5fd38bc810), "p", 0, 0 };
 VarInfo * __func_info__2f76c7f7dd4f0b27_fields[1] =  { &__func_info__2f76c7f7dd4f0b27_field_0 };
 FuncInfo __func_info__2f76c7f7dd4f0b27 = {"invoke block<(p:array<uint8> const#):void> const", "", __func_info__2f76c7f7dd4f0b27_fields, 1, 32, &__type_info__af63eb4c86020609, nullptr,0,UINT64_C(0x2f76c7f7dd4f0b27), 0x0 };
-TypeInfo __type_info__4ac1d999a882997b = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x4ac1d999a882997b) };
-TypeInfo __type_info__5ee52699b9679f52 = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af63e84c860200f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint32_t>>::size, UINT64_C(0x5ee52699b9679f52) };
 TypeInfo __type_info__af90fe4c864e9d52 = { Type::tString, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 16420, TypeSize<char *>::size, UINT64_C(0xaf90fe4c864e9d52) };
 TypeInfo __type_info__37d36026a6078a42 = { Type::tHandle, nullptr, nullptr, DAS_MAKE_ANNOTATION("~strings::StringBuilderWriter"), nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 2, TypeSize<StringBuilderWriter>::size, UINT64_C(0x37d36026a6078a42) };
+TypeInfo __type_info__9b3fbfdbc965601f = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af5be84c85f468f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint8_t>>::size, UINT64_C(0x9b3fbfdbc965601f) };
+TypeInfo __type_info__b208477a53cb453e = { Type::tArray, nullptr, nullptr, nullptr, &__type_info__af63e84c860200f0, nullptr, nullptr, nullptr, 0, 0, nullptr, 40962, TypeSize<TArray<uint32_t>>::size, UINT64_C(0xb208477a53cb453e) };
 TypeInfo __type_info__af63e84c860200f0 = { Type::tUInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<uint32_t>::size, UINT64_C(0xaf63e84c860200f0) };
 TypeInfo __type_info__af5be84c85f468f0 = { Type::tUInt8, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<uint8_t>::size, UINT64_C(0xaf5be84c85f468f0) };
 TypeInfo __type_info__af63eb4c86020609 = { Type::tVoid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<void>::size, UINT64_C(0xaf63eb4c86020609) };
@@ -84,42 +82,41 @@ static void resolveTypeInfoAnnotations()
     }
 }
 
-TypeInfo * __tinfo_0[1] = { &__type_info__4ac1d999a882997b };
-TypeInfo * __tinfo_1[1] = { &__type_info__5ee52699b9679f52 };
+TypeInfo * __tinfo_0[1] = { &__type_info__9b3fbfdbc965601f };
+TypeInfo * __tinfo_1[1] = { &__type_info__b208477a53cb453e };
 TypeInfo * __tinfo_2[2] = { &__type_info__37d36026a6078a42, &__type_info__af90fe4c864e9d52 };
-TypeInfo * __tinfo_3[2] = { &__type_info__37d36026a6078a42, &__type_info__af90fe4c864e9d52 };
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_3dbee92a7efb07d9 ( Context * __context__, TDim<uint8_t,2> const  & __a_rename_at_586_0 );
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_194914ba4b4e9234 ( Context * __context__, TDim<uint8_t,3> const  & __a_rename_at_586_1 );
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_3d13e435f27e824d ( Context * __context__, TDim<uint8_t,4> const  & __a_rename_at_586_2 );
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_a94ae7fe5f83f893 ( Context * __context__, TDim<uint8_t,1> const  & __a_rename_at_586_3 );
-inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_a6123e6697ded437 ( Context * __context__, TDim<uint8_t,2> & __a_rename_at_1352_4 );
-inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_dd87c6f1da83ea06 ( Context * __context__, TDim<uint8_t,3> & __a_rename_at_1352_6 );
-inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_4c32e98c64dc9655 ( Context * __context__, TDim<uint8_t,4> & __a_rename_at_1352_8 );
-inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_52af64c8664bb146 ( Context * __context__, TDim<uint8_t,1> & __a_rename_at_1352_10 );
-inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_26755ce4d233ca82 ( Context * __context__, TArray<uint8_t> & __a_rename_at_50_12 );
-inline TArray<uint32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_3de422272adba695 ( Context * __context__, TArray<uint32_t> & __a_rename_at_50_13 );
-inline void _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_165_14, uint8_t __value_rename_at_165_15 );
-inline void _FuncbuiltinTickreserveTick3994685146752941225_d0790c6d74061d34 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_125_16, int32_t __newSize_rename_at_125_17 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_c46ce71d6a41166a ( Context * __context__, TArray<uint32_t> & __Arr_rename_at_181_18, uint32_t __value_rename_at_181_19 );
-inline void _FuncbuiltinTickresizeTick4811697762258667383_71b1749d234f576e ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_20, int32_t __newSize_rename_at_68_21 );
-inline uint32_t utf16_to_utf32_67298994a5baa194 ( Context * __context__, uint32_t __high_rename_at_10_22, uint32_t __low_rename_at_10_23 );
-inline void utf8_encode_b6fe59c3abe9a444 ( Context * __context__, TArray<uint8_t> & __dest_array_rename_at_18_24, uint32_t __ch_rename_at_18_25 );
-inline TArray<uint8_t> utf8_encode_97b551f35cf80978 ( Context * __context__, uint32_t __ch_rename_at_38_26 );
-inline void utf8_encode_e2de5a2c582774dc ( Context * __context__, TArray<uint8_t> & __dest_array_rename_at_61_27, TArray<uint32_t> const  & __source_utf32_string_rename_at_61_28 );
-inline TArray<uint8_t> utf8_encode_5c19a2da34c8f208 ( Context * __context__, TArray<uint32_t> const  & __source_utf32_string_rename_at_69_30 );
-inline int32_t utf8_length_c0cb690c545d23a5 ( Context * __context__, TArray<uint8_t> const  & __utf8_string_rename_at_80_33 );
-inline int32_t utf8_length_9bc85c1c74b26c7e ( Context * __context__, char * const  __utf8_string_rename_at_92_36 );
-inline bool is_first_byte_of_utf8_char_26620640f6460cdb ( Context * __context__, uint8_t __ch_rename_at_104_39 );
-inline bool contains_utf8_bom_f2cf32cf55e0a6d4 ( Context * __context__, TArray<uint8_t> const  & __utf8_string_rename_at_110_41 );
-inline bool contains_utf8_bom_d5ae1a8e5b1e79db ( Context * __context__, char * const  __utf8_string_rename_at_116_42 );
-inline bool is_utf8_string_valid_6da0450b19500e4d ( Context * __context__, TArray<uint8_t> const  & __utf8_string_rename_at_154_43 );
-inline bool is_utf8_string_valid_bcfa16997a4edaaf ( Context * __context__, char * const  __utf8_string_rename_at_167_49 );
-inline void utf8_decode_16c21049b073c3e2 ( Context * __context__, TArray<uint32_t> & __dest_utf32_string_rename_at_180_55, TArray<uint8_t> const  & __source_utf8_string_rename_at_180_56 );
-inline TArray<uint32_t> utf8_decode_d1ca0cab78c6a9ea ( Context * __context__, TArray<uint8_t> const  & __source_utf8_string_rename_at_199_63 );
-inline TArray<uint32_t> utf8_decode_1df490f6da36ae8 ( Context * __context__, char * const  __source_utf8_string_rename_at_207_65 );
-inline void utf8_decode_233a82235363f092 ( Context * __context__, TArray<uint32_t> & __dest_utf32_string_rename_at_217_68, char * const  __source_utf8_string_rename_at_217_69 );
-inline char * decode_unicode_escape_511f3efa8f121c21 ( Context * __context__, char * const  __str_rename_at_224_71 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_424e5a5af176be26 ( Context * __context__, TDim<uint8_t,2> const  & __a_rename_at_586_0 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_2d5894d58d05f52 ( Context * __context__, TDim<uint8_t,3> const  & __a_rename_at_586_1 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_5e3beb551331dc06 ( Context * __context__, TDim<uint8_t,4> const  & __a_rename_at_586_2 );
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_1e99f990a58976cb ( Context * __context__, TDim<uint8_t,1> const  & __a_rename_at_586_3 );
+inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_ba90b9e0923e6277 ( Context * __context__, TDim<uint8_t,2> & __a_rename_at_1468_4 );
+inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_1a0ad6f653eeb2ac ( Context * __context__, TDim<uint8_t,3> & __a_rename_at_1468_6 );
+inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_21b6a0bab5d7baaa ( Context * __context__, TDim<uint8_t,4> & __a_rename_at_1468_8 );
+inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_d728636f5ab2a3f8 ( Context * __context__, TDim<uint8_t,1> & __a_rename_at_1468_10 );
+inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316 ( Context * __context__, TArray<uint8_t> & __a_rename_at_50_12 );
+inline TArray<uint32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_6a6451a2add6b045 ( Context * __context__, TArray<uint32_t> & __a_rename_at_50_13 );
+inline void _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_165_14, uint8_t __value_rename_at_165_15 );
+inline void _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_125_16, int32_t __newSize_rename_at_125_17 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_427d344a8b35c688 ( Context * __context__, TArray<uint32_t> & __Arr_rename_at_181_18, uint32_t __value_rename_at_181_19 );
+inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> & __Arr_rename_at_68_20, int32_t __newSize_rename_at_68_21 );
+inline uint32_t utf16_to_utf32_cff3dafb1197cdfe ( Context * __context__, uint32_t __high_rename_at_10_22, uint32_t __low_rename_at_10_23 );
+inline void utf8_encode_15cfb73a783e13c3 ( Context * __context__, TArray<uint8_t> & __dest_array_rename_at_18_24, uint32_t __ch_rename_at_18_25 );
+inline TArray<uint8_t> utf8_encode_3900a01426735b3c ( Context * __context__, uint32_t __ch_rename_at_38_26 );
+inline void utf8_encode_889398f5ff1395f8 ( Context * __context__, TArray<uint8_t> & __dest_array_rename_at_61_27, TArray<uint32_t> const  & __source_utf32_string_rename_at_61_28 );
+inline TArray<uint8_t> utf8_encode_5700734ed2aeaa61 ( Context * __context__, TArray<uint32_t> const  & __source_utf32_string_rename_at_69_30 );
+inline int32_t utf8_length_907cab2006cee353 ( Context * __context__, TArray<uint8_t> const  & __utf8_string_rename_at_80_33 );
+inline int32_t utf8_length_12b5fbe4d57291a4 ( Context * __context__, char * const  __utf8_string_rename_at_92_36 );
+inline bool is_first_byte_of_utf8_char_54d6de0ccc3233ff ( Context * __context__, uint8_t __ch_rename_at_104_39 );
+inline bool contains_utf8_bom_726579135064e73d ( Context * __context__, TArray<uint8_t> const  & __utf8_string_rename_at_110_41 );
+inline bool contains_utf8_bom_64466034c8e654eb ( Context * __context__, char * const  __utf8_string_rename_at_116_42 );
+inline bool is_utf8_string_valid_d24fc2ea4690cc02 ( Context * __context__, TArray<uint8_t> const  & __utf8_string_rename_at_154_43 );
+inline bool is_utf8_string_valid_76d0a9290bfdca2a ( Context * __context__, char * const  __utf8_string_rename_at_167_49 );
+inline void utf8_decode_52e084b93ad4506a ( Context * __context__, TArray<uint32_t> & __dest_utf32_string_rename_at_180_55, TArray<uint8_t> const  & __source_utf8_string_rename_at_180_56 );
+inline TArray<uint32_t> utf8_decode_8a62df3d541e9cd3 ( Context * __context__, TArray<uint8_t> const  & __source_utf8_string_rename_at_199_63 );
+inline TArray<uint32_t> utf8_decode_e9b199ec898bff47 ( Context * __context__, char * const  __source_utf8_string_rename_at_207_65 );
+inline void utf8_decode_14c6fb677c005963 ( Context * __context__, TArray<uint32_t> & __dest_utf32_string_rename_at_217_68, char * const  __source_utf8_string_rename_at_217_69 );
+inline char * decode_unicode_escape_df0808a06ace62b0 ( Context * __context__, char * const  __str_rename_at_224_71 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -494,124 +491,124 @@ void __init_script ( Context * __context__, bool __init_shared )
     das_global<uint32_t,0x32e75a6a55963340>(__context__) = 0x0u;/*UTF8_ACCEPT*/
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_3dbee92a7efb07d9 ( Context * __context__, TDim<uint8_t,2> const  &  __a_rename_at_586_0 )
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_424e5a5af176be26 ( Context * __context__, TDim<uint8_t,2> const  &  __a_rename_at_586_0 )
 {
     return das_auto_cast<int32_t>::cast(2);
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_194914ba4b4e9234 ( Context * __context__, TDim<uint8_t,3> const  &  __a_rename_at_586_1 )
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_2d5894d58d05f52 ( Context * __context__, TDim<uint8_t,3> const  &  __a_rename_at_586_1 )
 {
     return das_auto_cast<int32_t>::cast(3);
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_3d13e435f27e824d ( Context * __context__, TDim<uint8_t,4> const  &  __a_rename_at_586_2 )
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_5e3beb551331dc06 ( Context * __context__, TDim<uint8_t,4> const  &  __a_rename_at_586_2 )
 {
     return das_auto_cast<int32_t>::cast(4);
 }
 
-inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_a94ae7fe5f83f893 ( Context * __context__, TDim<uint8_t,1> const  &  __a_rename_at_586_3 )
+inline int32_t _FuncbuiltinTicklengthTick18150397773952384912_1e99f990a58976cb ( Context * __context__, TDim<uint8_t,1> const  &  __a_rename_at_586_3 )
 {
     return das_auto_cast<int32_t>::cast(1);
 }
 
-inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_a6123e6697ded437 ( Context * __context__, TDim<uint8_t,2> &  __a_rename_at_1352_4 )
+inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_ba90b9e0923e6277 ( Context * __context__, TDim<uint8_t,2> &  __a_rename_at_1468_4 )
 {
-    TArray<uint8_t> __arr_rename_at_1354_5;das_zero(__arr_rename_at_1354_5);
-    _FuncbuiltinTickresizeTick4811697762258667383_71b1749d234f576e(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1354_5),2);
-    das_copy(das_cast<TDim<uint8_t,2>>::cast(das_ref(__context__,__arr_rename_at_1354_5(0,__context__))),__a_rename_at_1352_4);
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1354_5);
+    TArray<uint8_t> __arr_rename_at_1470_5;das_zero(__arr_rename_at_1470_5);
+    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1470_5),2);
+    das_copy(das_cast<TDim<uint8_t,2>>::cast(das_ref(__context__,__arr_rename_at_1470_5(0,__context__))),__a_rename_at_1468_4);
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1470_5);
 }
 
-inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_dd87c6f1da83ea06 ( Context * __context__, TDim<uint8_t,3> &  __a_rename_at_1352_6 )
+inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_1a0ad6f653eeb2ac ( Context * __context__, TDim<uint8_t,3> &  __a_rename_at_1468_6 )
 {
-    TArray<uint8_t> __arr_rename_at_1354_7;das_zero(__arr_rename_at_1354_7);
-    _FuncbuiltinTickresizeTick4811697762258667383_71b1749d234f576e(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1354_7),3);
-    das_copy(das_cast<TDim<uint8_t,3>>::cast(das_ref(__context__,__arr_rename_at_1354_7(0,__context__))),__a_rename_at_1352_6);
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1354_7);
+    TArray<uint8_t> __arr_rename_at_1470_7;das_zero(__arr_rename_at_1470_7);
+    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1470_7),3);
+    das_copy(das_cast<TDim<uint8_t,3>>::cast(das_ref(__context__,__arr_rename_at_1470_7(0,__context__))),__a_rename_at_1468_6);
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1470_7);
 }
 
-inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_4c32e98c64dc9655 ( Context * __context__, TDim<uint8_t,4> &  __a_rename_at_1352_8 )
+inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_21b6a0bab5d7baaa ( Context * __context__, TDim<uint8_t,4> &  __a_rename_at_1468_8 )
 {
-    TArray<uint8_t> __arr_rename_at_1354_9;das_zero(__arr_rename_at_1354_9);
-    _FuncbuiltinTickresizeTick4811697762258667383_71b1749d234f576e(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1354_9),4);
-    das_copy(das_cast<TDim<uint8_t,4>>::cast(das_ref(__context__,__arr_rename_at_1354_9(0,__context__))),__a_rename_at_1352_8);
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1354_9);
+    TArray<uint8_t> __arr_rename_at_1470_9;das_zero(__arr_rename_at_1470_9);
+    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1470_9),4);
+    das_copy(das_cast<TDim<uint8_t,4>>::cast(das_ref(__context__,__arr_rename_at_1470_9(0,__context__))),__a_rename_at_1468_8);
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1470_9);
 }
 
-inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_52af64c8664bb146 ( Context * __context__, TDim<uint8_t,1> &  __a_rename_at_1352_10 )
+inline TArray<uint8_t> _FuncbuiltinTickto_array_moveTick3185538323411982277_d728636f5ab2a3f8 ( Context * __context__, TDim<uint8_t,1> &  __a_rename_at_1468_10 )
 {
-    TArray<uint8_t> __arr_rename_at_1354_11;das_zero(__arr_rename_at_1354_11);
-    _FuncbuiltinTickresizeTick4811697762258667383_71b1749d234f576e(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1354_11),1);
-    das_copy(das_cast<TDim<uint8_t,1>>::cast(das_ref(__context__,__arr_rename_at_1354_11(0,__context__))),__a_rename_at_1352_10);
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1354_11);
+    TArray<uint8_t> __arr_rename_at_1470_11;das_zero(__arr_rename_at_1470_11);
+    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__arr_rename_at_1470_11),1);
+    das_copy(das_cast<TDim<uint8_t,1>>::cast(das_ref(__context__,__arr_rename_at_1470_11(0,__context__))),__a_rename_at_1468_10);
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(__arr_rename_at_1470_11);
 }
 
-inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_26755ce4d233ca82 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_50_12 )
+inline TArray<uint8_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316 ( Context * __context__, TArray<uint8_t> &  __a_rename_at_50_12 )
 {
     das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_0,cast<TArray<uint8_t> &>::from(__a_rename_at_50_12)));
     return das_auto_cast_ref<TArray<uint8_t> &>::cast(__a_rename_at_50_12);
 }
 
-inline TArray<uint32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_3de422272adba695 ( Context * __context__, TArray<uint32_t> &  __a_rename_at_50_13 )
+inline TArray<uint32_t> & _FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_6a6451a2add6b045 ( Context * __context__, TArray<uint32_t> &  __a_rename_at_50_13 )
 {
     das_call_interop<void>::call(&builtin_verify_locks,__context__,SimNode_AotInterop<1>(__tinfo_1,cast<TArray<uint32_t> &>::from(__a_rename_at_50_13)));
     return das_auto_cast_ref<TArray<uint32_t> &>::cast(__a_rename_at_50_13);
 }
 
-inline void _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_165_14, uint8_t __value_rename_at_165_15 )
+inline void _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_165_14, uint8_t __value_rename_at_165_15 )
 {
     das_copy(__Arr_rename_at_165_14(builtin_array_push_back(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_165_14),1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_165_15);
 }
 
-inline void _FuncbuiltinTickreserveTick3994685146752941225_d0790c6d74061d34 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_125_16, int32_t __newSize_rename_at_125_17 )
+inline void _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_125_16, int32_t __newSize_rename_at_125_17 )
 {
     builtin_array_reserve(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_125_16),__newSize_rename_at_125_17,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_c46ce71d6a41166a ( Context * __context__, TArray<uint32_t> &  __Arr_rename_at_181_18, uint32_t __value_rename_at_181_19 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_427d344a8b35c688 ( Context * __context__, TArray<uint32_t> &  __Arr_rename_at_181_18, uint32_t __value_rename_at_181_19 )
 {
     das_copy(__Arr_rename_at_181_18(builtin_array_push_back(das_arg<TArray<uint32_t>>::pass(__Arr_rename_at_181_18),4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_19);
 }
 
-inline void _FuncbuiltinTickresizeTick4811697762258667383_71b1749d234f576e ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_68_20, int32_t __newSize_rename_at_68_21 )
+inline void _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__, TArray<uint8_t> &  __Arr_rename_at_68_20, int32_t __newSize_rename_at_68_21 )
 {
     builtin_array_resize(das_arg<TArray<uint8_t>>::pass(__Arr_rename_at_68_20),__newSize_rename_at_68_21,1,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline uint32_t utf16_to_utf32_67298994a5baa194 ( Context * __context__, uint32_t __high_rename_at_10_22, uint32_t __low_rename_at_10_23 )
+inline uint32_t utf16_to_utf32_cff3dafb1197cdfe ( Context * __context__, uint32_t __high_rename_at_10_22, uint32_t __low_rename_at_10_23 )
 {
-    return das_auto_cast<uint32_t>::cast(((__high_rename_at_10_22 >= 0xd800u) && (__high_rename_at_10_22 <= 0xdbffu)) ? das_auto_cast<uint32_t>::cast(((((__high_rename_at_10_22 - 0xd800u) << 0xau) + (__low_rename_at_10_23 - 0xdc00u)) + 0x10000u)) : das_auto_cast<uint32_t>::cast(__high_rename_at_10_22));
+    return das_auto_cast<uint32_t>::cast(((__high_rename_at_10_22 >= 0xd800u) && (__high_rename_at_10_22 <= 0xdbffu)) ? das_auto_cast<uint32_t>::cast((((SimPolicy<uint32_t>::BinShl((__high_rename_at_10_22 - 0xd800u),0xau,*__context__,nullptr)) + (__low_rename_at_10_23 - 0xdc00u)) + 0x10000u)) : das_auto_cast<uint32_t>::cast(__high_rename_at_10_22));
 }
 
-inline void utf8_encode_b6fe59c3abe9a444 ( Context * __context__, TArray<uint8_t> &  __dest_array_rename_at_18_24, uint32_t __ch_rename_at_18_25 )
+inline void utf8_encode_15cfb73a783e13c3 ( Context * __context__, TArray<uint8_t> &  __dest_array_rename_at_18_24, uint32_t __ch_rename_at_18_25 )
 {
     if ( __ch_rename_at_18_25 < 0x80u )
     {
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t(__ch_rename_at_18_25));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t(__ch_rename_at_18_25));
     } else if ( __ch_rename_at_18_25 < 0x800u )
     {
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 >> 0x6u) + 0xc0u));
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 & 0x3fu) + 0x80u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((SimPolicy<uint32_t>::BinShr(__ch_rename_at_18_25,0x6u,*__context__,nullptr)) + 0xc0u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 & 0x3fu) + 0x80u));
     } else if ( __ch_rename_at_18_25 < 0x10000u )
     {
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 >> 0xcu) + 0xe0u));
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t(((__ch_rename_at_18_25 >> 0x6u) & 0x3fu) + 0x80u));
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 & 0x3fu) + 0x80u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((SimPolicy<uint32_t>::BinShr(__ch_rename_at_18_25,0xcu,*__context__,nullptr)) + 0xe0u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t(((SimPolicy<uint32_t>::BinShr(__ch_rename_at_18_25,0x6u,*__context__,nullptr)) & 0x3fu) + 0x80u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 & 0x3fu) + 0x80u));
     } else {
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 >> 0x12u) + 0xf0u));
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t(((__ch_rename_at_18_25 >> 0xcu) & 0x3fu) + 0x80u));
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t(((__ch_rename_at_18_25 >> 0x6u) & 0x3fu) + 0x80u));
-        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 & 0x3fu) + 0x80u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((SimPolicy<uint32_t>::BinShr(__ch_rename_at_18_25,0x12u,*__context__,nullptr)) + 0xf0u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t(((SimPolicy<uint32_t>::BinShr(__ch_rename_at_18_25,0xcu,*__context__,nullptr)) & 0x3fu) + 0x80u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t(((SimPolicy<uint32_t>::BinShr(__ch_rename_at_18_25,0x6u,*__context__,nullptr)) & 0x3fu) + 0x80u));
+        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_18_24),uint8_t((__ch_rename_at_18_25 & 0x3fu) + 0x80u));
     };
 }
 
-inline TArray<uint8_t> utf8_encode_97b551f35cf80978 ( Context * __context__, uint32_t __ch_rename_at_38_26 )
+inline TArray<uint8_t> utf8_encode_3900a01426735b3c ( Context * __context__, uint32_t __ch_rename_at_38_26 )
 {
     if ( __ch_rename_at_38_26 < 0x80u )
     {
         TArray<uint8_t> _temp_make_local_41_19_0; _temp_make_local_41_19_0;
         TDim<uint8_t,1> _temp_make_local_41_19_1; _temp_make_local_41_19_1;
-        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_26755ce4d233ca82(__context__,das_arg<TArray<uint8_t>>::pass((_temp_make_local_41_19_0 = (_FuncbuiltinTickto_array_moveTick3185538323411982277_52af64c8664bb146(__context__,das_arg<TDim<uint8_t,1>>::pass((([&]() -> TDim<uint8_t,1>& {
+        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316(__context__,das_arg<TArray<uint8_t>>::pass((_temp_make_local_41_19_0 = (_FuncbuiltinTickto_array_moveTick3185538323411982277_d728636f5ab2a3f8(__context__,das_arg<TDim<uint8_t,1>>::pass((([&]() -> TDim<uint8_t,1>& {
             _temp_make_local_41_19_1(0,__context__) = uint8_t(__ch_rename_at_38_26);
             return _temp_make_local_41_19_1;
         })()))))))));
@@ -619,8 +616,8 @@ inline TArray<uint8_t> utf8_encode_97b551f35cf80978 ( Context * __context__, uin
     {
         TArray<uint8_t> _temp_make_local_43_19_2; _temp_make_local_43_19_2;
         TDim<uint8_t,2> _temp_make_local_43_19_3; _temp_make_local_43_19_3;
-        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_26755ce4d233ca82(__context__,das_arg<TArray<uint8_t>>::pass((_temp_make_local_43_19_2 = (_FuncbuiltinTickto_array_moveTick3185538323411982277_a6123e6697ded437(__context__,das_arg<TDim<uint8_t,2>>::pass((([&]() -> TDim<uint8_t,2>& {
-            _temp_make_local_43_19_3(0,__context__) = uint8_t((__ch_rename_at_38_26 >> 0x6u) + 0xc0u);
+        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316(__context__,das_arg<TArray<uint8_t>>::pass((_temp_make_local_43_19_2 = (_FuncbuiltinTickto_array_moveTick3185538323411982277_ba90b9e0923e6277(__context__,das_arg<TDim<uint8_t,2>>::pass((([&]() -> TDim<uint8_t,2>& {
+            _temp_make_local_43_19_3(0,__context__) = uint8_t((SimPolicy<uint32_t>::BinShr(__ch_rename_at_38_26,0x6u,*__context__,nullptr)) + 0xc0u);
             _temp_make_local_43_19_3(1,__context__) = uint8_t((__ch_rename_at_38_26 & 0x3fu) + 0x80u);
             return _temp_make_local_43_19_3;
         })()))))))));
@@ -628,26 +625,26 @@ inline TArray<uint8_t> utf8_encode_97b551f35cf80978 ( Context * __context__, uin
     {
         TArray<uint8_t> _temp_make_local_47_19_4; _temp_make_local_47_19_4;
         TDim<uint8_t,3> _temp_make_local_47_19_5; _temp_make_local_47_19_5;
-        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_26755ce4d233ca82(__context__,das_arg<TArray<uint8_t>>::pass((_temp_make_local_47_19_4 = (_FuncbuiltinTickto_array_moveTick3185538323411982277_dd87c6f1da83ea06(__context__,das_arg<TDim<uint8_t,3>>::pass((([&]() -> TDim<uint8_t,3>& {
-            _temp_make_local_47_19_5(0,__context__) = uint8_t((__ch_rename_at_38_26 >> 0xcu) + 0xe0u);
-            _temp_make_local_47_19_5(1,__context__) = uint8_t(((__ch_rename_at_38_26 >> 0x6u) & 0x3fu) + 0x80u);
+        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316(__context__,das_arg<TArray<uint8_t>>::pass((_temp_make_local_47_19_4 = (_FuncbuiltinTickto_array_moveTick3185538323411982277_1a0ad6f653eeb2ac(__context__,das_arg<TDim<uint8_t,3>>::pass((([&]() -> TDim<uint8_t,3>& {
+            _temp_make_local_47_19_5(0,__context__) = uint8_t((SimPolicy<uint32_t>::BinShr(__ch_rename_at_38_26,0xcu,*__context__,nullptr)) + 0xe0u);
+            _temp_make_local_47_19_5(1,__context__) = uint8_t(((SimPolicy<uint32_t>::BinShr(__ch_rename_at_38_26,0x6u,*__context__,nullptr)) & 0x3fu) + 0x80u);
             _temp_make_local_47_19_5(2,__context__) = uint8_t((__ch_rename_at_38_26 & 0x3fu) + 0x80u);
             return _temp_make_local_47_19_5;
         })()))))))));
     } else {
         TArray<uint8_t> _temp_make_local_52_19_6; _temp_make_local_52_19_6;
         TDim<uint8_t,4> _temp_make_local_52_19_7; _temp_make_local_52_19_7;
-        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_26755ce4d233ca82(__context__,das_arg<TArray<uint8_t>>::pass((_temp_make_local_52_19_6 = (_FuncbuiltinTickto_array_moveTick3185538323411982277_4c32e98c64dc9655(__context__,das_arg<TDim<uint8_t,4>>::pass((([&]() -> TDim<uint8_t,4>& {
-            _temp_make_local_52_19_7(0,__context__) = uint8_t((__ch_rename_at_38_26 >> 0x12u) + 0xf0u);
-            _temp_make_local_52_19_7(1,__context__) = uint8_t(((__ch_rename_at_38_26 >> 0xcu) & 0x3fu) + 0x80u);
-            _temp_make_local_52_19_7(2,__context__) = uint8_t(((__ch_rename_at_38_26 >> 0x6u) & 0x3fu) + 0x80u);
+        return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316(__context__,das_arg<TArray<uint8_t>>::pass((_temp_make_local_52_19_6 = (_FuncbuiltinTickto_array_moveTick3185538323411982277_21b6a0bab5d7baaa(__context__,das_arg<TDim<uint8_t,4>>::pass((([&]() -> TDim<uint8_t,4>& {
+            _temp_make_local_52_19_7(0,__context__) = uint8_t((SimPolicy<uint32_t>::BinShr(__ch_rename_at_38_26,0x12u,*__context__,nullptr)) + 0xf0u);
+            _temp_make_local_52_19_7(1,__context__) = uint8_t(((SimPolicy<uint32_t>::BinShr(__ch_rename_at_38_26,0xcu,*__context__,nullptr)) & 0x3fu) + 0x80u);
+            _temp_make_local_52_19_7(2,__context__) = uint8_t(((SimPolicy<uint32_t>::BinShr(__ch_rename_at_38_26,0x6u,*__context__,nullptr)) & 0x3fu) + 0x80u);
             _temp_make_local_52_19_7(3,__context__) = uint8_t((__ch_rename_at_38_26 & 0x3fu) + 0x80u);
             return _temp_make_local_52_19_7;
         })()))))))));
     };
 }
 
-inline void utf8_encode_e2de5a2c582774dc ( Context * __context__, TArray<uint8_t> &  __dest_array_rename_at_61_27, TArray<uint32_t> const  &  __source_utf32_string_rename_at_61_28 )
+inline void utf8_encode_889398f5ff1395f8 ( Context * __context__, TArray<uint8_t> &  __dest_array_rename_at_61_27, TArray<uint32_t> const  &  __source_utf32_string_rename_at_61_28 )
 {
     {
         bool __need_loop_63 = true;
@@ -657,16 +654,16 @@ inline void utf8_encode_e2de5a2c582774dc ( Context * __context__, TArray<uint8_t
         __need_loop_63 = __ch_iterator.first(__context__,(__ch_rename_at_63_29)) && __need_loop_63;
         for ( ; __need_loop_63 ; __need_loop_63 = __ch_iterator.next(__context__,(__ch_rename_at_63_29)) )
         {
-            utf8_encode_b6fe59c3abe9a444(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_61_27),(*__ch_rename_at_63_29));
+            utf8_encode_15cfb73a783e13c3(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_61_27),(*__ch_rename_at_63_29));
         }
         __ch_iterator.close(__context__,(__ch_rename_at_63_29));
     };
 }
 
-inline TArray<uint8_t> utf8_encode_5c19a2da34c8f208 ( Context * __context__, TArray<uint32_t> const  &  __source_utf32_string_rename_at_69_30 )
+inline TArray<uint8_t> utf8_encode_5700734ed2aeaa61 ( Context * __context__, TArray<uint32_t> const  &  __source_utf32_string_rename_at_69_30 )
 {
     TArray<uint8_t> __dest_array_rename_at_71_31;das_zero(__dest_array_rename_at_71_31);
-    _FuncbuiltinTickreserveTick3994685146752941225_d0790c6d74061d34(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_71_31),builtin_array_size(__source_utf32_string_rename_at_69_30));
+    _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_71_31),builtin_array_size(__source_utf32_string_rename_at_69_30));
     {
         bool __need_loop_73 = true;
         // ch: uint const&
@@ -675,14 +672,14 @@ inline TArray<uint8_t> utf8_encode_5c19a2da34c8f208 ( Context * __context__, TAr
         __need_loop_73 = __ch_iterator.first(__context__,(__ch_rename_at_73_32)) && __need_loop_73;
         for ( ; __need_loop_73 ; __need_loop_73 = __ch_iterator.next(__context__,(__ch_rename_at_73_32)) )
         {
-            utf8_encode_b6fe59c3abe9a444(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_71_31),(*__ch_rename_at_73_32));
+            utf8_encode_15cfb73a783e13c3(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_71_31),(*__ch_rename_at_73_32));
         }
         __ch_iterator.close(__context__,(__ch_rename_at_73_32));
     };
-    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_26755ce4d233ca82(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_71_31)));
+    return /* <- */ das_auto_cast_move<TArray<uint8_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316(__context__,das_arg<TArray<uint8_t>>::pass(__dest_array_rename_at_71_31)));
 }
 
-inline int32_t utf8_length_c0cb690c545d23a5 ( Context * __context__, TArray<uint8_t> const  &  __utf8_string_rename_at_80_33 )
+inline int32_t utf8_length_907cab2006cee353 ( Context * __context__, TArray<uint8_t> const  &  __utf8_string_rename_at_80_33 )
 {
     int32_t __length_rename_at_82_34 = 0;
     {
@@ -703,7 +700,7 @@ inline int32_t utf8_length_c0cb690c545d23a5 ( Context * __context__, TArray<uint
     return das_auto_cast<int32_t>::cast(__length_rename_at_82_34);
 }
 
-inline int32_t utf8_length_9bc85c1c74b26c7e ( Context * __context__, char * const  __utf8_string_rename_at_92_36 )
+inline int32_t utf8_length_12b5fbe4d57291a4 ( Context * __context__, char * const  __utf8_string_rename_at_92_36 )
 {
     int32_t __length_rename_at_94_37 = 0;
     {
@@ -724,23 +721,23 @@ inline int32_t utf8_length_9bc85c1c74b26c7e ( Context * __context__, char * cons
     return das_auto_cast<int32_t>::cast(__length_rename_at_94_37);
 }
 
-inline bool is_first_byte_of_utf8_char_26620640f6460cdb ( Context * __context__, uint8_t __ch_rename_at_104_39 )
+inline bool is_first_byte_of_utf8_char_54d6de0ccc3233ff ( Context * __context__, uint8_t __ch_rename_at_104_39 )
 {
     uint32_t __x_rename_at_105_40 = ((uint32_t)uint32_t(__ch_rename_at_104_39));
     return das_auto_cast<bool>::cast((__x_rename_at_105_40 > 0x0u) && ((__x_rename_at_105_40 < 0x80u) || ((__x_rename_at_105_40 & 0xc0u) == 0xc0u)));
 }
 
-inline bool contains_utf8_bom_f2cf32cf55e0a6d4 ( Context * __context__, TArray<uint8_t> const  &  __utf8_string_rename_at_110_41 )
+inline bool contains_utf8_bom_726579135064e73d ( Context * __context__, TArray<uint8_t> const  &  __utf8_string_rename_at_110_41 )
 {
     return das_auto_cast<bool>::cast((((builtin_array_size(__utf8_string_rename_at_110_41) >= 3) && (uint32_t(__utf8_string_rename_at_110_41(0,__context__)) == 0xefu)) && (uint32_t(__utf8_string_rename_at_110_41(1,__context__)) == 0xbbu)) && (uint32_t(__utf8_string_rename_at_110_41(2,__context__)) == 0xbfu));
 }
 
-inline bool contains_utf8_bom_d5ae1a8e5b1e79db ( Context * __context__, char * const  __utf8_string_rename_at_116_42 )
+inline bool contains_utf8_bom_64466034c8e654eb ( Context * __context__, char * const  __utf8_string_rename_at_116_42 )
 {
     return das_auto_cast<bool>::cast(((!(builtin_empty(__utf8_string_rename_at_116_42)) && (uint32_t(get_character_uat(__utf8_string_rename_at_116_42,0)) == 0xefu)) && (uint32_t(get_character_uat(__utf8_string_rename_at_116_42,1)) == 0xbbu)) && (uint32_t(get_character_uat(__utf8_string_rename_at_116_42,2)) == 0xbfu));
 }
 
-inline bool is_utf8_string_valid_6da0450b19500e4d ( Context * __context__, TArray<uint8_t> const  &  __utf8_string_rename_at_154_43 )
+inline bool is_utf8_string_valid_d24fc2ea4690cc02 ( Context * __context__, TArray<uint8_t> const  &  __utf8_string_rename_at_154_43 )
 {
     uint32_t __codepoint_rename_at_155_44 = 0x0u;
     uint32_t __state_rename_at_156_45 = 0x0u;
@@ -754,7 +751,7 @@ inline bool is_utf8_string_valid_6da0450b19500e4d ( Context * __context__, TArra
         {
             uint32_t __byte_rename_at_158_47 = ((uint32_t)uint32_t((*__ch_rename_at_157_46)));
             uint32_t __type__rename_at_159_48 = ((uint32_t)das_shared<TDim<uint32_t,364>,0x28a2e6c17bde423c>(__context__) /*s_utf8d*/(__byte_rename_at_158_47,__context__));
-            das_copy(__codepoint_rename_at_155_44,(__state_rename_at_156_45 != 0x0u) ? das_auto_cast<uint32_t>::cast(((__byte_rename_at_158_47 & 0x3fu) | (__codepoint_rename_at_155_44 << 0x6u))) : das_auto_cast<uint32_t>::cast(((0xffu >> __type__rename_at_159_48) & __byte_rename_at_158_47)));
+            das_copy(__codepoint_rename_at_155_44,(__state_rename_at_156_45 != 0x0u) ? das_auto_cast<uint32_t>::cast(((__byte_rename_at_158_47 & 0x3fu) | (SimPolicy<uint32_t>::BinShl(__codepoint_rename_at_155_44,0x6u,*__context__,nullptr)))) : das_auto_cast<uint32_t>::cast(((SimPolicy<uint32_t>::BinShr(0xffu,__type__rename_at_159_48,*__context__,nullptr)) & __byte_rename_at_158_47)));
             das_copy(__state_rename_at_156_45,das_shared<TDim<uint32_t,364>,0x28a2e6c17bde423c>(__context__) /*s_utf8d*/(((__state_rename_at_156_45 + 0x100u) + __type__rename_at_159_48),__context__));
         }
         __ch_iterator.close(__context__,(__ch_rename_at_157_46));
@@ -762,7 +759,7 @@ inline bool is_utf8_string_valid_6da0450b19500e4d ( Context * __context__, TArra
     return das_auto_cast<bool>::cast(__state_rename_at_156_45 == 0x0u);
 }
 
-inline bool is_utf8_string_valid_bcfa16997a4edaaf ( Context * __context__, char * const  __utf8_string_rename_at_167_49 )
+inline bool is_utf8_string_valid_76d0a9290bfdca2a ( Context * __context__, char * const  __utf8_string_rename_at_167_49 )
 {
     uint32_t __codepoint_rename_at_168_50 = 0x0u;
     uint32_t __state_rename_at_169_51 = 0x0u;
@@ -776,7 +773,7 @@ inline bool is_utf8_string_valid_bcfa16997a4edaaf ( Context * __context__, char 
         {
             uint32_t __byte_rename_at_171_53 = ((uint32_t)uint32_t(__ch_rename_at_170_52));
             uint32_t __type__rename_at_172_54 = ((uint32_t)das_shared<TDim<uint32_t,364>,0x28a2e6c17bde423c>(__context__) /*s_utf8d*/(__byte_rename_at_171_53,__context__));
-            das_copy(__codepoint_rename_at_168_50,(__state_rename_at_169_51 != 0x0u) ? das_auto_cast<uint32_t>::cast(((__byte_rename_at_171_53 & 0x3fu) | (__codepoint_rename_at_168_50 << 0x6u))) : das_auto_cast<uint32_t>::cast(((0xffu >> __type__rename_at_172_54) & __byte_rename_at_171_53)));
+            das_copy(__codepoint_rename_at_168_50,(__state_rename_at_169_51 != 0x0u) ? das_auto_cast<uint32_t>::cast(((__byte_rename_at_171_53 & 0x3fu) | (SimPolicy<uint32_t>::BinShl(__codepoint_rename_at_168_50,0x6u,*__context__,nullptr)))) : das_auto_cast<uint32_t>::cast(((SimPolicy<uint32_t>::BinShr(0xffu,__type__rename_at_172_54,*__context__,nullptr)) & __byte_rename_at_171_53)));
             das_copy(__state_rename_at_169_51,das_shared<TDim<uint32_t,364>,0x28a2e6c17bde423c>(__context__) /*s_utf8d*/(((__state_rename_at_169_51 + 0x100u) + __type__rename_at_172_54),__context__));
         }
         __ch_iterator.close(__context__,(__ch_rename_at_170_52));
@@ -784,56 +781,56 @@ inline bool is_utf8_string_valid_bcfa16997a4edaaf ( Context * __context__, char 
     return das_auto_cast<bool>::cast(__state_rename_at_169_51 == 0x0u);
 }
 
-inline void utf8_decode_16c21049b073c3e2 ( Context * __context__, TArray<uint32_t> &  __dest_utf32_string_rename_at_180_55, TArray<uint8_t> const  &  __source_utf8_string_rename_at_180_56 )
+inline void utf8_decode_52e084b93ad4506a ( Context * __context__, TArray<uint32_t> &  __dest_utf32_string_rename_at_180_55, TArray<uint8_t> const  &  __source_utf8_string_rename_at_180_56 )
 {
     uint32_t __codepoint_rename_at_182_57 = 0x0u;
     uint32_t __state_rename_at_183_58 = 0x0u;
     int32_t __length_rename_at_184_59 = ((int32_t)builtin_array_size(__source_utf8_string_rename_at_180_56));
-    int32_t __i_rename_at_185_60 = (contains_utf8_bom_f2cf32cf55e0a6d4(__context__,__source_utf8_string_rename_at_180_56) ? das_auto_cast<int32_t>::cast(3) : das_auto_cast<int32_t>::cast(0));
+    int32_t __i_rename_at_185_60 = (contains_utf8_bom_726579135064e73d(__context__,__source_utf8_string_rename_at_180_56) ? das_auto_cast<int32_t>::cast(3) : das_auto_cast<int32_t>::cast(0));
     while ( __i_rename_at_185_60 < __length_rename_at_184_59 )
     {
         uint32_t __byte_rename_at_188_61 = ((uint32_t)uint32_t(__source_utf8_string_rename_at_180_56(__i_rename_at_185_60++,__context__)));
         uint32_t __type__rename_at_189_62 = ((uint32_t)das_shared<TDim<uint32_t,364>,0x28a2e6c17bde423c>(__context__) /*s_utf8d*/(__byte_rename_at_188_61,__context__));
-        das_copy(__codepoint_rename_at_182_57,(__state_rename_at_183_58 != 0x0u) ? das_auto_cast<uint32_t>::cast(((__byte_rename_at_188_61 & 0x3fu) | (__codepoint_rename_at_182_57 << 0x6u))) : das_auto_cast<uint32_t>::cast(((0xffu >> __type__rename_at_189_62) & __byte_rename_at_188_61)));
+        das_copy(__codepoint_rename_at_182_57,(__state_rename_at_183_58 != 0x0u) ? das_auto_cast<uint32_t>::cast(((__byte_rename_at_188_61 & 0x3fu) | (SimPolicy<uint32_t>::BinShl(__codepoint_rename_at_182_57,0x6u,*__context__,nullptr)))) : das_auto_cast<uint32_t>::cast(((SimPolicy<uint32_t>::BinShr(0xffu,__type__rename_at_189_62,*__context__,nullptr)) & __byte_rename_at_188_61)));
         das_copy(__state_rename_at_183_58,das_shared<TDim<uint32_t,364>,0x28a2e6c17bde423c>(__context__) /*s_utf8d*/(((__state_rename_at_183_58 + 0x100u) + __type__rename_at_189_62),__context__));
         if ( __state_rename_at_183_58 == 0x0u )
         {
-            _FuncbuiltinTickpushTick10769833213962245646_c46ce71d6a41166a(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_180_55),__codepoint_rename_at_182_57);
+            _FuncbuiltinTickpushTick10769833213962245646_427d344a8b35c688(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_180_55),__codepoint_rename_at_182_57);
         };
     };
 }
 
-inline TArray<uint32_t> utf8_decode_d1ca0cab78c6a9ea ( Context * __context__, TArray<uint8_t> const  &  __source_utf8_string_rename_at_199_63 )
+inline TArray<uint32_t> utf8_decode_8a62df3d541e9cd3 ( Context * __context__, TArray<uint8_t> const  &  __source_utf8_string_rename_at_199_63 )
 {
     TArray<uint32_t> __dest_utf32_string_rename_at_201_64;das_zero(__dest_utf32_string_rename_at_201_64);
-    utf8_decode_16c21049b073c3e2(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_201_64),__source_utf8_string_rename_at_199_63);
-    return /* <- */ das_auto_cast_move<TArray<uint32_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_3de422272adba695(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_201_64)));
+    utf8_decode_52e084b93ad4506a(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_201_64),__source_utf8_string_rename_at_199_63);
+    return /* <- */ das_auto_cast_move<TArray<uint32_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_6a6451a2add6b045(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_201_64)));
 }
 
-inline TArray<uint32_t> utf8_decode_1df490f6da36ae8 ( Context * __context__, char * const  __source_utf8_string_rename_at_207_65 ) { das_stack_prologue __prologue(__context__,96,"utf8_decode " DAS_FILE_LINE);
+inline TArray<uint32_t> utf8_decode_e9b199ec898bff47 ( Context * __context__, char * const  __source_utf8_string_rename_at_207_65 ) { das_stack_prologue __prologue(__context__,96,"utf8_decode " DAS_FILE_LINE);
 {
     TArray<uint32_t> __dest_utf32_string_rename_at_209_66;das_zero(__dest_utf32_string_rename_at_209_66);
     builtin_string_peek(__source_utf8_string_rename_at_207_65,das_make_block<void,TArray<uint8_t> const  &>(__context__,80,0,&__func_info__5f4b6da70ca496e2,[&](TArray<uint8_t> const  & __arr_rename_at_210_67) -> void{
-        utf8_decode_16c21049b073c3e2(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_209_66),__arr_rename_at_210_67);
+        utf8_decode_52e084b93ad4506a(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_209_66),__arr_rename_at_210_67);
     }),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<TArray<uint32_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_3de422272adba695(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_209_66)));
+    return /* <- */ das_auto_cast_move<TArray<uint32_t>>::cast(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_6a6451a2add6b045(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_209_66)));
 }}
 
-inline void utf8_decode_233a82235363f092 ( Context * __context__, TArray<uint32_t> &  __dest_utf32_string_rename_at_217_68, char * const  __source_utf8_string_rename_at_217_69 ) { das_stack_prologue __prologue(__context__,96,"utf8_decode " DAS_FILE_LINE);
+inline void utf8_decode_14c6fb677c005963 ( Context * __context__, TArray<uint32_t> &  __dest_utf32_string_rename_at_217_68, char * const  __source_utf8_string_rename_at_217_69 ) { das_stack_prologue __prologue(__context__,96,"utf8_decode " DAS_FILE_LINE);
 {
     builtin_string_peek(__source_utf8_string_rename_at_217_69,das_make_block<void,TArray<uint8_t> const  &>(__context__,80,0,&__func_info__5f4b6da70ca496e2,[&](TArray<uint8_t> const  & __arr_rename_at_219_70) -> void{
-        utf8_decode_16c21049b073c3e2(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_217_68),__arr_rename_at_219_70);
+        utf8_decode_52e084b93ad4506a(__context__,das_arg<TArray<uint32_t>>::pass(__dest_utf32_string_rename_at_217_68),__arr_rename_at_219_70);
     }),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }}
 
-inline char * decode_unicode_escape_511f3efa8f121c21 ( Context * __context__, char * const  __str_rename_at_224_71 ) { das_stack_prologue __prologue(__context__,384,"decode_unicode_escape " DAS_FILE_LINE);
+inline char * decode_unicode_escape_df0808a06ace62b0 ( Context * __context__, char * const  __str_rename_at_224_71 ) { das_stack_prologue __prologue(__context__,384,"decode_unicode_escape " DAS_FILE_LINE);
 {
     return das_auto_cast<char *>::cast(((char * const )(builtin_build_string_T([&](StringBuilderWriter & __writer_rename_at_225_72) DAS_AOT_INLINE_LAMBDA -> void{
         builtin_string_peek(__str_rename_at_224_71,das_make_block<void,TArray<uint8_t> const  &>(__context__,144,0,&__func_info__2f76c7f7dd4f0b27,[&](TArray<uint8_t> const  & __p_rename_at_226_73) -> void{
             int32_t __i_rename_at_227_74 = 0;
             int32_t __llen_rename_at_228_75 = ((int32_t)builtin_array_size(__p_rename_at_226_73));
             TArray<uint8_t> __bang_rename_at_229_76;das_zero(__bang_rename_at_229_76);
-            _FuncbuiltinTickreserveTick3994685146752941225_d0790c6d74061d34(__context__,das_arg<TArray<uint8_t>>::pass(__bang_rename_at_229_76),8);
+            _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6(__context__,das_arg<TArray<uint8_t>>::pass(__bang_rename_at_229_76),8);
             uint32_t __high_surrogate_rename_at_231_77 = 0x0u;
             while ( __i_rename_at_227_74 < __llen_rename_at_228_75 )
             {
@@ -841,10 +838,10 @@ inline char * decode_unicode_escape_511f3efa8f121c21 ( Context * __context__, ch
                 {
                     int32_t __j_rename_at_234_78 = (__i_rename_at_227_74 + 1);
                     int32_t __jlen_rename_at_235_79 = ((int32_t)SimPolicy<int32_t>::Min(__llen_rename_at_228_75,__j_rename_at_234_78 + 8,*__context__,nullptr));
-                    _FuncbuiltinTickresizeTick4811697762258667383_71b1749d234f576e(__context__,das_arg<TArray<uint8_t>>::pass(__bang_rename_at_229_76),0);
+                    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__,das_arg<TArray<uint8_t>>::pass(__bang_rename_at_229_76),0);
                     while ( (__j_rename_at_234_78 < __jlen_rename_at_235_79) && is_hex(int32_t(__p_rename_at_226_73(__j_rename_at_234_78,__context__))) )
                     {
-                        _FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16(__context__,das_arg<TArray<uint8_t>>::pass(__bang_rename_at_229_76),__p_rename_at_226_73(__j_rename_at_234_78,__context__));
+                        _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__,das_arg<TArray<uint8_t>>::pass(__bang_rename_at_229_76),__p_rename_at_226_73(__j_rename_at_234_78,__context__));
                         ++__j_rename_at_234_78;
                     };
                     if ( builtin_array_size(das_arg<TArray<uint8_t>>::pass(__bang_rename_at_229_76)) == 4 )
@@ -858,13 +855,13 @@ inline char * decode_unicode_escape_511f3efa8f121c21 ( Context * __context__, ch
                             } else {
                                 TArray<uint8_t> _temp_make_local_250_55_8; _temp_make_local_250_55_8;
                                 uint32_t __low_surrogate_rename_at_247_81 = ((uint32_t)__utf32_rename_at_242_80);
-                                uint32_t __pair_rename_at_248_82 = ((uint32_t)((((__high_surrogate_rename_at_231_77 - 0xd800u) << 0xau) + 0x10000u) + (__low_surrogate_rename_at_247_81 - 0xdc00u)));
+                                uint32_t __pair_rename_at_248_82 = ((uint32_t)(((SimPolicy<uint32_t>::BinShl((__high_surrogate_rename_at_231_77 - 0xd800u),0xau,*__context__,nullptr)) + 0x10000u) + (__low_surrogate_rename_at_247_81 - 0xdc00u)));
                                 das_copy(__high_surrogate_rename_at_231_77,0x0u);
-                                das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_2,cast<StringBuilderWriter &>::from(__writer_rename_at_225_72),cast<char * const >::from(((char * const )(builtin_string_from_array(das_arg<TArray<uint8_t>>::pass((_temp_make_local_250_55_8 = (utf8_encode_97b551f35cf80978(__context__,__pair_rename_at_248_82)))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))))));
+                                das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_2,cast<StringBuilderWriter &>::from(__writer_rename_at_225_72),cast<char * const >::from(((char * const )(builtin_string_from_array(das_arg<TArray<uint8_t>>::pass((_temp_make_local_250_55_8 = (utf8_encode_3900a01426735b3c(__context__,__pair_rename_at_248_82)))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))))));
                             };
                         } else {
                             TArray<uint8_t> _temp_make_local_253_51_9; _temp_make_local_253_51_9;
-                            das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_3,cast<StringBuilderWriter &>::from(__writer_rename_at_225_72),cast<char * const >::from(((char * const )(builtin_string_from_array(das_arg<TArray<uint8_t>>::pass((_temp_make_local_253_51_9 = (utf8_encode_97b551f35cf80978(__context__,__utf32_rename_at_242_80)))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))))));
+                            das_call_interop<StringBuilderWriter &>::call(&builtin_write_string,__context__,SimNode_AotInterop<2>(__tinfo_2,cast<StringBuilderWriter &>::from(__writer_rename_at_225_72),cast<char * const >::from(((char * const )(builtin_string_from_array(das_arg<TArray<uint8_t>>::pass((_temp_make_local_253_51_9 = (utf8_encode_3900a01426735b3c(__context__,__utf32_rename_at_242_80)))),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))))));
                         };
                         das_copy(__i_rename_at_227_74,__j_rename_at_234_78);
                         continue;
@@ -876,106 +873,203 @@ inline char * decode_unicode_escape_511f3efa8f121c21 ( Context * __context__, ch
         }),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
     },__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))))));
 }}
+static vec4f __wrap__FuncbuiltinTicklengthTick18150397773952384912_424e5a5af176be26 ( Context * __context__ ) {
+    TDim<uint8_t,2> const  &  arg_a = cast_aot_arg<TDim<uint8_t,2> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<int32_t>::from(_FuncbuiltinTicklengthTick18150397773952384912_424e5a5af176be26(__context__, arg_a));
+}
+static vec4f __wrap__FuncbuiltinTicklengthTick18150397773952384912_2d5894d58d05f52 ( Context * __context__ ) {
+    TDim<uint8_t,3> const  &  arg_a = cast_aot_arg<TDim<uint8_t,3> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<int32_t>::from(_FuncbuiltinTicklengthTick18150397773952384912_2d5894d58d05f52(__context__, arg_a));
+}
+static vec4f __wrap__FuncbuiltinTicklengthTick18150397773952384912_5e3beb551331dc06 ( Context * __context__ ) {
+    TDim<uint8_t,4> const  &  arg_a = cast_aot_arg<TDim<uint8_t,4> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<int32_t>::from(_FuncbuiltinTicklengthTick18150397773952384912_5e3beb551331dc06(__context__, arg_a));
+}
+static vec4f __wrap__FuncbuiltinTicklengthTick18150397773952384912_1e99f990a58976cb ( Context * __context__ ) {
+    TDim<uint8_t,1> const  &  arg_a = cast_aot_arg<TDim<uint8_t,1> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<int32_t>::from(_FuncbuiltinTicklengthTick18150397773952384912_1e99f990a58976cb(__context__, arg_a));
+}
+static vec4f __wrap__FuncbuiltinTickto_array_moveTick3185538323411982277_ba90b9e0923e6277 ( Context * __context__ ) {
+    TDim<uint8_t,2> &  arg_a = cast_aot_arg<TDim<uint8_t,2> & >::to(*__context__,__context__->abiArguments()[0]);
+    *((TArray<uint8_t> *) __context__->abiCMRES) = _FuncbuiltinTickto_array_moveTick3185538323411982277_ba90b9e0923e6277(__context__, arg_a);
+    return v_zero();
+}
+static vec4f __wrap__FuncbuiltinTickto_array_moveTick3185538323411982277_1a0ad6f653eeb2ac ( Context * __context__ ) {
+    TDim<uint8_t,3> &  arg_a = cast_aot_arg<TDim<uint8_t,3> & >::to(*__context__,__context__->abiArguments()[0]);
+    *((TArray<uint8_t> *) __context__->abiCMRES) = _FuncbuiltinTickto_array_moveTick3185538323411982277_1a0ad6f653eeb2ac(__context__, arg_a);
+    return v_zero();
+}
+static vec4f __wrap__FuncbuiltinTickto_array_moveTick3185538323411982277_21b6a0bab5d7baaa ( Context * __context__ ) {
+    TDim<uint8_t,4> &  arg_a = cast_aot_arg<TDim<uint8_t,4> & >::to(*__context__,__context__->abiArguments()[0]);
+    *((TArray<uint8_t> *) __context__->abiCMRES) = _FuncbuiltinTickto_array_moveTick3185538323411982277_21b6a0bab5d7baaa(__context__, arg_a);
+    return v_zero();
+}
+static vec4f __wrap__FuncbuiltinTickto_array_moveTick3185538323411982277_d728636f5ab2a3f8 ( Context * __context__ ) {
+    TDim<uint8_t,1> &  arg_a = cast_aot_arg<TDim<uint8_t,1> & >::to(*__context__,__context__->abiArguments()[0]);
+    *((TArray<uint8_t> *) __context__->abiCMRES) = _FuncbuiltinTickto_array_moveTick3185538323411982277_d728636f5ab2a3f8(__context__, arg_a);
+    return v_zero();
+}
+static vec4f __wrap__FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316 ( Context * __context__ ) {
+    TArray<uint8_t> &  arg_a = cast_aot_arg<TArray<uint8_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<TArray<uint8_t> &>::from(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316(__context__, arg_a));
+}
+static vec4f __wrap__FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_6a6451a2add6b045 ( Context * __context__ ) {
+    TArray<uint32_t> &  arg_a = cast_aot_arg<TArray<uint32_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<TArray<uint32_t> &>::from(_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_6a6451a2add6b045(__context__, arg_a));
+}
+static vec4f __wrap__FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 ( Context * __context__ ) {
+    TArray<uint8_t> &  arg_Arr = cast_aot_arg<TArray<uint8_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    uint8_t arg_value = cast_aot_arg<uint8_t>::to(*__context__,__context__->abiArguments()[1]);
+    _FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67(__context__, arg_Arr, arg_value);
+    return v_zero();
+}
+static vec4f __wrap__FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 ( Context * __context__ ) {
+    TArray<uint8_t> &  arg_Arr = cast_aot_arg<TArray<uint8_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    int32_t arg_newSize = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[1]);
+    _FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6(__context__, arg_Arr, arg_newSize);
+    return v_zero();
+}
+static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_427d344a8b35c688 ( Context * __context__ ) {
+    TArray<uint32_t> &  arg_Arr = cast_aot_arg<TArray<uint32_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    uint32_t arg_value = cast_aot_arg<uint32_t>::to(*__context__,__context__->abiArguments()[1]);
+    _FuncbuiltinTickpushTick10769833213962245646_427d344a8b35c688(__context__, arg_Arr, arg_value);
+    return v_zero();
+}
+static vec4f __wrap__FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 ( Context * __context__ ) {
+    TArray<uint8_t> &  arg_Arr = cast_aot_arg<TArray<uint8_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    int32_t arg_newSize = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[1]);
+    _FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176(__context__, arg_Arr, arg_newSize);
+    return v_zero();
+}
+static vec4f __wrap_utf16_to_utf32_cff3dafb1197cdfe ( Context * __context__ ) {
+    uint32_t arg_high = cast_aot_arg<uint32_t>::to(*__context__,__context__->abiArguments()[0]);
+    uint32_t arg_low = cast_aot_arg<uint32_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<uint32_t>::from(utf16_to_utf32_cff3dafb1197cdfe(__context__, arg_high, arg_low));
+}
+static vec4f __wrap_utf8_encode_15cfb73a783e13c3 ( Context * __context__ ) {
+    TArray<uint8_t> &  arg_dest_array = cast_aot_arg<TArray<uint8_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    uint32_t arg_ch = cast_aot_arg<uint32_t>::to(*__context__,__context__->abiArguments()[1]);
+    utf8_encode_15cfb73a783e13c3(__context__, arg_dest_array, arg_ch);
+    return v_zero();
+}
+static vec4f __wrap_utf8_encode_3900a01426735b3c ( Context * __context__ ) {
+    uint32_t arg_ch = cast_aot_arg<uint32_t>::to(*__context__,__context__->abiArguments()[0]);
+    *((TArray<uint8_t> *) __context__->abiCMRES) = utf8_encode_3900a01426735b3c(__context__, arg_ch);
+    return v_zero();
+}
+static vec4f __wrap_utf8_encode_889398f5ff1395f8 ( Context * __context__ ) {
+    TArray<uint8_t> &  arg_dest_array = cast_aot_arg<TArray<uint8_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    TArray<uint32_t> const  &  arg_source_utf32_string = cast_aot_arg<TArray<uint32_t> const  & >::to(*__context__,__context__->abiArguments()[1]);
+    utf8_encode_889398f5ff1395f8(__context__, arg_dest_array, arg_source_utf32_string);
+    return v_zero();
+}
+static vec4f __wrap_utf8_encode_5700734ed2aeaa61 ( Context * __context__ ) {
+    TArray<uint32_t> const  &  arg_source_utf32_string = cast_aot_arg<TArray<uint32_t> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    *((TArray<uint8_t> *) __context__->abiCMRES) = utf8_encode_5700734ed2aeaa61(__context__, arg_source_utf32_string);
+    return v_zero();
+}
+static vec4f __wrap_utf8_length_907cab2006cee353 ( Context * __context__ ) {
+    TArray<uint8_t> const  &  arg_utf8_string = cast_aot_arg<TArray<uint8_t> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<int32_t>::from(utf8_length_907cab2006cee353(__context__, arg_utf8_string));
+}
+static vec4f __wrap_utf8_length_12b5fbe4d57291a4 ( Context * __context__ ) {
+    char * const  arg_utf8_string = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<int32_t>::from(utf8_length_12b5fbe4d57291a4(__context__, arg_utf8_string));
+}
+static vec4f __wrap_is_first_byte_of_utf8_char_54d6de0ccc3233ff ( Context * __context__ ) {
+    uint8_t arg_ch = cast_aot_arg<uint8_t>::to(*__context__,__context__->abiArguments()[0]);
+    return cast<bool>::from(is_first_byte_of_utf8_char_54d6de0ccc3233ff(__context__, arg_ch));
+}
+static vec4f __wrap_contains_utf8_bom_726579135064e73d ( Context * __context__ ) {
+    TArray<uint8_t> const  &  arg_utf8_string = cast_aot_arg<TArray<uint8_t> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<bool>::from(contains_utf8_bom_726579135064e73d(__context__, arg_utf8_string));
+}
+static vec4f __wrap_contains_utf8_bom_64466034c8e654eb ( Context * __context__ ) {
+    char * const  arg_utf8_string = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<bool>::from(contains_utf8_bom_64466034c8e654eb(__context__, arg_utf8_string));
+}
+static vec4f __wrap_is_utf8_string_valid_d24fc2ea4690cc02 ( Context * __context__ ) {
+    TArray<uint8_t> const  &  arg_utf8_string = cast_aot_arg<TArray<uint8_t> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<bool>::from(is_utf8_string_valid_d24fc2ea4690cc02(__context__, arg_utf8_string));
+}
+static vec4f __wrap_is_utf8_string_valid_76d0a9290bfdca2a ( Context * __context__ ) {
+    char * const  arg_utf8_string = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<bool>::from(is_utf8_string_valid_76d0a9290bfdca2a(__context__, arg_utf8_string));
+}
+static vec4f __wrap_utf8_decode_52e084b93ad4506a ( Context * __context__ ) {
+    TArray<uint32_t> &  arg_dest_utf32_string = cast_aot_arg<TArray<uint32_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    TArray<uint8_t> const  &  arg_source_utf8_string = cast_aot_arg<TArray<uint8_t> const  & >::to(*__context__,__context__->abiArguments()[1]);
+    utf8_decode_52e084b93ad4506a(__context__, arg_dest_utf32_string, arg_source_utf8_string);
+    return v_zero();
+}
+static vec4f __wrap_utf8_decode_8a62df3d541e9cd3 ( Context * __context__ ) {
+    TArray<uint8_t> const  &  arg_source_utf8_string = cast_aot_arg<TArray<uint8_t> const  & >::to(*__context__,__context__->abiArguments()[0]);
+    *((TArray<uint32_t> *) __context__->abiCMRES) = utf8_decode_8a62df3d541e9cd3(__context__, arg_source_utf8_string);
+    return v_zero();
+}
+static vec4f __wrap_utf8_decode_e9b199ec898bff47 ( Context * __context__ ) {
+    char * const  arg_source_utf8_string = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[0]);
+    *((TArray<uint32_t> *) __context__->abiCMRES) = utf8_decode_e9b199ec898bff47(__context__, arg_source_utf8_string);
+    return v_zero();
+}
+static vec4f __wrap_utf8_decode_14c6fb677c005963 ( Context * __context__ ) {
+    TArray<uint32_t> &  arg_dest_utf32_string = cast_aot_arg<TArray<uint32_t> & >::to(*__context__,__context__->abiArguments()[0]);
+    char * const  arg_source_utf8_string = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
+    utf8_decode_14c6fb677c005963(__context__, arg_dest_utf32_string, arg_source_utf8_string);
+    return v_zero();
+}
+static vec4f __wrap_decode_unicode_escape_df0808a06ace62b0 ( Context * __context__ ) {
+    char * const  arg_str = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[0]);
+    return cast<char *>::from(decode_unicode_escape_df0808a06ace62b0(__context__, arg_str));
+}
+static vec4f __wrap___init_script ( Context * __context__ ) {
+    __init_script(__context__, cast_aot_arg<bool>::to(*__context__,__context__->abiArguments()[0]));
+    return v_zero();
+};
+
+#pragma optimize("", off)
+struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };
+static AotFunction functions[] = {
+    { 0x5f2482cc28bc3b00, false, (void*)&_FuncbuiltinTicklengthTick18150397773952384912_424e5a5af176be26, &__wrap__FuncbuiltinTicklengthTick18150397773952384912_424e5a5af176be26 },
+    { 0x6fe85bba2d9b3792, false, (void*)&_FuncbuiltinTicklengthTick18150397773952384912_2d5894d58d05f52, &__wrap__FuncbuiltinTicklengthTick18150397773952384912_2d5894d58d05f52 },
+    { 0x526025a25c517ee9, false, (void*)&_FuncbuiltinTicklengthTick18150397773952384912_5e3beb551331dc06, &__wrap__FuncbuiltinTicklengthTick18150397773952384912_5e3beb551331dc06 },
+    { 0x6c2b0f397612e34b, false, (void*)&_FuncbuiltinTicklengthTick18150397773952384912_1e99f990a58976cb, &__wrap__FuncbuiltinTicklengthTick18150397773952384912_1e99f990a58976cb },
+    { 0x13c291e559c1178d, true, (void*)&_FuncbuiltinTickto_array_moveTick3185538323411982277_ba90b9e0923e6277, &__wrap__FuncbuiltinTickto_array_moveTick3185538323411982277_ba90b9e0923e6277 },
+    { 0x874148240ba53e70, true, (void*)&_FuncbuiltinTickto_array_moveTick3185538323411982277_1a0ad6f653eeb2ac, &__wrap__FuncbuiltinTickto_array_moveTick3185538323411982277_1a0ad6f653eeb2ac },
+    { 0x4e0d182e087b694b, true, (void*)&_FuncbuiltinTickto_array_moveTick3185538323411982277_21b6a0bab5d7baaa, &__wrap__FuncbuiltinTickto_array_moveTick3185538323411982277_21b6a0bab5d7baaa },
+    { 0x7b02d904566d5285, true, (void*)&_FuncbuiltinTickto_array_moveTick3185538323411982277_d728636f5ab2a3f8, &__wrap__FuncbuiltinTickto_array_moveTick3185538323411982277_d728636f5ab2a3f8 },
+    { 0x6e72b02edd194156, false, (void*)&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316, &__wrap__FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_be18d65a158eb316 },
+    { 0x32707a92d16eb901, false, (void*)&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_6a6451a2add6b045, &__wrap__FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_6a6451a2add6b045 },
+    { 0xcba4b4c693ad27e9, false, (void*)&_FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67, &__wrap__FuncbuiltinTickpushTick14133213201864676143_9fcb5919841caa67 },
+    { 0xfd084015992baa1, false, (void*)&_FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6, &__wrap__FuncbuiltinTickreserveTick3994685146752941225_54cb508dc62508e6 },
+    { 0xeb5dd5f9d13978f3, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_427d344a8b35c688, &__wrap__FuncbuiltinTickpushTick10769833213962245646_427d344a8b35c688 },
+    { 0xc502128bbf7c5d21, false, (void*)&_FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176, &__wrap__FuncbuiltinTickresizeTick4811697762258667383_2333bfdfd8018176 },
+    { 0x46001bd7127d172b, false, (void*)&utf16_to_utf32_cff3dafb1197cdfe, &__wrap_utf16_to_utf32_cff3dafb1197cdfe },
+    { 0x1d80df2a87f5d37, false, (void*)&utf8_encode_15cfb73a783e13c3, &__wrap_utf8_encode_15cfb73a783e13c3 },
+    { 0x46cbae64f066daf4, true, (void*)&utf8_encode_3900a01426735b3c, &__wrap_utf8_encode_3900a01426735b3c },
+    { 0xf6144c3e88540c9b, false, (void*)&utf8_encode_889398f5ff1395f8, &__wrap_utf8_encode_889398f5ff1395f8 },
+    { 0x2da6c6abc2cdcfa0, true, (void*)&utf8_encode_5700734ed2aeaa61, &__wrap_utf8_encode_5700734ed2aeaa61 },
+    { 0x1a3234293f14078e, false, (void*)&utf8_length_907cab2006cee353, &__wrap_utf8_length_907cab2006cee353 },
+    { 0x488c7268b82f5ab6, false, (void*)&utf8_length_12b5fbe4d57291a4, &__wrap_utf8_length_12b5fbe4d57291a4 },
+    { 0xf07e14b83278670c, false, (void*)&is_first_byte_of_utf8_char_54d6de0ccc3233ff, &__wrap_is_first_byte_of_utf8_char_54d6de0ccc3233ff },
+    { 0x3b17c0ad59e73aa6, false, (void*)&contains_utf8_bom_726579135064e73d, &__wrap_contains_utf8_bom_726579135064e73d },
+    { 0xf7f7c8398c467786, false, (void*)&contains_utf8_bom_64466034c8e654eb, &__wrap_contains_utf8_bom_64466034c8e654eb },
+    { 0x1b238807503fe2d4, false, (void*)&is_utf8_string_valid_d24fc2ea4690cc02, &__wrap_is_utf8_string_valid_d24fc2ea4690cc02 },
+    { 0x4187a84932c9680c, false, (void*)&is_utf8_string_valid_76d0a9290bfdca2a, &__wrap_is_utf8_string_valid_76d0a9290bfdca2a },
+    { 0x1b23d845338fcc5e, false, (void*)&utf8_decode_52e084b93ad4506a, &__wrap_utf8_decode_52e084b93ad4506a },
+    { 0x944dee3468df3a7a, true, (void*)&utf8_decode_8a62df3d541e9cd3, &__wrap_utf8_decode_8a62df3d541e9cd3 },
+    { 0xf0d2578011aea5d1, true, (void*)&utf8_decode_e9b199ec898bff47, &__wrap_utf8_decode_e9b199ec898bff47 },
+    { 0x66709658358af242, false, (void*)&utf8_decode_14c6fb677c005963, &__wrap_utf8_decode_14c6fb677c005963 },
+    { 0xe0da4d43f4a590ff, false, (void*)&decode_unicode_escape_df0808a06ace62b0, &__wrap_decode_unicode_escape_df0808a06ace62b0 },
+};
+#pragma optimize("", on)
 
 static void registerAotFunctions ( AotLibrary & aotLib ) {
-    aotLib[0xc09ebdedbaa09cdd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_3dbee92a7efb07d9>>();
-    };
-    aotLib[0x55e8ae42bad9aab0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_194914ba4b4e9234>>();
-    };
-    aotLib[0x8d5d7bcf0ca0306f] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_3d13e435f27e824d>>();
-    };
-    aotLib[0x6ecbc7360ceedde0] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTicklengthTick18150397773952384912_a94ae7fe5f83f893>>();
-    };
-    aotLib[0xf04a1ead8ce3fa81] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickto_array_moveTick3185538323411982277_a6123e6697ded437>>();
-    };
-    aotLib[0xefd9de45790d1cee] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickto_array_moveTick3185538323411982277_dd87c6f1da83ea06>>();
-    };
-    aotLib[0x48edd1ea96e09090] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickto_array_moveTick3185538323411982277_4c32e98c64dc9655>>();
-    };
-    aotLib[0xb87c157ba48364ea] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&_FuncbuiltinTickto_array_moveTick3185538323411982277_52af64c8664bb146>>();
-    };
-    aotLib[0xb45f92d1b1567597] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_26755ce4d233ca82>>();
-    };
-    aotLib[0xd41772edf1ed35a5] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTick_return_with_lockcheckTick2939372000839727345_3de422272adba695>>();
-    };
-    aotLib[0xb826e8437742841a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick14133213201864676143_85e3c65216347e16>>();
-    };
-    aotLib[0x5e9acdcce3ca5e0a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickreserveTick3994685146752941225_d0790c6d74061d34>>();
-    };
-    aotLib[0xd685e1be2a71cb21] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickpushTick10769833213962245646_c46ce71d6a41166a>>();
-    };
-    aotLib[0xd952211b24df1ed4] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&_FuncbuiltinTickresizeTick4811697762258667383_71b1749d234f576e>>();
-    };
-    aotLib[0x98d568f19bd21681] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&utf16_to_utf32_67298994a5baa194>>();
-    };
-    aotLib[0xc3627e7ef55a7b3b] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&utf8_encode_b6fe59c3abe9a444>>();
-    };
-    aotLib[0x8e0402cae77fb70a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&utf8_encode_97b551f35cf80978>>();
-    };
-    aotLib[0x6432dd5c8b6befc] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&utf8_encode_e2de5a2c582774dc>>();
-    };
-    aotLib[0x6349abb725e253ef] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&utf8_encode_5c19a2da34c8f208>>();
-    };
-    aotLib[0x4351f107078bf80a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&utf8_length_c0cb690c545d23a5>>();
-    };
-    aotLib[0xc9f7bbf2dc09371] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&utf8_length_9bc85c1c74b26c7e>>();
-    };
-    aotLib[0x53c981ce08bab93e] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_first_byte_of_utf8_char_26620640f6460cdb>>();
-    };
-    aotLib[0x45787e4aa8c7318d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&contains_utf8_bom_f2cf32cf55e0a6d4>>();
-    };
-    aotLib[0xab5cf2238d531d07] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&contains_utf8_bom_d5ae1a8e5b1e79db>>();
-    };
-    aotLib[0x2a732b85904d52dd] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_utf8_string_valid_6da0450b19500e4d>>();
-    };
-    aotLib[0xfcacb42b1874921a] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&is_utf8_string_valid_bcfa16997a4edaaf>>();
-    };
-    aotLib[0xc9797b2bab39bbee] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&utf8_decode_16c21049b073c3e2>>();
-    };
-    aotLib[0x6f33c745c1c08455] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&utf8_decode_d1ca0cab78c6a9ea>>();
-    };
-    aotLib[0x3f3a38289d604e8d] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_AotCMRES<&utf8_decode_1df490f6da36ae8>>();
-    };
-    aotLib[0xb1f3462ddcd863aa] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&utf8_decode_233a82235363f092>>();
-    };
-    aotLib[0x491b63d6deab9770] = +[](Context & ctx) -> SimNode* {
-        return ctx.code->makeNode<AutoSimNode_Aot<&decode_unicode_escape_511f3efa8f121c21>>();
-    };
+    for (const auto &[hash, cmres, fn1, fn2] : functions) {
+        aotLib.emplace(hash, AotFactory(cmres, fn1, fn2));
+    }
     // [[ init script ]]
-    aotLib[0x79a88bf5abaa802f] = +[](Context & ctx) -> SimNode* {
-        ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();
-        return ctx.aotInitScript;
-    };
+    aotLib.emplace(0x2bb7c8a6d06b2d73, AotFactory(false, (void*)&__init_script, &__wrap___init_script));
     resolveTypeInfoAnnotations();
 }
 
