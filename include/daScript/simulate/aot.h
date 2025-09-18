@@ -1704,20 +1704,20 @@ namespace das {
     }
 
     template <typename TT>
-    __forceinline TT & das_deref ( Context * __context__, const TT * ptr ) {
-        if ( !ptr ) __context__->throw_error("dereferencing null pointer");
+    __forceinline TT & das_deref ( Context * __context__, const TT * ptr, const char * file = "", int line = 0 ) {
+        if ( !ptr ) __context__->throw_error_ex("dereferencing null pointer at %s:%d", file, line);
         return *((TT *)ptr);
     }
 
     template <typename TT>
-    __forceinline TT & das_deref ( Context * __context__, const smart_ptr<TT> & ptr ) {
-        if ( !ptr ) __context__->throw_error("dereferencing null pointer");
+    __forceinline TT & das_deref ( Context * __context__, const smart_ptr<TT> & ptr, const char * file = "", int line = 0 ) {
+        if ( !ptr ) __context__->throw_error_ex("dereferencing null pointer at %s:%d", file, line);
         return *ptr.get();
     }
 
     template <typename TT>
-    __forceinline TT & das_deref ( Context * __context__, const smart_ptr_raw<TT> & ptr ) {
-        if ( !ptr ) __context__->throw_error("dereferencing null pointer");
+    __forceinline TT & das_deref ( Context * __context__, const smart_ptr_raw<TT> & ptr, const char * file = "", int line = 0 ) {
+        if ( !ptr ) __context__->throw_error_ex("dereferencing null pointer at %s:%d", file, line);
         return *ptr.get();
     }
 
