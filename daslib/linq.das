@@ -12,7 +12,7 @@ requirement:
 
 OPERATIONS
 Sorting data
-     reverse - Reverses the order of elements in an iterable
+     reverse, reverse_inplace, reverse_to_array, reverse_to_sequence - Reverses the order of elements in an iterable
      order - Sorts the elements of an iterable
      order_descending - Sorts the elements of an iterable in descending order
      order_by - Sorts the elements of an iterable
@@ -146,6 +146,29 @@ def concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
 }
 
 [skip_lock_check]
+def reverse_inplace(var buffer : array<auto(TT)>) {
+    //! Reverses an array in place
+    unsafe(set_verify_array_locks(buffer, false))
+    let l = length(buffer)
+    let half = l / 2
+    let lm1 = l - 1
+    for (i in range(half)) {
+        var t : TT -& <- buffer[i]
+        buffer[i] <- buffer[lm1 - i]
+        buffer[lm1 - i] <- t
+    }
+    unsafe(set_verify_array_locks(buffer, true))
+}
+
+[skip_lock_check]
+def reverse(var a : array<auto(TT)>) : array<TT -const -&> {
+    //! Reverses an array
+    var b := a
+    reverse_inplace(b)
+    return <- b
+}
+
+[skip_lock_check]
 def reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Reverses an iterator
     return generator<TT -const -&> capture(<- a) () <| $ {
@@ -161,6 +184,27 @@ def reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
         unsafe(set_verify_array_locks(buffer, true))
         return false
     }
+}
+
+[skip_lock_check]
+def reverse_to_array(var a : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Reverses an iterator and returns an array
+    var buffer : array<TT -const -&>
+    unsafe(set_verify_array_locks(buffer, false))
+    for (it in a) {
+        buffer.push_clone(it)
+    }
+    unsafe(set_verify_array_locks(buffer, true))
+    reverse_inplace(buffer)
+    return <- buffer
+}
+
+[skip_lock_check]
+def reverse_to_sequence(var a : array<auto(TT)>) : iterator<TT -const -&> {
+    //! Reverses an array and returns an iterator
+    var b := a
+    reverse_inplace(b)
+    return move_to_sequence(b)
 }
 
 [skip_lock_check]
