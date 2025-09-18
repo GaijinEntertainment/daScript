@@ -93,6 +93,7 @@ def split(text, delim : string implicit; blk : block< (arg : array<string>#) >) 
     builtin_string_split(text, delim, blk)
 }
 
+[skip_lock_check]
 def split(text, delim : string implicit) : array<string> {
     var res : array<string>
     builtin_string_split(text, delim) <| $(arr : array<string>#) : void {
@@ -105,6 +106,7 @@ def split_by_chars(text, delim : string implicit; blk : block< (arg : array<stri
     builtin_string_split_by_char(text, delim, blk)
 }
 
+[skip_lock_check]
 def split_by_chars(text, delim : string implicit) : array<string> {
     var res : array<string>
     builtin_string_split_by_char(text, delim) <| $(arr : array<string>#) : void {
@@ -133,7 +135,7 @@ def eq(b : das_string; a : string implicit) {
 def levenshtein_distance(s, t : string implicit) : int {
     let sLen = length(s)
     let tLen = length(t)
-    var d : array<array<int>>
+    var inscope d : array<array<int>>
     d |> resize(sLen + 1)
     for (i in range(sLen + 1)) {
         d[i] |> resize(tLen + 1)
@@ -152,8 +154,6 @@ def levenshtein_distance(s, t : string implicit) : int {
     }
 
     return d[sLen][tLen]
-} finally {
-    delete d
 }
 
 // https://en.wikipedia.org/wiki/Levenshtein_distance#Iterative_with_two_matrix_rows
@@ -161,9 +161,9 @@ def levenshtein_distance(s, t : string implicit) : int {
 def levenshtein_distance_fast(s, t : string implicit) : int {
     let sLen = length(s)
     let tLen = length(t)
-    var v0 : array<int>
+    var inscope v0 : array<int>
     v0 |> resize(tLen + 1)
-    var v1 : array<int>
+    var inscope v1 : array<int>
     v1 |> resize(tLen + 1)
     for (i in range(tLen + 1)) {
         v0[i] = i
@@ -183,9 +183,6 @@ def levenshtein_distance_fast(s, t : string implicit) : int {
     }
 
     return v0[tLen]
-} finally {
-    delete v0
-    delete v1
 }
 
 def replace_multiple(source : string; replaces : array<tuple<text : string; replacement : string>>) {

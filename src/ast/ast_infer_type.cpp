@@ -60,7 +60,7 @@ namespace das {
             checkNoGlobalVariablesAtAll = prog->options.getBoolOption("no_global_variables_at_all", prog->policies.no_global_variables_at_all);
             strictSmartPointers = prog->options.getBoolOption("strict_smart_pointers", prog->policies.strict_smart_pointers);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
-            skipModuleLockChecks = prog->options.getBoolOption("skip_module_lock_checks", false);
+            prog->thisModule->skipLockCheck = prog->options.getBoolOption("skip_module_lock_checks", false);
             strictUnsafeDelete = prog->options.getBoolOption("strict_unsafe_delete", prog->policies.strict_unsafe_delete);
             reportInvisibleFunctions = prog->options.getBoolOption("report_invisible_functions", prog->policies.report_invisible_functions);
             reportPrivateFunctions = prog->options.getBoolOption("report_private_functions", prog->policies.report_private_functions);
@@ -103,7 +103,6 @@ namespace das {
         bool                    checkNoGlobalVariablesAtAll = false;
         bool                    strictSmartPointers = false;
         bool                    disableInit = false;
-        bool                    skipModuleLockChecks = false;
         bool                    strictUnsafeDelete = false;
         bool                    reportInvisibleFunctions = false;
         bool                    reportPrivateFunctions = false;
@@ -3317,7 +3316,7 @@ namespace das {
                                     auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
                                     if ( func && func->requestNoJit ) jitFlags |= generator_nojit;
                                     auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, generator_needYield | jitFlags, program);
-                                    if ( func && func->skipLockCheck ) pFn->skipLockCheck = true;
+                                    if ( func && func->skipLockCheck ) pFn->skipLockCheck = true;   // we propagate skipLockCheck to the generator function
                                     if ( program->addFunction(pFn) ) {
                                         auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                         if ( program->addFunction(pFnFin) ) {
@@ -3448,7 +3447,7 @@ namespace das {
                                 auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
                                 if ( func && func->requestNoJit ) jitFlags |= generator_nojit;
                                 auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, jitFlags, program);
-                                if ( func && func->skipLockCheck ) pFn->skipLockCheck = true;
+                                if ( func && func->skipLockCheck ) pFn->skipLockCheck = true; // we propagate skipLockCheck to the lambda function
                                 if ( program->addFunction(pFn) ) {
                                     auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
                                     if ( program->addFunction(pFnFin) ) {
@@ -4024,6 +4023,18 @@ namespace das {
     }
 
     // ExprTypeInfo
+        bool skipLockCheck() const {
+            if ( program->thisModule->skipLockCheck ) return true;                  // if this module has options skip_lock_check - we skip
+            if ( func ) {
+                if ( func->skipLockCheck ) return true;                             // if this function is [skip_lock_check] - we skip
+                if ( func->module->skipLockCheck ) return true;                     // if this function is from the module, with options skip_lock_check - we skip
+                if ( auto fromGeneric = func->getOriginPtr() ) {
+                    if ( fromGeneric->skipLockCheck ) return true;                  // if this function is from generic function, with options skip_lock_check - we skip
+                    if ( fromGeneric->module->skipLockCheck ) return true;          // if this function is from generic function, from the module, with options skip_lock_check - we skip
+                }
+            }
+            return false;
+        }
         virtual ExpressionPtr visit ( ExprTypeInfo * expr ) override {
             expr->macro = nullptr;
             if ( expr->typeexpr && expr->typeexpr->isExprType() ) {
@@ -4381,7 +4392,7 @@ namespace das {
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialCopy());
                 } else if ( expr->trait=="need_lock_check" ) {
                     reportAstChanged();
-                    return make_smart<ExprConstBool>(expr->at,((func && func->skipLockCheck) || skipModuleLockChecks) ? false : expr->typeexpr->lockCheck());
+                    return make_smart<ExprConstBool>(expr->at,skipLockCheck() ? false : expr->typeexpr->lockCheck());
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     auto etype = expr->typeexpr;
                     if ( etype->isPointer() && etype->firstType ) etype = etype->firstType;
@@ -5124,7 +5135,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 if ( seT->secondType && seT->secondType->lockCheck() ) {
-                    if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
+                    if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !skipLockCheck() ) { // we always skip at lockchecks in builtin
                         reportAstChanged(); // we promote tab[index] into _at_with_lockcheck(tab,index)
                         auto pCall = make_smart<ExprCall>(expr->at, "_at_with_lockcheck");
                         pCall->arguments.push_back(expr->subexpr->clone());
@@ -6715,7 +6726,7 @@ namespace das {
                 error("moving classes requires unsafe"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::unsafe);
             } else if ( expr->left->type->lockCheck() || expr->right->type->lockCheck()) {
-                if ( !expr->skipLockCheck && !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
+                if ( !expr->skipLockCheck && !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !skipLockCheck() ) { // we always skip lock check in builtin.das
                     reportAstChanged();
                     auto pCall = make_smart<ExprCall>(expr->at,"_move_with_lockcheck");
                     pCall->arguments.push_back(expr->left->clone());
@@ -7150,8 +7161,8 @@ namespace das {
                 }
             }
             if ( expr->moveSemantics && expr->subexpr && expr->subexpr->type && expr->subexpr->type->lockCheck() ) {
-                if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
-                    if ( !expr->skipLockCheck && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
+                if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) { // we always skip lock check in builtin.das
+                    if ( !expr->skipLockCheck && !skipLockCheck() ) {
                         bool checkIt = true;
                         if ( expr->subexpr->rtti_isCall() ) {
                             auto ccall = static_pointer_cast<ExprCall>(expr->subexpr);

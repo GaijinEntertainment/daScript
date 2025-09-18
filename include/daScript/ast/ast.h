@@ -1235,6 +1235,7 @@ namespace das
                 bool    doNotAllowUnsafe : 1;
                 bool    wasParsedNameless : 1;
                 bool    visibleEverywhere : 1;
+                bool    skipLockCheck : 1;
             };
             uint32_t        moduleFlags = 0;
         };
