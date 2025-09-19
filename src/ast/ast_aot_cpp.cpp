@@ -483,7 +483,43 @@ namespace das {
         }
     };
 
+    template <typename V>
+    class DebugVarCache {
+        using VarName = string;
+    public:
+        DebugVarCache() = default;
+
+        pair<VarName, bool> emplace(const VarName &name, const V &value) {
+            auto [val, success] = argNamesCache.emplace(value, name);
+            auto [varName, succ] = info2Name.emplace(name, val->second);
+            DAS_ASSERTF(succ, "Attempt to insert same key twice\n");
+            return make_pair(val->second, success);
+        }
+
+        VarName& get(const VarName &k) {
+            return info2Name.at(k);
+        }
+
+        bool contains(const V &k) {
+            return argNamesCache.count(k);
+        }
+
+        bool empty() const {
+            return argNamesCache.empty();
+        }
+
+        void clear() {
+            argNamesCache.clear();
+            info2Name.clear();
+        }
+    private:
+        unordered_map<V, VarName> argNamesCache;
+        unordered_map<VarName, VarName> info2Name;
+    };
+
     class AotDebugInfoHelper : public DebugInfoHelper {
+        mutable DebugVarCache<string> info2Name;
+        mutable DebugVarCache<string> info2TypeName;
     public:
         void writeDim ( TextWriter & ss, TypeInfo * info, const string & suffix = ""  ) const {
             if ( info->dimSize ) {
@@ -497,42 +533,47 @@ namespace das {
         }
         void writeArgNames ( TextWriter & ss, TypeInfo * info, const string & suffix = "" ) const {
             if ( info->argCount && info->argNames ) {
-                ss << "const char * " << typeInfoName(info) << "_arg_names" << suffix << "[" << info->argCount << "] = { ";
+                const auto tiName = typeInfoName(info) + "_arg_names" + suffix;
+                TextWriter value;
                 for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
-                    if ( i ) ss << ", ";
-                    ss << "\"" << info->argNames[i] << "\"";
+                    if ( i ) value << ", ";
+                    value << "\"" << info->argNames[i] << "\"";
                 }
-                ss << " };\n";
+                const auto [val, succ] = info2Name.emplace(tiName, value.str());
+                if (succ) {
+                    ss << "const char * " << tiName << "[" << info->argCount << "] = { ";
+                    ss << value.c_str();
+                    ss << " };\n";
+                }
             }
         }
         void writeArgTypes ( TextWriter & ss, TypeInfo * info, const string & suffix = ""  ) const {
             if ( info->argCount && info->argTypes ) {
-                ss << "TypeInfo * " << typeInfoName(info) << "_arg_types" << suffix << "[" << info->argCount << "] = { ";
+                const auto tiName = typeInfoName(info) + "_arg_types" + suffix;
+                TextWriter value;
                 for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
-                    if ( i ) ss << ", ";
-                    ss << "&" << typeInfoName(info->argTypes[i]);
+                    if ( i ) value << ", ";
+                    value << "&" << typeInfoName(info->argTypes[i]);
                 }
-                ss << " };\n";
+                const auto [val, succ] = info2TypeName.emplace(tiName, value.str());
+                if (succ) {
+                    ss << "TypeInfo * " << tiName << "[" << info->argCount << "] = { ";
+                    ss << value.c_str();
+                    ss << " };\n";
+                }
             }
         }
 
         string str() const {
             TextWriter ss;
+            DAS_ASSERT(info2Name.empty() && info2TypeName.empty());
             // extern declarations
+            // No need to extern declare anything but types
             for ( const auto & ti : ordered(smn2s) ) {
                 ss << "extern StructInfo " << structInfoName(ti.second) << ";\n";
             }
             for ( const auto & ti : ordered(tmn2t) ) {
                 ss << "extern TypeInfo " << typeInfoName(ti.second) << ";\n";
-            }
-            for ( const auto & ti : ordered(vmn2v) ) {
-                ss << "extern VarInfo " << varInfoName(ti.second) << ";\n";
-            }
-            for ( const auto & ti : ordered(fmn2f) ) {
-                ss << "extern FuncInfo " << funcInfoName(ti.second) << ";\n";
-            }
-            for ( const auto & ti : ordered(emn2e) ) {
-                ss << "extern EnumInfo " << enumInfoName(ti.second) << ";\n";
             }
             ss << "\n";
             for ( const auto & [_, tinfo] : ordered(emn2e) ) {
@@ -574,6 +615,8 @@ namespace das {
                   "        ann.resolveAnnotation();\n"
                   "    }\n"
                   "}\n\n";
+            info2Name.clear();
+            info2TypeName.clear();
             return ss.str();
         }
         string enumInfoName ( EnumInfo * info ) const {
@@ -584,11 +627,6 @@ namespace das {
         string funcInfoName ( FuncInfo * info ) const {
             TextWriter ss;
             ss << "__func_info__" << HEX << info->hash << DEC;
-            return ss.str();
-        }
-        string varInfoName ( VarInfo * info ) const {
-            TextWriter ss;
-            ss << "__var_info__" << HEX << info->hash << DEC;
             return ss.str();
         }
         string structInfoName ( StructInfo * info ) const {
@@ -753,12 +791,12 @@ namespace das {
             }
 
             if (info->argCount && info->argTypes) {
-                ss << ", (TypeInfo **)" << typeInfoName(info) << "_arg_types" << suffix;
+                ss << ", (TypeInfo **)" << info2TypeName.get(typeInfoName(info) + "_arg_types" + suffix);
             } else {
                 ss << ", nullptr";
             }
             if (info->argCount && info->argNames) {
-                ss << ", " << typeInfoName(info) << "_arg_names" << suffix;
+                ss << ", " << info2Name.get(typeInfoName(info) + "_arg_names" + suffix);
             } else {
                 ss << ", nullptr";
             }
@@ -1015,6 +1053,7 @@ namespace das {
             ss.clear();
             sti.clear();
             stg.clear();
+            cachedTi.clear();
         }
     public:
         TextWriter                  ss, sti, stg;
@@ -1031,6 +1070,7 @@ namespace das {
         bool                        prologue = false;
         bool                        solidContext = false;
         bool                        cross_platform = true;
+        DebugVarCache<string>       cachedTi;
 
         mutable das_map<Expression *,size_t> localTempNames;
 
@@ -2498,14 +2538,22 @@ namespace das {
                 elInfo.push_back(info);
             }
             string debug_info_name = "__tinfo_" + to_string(debugInfoGlobal++);
-            sti << "TypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
+            TextWriter tw;
             for ( size_t i=0, is=elInfo.size(); i!=is; ++i ) {
                 auto info = elInfo[i];
-                if ( i ) sti << ", ";
-                sti << "&" << helper.typeInfoName(info);
+                if ( i ) tw << ", ";
+                tw << "&" << helper.typeInfoName(info);
             }
-            sti << " };\n";
-            return debug_info_name;
+            const auto [val, succ] = cachedTi.emplace(debug_info_name, tw.str());
+            if (!succ) {
+                return val;
+            } else {
+                sti << "TypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
+                sti << tw.c_str();
+                sti << " };\n";
+                DAS_ASSERT(debug_info_name == val);
+                return debug_info_name;
+            }
         }
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);
@@ -3630,6 +3678,77 @@ namespace das {
         }
     };
 
+    class ArgsConverter : public Visitor {
+        TextWriter ss;
+        size_t arg_id = 0;
+    public:
+        explicit ArgsConverter() {}
+
+        string str() {
+            return std::move(ss.str());
+        }
+
+        // function
+        virtual bool canVisitFunction ( Function * fun ) override {
+            if ( fun->noAot ) return false;
+            if ( fun->isTemplate ) return false;
+            return true;
+        }
+        void preVisit ( Function * fn) override {
+            Visitor::preVisit(fn);
+            ss << "static vec4f __wrap_" << aotFuncName(fn) << " ( Context * __context__ ) {\n";
+            assert(arg_id == 0);
+        }
+
+        void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
+            Visitor::preVisitArgument(fn,arg,last);
+            // arg
+            TextWriter type_str;
+            if (isLocalVec(arg->type)) {
+                describeLocalCppType(type_str, arg->type);
+            } else {
+                type_str << describeCppType(arg->type);
+            }
+            if (arg->type->isRefType()) {
+                type_str << " & ";
+            }
+            string type_name = type_str.str();
+            ss << "    " << type_name << " arg_" << aotSuffixNameEx(arg->name, "") << " = " << "cast_aot_arg<" << type_name;
+            ss << ">::to(*__context__,__context__->abiArguments()[" << arg_id << "]);\n";
+            arg_id++;
+        }
+
+        FunctionPtr visit ( Function * fn ) override {
+            const auto is_cmres = fn->copyOnReturn || fn->moveOnReturn;
+
+            arg_id = 0;
+            ss << "    ";
+            if (!fn->result->isVoid() && !is_cmres) {
+                ss << "return cast<";
+                describeLocalCppType(ss,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
+                ss << ">::from(";
+            }
+            if (is_cmres) {
+                ss << "*((";
+                describeLocalCppType(ss,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
+                ss << " *) __context__->abiCMRES) = ";
+            }
+            ss << aotFuncName(fn) << "(__context__";
+            for (const auto arg : fn->arguments) {
+                ss << ", arg_" << aotSuffixNameEx(arg->name, "");
+            }
+            ss << ")";
+            if (!fn->result->isVoid() && !is_cmres) {
+                ss << ");\n";
+            } else {
+                ss << ";\n";
+                ss << "    return v_zero();\n";
+            }
+            ss << "}\n";
+            return Visitor::visit(fn);
+        }
+    };
+
     uint64_t Context::getInitSemanticHash() {
         const uint64_t fnv_prime = 1099511628211ul;
         uint64_t hash = globalsSize ^ sharedSize;
@@ -3698,32 +3817,56 @@ namespace das {
 
     void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers, bool allModules ) {
         const auto fnn = collectUsedFunctions(library.modules, totalFunctions, getThisModule(), allModules);
-        if ( headers ) {
-            logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
-        }
+        auto visitor = ArgsConverter();
+        visit(visitor);
+        logs << visitor.str();
+
         bool funInit = false;
         for ( const auto fn : fnn ) {
             if ( fn->init ) {
                 funInit = true;
             }
-            uint64_t semH = fn->aotHash;
-            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
-            logs << "        return ctx.code->makeNode<AutoSimNode_Aot";
-            if ( fn->copyOnReturn || fn->moveOnReturn ) {
-                logs << "CMRES";
+        }
+        if ( context.totalVariables || funInit ) {
+            logs << "static vec4f __wrap___init_script ( Context * __context__ ) {\n";
+            logs << "    __init_script(__context__, cast_aot_arg<bool>::to(*__context__,__context__->abiArguments()[0]));\n";
+            logs << "    return v_zero();\n";
+            logs << "};\n";
+        }
+
+        if (!fnn.empty()) {
+            logs << "\n#pragma optimize(\"\", off)\n"; // Let's disable any optimizations. It helps on MSVC to compile faster
+            // We should duplicate fields of AotFactory to reduce comptime.
+            logs << "struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };\n";
+            logs << "static AotFunction functions[] = {\n";
+            for ( const auto fn : fnn ) {
+                logs << "    { 0x" << HEX << fn->aotHash << DEC << ", "
+                     << ( fn->copyOnReturn || fn->moveOnReturn ? "true" : "false") << ", "
+                     << "(void*)&" << aotFuncName(fn) << ", &__wrap_" << aotFuncName(fn) << " },\n";
             }
-            logs << "<&" << aotFuncName(fn) << ">>();\n    };\n";
+            logs << "};\n";
+            logs << "#pragma optimize(\"\", on)\n"; // Enable optimizations back
+        }
+        if ( headers ) {
+            logs << "\nvoid registerAot ( AotLibrary & aotLib ) \n{\n";
+        } else {
+            logs << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
+        }
+        if (!fnn.empty()) {
+            logs << "    for (const auto &[hash, cmres, fn1, fn2] : functions) {\n";
+            logs << "        aotLib.emplace(hash, AotFactory(cmres, fn1, fn2));\n";
+            logs << "    }\n";
         }
         if ( context.totalVariables || funInit ) {
             uint64_t semH = context.getInitSemanticHash();
             semH = getInitSemanticHashWithDep(semH);
             logs << "    // [[ init script ]]\n";
-            logs << "    aotLib[0x" << HEX << semH << DEC << "] = +[](Context & ctx) -> SimNode* {\n";
-            logs << "        ctx.aotInitScript = ctx.code->makeNode<AutoSimNode_Aot<&__init_script>>();\n";
-            logs << "        return ctx.aotInitScript;\n";
-            logs << "    };\n";
+            logs << "    aotLib.emplace(0x" << HEX << semH << DEC << ", AotFactory(false, (void*)&__init_script, &__wrap___init_script));\n";
         }
         if ( headers ) {
+            logs << "}\n";
+        } else {
+            logs << "    resolveTypeInfoAnnotations();\n";
             logs << "}\n";
         }
     }
@@ -3973,10 +4116,7 @@ namespace das {
     }
 
     void dumpRegisterAot(TextWriter &tw, ProgramPtr program, Context &context, bool allModules) {
-        tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
         program->registerAotCpp(tw, context, false, allModules);
-        tw << "    resolveTypeInfoAnnotations();\n";
-        tw << "};\n";
         tw << "\n";
         tw << "static AotListBase impl(registerAotFunctions);\n";
     }

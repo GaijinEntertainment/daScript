@@ -5,6 +5,8 @@
 #include "daScript/simulate/aot_library.h"
 
  // require builtin
+#include "daScript/simulate/bin_serializer.h"
+#include "daScript/simulate/runtime_profile.h"
  // require functional
 
 #if defined(_MSC_VER)

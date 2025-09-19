@@ -38,6 +38,15 @@ namespace das {
 
     AotListBase * AotListBase::head = nullptr;
 
+    SimNode* AotFactory::operator()(Context& ctx) const
+    {
+        if (is_cmres) {
+            return ctx.code->makeNode<SimNode_AotCMRES>(fn, wrappedFn);
+        } else {
+            return ctx.code->makeNode<SimNode_Aot>(fn, wrappedFn);
+        }
+    }
+
     AotListBase::AotListBase( RegisterAotFunctions prfn ) {
         tail = head;
         head = this;
