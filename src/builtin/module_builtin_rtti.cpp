@@ -804,6 +804,7 @@ namespace das {
                 auto bT = f.second.decl->baseType;
                 switch ( bT ) {
                     case Type::tUInt:   bT = Type::tInt; break;
+                    default: break;
                 }
                 options.push_back({f.first,bT});
             }
