@@ -225,9 +225,35 @@ struct private LinqCall {
 }
 
 var private linqCalls = {
+// where
     "where_" => LinqCall(name = "where_"),
+    "where_to_array" => LinqCall(name = "where_"),
+    "where_to_sequence" => LinqCall(name = "where_"),
+// select
     "select" => LinqCall(name = "select"),
+    "select_to_array" => LinqCall(name = "select"),
+    "select_to_sequence" => LinqCall(name = "select"),
+// reverse
     "reverse" => LinqCall(name = "reverse"),
+    "reverse_to_array" => LinqCall(name = "reverse"),
+    "reverse_to_sequence" => LinqCall(name = "reverse"),
+// order
+    "order" => LinqCall(name = "order"),
+    "order_to_array" => LinqCall(name = "order"),
+    "order_to_sequence" => LinqCall(name = "order"),
+// order_descending
+    "order_descending" => LinqCall(name = "order_descending"),
+    "order_descending_to_array" => LinqCall(name = "order_descending"),
+    "order_descending_to_sequence" => LinqCall(name = "order_descending"),
+// order_by
+    "order_by" => LinqCall(name = "order_by"),
+    "order_by_to_array" => LinqCall(name = "order_by"),
+    "order_by_to_sequence" => LinqCall(name = "order_by"),
+// order_by_descending
+    "order_by_descending" => LinqCall(name = "order_by_descending"),
+    "order_by_descending_to_array" => LinqCall(name = "order_by_descending"),
+    "order_by_descending_to_sequence" => LinqCall(name = "order_by_descending"),
+// skippables
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
 }
@@ -254,9 +280,7 @@ def private is_linq_call(var expr : Expression?) : bool {
 [macro_function]
 def private flatten_linq(var expr : ExpressionPtr)  {
     var top = get_ptr(expr)
-
     var calls : array<tuple<ExprCall?; LinqCall>>
-
     while (top != null) {
         if (top is ExprCall) {
             var topCall = top as ExprCall
@@ -280,9 +304,7 @@ def private flatten_linq(var expr : ExpressionPtr)  {
             break
         }
     }
-
     calls.reverse_inplace()
-
     // ok, at this point top is source
     return <- (top, calls)
 }
