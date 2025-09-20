@@ -81,6 +81,9 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int) {
     }
     let oldSize = length(Arr)
     __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
+    static_if (typeinfo need_lock_check(type<numT>)) {
+        unsafe(set_verify_array_locks(Arr, false))
+    }
     for (i in range(oldSize, newSize)) {
         static_if (typeinfo is_workhorse(type<numT>)) {
             Arr[i] = numT()
@@ -92,6 +95,9 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int) {
             Arr[i] := default<numT>
         }
     }
+    static_if (typeinfo need_lock_check(type<numT>)) {
+        unsafe(set_verify_array_locks(Arr, true))
+    }
 }
 
 def resize_and_init(var Arr : array<auto(numT)>; newSize : int; initValue : numT) {
@@ -100,12 +106,18 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int; initValue : numT
     }
     let oldSize = length(Arr)
     __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
+    static_if (typeinfo need_lock_check(type<numT>)) {
+        unsafe(set_verify_array_locks(Arr, false))
+    }
     for (i in range(oldSize, newSize)) {
         static_if (typeinfo can_copy(initValue)) {
             Arr[i] = initValue
         } else {
             Arr[i] := initValue
         }
+    }
+    static_if (typeinfo need_lock_check(type<numT>)) {
+        unsafe(set_verify_array_locks(Arr, true))
     }
 }
 
@@ -1201,8 +1213,8 @@ def clone(var a : table<string; auto(VT)[]>; b : table<string; VT[]> | #) {
 def clone(var args; var nargs : array<string>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
-    for (i in range(tot)) {
-        args[i] := nargs[i]
+    for (i, na in range(tot), nargs) {
+        args[i] := na
     }
     // delete nargs // we can make this unsafe_when_not_clone_array, or just let GC deal with it
 }
@@ -1211,8 +1223,8 @@ def clone(var args; var nargs : array<string>) {
 def clone(var args; var nargs : array<int>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
-    for (i in range(tot)) {
-        args[i] := nargs[i]
+    for (i, na in range(tot), nargs) {
+        args[i] := na
     }
 }
 
@@ -1220,8 +1232,8 @@ def clone(var args; var nargs : array<int>) {
 def clone(var args; var nargs : array<uint8>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
-    for (i in range(tot)) {
-        args[i] := nargs[i]
+    for (i, na in range(tot), nargs) {
+        args[i] := na
     }
 }
 
@@ -1229,8 +1241,8 @@ def clone(var args; var nargs : array<uint8>) {
 def clone(var args; var nargs : array<tuple<uint; uint>>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
-    for (i in range(tot)) {
-        args[i] := nargs[i]
+    for (i, na in range(tot), nargs) {
+        args[i] := na
     }
 }
 
@@ -1448,8 +1460,14 @@ def nothing(var it : iterator<auto(TT)>) : iterator<TT> {
 [skip_lock_check]
 def to_array(var it : iterator<auto(TT)>) : array<TT -const -&> {
     var arr : array<TT -const -&>
+    static_if (typeinfo need_lock_check(type<TT>)) {
+        unsafe(set_verify_array_locks(arr, false))
+    }
     for (x in it) {
         push_clone(arr, x)
+    }
+    static_if (typeinfo need_lock_check(type<TT>)) {
+        unsafe(set_verify_array_locks(arr, true))
     }
     return <- arr
 }
@@ -1773,8 +1791,8 @@ def lock_data(a : array<auto(TT)> ==const | #; blk : block<(p : TT const?#; s : 
 // find_index
 
 def find_index(arr : array<auto(TT)> | #; key : TT) {
-    for (i in range(length(arr))) {
-        if (arr[i] == key) {
+    for (o, i in arr, range(length(arr))) {
+        if (o == key) {
             return i
         }
     }
@@ -1782,8 +1800,8 @@ def find_index(arr : array<auto(TT)> | #; key : TT) {
 }
 
 def find_index(arr : auto(TT)[] | #; key : TT) {
-    for (i in range(length(arr))) {
-        if (arr[i] == key) {
+    for (o, i in arr, range(length(arr))) {
+        if (o == key) {
             return i
         }
     }
@@ -1800,8 +1818,8 @@ def find_index(var arr : iterator<auto(TT)>; key : TT -&) {
 }
 
 def find_index_if(arr : array<auto(TT)> | #; blk : block<(key : TT) : bool>) {
-    for (i in range(length(arr))) {
-        if (invoke(blk, arr[i])) {
+    for (o, i in arr, range(length(arr))) {
+        if (invoke(blk, o)) {
             return i
         }
     }
@@ -1809,8 +1827,8 @@ def find_index_if(arr : array<auto(TT)> | #; blk : block<(key : TT) : bool>) {
 }
 
 def find_index_if(arr : auto(TT)[] | #; blk : block<(key : TT) : bool>) {
-    for (i in range(length(arr))) {
-        if (invoke(blk, arr[i])) {
+    for (o, i in arr, range(length(arr))) {
+        if (invoke(blk, o)) {
             return i
         }
     }
@@ -1916,8 +1934,14 @@ def subarray(a : auto(TT)[]; r : range) {
         var ra : array<TT -const -&>
         if (r.x < r.y) {
             ra |> reserve(r.y - r.x)
+            static_if (typeinfo need_lock_check(type<TT>)) {
+                unsafe(set_verify_array_locks(ra, false))
+            }
             for (t in r) {
                 ra |> push(a[t])
+            }
+            static_if (typeinfo need_lock_check(type<TT>)) {
+                unsafe(set_verify_array_locks(ra, true))
             }
         }
         return <- ra
@@ -1931,8 +1955,14 @@ def subarray(a : auto(TT)[]; r : urange) {
         var ra : array<TT -const -&>
         if (r.x < r.y) {
             ra |> reserve(int(r.y - r.x))
+            static_if (typeinfo need_lock_check(type<TT>)) {
+                unsafe(set_verify_array_locks(ra, false))
+            }
             for (t in r) {
                 ra |> push(a[t])
+            }
+            static_if (typeinfo need_lock_check(type<TT>)) {
+                unsafe(set_verify_array_locks(ra, true))
             }
         }
         return <- ra
@@ -1946,8 +1976,14 @@ def subarray(a : array<auto(TT)>; r : range) {
         var ra : array<TT -const -&>
         if (r.x < r.y) {
             ra |> reserve(r.y - r.x)
+            static_if (typeinfo need_lock_check(type<TT>)) {
+                unsafe(set_verify_array_locks(ra, false))
+            }
             for (t in r) {
                 ra |> push(a[t])
+            }
+            static_if (typeinfo need_lock_check(type<TT>)) {
+                unsafe(set_verify_array_locks(ra, true))
             }
         }
         return <- ra
@@ -1961,8 +1997,14 @@ def subarray(a : array<auto(TT)>; r : urange) {
         var ra : array<TT -const -&>
         if (r.x < r.y) {
             ra |> reserve(int(r.y - r.x))
+            static_if (typeinfo need_lock_check(type<TT>)) {
+                unsafe(set_verify_array_locks(ra, false))
+            }
             for (t in r) {
                 ra |> push(a[t])
+            }
+            static_if (typeinfo need_lock_check(type<TT>)) {
+                unsafe(set_verify_array_locks(ra, true))
             }
         }
         return <- ra

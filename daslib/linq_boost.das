@@ -218,6 +218,150 @@ def private fold_linq_cond(var expr : ExpressionPtr; argName : string) : Express
     return <- qmacro(invoke($e(expr), $i(argName)))
 }
 
+struct private LinqCall {
+    name : string
+    moduleName : string = "linq"
+    skip : bool = false             // if specified, expression is skipped in folding
+}
+
+var private linqCalls = {
+// where
+    "where_" => LinqCall(name = "where_"),
+    "where_to_array" => LinqCall(name = "where_"),
+    "where_to_sequence" => LinqCall(name = "where_"),
+// select
+    "select" => LinqCall(name = "select"),
+    "select_to_array" => LinqCall(name = "select"),
+    "select_to_sequence" => LinqCall(name = "select"),
+// reverse
+    "reverse" => LinqCall(name = "reverse"),
+    "reverse_to_array" => LinqCall(name = "reverse"),
+    "reverse_to_sequence" => LinqCall(name = "reverse"),
+// order
+    "order" => LinqCall(name = "order"),
+    "order_to_array" => LinqCall(name = "order"),
+    "order_to_sequence" => LinqCall(name = "order"),
+// order_descending
+    "order_descending" => LinqCall(name = "order_descending"),
+    "order_descending_to_array" => LinqCall(name = "order_descending"),
+    "order_descending_to_sequence" => LinqCall(name = "order_descending"),
+// order_by
+    "order_by" => LinqCall(name = "order_by"),
+    "order_by_to_array" => LinqCall(name = "order_by"),
+    "order_by_to_sequence" => LinqCall(name = "order_by"),
+// order_by_descending
+    "order_by_descending" => LinqCall(name = "order_by_descending"),
+    "order_by_descending_to_array" => LinqCall(name = "order_by_descending"),
+    "order_by_descending_to_sequence" => LinqCall(name = "order_by_descending"),
+// skippables
+    "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
+    "to_sequence" => LinqCall(name = "to_sequence", skip = true),
+}
+
+[macro_function]
+def private is_linq_call(var expr : Expression?) : bool {
+    if (expr is ExprCall) {
+        var call = expr as ExprCall
+        var funcName = string(call.func.name)
+        while (call.func.fromGeneric != null) {
+            call.func = call.func.fromGeneric.get_ptr()
+            funcName = string(call.func.name)
+        }
+        if (linqCalls.key_exists(funcName)) {
+            let linqCall = linqCalls.get_value(funcName)
+            if (linqCall.moduleName == string(call.func._module.name)) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+[macro_function]
+def private flatten_linq(var expr : ExpressionPtr)  {
+    var top = get_ptr(expr)
+    var calls : array<tuple<ExprCall?; LinqCall>>
+    while (top != null) {
+        if (top is ExprCall) {
+            var topCall = top as ExprCall
+            var topFunc = topCall.func
+            while (topFunc.fromGeneric != null) {
+                topFunc = topFunc.fromGeneric.get_ptr()
+            }
+            let funcName = string(topFunc.name)
+            if (!linqCalls.key_exists(funcName)) {
+                break
+            }
+            let linqCall = linqCalls.get_value(funcName)
+            if (linqCall.moduleName != string(topFunc._module.name)) {
+                break
+            }
+            if (!linqCall.skip) {
+                calls.push((topCall, linqCall))
+            }
+            top = topCall.arguments[0].get_ptr()
+        } else {
+            break
+        }
+    }
+    calls.reverse_inplace()
+    // ok, at this point top is source
+    return <- (top, calls)
+}
+
+[macro_function]
+def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
+    //! fold sequence into
+    //!   invoke ( top, $ ( it ) : auto {
+    //!      var pass_0 = call0(it,...) // or call0_to_array(it,...)
+    //!      var pass_1 = call1(pass_0,...)
+    //!      ...
+    //!      return <- pass_N // or pass_N.to_sequence() if expr is iterator
+    //!   } )
+    var inscope blk <- new ExprBlock(at = expr.at)
+
+    var (top, calls) = flatten_linq(expr)
+
+    var inscope topExpr <- clone_expression(unsafe(reinterpret<ExpressionPtr>(top)))
+    var inscope topExprType <- clone_type(top._type)
+
+    var inscope topValue = qmacro(source)
+
+    let lastCallIndex = calls |> length - 1
+
+    for (cll, argIndex in calls, count()) {
+        if (true) {
+            let newArgName = "pass_{argIndex}"
+            var callName = cll._1.name
+            if (argIndex == 0 && top._type.isIterator) {
+                callName = "{callName}_to_array"
+            } elif (argIndex == lastCallIndex && expr._type.isIterator) {
+                callName = "{callName}_to_sequence"
+            }
+            var inscope newCall = qmacro($c(callName)($e(topValue)))
+            let numArgs = cll._0.arguments |> length
+            for (i in 1..numArgs) {
+                (newCall as ExprCall).arguments |> emplace_new <| clone_expression(cll._0.arguments[i])
+            }
+            blk.list |> emplace_new <| qmacro_expr() {
+                var $i(newArgName) <- $e(newCall)
+            }
+            if (argIndex != 0) {
+                blk.list |> emplace_new <| qmacro_expr() {
+                    delete $e(topValue)
+                }
+            }
+            topValue |> move_new <| qmacro($i(newArgName))
+        }
+    }
+
+    blk.list |> emplace_new <| qmacro_expr() {
+        return <- $e(topValue)
+    }
+
+    return <- qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
+}
+
 [macro_function]
 def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
     //! fold the following sequence
@@ -238,6 +382,7 @@ def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
     top = e_where != null ? e_where.arguments[0].get_ptr() : top
     // source is iterable
     return <- res if (top._type == null || !(top._type.isIterator || top._type.isGoodArrayType))
+    return <- res if (is_linq_call(top))
     var inscope iterType <- clone_type(top._type.firstType)
     // now, let's check for to_sequence(foo), and skip
     var e_to_sequence = top.is_call_or_generic_arg0("to_sequence", "linq")
@@ -271,12 +416,14 @@ class private LinqFold : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
-        var inscope res <- fold_linq_where_expr(call.arguments[0])
+        var inscope res : ExpressionPtr <- fold_linq_where_expr(call.arguments[0])
+        if (res == null) {
+            res |> move_new <| fold_linq_default(call.arguments[0])
+        }
         if (res == null) {
             prog |> macro_error(call.at, "cannot fold LINQ expression")
             return <- call
         }
-        res.force_at(call.at)
         return <- res
     }
 }
