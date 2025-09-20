@@ -221,7 +221,7 @@ def private fold_linq_cond(var expr : ExpressionPtr; argName : string) : Express
 struct private LinqCall {
     name : string
     moduleName : string = "linq"
-    skip : bool = false
+    skip : bool = false             // if specified, expression is skipped in folding
 }
 
 var private linqCalls = {
@@ -229,6 +229,7 @@ var private linqCalls = {
     "select" => LinqCall(name = "select"),
     "reverse" => LinqCall(name = "reverse"),
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
+    "to_sequence" => LinqCall(name = "to_sequence", skip = true),
 }
 
 [macro_function]
@@ -271,7 +272,9 @@ def private flatten_linq(var expr : ExpressionPtr)  {
             if (linqCall.moduleName != string(topFunc._module.name)) {
                 break
             }
-            calls.push((topCall, linqCall))
+            if (!linqCall.skip) {
+                calls.push((topCall, linqCall))
+            }
             top = topCall.arguments[0].get_ptr()
         } else {
             break
@@ -296,20 +299,22 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
     var inscope blk <- new ExprBlock(at = expr.at)
 
     var (top, calls) = flatten_linq(expr)
-    var e_to_sequence = top.is_call_or_generic_arg0("to_sequence", "linq")
-    top = e_to_sequence != null ? e_to_sequence : top
 
     var inscope topExpr <- clone_expression(unsafe(reinterpret<ExpressionPtr>(top)))
     var inscope topExprType <- clone_type(top._type)
 
     var inscope topValue = qmacro(source)
 
+    let lastCallIndex = calls |> length - 1
+
     for (cll, argIndex in calls, count()) {
-        if (!cll._1.skip) {
+        if (true) {
             let newArgName = "pass_{argIndex}"
             var callName = cll._1.name
             if (argIndex == 0 && top._type.isIterator) {
-                callName = "{callName}_to_array"    // todo: special to_array names?
+                callName = "{callName}_to_array"
+            } elif (argIndex == lastCallIndex && expr._type.isIterator) {
+                callName = "{callName}_to_sequence"
             }
             var inscope newCall = qmacro($c(callName)($e(topValue)))
             let numArgs = cll._0.arguments |> length
@@ -317,15 +322,15 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
                 (newCall as ExprCall).arguments |> emplace_new <| clone_expression(cll._0.arguments[i])
             }
             blk.list |> emplace_new <| qmacro_expr() {
-                var inscope $i(newArgName) <- $e(newCall)
+                var $i(newArgName) <- $e(newCall)
+            }
+            if (argIndex != 0) {
+                blk.list |> emplace_new <| qmacro_expr() {
+                    delete $e(topValue)
+                }
             }
             topValue |> move_new <| qmacro($i(newArgName))
-            argIndex ++
         }
-    }
-
-    if (expr._type.isIterator) {
-        topValue |> move_new <| qmacro($e(topValue).to_sequence())
     }
 
     blk.list |> emplace_new <| qmacro_expr() {
