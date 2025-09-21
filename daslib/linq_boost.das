@@ -222,6 +222,7 @@ struct private LinqCall {
     name : string
     moduleName : string = "linq"
     skip : bool = false             // if specified, expression is skipped in folding
+    inplace : bool = false          // if specified, expression is inplace and does not create new variable
 }
 
 var private linqCalls = {
@@ -234,25 +235,25 @@ var private linqCalls = {
     "select_to_array" => LinqCall(name = "select"),
     "select_to_sequence" => LinqCall(name = "select"),
 // reverse
-    "reverse" => LinqCall(name = "reverse"),
-    "reverse_to_array" => LinqCall(name = "reverse"),
-    "reverse_to_sequence" => LinqCall(name = "reverse"),
+    "reverse" => LinqCall(name = "reverse", inplace = true),
+    "reverse_to_array" => LinqCall(name = "reverse", inplace = true),
+    "reverse_to_sequence" => LinqCall(name = "reverse", inplace = true),
 // order
-    "order" => LinqCall(name = "order"),
-    "order_to_array" => LinqCall(name = "order"),
-    "order_to_sequence" => LinqCall(name = "order"),
+    "order" => LinqCall(name = "order", inplace = true),
+    "order_to_array" => LinqCall(name = "order", inplace = true),
+    "order_to_sequence" => LinqCall(name = "order", inplace = true),
 // order_descending
-    "order_descending" => LinqCall(name = "order_descending"),
-    "order_descending_to_array" => LinqCall(name = "order_descending"),
-    "order_descending_to_sequence" => LinqCall(name = "order_descending"),
+    "order_descending" => LinqCall(name = "order_descending", inplace = true),
+    "order_descending_to_array" => LinqCall(name = "order_descending", inplace = true),
+    "order_descending_to_sequence" => LinqCall(name = "order_descending", inplace = true),
 // order_by
-    "order_by" => LinqCall(name = "order_by"),
-    "order_by_to_array" => LinqCall(name = "order_by"),
-    "order_by_to_sequence" => LinqCall(name = "order_by"),
+    "order_by" => LinqCall(name = "order_by", inplace = true),
+    "order_by_to_array" => LinqCall(name = "order_by", inplace = true),
+    "order_by_to_sequence" => LinqCall(name = "order_by", inplace = true),
 // order_by_descending
-    "order_by_descending" => LinqCall(name = "order_by_descending"),
-    "order_by_descending_to_array" => LinqCall(name = "order_by_descending"),
-    "order_by_descending_to_sequence" => LinqCall(name = "order_by_descending"),
+    "order_by_descending" => LinqCall(name = "order_by_descending", inplace = true),
+    "order_by_descending_to_array" => LinqCall(name = "order_by_descending", inplace = true),
+    "order_by_descending_to_sequence" => LinqCall(name = "order_by_descending", inplace = true),
 // skippables
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
@@ -318,47 +319,56 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
     //!      ...
     //!      return <- pass_N // or pass_N.to_sequence() if expr is iterator
     //!   } )
+    //!   skip var if call is inplace
+    //!   skip delete if call is not first
+    //!   if call is first and source is iterator, then call is call_to_array
+    //!   if call is last and expr is iterator, then return is pass_N.to_sequence()
+    //!   if expr is not linq call, return null
     var inscope blk <- new ExprBlock(at = expr.at)
-
     var (top, calls) = flatten_linq(expr)
-
+    if (calls |> length == 0) {
+        return <- default<ExpressionPtr>
+    }
     var inscope topExpr <- clone_expression(unsafe(reinterpret<ExpressionPtr>(top)))
     var inscope topExprType <- clone_type(top._type)
-
     var inscope topValue = qmacro(source)
-
     let lastCallIndex = calls |> length - 1
-
     for (cll, argIndex in calls, count()) {
         if (true) {
             let newArgName = "pass_{argIndex}"
             var callName = cll._1.name
+            var inplace = false
             if (argIndex == 0 && top._type.isIterator) {
                 callName = "{callName}_to_array"
             } elif (argIndex == lastCallIndex && expr._type.isIterator) {
                 callName = "{callName}_to_sequence"
+            } elif (argIndex != 0 && cll._1.inplace) {
+                callName = "{callName}_inplace"
+                inplace = true
             }
             var inscope newCall = qmacro($c(callName)($e(topValue)))
             let numArgs = cll._0.arguments |> length
             for (i in 1..numArgs) {
                 (newCall as ExprCall).arguments |> emplace_new <| clone_expression(cll._0.arguments[i])
             }
-            blk.list |> emplace_new <| qmacro_expr() {
-                var $i(newArgName) <- $e(newCall)
-            }
-            if (argIndex != 0) {
+            if (inplace) {
+                blk.list |> emplace(newCall)
+            } else {
                 blk.list |> emplace_new <| qmacro_expr() {
-                    delete $e(topValue)
+                    var $i(newArgName) <- $e(newCall)
                 }
+                if (argIndex != 0) {
+                    blk.list |> emplace_new <| qmacro_expr() {
+                        delete $e(topValue)
+                    }
+                }
+                topValue |> move_new <| qmacro($i(newArgName))
             }
-            topValue |> move_new <| qmacro($i(newArgName))
         }
     }
-
     blk.list |> emplace_new <| qmacro_expr() {
         return <- $e(topValue)
     }
-
     return <- qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
 }
 
@@ -382,7 +392,7 @@ def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
     top = e_where != null ? e_where.arguments[0].get_ptr() : top
     // source is iterable
     return <- res if (top._type == null || !(top._type.isIterator || top._type.isGoodArrayType))
-    return <- res if (is_linq_call(top))
+    return <- res if (is_linq_call(top))    // if  its just begining of the linq chain, bail out
     var inscope iterType <- clone_type(top._type.firstType)
     // now, let's check for to_sequence(foo), and skip
     var e_to_sequence = top.is_call_or_generic_arg0("to_sequence", "linq")

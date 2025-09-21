@@ -13,10 +13,10 @@ requirement:
 OPERATIONS
 Sorting data
      reverse, reverse_inplace, reverse_to_array, reverse_to_sequence - Reverses the order of elements in an iterable
-     order, order_to_array, order_to_sequence - Sorts the elements of an iterable
-     order_descending, order_descending_to_array, order_descending_to_sequence - Sorts the elements of an iterable in descending order
-     order_by, order_by_to_array, order_by_to_sequence - Sorts the elements of an iterable
-     order_by_descending, order_by_descending_to_array, order_by_descending_to_sequence - Sorts the elements of an iterable in descending order
+     order, order_inplace, order_to_array, order_to_sequence - Sorts the elements of an iterable
+     order_descending,  order_descending_inplace, order_descending_to_array, order_descending_to_sequence - Sorts the elements of an iterable in descending order
+     order_by, order_by_inplace, order_by_to_array, order_by_to_sequence - Sorts the elements of an iterable
+     order_by_descending,  order_by_descending_inplace, order_by_descending_to_array, order_by_descending_to_sequence - Sorts the elements of an iterable in descending order
 Set operations
      distinct - Returns distinct elements from an iterable
      distinct_by - Returns distinct elements from an iterable by key
@@ -220,6 +220,12 @@ def reverse_to_sequence(var a : array<auto(TT)>) : iterator<TT -const -&> {
 }
 
 [skip_lock_check]
+def order_inplace(var buffer : array<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) {
+    //! Sorts an array in place
+    sort(buffer, fun)
+}
+
+[skip_lock_check]
 def order(var a : iterator<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) : iterator<TT -const -&> {
     //! Sorts an iterator
     var arr <- to_array(a)
@@ -249,6 +255,12 @@ def order_to_sequence(var a : array<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT 
     var b := a
     sort(b, fun)
     return move_to_sequence(b)
+}
+
+[skip_lock_check]
+def order_descending_inplace(var buffer : array<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) {
+    //! Sorts an array in descending order in place
+    sort(buffer, $(v1, v2) => fun(v2, v1))
 }
 
 [skip_lock_check]
@@ -316,6 +328,12 @@ def less(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>) : bool {
 }
 
 [skip_lock_check]
+def order_by_inplace(var buffer : array<auto(TT)>; key) {
+    //! Sorts an array in place
+    sort(buffer, $(v1, v2) => _::less(key(v1), key(v2)))
+}
+
+[skip_lock_check]
 def order_by(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Sorts an iterator
     var arr <- to_array(a)
@@ -345,6 +363,12 @@ def order_by_to_sequence(var a : array<auto(TT)>; key) : iterator<TT -const -&> 
     var b := a
     sort(b, $(v1, v2) => _::less(key(v1), key(v2)))
     return move_to_sequence(b)
+}
+
+[skip_lock_check]
+def order_by_descending_inplace(var buffer : array<auto(TT)>; key) {
+    //! Sorts an array in descending order in place
+    sort(buffer, $(v1, v2) => _::less(key(v2), key(v1)))
 }
 
 [skip_lock_check]
