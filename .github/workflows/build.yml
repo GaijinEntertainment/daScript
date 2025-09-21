@@ -38,8 +38,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, linux_arm, darwin, darwin13, windows]
-        architecture: [32, 64]
+        target: [linux, linux_arm, darwin15, darwin26, windows]
+        architecture: [32, 64, arm64]
         cmake_preset: [ Debug, Release ]
 
         include:
@@ -55,18 +55,25 @@ jobs:
             runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
-          - target: darwin
-            release_target: darwin
+          - target: darwin15
+            release_target: darwin15
+            release_arch: x86_64
+            runner: macos-15 # latest with x86_64 https://github.com/actions/runner-images?tab=readme-ov-file#available-images
+            architecture_string: x86_64
+            archive_ext: tar.gz
+
+          - target: darwin15
+            release_target: darwin15
             release_arch: arm64
-            runner: macos-latest # arm64
+            runner: macos-15
             architecture_string: arm64
             archive_ext: tar.gz
 
-          - target: darwin13
-            release_target: darwin
-            release_arch: x86_64
-            runner: macos-13 # x64
-            architecture_string: x86_64
+          - target: darwin26
+            release_target: darwin26
+            release_arch: arm64
+            runner: macos-26 # arm64 only image
+            architecture_string: arm64
             archive_ext: tar.gz
 
           - target: windows
@@ -77,11 +84,11 @@ jobs:
             build_system: cmake
             cmake_generator: Visual Studio 17 2022
 
-          - target: darwin
+          - target: darwin15
             build_system: cmake
             cmake_generator: Ninja
 
-          - target: darwin13
+          - target: darwin26
             build_system: cmake
             cmake_generator: Ninja
 
@@ -106,17 +113,29 @@ jobs:
             architecture_string: x64
 
         exclude:
-          - target: darwin
+          - target: darwin15
             architecture: 32
-
-          - target: darwin13
+          
+          - target: darwin26
             architecture: 32
+         
+          - target: darwin26
+            architecture: 64
 
           - target: linux
             architecture: 32
 
+          - target: linux
+            architecture: arm64
+
           - target: linux_arm
             architecture: 32
+
+          - target: linux_arm
+            architecture: arm64 # todo
+
+          - target: windows
+            architecture: arm64 # todo https://github.com/actions/partner-runner-images/tree/main?tab=readme-ov-file#available-images
 
     steps:
     - name: "SCM Checkout"
@@ -128,6 +147,19 @@ jobs:
     - name: "Install: Required Dev Packages"
       run: |
         set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+          darwin15arm64|darwin26arm64)
+            brew install bison
+            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/usr/local/opt/bison/lib"
+            ;;
+          darwin1564|darwin2664)
+            brew install bison
+            echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
+            ;;
+        esac
+
         case "${{ matrix.target }}${{ matrix.architecture }}" in
           linux64)
             echo "MARCH=64" >> $GITHUB_ENV
@@ -149,16 +181,6 @@ jobs:
               libxcursor-dev \
               libxinerama-dev \
               libxi-dev
-            ;;
-          darwin1364)
-            brew install bison
-            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
-            export LDFLAGS="-L/usr/local/opt/bison/lib"
-            ;;
-          darwin64)
-            brew install bison
-            echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
-            export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
             ;;
         esac
 
