@@ -359,6 +359,13 @@ namespace das
         return that;
     }
 
+    void SimNode_ForWithIteratorBase::closeIterators ( Iterator ** sources, char ** pi, Context & context ) {
+        for ( int t=int(totalSources)-1; t>=0; --t ) {
+            sources[t]->close(context, pi[t]);
+        }
+
+    }
+
     vec4f SimNode_ForWithIteratorBase::eval ( Context & context ) {
         // note: this is the 'slow' version, to which we fall back when there are too many sources
         DAS_PROFILE_NODE
@@ -394,9 +401,7 @@ namespace das
         }
     loopend:
         evalFinal(context);
-        for ( int t=0; t!=totalCount; ++t ) {
-            sources[t]->close(context, pi[t]);
-        }
+        closeIterators(sources.data(), pi.data(), context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -439,9 +444,7 @@ namespace das
         }
     loopend:
         evalFinal(context);
-        for ( int t=0; t!=totalCount; ++t ) {
-            sources[t]->close(context, pi[t]);
-        }
+        closeIterators(sources.data(), pi.data(), context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -486,9 +489,7 @@ namespace das
         }
     loopend:
         this->evalFinal(context);
-        for ( int t=0; t!=totalCount; ++t ) {
-            sources[t]->close(context, pi[t]);
-        }
+        closeIterators(sources.data(), pi.data(), context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
