@@ -3238,7 +3238,7 @@ commas
 
 
 bitfield_alias_bits
-    : %empty  {
+    :  {
         auto pSL = new vector<string>();
         $$ = pSL;
 
