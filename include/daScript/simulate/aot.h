@@ -11,6 +11,7 @@
 #include "daScript/simulate/aot_builtin_time.h"
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/interop.h"
+#include "daScript/simulate/jit_abi.h" // CallJitFn
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -3126,9 +3127,9 @@ namespace das {
     void builtin_sort_cblock ( vec4f arr, int32_t, int32_t length, const TBlock<bool,TT,TT> & cmp, Context * context, LineInfoArg * lineinfo ) {
         auto data = cast<TT *>::to(arr);
         if ( cmp.jitFunction ) {
-            auto cmpFn = (bool (*)(TT,TT,const Block &,Context *)) cmp.jitFunction;
+            using CmpFn = CallJitFn<bool, TT, TT, const Block &, Context*>;
             sort ( data, data+length, [&](TT x, TT y) -> bool {
-                return cmpFn(x,y,cmp,context);
+                return CmpFn::static_call(cmp.jitFunction,x,y,cmp,context);
             });
         } else {
             vec4f bargs[2];
@@ -3166,9 +3167,9 @@ namespace das {
             auto data = (TT *) arr.data;
             array_lock(*context, arr, at);
             if ( cmp.jitFunction ) {
-                auto cmpFn = (bool (*)(TT,TT,const Block &,Context *)) cmp.jitFunction;
+                using CmpFn = CallJitFn<bool,TT, TT,const Block &,Context *>;
                 das::sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
-                    return cmpFn(x,y,cmp,context);
+                    return CmpFn::static_call(cmp.jitFunction, x,y,cmp,context);
                 });
             } else {
                 vec4f bargs[2];
@@ -3187,9 +3188,9 @@ namespace das {
             auto data = (TT *) arr.data;
             array_lock(*context, arr, at);
             if ( cmp.jitFunction ) {
-                auto cmpFn = (bool (*)(const TT &,const TT &,const Block &,Context *)) cmp.jitFunction;
+                using CmpFn = CallJitFn<bool,const TT &,const TT &,const Block &,Context *>;
                 das::sort ( data, data+arr.size, [&](const TT & x,const TT & y) -> bool {
-                    return cmpFn(x,y,cmp,context);
+                    return CmpFn::static_call(cmp.jitFunction,x,y,cmp,context);
                 });
             } else {
                 vec4f bargs[2];
