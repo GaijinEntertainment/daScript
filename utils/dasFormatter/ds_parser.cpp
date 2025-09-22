@@ -10773,7 +10773,7 @@ yyreduce:
     break;
 
   case 730: /* bitfield_alias_bits: %empty  */
-              {
+       {
         auto pSL = new vector<string>();
         (yyval.pNameList) = pSL;
 
