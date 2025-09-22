@@ -3649,7 +3649,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         loopend:
             this->evalFinal(context);
-            closeIterators(sources, pi, context);
+            this->closeIterators(sources, pi, context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3747,7 +3747,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         loopend:
             this->evalFinal(context);
-            closeIterators(sources, pi, context);
+            this->closeIterators(sources, pi, context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
