@@ -3489,6 +3489,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * visitFor ( SimVisitor & vis, int total );
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        void closeIterators ( Iterator ** sources, char ** pi, Context & context );
         SimNode **  source_iterators = nullptr;
         uint32_t *  stackTop = nullptr;
         uint32_t    size = 0;
@@ -3539,9 +3540,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         loopend:
             evalFinal(context);
-            for ( int t=0; t!=totalCount; ++t ) {
-                sources[t]->close(context, pi[t]);
-            }
+            closeIterators(sources, pi, context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3650,9 +3649,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         loopend:
             this->evalFinal(context);
-            for ( int t=0; t!=totalCount; ++t ) {
-                sources[t]->close(context, pi[t]);
-            }
+            this->closeIterators(sources, pi, context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3750,9 +3747,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             }
         loopend:
             this->evalFinal(context);
-            for ( int t=0; t!=totalCount; ++t ) {
-                sources[t]->close(context, pi[t]);
-            }
+            this->closeIterators(sources, pi, context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }

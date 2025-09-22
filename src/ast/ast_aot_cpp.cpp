@@ -3668,7 +3668,8 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprFor * ffor ) override {
             ss << "\n";
-            for ( auto & var : ffor->iteratorVariables ) {
+            for ( int si=ffor->iteratorVariables.size()-1; si>=0; --si ) {
+                auto & var = ffor->iteratorVariables[si];
                 ss << tabs() << forSrcName(var->name) << ".close(__context__,";
                 ss << "(" << collector.getVarName(var) << "));\n";
             }

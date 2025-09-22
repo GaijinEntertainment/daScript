@@ -559,7 +559,7 @@ namespace das {
             }
             if (expr->name == "builtin_try_recover") {
                 DAS_ASSERTF(expr->arguments.size() == 4,
-                    "builtin_try_recover somehow called with wrong number of arguments = %li (%li), expected 2.",
+                    "builtin_try_recover somehow called with wrong number of arguments = %i (%i), expected 2.",
                     int(expr->arguments.size() - 2), int(expr->arguments.size()));
                 if (!expr->arguments.at(0)->rtti_isMakeBlock() ||
                     !expr->arguments.at(1)->rtti_isMakeBlock()) {
