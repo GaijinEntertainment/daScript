@@ -278,6 +278,13 @@ var private linqCalls = {
     "min_max_average_by" => LinqCall(name = "min_max_average_by"),
     "aggregate" => LinqCall(name = "aggregate"),
     "sum" => LinqCall(name = "sum"),
+// ranges
+    "skip" => LinqCall(name = "skip", inplace = true),
+    "skip_to_array" => LinqCall(name = "skip", inplace = true),
+    "skip_to_sequence" => LinqCall(name = "skip", inplace = true),
+    "skip_while" => LinqCall(name = "skip_while"),
+    "skip_while_to_array" => LinqCall(name = "skip_while"),
+    "skip_while_to_sequence" => LinqCall(name = "skip_while"),
 // skippables
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),

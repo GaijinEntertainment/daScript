@@ -33,7 +33,7 @@ namespace das {
     }
 
     void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at ) {
-        if ( newSize<0 ) context->throw_error_at(at, "reserving array to negative size %i", newSize);
+        if ( newSize<0 ) return; // no point of displaying errors, if reserve fails
         array_reserve( *context, pArray, newSize, stride, at );
     }
 

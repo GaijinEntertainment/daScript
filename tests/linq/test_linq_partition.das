@@ -45,6 +45,34 @@ def test_skip(t : T?) {
             t |> success(c.a.Equal([i + 3, (i + 3) * 10]))
         }
     }
+    t |> run("skip to array") <| @(t : T?) {
+        var query_array = skip_to_array(
+            [iterator for(x in 0..5); x],
+            2
+        )
+        static_assert(typeinfo is_array(query_array))
+        for (c, i in query_array, 0..3) {
+            t |> equal(c, i + 2)
+        }
+    }
+    t |> run("skip to sequence") <| @(t : T?) {
+        var query_seq = skip_to_sequence(
+            [0, 1, 2, 3, 4, 5],
+            2
+        )
+        static_assert(typeinfo is_iterator(query_seq))
+        for (c, i in query_seq, 0..3) {
+            t |> equal(c, i + 2)
+        }
+    }
+    t |> run("skip in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 5]
+        skip_inplace(arr, 2)
+        t |> equal(4, length(arr))
+        for (c, i in arr, 0..3) {
+            t |> equal(c, i + 2)
+        }
+    }
 }
 
 [test]

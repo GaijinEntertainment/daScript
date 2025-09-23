@@ -113,11 +113,7 @@ def to_table(var a : iterator<auto(TT)>; key; elementSelector) : table<typedecl(
     var result : table<typedecl(unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&>
     for (it in a) {
         let k = key(it)
-        static_if (typeinfo can_copy(it)) {
-            unsafe(result[unique_key(k)]) = elementSelector(it)
-        } else {
-            unsafe(result[unique_key(k)]) <- clone_to_move(elementSelector(it))
-        }
+        unsafe(result[unique_key(k)]) := elementSelector(it)
     }
     return <- result
 }
@@ -518,9 +514,35 @@ def where_to_sequence(var src : array<auto(TT)>; predicate : block<(arg : TT -&)
 }
 
 [skip_lock_check]
-def skip(var src : iterator<auto(TT)>; var total : int) {
+def skip(var arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
     //! Yields all but the first `total` elements
-    return <- generator<TT -&> capture(<- src) () <| $() {
+    let len = length(arr)
+    let remaining = len - total
+    if (remaining <= 0) {
+        return <- default<array<TT -& -const>>
+    }
+    return <- subarray(arr, total..len)
+}
+
+[skip_lock_check]
+def skip_inplace(var arr : array<auto(TT)>; var total : int) {
+    //! Removes the first `total` elements from an array in place
+    let len = length(arr)
+    let remaining = len - total
+    if (remaining <= 0) {
+        arr.clear()
+        return
+    }
+    for (i in 0..remaining) {
+        arr[i] <- arr[i + total]
+    }
+    arr.resize(remaining)
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private skip_to_sequence(var src; tt : auto(TT); var total : int) : iterator<TT -& -const> {
+    //! Yields all but the first `total` elements
+    return <- generator<TT -& -const> capture(<- src) () <| $() {
         for (x in src) {
             if (total > 0) {
                 total --
@@ -536,10 +558,42 @@ def skip(var src : iterator<auto(TT)>; var total : int) {
     }
 }
 
+
 [skip_lock_check]
-def skip_while(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) {
+def skip(var src : iterator<auto(TT)>; var total : int) : iterator<TT -& -const> {
+    //! Yields all but the first `total` elements
+    return skip_to_sequence(src, type<TT -& -const>, total)
+}
+
+[skip_lock_check]
+def skip_to_sequence(var src : array<auto(TT)>; var total : int) : iterator<TT -& -const> {
+    //! Yields all but the first `total` elements and returns an iterator
+    return skip_to_sequence(src, type<TT -& -const>, total)
+}
+
+[skip_lock_check]
+def skip_to_array(var src : iterator<auto(TT)>; var total : int) : array<TT -& -const> {
+    //! Yields all but the first `total` elements and returns an array
+    var buffer : array<TT -& -const>
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, false))
+    }
+    for (x in src) {
+        if (total > 0) {
+            total --
+            continue
+        }
+        buffer.push_clone(x)
+    }
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, true))
+    }
+    return <- buffer
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private skip_while_impl(var src; tt : auto(TT); predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
     //! Skips all elements of an iterator while the predicate is true
-    // TODO: specialize with const value vs var value of predicate, which can be captured.
     var buffer : array<TT -& -const>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
@@ -558,7 +612,32 @@ def skip_while(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : b
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
+}
+
+[skip_lock_check]
+def skip_while(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
+    //! Skips all elements of an iterator while the predicate is true
+    // TODO: specialize with const value vs var value of predicate, which can be captured.
+    return <- skip_while_impl(src, type<TT -& -const>, predicate).move_to_sequence()
+}
+
+[skip_lock_check]
+def skip_while(var src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
+    //! Skips all elements of an array while the predicate is true
+    return <- skip_while_impl(src, type<TT -& -const>, predicate)
+}
+
+[skip_lock_check]
+def skip_while_to_array(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
+    //! Skips all elements of an iterator while the predicate is true and returns an array
+    return <- skip_while_impl(src, type<TT -& -const>, predicate)
+}
+
+[skip_lock_check]
+def skip_while_to_sequence(var src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
+    //! Skips all elements of an array while the predicate is true and returns an iterator
+    return <- skip_while_impl(src, type<TT -& -const>, predicate).move_to_sequence()
 }
 
 [skip_lock_check]
@@ -625,18 +704,10 @@ def private min_impl(var src; tt : auto(TT)) : TT -& -const {
     var first : bool = true
     for (x in src) {
         if (first) {
-            static_if (typeinfo can_copy(x)) {
-                minn = x
-            } else {
-                minn <- clone_to_move(x)
-            }
+            minn := x
             first = false
         } elif (_::less(x, minn)) {
-            static_if (typeinfo can_copy(x)) {
-                minn = x
-            } else {
-                minn <- clone_to_move(x)
-            }
+            minn := x
         }
     }
     return <- minn
@@ -668,18 +739,10 @@ def private min_by_impl(var src; tt : auto(TT); key) : TT -& -const {
     var first : bool = true
     for (x in src) {
         if (first) {
-            static_if (typeinfo can_copy(x)) {
-                minn = x
-            } else {
-                minn <- clone_to_move(x)
-            }
+            minn := x
             first = false
         } elif (_::less(key(x), key(minn))) {
-            static_if (typeinfo can_copy(x)) {
-                minn = x
-            } else {
-                minn <- clone_to_move(x)
-            }
+            minn := x
         }
     }
     return <- minn
@@ -689,7 +752,7 @@ def private min_by_impl(var src; tt : auto(TT); key) : TT -& -const {
 def min_by(var src : iterator<auto(TT)>; key) : TT -& -const {
     //! Finds the minimum element in an iterator by key
     static_if (typeinfo is_workhorse(type<TT>)) {
-        return <- min_by_impl(src, type<TT -const -&>, key)
+        return min_by_impl(src, type<TT -const -&>, key)
     } else {
         return <- min_by_impl(src, type<TT -const -&>, key)
     }
@@ -711,18 +774,10 @@ def private max_impl(var src; tt : auto(TT)) : TT -& -const {
     var first : bool = true
     for (x in src) {
         if (first) {
-            static_if (typeinfo can_copy(x)) {
-                maxx = x
-            } else {
-                maxx <- clone_to_move(x)
-            }
+            maxx := x
             first = false
         } elif (_::less(maxx, x)) {
-            static_if (typeinfo can_copy(x)) {
-                maxx = x
-            } else {
-                maxx <- clone_to_move(x)
-            }
+            maxx := x
         }
     }
     return <- maxx
@@ -754,18 +809,10 @@ def private max_by_impl(var src; tt : auto(TT); key) : TT -& -const {
     var first : bool = true
     for (x in src) {
         if (first) {
-            static_if (typeinfo can_copy(x)) {
-                maxx = x
-            } else {
-                maxx <- clone_to_move(x)
-            }
+            maxx := x
             first = false
         } elif (_::less(key(maxx), key(x))) {
-            static_if (typeinfo can_copy(x)) {
-                maxx = x
-            } else {
-                maxx <- clone_to_move(x)
-            }
+            maxx := x
         }
     }
     return <- maxx
@@ -798,27 +845,14 @@ def private min_max_impl(var src; tt : auto(TT)) : tuple<TT -& -const, TT -& -co
     var first : bool = true
     for (x in src) {
         if (first) {
-            static_if (typeinfo can_copy(x)) {
-                minn = x
-                maxx = x
-            } else {
-                minn <- clone_to_move(x)
-                maxx <- clone_to_move(x)
-            }
+            minn := x
+            maxx := x
             first = false
         } else {
             if (_::less(x, minn)) {
-                static_if (typeinfo can_copy(x)) {
-                    minn = x
-                } else {
-                    minn <- clone_to_move(x)
-                }
+                minn := x
             } elif (_::less(maxx, x)) {
-                static_if (typeinfo can_copy(x)) {
-                    maxx = x
-                } else {
-                    maxx <- clone_to_move(x)
-                }
+                maxx := x
             }
         }
     }
@@ -844,27 +878,14 @@ def private min_max_by_impl(var src; tt : auto(TT); key) : tuple<TT -& -const, T
     var first : bool = true
     for (x in src) {
         if (first) {
-            static_if (typeinfo can_copy(x)) {
-                minn = x
-                maxx = x
-            } else {
-                minn <- clone_to_move(x)
-                maxx <- clone_to_move(x)
-            }
+            minn := x
+            maxx := x
             first = false
         } else {
             if (_::less(key(x), key(minn))) {
-                static_if (typeinfo can_copy(x)) {
-                    minn = x
-                } else {
-                    minn <- clone_to_move(x)
-                }
+                minn := x
             } elif (_::less(key(maxx), key(x))) {
-                static_if (typeinfo can_copy(x)) {
-                    maxx = x
-                } else {
-                    maxx <- clone_to_move(x)
-                }
+                maxx := x
             }
         }
     }
@@ -885,17 +906,12 @@ def min_max_by(var src : array<auto(TT)>; key) : tuple<TT -& -const, TT -& -cons
 
 [skip_lock_check, unused_argument(tt)]
 def private aggregate_impl(var src; tt : auto(TT); seed : auto(AGG); func : block<(acc : AGG -&, x : TT -&) : AGG -&>) : AGG -& -const {
-    var acc : AGG -&
-    static_if (typeinfo can_copy(seed)) {
-        acc = seed
-    } else {
-        acc <- clone_to_move(seed)
-    }
+    var acc : AGG -& := seed
     for (x in src) {
         static_if (typeinfo can_copy(x)) {
             acc = func(acc, x)
         } else {
-            acc <- func(acc, clone_to_move(x))
+            acc <- func(acc, x)
         }
     }
     return <- acc
@@ -907,7 +923,7 @@ def aggregate(var src : iterator<auto(TT)>; seed : auto(AGG); func : block<(acc 
     static_if (typeinfo is_workhorse(seed)) {
         return aggregate_impl(src, type<TT -const -&>, seed, func)
     } else {
-        return <- aggregate_impl(src, type<TT -const -&>, clone_to_move(seed), func)
+        return <- aggregate_impl(src, type<TT -const -&>, seed, func)
     }
 }
 
@@ -917,7 +933,7 @@ def aggregate(var src : array<auto(TT)>; seed : auto(AGG); func : block<(acc : A
     static_if (typeinfo is_workhorse(seed)) {
         return aggregate_impl(src, type<TT -const -&>, seed, func)
     } else {
-        return <- aggregate_impl(src, type<TT -const -&>, clone_to_move(seed), func)
+        return <- aggregate_impl(src, type<TT -const -&>, seed, func)
     }
 }
 
@@ -925,11 +941,7 @@ def aggregate(var src : array<auto(TT)>; seed : auto(AGG); func : block<(acc : A
 def private sum_impl(var src; tt : auto(TT)) : TT -const -& {
     var total : TT -const -&
     for (x in src) {
-        static_if (typeinfo can_copy(x)) {
-            total += x
-        } else {
-            total += clone_to_move(x)
-        }
+        total += x
     }
     return <- total
 }
@@ -959,11 +971,7 @@ def average_impl(var src; tt : auto(TT)) : TT -const -& {
     var total : TT -const -&
     var count : uint64
     for (x in src) {
-        static_if (typeinfo can_copy(x)) {
-            total += x
-        } else {
-            total += clone_to_move(x)
-        }
+        total += x
         count ++
     }
     if (count != 0ul) {
@@ -1005,35 +1013,17 @@ def private min_max_average_impl(var src; tt : auto(TT)) : tuple<TT -const -&, T
     var first : bool = true
     for (x in src) {
         if (first) {
-            static_if (typeinfo can_copy(x)) {
-                minn = x
-                maxx = x
-                total = x
-            } else {
-                minn <- clone_to_move(x)
-                maxx <- clone_to_move(x)
-                total <- clone_to_move(x)
-            }
+            minn := x
+            maxx := x
+            total := x
             first = false
         } else {
             if (_::less(x, minn)) {
-                static_if (typeinfo can_copy(x)) {
-                    minn = x
-                } else {
-                    minn <- clone_to_move(x)
-                }
+                minn := x
             } elif (_::less(maxx, x)) {
-                static_if (typeinfo can_copy(x)) {
-                    maxx = x
-                } else {
-                    maxx <- clone_to_move(x)
-                }
+                maxx := x
             }
-            static_if (typeinfo can_copy(x)) {
-                total += x
-            } else {
-                total += clone_to_move(x)
-            }
+            total += x
         }
         count ++
     }
@@ -1068,35 +1058,17 @@ def private min_max_average_by_impl(var src; tt : auto(TT); key) : tuple<TT -con
     var first : bool = true
     for (x in src) {
         if (first) {
-            static_if (typeinfo can_copy(x)) {
-                minn = x
-                maxx = x
-                total = x
-            } else {
-                minn <- clone_to_move(x)
-                maxx <- clone_to_move(x)
-                total <- clone_to_move(x)
-            }
+            minn := x
+            maxx := x
+            total := x
             first = false
         } else {
             if (_::less(key(x), key(minn))) {
-                static_if (typeinfo can_copy(x)) {
-                    minn = x
-                } else {
-                    minn <- clone_to_move(x)
-                }
+                minn := x
             } elif (_::less(key(maxx), key(x))) {
-                static_if (typeinfo can_copy(x)) {
-                    maxx = x
-                } else {
-                    maxx <- clone_to_move(x)
-                }
+                maxx := x
             }
-            static_if (typeinfo can_copy(x)) {
-                total += x
-            } else {
-                total += clone_to_move(x)
-            }
+            total += x
         }
         count ++
     }
@@ -1534,11 +1506,7 @@ def last(var src : iterator<auto(TT)>) : TT -const -& {
     var last : TT -const -&
     for (it in src) {
         found = true
-        static_if (typeinfo can_copy(it)) {
-            last = it
-        } else {
-            last <- clone_to_move(it)
-        }
+        last := it
     }
     if (!found) {
         panic("sequence contains no elements")
@@ -1553,11 +1521,7 @@ def last_or_default(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -co
     var last : TT -const -&
     for (it in src) {
         found = true
-        static_if (typeinfo can_copy(it)) {
-            last = it
-        } else {
-            last <- clone_to_move(it)
-        }
+        last := it
     }
     if (!found) {
         static_if (typeinfo can_copy(defaultValue)) {
@@ -1579,11 +1543,7 @@ def single(var src : iterator<auto(TT)>) : TT -const -& {
             panic("sequence contains more than one element")
         }
         found = true
-        static_if (typeinfo can_copy(it)) {
-            single = it
-        } else {
-            single <- clone_to_move(it)
-        }
+        single := it
     }
     if (!found) {
         panic("sequence contains no elements")
@@ -1605,11 +1565,7 @@ def single_or_default(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -
             }
         }
         found = true
-        static_if (typeinfo can_copy(it)) {
-            single = it
-        } else {
-            single <- clone_to_move(it)
-        }
+        single := it
     }
     if (!found) {
         static_if (typeinfo can_copy(defaultValue)) {

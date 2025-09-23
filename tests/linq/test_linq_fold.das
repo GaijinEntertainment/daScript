@@ -2,6 +2,7 @@ options gen2
 require daslib/linq
 require dastest/testing_boost public
 require math
+require strings
 
 require daslib/linq_boost
 
@@ -110,3 +111,153 @@ def test_generic_fold(t : T?) {
     }
 }
 
+[test]
+def test_generic_fold_order(t : T?) {
+    t |> run("order fold") <| @(t : T?) {
+        var t5 <- ([5, 3, 1, 4, 2]
+            .to_sequence()
+            .order($(a, b) => a < b)
+            ._fold()
+            )
+        t |> equal(typeinfo typename(t5), "iterator<int>")
+        for (i, v in 0..5, t5) {
+            t |> equal(i + 1, v)
+        }
+    }
+    t |> run("order_descending fold") <| @(t : T?) {
+        var t6 <- ([5, 3, 1, 4, 2]
+            .to_sequence()
+            .order_descending($(a, b) => a < b)
+            ._fold()
+            )
+        t |> equal(typeinfo typename(t6), "iterator<int>")
+        for (i, v in 0..5, t6) {
+            t |> equal(5 - i, v)
+        }
+    }
+    t |> run("order_by fold") <| @(t : T?) {
+        var t7 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
+            .to_sequence()
+            ._order_by(length(_))
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t7), "iterator<string>")
+        var sorted = ["kiwi", "apple", "banana", "cherry", "blueberry"]
+        for (i, v in 0..5, t7) {
+            t |> equal(sorted[i], v)
+        }
+    }
+    t |> run("order_by_descending fold") <| @(t : T?) {
+        var t8 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
+            ._order_by_descending(length(_))
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t8), "array<string>")
+        var sorted = ["blueberry", "banana", "cherry", "apple", "kiwi"]
+        for (i, v in 0..5, t8) {
+            t |> equal(sorted[i], v)
+        }
+    }
+}
+
+[test]
+def test_generic_fold_aggregates(t : T?) {
+    t |> run("min fold") <| @(t : T?) {
+        var t1 = ([5, 3, 8, 1, 4]
+            .to_sequence()
+            .min()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t1), "int")
+        t |> equal(1, t1)
+    }
+    t |> run("min_by fold") <| @(t : T?) {
+        var t2 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
+            .to_sequence()
+            ._min_by(length(_))
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t2), "string")
+        t |> equal("kiwi", t2)
+    }
+    t |> run("max fold") <| @(t : T?) {
+        var t2 = ([5, 3, 8, 1, 4]
+            .to_sequence()
+            .max()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t2), "int")
+        t |> equal(8, t2)
+    }
+    t |> run("max_by fold") <| @(t : T?) {
+        var t2 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
+            .to_sequence()
+            ._max_by(length(_))
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t2), "string")
+        t |> equal("blueberry", t2)
+    }
+    t |> run("min_max fold") <| @(t : T?) {
+        var (tmin, tmax) = ([5, 3, 8, 1, 4]
+            .to_sequence()
+            .min_max()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(tmin), "int")
+        t |> equal(typeinfo typename(tmax), "int")
+        t |> equal(1, tmin)
+        t |> equal(8, tmax)
+    }
+    t |> run("min_max_by fold") <| @(t : T?) {
+        var (tmin, tmax) = (["apple", "banana", "kiwi", "cherry", "blueberry"]
+            .to_sequence()
+            ._min_max_by(length(_))
+            ._fold()
+        )
+        t |> equal(typeinfo typename(tmin), "string")
+        t |> equal(typeinfo typename(tmax), "string")
+        t |> equal("kiwi", tmin)
+        t |> equal("blueberry", tmax)
+    }
+    t |> run("average fold") <| @(t : T?) {
+        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
+            .to_sequence()
+            .average()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t2), "int")
+        t |> equal(4, t2)
+    }
+    t |> run("min_max_avarage fold") <| @(t : T?) {
+        var (tmin, tmax, tavg) = ([1, 2, 3, 4, 5, 6, 7, 8]
+            .to_sequence()
+            .min_max_average()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(tmin), "int")
+        t |> equal(typeinfo typename(tmax), "int")
+        t |> equal(typeinfo typename(tavg), "int")
+        t |> equal(1, tmin)
+        t |> equal(8, tmax)
+        t |> equal(4, tavg)
+    }
+    t |> run("sum fold") <| @(t : T?) {
+        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
+            .to_sequence()
+            .sum()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t2), "int")
+        t |> equal(36, t2)
+    }
+    t |> run("aggregate fold") <| @(t : T?) {
+        var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
+            .to_sequence()
+            .aggregate("", $(a, b) => "{a},{b}")
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t2), "string")
+        t |> equal(",1,2,3,4,5,6,7,8", t2)
+    }
+}
