@@ -200,7 +200,7 @@ def test_sum(t : T?) {
     }
     t |> run("float sum from array") <| @(t : T?) {
         var queryf = sum(
-            [for(x in 0..5); float(x)]
+            [for (x in 0..5); float(x)]
         )
         t |> equal(queryf, 10.0)
     }
@@ -262,7 +262,7 @@ def test_aggregate(t : T?) {
     }
     t |> run("type change aggregate") <| @(t : T?) {
         var query = aggregate(
-            [for(x in 0..5); x],
+            [for (x in 0..5); x],
             "",
             $(acc, x) => "{acc}{x}"
         )
