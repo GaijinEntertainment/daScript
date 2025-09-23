@@ -2,6 +2,7 @@ options gen2
 require daslib/linq
 require dastest/testing_boost public
 require math
+require strings
 
 require daslib/linq_boost
 
@@ -63,6 +64,16 @@ def test_min(t : T?) {
         )
         t |> success(qcomplex.a.Equal([0, 0]))
     }
+    t |> run("min from array of strings") <| @(t : T?) {
+        var strings = ["banana", "apple", "cherry", "date"]
+        var minString = min(strings)
+        t |> equal(minString, "apple")
+    }
+    t |> run("min by from array of strings") <| @(t : T?) {
+        var strings = ["banana", "apple", "cherry", "date", "late"]
+        var minString = _min_by(strings, (length(_), _))
+        t |> equal(minString, "date")
+    }
 }
 
 [test]
@@ -99,6 +110,78 @@ def test_max(t : T?) {
         )
         t |> success(qcomplex.a.Equal([4, 40]))
     }
+    t |> run("max from array of strings") <| @(t : T?) {
+        var strings = ["banana", "apple", "cherry", "date"]
+        var maxString = max(strings.to_sequence())
+        t |> equal(maxString, "date")
+    }
+    t |> run("max by from array of strings") <| @(t : T?) {
+        var strings = ["banana", "apple", "cherry", "date", "late"]
+        var maxString = _max_by(strings, (length(_), _))
+        t |> equal(maxString, "cherry")
+    }
+}
+
+[test]
+def test_min_max(t : T?) {
+    t |> run("basic min_max") <| @(t : T?) {
+        var numbers = [
+            5, 3, 8, 1, 4
+        ]
+        var (minVal, maxVal) = min_max(
+            numbers.to_sequence()
+        )
+        t |> equal(minVal, 1)
+        t |> equal(maxVal, 8)
+    }
+    t |> run("complex min_max by") <| @(t : T?) {
+        var (minPerson, maxPerson) = _min_max_by(
+            people.to_sequence(),
+            (_.age, _.name)
+        )
+        t |> equal(minPerson.name, "Bob")
+        t |> equal(minPerson.age, 20)
+        t |> equal(maxPerson.name, "Charlie")
+        t |> equal(maxPerson.age, 35)
+    }
+    t |> run("complex min_max by") <| @(t : T?) {
+        var (minComplex, maxComplex) = _min_max_by(
+            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+            (_.a[0], _.a[1])
+        )
+        t |> success(minComplex.a.Equal([0, 0]))
+        t |> success(maxComplex.a.Equal([4, 40]))
+    }
+    t |> run("min_max from array of strings") <| @(t : T?) {
+        var strings = ["banana", "apple", "cherry", "date"]
+        var (minString, maxString) = min_max(strings.to_sequence())
+        t |> equal(minString, "apple")
+        t |> equal(maxString, "date")
+    }
+}
+
+[test]
+def test_min_max_average(t : T?) {
+    t |> run("basic min_max_average") <| @(t : T?) {
+        var numbers = [
+            5, 3, 8, 1, 4
+        ]
+        var (minVal, maxVal, avgVal) = min_max_average(
+            numbers.to_sequence()
+        )
+        t |> equal(minVal, 1)
+        t |> equal(maxVal, 8)
+        t |> equal(avgVal, 4)
+    }
+    t |> run("complex min_max_average by") <| @(t : T?) {
+        var (minComplex, maxComplex, avgComplex) = _min_max_average_by(
+            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+            (_.a[0], _.a[1])
+        )
+        t |> success(minComplex.a.Equal([0, 0]))
+        t |> success(maxComplex.a.Equal([4, 40]))
+        t |> success(avgComplex.a.Equal([2, 20]))
+    }
 }
 
 [test]
@@ -114,6 +197,12 @@ def test_sum(t : T?) {
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         t |> success(qcomplex.a.Equal([10, 100]))
+    }
+    t |> run("float sum from array") <| @(t : T?) {
+        var queryf = sum(
+            [for(x in 0..5); float(x)]
+        )
+        t |> equal(queryf, 10.0)
     }
 }
 
@@ -137,6 +226,11 @@ def test_average(t : T?) {
         )
         t |> success(qcomplex.a.Equal([2, 20]))
     }
+    t |> run("average from array of floats") <| @(t : T?) {
+        var floats = [1.0, 2.0, 3.0, 4.0, 5.0]
+        var avgFloat = average(floats.to_sequence())
+        t |> equal(avgFloat, 3.0)
+    }
 }
 
 [test]
@@ -157,5 +251,21 @@ def test_aggregate(t : T?) {
         )
         t |> equal(qcomplex.a[0], 10)
         t |> equal(qcomplex.a[1], 100)
+    }
+    t |> run("string aggregate") <| @(t : T?) {
+        var strAgg = aggregate(
+            ["hello", " ", "world"],
+            "",
+            $(acc, x) => acc + x
+        )
+        t |> equal(strAgg, "hello world")
+    }
+    t |> run("type change aggregate") <| @(t : T?) {
+        var query = aggregate(
+            [for(x in 0..5); x],
+            "",
+            $(acc, x) => "{acc}{x}"
+        )
+        t |> equal(query, "01234")
     }
 }

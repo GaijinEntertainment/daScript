@@ -38,12 +38,11 @@ Generation operations
 Aggregation operations
      count - Counts elements in an iterable
      long_count - Counts elements in an iterable, using a long integer
-     min - Finds the minimum element in an iterable
-     min_by - Finds the minimum element in an iterable by a key
-     max - Finds the maximum element in an iterable
-     max_by - Finds the maximum element in an iterable by a key
+     min, min_by - Finds the minimum element in an iterable
+     max, max_by - Finds the maximum element in an iterable
+     min_max, min_max_by - Finds both the minimum and maximum elements in an iterable
+     min_max_average, min_max_average_by - Finds the minimum, maximum, and average elements in an iterable
      sum - Sums the elements in an iterable
-     sum_by - Sums the elements in an iterable by a key
      average - Averages the elements in an iterable
      aggregate - Aggregates the elements in an iterable
 Filtering data
@@ -620,26 +619,51 @@ def take_while(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : b
     }
     return buffer.move_to_sequence()
 }
-
-[skip_lock_check]
-def min(var src : iterator<auto(TT)>) : TT -& -const {
-    //! Finds the minimum element in an iterator
+[skip_lock_check, unused_argument(tt)]
+def private min_impl(var src; tt : auto(TT)) : TT -& -const {
     var minn : TT -& -const
     var first : bool = true
     for (x in src) {
         if (first) {
-            minn = x
+            static_if (typeinfo can_copy(x)) {
+                minn = x
+            } else {
+                minn <- clone_to_move(x)
+            }
             first = false
         } elif (_::less(x, minn)) {
-            minn = x
+            static_if (typeinfo can_copy(x)) {
+                minn = x
+            } else {
+                minn <- clone_to_move(x)
+            }
         }
     }
     return <- minn
 }
 
 [skip_lock_check]
-def min_by(var src : iterator<auto(TT)>; key) : TT -& -const {
-    //! Finds the minimum element in an iterator by key
+def min(var src : iterator<auto(TT)>) : TT -& -const {
+    //! Finds the minimum element in an iterator
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return min_impl(src, type<TT -const -&>)
+    } else {
+        return <- min_impl(src, type<TT -const -&>)
+    }
+}
+
+[skip_lock_check]
+def min(var src : array<auto(TT)>) : TT -& -const {
+    //! Finds the minimum element in an array
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return min_impl(src, type<TT -const -&>)
+    } else {
+        return <- min_impl(src, type<TT -const -&>)
+    }
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private min_by_impl(var src; tt : auto(TT); key) : TT -& -const {
     var minn : TT -& -const
     var first : bool = true
     for (x in src) {
@@ -662,8 +686,27 @@ def min_by(var src : iterator<auto(TT)>; key) : TT -& -const {
 }
 
 [skip_lock_check]
-def max(var src : iterator<auto(TT)>) : TT -& -const {
-    //! Finds the maximum element in an iterator
+def min_by(var src : iterator<auto(TT)>; key) : TT -& -const {
+    //! Finds the minimum element in an iterator by key
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return <- min_by_impl(src, type<TT -const -&>, key)
+    } else {
+        return <- min_by_impl(src, type<TT -const -&>, key)
+    }
+}
+
+[skip_lock_check]
+def min_by(var src : array<auto(TT)>; key) : TT -& -const {
+    //! Finds the minimum element in an array by key
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return min_by_impl(src, type<TT -const -&>, key)
+    } else {
+        return <- min_by_impl(src, type<TT -const -&>, key)
+    }
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private max_impl(var src; tt : auto(TT)) : TT -& -const {
     var maxx : TT -& -const
     var first : bool = true
     for (x in src) {
@@ -686,8 +729,27 @@ def max(var src : iterator<auto(TT)>) : TT -& -const {
 }
 
 [skip_lock_check]
-def max_by(var src : iterator<auto(TT)>; key) : TT -& -const {
-    //! Finds the maximum element in an iterator by key
+def max(var src : iterator<auto(TT)>) : TT -& -const {
+    //! Finds the maximum element in an iterator
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return max_impl(src, type<TT -const -&>)
+    } else {
+        return <- max_impl(src, type<TT -const -&>)
+    }
+}
+
+[skip_lock_check]
+def max(var src : array<auto(TT)>) : TT -& -const {
+    //! Finds the maximum element in an array
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return max_impl(src, type<TT -const -&>)
+    } else {
+        return <- max_impl(src, type<TT -const -&>)
+    }
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private max_by_impl(var src; tt : auto(TT); key) : TT -& -const {
     var maxx : TT -& -const
     var first : bool = true
     for (x in src) {
@@ -710,9 +772,120 @@ def max_by(var src : iterator<auto(TT)>; key) : TT -& -const {
 }
 
 [skip_lock_check]
-def aggregate(var src : iterator<auto(TT)>; seed : TT -&; func : block<(acc : TT -&, x : TT -&) : TT -&>) : TT -const -& {
-    //! Aggregates elements in an iterator using a seed and a function
-    var acc : TT -& -const
+def max_by(var src : iterator<auto(TT)>; key) : TT -& -const {
+    //! Finds the maximum element in an iterator by key
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return max_by_impl(src, type<TT -const -&>, key)
+    } else {
+        return <- max_by_impl(src, type<TT -const -&>, key)
+    }
+}
+
+[skip_lock_check]
+def max_by(var src : array<auto(TT)>; key) : TT -& -const {
+    //! Finds the maximum element in an array by key
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return max_by_impl(src, type<TT -const -&>, key)
+    } else {
+        return <- max_by_impl(src, type<TT -const -&>, key)
+    }
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private min_max_impl(var src; tt : auto(TT)) : tuple<TT -& -const, TT -& -const> {
+    var minn : TT -& -const
+    var maxx : TT -& -const
+    var first : bool = true
+    for (x in src) {
+        if (first) {
+            static_if (typeinfo can_copy(x)) {
+                minn = x
+                maxx = x
+            } else {
+                minn <- clone_to_move(x)
+                maxx <- clone_to_move(x)
+            }
+            first = false
+        } else {
+            if (_::less(x, minn)) {
+                static_if (typeinfo can_copy(x)) {
+                    minn = x
+                } else {
+                    minn <- clone_to_move(x)
+                }
+            } elif (_::less(maxx, x)) {
+                static_if (typeinfo can_copy(x)) {
+                    maxx = x
+                } else {
+                    maxx <- clone_to_move(x)
+                }
+            }
+        }
+    }
+    return <- (minn, maxx)
+}
+
+[skip_lock_check]
+def min_max(var src : iterator<auto(TT)>) : tuple<TT -& -const, TT -& -const> {
+    //! Finds the minimum and maximum elements in an iterator
+    return <- min_max_impl(src, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def min_max(var src : array<auto(TT)>) : tuple<TT -& -const, TT -& -const> {
+    //! Finds the minimum and maximum elements in an array
+    return <- min_max_impl(src, type<TT -const -&>)
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private min_max_by_impl(var src; tt : auto(TT); key) : tuple<TT -& -const, TT -& -const> {
+    var minn : TT -& -const
+    var maxx : TT -& -const
+    var first : bool = true
+    for (x in src) {
+        if (first) {
+            static_if (typeinfo can_copy(x)) {
+                minn = x
+                maxx = x
+            } else {
+                minn <- clone_to_move(x)
+                maxx <- clone_to_move(x)
+            }
+            first = false
+        } else {
+            if (_::less(key(x), key(minn))) {
+                static_if (typeinfo can_copy(x)) {
+                    minn = x
+                } else {
+                    minn <- clone_to_move(x)
+                }
+            } elif (_::less(key(maxx), key(x))) {
+                static_if (typeinfo can_copy(x)) {
+                    maxx = x
+                } else {
+                    maxx <- clone_to_move(x)
+                }
+            }
+        }
+    }
+    return <- (minn, maxx)
+}
+
+[skip_lock_check]
+def min_max_by(var src : iterator<auto(TT)>; key) : tuple<TT -& -const, TT -& -const> {
+    //! Finds the minimum and maximum elements in an iterator by key
+    return <- min_max_by_impl(src, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def min_max_by(var src : array<auto(TT)>; key) : tuple<TT -& -const, TT -& -const> {
+    //! Finds the minimum and maximum elements in an array by key
+    return <- min_max_by_impl(src, type<TT -const -&>, key)
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private aggregate_impl(var src; tt : auto(TT); seed : auto(AGG); func : block<(acc : AGG -&, x : TT -&) : AGG -&>) : AGG -& -const {
+    var acc : AGG -&
     static_if (typeinfo can_copy(seed)) {
         acc = seed
     } else {
@@ -729,22 +902,68 @@ def aggregate(var src : iterator<auto(TT)>; seed : TT -&; func : block<(acc : TT
 }
 
 [skip_lock_check]
-def sum(var src : iterator<auto(TT)>) : TT -const -& {
-    //! Sums elements in an iterator
+def aggregate(var src : iterator<auto(TT)>; seed : auto(AGG); func : block<(acc : AGG -&, x : TT -&) : AGG -&>) : AGG -& -const {
+    //! Aggregates elements in an iterator using a seed and a function
+    static_if (typeinfo is_workhorse(seed)) {
+        return aggregate_impl(src, type<TT -const -&>, seed, func)
+    } else {
+        return <- aggregate_impl(src, type<TT -const -&>, clone_to_move(seed), func)
+    }
+}
+
+[skip_lock_check]
+def aggregate(var src : array<auto(TT)>; seed : auto(AGG); func : block<(acc : AGG -&, x : TT -&) : AGG -&>) : AGG -& -const {
+    //! Aggregates elements in an array using a seed and a function
+    static_if (typeinfo is_workhorse(seed)) {
+        return aggregate_impl(src, type<TT -const -&>, seed, func)
+    } else {
+        return <- aggregate_impl(src, type<TT -const -&>, clone_to_move(seed), func)
+    }
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private sum_impl(var src; tt : auto(TT)) : TT -const -& {
     var total : TT -const -&
     for (x in src) {
-        total += x
+        static_if (typeinfo can_copy(x)) {
+            total += x
+        } else {
+            total += clone_to_move(x)
+        }
     }
     return <- total
 }
 
 [skip_lock_check]
-def average(var src : iterator<auto(TT)>) : TT -const -& {
-    //! Averages elements in an iterator
+def sum(var src : iterator<auto(TT)>) : TT -const -& {
+    //! Sums elements in an iterator
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return sum_impl(src, type<TT -const -&>)
+    } else {
+        return <- sum_impl(src, type<TT -const -&>)
+    }
+}
+
+[skip_lock_check]
+def sum(var src : array<auto(TT)>) : TT -const -& {
+    //! Sums elements in an array
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return sum_impl(src, type<TT -const -&>)
+    } else {
+        return <- sum_impl(src, type<TT -const -&>)
+    }
+}
+
+[skip_lock_check, unused_argument(tt)]
+def average_impl(var src; tt : auto(TT)) : TT -const -& {
     var total : TT -const -&
     var count : uint64
     for (x in src) {
-        total += x
+        static_if (typeinfo can_copy(x)) {
+            total += x
+        } else {
+            total += clone_to_move(x)
+        }
         count ++
     }
     if (count != 0ul) {
@@ -755,6 +974,152 @@ def average(var src : iterator<auto(TT)>) : TT -const -& {
         }
     }
     return <- total
+}
+
+[skip_lock_check]
+def average(var src : iterator<auto(TT)>) : TT -const -& {
+    //! Averages elements in an iterator
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return average_impl(src, type<TT -const -&>)
+    } else {
+        return <- average_impl(src, type<TT -const -&>)
+    }
+}
+
+[skip_lock_check]
+def average(var src : array<auto(TT)>) : TT -const -& {
+    //! Averages elements in an array
+    static_if (typeinfo is_workhorse(type<TT>)) {
+        return average_impl(src, type<TT -const -&>)
+    } else {
+        return <- average_impl(src, type<TT -const -&>)
+    }
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private min_max_average_impl(var src; tt : auto(TT)) : tuple<TT -const -&, TT -const -&, TT -const -&> {
+    var minn : TT -const -&
+    var maxx : TT -const -&
+    var total : TT -const -&
+    var count : uint64
+    var first : bool = true
+    for (x in src) {
+        if (first) {
+            static_if (typeinfo can_copy(x)) {
+                minn = x
+                maxx = x
+                total = x
+            } else {
+                minn <- clone_to_move(x)
+                maxx <- clone_to_move(x)
+                total <- clone_to_move(x)
+            }
+            first = false
+        } else {
+            if (_::less(x, minn)) {
+                static_if (typeinfo can_copy(x)) {
+                    minn = x
+                } else {
+                    minn <- clone_to_move(x)
+                }
+            } elif (_::less(maxx, x)) {
+                static_if (typeinfo can_copy(x)) {
+                    maxx = x
+                } else {
+                    maxx <- clone_to_move(x)
+                }
+            }
+            static_if (typeinfo can_copy(x)) {
+                total += x
+            } else {
+                total += clone_to_move(x)
+            }
+        }
+        count ++
+    }
+    if (count != 0ul) {
+        static_if (typeinfo is_workhorse(type<TT>)) {
+            total /= TT(count)
+        } else {
+            total /= count
+        }
+    }
+    return <- (minn, maxx, total)
+}
+
+[skip_lock_check]
+def min_max_average(var src : iterator<auto(TT)>) : tuple<TT -const -&, TT -const -&, TT -const -&> {
+    //! Finds the minimum, maximum, and average elements in an iterator
+    return <- min_max_average_impl(src, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def min_max_average(var src : array<auto(TT)>) : tuple<TT -const -&, TT -const -&, TT -const -&> {
+    //! Finds the minimum, maximum, and average elements in an array
+    return <- min_max_average_impl(src, type<TT -const -&>)
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private min_max_average_by_impl(var src; tt : auto(TT); key) : tuple<TT -const -&, TT -const -&, TT -const -&> {
+    var minn : TT -const -&
+    var maxx : TT -const -&
+    var total : TT -const -&
+    var count : uint64
+    var first : bool = true
+    for (x in src) {
+        if (first) {
+            static_if (typeinfo can_copy(x)) {
+                minn = x
+                maxx = x
+                total = x
+            } else {
+                minn <- clone_to_move(x)
+                maxx <- clone_to_move(x)
+                total <- clone_to_move(x)
+            }
+            first = false
+        } else {
+            if (_::less(key(x), key(minn))) {
+                static_if (typeinfo can_copy(x)) {
+                    minn = x
+                } else {
+                    minn <- clone_to_move(x)
+                }
+            } elif (_::less(key(maxx), key(x))) {
+                static_if (typeinfo can_copy(x)) {
+                    maxx = x
+                } else {
+                    maxx <- clone_to_move(x)
+                }
+            }
+            static_if (typeinfo can_copy(x)) {
+                total += x
+            } else {
+                total += clone_to_move(x)
+            }
+        }
+        count ++
+    }
+    if (count != 0ul) {
+        static_if (typeinfo is_workhorse(type<TT>)) {
+            total /= TT(count)
+        } else {
+            total /= count
+        }
+    }
+    return <- (minn, maxx, total)
+}
+
+[skip_lock_check]
+def min_max_average_by(var src : iterator<auto(TT)>; key) : tuple<TT -const -&, TT -const -&, TT -const -&> {
+    //! Finds the minimum, maximum, and average elements in an iterator by key
+    return <- min_max_average_by_impl(src, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def min_max_average_by(var src : array<auto(TT)>; key) : tuple<TT -const -&, TT -const -&, TT -const -&> {
+    //! Finds the minimum, maximum, and average elements in an array by key
+    return <- min_max_average_by_impl(src, type<TT -const -&>, key)
 }
 
 [skip_lock_check]

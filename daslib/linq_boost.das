@@ -14,7 +14,9 @@ Transform operations
     - _select(it, expr)        => select(it, $(_) => expr)
 Aggregation operations
     - _min_by(it, expr)         => min_by(it, $(_) => expr)
-    - _max_by(it, expr)         => max_by(it, $(_) => expr
+    - _max_by(it, expr)         => max_by(it, $(_) => expr)
+    - _min_max_by(it, expr)     => min_max_by(it, $(_) => expr)
+    - _min_max_average_by(it, expr) => min_max_average_by(it, $(_) => expr)
 Comparators and keys
     - _sequence_equal_by(it1, it2, expr) => sequence_equal_by(it1, it2, $(_) => expr)
 Partitioning data
@@ -105,6 +107,16 @@ class private LinqMinBy : AstCallMacro_LinqPred2 {
 [call_macro(name="_max_by")]
 class private LinqMaxBy : AstCallMacro_LinqPred2 {
     override predName = "max_by"
+}
+
+[call_macro(name="_min_max_by")]
+class private LinqMinMaxBy : AstCallMacro_LinqPred2 {
+    override predName = "min_max_by"
+}
+
+[call_macro(name="_min_max_average_by")]
+class private LinqMinMaxAverageBy : AstCallMacro_LinqPred2 {
+    override predName = "min_max_average_by"
 }
 
 [call_macro(name="_skip_while")]
@@ -254,6 +266,18 @@ var private linqCalls = {
     "order_by_descending" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_array" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_sequence" => LinqCall(name = "order_by_descending", inplace = true),
+// aggregate
+    "average" => LinqCall(name = "average"),
+    "min" => LinqCall(name = "min"),
+    "min_by" => LinqCall(name = "min_by"),
+    "max" => LinqCall(name = "max"),
+    "max_by" => LinqCall(name = "max_by"),
+    "min_max" => LinqCall(name = "min_max"),
+    "min_max_by" => LinqCall(name = "min_max_by"),
+    "min_max_average" => LinqCall(name = "min_max_average"),
+    "min_max_average_by" => LinqCall(name = "min_max_average_by"),
+    "aggregate" => LinqCall(name = "aggregate"),
+    "sum" => LinqCall(name = "sum"),
 // skippables
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
@@ -355,7 +379,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
                 blk.list |> emplace(newCall)
             } else {
                 blk.list |> emplace_new <| qmacro_expr() {
-                    var $i(newArgName) <- $e(newCall)
+                    var $i(newArgName) = $e(newCall)
                 }
                 if (argIndex != 0) {
                     blk.list |> emplace_new <| qmacro_expr() {
