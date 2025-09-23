@@ -267,6 +267,8 @@ var private linqCalls = {
     "order_by_descending_to_array" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_sequence" => LinqCall(name = "order_by_descending", inplace = true),
 // aggregate
+    "count" => LinqCall(name = "count"),
+    "long_count" => LinqCall(name = "long_count"),
     "average" => LinqCall(name = "average"),
     "min" => LinqCall(name = "min"),
     "min_by" => LinqCall(name = "min_by"),
@@ -285,6 +287,12 @@ var private linqCalls = {
     "skip_while" => LinqCall(name = "skip_while"),
     "skip_while_to_array" => LinqCall(name = "skip_while"),
     "skip_while_to_sequence" => LinqCall(name = "skip_while"),
+    "take" => LinqCall(name = "take", inplace = true),
+    "take_to_array" => LinqCall(name = "take", inplace = true),
+    "take_to_sequence" => LinqCall(name = "take", inplace = true),
+    "take_while" => LinqCall(name = "take_while"),
+    "take_while_to_array" => LinqCall(name = "take_while"),
+    "take_while_to_sequence" => LinqCall(name = "take_while"),
 // skippables
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),

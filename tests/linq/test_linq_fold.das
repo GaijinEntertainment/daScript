@@ -261,3 +261,57 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(",1,2,3,4,5,6,7,8", t2)
     }
 }
+
+[test]
+def test_generic_fold_skip_and_take(t : T?) {
+    t |> run("skip fold") <| @(t : T?) {
+        var t1 = ([5, 3, 8, 1, 4]
+            .to_sequence()
+            .skip(2)
+            .min()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t1), "int")
+        t |> equal(1, t1)
+    }
+    t |> run("skip_while fold") <| @(t : T?) {
+        var t2 = ([5, 3, 8, 1, 4]
+            .to_sequence()
+            ._skip_while(_ > 3)
+            .min()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t2), "int")
+        t |> equal(1, t2)
+    }
+    t |> run("take fold") <| @(t : T?) {
+        var t3 = ([5, 3, 8, 1, 4]
+            .to_sequence()
+            .take(3)
+            .max()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t3), "int")
+        t |> equal(8, t3)
+    }
+    t |> run("take_while fold") <| @(t : T?) {
+        var t4 = ([5, 3, 8, 1, 4]
+            .to_sequence()
+            ._take_while(_ < 8)
+            .max()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t4), "int")
+        t |> equal(5, t4)
+    }
+    t |> run("take range fold") <| @(t : T?) {
+        var t5 = ([5, 3, 8, 1, 4]
+            .to_sequence()
+            .take(1..4)
+            .max()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t5), "int")
+        t |> equal(8, t5)
+    }
+}

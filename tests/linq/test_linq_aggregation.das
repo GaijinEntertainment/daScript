@@ -28,6 +28,16 @@ def test_count(t : T?) {
         )
         t |> equal(totalComplex, 5l)
     }
+    t |> run("count from array") <| @(t : T?) {
+        var arr = [for (x in 0..5); x]
+        var arrayTotal = count(arr)
+        t |> equal(arrayTotal, 5)
+    }
+    t |> run("long count from array") <| @(t : T?) {
+        var arr = [for (x in 0..5); x]
+        var arrayLongTotal = long_count(arr)
+        t |> equal(arrayLongTotal, 5l)
+    }
 }
 
 [test]
