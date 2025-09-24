@@ -3339,7 +3339,7 @@ namespace das
             }
         }
         // if there is anything pinvoke or the option is set
-        if ( anyPInvoke || policies.threadlock_context || policies.debugger ) {
+        if ( !context.contextMutex && (anyPInvoke || policies.threadlock_context || policies.debugger) ) {
             context.contextMutex = new recursive_mutex;
         }
         //
