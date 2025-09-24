@@ -1930,87 +1930,75 @@ def swap(var a, b : auto(TT)&) {
 }
 
 def subarray(a : auto(TT)[]; r : range) {
-    static_if (typeinfo can_copy(type<TT>)) {
-        var ra : array<TT -const -&>
-        if (r.x < r.y) {
-            ra |> reserve(r.y - r.x)
-            static_if (typeinfo need_lock_check(type<TT>)) {
-                unsafe(set_verify_array_locks(ra, false))
-            }
-            for (t in r) {
-                ra |> push(a[t])
-            }
-            static_if (typeinfo need_lock_check(type<TT>)) {
-                unsafe(set_verify_array_locks(ra, true))
-            }
+    var ra : array<TT -const -&>
+    if (r.x < r.y) {
+        ra |> reserve(r.y - r.x)
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, false))
         }
-        return <- ra
-    } else {
-        concept_assert(false, "can't get subarray of non-copyable type")
+        for (t in r) {
+            ra |> push_clone(a[t])
+        }
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, true))
+        }
     }
+    return <- ra
 }
 
 def subarray(a : auto(TT)[]; r : urange) {
-    static_if (typeinfo can_copy(type<TT>)) {
-        var ra : array<TT -const -&>
-        if (r.x < r.y) {
-            ra |> reserve(int(r.y - r.x))
-            static_if (typeinfo need_lock_check(type<TT>)) {
-                unsafe(set_verify_array_locks(ra, false))
-            }
-            for (t in r) {
-                ra |> push(a[t])
-            }
-            static_if (typeinfo need_lock_check(type<TT>)) {
-                unsafe(set_verify_array_locks(ra, true))
-            }
+    var ra : array<TT -const -&>
+    if (r.x < r.y) {
+        ra |> reserve(int(r.y - r.x))
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, false))
         }
-        return <- ra
-    } else {
-        concept_assert(false, "can't get subarray of non-copyable type")
+        for (t in r) {
+            ra |> push_clone(a[t])
+        }
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, true))
+        }
     }
+    return <- ra
 }
 
 def subarray(a : array<auto(TT)>; r : range) {
-    static_if (typeinfo can_copy(type<TT>)) {
-        var ra : array<TT -const -&>
-        if (r.x < r.y) {
-            ra |> reserve(r.y - r.x)
-            static_if (typeinfo need_lock_check(type<TT>)) {
-                unsafe(set_verify_array_locks(ra, false))
-            }
-            for (t in r) {
-                ra |> push(a[t])
-            }
-            static_if (typeinfo need_lock_check(type<TT>)) {
-                unsafe(set_verify_array_locks(ra, true))
-            }
+    var ra : array<TT -const -&>
+    if (r.x < r.y) {
+        ra |> reserve(r.y - r.x)
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, false))
+            unsafe(set_verify_array_locks(a, false))
         }
-        return <- ra
-    } else {
-        concept_assert(false, "can't get subarray of non-copyable type")
+        for (t in r) {
+            ra |> push_clone(a[t])
+        }
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, true))
+            unsafe(set_verify_array_locks(a, true))
+        }
     }
+    return <- ra
 }
 
 def subarray(a : array<auto(TT)>; r : urange) {
-    static_if (typeinfo can_copy(type<TT>)) {
-        var ra : array<TT -const -&>
-        if (r.x < r.y) {
-            ra |> reserve(int(r.y - r.x))
-            static_if (typeinfo need_lock_check(type<TT>)) {
-                unsafe(set_verify_array_locks(ra, false))
-            }
-            for (t in r) {
-                ra |> push(a[t])
-            }
-            static_if (typeinfo need_lock_check(type<TT>)) {
-                unsafe(set_verify_array_locks(ra, true))
-            }
+    var ra : array<TT -const -&>
+    if (r.x < r.y) {
+        ra |> reserve(int(r.y - r.x))
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, false))
+            unsafe(set_verify_array_locks(a, false))
         }
-        return <- ra
-    } else {
-        concept_assert(false, "can't get subarray of non-copyable type")
+        for (t in r) {
+            ra |> push_clone(a[t])
+        }
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, true))
+            unsafe(set_verify_array_locks(a, true))
+        }
     }
+    return <- ra
 }
 
 def move_to_ref(var a : auto&; var b) {

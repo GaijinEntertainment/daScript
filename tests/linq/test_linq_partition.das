@@ -23,7 +23,7 @@ def test_skip(t : T?) {
             [iterator for(x in 0..5); x],
             _ < 3
         )
-        for (c, i in query_skip, 0..2) {
+        for (c, i in query_skip, 0..3) {
             t |> equal(c, i + 3)
         }
     }
@@ -45,6 +45,34 @@ def test_skip(t : T?) {
             t |> success(c.a.Equal([i + 3, (i + 3) * 10]))
         }
     }
+    t |> run("skip to array") <| @(t : T?) {
+        var query_array = skip_to_array(
+            [iterator for(x in 0..5); x],
+            2
+        )
+        static_assert(typeinfo is_array(query_array))
+        for (c, i in query_array, 0..3) {
+            t |> equal(c, i + 2)
+        }
+    }
+    t |> run("skip to sequence") <| @(t : T?) {
+        var query_seq = skip_to_sequence(
+            [0, 1, 2, 3, 4, 5],
+            2
+        )
+        static_assert(typeinfo is_iterator(query_seq))
+        for (c, i in query_seq, 0..3) {
+            t |> equal(c, i + 2)
+        }
+    }
+    t |> run("skip in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 5]
+        skip_inplace(arr, 2)
+        t |> equal(4, length(arr))
+        for (c, i in arr, 0..3) {
+            t |> equal(c, i + 2)
+        }
+    }
 }
 
 [test]
@@ -54,7 +82,7 @@ def test_take(t : T?) {
             [iterator for(x in 0..5); x],
             3
         )
-        for (c, i in query, 0..2) {
+        for (c, i in query, 0..3) {
             t |> equal(c, i)
         }
     }
@@ -63,16 +91,17 @@ def test_take(t : T?) {
             [iterator for(x in 0..5); x],
             _ < 3
         )
-        for (c, i in query_take_while, 0..2) {
+        for (c, i in query_take_while, 0..3) {
             t |> equal(c, i)
         }
     }
     t |> run("complex take range") <| @(t : T?) {
         var query_take_range = take(
-            [iterator for(x in 0..5); x],
+            [for (x in 0..5); x],
             1..4
         )
-        for (c, i in query_take_range, 0..2) {
+        t |> equal(3, length(query_take_range))
+        for (c, i in query_take_range, 0..3) {
             t |> equal(c, i + 1)
         }
     }
@@ -81,7 +110,7 @@ def test_take(t : T?) {
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             3
         )
-        for (c, i in qcomplex, 0..2) {
+        for (c, i in qcomplex, 0..3) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
@@ -90,9 +119,69 @@ def test_take(t : T?) {
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             _.a[0] < 3
         )
-        for (c, i in qcomplex_take_while, 0..2) {
+        for (c, i in qcomplex_take_while, 0..3) {
             t |> success(c.a.Equal([i, i * 10]))
         }
+    }
+    t |> run("take to array") <| @(t : T?) {
+        var query_array = take_to_array(
+            [iterator for(x in 0..5); x],
+            3
+        )
+        static_assert(typeinfo is_array(query_array))
+        for (c, i in query_array, 0..3) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("take to sequence") <| @(t : T?) {
+        var query_seq = take_to_sequence(
+            [0, 1, 2, 3, 4, 5],
+            3
+        )
+        static_assert(typeinfo is_iterator(query_seq))
+        for (c, i in query_seq, 0..3) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("take in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 5]
+        take_inplace(arr, 3)
+        t |> equal(3, length(arr))
+        for (c, i in arr, 0..3) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("take range in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 5]
+        take_inplace(arr, 1..4)
+        t |> equal(3, length(arr))
+        for (c, i in arr, 0..3) {
+            t |> equal(c, i + 1)
+        }
+    }
+    t |> run("take range to array") <| @(t : T?) {
+        var query_array = take_to_array(
+            [iterator for(x in 0..5); x],
+            1..4
+        )
+        static_assert(typeinfo is_array(query_array))
+        t |> equal(3, length(query_array))
+        for (c, i in query_array, 0..3) {
+            t |> equal(c, i + 1)
+        }
+    }
+    t |> run("take range to sequence") <| @(t : T?) {
+        var query_seq = take_to_sequence(
+            [0, 1, 2, 3, 4, 5],
+            1..4
+        )
+        static_assert(typeinfo is_iterator(query_seq))
+        var count = 0
+        for (c, i in query_seq, 0..3) {
+            t |> equal(c, i + 1)
+            count ++
+        }
+        t |> equal(3, count)
     }
 }
 
