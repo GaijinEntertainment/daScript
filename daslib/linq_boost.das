@@ -391,7 +391,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
                 inplace = true
             }
             for (i in cll._1.recursive) {   // this is where we make recursion
-                if ( i>=1 && i < cll._0.arguments |> length ) {
+                if (i >= 1 && i < cll._0.arguments |> length) {
                     var inscope argExpr <- make_call(cll._0.at, "_fold")
                     (argExpr as ExprCallMacro).arguments |> emplace <| cll._0.arguments[i]
                     cll._0.arguments[i] |> move <| argExpr
