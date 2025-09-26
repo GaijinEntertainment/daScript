@@ -7,12 +7,26 @@ namespace das
     struct FuncInfo;
     struct LineInfoArg;
 
+    class JitFn {
+    private:
+        template <typename RetT, typename ...Args>
+        friend class CallJitFn; // Call it only using this helper
+        void *jitFn;
+    public:
+        JitFn() : jitFn(nullptr) {}
+        JitFn(void *jitFn) : jitFn(jitFn) {}
+
+        operator bool() const {
+            return jitFn != nullptr;
+        }
+    };
+
     struct Block {
         uint32_t    stackOffset;
         uint32_t    argumentsOffset;
         SimNode *   body;
         void *      aotFunction;
-        void *      jitFunction;
+        JitFn      jitFunction;
         vec4f *     functionArguments;
         FuncInfo *  info;
         __forceinline bool operator == ( const Block & b ) const {

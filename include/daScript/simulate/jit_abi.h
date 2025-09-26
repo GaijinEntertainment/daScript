@@ -43,6 +43,7 @@ template <typename Ret, typename ... Args> struct NeedVectorWrap< Ret(*)(Args...
     };
 };
 
+// llvm ir -> c++
 template <int CMRES, int wrap, typename FuncT, FuncT fn> struct ImplWrapCall;
 
 template <typename FuncT, FuncT fn>     // no cmres, no wrap
@@ -73,6 +74,16 @@ struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
         return static_cast<typename WrapType<RetT>::rettype>(fnPtr(args...));   // note explicit cast
     };
     static void * get_builtin_address() { return (void *) &static_call; }
+};
+
+// c++ -> llvm ir
+template <typename RetT, typename ...Args>
+struct CallJitFn {   // no cmres, wrap
+    static RetT static_call (const JitFn &fn, Args... args ) {
+        typedef typename WrapType<RetT>::type (* FuncType)(typename WrapType<Args>::type...);
+        auto fnPtr = reinterpret_cast<FuncType>(fn.jitFn);
+        return static_cast<RetT>(fnPtr(args...));   // note explicit cast
+    }
 };
 
 #if defined(_MSC_VER)
