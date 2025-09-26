@@ -1256,10 +1256,13 @@ namespace das
                     return true;
                 }
             }
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        }
+        /*
+            // NOT REALLY. array<FancyClass> can stay uninitialized
+            else if ( baseType==Type::tArray || baseType==Type::tTable ) {
             if ( firstType && firstType->hasNonTrivialCtor(dep) ) return true;
             if ( secondType && secondType->hasNonTrivialCtor(dep) ) return true;
-        }
+        } */
         return false;
     }
 
