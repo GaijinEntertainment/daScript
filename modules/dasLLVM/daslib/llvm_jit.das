@@ -1104,6 +1104,33 @@ class LlvmJitVisitor : AstVisitor {
         return args
     }
 
+    def build_interop_call(fn_type : LLVMOpaqueType?; loaded_func : LLVMOpaqueValue?;
+                           args : dasvector`smart_ptr`Expression; var params : array<LLVMOpaqueValue?>;
+                           start : uint; name : string) {
+        var ccall = LLVMBuildCall2(g_builder, fn_type, loaded_func, params, name)
+        for (arg, ai in args, ucount(start)) {
+            let maybe_ext = need_z_or_s_ext(arg._type)
+            if (maybe_ext != null) {
+                LLVMAddCallSiteAttribute(ccall, ai + 1u, maybe_ext)
+            }
+        }
+        return ccall
+    }
+
+    def need_z_or_s_ext(_type : TypeDeclPtr) {
+        if (!_type.isRef && _type.sizeOf < 4 &&
+            _type.baseType != Type.fakeContext && // incorrect size for fakeContext & fakeLineInfo
+            _type.baseType != Type.fakeLineInfo) {
+            if (_type.isSignedInteger) {
+                return g_ctx |> LLVMGetEnumAttribute("signext")
+            } else {
+                // unsigned ints + bitfields + enums
+                return g_ctx |> LLVMGetEnumAttribute("zeroext")
+            }
+        }
+        return null
+    }
+
     def register_extern_function(expr : smart_ptr<ExprCallFunc>) : LLVMOpaqueValue? {
         let mangled_name = get_mangled_name(expr.func)
         var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
@@ -1136,9 +1163,16 @@ class LlvmJitVisitor : AstVisitor {
                 LLVMAddAttributeToFunction(ofunc, g_ctx |> LLVMGetEnumAttribute("nounwind"))     // TODO: better no-unwind?
                 LLVMAddAttributeToFunction(ofunc, g_ctx |> LLVMGetEnumAttribute("willreturn"))
             }
+            var ao = cmres ? 1u : 0u
+            for (arg, ai in expr.func.arguments, ucount()) {
+                let maybe_ext = need_z_or_s_ext(arg._type)
+                if (maybe_ext != null) {
+                    LLVMAddAttributeToFunctionArgument(ofunc, ai + ao, maybe_ext)
+                }
+            }
+
             if (!expr.func.sideEffectFlags.modifyExternal) {
                 var nocapture_attr = g_ctx |> LLVMGetEnumAttribute("nocapture")
-                var ao = cmres ? 1u : 0u
                 for (arg, ai in expr.func.arguments, ucount()) {
                     if (arg._type.isRef) {
                         LLVMAddAttributeToFunctionArgument(ofunc, ai + ao, nocapture_attr)
@@ -1288,10 +1322,10 @@ class LlvmJitVisitor : AstVisitor {
                 if (cmresEval != null) {
                     var cmresPtr = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(type_to_llvm_type(expr.func.result), 0u), "cmresPTR")
                     params |> push(cmresPtr, 0)
-                    var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
+                    var ccall = build_interop_call(typ, func, expr.arguments, params, 1u, "")
                     setE(expr, cmresEval)
                 } else {
-                    var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
+                    var ccall = build_interop_call(typ, func, expr.arguments, params, 0u, "")
                     setE(expr, ccall)
                 }
             }
@@ -5171,7 +5205,7 @@ class LlvmJitVisitor : AstVisitor {
             vec = LLVMBuildInsertElement(g_builder, vec, y, types.ConstI32(1ul), "")
             vec = LLVMBuildInsertElement(g_builder, vec, z, types.ConstI32(2ul), "vec4f_to_float3")
             return vec
-        } elif (bt == Type.tFloat4) {
+        } elif (bt == Type.tFloat4 || bt == Type.anyArgument) {
             return v4f
         } elif (bt == Type.tInt2 || bt == Type.tUInt2 || bt == Type.tRange || bt == Type.tURange) {
             var vec = LLVMGetUndef(types.LLVMFloat2Type())
@@ -5208,7 +5242,9 @@ class LlvmJitVisitor : AstVisitor {
 
     def cast_from_vec4f(expr : ExpressionPtr; etype : TypeDeclPtr; v4f : LLVMOpaqueValue?) {
         var tres : LLVMOpaqueValue?
-        if (etype.isRef) {
+        if (etype.baseType == Type.anyArgument) {
+            tres = v4f
+        } elif (etype.isRef) {
             var ptr_type = LLVMPointerType(type_to_llvm_type(etype), 0u)
             tres = cast_from_vec4f_ptr(v4f, ptr_type)
         } elif (etype.isWorkhorseType) {
@@ -5217,7 +5253,7 @@ class LlvmJitVisitor : AstVisitor {
             var inscope tp <- get_underlying_value_type(etype)
             if (tp == null) {
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(etype)} {describe(expr.at)}");
-            } elif (!tp.isWorkhorseType) {
+            } elif (!tp.isWorkhorseType && tp.baseType != Type.anyArgument) {
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)} {describe(expr.at)}")
             }
             tres = cast_from_vec4f_workhorse(tp, expr, v4f)
@@ -5295,6 +5331,8 @@ class LlvmJitVisitor : AstVisitor {
             } else {
                 failed("unsupported workhorse cast_to_vec4f cast {describe(etype)} aka {etype.baseType}")
             }
+        } elif (etype.baseType == Type.anyArgument) {
+            tres = tsrc
         } elif (etype.isFunction) {
             assert(typeinfo sizeof(type<void?>) == 8)
             var vvec = LLVMGetUndef(LLVMVectorType(types.t_int64, 2u))
@@ -5306,7 +5344,7 @@ class LlvmJitVisitor : AstVisitor {
             var inscope tp <- get_underlying_value_type(etype)
             if (tp == null) {
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(etype)}")
-            } elif (!tp.isWorkhorseType) {
+            } elif (!tp.isWorkhorseType && tp.baseType != Type.anyArgument) {
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)}")
             }
             tres = cast_to_vec4f(tp, tsrc)
@@ -5745,17 +5783,6 @@ class DisableJitVisitor : AstVisitor {
                 disable = true
                 return
             }
-        }
-    }
-
-    def override preVisitExprAt(expr : smart_ptr<ExprFor>) : void {
-        if (subExprT.isPointer) {
-        } elif (subExprT.dim |> length != 0) {
-        } elif (subExprT.isGoodArrayType) {
-        } elif (subExprT.isGoodTableType) {
-        } elif (subExprT.isVectorType) {
-        } else {
-            disable = true
         }
     }
 
