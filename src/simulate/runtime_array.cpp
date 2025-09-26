@@ -24,6 +24,10 @@ namespace das
     void array_reserve(Context & context, Array & arr, uint32_t newCapacity, uint32_t stride, LineInfo * at) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't change capacity of a locked array");
         if ( arr.capacity >= newCapacity ) return;
+        uint64_t memSize64 = uint64_t(newCapacity) * uint64_t(stride);
+        if ( memSize64>=0xffffffff ) {
+            context.throw_error_at(at, "can't grow array, out of index space [capacity=%i] [stride=%i]", newCapacity, stride);
+        }
         char * newData = nullptr;
         if ( context.verySafeContext ) {
             newData = (char *)context.allocate(newCapacity*stride, at);
