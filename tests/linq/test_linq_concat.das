@@ -28,6 +28,27 @@ def test_append(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
+    t |> run("append to array") <| @(t : T?) {
+        var qarray = append_to_array(
+            [iterator for(x in 0..5); x],
+            5
+        )
+        t |> success(qarray.Equal([0, 1, 2, 3, 4, 5]))
+    }
+    t |> run("append to sequence") <| @(t : T?) {
+        var qsequence = append_to_sequence(
+            [for (x in 0..5); x],
+            5
+        )
+        for (c, i in qsequence, 0..6) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("append inplace") <| @(t : T?) {
+        var a = [for (x in 0..5); x]
+        append_inplace(a, 5)
+        t |> success(a.Equal([0, 1, 2, 3, 4, 5]))
+    }
 }
 
 [test]
@@ -49,6 +70,27 @@ def test_prepend(t : T?) {
         for (c, i in qcomplex, -1..5) {
             t |> success(c.a.Equal([i, i * 10]))
         }
+    }
+    t |> run("prepend to array") <| @(t : T?) {
+        var qarray = prepend_to_array(
+            [iterator for(x in 0..5); x],
+            -1
+        )
+        t |> success(qarray.Equal([-1, 0, 1, 2, 3, 4]))
+    }
+    t |> run("prepend to sequence") <| @(t : T?) {
+        var qsequence = prepend_to_sequence(
+            [for (x in 0..5); x],
+            -1
+        )
+        for (c, i in qsequence, -1..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("prepend inplace") <| @(t : T?) {
+        var a = [for (x in 0..5); x]
+        prepend_inplace(a, -1)
+        t |> success(a.Equal([-1, 0, 1, 2, 3, 4]))
     }
 }
 
@@ -87,5 +129,10 @@ def test_concat(t : T?) {
         for (c, i in qsequence, 0..10) {
             t |> equal(c, i)
         }
+    }
+    t |> run("concat inplace") <| @(t : T?) {
+        var a = [for (x in 0..5); x]
+        concat_inplace(a, [for (x in 5..10); x])
+        t |> success(a.Equal([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
     }
 }

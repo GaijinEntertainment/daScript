@@ -295,9 +295,15 @@ var private linqCalls = {
     "take_while_to_array" => LinqCall(name = "take_while"),
     "take_while_to_sequence" => LinqCall(name = "take_while"),
 // concatenation operations
-    "concat" => LinqCall(name = "concat", recursive = [1]),
-    "concat_to_array" => LinqCall(name = "concat", recursive = [1]),
-    "concat_to_sequence" => LinqCall(name = "concat", recursive = [1]),
+    "concat" => LinqCall(name = "concat", recursive = [1], inplace = true),
+    "concat_to_array" => LinqCall(name = "concat", recursive = [1], inplace = true),
+    "concat_to_sequence" => LinqCall(name = "concat", recursive = [1], inplace = true),
+    "prepend" => LinqCall(name = "prepend", inplace = true),
+    "prepend_to_array" => LinqCall(name = "prepend", inplace = true),
+    "prepend_to_sequence" => LinqCall(name = "prepend", inplace = true),
+    "append" => LinqCall(name = "append", inplace = true),
+    "append_to_array" => LinqCall(name = "append", inplace = true),
+    "append_to_sequence" => LinqCall(name = "append", inplace = true),
 // skippables
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),

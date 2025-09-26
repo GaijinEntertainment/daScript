@@ -27,9 +27,9 @@ Set operations
      intersect - Returns elements that are present in both iterables
      intersect_by - Returns elements that are present in both iterables by key
 Concatenation operations
-     append - Appends an element to the end of an iterable
-     prepend - Prepends an element to the beginning of an iterable
-     concat, concat_to_array, concat_to_sequence - Concatenates two iterables
+     append, append_to_array, append_to_sequence, append_inplace - Appends an element to the end of an iterable
+     prepend, prepend_to_array, prepend_to_sequence, prepend_inplace - Prepends an element to the beginning of an iterable
+     concat, concat_to_array, concat_to_sequence, concat_inplace - Concatenates two iterables
 Generation operations
      empty - Returns an empty iterable of a default type
      default_empty - Returns the elements of the iterable, or a default value if the iterable is empty
@@ -119,7 +119,7 @@ def to_table(var a : iterator<auto(TT)>; key; elementSelector) : table<typedecl(
 }
 
 [skip_lock_check, unused_argument(tt)]
-def private concat_to_array_impl(var a; var b; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+def private concat_impl(var a; var b; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
     //! Concatenates two arrays or iterators
     var c : array<TT -const -&>
     static_if (typeinfo need_lock_check(c)) {
@@ -143,17 +143,17 @@ def private concat_to_array_impl(var a; var b; tt : auto(TT); reserveSize : int)
 
 [skip_lock_check]
 def concat(var a, b : array<auto(TT)>) : array<TT -const -&> {
-    return <- concat_to_array_impl(a, b, type<TT -const -&>, length(a) + length(b))
+    return <- concat_impl(a, b, type<TT -const -&>, length(a) + length(b))
 }
 
 [skip_lock_check]
 def concat_to_array(var a, b : iterator<auto(TT)>) : array<TT -const -&> {
-    return <- concat_to_array_impl(a, b, type<TT -const -&>, 0)
+    return <- concat_impl(a, b, type<TT -const -&>, 0)
 }
 
 [skip_lock_check]
 def concat_to_sequence(var a, b : array<auto(TT)>) : iterator<TT -const -&> {
-    return <- concat_to_array_impl(a, b, type<TT -const -&>, length(a) + length(b)).move_to_sequence()
+    return <- concat_impl(a, b, type<TT -const -&>, length(a) + length(b)).move_to_sequence()
 }
 
 [skip_lock_check]
@@ -175,6 +175,15 @@ def concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
             }
         }
         return false
+    }
+}
+
+[skip_lock_check]
+def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
+    //! Concatenates two arrays in place
+    a.reserve(length(a) + length(b))
+    for (it in b) {
+        a.push_clone(it)
     }
 }
 
@@ -1769,6 +1778,44 @@ def single_or_default(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -
 }
 
 [skip_lock_check]
+def private prepend_impl(var arr; tt : auto(TT); reserveSize : int; value : TT -&) : array<TT -const -&> {
+    //! Prepends a value to the beginning of an array
+    var buffer : array<TT -const -&>
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, false))
+    }
+    if (reserveSize > 0) {
+        buffer.reserve(reserveSize)
+    }
+    buffer.push_clone(value)
+    for (x in arr) {
+        buffer.push_clone(x)
+    }
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, true))
+    }
+    return <- buffer
+}
+
+[skip_lock_check]
+def prepend(var arr : array<auto(TT)>; value : TT -&) : array<TT -const -&> {
+    //! Prepends a value to the beginning of an array
+    return <- prepend_impl(arr, type<TT -const -&>, length(arr) + 1, value)
+}
+
+[skip_lock_check]
+def prepend_to_array(var it : iterator<auto(TT)>; value : TT -&) : array<TT -const -&> {
+    //! Prepends a value to the beginning of an iterator and returns an array
+    return <- prepend_impl(it, type<TT -const -&>, 0, value)
+}
+
+[skip_lock_check]
+def prepend_to_sequence(var arr : array<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
+    //! Prepends a value to the beginning of an array and returns an iterator
+    return <- prepend_impl(arr, type<TT -const -&>, length(arr) + 1, value).move_to_sequence()
+}
+
+[skip_lock_check]
 def prepend(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
     //! Prepends a value to the beginning of an iterator
     return generator<TT -const -&> capture(<- it, := value) () <| $ {
@@ -1789,6 +1836,50 @@ def prepend(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&>
 }
 
 [skip_lock_check]
+def prepend_inplace(var arr : array<auto(TT)>; value : TT -&) {
+    //! Prepends a value to the beginning of an array in place
+    arr.push_clone(value, 0)
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private append_impl(var arr; tt : auto(TT); reserveSize : int; value : TT -&) : array<TT -const -&> {
+    //! Appends a value to the end of an array
+    var buffer : array<TT -const -&>
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, false))
+    }
+    if (reserveSize > 0) {
+        buffer.reserve(reserveSize)
+    }
+    for (x in arr) {
+        buffer.push_clone(x)
+    }
+    buffer.push_clone(value)
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, true))
+    }
+    return <- buffer
+}
+
+[skip_lock_check]
+def append(var arr : array<auto(TT)>; value : TT -&) : array<TT -const -&> {
+    //! Appends a value to the end of an array
+    return <- append_impl(arr, type<TT -const -&>, length(arr) + 1, value)
+}
+
+[skip_lock_check]
+def append_to_array(var it : iterator<auto(TT)>; value : TT -&) : array<TT -const -&> {
+    //! Appends a value to the end of an iterator and returns an array
+    return <- append_impl(it, type<TT -const -&>, 0, value)
+}
+
+[skip_lock_check]
+def append_to_sequence(var arr : array<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
+    //! Appends a value to the end of an array and returns an iterator
+    return <- append_impl(arr, type<TT -const -&>, length(arr) + 1, value).move_to_sequence()
+}
+
+[skip_lock_check]
 def append(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
     //! Appends a value to the end of an iterator
     return generator<TT -const -&> capture(<- it, := value) () <| $ {
@@ -1806,6 +1897,12 @@ def append(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> 
         }
         return false
     }
+}
+
+[skip_lock_check]
+def append_inplace(var arr : array<auto(TT)>; value : TT -&) {
+    //! Appends a value to the end of an array in place
+    arr.push_clone(value)
 }
 
 [skip_lock_check, unused_argument(tt)]
