@@ -318,7 +318,7 @@ def test_generic_fold_skip_and_take(t : T?) {
 
 [test]
 def test_concat(t : T?) {
-    t |> run("basic append") <| @(t : T?) {
+    t |> run("basic concat") <| @(t : T?) {
         var q <- (
             concat(
                 [1, 2, 3, 4, 5]
@@ -337,6 +337,44 @@ def test_concat(t : T?) {
         t |> equal(length(q), 6)
         var expected = [6, 4, 2, 30, 27, 24]
         for (i, v in 0..6, q) {
+            t |> equal(expected[i], v)
+        }
+    }
+    t |> run("basic append") <| @(t : T?) {
+        var q <- (
+            append(
+                [1, 2, 3, 4, 5]
+                .reverse()
+                ._where(_ <= 3)
+                ._select(_ * 2)
+            ,
+                100
+            )
+            ._fold()
+        )
+        t |> equal(typeinfo typename(q), "array<int>")
+        t |> equal(length(q), 4)
+        var expected = [6, 4, 2, 100]
+        for (i, v in 0..4, q) {
+            t |> equal(expected[i], v)
+        }
+    }
+    t |> run("basic prepend") <| @(t : T?) {
+        var q <- (
+            prepend(
+                [1, 2, 3, 4, 5]
+                .reverse()
+                ._where(_ <= 3)
+                ._select(_ * 2)
+            ,
+                100
+            )
+            ._fold()
+        )
+        t |> equal(typeinfo typename(q), "array<int>")
+        t |> equal(length(q), 4)
+        var expected = [100, 6, 4, 2]
+        for (i, v in 0..4, q) {
             t |> equal(expected[i], v)
         }
     }
