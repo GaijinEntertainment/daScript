@@ -5313,6 +5313,11 @@ namespace das {
                     error("safe-index of array<> must be inside the 'unsafe' block",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
+                if ( !ixT->isIndexExt() ) {
+                    error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'",  "", "",
+                        expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
+                }
                 auto seT = expr->subexpr->type;
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_smart<TypeDecl>(*seT->firstType);
@@ -5339,8 +5344,13 @@ namespace das {
                 expr->type->constant |= seT->constant;
             } else if ( expr->subexpr->type->dim.size() ) {
                 if ( !safeExpression(expr) ) {
-                    error("safe-index of [] must be inside the 'unsafe' block",  "", "",
+                    error("safe-index of fixed_array<> must be inside the 'unsafe' block",  "", "",
                         expr->at, CompilationError::unsafe);
+                }
+                if ( !ixT->isIndexExt() ) {
+                    error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'",  "", "",
+                        expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
                 }
                 const auto & seT = expr->subexpr->type;
                 if ( !seT->isAutoArrayResolved() ) {
@@ -5355,6 +5365,11 @@ namespace das {
                 }
                 expr->type->firstType->constant |= seT->constant;
             } else if ( expr->subexpr->type->isVectorType() && expr->subexpr->type->isRef() ) {
+                if ( !ixT->isIndexExt() ) {
+                    error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'",  "", "",
+                        expr->index->at, CompilationError::invalid_index_type);
+                    return Visitor::visit(expr);
+                }
                 const auto & seT = expr->subexpr->type;
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
