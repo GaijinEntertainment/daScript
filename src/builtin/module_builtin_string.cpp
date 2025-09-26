@@ -42,33 +42,33 @@ namespace das
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
-        return (cmpLen > strLen) ? false : memcmp(&str[strLen - cmpLen], cmp, cmpLen) == 0;
+        return (cmpLen <= strLen) && memcmp(&str[strLen - cmpLen], cmp, cmpLen) == 0;
     }
 
     bool builtin_string_startswith ( const char * str, const char * cmp, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
-        return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
+        return (cmpLen <= strLen) && memcmp(str, cmp, cmpLen) == 0;
     }
 
     bool builtin_string_startswith2 ( const char * str, const char * cmp, uint32_t cmpLen, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         cmpLen = min(cmpLen, stringLengthSafe ( *context, cmp ));
-        return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
+        return (cmpLen <= strLen) && memcmp(str, cmp, cmpLen) == 0;
     }
 
     bool builtin_string_startswith3 ( const char * str, int32_t offset, const char * cmp, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if ( offset<0 || uint32_t(offset)>=strLen ) return  false;
         const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
-        return (cmpLen > strLen) ? false : memcmp(str + offset, cmp, cmpLen) == 0;
+        return (cmpLen <= strLen - uint32_t(offset)) && memcmp(str + offset, cmp, cmpLen) == 0;
     }
 
     bool builtin_string_startswith4 ( const char * str, int32_t offset, const char * cmp, uint32_t cmpLen, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if ( offset<0 || uint32_t(offset)>=strLen ) return  false;
         cmpLen = min(cmpLen, stringLengthSafe ( *context, cmp ));
-        return (cmpLen > strLen) ? false : memcmp(str + offset, cmp, cmpLen) == 0;
+        return (cmpLen <= strLen - uint32_t(offset)) && memcmp(str + offset, cmp, cmpLen) == 0;
     }
 
     __forceinline bool is_space ( char c ) {

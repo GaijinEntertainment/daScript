@@ -37,7 +37,16 @@ def test_properties(t : T?) {
 
     t |> run("starts_with") <| @@(t : T?) {
         t |> success(starts_with("123", "12"))
+        t |> success(starts_with("123", "123"))
         t |> success(!starts_with("123", "23"))
+        t |> success(!starts_with("123", "1234"))
+        t |> success(starts_with("123", 1, "23"))
+        t |> success(starts_with("123", 1, "23", 2u))
+        t |> success(starts_with("123", 1, "2", 1u))
+        t |> success(starts_with("123", 2, "3"))
+        t |> success(starts_with("123", 2, "3", 2u)) // yes, it's ok
+        t |> success(!starts_with("123", 3, "4"))
+        t |> success(!starts_with("123", 3, "4", 2u))
         var fake <- Faker()
         let limit = re_gen_get_rep_limit()
         fuzz <| $() {
@@ -49,7 +58,9 @@ def test_properties(t : T?) {
 
     t |> run("ends_with") <| @@(t : T?) {
         t |> success(ends_with("123", "23"))
+        t |> success(ends_with("123", "123"))
         t |> success(!ends_with("123", "12"))
+        t |> success(!ends_with("123", "0123"))
         var fake <- Faker()
         let limit = re_gen_get_rep_limit()
         fuzz <| $() {
