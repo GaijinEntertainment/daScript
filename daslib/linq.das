@@ -29,7 +29,7 @@ Set operations
 Concatenation operations
      append - Appends an element to the end of an iterable
      prepend - Prepends an element to the beginning of an iterable
-     concat - Concatenates two iterables
+     concat, concat_to_array, concat_to_sequence - Concatenates two iterables
 Generation operations
      empty - Returns an empty iterable of a default type
      default_empty - Returns the elements of the iterable, or a default value if the iterable is empty
@@ -116,6 +116,44 @@ def to_table(var a : iterator<auto(TT)>; key; elementSelector) : table<typedecl(
         unsafe(result[unique_key(k)]) := elementSelector(it)
     }
     return <- result
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private concat_to_array_impl(var a; var b; tt : auto(TT); reserveSize : int) : array<TT -const -&> {
+    //! Concatenates two arrays or iterators
+    var c : array<TT -const -&>
+    static_if (typeinfo need_lock_check(c)) {
+        unsafe(set_verify_array_locks(c, false))
+    }
+    if (reserveSize > 0) {
+        c.reserve(reserveSize)
+    }
+    for (it in a) {
+        c.push_clone(it)
+    }
+    for (it in b) {
+        c.push_clone(it)
+    }
+    static_if (typeinfo need_lock_check(c)) {
+        unsafe(set_verify_array_locks(c, true))
+    }
+    return <- c
+
+}
+
+[skip_lock_check]
+def concat(var a, b : array<auto(TT)>) : array<TT -const -&> {
+    return <- concat_to_array_impl(a, b, type<TT -const -&>, length(a) + length(b))
+}
+
+[skip_lock_check]
+def concat_to_array(var a, b : iterator<auto(TT)>) : array<TT -const -&> {
+    return <- concat_to_array_impl(a, b, type<TT -const -&>, 0)
+}
+
+[skip_lock_check]
+def concat_to_sequence(var a, b : array<auto(TT)>) : iterator<TT -const -&> {
+    return <- concat_to_array_impl(a, b, type<TT -const -&>, length(a) + length(b)).move_to_sequence()
 }
 
 [skip_lock_check]

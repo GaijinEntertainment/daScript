@@ -72,4 +72,20 @@ def test_concat(t : T?) {
             assert(c.a.Equal([i, i * 10]))
         }
     }
+    t |> run("concat to array") <| @(t : T?) {
+        var qarray = concat_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 5..10); x]
+        )
+        t |> success(qarray.Equal([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
+    }
+    t |> run("concat to sequence") <| @(t : T?) {
+        var qsequence = concat_to_sequence(
+            [for (x in 0..5); x],
+            [for (x in 5..10); x]
+        )
+        for (c, i in qsequence, 0..10) {
+            t |> equal(c, i)
+        }
+    }
 }

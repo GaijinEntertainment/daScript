@@ -235,6 +235,7 @@ struct private LinqCall {
     moduleName : string = "linq"
     skip : bool = false             // if specified, expression is skipped in folding
     inplace : bool = false          // if specified, expression is inplace and does not create new variable
+    recursive : array<int>          // indices of arguments to apply fold_linq_default on
 }
 
 var private linqCalls = {
@@ -293,6 +294,10 @@ var private linqCalls = {
     "take_while" => LinqCall(name = "take_while"),
     "take_while_to_array" => LinqCall(name = "take_while"),
     "take_while_to_sequence" => LinqCall(name = "take_while"),
+// concatenation operations
+    "concat" => LinqCall(name = "concat", recursive = [1]),
+    "concat_to_array" => LinqCall(name = "concat", recursive = [1]),
+    "concat_to_sequence" => LinqCall(name = "concat", recursive = [1]),
 // skippables
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
@@ -308,7 +313,7 @@ def private is_linq_call(var expr : Expression?) : bool {
             funcName = string(call.func.name)
         }
         if (linqCalls.key_exists(funcName)) {
-            let linqCall = linqCalls.get_value(funcName)
+            let linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
             if (linqCall.moduleName == string(call.func._module.name)) {
                 return true
             }
@@ -320,7 +325,7 @@ def private is_linq_call(var expr : Expression?) : bool {
 [macro_function]
 def private flatten_linq(var expr : ExpressionPtr)  {
     var top = get_ptr(expr)
-    var calls : array<tuple<ExprCall?; LinqCall>>
+    var calls : array<tuple<ExprCall?; LinqCall const?>>
     while (top != null) {
         if (top is ExprCall) {
             var topCall = top as ExprCall
@@ -332,12 +337,12 @@ def private flatten_linq(var expr : ExpressionPtr)  {
             if (!linqCalls.key_exists(funcName)) {
                 break
             }
-            let linqCall = linqCalls.get_value(funcName)
+            let linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
             if (linqCall.moduleName != string(topFunc._module.name)) {
                 break
             }
             if (!linqCall.skip) {
-                calls.push((topCall, linqCall))
+                calls.push((topCall, unsafe(addr(linqCall))))
             }
             top = topCall.arguments[0].get_ptr()
         } else {
@@ -385,6 +390,13 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
                 callName = "{callName}_inplace"
                 inplace = true
             }
+            for (i in cll._1.recursive) {   // this is where we make recursion
+                if ( i>=1 && i < cll._0.arguments |> length ) {
+                    var inscope argExpr <- make_call(cll._0.at, "_fold")
+                    (argExpr as ExprCallMacro).arguments |> emplace <| cll._0.arguments[i]
+                    cll._0.arguments[i] |> move <| argExpr
+                }
+            }
             var inscope newCall = qmacro($c(callName)($e(topValue)))
             let numArgs = cll._0.arguments |> length
             for (i in 1..numArgs) {
@@ -396,6 +408,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
                 blk.list |> emplace_new <| qmacro_expr() {
                     var $i(newArgName) = $e(newCall)
                 }
+                (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
                 if (argIndex != 0) {
                     blk.list |> emplace_new <| qmacro_expr() {
                         delete $e(topValue)
@@ -408,7 +421,10 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
     blk.list |> emplace_new <| qmacro_expr() {
         return <- $e(topValue)
     }
-    return <- qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
+    var inscope res <- qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
+    (((res as ExprInvoke).arguments[0] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
+    res.force_generated(true)
+    return <- res
 }
 
 [macro_function]
