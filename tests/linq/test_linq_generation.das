@@ -50,11 +50,19 @@ def test_defaultempty(t : T?) {
 def test_empty(t : T?) {
     t |> run("basic empty") <| @(t : T?) {
         var query = empty(type<int>)
-        verify(empty(query))
+        var found = false
+        for (it in query) {
+            found = true
+        }
+        t |> success(!found)
     }
     t |> run("complex empty") <| @(t : T?) {
         var qcomplex = empty(type<ComplexType>)
-        verify(empty(qcomplex))
+        var found_complex = false
+        for (it in qcomplex) {
+            found_complex = true
+        }
+        t |> success(!found_complex)
     }
 }
 

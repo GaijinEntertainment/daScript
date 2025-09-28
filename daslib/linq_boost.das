@@ -134,6 +134,11 @@ class private LinqAll : AstCallMacro_LinqPred2 {
     override predName = "all"
 }
 
+[call_macro(name="_any")]
+class private LinqAny : AstCallMacro_LinqPred2 {
+    override predName = "any"
+}
+
 [call_macro(name="_distinct_by")]
 class private LinqDistinctBy : AstCallMacro_LinqPred2 {
     override predName = "distinct_by"
@@ -304,6 +309,10 @@ var private linqCalls = {
     "append" => LinqCall(name = "append", inplace = true),
     "append_to_array" => LinqCall(name = "append", inplace = true),
     "append_to_sequence" => LinqCall(name = "append", inplace = true),
+// querying data
+    "any" => LinqCall(name = "any"),
+    "all" => LinqCall(name = "all"),
+    "contains" => LinqCall(name = "contains"),
 // skippables
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
@@ -388,13 +397,15 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
             let newArgName = "pass_{argIndex}"
             var callName = cll._1.name
             var inplace = false
-            if (argIndex == 0 && top._type.isIterator) {
-                callName = "{callName}_to_array"
-            } elif (argIndex == lastCallIndex && expr._type.isIterator) {
-                callName = "{callName}_to_sequence"
-            } elif (argIndex != 0 && cll._1.inplace) {
-                callName = "{callName}_inplace"
-                inplace = true
+            if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {
+                if (argIndex == 0 && top._type.isIterator) {
+                    callName = "{callName}_to_array"
+                } elif (argIndex == lastCallIndex && expr._type.isIterator) {
+                    callName = "{callName}_to_sequence"
+                } elif (argIndex != 0 && cll._1.inplace) {
+                    callName = "{callName}_inplace"
+                    inplace = true
+                }
             }
             for (i in cll._1.recursive) {   // this is where we make recursion
                 if (i >= 1 && i < cll._0.arguments |> length) {
@@ -427,6 +438,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
     blk.list |> emplace_new <| qmacro_expr() {
         return <- $e(topValue)
     }
+    topExpr.genFlags |= ExprGenFlags.alwaysSafe
     var inscope res <- qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
     (((res as ExprInvoke).arguments[0] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
     res.force_generated(true)

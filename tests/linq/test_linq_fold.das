@@ -379,3 +379,64 @@ def test_concat(t : T?) {
         }
     }
 }
+
+[test]
+def test_any_all_contains(t : T?) {
+    t |> run("fold any") <| @(t : T?) {
+        var query = (
+            [for (x in 0..5); x]
+            ._any(_ > 3)
+            ._fold()
+        )
+        t |> success(query)
+    }
+    t |> run("fold any false") <| @(t : T?) {
+        var qpred2 = (
+            [iterator for(x in 0..5); x]
+            ._any(_ > 10)
+            ._fold()
+        )
+        t |> success(!qpred2)
+    }
+    t |> run("fold all") <| @(t : T?) {
+        var query = (
+            [iterator for(x in 0..5); x]
+            ._all(_ < 5)
+            ._fold()
+        )
+        t |> success(query)
+    }
+    t |> run("fold all empty") <| @(t : T?) {
+        var qempty = (
+            empty(type<int>)
+            ._all(_ < 5)
+            ._fold()
+        )
+        t |> success(qempty)
+    }
+    t |> run("fold contains") <| @(t : T?) {
+        var query = (
+            [iterator for(x in 0..5); x]
+            .contains(3)
+            ._fold()
+        )
+        t |> success(query)
+    }
+    t |> run("fold complex contains") <| @(t : T?) {
+        var qcomplex = (
+            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+            .contains(ComplexType(a = [3, 30]))
+            ._fold()
+        )
+        t |> success(qcomplex)
+    }
+    t |> run("fold complex contains false") <| @(t : T?) {
+        var qcomplex = (
+            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+            .contains(ComplexType(a = [3, 31]))
+            ._fold()
+        )
+        t |> success(!qcomplex)
+    }
+}
+

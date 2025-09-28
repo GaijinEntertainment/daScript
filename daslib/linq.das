@@ -57,7 +57,7 @@ Join operations
      join - Joins two iterables based on a key (inner join)
      group_join - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
 Querying data
-     any - Returns true if the iterable has at least one element
+     any - Returns true if the iterable has at least one element (or at least one element which satisfies the predicate)
      all - Returns true if all elements in the iterable satisfy the predicate
      contains - Returns true if the element is present in the iterable
 Grouping data
@@ -1428,6 +1428,12 @@ def union_by(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) 
 
 
 [skip_lock_check]
+def any(var src : array<auto(TT)>) : bool {
+    //! Returns true if the array has at least one element
+    return length(src) != 0
+}
+
+[skip_lock_check]
 def any(var src : iterator<auto(TT)>) : bool {
     //! Returns true if the iterator has at least one element
     for (it in src) {
@@ -1436,15 +1442,48 @@ def any(var src : iterator<auto(TT)>) : bool {
     return false
 }
 
+[skip_lock_check, unused_argument(tt)]
+def private any_impl(var src; tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool {
+    for (it in src) {
+        if (predicate(it)) {
+            return true
+        }
+    }
+    return false
+}
+
 [skip_lock_check]
-def all(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
-    //! Returns true if all elements in the iterator satisfy the predicate
+def any(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
+    //! Returns true if any element in the iterator satisfies the predicate
+    return any_impl(src, type<TT -const -&>, predicate)
+}
+
+[skip_lock_check]
+def any(var src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
+    //! Returns true if any element in the array satisfies the predicate
+    return any_impl(src, type<TT -const -&>, predicate)
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private all_impl(var src; tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool {
     for (it in src) {
         if (!predicate(it)) {
             return false
         }
     }
     return true
+}
+
+[skip_lock_check]
+def all(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
+    //! Returns true if all elements in the iterator satisfy the predicate
+    return all_impl(src, type<TT -const -&>, predicate)
+}
+
+[skip_lock_check]
+def all(var src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
+    //! Returns true if all elements in the array satisfy the predicate
+    return all_impl(src, type<TT -const -&>, predicate)
 }
 
 [skip_lock_check]
@@ -1535,9 +1574,8 @@ def intersect_by(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; k
     return buffer.move_to_sequence()
 }
 
-[skip_lock_check]
-def contains(var src : iterator<auto(TT)>; element : TT -&) : bool {
-    //! Returns true if the element is present in the iterator
+[skip_lock_check, unused_argument(tt)]
+def private contains_impl(var src; tt : auto(TT); element : TT -&) : bool {
     for (it in src) {
         if (it == element) {
             return true
@@ -1546,10 +1584,24 @@ def contains(var src : iterator<auto(TT)>; element : TT -&) : bool {
     return false
 }
 
+[skip_lock_check]
+def contains(var src : iterator<auto(TT)>; element : TT -&) : bool {
+    //! Returns true if the element is present in the iterator
+    return contains_impl(src, type<TT -const -&>, element)
+}
+
+[skip_lock_check]
+def contains(var src : array<auto(TT)>; element : TT -&) : bool {
+    //! Returns true if the element is present in the array
+    return contains_impl(src, type<TT -const -&>, element)
+}
+
 [skip_lock_check, unused_argument(typ)]
 def empty(var typ : auto(TT)) : iterator<TT -const -&> {
     //! Returns an empty iterator of the specified type
-    return <- default<iterator<TT -const -&>>
+    return <- generator<TT -const -&>() <| $ {
+        return false
+    }
 }
 
 [skip_lock_check]
