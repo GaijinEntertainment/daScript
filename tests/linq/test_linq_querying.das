@@ -21,6 +21,29 @@ def test_any(t : T?) {
         )
         t |> success(qcomplex)
     }
+    t |> run("empty any") <| @(t : T?) {
+        var qempty = any(
+            empty(type<int>)
+        )
+        t |> success(!qempty)
+    }
+    t |> run("any from array") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4]
+        var qarray = any(arr)
+        t |> success(qarray)
+    }
+    t |> run("any with predicate") <| @(t : T?) {
+        var qpred = _any(
+            [iterator for(x in 0..5); x],
+            _ > 3
+        )
+        t |> success(qpred)
+        var qpred2 = _any(
+            [iterator for(x in 0..5); x],
+            _ > 10
+        )
+        t |> success(!qpred2)
+    }
 }
 
 [test]
@@ -38,6 +61,21 @@ def test_all(t : T?) {
             _.a[0] < 5
         )
         t |> success(qcomplex)
+    }
+    t |> run("empty all") <| @(t : T?) {
+        var qempty = _all(
+            empty(type<int>),
+            _ < 5
+        )
+        t |> success(qempty)
+    }
+    t |> run("all from array") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4]
+        var qarray = _all(
+            arr,
+            _ < 5
+        )
+        t |> success(qarray)
     }
 }
 
