@@ -18,14 +18,14 @@ Sorting data
      order_by, order_by_inplace, order_by_to_array, order_by_to_sequence - Sorts the elements of an iterable
      order_by_descending,  order_by_descending_inplace, order_by_descending_to_array, order_by_descending_to_sequence - Sorts the elements of an iterable in descending order
 Set operations
-     distinct - Returns distinct elements from an iterable
-     distinct_by - Returns distinct elements from an iterable by key
+     distinct, distinct_inplace, distinct_to_array, distinct_to_sequence, distinct_by_to_array - Returns distinct elements from an iterable
+     distinct_by, distinct_by_inplace, distinct_by_to_array, distinct_by_to_sequence - Returns distinct elements from an iterable (or by key)
      union - Returns the union of two iterables
-     union_by - Returns the union of two iterables by key
+     union_by - Returns the union of two iterables (or by key)
      except - Returns elements from the first iterable that are not in the second iterable
-     except_by - Returns elements from the first iterable that are not in the second iterable by key
-     intersect - Returns elements that are present in both iterables
-     intersect_by - Returns elements that are present in both iterables by key
+     except_by - Returns elements from the first iterable that are not in the second iterable (or by key)
+     intersect - Returns elements that are present in both iterables (or by key)
+     intersect_by - Returns elements that are present in both iterables (or by key)
 Concatenation operations
      append, append_to_array, append_to_sequence, append_inplace - Appends an element to the end of an iterable
      prepend, prepend_to_array, prepend_to_sequence, prepend_inplace - Prepends an element to the beginning of an iterable
@@ -109,11 +109,11 @@ def move_to_sequence(var a : array<auto(TT)>) : iterator<TT -const -&> {
 }
 
 [skip_lock_check]
-def to_table(var a : iterator<auto(TT)>; key; elementSelector) : table<typedecl(unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&> {
-    var result : table<typedecl(unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&>
+def to_table(var a : iterator<auto(TT)>; key; elementSelector) : table<typedecl(_::unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&> {
+    var result : table<typedecl(_::unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&>
     for (it in a) {
         let k = key(it)
-        unsafe(result[unique_key(k)]) := elementSelector(it)
+        unsafe(result[_::unique_key(k)]) := elementSelector(it)
     }
     return <- result
 }
@@ -181,9 +181,16 @@ def concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
 [skip_lock_check]
 def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
     //! Concatenates two arrays in place
+    static_if (typeinfo need_lock_check(a)) {
+        _builtin_verify_locks(a)
+        unsafe(set_verify_array_locks(a, false))
+    }
     a.reserve(length(a) + length(b))
     for (it in b) {
         a.push_clone(it)
+    }
+    static_if (typeinfo need_lock_check(a)) {
+        unsafe(set_verify_array_locks(a, true))
     }
 }
 
@@ -191,6 +198,7 @@ def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
 def reverse_inplace(var buffer : array<auto(TT)>) {
     //! Reverses an array in place
     static_if (typeinfo need_lock_check(buffer)) {
+        _builtin_verify_locks(buffer)
         unsafe(set_verify_array_locks(buffer, false))
     }
     let l = length(buffer)
@@ -455,12 +463,78 @@ def unique_key(a) {
 }
 
 [skip_lock_check]
+def private distinct_impl(var a; tt : auto(TT)) : array<TT -const -&> {
+    //! Returns distinct elements from an iterator
+    var inscope seen : table<typedecl(_::unique_key(type<TT>))>
+    var buffer : array<TT -const -&>
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, false))
+    }
+    for (it in a) {
+        let k = _::unique_key(it)
+        if (!seen.key_exists(k)) {
+            buffer.push_clone(it)
+            seen.insert(k)
+        }
+    }
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, true))
+    }
+    return <- buffer
+}
+
+[skip_lock_check]
+def distinct(var a : array<auto(TT)>) : array<TT -const -&> {
+    //! Returns distinct elements from an array
+    return <- distinct_impl(a, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def distinct_to_array(var a : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Returns distinct elements from an iterator and returns an array
+    return <- distinct_impl(a, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def distinct_to_sequence(var a : array<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns distinct elements from an array and returns an iterator
+    var b := a
+    return distinct(b).move_to_sequence()
+}
+
+[skip_lock_check]
+def distinct_inplace(var a : array<auto(TT)>) {
+    //! Returns distinct elements from an array in place
+    var to_index = 0
+    var inscope seen : table<typedecl(_::unique_key(type<TT>))>
+    static_if (typeinfo need_lock_check(a)) {
+        _builtin_verify_locks(a)
+        set_verify_array_locks(a, false)
+    }
+    for (from_index in 0 .. length(a)) {
+        var it & = unsafe(a[from_index])
+        let k = _::unique_key(it)
+        if (!seen.key_exists(k)) {
+            if (to_index != from_index) {
+                a[to_index] <- it
+            }
+            to_index ++
+            seen.insert(k)
+        }
+    }
+    a.resize(to_index)
+    static_if (typeinfo need_lock_check(a)) {
+        set_verify_array_locks(a, true)
+    }
+}
+
+[skip_lock_check]
 def distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns distinct elements from an iterator
     return generator<TT -const -&> capture(<- a) () <| $ {
-        var inscope seen : table<typedecl(unique_key(type<TT>))>
+        var inscope seen : table<typedecl(_::unique_key(type<TT>))>
         for (it in a) {
-            let k = unique_key(it)
+            let k = _::unique_key(it)
             if (!seen.key_exists(k)) {
                 static_if (typeinfo can_copy(it)) {
                     yield it
@@ -474,17 +548,16 @@ def distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     }
 }
 
-[skip_lock_check]
-def distinct_by(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
+[skip_lock_check, unused_argument(tt)]
+def private distinct_by_impl(var a; tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns distinct elements from an iterator based on a key
-    // TODO: specialize with const value vs var value of key, which can be captured.
-    var inscope seen : table<typedecl(unique_key(key(type<TT>)))>
+    var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
     var buffer : array<TT -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
     }
     for (it in a) {
-        let k = unique_key(key(it))
+        let k = _::unique_key(key(it))
         if (!seen.key_exists(k)) {
             buffer.push_clone(it)
             seen.insert(k)
@@ -493,8 +566,59 @@ def distinct_by(var a : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
+}
 
+[skip_lock_check]
+def distinct_by(var a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! Returns distinct elements from an array based on a key
+    return <- distinct_by_impl(a, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def distinct_by_to_array(var a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! Returns distinct elements from an iterator based on a key and returns an array
+    return <- distinct_by_impl(a, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def distinct_by_to_sequence(var a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! Returns distinct elements from an array based on a key and returns an iterator
+    var b := a
+    return distinct_by_impl(b, type<TT -const -&>, key).move_to_sequence()
+}
+
+[skip_lock_check]
+def distinct_by(var a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! Returns distinct elements from an iterator based on a key
+    // TODO: specialize with const value vs var value of key, which can be captured.
+    return <- distinct_by_impl(a, type<TT -const -&>, key).move_to_sequence()
+}
+
+[skip_lock_check]
+def distinct_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) {
+    //! Returns distinct elements from an array based on a key in place
+    var to_index = 0
+    var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
+    static_if (typeinfo need_lock_check(a)) {
+        _builtin_verify_locks(a)
+        set_verify_array_locks(a, false)
+    }
+    for (from_index in 0 .. length(a)) {
+        var it & = unsafe(a[from_index])
+        let k = _::unique_key(key(it))
+        if (!seen.key_exists(k)) {
+            if (to_index != from_index) {
+                a[to_index] <- it
+            }
+            to_index ++
+            seen.insert(k)
+        }
+    }
+    a.resize(to_index)
+    static_if (typeinfo need_lock_check(a)) {
+        set_verify_array_locks(a, true)
+    }
 }
 
 [skip_lock_check]
@@ -586,6 +710,10 @@ def skip(var arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
 [skip_lock_check]
 def skip_inplace(var arr : array<auto(TT)>; var total : int) {
     //! Removes the first `total` elements from an array in place
+    static_if (typeinfo need_lock_check(arr)) {
+        _builtin_verify_locks(arr)
+        unsafe(set_verify_array_locks(arr, false))
+    }
     let len = length(arr)
     let remaining = len - total
     if (remaining <= 0) {
@@ -596,6 +724,9 @@ def skip_inplace(var arr : array<auto(TT)>; var total : int) {
         arr[i] <- arr[i + total]
     }
     arr.resize(remaining)
+    static_if (typeinfo need_lock_check(arr)) {
+        unsafe(set_verify_array_locks(arr, true))
+    }
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -838,6 +969,10 @@ def take_to_sequence(var src : array<auto(TT)>; from : range) : iterator<TT -& -
 [skip_lock_check]
 def take_inplace(var arr : array<auto(TT)>; from : range) {
     //! Keeps only a range of elements in an array in place
+    static_if (typeinfo need_lock_check(arr)) {
+        _builtin_verify_locks(arr)
+        unsafe(set_verify_array_locks(arr, false))
+    }
     let len = length(arr)
     let start = (from.x < 0) ? 0 : ((from.x > len) ? len : from.x)
     var end = (from.y < 0) ? 0 : ((from.y > len) ? len : from.y)
@@ -849,6 +984,9 @@ def take_inplace(var arr : array<auto(TT)>; from : range) {
         arr[i] <- arr[start + i]
     }
     arr.resize(taking)
+    static_if (typeinfo need_lock_check(arr)) {
+        unsafe(set_verify_array_locks(arr, true))
+    }
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -1297,9 +1435,9 @@ def min_max_average_by(var src : array<auto(TT)>; key) : tuple<TT -const -&, TT 
 [skip_lock_check]
 def join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
     //! Joins two iterators based on matching keys (inner join)
-    var inscope tableb : table<typedecl(unique_key(keyb(type<TB>))); array<TB -const -&>>
+    var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
-        let k = unique_key(keyb(itb))
+        let k = _::unique_key(keyb(itb))
         unsafe(tableb[k]).push_clone(itb)
     }
     var buffer : array<typedecl(result(type<TA>, type<TB>)) -const -&>
@@ -1307,7 +1445,7 @@ def join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, key
         unsafe(set_verify_array_locks(buffer, false))
     }
     for (ita in srca) {
-        let k = unique_key(keya(ita))
+        let k = _::unique_key(keya(ita))
         tableb.get(k, $(arr){
             for (itb in arr) {
                 buffer.push_clone(result(ita, itb))
@@ -1323,9 +1461,9 @@ def join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, key
 [skip_lock_check]
 def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<iterator<TB -const -&>>)) -const -&> {
     // we pass TA, and sequence of TB to 'result'
-    var inscope tableb : table<typedecl(unique_key(keyb(type<TB>))); array<TB -const -&>>
+    var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
-        let k = unique_key(keyb(itb))
+        let k = _::unique_key(keyb(itb))
         unsafe(tableb[k]).push_clone(itb)
     }
     var buffer : array<typedecl(result(type<TA>, type<iterator<TB -const -&>>)) -const -&>
@@ -1333,7 +1471,7 @@ def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; key
         unsafe(set_verify_array_locks(buffer, false))
     }
     for (ita in srca) {
-        let k = unique_key(keya(ita))
+        let k = _::unique_key(keya(ita))
         tableb.get(k, $(var arr){
             buffer.push_clone(result(ita, arr.to_sequence()))
         })
@@ -1347,10 +1485,10 @@ def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; key
 [skip_lock_check]
 def group_by(var source : iterator<auto(TT)>; key; element_selector; result_selector)  {
     //! Groups the elements of an iterator according to a specified key selector function
-    var tab : table<typedecl(unique_key(key(type<TT>))); tuple<typedecl(key(type<TT>)), array<typedecl(element_selector(type<TT>)) -const -&>>>
+    var tab : table<typedecl(_::unique_key(key(type<TT>))); tuple<typedecl(key(type<TT>)), array<typedecl(element_selector(type<TT>)) -const -&>>>
     for (it in source) {
         let kIT = key(it)
-        let k = unique_key(kIT)
+        let k = _::unique_key(kIT)
         if (tab.key_exists(k)) {
             unsafe(tab[k])._1.push_clone(element_selector(it))
         } else {
@@ -1370,23 +1508,23 @@ def group_by(var source : iterator<auto(TT)>; key; element_selector; result_sele
     return buffer.to_sequence()
 }
 
-[skip_lock_check]
-def union(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
+[skip_lock_check, unused_argument(tt)]
+def private union_impl(var srca; var srcb; tt : auto(TT)) : array<TT -const -&> {
     //! Returns distinct elements from the concatenation of two iterators
     var buffer : array<TT -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
     }
-    var inscope seen : table<typedecl(unique_key(type<TT>))>
+    var inscope seen : table<typedecl(_::unique_key(type<TT>))>
     for (ita in srca) {
-        let k = unique_key(ita)
+        let k = _::unique_key(ita)
         if (!seen.key_exists(k)) {
             buffer.push_clone(ita)
             seen.insert(k)
         }
     }
     for (itb in srcb) {
-        let k = unique_key(itb)
+        let k = _::unique_key(itb)
         if (!seen.key_exists(k)) {
             buffer.push_clone(itb)
             seen.insert(k)
@@ -1395,26 +1533,50 @@ def union(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterat
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
 }
 
 [skip_lock_check]
-def union_by(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) : iterator<TT -const -&> {
+def union(var srca, srcb : array<auto(TT)>) : array<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two arrays
+    return <- union_impl(srca, srcb, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def union(var srca, srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two iterators
+    return <- union_impl(srca, srcb, type<TT -const -&>).move_to_sequence()
+}
+
+[skip_lock_check]
+def union_to_array(var srca, srcb : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two iterators and returns an array
+    return <- union_impl(srca, srcb, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def union_to_sequence(var srca, srcb : array<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two arrays and returns an iterator
+    return <- union_impl(srca, srcb, type<TT -const -&>).move_to_sequence()
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private union_by_impl(var srca; var srcb; tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns distinct elements from the concatenation of two iterators by key
     var buffer : array<TT -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
     }
-    var inscope seen : table<typedecl(unique_key(key(type<TT>)))>
+    var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
     for (ita in srca) {
-        let k = unique_key(key(ita))
+        let k = _::unique_key(key(ita))
         if (!seen.key_exists(k)) {
             buffer.push_clone(ita)
             seen.insert(k)
         }
     }
     for (itb in srcb) {
-        let k = unique_key(key(itb))
+        let k = _::unique_key(key(itb))
         if (!seen.key_exists(k)) {
             buffer.push_clone(itb)
             seen.insert(k)
@@ -1423,9 +1585,32 @@ def union_by(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) 
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
 }
 
+[skip_lock_check]
+def union_by(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two iterators by key
+    return <- union_by_impl(srca, srcb, type<TT -const -&>, key).move_to_sequence()
+}
+
+[skip_lock_check]
+def union_by(var srca, srcb : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two arrays by key
+    return <- union_by_impl(srca, srcb, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def union_by_to_array(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two iterators by key and returns an array
+    return <- union_by_impl(srca, srcb, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def union_by_to_sequence(var srca, srcb : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! Returns distinct elements from the concatenation of two arrays by key and returns an iterator
+    return <- union_by_impl(srca, srcb, type<TT -const -&>, key).move_to_sequence()
+}
 
 [skip_lock_check]
 def any(var src : array<auto(TT)>) : bool {
@@ -1489,16 +1674,16 @@ def all(var src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bo
 [skip_lock_check]
 def except(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns elements from the first iterator that are not in the second iterator
-    var inscope seen : table<typedecl(unique_key(type<TT>))>
+    var inscope seen : table<typedecl(_::unique_key(type<TT>))>
     for (it in exclude) {
-        seen.insert(unique_key(it))
+        seen.insert(_::unique_key(it))
     }
     var buffer : array<TT -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
     }
     for (it in src) {
-        if (!seen.key_exists(unique_key(it))) {
+        if (!seen.key_exists(_::unique_key(it))) {
             buffer.push_clone(it)
         }
     }
@@ -1511,16 +1696,16 @@ def except(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>) : ite
 [skip_lock_check]
 def except_by(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Returns elements from the first iterator that are not in the second iterator by key
-    var inscope seen : table<typedecl(unique_key(key(type<TT>)))>
+    var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
     for (it in exclude) {
-        seen.insert(unique_key(key(it)))
+        seen.insert(_::unique_key(key(it)))
     }
     var buffer : array<TT -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
     }
     for (it in src) {
-        if (!seen.key_exists(unique_key(key(it)))) {
+        if (!seen.key_exists(_::unique_key(key(it)))) {
             buffer.push_clone(it)
         }
     }
@@ -1533,16 +1718,16 @@ def except_by(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>; ke
 [skip_lock_check]
 def intersect(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns elements that are present in both iterators
-    var inscope seen : table<typedecl(unique_key(type<TT>))>
+    var inscope seen : table<typedecl(_::unique_key(type<TT>))>
     for (it in srca) {
-        seen.insert(unique_key(it))
+        seen.insert(_::unique_key(it))
     }
     var buffer : array<TT -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
     }
     for (it in srcb) {
-        if (seen.key_exists(unique_key(it))) {
+        if (seen.key_exists(_::unique_key(it))) {
             buffer.push_clone(it)
         }
     }
@@ -1555,16 +1740,16 @@ def intersect(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : it
 [skip_lock_check]
 def intersect_by(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) : iterator<TT -const -&> {
     //! Returns elements that are present in both iterators by key
-    var inscope seen : table<typedecl(unique_key(key(type<TT>)))>
+    var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
     for (it in srca) {
-        seen.insert(unique_key(key(it)))
+        seen.insert(_::unique_key(key(it)))
     }
     var buffer : array<TT -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
     }
     for (it in srcb) {
-        if (seen.key_exists(unique_key(key(it)))) {
+        if (seen.key_exists(_::unique_key(key(it)))) {
             buffer.push_clone(it)
         }
     }

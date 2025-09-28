@@ -24,6 +24,7 @@ Partitioning data
     - _take_while(it, expr)     => take_while(it, $(_) => expr)
 Querying data
     - _all(it, expr)            => all(it, $(_) => expr)
+    _ _any(it, expr)            => any(it, $(_) => expr)
 Set operations
     - _distinct_by(it, expr)     => distinct_by(it, $(_) => expr)
     _ _union_by(it1, it2, expr) => union_by(it1, it2, $(_) => expr)
@@ -144,14 +145,44 @@ class private LinqDistinctBy : AstCallMacro_LinqPred2 {
     override predName = "distinct_by"
 }
 
+[call_macro(name="_distinct_by_to_array")]
+class private LinqDistinctByToArray : AstCallMacro_LinqPred2 {
+    override predName = "distinct_by_to_array"
+}
+
+[call_macro(name="_distinct_by_to_sequence")]
+class private LinqDistinctByToSequence : AstCallMacro_LinqPred2 {
+    override predName = "distinct_by_to_sequence"
+}
+
 [call_macro(name="_order_by")]
 class private LinqOrderBy : AstCallMacro_LinqPred2 {
     override predName = "order_by"
 }
 
+[call_macro(name="_order_by_to_array")]
+class private LinqOrderByToArray : AstCallMacro_LinqPred2 {
+    override predName = "order_by_to_array"
+}
+
+[call_macro(name="_order_by_to_sequence")]
+class private LinqOrderByToSequence : AstCallMacro_LinqPred2 {
+    override predName = "order_by_to_sequence"
+}
+
 [call_macro(name="_order_by_descending")]
 class private LinqOrderByDescending : AstCallMacro_LinqPred2 {
     override predName = "order_by_descending"
+}
+
+[call_macro(name="_order_by_descending_to_array")]
+class private LinqOrderByDescendingToArray : AstCallMacro_LinqPred2 {
+    override predName = "order_by_descending_to_array"
+}
+
+[call_macro(name="_order_by_descending_to_sequence")]
+class private LinqOrderByDescendingToSequence : AstCallMacro_LinqPred2 {
+    override predName = "order_by_descending_to_sequence"
 }
 
 class private AstCallMacro_LinqPredII2 : AstCallMacro {
@@ -193,6 +224,16 @@ class private LinqIntersectBy : AstCallMacro_LinqPredII2 {
 [call_macro(name="_union_by")]
 class private LinqUnionBy : AstCallMacro_LinqPredII2 {
     override predName = "union_by"
+}
+
+[call_macro(name="_union_by_to_array")]
+class private LinqUnionByToArray : AstCallMacro_LinqPredII2 {
+    override predName = "union_by_to_array"
+}
+
+[call_macro(name="_union_by_to_sequence")]
+class private LinqUnionByToSequence : AstCallMacro_LinqPredII2 {
+    override predName = "union_by_to_sequence"
 }
 
 def private is_call_or_generic(var expr : Expression?, name, moduleName : string) : ExprCall? {
@@ -244,31 +285,27 @@ struct private LinqCall {
 }
 
 var private linqCalls = {
-// where
+// filtering data
     "where_" => LinqCall(name = "where_"),
     "where_to_array" => LinqCall(name = "where_"),
     "where_to_sequence" => LinqCall(name = "where_"),
-// select
+// transform operations
     "select" => LinqCall(name = "select"),
     "select_to_array" => LinqCall(name = "select"),
     "select_to_sequence" => LinqCall(name = "select"),
-// reverse
+// sorting data
     "reverse" => LinqCall(name = "reverse", inplace = true),
     "reverse_to_array" => LinqCall(name = "reverse", inplace = true),
     "reverse_to_sequence" => LinqCall(name = "reverse", inplace = true),
-// order
     "order" => LinqCall(name = "order", inplace = true),
     "order_to_array" => LinqCall(name = "order", inplace = true),
     "order_to_sequence" => LinqCall(name = "order", inplace = true),
-// order_descending
     "order_descending" => LinqCall(name = "order_descending", inplace = true),
     "order_descending_to_array" => LinqCall(name = "order_descending", inplace = true),
     "order_descending_to_sequence" => LinqCall(name = "order_descending", inplace = true),
-// order_by
     "order_by" => LinqCall(name = "order_by", inplace = true),
     "order_by_to_array" => LinqCall(name = "order_by", inplace = true),
     "order_by_to_sequence" => LinqCall(name = "order_by", inplace = true),
-// order_by_descending
     "order_by_descending" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_array" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_sequence" => LinqCall(name = "order_by_descending", inplace = true),
@@ -309,6 +346,19 @@ var private linqCalls = {
     "append" => LinqCall(name = "append", inplace = true),
     "append_to_array" => LinqCall(name = "append", inplace = true),
     "append_to_sequence" => LinqCall(name = "append", inplace = true),
+// set operations
+    "distinct" => LinqCall(name = "distinct", inplace = true),
+    "distinct_to_array" => LinqCall(name = "distinct", inplace = true),
+    "distinct_to_sequence" => LinqCall(name = "distinct", inplace = true),
+    "distinct_by" => LinqCall(name = "distinct_by", inplace = true),
+    "distinct_by_to_array" => LinqCall(name = "distinct_by", inplace = true),
+    "distinct_by_to_sequence" => LinqCall(name = "distinct_by", inplace = true),
+    "union" => LinqCall(name = "union", recursive = [1]),
+    "union_to_array" => LinqCall(name = "union", recursive = [1]),
+    "union_to_sequence" => LinqCall(name = "union", recursive = [1]),
+    "union_by" => LinqCall(name = "union_by", recursive = [1]),
+    "union_by_to_array" => LinqCall(name = "union_by", recursive = [1]),
+    "union_by_to_sequence" => LinqCall(name = "union_by", recursive = [1]),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),
@@ -505,7 +555,7 @@ class private LinqFold : AstCallMacro {
         }
         if (res == null) {
             prog |> macro_error(call.at, "cannot fold LINQ expression")
-            return <- call
+            return <- res
         }
         return <- res
     }

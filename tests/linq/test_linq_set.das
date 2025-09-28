@@ -25,6 +25,46 @@ def test_distinct(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
+    t |> run("distinct from array") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]
+        var qarray = distinct(arr)
+        for (c, i in qarray, 0..4) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct empty") <| @(t : T?) {
+        var qempty = distinct(
+            empty(type<int>)
+        )
+        var found = false
+        for (it in qempty) {
+            found = true
+        }
+        t |> success(!found)
+    }
+    t |> run("distinct to array") <| @(t : T?) {
+        var qtoarray = distinct_to_array(
+            [iterator for(x in 0..5); x]
+        )
+        for (c, i in qtoarray, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct to sequence") <| @(t : T?) {
+        var qtoseq = distinct_to_sequence(
+            [for (x in 0..5); x]
+        )
+        for (c, i in qtoseq, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]
+        distinct_inplace(arr)
+        for (c, i in arr, 0..4) {
+            t |> equal(c, i)
+        }
+    }
 }
 
 [test]
@@ -46,6 +86,42 @@ def test_distinctby(t : T?) {
         )
         for (c, i in qcomplex, 0..5) {
             t |> success(c.a.Equal([i, i * 10]))
+        }
+    }
+    t |> run("distinct by empty") <| @(t : T?) {
+        var qempty = _distinct_by(
+            empty(type<int>),
+            _
+        )
+        var found = false
+        for (it in qempty) {
+            found = true
+        }
+        t |> success(!found)
+    }
+    t |> run("distinct by to array") <| @(t : T?) {
+        var qtoarray = distinct_by_to_array(
+            [iterator for(x in 0..5); x],
+            $(_ : int) => _
+        )
+        for (c, i in qtoarray, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct by to sequence") <| @(t : T?) {
+        var qtoseq = distinct_by_to_sequence(
+            [for (x in 0..5); x],
+            $(_ : int) => _
+        )
+        for (c, i in qtoseq, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct by in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]
+        distinct_by_inplace(arr, $(_ : int) => _)
+        for (c, i in arr, 0..4) {
+            t |> equal(c, i)
         }
     }
 }
@@ -83,6 +159,26 @@ def test_union(t : T?) {
             t |> equal(c.a[1], e._1)
         }
     }
+    t |> run("union to array") <| @(t : T?) {
+        var qtoarray = union_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 3..8); x]
+        )
+        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        for (c, e in qtoarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("union to sequence") <| @(t : T?) {
+        var qtoseq = union_to_sequence(
+            [for (x in 0..5); x],
+            [for (x in 3..8); x]
+        )
+        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        for (c, e in qtoseq, expected) {
+            t |> equal(c, e)
+        }
+    }
 }
 
 [test]
@@ -118,6 +214,28 @@ def test_unionby(t : T?) {
         for (c, e in qcomplex, expected_complex) {
             t |> equal(c.a[0], e._0)
             t |> equal(c.a[1], e._1)
+        }
+    }
+    t |> run("union by to array") <| @(t : T?) {
+        var qtoarray = union_by_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 3..8); x],
+            $(_ : int) => _
+        )
+        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        for (c, e in qtoarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("union by to sequence") <| @(t : T?) {
+        var qtoseq = union_by_to_sequence(
+            [for (x in 0..5); x],
+            [for (x in 3..8); x],
+            $(_ : int) => _
+        )
+        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        for (c, e in qtoseq, expected) {
+            t |> equal(c, e)
         }
     }
 }
