@@ -440,3 +440,37 @@ def test_any_all_contains(t : T?) {
     }
 }
 
+[test]
+def test_distinct_and_distinct_by(t : T?) {
+    t |> run("basic distinct") <| @(t : T?) {
+        var query = distinct(
+            [iterator for(x in 0..5); x]
+        )._fold()
+        for (c, i in query, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("complex distinct") <| @(t : T?) {
+        var qcomplex = distinct(
+            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
+        )._fold()
+        for (c, i in qcomplex, 0..5) {
+            t |> success(c.a.Equal([i, i * 10]))
+        }
+    }
+    t |> run("distinc by") <| @(t : T?) {
+        var qdistinctby = (
+            [iterator for(x in 0..5); ComplexType(a = [x % 3, x * 10])]
+            ._distinct_by(_.a[0])
+            ._fold()
+        )
+        var found = [false, false, false]
+        for (c in qdistinctby) {
+            t |> success(!found[c.a[0]])
+            found[c.a[0]] = true
+        }
+        for (i in 0..3) {
+            t |> success(found[i])
+        }
+    }
+}

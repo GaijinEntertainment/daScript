@@ -24,6 +24,7 @@ Partitioning data
     - _take_while(it, expr)     => take_while(it, $(_) => expr)
 Querying data
     - _all(it, expr)            => all(it, $(_) => expr)
+    _ _any(it, expr)            => any(it, $(_) => expr)
 Set operations
     - _distinct_by(it, expr)     => distinct_by(it, $(_) => expr)
     _ _union_by(it1, it2, expr) => union_by(it1, it2, $(_) => expr)
@@ -144,6 +145,16 @@ class private LinqDistinctBy : AstCallMacro_LinqPred2 {
     override predName = "distinct_by"
 }
 
+[call_macro(name="_distinct_by_to_array")]
+class private LinqDistinctByToArray : AstCallMacro_LinqPred2 {
+    override predName = "distinct_by_to_array"
+}
+
+[call_macro(name="_distinct_by_to_sequence")]
+class private LinqDistinctByToSequence : AstCallMacro_LinqPred2 {
+    override predName = "distinct_by_to_sequence"
+}
+
 [call_macro(name="_order_by")]
 class private LinqOrderBy : AstCallMacro_LinqPred2 {
     override predName = "order_by"
@@ -244,31 +255,27 @@ struct private LinqCall {
 }
 
 var private linqCalls = {
-// where
+// filtering data
     "where_" => LinqCall(name = "where_"),
     "where_to_array" => LinqCall(name = "where_"),
     "where_to_sequence" => LinqCall(name = "where_"),
-// select
+// transform operations
     "select" => LinqCall(name = "select"),
     "select_to_array" => LinqCall(name = "select"),
     "select_to_sequence" => LinqCall(name = "select"),
-// reverse
+// sorting data
     "reverse" => LinqCall(name = "reverse", inplace = true),
     "reverse_to_array" => LinqCall(name = "reverse", inplace = true),
     "reverse_to_sequence" => LinqCall(name = "reverse", inplace = true),
-// order
     "order" => LinqCall(name = "order", inplace = true),
     "order_to_array" => LinqCall(name = "order", inplace = true),
     "order_to_sequence" => LinqCall(name = "order", inplace = true),
-// order_descending
     "order_descending" => LinqCall(name = "order_descending", inplace = true),
     "order_descending_to_array" => LinqCall(name = "order_descending", inplace = true),
     "order_descending_to_sequence" => LinqCall(name = "order_descending", inplace = true),
-// order_by
     "order_by" => LinqCall(name = "order_by", inplace = true),
     "order_by_to_array" => LinqCall(name = "order_by", inplace = true),
     "order_by_to_sequence" => LinqCall(name = "order_by", inplace = true),
-// order_by_descending
     "order_by_descending" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_array" => LinqCall(name = "order_by_descending", inplace = true),
     "order_by_descending_to_sequence" => LinqCall(name = "order_by_descending", inplace = true),
@@ -309,6 +316,13 @@ var private linqCalls = {
     "append" => LinqCall(name = "append", inplace = true),
     "append_to_array" => LinqCall(name = "append", inplace = true),
     "append_to_sequence" => LinqCall(name = "append", inplace = true),
+// set operations
+    "distinct" => LinqCall(name = "distinct", inplace = true),
+    "distinct_to_array" => LinqCall(name = "distinct", inplace = true),
+    "distinct_to_sequence" => LinqCall(name = "distinct", inplace = true),
+    "distinct_by" => LinqCall(name = "distinct_by", inplace = true),
+    "distinct_by_to_array" => LinqCall(name = "distinct_by", inplace = true),
+    "distinct_by_to_sequence" => LinqCall(name = "distinct_by", inplace = true),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),

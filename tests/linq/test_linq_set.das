@@ -25,6 +25,46 @@ def test_distinct(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
+    t |> run("distinct from array") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]
+        var qarray = distinct(arr)
+        for (c, i in qarray, 0..4) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct empty") <| @(t : T?) {
+        var qempty = distinct(
+            empty(type<int>)
+        )
+        var found = false
+        for (it in qempty) {
+            found = true
+        }
+        t |> success(!found)
+    }
+    t |> run("distinct to array") <| @(t : T?) {
+        var qtoarray = distinct_to_array(
+            [iterator for(x in 0..5); x]
+        )
+        for (c, i in qtoarray, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct to sequence") <| @(t : T?) {
+        var qtoseq = distinct_to_sequence(
+            [for (x in 0..5); x]
+        )
+        for (c, i in qtoseq, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]
+        distinct_inplace(arr)
+        for (c, i in arr, 0..4) {
+            t |> equal(c, i)
+        }
+    }
 }
 
 [test]
@@ -46,6 +86,42 @@ def test_distinctby(t : T?) {
         )
         for (c, i in qcomplex, 0..5) {
             t |> success(c.a.Equal([i, i * 10]))
+        }
+    }
+    t |> run("distinct by empty") <| @(t : T?) {
+        var qempty = _distinct_by(
+            empty(type<int>),
+            _
+        )
+        var found = false
+        for (it in qempty) {
+            found = true
+        }
+        t |> success(!found)
+    }
+    t |> run("distinct by to array") <| @(t : T?) {
+        var qtoarray = distinct_by_to_array(
+            [iterator for(x in 0..5); x],
+            $(_ : int) => _
+        )
+        for (c, i in qtoarray, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct by to sequence") <| @(t : T?) {
+        var qtoseq = distinct_by_to_sequence(
+            [for (x in 0..5); x],
+            $(_ : int) => _
+        )
+        for (c, i in qtoseq, 0..5) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("distinct by in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]
+        distinct_by_inplace(arr, $(_ : int) => _)
+        for (c, i in arr, 0..4) {
+            t |> equal(c, i)
         }
     }
 }
