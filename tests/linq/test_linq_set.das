@@ -159,6 +159,26 @@ def test_union(t : T?) {
             t |> equal(c.a[1], e._1)
         }
     }
+    t |> run("union to array") <| @(t : T?) {
+        var qtoarray = union_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 3..8); x]
+        )
+        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        for (c, e in qtoarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("union to sequence") <| @(t : T?) {
+        var qtoseq = union_to_sequence(
+            [for (x in 0..5); x],
+            [for (x in 3..8); x]
+        )
+        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        for (c, e in qtoseq, expected) {
+            t |> equal(c, e)
+        }
+    }
 }
 
 [test]
@@ -194,6 +214,28 @@ def test_unionby(t : T?) {
         for (c, e in qcomplex, expected_complex) {
             t |> equal(c.a[0], e._0)
             t |> equal(c.a[1], e._1)
+        }
+    }
+    t |> run("union by to array") <| @(t : T?) {
+        var qtoarray = union_by_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 3..8); x],
+            $(_ : int) => _
+        )
+        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        for (c, e in qtoarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("union by to sequence") <| @(t : T?) {
+        var qtoseq = union_by_to_sequence(
+            [for (x in 0..5); x],
+            [for (x in 3..8); x],
+            $(_ : int) => _
+        )
+        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        for (c, e in qtoseq, expected) {
+            t |> equal(c, e)
         }
     }
 }

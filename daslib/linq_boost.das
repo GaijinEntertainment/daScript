@@ -160,9 +160,29 @@ class private LinqOrderBy : AstCallMacro_LinqPred2 {
     override predName = "order_by"
 }
 
+[call_macro(name="_order_by_to_array")]
+class private LinqOrderByToArray : AstCallMacro_LinqPred2 {
+    override predName = "order_by_to_array"
+}
+
+[call_macro(name="_order_by_to_sequence")]
+class private LinqOrderByToSequence : AstCallMacro_LinqPred2 {
+    override predName = "order_by_to_sequence"
+}
+
 [call_macro(name="_order_by_descending")]
 class private LinqOrderByDescending : AstCallMacro_LinqPred2 {
     override predName = "order_by_descending"
+}
+
+[call_macro(name="_order_by_descending_to_array")]
+class private LinqOrderByDescendingToArray : AstCallMacro_LinqPred2 {
+    override predName = "order_by_descending_to_array"
+}
+
+[call_macro(name="_order_by_descending_to_sequence")]
+class private LinqOrderByDescendingToSequence : AstCallMacro_LinqPred2 {
+    override predName = "order_by_descending_to_sequence"
 }
 
 class private AstCallMacro_LinqPredII2 : AstCallMacro {
@@ -204,6 +224,16 @@ class private LinqIntersectBy : AstCallMacro_LinqPredII2 {
 [call_macro(name="_union_by")]
 class private LinqUnionBy : AstCallMacro_LinqPredII2 {
     override predName = "union_by"
+}
+
+[call_macro(name="_union_by_to_array")]
+class private LinqUnionByToArray : AstCallMacro_LinqPredII2 {
+    override predName = "union_by_to_array"
+}
+
+[call_macro(name="_union_by_to_sequence")]
+class private LinqUnionByToSequence : AstCallMacro_LinqPredII2 {
+    override predName = "union_by_to_sequence"
 }
 
 def private is_call_or_generic(var expr : Expression?, name, moduleName : string) : ExprCall? {
@@ -323,6 +353,12 @@ var private linqCalls = {
     "distinct_by" => LinqCall(name = "distinct_by", inplace = true),
     "distinct_by_to_array" => LinqCall(name = "distinct_by", inplace = true),
     "distinct_by_to_sequence" => LinqCall(name = "distinct_by", inplace = true),
+    "union" => LinqCall(name = "union", recursive = [1]),
+    "union_to_array" => LinqCall(name = "union", recursive = [1]),
+    "union_to_sequence" => LinqCall(name = "union", recursive = [1]),
+    "union_by" => LinqCall(name = "union_by", recursive = [1]),
+    "union_by_to_array" => LinqCall(name = "union_by", recursive = [1]),
+    "union_by_to_sequence" => LinqCall(name = "union_by", recursive = [1]),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),
@@ -519,7 +555,7 @@ class private LinqFold : AstCallMacro {
         }
         if (res == null) {
             prog |> macro_error(call.at, "cannot fold LINQ expression")
-            return <- call
+            return <- res
         }
         return <- res
     }
