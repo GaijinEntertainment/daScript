@@ -479,16 +479,16 @@ def test_distinct_and_distinct_by(t : T?) {
 def test_unique(t : T?) {
     t |> run("basic unique") <| @(t : T?) {
         var t1 <- (
-            [1,2,3,4,5]
+            [1, 2, 3, 4, 5]
             ._select(_ % 4)
             .union(
-                [3,4,5,6,7]
-                ._select(_*_)
+                [3, 4, 5, 6, 7]
+                ._select(_ * _)
             )
             ._order_by(_) // sort
             ._fold()
         )
-        var expected = [0,1,2,3,9,16,25,36,49]
+        var expected = [0, 1, 2, 3, 9, 16, 25, 36, 49]
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
