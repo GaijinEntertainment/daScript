@@ -342,7 +342,6 @@ namespace das
         ExpressionPtr   init;
         ExpressionPtr   source;     // if its interator variable, this is where the source is
         LineInfo        at;
-        int             index = -1;
         uint32_t        stackTop = 0;
         uint32_t        extraLocalOffset = 0;   // this is here for fake variables only
         Module *        module = nullptr;
@@ -1645,6 +1644,12 @@ namespace das
         void makeMacroModule( TextWriter & logs );
         vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
         void serialize ( AstSerializer & ser );
+        __forceinline int32_t & varIndex( Variable * var ) {
+            return variableIndices.emplace(var, -1).first->second;
+        }
+        __forceinline int32_t & varIndex( const VariablePtr & var ) {
+            return variableIndices.emplace(var.get(), -1).first->second;
+        }
     protected:
         // this is no longer the way to link AOT
         //  set CodeOfPolicies::aot instead
@@ -1701,6 +1706,7 @@ namespace das
         CodeOfPolicies              policies;
         vector<tuple<Module *,string,string,bool,LineInfo>> allRequireDecl;
         das_hash_map<uint64_t,TypeDecl *> astTypeInfo;
+        das_hash_map<Variable *,int32_t> variableIndices;
     };
 
     // module parsing routines

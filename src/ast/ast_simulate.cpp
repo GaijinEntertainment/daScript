@@ -2214,7 +2214,7 @@ namespace das
                 }
             }
         } else {
-            DAS_ASSERT(variable->index >= 0 && "using variable which is not used. how?");
+            DAS_ASSERT(context.thisProgram->varIndex(variable) >= 0 && "using variable which is not used. how?");
             uint64_t mnh = variable->getMangledNameHash();
             if ( !variable->module->isSolidContext ) {
                 if ( variable->global_shared ) {
@@ -2888,15 +2888,15 @@ namespace das
             } else {
                 if ( !var->module->isSolidContext ) {
                     if ( var->global_shared ) {
-                        get = context.code->makeNode<SimNode_GetSharedMnh>(var->init->at, var->index, var->getMangledNameHash());
+                        get = context.code->makeNode<SimNode_GetSharedMnh>(var->init->at, context.thisProgram->varIndex(var), var->getMangledNameHash());
                     } else {
-                        get = context.code->makeNode<SimNode_GetGlobalMnh>(var->init->at, var->index, var->getMangledNameHash());
+                        get = context.code->makeNode<SimNode_GetGlobalMnh>(var->init->at, context.thisProgram->varIndex(var), var->getMangledNameHash());
                     }
                 } else {
                     if ( var->global_shared ) {
-                        get = context.code->makeNode<SimNode_GetShared>(var->init->at, var->index, var->getMangledNameHash());
+                        get = context.code->makeNode<SimNode_GetShared>(var->init->at, context.thisProgram->varIndex(var), var->getMangledNameHash());
                     } else {
-                        get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, var->index, var->getMangledNameHash());
+                        get = context.code->makeNode<SimNode_GetGlobal>(var->init->at, context.thisProgram->varIndex(var), var->getMangledNameHash());
                     }
                 }
             }
@@ -3204,12 +3204,12 @@ namespace das
                 pm->globals.foreach([&](auto pvar){
                     if (!pvar->used)
                         return;
-                    if ( pvar->index<0 ) {
+                    if (context.thisProgram->varIndex(pvar) < 0) {
                         error("Internal compiler errors. Simulating variable which is not used" + pvar->name,
                             "", "", LineInfo());
                         return;
                     }
-                    auto & gvar = context.globalVariables[pvar->index];
+                    auto & gvar = context.globalVariables[context.thisProgram->varIndex(pvar)];
                     gvar.name = context.code->allocateName(pvar->name);
                     gvar.size = pvar->type->getSizeOf();
                     gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
@@ -3310,7 +3310,7 @@ namespace das
                 pm->globals.foreach([&](auto pvar){
                     if (!pvar->used)
                         return;
-                    auto & gvar = context.globalVariables[pvar->index];
+                    auto & gvar = context.globalVariables[context.thisProgram->varIndex(pvar)];
                     if ( !folding && pvar->init ) {
                         if ( disableInit && !pvar->init->rtti_isConstant() ) {
                             error("[init] is disabled in the options or CodeOfPolicies",

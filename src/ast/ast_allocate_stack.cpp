@@ -985,14 +985,14 @@ namespace das {
         library.foreach_in_order([&](Module * pm){
             for ( auto & var : pm->globals.each() ) {
                 if (var->used) {
-                    var->index = totalVariables++;
+                    varIndex(var) = totalVariables++;
                     if ( log ) {
-                        logs << "\t" << var->index << "\t"  << var->stackTop << "\t"
+                        logs << "\t" << varIndex(var) << "\t"  << var->stackTop << "\t"
                             << var->type->getSizeOf() << "\t" << var->getMangledName() << "\n";
                     }
                 }
                 else {
-                    var->index = -2;
+                    varIndex(var) = -2;
                 }
             }
             return true;
