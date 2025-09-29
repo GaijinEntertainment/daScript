@@ -5,6 +5,15 @@
 #include "daScript/misc/rangetype.h"
 
 namespace das {
+    template <typename T>
+    const char *debug_type_name() {
+#if defined(_MSC_VER)
+        return __FUNCSIG__;
+#else
+        return __PRETTY_FUNCTION__;
+#endif
+    }
+
 
     template <typename TT>
     struct typeName;
