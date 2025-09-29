@@ -56,27 +56,15 @@ SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
 class Point3 {
 public:
     float x, y, z;
-    explicit operator vec3f() const { return v_make_vec3f(x, y, z); };
+    Point3() = default;
+    Point3(float x, float y, float z) : x(x), y(y), z(z) {}
 };
 
 
 namespace das {
-    class Point3_WrapArg : public Point3
-    {
-    public:
-        Point3_WrapArg(vec3f t) : Point3() {
-            using Extractor = vec_extract<float>;
-            x = Extractor::x(t);
-            y = Extractor::y(t);
-            z = Extractor::z(t);
-        }
-    };
 
-    template <>
-    struct WrapArgType<Point3>
-    {
-        typedef Point3_WrapArg type;
-    };
+    template <> struct WrapArgType<Point3> { typedef WrapVec3Arg<Point3, float> type; };
+    template <> struct WrapRetType<Point3> { typedef WrapVec3Arg<Point3, float> type; };
 
     template <> struct WrapType<Point3> {
         enum { value = true };

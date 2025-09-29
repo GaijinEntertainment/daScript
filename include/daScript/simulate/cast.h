@@ -11,6 +11,25 @@ namespace das
     template <typename TT> struct WrapArgType { typedef TT type; };
     template <typename TT> struct WrapRetType { typedef TT type; };
 
+    // gcc fails to deduce auto field type. We should manually add it
+    template <typename T, typename Element, Element T::*BaseField = &T::x>
+    struct WrapVec2Arg : T {
+        WrapVec2Arg(vec4f t) : T(vec_extract<Element>::x(t), vec_extract<Element>::y(t)) {}
+        operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
+    };
+
+    template <typename T, typename Element, Element T::*BaseField = &T::x>
+    struct WrapVec3Arg : T {
+        WrapVec3Arg(vec4f t) : T(vec_extract<Element>::x(t), vec_extract<Element>::y(t), vec_extract<Element>::z(t)) {}
+        operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
+    };
+
+    template <typename T, typename Element, Element T::*BaseField = &T::x>
+    struct WrapVec4Arg : T {
+        WrapVec4Arg(vec4f t) : T(vec_extract<Element>::x(t), vec_extract<Element>::y(t), vec_extract<Element>::z(t), vec_extract<Element>::w(t)) {}
+        operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
+    };
+
     template <typename TT>
     struct das_alias;
 
