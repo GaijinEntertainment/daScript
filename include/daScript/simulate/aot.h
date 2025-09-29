@@ -555,11 +555,8 @@ namespace das {
     struct das_index;
 
     template <typename TT>
-    struct das_default_vector_size;
-
-    template <typename TT>
-    struct das_default_vector_size<vector<TT>> {
-        static __forceinline uint32_t size( const vector<TT> & value ) {
+    struct das_default_vector_size {
+        static __forceinline uint32_t size( const TT & value ) {
             return uint32_t(value.size());
         }
     };
