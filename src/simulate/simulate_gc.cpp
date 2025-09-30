@@ -29,11 +29,11 @@ namespace das
         int32_t            gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
         int32_t            gcStructFlags = StructInfo::flag_stringHeapGC | StructInfo::flag_heapGC;
 
-        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+        virtual bool canVisitStructure ( char * /*ps*/, StructInfo * info ) override {
             if ( !(info->flags & gcStructFlags) ) return false;
             return true;
         }
-        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+        virtual bool canVisitHandle ( char * /*ps*/, TypeInfo * info ) override {
             if ( !(info->flags & gcFlags) ) return false;
             return true;
         }
@@ -479,7 +479,7 @@ namespace das
         virtual void afterTuple ( char *, TypeInfo * ) override {
             popRange();
         }
-        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, int idx, bool ) override {
+        virtual void beforeTupleEntry ( char *, TypeInfo * /*ti*/, char *, int idx, bool ) override {
             history.push_back(to_string(static_cast<uint32_t>(idx)));
         }
         virtual void afterTupleEntry ( char *, TypeInfo *, char *, int, bool ) override {
@@ -507,11 +507,11 @@ namespace das
             keys.pop_back();
             history.pop_back();
         }
-        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+        virtual bool canVisitStructure ( char * /*ps*/, StructInfo * info ) override {
             if ( !((info->flags | gcAlways) & gcStructFlags) ) return false;
             return true;
         }
-        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+        virtual bool canVisitHandle ( char * /*ps*/, TypeInfo * info ) override {
             if ( !((info->flags | gcAlways) & gcFlags) ) return false;
             return true;
         }

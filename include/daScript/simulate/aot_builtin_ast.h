@@ -558,7 +558,7 @@ namespace das {
     TypeDeclPtr getHandledTypeFieldTypeDecl ( smart_ptr_raw<TypeAnnotation> annotation, char * name, bool isConst, Context * context, LineInfoArg * at );
     TypeDeclPtr getHandledTypeIndexTypeDecl ( TypeAnnotation *annotation, Expression *src, Expression *idx, Context * context, LineInfoArg * at );
     void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * context, LineInfoArg * at);
-    int getVectorLength(void* vec, smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at);
+    int32_t getVectorLength(void* vec, smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at);
     bool addModuleRequire ( Module * module, Module * reqModule, bool publ );
     void findMatchingVariable ( Program * program, Function * func, const char * _name, bool seePrivate,
         const TBlock<void,TTemporary<TArray<smart_ptr_raw<Variable>>>> & block, Context * context, LineInfoArg * arg );

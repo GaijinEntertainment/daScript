@@ -54,7 +54,6 @@ namespace das
 
         virtual void walk_table ( Table * tab, TypeInfo * info ) override {
             if ( !info->secondType || ((info->secondType->flags & TypeInfo::flag_lockCheck) != TypeInfo::flag_lockCheck) ) return;
-            int keySize = info->firstType->size;
             int valueSize = info->secondType->size;
             uint32_t count = 0;
             for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {

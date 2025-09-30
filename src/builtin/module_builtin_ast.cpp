@@ -737,8 +737,7 @@ namespace das {
         abort();
     }
 
-    void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * context, LineInfoArg * at) {
-        const auto sz = type->getSizeOf();
+    void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * /*context*/, LineInfoArg * /*at*/) {
         auto tstr = type->describe();
         auto get_at = [idx](auto *vec) {
             return static_cast<void*>(&vec->at(idx));
@@ -746,11 +745,11 @@ namespace das {
         return apply_to_vec(vec, tstr, get_at);
     }
 
-    int getVectorLength(void* vec, smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at) {
+    int32_t getVectorLength(void* vec, smart_ptr_raw<TypeDecl> type, Context * /*context*/, LineInfoArg * /*at*/) {
         auto get_size = [](auto *vec) {
             return vec->size();
         };
-        return apply_to_vec(vec, type->describe(), get_size);
+        return (int) apply_to_vec(vec, type->describe(), get_size);
     }
 
     uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
@@ -943,7 +942,7 @@ namespace das {
         return macro->aotInfix(*ss, expr);
     }
 
-    FileInfo *clone_file_info(const char *name, int tabSize, Context * context, LineInfoArg * at) {
+    FileInfo *clone_file_info(const char *name, int tabSize, Context * context, LineInfoArg * /*at*/) {
         auto res = new FileInfo();
         context->deleteUponFinish.emplace_back(res);
         res->name = name;

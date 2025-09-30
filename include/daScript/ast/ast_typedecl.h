@@ -651,10 +651,10 @@ namespace das {
         if (tt->isVectorType()) {
             bool is_same_type = is_same_v<typename WrapType<remove_cv_t<remove_reference_t<TT>>>::type, vec4f>;
             bool is_same_rettype = is_same_v<typename WrapType<remove_cv_t<remove_reference_t<TT>>>::type, vec4f>;
-            DAS_ASSERTF(is_same_type, "To make c++-jit interop work vec-types should be provided with WrapType::type "
+            DAS_VERIFYF(is_same_type, "To make c++-jit interop work vec-types should be provided with WrapType::type "
                                       "and optionally WrapArgType, WrapRetType (if vec4f conversion is not implemented "
                                       "in type itself). Failed TT: %s", debug_type_name<TT>());
-            DAS_ASSERTF(is_same_rettype, "To make c++-jit interop work vec-types should be provided with WrapType::rettype "
+            DAS_VERIFYF(is_same_rettype, "To make c++-jit interop work vec-types should be provided with WrapType::rettype "
                                          "and optionally WrapArgType, WrapRetType (if vec4f conversion is not implemented "
                                          "in type itself). Failed TT: %s", debug_type_name<TT>());
         }
