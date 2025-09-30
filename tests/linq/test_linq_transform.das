@@ -233,6 +233,44 @@ def test_zip(t : T?) {
             t |> equal(c._1, e._1)
         }
     }
+    t |> run("zip to array") <| @(t : T?) {
+        var query = zip_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 10..15); x]
+        )
+        static_assert(typeinfo is_array(query))
+        var expected = [
+            (0, 10),
+            (1, 11),
+            (2, 12),
+            (3, 13),
+            (4, 14),
+            (5, 15)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+        }
+    }
+    t |> run("zip to sequence") <| @(t : T?) {
+        var query = zip_to_sequence(
+            [0, 1, 2, 3, 4, 5],
+            [10, 11, 12, 13, 14, 15]
+        )
+        static_assert(typeinfo is_iterator(query))
+        var expected = [
+            (0, 10),
+            (1, 11),
+            (2, 12),
+            (3, 13),
+            (4, 14),
+            (5, 15)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+        }
+    }
     t |> run("complex zip") <| @(t : T?) {
         var qcomplex = zip(
             [iterator for(x in 0..5); x],
@@ -271,6 +309,46 @@ def test_zip(t : T?) {
             t |> equal(c._3, e._3)
         }
     }
+    t |> run("complex zip to array") <| @(t : T?) {
+        var qcomplex = zip_to_array(
+            [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
+            [iterator for(x in 10..15); ComplexType(a = [x, x * 20])],
+            $(x, y : ComplexType) => (x.a[0], x.a[1], y.a[0], y.a[1])
+        )
+        static_assert(typeinfo is_array(qcomplex))
+        var expected_complex = [
+            (0, 0,  10, 200),
+            (1, 10, 11, 220),
+            (2, 20, 12, 240),
+            (3, 30, 13, 260),
+            (4, 40, 14, 280)
+        ]
+        for (c, e in qcomplex, expected_complex) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+            t |> equal(c._2, e._2)
+            t |> equal(c._3, e._3)
+        }
+    }
+    t |> run("complex zip to sequence") <| @(t : T?) {
+        var qcomplex = zip_to_sequence(
+            [for (x in 0..5); ComplexType(a = [x, x * 10])],
+            [for (x in 10..15); ComplexType(a = [x, x * 20])],
+            $(x, y : ComplexType) => (x.a[0], x.a[1], y.a[0], y.a[1])
+        )
+        static_assert(typeinfo is_iterator(qcomplex))
+        var expected_complex = [
+            (0, 0,  10, 200),
+            (1, 10, 11, 220),
+            (2, 20, 12, 240),
+            (3, 30, 13, 260),
+            (4, 40, 14, 280)
+        ]
+        for (c, e in qcomplex, expected_complex) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+            t |> equal(c._2, e._2)
+            t |> equal(c._3, e._3)
+        }
+    }
 }
-
-

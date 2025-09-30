@@ -11,13 +11,13 @@ requirement:
  - types can be moved, and kept in the container or the collection
 
 OPERATIONS
-Sorting data
+Sorting data (*)
      reverse, reverse_inplace, reverse_to_array, reverse_to_sequence - Reverses the order of elements in an iterable
      order, order_inplace, order_to_array, order_to_sequence - Sorts the elements of an iterable
      order_descending,  order_descending_inplace, order_descending_to_array, order_descending_to_sequence - Sorts the elements of an iterable in descending order
      order_by, order_by_inplace, order_by_to_array, order_by_to_sequence - Sorts the elements of an iterable
      order_by_descending,  order_by_descending_inplace, order_by_descending_to_array, order_by_descending_to_sequence - Sorts the elements of an iterable in descending order
-Set operations
+Set operations (*)
      distinct, distinct_inplace, distinct_to_array, distinct_to_sequence, distinct_by_to_array - Returns distinct elements from an iterable
      distinct_by, distinct_by_inplace, distinct_by_to_array, distinct_by_to_sequence - Returns distinct elements from an iterable (or by key)
      union, union_to_array, union_to_sequence - Returns the union of two iterables
@@ -26,16 +26,16 @@ Set operations
      except_by, except_by_to_array, except_by_to_sequence - Returns elements from the first iterable that are not in the second iterable (or by key)
      intersect - Returns elements that are present in both iterables (or by key)
      intersect_by - Returns elements that are present in both iterables (or by key)
-Concatenation operations
+Concatenation operations (*)
      append, append_to_array, append_to_sequence, append_inplace - Appends an element to the end of an iterable
      prepend, prepend_to_array, prepend_to_sequence, prepend_inplace - Prepends an element to the beginning of an iterable
      concat, concat_to_array, concat_to_sequence, concat_inplace - Concatenates two iterables
-Generation operations
+Generation operations (-)
      empty - Returns an empty iterable of a default type
      default_empty - Returns the elements of the iterable, or a default value if the iterable is empty
      range_sequence - Generates a sequence of integers within a specified range
      repeat - Generates a sequence that contains one repeated value
-Aggregation operations
+Aggregation operations (*)
      count - Counts elements in an iterable
      long_count - Counts elements in an iterable, using a long integer
      min, min_by - Finds the minimum element in an iterable
@@ -45,18 +45,18 @@ Aggregation operations
      sum - Sums the elements in an iterable
      average - Averages the elements in an iterable
      aggregate - Aggregates the elements in an iterable
-Filtering data
+Filtering data (*)
      where_, where_to_array, where_to_sequence - Filters elements in an iterable
-Partitioning data
+Partitioning data (*)
      skip, skip_to_array, skip_to_sequence, skip_inplace - Skips the first `n` elements of an iterable
      skip_while, skip_while_to_array, skip_while_to_sequence - Skips all elements of an iterable while the predicate is true
      take, take_to_array, take_to_sequence, take_inplace - Takes the first `n` elements of an iterable or range of elements in the iterable
      take_while, take_while_to_array, take_while_to_sequence - Takes elements from an iterable while the predicate is true
-     chunk - Splits an iterable into chunks of a specified size
+     chunk, chunk_to_array, chunk_to_sequence - Splits an iterable into chunks of a specified size
 Join operations
      join - Joins two iterables based on a key (inner join)
      group_join - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
-Querying data
+Querying data (*)
      any - Returns true if the iterable has at least one element (or at least one element which satisfies the predicate)
      all - Returns true if all elements in the iterable satisfy the predicate
      contains - Returns true if the element is present in the iterable
@@ -71,7 +71,7 @@ Element operations
      last_or_default - Returns the last element in an iterable, or a default value if the iterable is empty
      single - Returns the only element of an iterable, and throws if there is not exactly one element
      single_or_default - Returns the only element of an iterable, or a default value if there is not exactly one element
-Transform operations
+Transform operations (*)
      select, select_to_array, select_to_sequence - Projects each element of an iterable into a new form
      select_many - Projects each element of an iterable to an iterable and flattens the resulting iterables into one iterable
      zip - Merges iterables into an iterable of tuples
@@ -1455,7 +1455,7 @@ def join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, key
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.to_sequence()
+    return buffer.move_to_sequence()
 }
 
 [skip_lock_check]
@@ -1479,7 +1479,7 @@ def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; key
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.to_sequence()
+    return buffer.move_to_sequence()
 }
 
 [skip_lock_check]
@@ -1505,7 +1505,7 @@ def group_by(var source : iterator<auto(TT)>; key; element_selector; result_sele
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.to_sequence()
+    return buffer.move_to_sequence()
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -2315,30 +2315,58 @@ def select_to_sequence(var src : array<auto(TT)>; result_selector) : iterator<ty
     return <- linq_select(src, type<TT -const -&>, length(src), result_selector).move_to_sequence()
 }
 
-[skip_lock_check]
-def chunk(var src : iterator<auto(TT)>; size : int) : iterator<iterator<TT -const -&>> {
-    //! Splits an iterator into chunks of a specified size
+[skip_lock_check, unused_argument(tt)]
+def private chunk_impl(var src; tt : auto(TT); size : int) : array<array<TT -const -&>> {
+    //! Splits an array into chunks of a specified size
     panic("chunk size must be greater than 0") if (size <= 0)
-    return generator<iterator<TT -const -&>> capture(<- src, := size) () <| $ {
-        var inscope buffer : array<TT -const -&>
-        static_if (typeinfo need_lock_check(buffer)) {
-            unsafe(set_verify_array_locks(buffer, false))
-        }
-        for (it in src) {
-            buffer.push_clone(it)
-            if (buffer.length() == size) {
-                yield <- buffer.to_sequence()
-                buffer.clear()
-            }
-        }
-        if (buffer.length() > 0) {
-            yield <- buffer.to_sequence()
-        }
-        static_if (typeinfo need_lock_check(buffer)) {
-            unsafe(set_verify_array_locks(buffer, true))
-        }
-        return false
+    var buffer : array<array<TT -const -&>>
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, false))
     }
+    var inscope chunk : array<TT -const -&>
+    static_if (typeinfo need_lock_check(chunk)) {
+        unsafe(set_verify_array_locks(chunk, false))
+    }
+    for (it in src) {
+        chunk.push_clone(it)
+        if (chunk.length() == size) {
+            buffer.emplace(chunk)
+        }
+    }
+    if (chunk.length() > 0) {
+        buffer.emplace(chunk)
+    }
+    static_if (typeinfo need_lock_check(chunk)) {
+        unsafe(set_verify_array_locks(chunk, true))
+    }
+    static_if (typeinfo need_lock_check(buffer)) {
+        unsafe(set_verify_array_locks(buffer, true))
+    }
+    return <- buffer
+}
+
+[skip_lock_check]
+def chunk(var src : array<auto(TT)>; size : int) : array<array<TT -const -&>> {
+    //! Splits an array into chunks of a specified size
+    return <- chunk_impl(src, type<TT -const -&>, size)
+}
+
+[skip_lock_check]
+def chunk_to_array(var src : iterator<auto(TT)>; size : int) : array<array<TT -const -&>> {
+    //! Splits an iterator into chunks of a specified size and returns an array
+    return <- chunk_impl(src, type<TT -const -&>, size)
+}
+
+[skip_lock_check]
+def chunk_to_sequence(var src : array<auto(TT)>; size : int) : iterator<array<TT -const -&>> {
+    //! Splits an iterator into chunks of a specified size and returns a sequence
+    return <- chunk_impl(src, type<TT -const -&>, size).move_to_sequence()
+}
+
+[skip_lock_check]
+def chunk(var src : iterator<auto(TT)>; size : int) : iterator<array<TT -const -&>> {
+    //! Splits an iterator into chunks of a specified size
+    return <- chunk_impl(src, type<TT -const -&>, size).move_to_sequence()
 }
 
 [unused_argument(src)]
@@ -2347,7 +2375,6 @@ def private iter_type(var src : iterator<auto(TT)>) : TT -const -& {
     var t : TT -const -&
     return <- t
 }
-
 
 [skip_lock_check]
 def select_many(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
@@ -2385,9 +2412,9 @@ def select_many(var src : iterator<auto(TT)>; collection_selector; result_select
     return buffer.move_to_sequence()
 }
 
-[skip_lock_check]
-def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : iterator<tuple<TT -const -&, UU -const -&>> {
-    //! Merges two iterators into an iterator of tuples
+[skip_lock_check, unused_argument(tt), unused_argument(uu)]
+def private zip_impl(var a; tt : auto(TT); var b; var uu : auto(UU)) : array<tuple<TT -const -&, UU -const -&>> {
+    //! Merges two iterators into an array of tuples
     var buffer : array<tuple<TT -const -&, UU -const -&>>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
@@ -2398,12 +2425,35 @@ def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : iterator<tuple
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
 }
 
 [skip_lock_check]
-def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_selector) : iterator<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
-    //! Merges two iterators into an iterator using a result selector function
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : iterator<tuple<TT -const -&, UU -const -&>> {
+    //! Merges two iterators into an iterator of tuples
+    return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>).move_to_sequence()
+}
+
+[skip_lock_check]
+def zip(var a : array<auto(TT)>; var b : array<auto(UU)>) : array<tuple<TT -const -&, UU -const -&>> {
+    //! Merges two arrays into an array of tuples
+    return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>)
+}
+
+[skip_lock_check]
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : array<tuple<TT -const -&, UU -const -&>> {
+    //! Merges two iterators into an array of tuples
+    return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>)
+}
+
+[skip_lock_check]
+def zip_to_sequence(var a : array<auto(TT)>; var b : array<auto(UU)>) : iterator<tuple<TT -const -&, UU -const -&>> {
+    //! Merges two iterators into an iterator of tuples
+    return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>).move_to_sequence()
+}
+
+[skip_lock_check, unused_argument(tt), unused_argument(uu)]
+def private zip_impl(var a; tt : auto(TT); var b; uu : auto(UU); result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
     var buffer : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
@@ -2414,5 +2464,29 @@ def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_selector)
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
+}
+
+[skip_lock_check]
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges two iterators into an iterator by applying a specified function
+    return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>, result_selector).move_to_sequence()
+}
+
+[skip_lock_check]
+def zip(var a : array<auto(TT)>; var b : array<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges two arrays into an array by applying a specified function
+    return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>, result_selector)
+}
+
+[skip_lock_check]
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges two iterators into an array by applying a specified function
+    return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>, result_selector)
+}
+
+[skip_lock_check]
+def zip_to_sequence(var a : array<auto(TT)>; var b : array<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
+    //! Merges two arrays into an iterator by applying a specified function
+    return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>, result_selector).move_to_sequence()
 }

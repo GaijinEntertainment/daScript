@@ -220,4 +220,41 @@ def text_chunk(t : T?) {
             }
         }
     }
+    t |> run("chunk to array") <| @(t : T?) {
+        var query_array = chunk_to_array(
+            [iterator for(x in 0..6); x],
+            2
+        )
+        static_assert(typeinfo is_array(query_array))
+        var expected = [
+            [0, 1],
+            [2, 3],
+            [4, 5]
+        ]
+        for (c, e in query_array, expected) {
+            for (i, v in c, e) {
+                t |> equal(i, v)
+            }
+        }
+    }
+    t |> run("chunk to sequence") <| @(t : T?) {
+        var query_seq = chunk_to_sequence(
+            [0, 1, 2, 3, 4, 5, 6],
+            2
+        )
+        static_assert(typeinfo is_iterator(query_seq))
+        var expected = [
+            [0, 1],
+            [2, 3],
+            [4, 5]
+        ]
+        for (c, e in query_seq, expected) {
+            var count = 0
+            for (i, v in c, e) {
+                t |> equal(i, v)
+                count ++
+            }
+            t |> equal(2, count)
+        }
+    }
 }
