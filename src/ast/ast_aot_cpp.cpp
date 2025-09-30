@@ -651,7 +651,7 @@ namespace das {
             }
             ss << ", " << info->nextGcField;
         }
-        void describeCppVarFuncInfo ( TextWriter & ss, string_view structName, VarInfo * info, const string & suffix ) const {
+        void describeCppVarFuncInfo ( TextWriter & ss, string_view /*structName*/, VarInfo * info, const string & suffix ) const {
             describeCppTypeInfo(ss, info, suffix);
             // Note: info offset is platform dependant, however for functions it's not done yet and always zero.
             DAS_ASSERT(info->offset == 0);
@@ -3668,7 +3668,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprFor * ffor ) override {
             ss << "\n";
-            for ( int si=ffor->iteratorVariables.size()-1; si>=0; --si ) {
+            for ( int si=int(ffor->iteratorVariables.size())-1; si>=0; --si ) {
                 auto & var = ffor->iteratorVariables[si];
                 ss << tabs() << forSrcName(var->name) << ".close(__context__,";
                 ss << "(" << collector.getVarName(var) << "));\n";
@@ -4189,7 +4189,7 @@ namespace das {
         return tw.str();
     }
 
-    string addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, Module* module, AotDebugInfoHelper& helper) {
+    string addFunctionInfo(bool /*disableInit*/, bool rtti, const vector<Function *> &fnn, Module* /*module*/, AotDebugInfoHelper& helper) {
         helper.rtti = rtti;
         vector<pair<FunctionPtr, FuncInfo*>> lookupFunctionTable;
         for (auto& pfun : fnn) {

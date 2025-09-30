@@ -29,7 +29,7 @@ namespace das {
                 anyStructFields.pop_back();
             }
         }
-        virtual void beforeStructureField ( char * ps, StructInfo *si, char * pf, VarInfo * vi, bool ) override {
+        virtual void beforeStructureField ( char * /*ps*/, StructInfo *si, char * pf, VarInfo * vi, bool ) override {
             enumAsInt = false;
             unescape = false;
             embed = false;
@@ -100,10 +100,10 @@ namespace das {
             }
             ignoreNextFields.push_back(ignoreNextField);
         }
-        virtual bool canVisitArray ( Array * ar, TypeInfo * ) override {
+        virtual bool canVisitArray ( Array * /*ar*/, TypeInfo * ) override {
             return ignoreNextFields.empty() || !ignoreNextFields.back();
         }
-        virtual bool canVisitTable ( char * ps, TypeInfo * ) override {
+        virtual bool canVisitTable ( char * /*ps*/, TypeInfo * ) override {
             return ignoreNextFields.empty() || !ignoreNextFields.back();
         }
         virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool ) override {
@@ -121,7 +121,7 @@ namespace das {
         virtual void afterTuple ( char *, TypeInfo * ) override {
             ss << "}";
         }
-        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, int idx, bool ) override {
+        virtual void beforeTupleEntry ( char *, TypeInfo * /*ti*/, char *, int idx, bool ) override {
             ss << "\"_" << idx << "\":";
         }
         virtual void afterTupleEntry ( char *, TypeInfo *, char *, int, bool last ) override {
@@ -292,11 +292,11 @@ namespace das {
             Enum(value,info);
         }
 
-        virtual bool revisitStructure ( char * ps, StructInfo * si ) override {
+        virtual bool revisitStructure ( char * /*ps*/, StructInfo * /*si*/ ) override {
             ss << "null";
             return false;
         }
-        virtual bool revisitHandle ( char * ps, TypeInfo * ti ) override {
+        virtual bool revisitHandle ( char * /*ps*/, TypeInfo * /*ti*/ ) override {
             ss << "null";
             return false;
         }

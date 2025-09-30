@@ -2167,7 +2167,7 @@ namespace das {
         return make_smart<CallMacroAdapter>(name,(char *)pClass,info,context);
     }
 
-    CallMacro *findModuleCallMacro ( Module * module, const char *name, Context * context, LineInfoArg * at ) {
+    CallMacro *findModuleCallMacro ( Module * module, const char *name, Context * /*context*/, LineInfoArg * at ) {
         auto exprCallMacro = static_cast<ExprCallMacro*>((*module->findCall(name))(*at));
         auto res = exprCallMacro->macro;
         delete exprCallMacro;

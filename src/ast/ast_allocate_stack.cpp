@@ -610,7 +610,7 @@ namespace das {
                 pushSp(); // Free everything allocated to init let (not let itself)
             }
         }
-        virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
+        virtual VariablePtr visitLet ( ExprLet * /*expr*/, const VariablePtr & var, bool /*last*/ ) override {
             if (!inStruct && !var->type->ref && var->type->baseType != Type::tBlock) {
                 popSp();
             }
