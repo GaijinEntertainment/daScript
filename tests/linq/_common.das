@@ -43,7 +43,7 @@ struct Person {
     age : int
 }
 
-var people = [
+let people = [
     Person(name = "Alice", age = 30),
     Person(name = "Bob", age = 25),
     Person(name = "Charlie", age = 35),
@@ -51,7 +51,7 @@ var people = [
     Person(name = "Alice", age = 25)
 ]
 
-var sorted = [
+let sorted = [
     Person(name = "Alice", age = 25),
     Person(name = "Alice", age = 30),
     Person(name = "Bob", age = 20),
@@ -59,7 +59,7 @@ var sorted = [
     Person(name = "Charlie", age = 35)
 ]
 
-var sorted_r = [
+let sorted_r = [
     Person(name = "Charlie", age = 35),
     Person(name = "Bob", age = 25),
     Person(name = "Bob", age = 20),
@@ -80,10 +80,10 @@ let barley = Pet(name = "Barley", owner = terry, age = 8.3)
 let boots = Pet(name = "Boots", owner = terry, age = 4.9)
 let whiskers = Pet(name = "Whiskers", owner = charlotte, age = 1.5)
 let daisy = Pet(name = "Daisy", owner = magnus, age = 4.3)
-var persons = [
+let persons = [
     magnus, terry, charlotte
 ]
-var pets = [
+let pets = [
     barley, boots, whiskers, daisy
 ]
 
