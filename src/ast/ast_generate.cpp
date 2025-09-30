@@ -125,6 +125,7 @@ namespace das {
         // temp : Array<expr->subexpr->type>
         auto pVar = make_smart<Variable>();
         pVar->generated = true;
+        pVar->can_shadow = true;
         pVar->at = expr->at;
         pVar->name = compName;
         pVar->type = make_smart<TypeDecl>(Type::tArray);

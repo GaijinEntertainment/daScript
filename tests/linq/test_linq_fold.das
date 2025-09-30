@@ -593,3 +593,60 @@ def test_intersect(t : T?) {
         }
     }
 }
+
+[test]
+def test_chunk(t : T?) {
+    t |> run("basic chunk") <| @(t : T?) {
+        var query = (
+            [for (x in 0..7); x]
+            .chunk(2)
+            ._select(length(_))
+            ._fold()
+        )
+        t |> equal(typeinfo typename(query), "array<int>")
+        let expected = [2, 2, 2, 1]
+        t |> equal(length(expected), length(query))
+        for (i, v in 0..length(expected), query) {
+            t |> equal(expected[i], v)
+        }
+    }
+}
+
+[test]
+def test_zip(t : T?) {
+    t |> run("basic zip") <| @(t : T?) {
+        var query = (
+            [for (x in 0..6); x]
+            ._select(_ * _)
+            .zip(
+                [for (y in 10..16); y]
+                ._select(_)
+            )
+            ._fold()
+        )
+        t |> equal(typeinfo typename(query), "array<tuple<int;int>>")
+        let expected = [(0, 10), (1, 11), (4, 12), (9, 13), (16, 14), (25, 15)]
+        t |> equal(length(expected), length(query))
+        for (i, v in 0..length(expected), query) {
+            t |> equal(expected[i]._0, v._0)
+            t |> equal(expected[i]._1, v._1)
+        }
+    }
+    t |> run("zip with predicate") <| @(t : T?) {
+        var query = (
+            [for (x in 0..6); x]
+            .zip(
+                [for (y in 10..16); y]
+                ._select(_),
+                $(a, b : int) => a + b
+            )
+            ._fold()
+        )
+        t |> equal(typeinfo typename(query), "array<int>")
+        let expected = [10, 12, 14, 16, 18, 20]
+        t |> equal(length(expected), length(query))
+        for (i, v in 0..length(expected), query) {
+            t |> equal(expected[i], v)
+        }
+    }
+}

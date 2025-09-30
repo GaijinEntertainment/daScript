@@ -11,7 +11,7 @@ LINQ_BOOST
 
 Transform operations
     - _where(it, expr)          => where_(it, $(_) => expr)
-    - _select(it, expr)        => select(it, $(_) => expr)
+    - _select(it, expr)         => select(it, $(_) => expr)
 Aggregation operations
     - _min_by(it, expr)         => min_by(it, $(_) => expr)
     - _max_by(it, expr)         => max_by(it, $(_) => expr)
@@ -313,6 +313,9 @@ var private linqCalls = {
     "select" => LinqCall(name = "select"),
     "select_to_array" => LinqCall(name = "select"),
     "select_to_sequence" => LinqCall(name = "select"),
+    "zip" => LinqCall(name = "zip", recursive = [1]),
+    "zip_to_array" => LinqCall(name = "zip", recursive = [1]),
+    "zip_to_sequence" => LinqCall(name = "zip", recursive = [1]),
 // sorting data
     "reverse" => LinqCall(name = "reverse", inplace = true),
     "reverse_to_array" => LinqCall(name = "reverse", inplace = true),
@@ -356,6 +359,9 @@ var private linqCalls = {
     "take_while" => LinqCall(name = "take_while"),
     "take_while_to_array" => LinqCall(name = "take_while"),
     "take_while_to_sequence" => LinqCall(name = "take_while"),
+    "chunk" => LinqCall(name = "chunk"),
+    "chunk_to_array" => LinqCall(name = "chunk"),
+    "chunk_to_sequence" => LinqCall(name = "chunk"),
 // concatenation operations
     "concat" => LinqCall(name = "concat", recursive = [1], inplace = true),
     "concat_to_array" => LinqCall(name = "concat", recursive = [1], inplace = true),
