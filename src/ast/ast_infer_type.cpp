@@ -9293,6 +9293,10 @@ namespace das {
                 vector<ExpressionPtr> cargs; cargs.reserve(expr->arguments.size());
                 bool failed = false;
                 for (auto & arg : expr->arguments) {
+                    if ( arg->type->ref ) {
+                        failed = true;
+                        break;
+                    }
                     if ( auto carg = getConstExpr(arg.get()) ) {
                         cargs.push_back(carg);
                     } else if ( arg->type->baseType==Type::fakeContext || arg->type->baseType==Type::fakeLineInfo ) {
