@@ -53,7 +53,7 @@ Partitioning data (*)
      take, take_to_array, take_to_sequence, take_inplace - Takes the first `n` elements of an iterable or range of elements in the iterable
      take_while, take_while_to_array, take_while_to_sequence - Takes elements from an iterable while the predicate is true
      chunk, chunk_to_array, chunk_to_sequence - Splits an iterable into chunks of a specified size
-Join and group operations
+Join and group operations (*)
      join - Joins two iterables based on a key (inner join)
      group_join - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
      group_by - Groups elements in an iterable by a key
@@ -1539,9 +1539,8 @@ def group_join_to_sequence(var srca : array<auto(TA)>; var srcb : array<auto(TB)
     return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
-[skip_lock_check]
-def group_by(var source : iterator<auto(TT)>; key; element_selector; result_selector)  {
-    //! Groups the elements of an iterator according to a specified key selector function
+[skip_lock_check, unused_argument(tt)]
+def group_by_impl(var source; tt : auto(TT); key; element_selector; result_selector)  {
     var tab : table<typedecl(_::unique_key(key(type<TT>))); tuple<typedecl(key(type<TT>)), array<typedecl(element_selector(type<TT>)) -const -&>>>
     for (it in source) {
         let kIT = key(it)
@@ -1562,7 +1561,31 @@ def group_by(var source : iterator<auto(TT)>; key; element_selector; result_sele
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.to_sequence_move()
+    return <- buffer
+}
+
+[skip_lock_check]
+def group_by(var source : iterator<auto(TT)>; key; element_selector; result_selector)  {
+    //! Groups the elements of an iterator according to a specified key selector function
+    return <- group_by_impl(source, type<TT -const -&>, key, element_selector, result_selector).to_sequence_move()
+}
+
+[skip_lock_check]
+def group_by(var source : array<auto(TT)>; key; element_selector; result_selector)  {
+    //! Groups the elements of an array according to a specified key selector function
+    return <- group_by_impl(source, type<TT -const -&>, key, element_selector, result_selector)
+}
+
+[skip_lock_check]
+def group_by_to_array(var source : iterator<auto(TT)>; key; element_selector; result_selector)  {
+    //! Groups the elements of an iterator according to a specified key selector function and returns an array
+    return <- group_by_impl(source, type<TT -const -&>, key, element_selector, result_selector)
+}
+
+[skip_lock_check]
+def group_by_to_sequence(var source : array<auto(TT)>; key; element_selector; result_selector)  {
+    //! Groups the elements of an array according to a specified key selector function and returns an iterator
+    return <- group_by_impl(source, type<TT -const -&>, key, element_selector, result_selector).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt)]

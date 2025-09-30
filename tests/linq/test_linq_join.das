@@ -264,5 +264,71 @@ def test_groupby(t : T?) {
             t |> equal(c._3, e._3)
         }
     }
+    t |> run("group by from array") <| @(t : T?) {
+        var query = group_by(
+            pets,
+            $(pet : Pet) => floor(pet.age),
+            $(pet : Pet) => pet.age,
+            $(baseAge : float, var ages : iterator<float>) {
+                var inscope aa = ages.to_array()
+                return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
+            }
+        )
+        var expected = [
+            (4., 2, 4.3, 4.9),
+            (1., 1, 1.5, 1.5),
+            (8., 1, 8.3, 8.3)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+            t |> equal(c._2, e._2)
+            t |> equal(c._3, e._3)
+        }
+    }
+    t |> run("group by to array") <| @(t : T?) {
+        var query = group_by_to_array(
+            pets.to_sequence(),
+            $(pet : Pet) => floor(pet.age),
+            $(pet : Pet) => pet.age,
+            $(baseAge : float, var ages : iterator<float>) {
+                var inscope aa = ages.to_array()
+                return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
+            }
+        )
+        var expected = [
+            (4., 2, 4.3, 4.9),
+            (1., 1, 1.5, 1.5),
+            (8., 1, 8.3, 8.3)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+            t |> equal(c._2, e._2)
+            t |> equal(c._3, e._3)
+        }
+    }
+    t |> run("group by to sequence") <| @(t : T?) {
+        var query = group_by_to_array(
+            pets.to_sequence(),
+            $(pet : Pet) => floor(pet.age),
+            $(pet : Pet) => pet.age,
+            $(baseAge : float, var ages : iterator<float>) {
+                var inscope aa = ages.to_array()
+                return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
+            }
+        ).to_sequence()
+        var expected = [
+            (4., 2, 4.3, 4.9),
+            (1., 1, 1.5, 1.5),
+            (8., 1, 8.3, 8.3)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+            t |> equal(c._2, e._2)
+            t |> equal(c._3, e._3)
+        }
+    }
 }
 

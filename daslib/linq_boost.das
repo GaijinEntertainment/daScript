@@ -413,6 +413,9 @@ var private linqCalls = {
     "group_join" => LinqCall(name = "group_join", recursive = [1]),
     "group_join_to_array" => LinqCall(name = "group_join", recursive = [1]),
     "group_join_to_sequence" => LinqCall(name = "group_join", recursive = [1]),
+    "group_by" => LinqCall(name = "group_by"),
+    "group_by_to_array" => LinqCall(name = "group_by"),
+    "group_by_to_sequence" => LinqCall(name = "group_by"),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),
