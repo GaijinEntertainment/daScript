@@ -62,7 +62,7 @@ Querying data (*)
      contains - Returns true if the element is present in the iterable
 Grouping data
      group_by - Groups elements in an iterable by a key
-Element operations
+Element operations (*)
      element_at - Returns the element at the specified index
      element_at_or_default - Returns the element at the specified index, or a default value if the index is out of range
      first - Returns the first element in an iterable
@@ -1959,6 +1959,17 @@ def sequence_equal_by(var first : iterator<auto(TT)>; var second : iterator<auto
 }
 
 [skip_lock_check]
+def element_at(var src : array<auto(TT)>; index : int) : TT -const -& {
+    //! Returns the element at the specified index
+    panic("element index out of range") if (index < 0 || index >= length(src))
+    static_if (typeinfo can_copy(src[index])) {
+        return src[index]
+    } else {
+        return <- clone_to_move(src[index])
+    }
+}
+
+[skip_lock_check]
 def element_at(var src : iterator<auto(TT)>; index : int) : TT -const -& {
     //! Returns the element at the specified index
     panic("element index out of range") if (index < 0)
@@ -1976,6 +1987,20 @@ def element_at(var src : iterator<auto(TT)>; index : int) : TT -const -& {
     panic("element index out of range")
     var t : TT -const -&
     return <- t
+}
+
+[skip_lock_check]
+def element_at_or_default(var src : array<auto(TT)>; index : int) : TT -const -& {
+    //! Returns the element at the specified index, or a default value if the index is out of range
+    if (index < 0 || index >= length(src)) {
+        var t : TT -const -&
+        return <- t
+    }
+    static_if (typeinfo can_copy(src[index])) {
+        return src[index]
+    } else {
+        return <- clone_to_move(src[index])
+    }
 }
 
 [skip_lock_check]
@@ -2001,6 +2026,17 @@ def element_at_or_default(var src : iterator<auto(TT)>; index : int) : TT -const
 }
 
 [skip_lock_check]
+def first(var src : array<auto(TT)>) : TT -const -& {
+    //! Returns the first element of an array
+    panic("sequence contains no elements") if (length(src) == 0)
+    static_if (typeinfo can_copy(src[0])) {
+        return src[0]
+    } else {
+        return <- clone_to_move(src[0])
+    }
+}
+
+[skip_lock_check]
 def first(var src : iterator<auto(TT)>) : TT -const -& {
     //! Returns the first element of an iterator
     for (it in src) {
@@ -2013,6 +2049,23 @@ def first(var src : iterator<auto(TT)>) : TT -const -& {
     panic("sequence contains no elements")
     var t : TT -const -&
     return <- t
+}
+
+[skip_lock_check]
+def first_or_default(var src : array<auto(TT)>; defaultValue : TT -&) : TT -const -& {
+    //! Returns the first element of an array, or a default value if the array is empty
+    if (length(src) == 0) {
+        static_if (typeinfo can_copy(defaultValue)) {
+            return defaultValue
+        } else {
+            return <- clone_to_move(defaultValue)
+        }
+    }
+    static_if (typeinfo can_copy(src[0])) {
+        return src[0]
+    } else {
+        return <- clone_to_move(src[0])
+    }
 }
 
 [skip_lock_check]
@@ -2033,6 +2086,18 @@ def first_or_default(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -c
 }
 
 [skip_lock_check]
+def last(var src : array<auto(TT)>) : TT -const -& {
+    //! Returns the last element of an array
+    let srcl = length(src)
+    panic("sequence contains no elements") if (srcl == 0)
+    static_if (typeinfo can_copy(src[srcl - 1])) {
+        return src[srcl - 1]
+    } else {
+        return <- clone_to_move(src[srcl - 1])
+    }
+}
+
+[skip_lock_check]
 def last(var src : iterator<auto(TT)>) : TT -const -& {
     //! Returns the last element of an iterator
     var found = false
@@ -2045,6 +2110,24 @@ def last(var src : iterator<auto(TT)>) : TT -const -& {
         panic("sequence contains no elements")
     }
     return <- last
+}
+
+[skip_lock_check]
+def last_or_default(var src : array<auto(TT)>; defaultValue : TT -&) : TT -const -& {
+    //! Returns the last element of an array, or a default value if the array is empty
+    let srcl = length(src)
+    if (srcl == 0) {
+        static_if (typeinfo can_copy(defaultValue)) {
+            return defaultValue
+        } else {
+            return <- clone_to_move(defaultValue)
+        }
+    }
+    static_if (typeinfo can_copy(src[srcl - 1])) {
+        return src[srcl - 1]
+    } else {
+        return <- clone_to_move(src[srcl - 1])
+    }
 }
 
 [skip_lock_check]
@@ -2067,6 +2150,23 @@ def last_or_default(var src : iterator<auto(TT)>; defaultValue : TT -&) : TT -co
 }
 
 [skip_lock_check]
+def single(var src : array<auto(TT)>) : TT -const -& {
+    //! Returns the only element of an array, and throws if there is not exactly one element
+    let srcl = length(src)
+    if (srcl == 0) {
+        panic("sequence contains no elements")
+    }
+    if (srcl > 1) {
+        panic("sequence contains more than one element")
+    }
+    static_if (typeinfo can_copy(src[0])) {
+        return src[0]
+    } else {
+        return <- clone_to_move(src[0])
+    }
+}
+
+[skip_lock_check]
 def single(var src : iterator<auto(TT)>) : TT -const -& {
     //! Returns the only element of an iterator, and throws if there is not exactly one element
     var found = false
@@ -2082,6 +2182,31 @@ def single(var src : iterator<auto(TT)>) : TT -const -& {
         panic("sequence contains no elements")
     }
     return <- single
+}
+
+[skip_lock_check]
+def single_or_default(var src : array<auto(TT)>; defaultValue : TT -&) : TT -const -& {
+    //! Returns the only element of an array, or a default value if there is not exactly one element
+    let srcl = length(src)
+    if (srcl == 0) {
+        static_if (typeinfo can_copy(defaultValue)) {
+            return defaultValue
+        } else {
+            return <- clone_to_move(defaultValue)
+        }
+    }
+    if (srcl > 1) {
+        static_if (typeinfo can_copy(defaultValue)) {
+            return defaultValue
+        } else {
+            return <- clone_to_move(defaultValue)
+        }
+    }
+    static_if (typeinfo can_copy(src[0])) {
+        return src[0]
+    } else {
+        return <- clone_to_move(src[0])
+    }
 }
 
 [skip_lock_check]

@@ -24,6 +24,13 @@ def test_elementat(t : T?) {
         t |> equal(qcomplex.a[0], 3)
         t |> equal(qcomplex.a[1], 30)
     }
+    t |> run("from array element at") <| @(t : T?) {
+        var qarray = element_at(
+            [1, 2, 3, 4, 5],
+            1
+        )
+        t |> equal(qarray, 2)
+    }
 }
 
 [test]
@@ -43,6 +50,13 @@ def test_elementatordefault(t : T?) {
         t |> equal(qcomplex.a[0], 3)
         t |> equal(qcomplex.a[1], 30)
     }
+    t |> run("from array element at or default") <| @(t : T?) {
+        var qarray = element_at_or_default(
+            [1, 2, 3, 4, 5],
+            1
+        )
+        t |> equal(qarray, 2)
+    }
 }
 
 [test]
@@ -59,6 +73,12 @@ def test_first(t : T?) {
         )
         t |> equal(qcomplex.a[0], 0)
         t |> equal(qcomplex.a[1], 0)
+    }
+    t |> run("from array first") <| @(t : T?) {
+        var qarray = first(
+            [1, 2, 3, 4, 5]
+        )
+        t |> equal(qarray, 1)
     }
 }
 
@@ -94,6 +114,13 @@ def test_firstordefault(t : T?) {
         t |> equal(qcomplex.a[0], 0)
         t |> equal(qcomplex.a[1], 0)
     }
+    t |> run("from array first or default") <| @(t : T?) {
+        var qarray = first_or_default(
+            [1, 2, 3, 4, 5],
+            -1
+        )
+        t |> equal(qarray, 1)
+    }
 }
 
 [test]
@@ -110,6 +137,12 @@ def test_last(t : T?) {
         )
         t |> equal(qcomplex.a[0], 4)
         t |> equal(qcomplex.a[1], 40)
+    }
+    t |> run("from array last") <| @(t : T?) {
+        var qarray = last(
+            [1, 2, 3, 4, 5]
+        )
+        t |> equal(qarray, 5)
     }
 }
 
@@ -137,6 +170,13 @@ def test_lastordefault(t : T?) {
         t |> equal(qcomplex.a[0], 4)
         t |> equal(qcomplex.a[1], 40)
     }
+    t |> run("from array last or default") <| @(t : T?) {
+        var qarray = last_or_default(
+            [1, 2, 3, 4, 5],
+            -1
+        )
+        t |> equal(qarray, 5)
+    }
 }
 
 [test]
@@ -159,6 +199,12 @@ def test_single(t : T?) {
         )
         t |> equal(qcomplex.a[0], 0)
         t |> equal(qcomplex.a[1], 0)
+    }
+    t |> run("from array single") <| @(t : T?) {
+        var qarray = single(
+            [1]
+        )
+        t |> equal(qarray, 1)
     }
 }
 
@@ -185,6 +231,13 @@ def test_singleordefault(t : T?) {
         )
         t |> equal(qcomplex.a[0], 2)
         t |> equal(qcomplex.a[1], 20)
+    }
+    t |> run("from array single or default not") <| @(t : T?) {
+        var qarray = single_or_default(
+            [1],
+            -1
+        )
+        t |> equal(qarray, 1)
     }
 }
 

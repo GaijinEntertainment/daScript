@@ -397,6 +397,15 @@ var private linqCalls = {
     "intersect_by" => LinqCall(name = "intersect_by", recursive = [1]),
     "intersect_by_to_array" => LinqCall(name = "intersect_by", recursive = [1]),
     "intersect_by_to_sequence" => LinqCall(name = "intersect_by", recursive = [1]),
+// element operations
+    "element_at" => LinqCall(name = "element_at"),
+    "element_at_or_default" => LinqCall(name = "element_at_or_default"),
+    "first" => LinqCall(name = "first"),
+    "first_or_default" => LinqCall(name = "first_or_default"),
+    "last" => LinqCall(name = "last"),
+    "last_or_default" => LinqCall(name = "last_or_default"),
+    "single" => LinqCall(name = "single"),
+    "single_or_default" => LinqCall(name = "single_or_default"),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),
