@@ -1442,7 +1442,7 @@ def min_max_average_by(var src : array<auto(TT)>; key) : tuple<TT -const -&, TT 
 }
 
 [skip_lock_check]
-def join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
+def private join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
     //! Joins two iterators based on matching keys (inner join)
     var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
@@ -1464,31 +1464,79 @@ def join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, key
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.to_sequence_move()
+    return <- buffer
 }
 
 [skip_lock_check]
-def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<iterator<TB -const -&>>)) -const -&> {
+def join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    //! Joins two iterators based on matching keys (inner join)
+    return <- join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
+}
+
+[skip_lock_check]
+def join(var srca : array<auto(TA)>; var srcb : array<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    //! Joins two arrays based on matching keys (inner join)
+    return <- join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+[skip_lock_check]
+def join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    //! Joins two iterators based on matching keys (inner join) and returns an array
+    return <- join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+[skip_lock_check]
+def join_to_sequence(var srca : array<auto(TA)>; var srcb : array<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    //! Joins two arrays based on matching keys (inner join) and returns an iterator
+    return <- join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
+}
+
+[skip_lock_check, unused_argument(ta, tb)]
+def private group_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
     // we pass TA, and sequence of TB to 'result'
     var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
     for (itb in srcb) {
         let k = _::unique_key(keyb(itb))
         unsafe(tableb[k]).push_clone(itb)
     }
-    var buffer : array<typedecl(result(type<TA>, type<iterator<TB -const -&>>)) -const -&>
+    var buffer : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
     }
     for (ita in srca) {
         let k = _::unique_key(keya(ita))
         tableb.get(k, $(var arr){
-            buffer.push_clone(result(ita, arr.to_sequence()))
+            buffer.push_clone(result(ita, arr))
         })
     }
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.to_sequence_move()
+    return <- buffer
+}
+
+[skip_lock_check]
+def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
+    // we pass TA, and sequence of TB to 'result'
+    return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
+}
+
+[skip_lock_check]
+def group_join(var srca : array<auto(TA)>; var srcb : array<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
+    // we pass TA, and sequence of TB to 'result'
+    return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+[skip_lock_check]
+def group_join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
+    // we pass TA, and sequence of TB to 'result'
+    return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+[skip_lock_check]
+def group_join_to_sequence(var srca : array<auto(TA)>; var srcb : array<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
+    // we pass TA, and sequence of TB to 'result'
+    return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
 [skip_lock_check]
@@ -2568,7 +2616,7 @@ def select_many(var src : iterator<auto(TT)>; collection_selector; result_select
     return buffer.to_sequence_move()
 }
 
-[skip_lock_check, unused_argument(tt), unused_argument(uu)]
+[skip_lock_check, unused_argument(tt, uu)]
 def private zip_impl(var a; tt : auto(TT); var b; var uu : auto(UU)) : array<tuple<TT -const -&, UU -const -&>> {
     //! Merges two iterators into an array of tuples
     var buffer : array<tuple<TT -const -&, UU -const -&>>
@@ -2608,7 +2656,7 @@ def zip_to_sequence(var a : array<auto(TT)>; var b : array<auto(UU)>) : iterator
     return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>).to_sequence_move()
 }
 
-[skip_lock_check, unused_argument(tt), unused_argument(uu)]
+[skip_lock_check, unused_argument(tt, uu)]
 def private zip_impl(var a; tt : auto(TT); var b; uu : auto(UU); result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
     var buffer : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&>
     static_if (typeinfo need_lock_check(buffer)) {

@@ -406,6 +406,13 @@ var private linqCalls = {
     "last_or_default" => LinqCall(name = "last_or_default"),
     "single" => LinqCall(name = "single"),
     "single_or_default" => LinqCall(name = "single_or_default"),
+// join operations
+    "join" => LinqCall(name = "join", recursive = [1]),
+    "join_to_array" => LinqCall(name = "join", recursive = [1]),
+    "join_to_sequence" => LinqCall(name = "join", recursive = [1]),
+    "group_join" => LinqCall(name = "group_join", recursive = [1]),
+    "group_join_to_array" => LinqCall(name = "group_join", recursive = [1]),
+    "group_join_to_sequence" => LinqCall(name = "group_join", recursive = [1]),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),
@@ -413,9 +420,7 @@ var private linqCalls = {
 // skippable
     "to_table" => LinqCall(name = "to_table"),
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
-    "to_array_move" => LinqCall(name = "to_array_move", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
-    "to_sequence_move" => LinqCall(name = "to_sequence_move", skip = true),
 }
 
 [macro_function]

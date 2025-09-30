@@ -48,6 +48,63 @@ def test_join(t : T?) {
             t |> equal(c.a[1], e._1)
         }
     }
+    t |> run("array join") <| @(t : T?) {
+        var arr1 = [1, 2, 3, 4, 5]
+        var arr2 = [4, 5, 6, 7, 8]
+        var query = join(
+            arr1,
+            arr2,
+            $(a : int) => a,
+            $(b : int) => b,
+            $(a : int, b : int) => (a, b)
+        )
+        var expected = [
+            (4, 4),
+            (5, 5)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+        }
+    }
+    t |> run("join to array") <| @(t : T?) {
+        var arr1 = [1, 2, 3, 4, 5].to_sequence_move()
+        var arr2 = [4, 5, 6, 7, 8].to_sequence_move()
+        var query = join(
+            arr1,
+            arr2,
+            $(a : int) => a,
+            $(b : int) => b,
+            $(a : int, b : int) => (a, b)
+        ).to_array()
+        var expected = [
+            (4, 4),
+            (5, 5)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+        }
+    }
+    t |> run("join to sequence") <| @(t : T?) {
+        var arr1 = [1, 2, 3, 4, 5]
+        var arr2 = [4, 5, 6, 7, 8]
+        var query = join(
+            arr1,
+            arr2,
+            $(a : int) => a,
+            $(b : int) => b,
+            $(a : int, b : int) => (a, b)
+        ).to_sequence()
+        var expected = [
+            (4, 4),
+            (5, 5)
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            t |> equal(c._1, e._1)
+        }
+    }
 }
 
 [test]
@@ -58,7 +115,7 @@ def test_groupjoin(t : T?) {
             pets.to_sequence(),
             $(p : Person) => p.name,
             $(pet : Pet) => pet.owner.name,
-            $(p : Person, var pets : iterator<Pet>) => (p.name, pets.to_array())
+            $(p : Person, var pets : array<Pet>) => (p.name, pets)
         )
         var expected = [
             ("Hedlund, Magnus", [daisy]),
@@ -79,9 +136,10 @@ def test_groupjoin(t : T?) {
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(c : ComplexType) => c.a[0],
             $(c : ComplexType) => c.a[1] / 10,
-            $(c : ComplexType, var pets : iterator<ComplexType>) => (c.a[0], pets.to_array())
+            $(c : ComplexType, var pets : array<ComplexType>) => (c.a[0], pets)
         )
         var expected_complex = [
+
             (0, [ComplexType(a = [0, 0])]),
             (1, [ComplexType(a = [1, 10])]),
             (2, [ComplexType(a = [2, 20])]),
@@ -93,6 +151,69 @@ def test_groupjoin(t : T?) {
             for (p1, p2 in c._1, e._1) {
                 t |> equal(p1.a[0], p2.a[0])
                 t |> equal(p1.a[1], p2.a[1])
+            }
+        }
+    }
+    t |> run("group join from array") <| @(t : T?) {
+        var query = group_join(
+            persons,
+            pets,
+            $(p : Person) => p.name,
+            $(pet : Pet) => pet.owner.name,
+            $(p : Person, var pets : array<Pet>) => (p.name, pets)
+        )
+        var expected = [
+            ("Hedlund, Magnus", [daisy]),
+            ("Adams, Terry", [barley, boots]),
+            ("Weiss, Charlotte", [whiskers])
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            for (p1, p2 in c._1, e._1) {
+                t |> equal(p1.name, p2.name)
+                t |> equal(p1.owner.name, p2.owner.name)
+            }
+        }
+    }
+    t |> run("group join to array") <| @(t : T?) {
+        var query = group_join_to_array(
+            persons.to_sequence(),
+            pets.to_sequence(),
+            $(p : Person) => p.name,
+            $(pet : Pet) => pet.owner.name,
+            $(p : Person, var pets : array<Pet>) => (p.name, pets)
+        )
+        var expected = [
+            ("Hedlund, Magnus", [daisy]),
+            ("Adams, Terry", [barley, boots]),
+            ("Weiss, Charlotte", [whiskers])
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            for (p1, p2 in c._1, e._1) {
+                t |> equal(p1.name, p2.name)
+                t |> equal(p1.owner.name, p2.owner.name)
+            }
+        }
+    }
+    t |> run("group join to sequence") <| @(t : T?) {
+        var query = group_join_to_array(
+            persons.to_sequence(),
+            pets.to_sequence(),
+            $(p : Person) => p.name,
+            $(pet : Pet) => pet.owner.name,
+            $(p : Person, var pets : array<Pet>) => (p.name, pets)
+        ).to_sequence()
+        var expected = [
+            ("Hedlund, Magnus", [daisy]),
+            ("Adams, Terry", [barley, boots]),
+            ("Weiss, Charlotte", [whiskers])
+        ]
+        for (c, e in query, expected) {
+            t |> equal(c._0, e._0)
+            for (p1, p2 in c._1, e._1) {
+                t |> equal(p1.name, p2.name)
+                t |> equal(p1.owner.name, p2.owner.name)
             }
         }
     }

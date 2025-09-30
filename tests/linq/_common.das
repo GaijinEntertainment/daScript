@@ -80,10 +80,10 @@ let barley = Pet(name = "Barley", owner = terry, age = 8.3)
 let boots = Pet(name = "Boots", owner = terry, age = 4.9)
 let whiskers = Pet(name = "Whiskers", owner = charlotte, age = 1.5)
 let daisy = Pet(name = "Daisy", owner = magnus, age = 4.3)
-let persons = [
+var persons = [
     magnus, terry, charlotte
 ]
-let pets = [
+var pets = [
     barley, boots, whiskers, daisy
 ]
 
