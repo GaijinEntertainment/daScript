@@ -54,9 +54,9 @@ Partitioning data (*)
      take_while, take_while_to_array, take_while_to_sequence - Takes elements from an iterable while the predicate is true
      chunk, chunk_to_array, chunk_to_sequence - Splits an iterable into chunks of a specified size
 Join and group operations (*)
-     join - Joins two iterables based on a key (inner join)
-     group_join - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
-     group_by - Groups elements in an iterable by a key
+     join, join_to_array, join_to_sequence - Joins two iterables based on a key (inner join)
+     group_join, group_join_to_array, group_join_to_sequence - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
+     group_by, group_by_to_array, group_by_to_sequence - Groups elements in an iterable by a key
 Querying data (*)
      any - Returns true if the iterable has at least one element (or at least one element which satisfies the predicate)
      all - Returns true if all elements in the iterable satisfy the predicate
@@ -72,11 +72,8 @@ Element operations (*)
      single_or_default - Returns the only element of an iterable, or a default value if there is not exactly one element
 Transform operations (*)
      select, select_to_array, select_to_sequence - Projects each element of an iterable into a new form
-
-// TODO:
-     select_many - Projects each element of an iterable to an iterable and flattens the resulting iterables into one iterable
-
-     zip - Merges iterables into an iterable of tuples
+     select_many, select_many_to_array, select_many_to_sequence - Projects each element of an iterable to an iterable and flattens the resulting iterables into one iterable
+     zip, zip_to_array, zip_to_sequence - Merges iterables into an iterable of tuples
 Converting sequence (*)
      to_table - Converts an iterable to a table
      to_sequence - Converts an array to an iterable
@@ -2817,9 +2814,16 @@ def private iter_type(var src : iterator<auto(TT)>) : TT -const -& {
     return <- t
 }
 
-[skip_lock_check]
-def select_many(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
-    //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
+[unused_argument(src)]
+def private iter_type(src : array<auto(TT)>) : TT -const -& {
+    //! this type trait is used to extract the type of elements in an iterator
+    var t : TT -const -&
+    return <- t
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private select_many_impl(var src; tt : auto(TT); result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
+    //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     var buffer : array<typedecl(result_selector(iter_type(type<TT>))) -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
@@ -2832,12 +2836,41 @@ def select_many(var src : iterator<auto(TT)>; result_selector) : iterator<typede
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.to_sequence_move()
+    return <- buffer
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private select_many_impl_const(src : auto(ARGT); tt : auto(TT); result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
+    return <- select_many_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, result_selector)
 }
 
 [skip_lock_check]
-def select_many(var src : iterator<auto(TT)>; collection_selector; result_selector) : iterator<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
+def select_many(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
+    return <- select_many_impl(src, type<TT -const -&>, result_selector).to_sequence_move()
+}
+
+[skip_lock_check]
+def select_many(src : array<auto(TT)>; result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
+    //! Projects each element of an array to an iterator and flattens the resulting iterators into one array
+    return <- select_many_impl_const(src, type<TT -const -&>, result_selector)
+}
+
+[skip_lock_check]
+def select_many_to_array(var src : iterator<auto(TT)>; result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
+    //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
+    return <- select_many_impl(src, type<TT -const -&>, result_selector)
+}
+
+[skip_lock_check]
+def select_many_to_sequence(src : array<auto(TT)>; result_selector) : iterator<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
+    //! Projects each element of an array to an iterator and flattens the resulting iterators into one iterator
+    return <- select_many_impl_const(src, type<TT -const -&>, result_selector).to_sequence_move()
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private select_many_impl(var src; tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
     var buffer : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&>
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, false))
@@ -2850,7 +2883,36 @@ def select_many(var src : iterator<auto(TT)>; collection_selector; result_select
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.to_sequence_move()
+    return <- buffer
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private select_many_impl_const(src : auto(ARGT); tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
+    return <- select_many_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, collection_selector, result_selector)
+}
+
+[skip_lock_check]
+def select_many(var src : iterator<auto(TT)>; collection_selector; result_selector) : iterator<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
+    return <- select_many_impl(src, type<TT -const -&>, collection_selector, result_selector).to_sequence_move()
+}
+
+[skip_lock_check]
+def select_many(src : array<auto(TT)>; collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! Projects each element of an array to an iterator and flattens the resulting iterators into one array
+    return <- select_many_impl_const(src, type<TT -const -&>, collection_selector, result_selector)
+}
+
+[skip_lock_check]
+def select_many_to_array(var src : iterator<auto(TT)>; collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
+    return <- select_many_impl(src, type<TT -const -&>, collection_selector, result_selector)
+}
+
+[skip_lock_check]
+def select_many_to_sequence(src : array<auto(TT)>; collection_selector; result_selector) : iterator<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
+    //! Projects each element of an array to an iterator and flattens the resulting iterators into one iterator
+    return <- select_many_impl_const(src, type<TT -const -&>, collection_selector, result_selector).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt, uu)]

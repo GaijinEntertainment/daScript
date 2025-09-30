@@ -165,6 +165,65 @@ def test_selectmany(t : T?) {
             t |> equal(i._1, q._1)
         }
     }
+    t |> run("selectmany to array") <| @(t : T?) {
+        var seq_seq = [
+            ["a", "b", "c"].to_sequence(),
+            ["d", "e", "f"].to_sequence(),
+            ["g", "h", "i"].to_sequence()
+        ]
+        var query = select_many_to_array(
+            seq_seq.to_sequence(),
+            $(s : string) => "{s}_{s}"
+        )
+        static_assert(typeinfo is_array(query))
+        var expected = [
+            "a_a", "b_b", "c_c",
+            "d_d", "e_e", "f_f",
+            "g_g", "h_h", "i_i"
+        ]
+        for (i, q in expected, query) {
+            t |> equal(i, q)
+        }
+    }
+    t |> run("selectmany to sequence") <| @(t : T?) {
+        var seq_seq = [
+            ["a", "b", "c"].to_sequence(),
+            ["d", "e", "f"].to_sequence(),
+            ["g", "h", "i"].to_sequence()
+        ]
+        var query = select_many_to_sequence(
+            seq_seq,
+            $(s : string) => "{s}_{s}"
+        )
+        static_assert(typeinfo is_iterator(query))
+        var expected = [
+            "a_a", "b_b", "c_c",
+            "d_d", "e_e", "f_f",
+            "g_g", "h_h", "i_i"
+        ]
+        for (i, q in expected, query) {
+            t |> equal(i, q)
+        }
+    }
+    t |> run("selectmany from array") <| @(t : T?) {
+        var seq_seq = [
+            ["a", "b", "c"],
+            ["d", "e", "f"],
+            ["g", "h", "i"]
+        ]
+        var query = select_many(
+            seq_seq,
+            $(s : string) => "{s}_{s}"
+        )
+        var expected = [
+            "a_a", "b_b", "c_c",
+            "d_d", "e_e", "f_f",
+            "g_g", "h_h", "i_i"
+        ]
+        for (i, q in expected, query) {
+            t |> equal(i, q)
+        }
+    }
 }
 
 [test]

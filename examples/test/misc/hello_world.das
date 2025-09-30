@@ -2,15 +2,12 @@ require daslib/linq_boost
 
 [export]
 def main() {
-    var t2 <- ([1, 2, 3, 4, 5].to_sequence()
-        ._where_to_array(_ <= 3)
-        .reverse()
-        ._select_to_sequence(_ * 2)
-        ._order_by_descending(_)
-        .to_array()
-        ._fold()
-        )
-    debug(t2)
+    let arr = [1, 2, 3, 4, 5]
+    var qarray = to_table(
+        arr,
+        $(x : int) => x,
+        $(x : int) => x * 10
+    )
 
 }
 
