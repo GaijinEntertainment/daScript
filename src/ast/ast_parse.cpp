@@ -471,7 +471,16 @@ namespace das {
         // we skip /* */ and // comments
         bool in_single_line_comment = false;
         bool in_multi_line_comment = false;
+        bool in_string = false;
         for (uint32_t i = 0; i < length; ++i) {
+            if (in_string) {
+                if (text[i] == '\\' && i + 1 < length) {
+                    ++i; // skip escaped character
+                } else if (text[i] == '"') {
+                    in_string = false;
+                }
+                continue;
+            }
             if (in_single_line_comment) {
                 if (text[i] == '\n') {
                     in_single_line_comment = false;
@@ -483,6 +492,10 @@ namespace das {
                     in_multi_line_comment = false;
                     ++i;
                 }
+                continue;
+            }
+            if (text[i] == '"') {
+                in_string = true;
                 continue;
             }
             if (text[i] == '/' && i + 1 < length) {
