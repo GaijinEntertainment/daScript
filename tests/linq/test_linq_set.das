@@ -267,6 +267,46 @@ def test_except(t : T?) {
             t |> equal(c.a[1], e._1)
         }
     }
+    t |> run("except from array") <| @(t : T?) {
+        var arr1 = [0, 1, 2, 3, 4, 5]
+        var arr2 = [3, 4, 5, 6, 7, 8]
+        var qarray = except(arr1, arr2)
+        var expected = [0, 1, 2]
+        for (c, e in qarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("except empty") <| @(t : T?) {
+        var qempty = except(
+            empty(type<int>),
+            [iterator for(x in 0..5); x]
+        )
+        var found = false
+        for (it in qempty) {
+            found = true
+        }
+        t |> success(!found)
+    }
+    t |> run("except to array") <| @(t : T?) {
+        var qtoarray = except_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 3..8); x]
+        )
+        var expected = [0, 1, 2]
+        for (c, e in qtoarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("except to sequence") <| @(t : T?) {
+        var qtoseq = except_to_sequence(
+            [for (x in 0..5); x],
+            [for (x in 3..8); x]
+        )
+        var expected = [0, 1, 2]
+        for (c, e in qtoseq, expected) {
+            t |> equal(c, e)
+        }
+    }
 }
 
 [test]
@@ -298,6 +338,28 @@ def test_exceptby(t : T?) {
             t |> equal(c.a[1], e._1)
         }
     }
+    t |> run("except by to array") <| @(t : T?) {
+        var qtoarray = _except_by_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 3..8); x],
+            _
+        )
+        var expected = [0, 1, 2]
+        for (c, e in qtoarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("except by to sequence") <| @(t : T?) {
+        var qtoseq = _except_by_to_sequence(
+            [for (x in 0..5); x],
+            [for (x in 3..8); x],
+            _
+        )
+        var expected = [0, 1, 2]
+        for (c, e in qtoseq, expected) {
+            t |> equal(c, e)
+        }
+    }
 }
 
 [test]
@@ -325,6 +387,46 @@ def test_intersect(t : T?) {
         for (c, e in qcomplex, expected_complex) {
             t |> equal(c.a[0], e._0)
             t |> equal(c.a[1], e._1)
+        }
+    }
+    t |> run("intersect from array") <| @(t : T?) {
+        var arr1 = [0, 1, 2, 3, 4, 5]
+        var arr2 = [3, 4, 5, 6, 7, 8]
+        var qarray = intersect(arr1, arr2)
+        var expected = [3, 4, 5]
+        for (c, e in qarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("intersect empty") <| @(t : T?) {
+        var qempty = intersect(
+            empty(type<int>),
+            [iterator for(x in 0..5); x]
+        )
+        var found = false
+        for (it in qempty) {
+            found = true
+        }
+        t |> success(!found)
+    }
+    t |> run("intersect to array") <| @(t : T?) {
+        var qtoarray = intersect_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 3..8); x]
+        )
+        var expected = [3, 4, 5]
+        for (c, e in qtoarray, expected) {
+            t |> equal(c, e)
+        }
+    }
+    t |> run("intersect to sequence") <| @(t : T?) {
+        var qtoseq = intersect_to_sequence(
+            [for (x in 0..5); x],
+            [for (x in 3..8); x]
+        )
+        var expected = [3, 4, 5]
+        for (c, e in qtoseq, expected) {
+            t |> equal(c, e)
         }
     }
 }
@@ -356,6 +458,17 @@ def test_intersectby(t : T?) {
         for (c, e in qcomplex, expected_complex) {
             t |> equal(c.a[0], e._0)
             t |> equal(c.a[1], e._1)
+        }
+    }
+    t |> run("intersect by to array") <| @(t : T?) {
+        var qtoarray = _intersect_by_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 3..8); x],
+            _
+        )
+        var expected = [3, 4, 5]
+        for (c, e in qtoarray, expected) {
+            t |> equal(c, e)
         }
     }
 }

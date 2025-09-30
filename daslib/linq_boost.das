@@ -192,12 +192,12 @@ class private AstCallMacro_LinqPredII2 : AstCallMacro {
     //!
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         // verifying arguments
-        macro_verify(call.arguments |> length == 3, prog, call.at, "expecting {predName}(iterator, iterator, predicate)")
-        macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting iterator")
-        macro_verify(call.arguments[0]._type.isIterator, prog, call.at, "expecting iterator")
-        macro_verify(call.arguments[1]._type != null, prog, call.at, "expecting iterator")
-        macro_verify(call.arguments[1]._type.isIterator, prog, call.at, "expecting iterator")
-        macro_verify(!call.arguments[0]._type.firstType.isAutoOrAlias, prog, call.at, "iterator type cannot be auto or alias")
+        macro_verify(call.arguments |> length == 3, prog, call.at, "expecting {predName}(iterator or array, iterator or array, predicate)")
+        macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting iterator or array")
+        macro_verify(call.arguments[0]._type.isIterator || call.arguments[0]._type.isGoodArrayType, prog, call.at, "expecting iterator or array")
+        macro_verify(call.arguments[1]._type != null, prog, call.at, "expecting iterator or array")
+        macro_verify(call.arguments[1]._type.isIterator || call.arguments[1]._type.isGoodArrayType, prog, call.at, "expecting iterator or array")
+        macro_verify(!call.arguments[0]._type.firstType.isAutoOrAlias, prog, call.at, "iterator or array type cannot be auto or alias")
         // replacing function
         var inscope iterType <- clone_iterator_type(call.arguments[0]._type)
         var inscope res <- qmacro($c(predName)($e(call.arguments[0]), $e(call.arguments[1]), $(_ : $t(iterType)) => $e(call.arguments[2])))
@@ -216,9 +216,29 @@ class private LinqExceptBy : AstCallMacro_LinqPredII2 {
     override predName = "except_by"
 }
 
+[call_macro(name="_except_by_to_array")]
+class private LinqExceptByToArray : AstCallMacro_LinqPredII2 {
+    override predName = "except_by_to_array"
+}
+
+[call_macro(name="_except_by_to_sequence")]
+class private LinqExceptByToSequence : AstCallMacro_LinqPredII2 {
+    override predName = "except_by_to_sequence"
+}
+
 [call_macro(name="_intersect_by")]
 class private LinqIntersectBy : AstCallMacro_LinqPredII2 {
     override predName = "intersect_by"
+}
+
+[call_macro(name="_intersect_by_to_array")]
+class private LinqIntersectByToArray : AstCallMacro_LinqPredII2 {
+    override predName = "intersect_by_to_array"
+}
+
+[call_macro(name="_intersect_by_to_sequence")]
+class private LinqIntersectByToSequence : AstCallMacro_LinqPredII2 {
+    override predName = "intersect_by_to_sequence"
 }
 
 [call_macro(name="_union_by")]
@@ -359,6 +379,18 @@ var private linqCalls = {
     "union_by" => LinqCall(name = "union_by", recursive = [1]),
     "union_by_to_array" => LinqCall(name = "union_by", recursive = [1]),
     "union_by_to_sequence" => LinqCall(name = "union_by", recursive = [1]),
+    "except" => LinqCall(name = "except", recursive = [1]),
+    "except_to_array" => LinqCall(name = "except", recursive = [1]),
+    "except_to_sequence" => LinqCall(name = "except", recursive = [1]),
+    "except_by" => LinqCall(name = "except_by", recursive = [1]),
+    "except_by_to_array" => LinqCall(name = "except_by", recursive = [1]),
+    "except_by_to_sequence" => LinqCall(name = "except_by", recursive = [1]),
+    "intersect" => LinqCall(name = "intersect", recursive = [1]),
+    "intersect_to_array" => LinqCall(name = "intersect", recursive = [1]),
+    "intersect_to_sequence" => LinqCall(name = "intersect", recursive = [1]),
+    "intersect_by" => LinqCall(name = "intersect_by", recursive = [1]),
+    "intersect_by_to_array" => LinqCall(name = "intersect_by", recursive = [1]),
+    "intersect_by_to_sequence" => LinqCall(name = "intersect_by", recursive = [1]),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),

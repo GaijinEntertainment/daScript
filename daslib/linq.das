@@ -20,10 +20,10 @@ Sorting data
 Set operations
      distinct, distinct_inplace, distinct_to_array, distinct_to_sequence, distinct_by_to_array - Returns distinct elements from an iterable
      distinct_by, distinct_by_inplace, distinct_by_to_array, distinct_by_to_sequence - Returns distinct elements from an iterable (or by key)
-     union - Returns the union of two iterables
-     union_by - Returns the union of two iterables (or by key)
-     except - Returns elements from the first iterable that are not in the second iterable
-     except_by - Returns elements from the first iterable that are not in the second iterable (or by key)
+     union, union_to_array, union_to_sequence - Returns the union of two iterables
+     union_by, union_by_to_array, union_by_to_sequence - Returns the union of two iterables (or by key)
+     except, except_to_array, except_to_sequence - Returns elements from the first iterable that are not in the second iterable
+     except_by, except_by_to_array, except_by_to_sequence - Returns elements from the first iterable that are not in the second iterable (or by key)
      intersect - Returns elements that are present in both iterables (or by key)
      intersect_by - Returns elements that are present in both iterables (or by key)
 Concatenation operations
@@ -1671,8 +1671,8 @@ def all(var src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bo
     return all_impl(src, type<TT -const -&>, predicate)
 }
 
-[skip_lock_check]
-def except(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>) : iterator<TT -const -&> {
+[skip_lock_check, unused_argument(tt)]
+def private except_impl(var src, exclude; tt : auto(TT)) : array<TT -const -&> {
     //! Returns elements from the first iterator that are not in the second iterator
     var inscope seen : table<typedecl(_::unique_key(type<TT>))>
     for (it in exclude) {
@@ -1690,11 +1690,35 @@ def except(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>) : ite
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
 }
 
 [skip_lock_check]
-def except_by(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>; key) : iterator<TT -const -&> {
+def except(var src, exclude : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns elements from the first iterator that are not in the second iterator
+    return <- except_impl(src, exclude, type<TT -const -&>).move_to_sequence()
+}
+
+[skip_lock_check]
+def except(var src, exclude : array<auto(TT)>) : array<TT -const -&> {
+    //! Returns elements from the first array that are not in the second array
+    return <- except_impl(src, exclude, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def except_to_array(var src, exclude : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Returns elements from the first iterator that are not in the second iterator and returns an array
+    return <- except_impl(src, exclude, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def except_to_sequence(var src, exclude : array<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns elements from the first array that are not in the second array and returns an iterator
+    return <- except_impl(src, exclude, type<TT -const -&>).move_to_sequence()
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private except_by_impl(var src, exclude; tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns elements from the first iterator that are not in the second iterator by key
     var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
     for (it in exclude) {
@@ -1712,11 +1736,35 @@ def except_by(var src : iterator<auto(TT)>; var exclude : iterator<auto(TT)>; ke
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
 }
 
 [skip_lock_check]
-def intersect(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
+def except_by(var src, exclude : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! Returns elements from the first iterator that are not in the second iterator by key
+    return <- except_by_impl(src, exclude, type<TT -const -&>, key).move_to_sequence()
+}
+
+[skip_lock_check]
+def except_by(var src, exclude : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! Returns elements from the first array that are not in the second array by key
+    return <- except_by_impl(src, exclude, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def except_by_to_array(var src, exclude : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! Returns elements from the first iterator that are not in the second iterator by key and returns an array
+    return <- except_by_impl(src, exclude, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def except_by_to_sequence(var src, exclude : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! Returns elements from the first array that are not in the second array by key and returns an iterator
+    return <- except_by_impl(src, exclude, type<TT -const -&>, key).move_to_sequence()
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private intersect_impl(var srca, srcb; tt : auto(TT)) : array<TT -const -&> {
     //! Returns elements that are present in both iterators
     var inscope seen : table<typedecl(_::unique_key(type<TT>))>
     for (it in srca) {
@@ -1734,11 +1782,35 @@ def intersect(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>) : it
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
 }
 
 [skip_lock_check]
-def intersect_by(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; key) : iterator<TT -const -&> {
+def intersect(var srca, srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns elements that are present in both iterators
+    return <- intersect_impl(srca, srcb, type<TT -const -&>).move_to_sequence()
+}
+
+[skip_lock_check]
+def intersect(var srca, srcb : array<auto(TT)>) : array<TT -const -&> {
+    //! Returns elements that are present in both arrays
+    return <- intersect_impl(srca, srcb, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def intersect_to_array(var srca, srcb : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Returns elements that are present in both iterators and returns an array
+    return <- intersect_impl(srca, srcb, type<TT -const -&>)
+}
+
+[skip_lock_check]
+def intersect_to_sequence(var srca, srcb : array<auto(TT)>) : iterator<TT -const -&> {
+    //! Returns elements that are present in both arrays and returns an iterator
+    return <- intersect_impl(srca, srcb, type<TT -const -&>).move_to_sequence()
+}
+
+[skip_lock_check, unused_argument(tt)]
+def private intersect_by_impl(var srca, srcb; tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns elements that are present in both iterators by key
     var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
     for (it in srca) {
@@ -1756,7 +1828,31 @@ def intersect_by(var srca : iterator<auto(TT)>; var srcb : iterator<auto(TT)>; k
     static_if (typeinfo need_lock_check(buffer)) {
         unsafe(set_verify_array_locks(buffer, true))
     }
-    return buffer.move_to_sequence()
+    return <- buffer
+}
+
+[skip_lock_check]
+def intersect_by(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! Returns elements that are present in both iterators by key
+    return <- intersect_by_impl(srca, srcb, type<TT -const -&>, key).move_to_sequence()
+}
+
+[skip_lock_check]
+def intersect_by(var srca, srcb : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! Returns elements that are present in both arrays by key
+    return <- intersect_by_impl(srca, srcb, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def intersect_by_to_array(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! Returns elements that are present in both iterators by key and returns an array
+    return <- intersect_by_impl(srca, srcb, type<TT -const -&>, key)
+}
+
+[skip_lock_check]
+def intersect_by_to_sequence(var srca, srcb : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! Returns elements that are present in both arrays by key and returns an iterator
+    return <- intersect_by_impl(srca, srcb, type<TT -const -&>, key).move_to_sequence()
 }
 
 [skip_lock_check, unused_argument(tt)]
