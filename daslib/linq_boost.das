@@ -410,9 +410,12 @@ var private linqCalls = {
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),
     "contains" => LinqCall(name = "contains"),
-// skippables
+// skippable
+    "to_table" => LinqCall(name = "to_table"),
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
+    "to_array_move" => LinqCall(name = "to_array_move", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
+    "to_sequence_move" => LinqCall(name = "to_sequence_move", skip = true),
 }
 
 [macro_function]
