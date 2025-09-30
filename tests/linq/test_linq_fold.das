@@ -494,4 +494,102 @@ def test_unique(t : T?) {
             t |> equal(expected[i], v)
         }
     }
+    t |> run("basic unique by") <| @(t : T?) {
+        var t1 <- (
+            [1, 2, 3, 4, 5]
+            ._select(_ % 4)
+            ._union_by(
+                [3, 4, 5, 6, 7]
+                ._select(_ * _),
+                _ % 4
+            )
+            ._order_by(_) // sort
+            ._fold()
+        )
+        var expected = [0, 1, 2, 3]
+        t |> equal(length(t1), length(expected))
+        for (i, v in 0..length(expected), t1) {
+            t |> equal(expected[i], v)
+        }
+    }
+}
+
+[test]
+def test_except(t : T?) {
+    t |> run("basic except") <| @(t : T?) {
+        var t1 <- (
+            [1, 2, 3, 4, 5]
+            ._select(_ % 4)
+            .except(
+                [3, 4, 5, 6, 7]
+                ._select(_ * _)
+            )
+            ._order_by(_) // sort
+            .distinct()
+            ._fold()
+        )
+        var expected = [0, 1, 2, 3]
+        t |> equal(length(t1), length(expected))
+        for (i, v in 0..length(expected), t1) {
+            t |> equal(expected[i], v)
+        }
+    }
+    t |> run("basic except by") <| @(t : T?) {
+        var t1 <- (
+            [1, 2, 3, 4, 5]
+            ._select(_ % 4)
+            ._except_by(
+                [3, 4, 5, 6, 7]
+                ._select(_ * _),
+                _ % 4
+            )
+            ._order_by(_) // sort
+            .distinct()
+            ._fold()
+        )
+        var expected = [2, 3]
+        t |> equal(length(t1), length(expected))
+        for (i, v in 0..length(expected), t1) {
+            t |> equal(expected[i], v)
+        }
+    }
+}
+
+[test]
+def test_intersect(t : T?) {
+    t |> run("basic intersect") <| @(t : T?) {
+        var t1 <- (
+            [1, 2, 3, 4, 5]
+            ._select(_)
+            .intersect(
+                [3, 4, 5, 6, 7]
+                ._select(_)
+            )
+            ._order_by(_) // sort
+            ._fold()
+        )
+        var expected = [3, 4, 5]
+        t |> equal(length(t1), length(expected))
+        for (i, v in 0..length(expected), t1) {
+            t |> equal(expected[i], v)
+        }
+    }
+    t |> run("basic intersect by") <| @(t : T?) {
+        var t1 <- (
+            [1, 2, 3, 4, 5]
+            ._select(_)
+            ._intersect_by(
+                [3, 4, 5, 6, 7]
+                ._select(_),
+                _ % 4
+            )
+            ._order_by(_) // sort
+            ._fold()
+        )
+        var expected = [3, 4, 5, 6, 7]
+        t |> equal(length(t1), length(expected))
+        for (i, v in 0..length(expected), t1) {
+            t |> equal(expected[i], v)
+        }
+    }
 }
