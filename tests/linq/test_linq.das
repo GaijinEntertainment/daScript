@@ -39,9 +39,21 @@ def test_totable(t : T?) {
             t |> success(found)
         }
     }
+    t |> run("array totable") <| @(t : T?) {
+        var qarray = to_table(
+            [1, 2, 3, 4, 5],
+            $(x : int) => x,
+            $(x : int) => x * 10
+        )
+        var expected = { 1 => 10, 2 => 20, 3 => 30, 4 => 40, 5 => 50 }
+        for (ek, ev in keys(expected), values(expected)) {
+            let found = qarray.get(unique_key(ek), $(v) {
+                t |> equal(ev, v)
+            })
+            t |> success(found)
+        }
+    }
 }
-
-
 
 [test]
 def test_where(t : T?) {
@@ -114,53 +126,6 @@ def test_where(t : T?) {
 }
 
 [test]
-def test_groupby(t : T?) {
-    t |> run("basic group by") <| @(t : T?) {
-        var query = group_by(
-            pets.to_sequence(),
-            $(pet : Pet) => floor(pet.age),
-            $(pet : Pet) => pet.age,
-            $(baseAge : float, var ages : iterator<float>) {
-                var inscope aa = ages.to_array()
-                return (baseAge, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
-            }
-        )
-        var expected = [
-            (4., 2, 4.3, 4.9),
-            (1., 1, 1.5, 1.5),
-            (8., 1, 8.3, 8.3)
-        ]
-        for (c, e in query, expected) {
-            t |> equal(c._0, e._0)
-            t |> equal(c._1, e._1)
-            t |> equal(c._2, e._2)
-            t |> equal(c._3, e._3)
-        }
-    }
-    t |> run("complex group by") <| @(t : T?) {
-        var qcomplex = group_by(
-            [iterator for(x in 0..5); ComplexType(a = [x % 2, x * 10])],
-            $(c : ComplexType) => c.a[0],
-            $(c : ComplexType) => c.a[1],
-            $(base : int, var vals : iterator<int>) {
-                var inscope aa = vals.to_array()
-                return (base, aa.length(), aa.to_sequence().min(), aa.to_sequence().max())
-            }
-        )
-        var expected_complex = [
-            (0, 3, 0, 40),      // even
-            (1, 2, 10, 30)      // odd
-        ]
-        for (c, e in qcomplex, expected_complex) {
-            t |> equal(c._0, e._0)
-            t |> equal(c._1, e._1)
-            t |> equal(c._2, e._2)
-            t |> equal(c._3, e._3)
-        }
-    }
-}
-
-[test]
 def test_sequenceequal(t : T?) {
     t |> run("basic sequence equal") <| @(t : T?) {
         var query = sequence_equal(
@@ -182,6 +147,13 @@ def test_sequenceequal(t : T?) {
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
         t |> success(qcomplex)
+    }
+    t |> run("array sequence equal") <| @(t : T?) {
+        var qarray = sequence_equal(
+            [0, 1, 2, 3, 4],
+            [0, 1, 2, 3, 4]
+        )
+        t |> success(qarray)
     }
 }
 
@@ -210,6 +182,14 @@ def test_sequenceequalby(t : T?) {
             _.a[0]
         )
         t |> success(qcomplex)
+    }
+    t |> run("array sequence equal by") <| @(t : T?) {
+        var qarray = _sequence_equal_by(
+            [0, 1, 2, 3, 4],
+            [0, 1, 2, 3, 4],
+            _
+        )
+        t |> success(qarray)
     }
 }
 

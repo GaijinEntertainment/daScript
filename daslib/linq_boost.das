@@ -313,6 +313,9 @@ var private linqCalls = {
     "select" => LinqCall(name = "select"),
     "select_to_array" => LinqCall(name = "select"),
     "select_to_sequence" => LinqCall(name = "select"),
+    "select_many" => LinqCall(name = "select_many"),
+    "select_many_to_array" => LinqCall(name = "select_many"),
+    "select_many_to_sequence" => LinqCall(name = "select_many"),
     "zip" => LinqCall(name = "zip", recursive = [1]),
     "zip_to_array" => LinqCall(name = "zip", recursive = [1]),
     "zip_to_sequence" => LinqCall(name = "zip", recursive = [1]),
@@ -397,11 +400,31 @@ var private linqCalls = {
     "intersect_by" => LinqCall(name = "intersect_by", recursive = [1]),
     "intersect_by_to_array" => LinqCall(name = "intersect_by", recursive = [1]),
     "intersect_by_to_sequence" => LinqCall(name = "intersect_by", recursive = [1]),
+// element operations
+    "element_at" => LinqCall(name = "element_at"),
+    "element_at_or_default" => LinqCall(name = "element_at_or_default"),
+    "first" => LinqCall(name = "first"),
+    "first_or_default" => LinqCall(name = "first_or_default"),
+    "last" => LinqCall(name = "last"),
+    "last_or_default" => LinqCall(name = "last_or_default"),
+    "single" => LinqCall(name = "single"),
+    "single_or_default" => LinqCall(name = "single_or_default"),
+// join operations
+    "join" => LinqCall(name = "join", recursive = [1]),
+    "join_to_array" => LinqCall(name = "join", recursive = [1]),
+    "join_to_sequence" => LinqCall(name = "join", recursive = [1]),
+    "group_join" => LinqCall(name = "group_join", recursive = [1]),
+    "group_join_to_array" => LinqCall(name = "group_join", recursive = [1]),
+    "group_join_to_sequence" => LinqCall(name = "group_join", recursive = [1]),
+    "group_by" => LinqCall(name = "group_by"),
+    "group_by_to_array" => LinqCall(name = "group_by"),
+    "group_by_to_sequence" => LinqCall(name = "group_by"),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),
     "contains" => LinqCall(name = "contains"),
-// skippables
+// skippable
+    "to_table" => LinqCall(name = "to_table"),
     "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
 }
