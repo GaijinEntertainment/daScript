@@ -1660,19 +1660,19 @@ namespace das {
                     ->args({"table","key","baseType","valueTypeSize","context","at"});
             // 'each' iterators for jit
             addExtern<DAS_BIND_FUN(each_FuncInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
-                SideEffects::none, "each_FuncInfo")
+                SideEffects::modifyArgument, "each_FuncInfo")
                     ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_const_FuncInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_const_FuncInfo")
                     ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_StructInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
-                SideEffects::none, "each_StructInfo")
+                SideEffects::modifyArgument, "each_StructInfo")
                     ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_const_StructInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_const_StructInfo")
                     ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_EnumInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
-                SideEffects::none, "each_EnumInfo")
+                SideEffects::modifyArgument, "each_EnumInfo")
                     ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_const_EnumInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_const_EnumInfo")
