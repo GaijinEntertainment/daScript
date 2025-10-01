@@ -385,8 +385,16 @@ def public init_jit {
     // void jit_make_block ( Block * blk, int32_t argStackTop, uint64_t annotationData, void * bodyNode, void * jitImpl, void * funcInfo, Context * context )
     var jit_make_block = LLVMAddFunctionWithType(g_mod, FN_JIT_MAKE_BLOCK,
         LLVMFunctionType(g_prim_t.t_void,
-            fixed_array<LLVMTypeRef>(LLVMPointerType(g_t_block, 0u), g_prim_t.t_int32, g_prim_t.t_int64, g_prim_t.LLVMVoidPtrType(),
-                g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
+            fixed_array<LLVMTypeRef>(
+                LLVMPointerType(g_t_block, 0u), // blk
+                g_prim_t.t_int32,               // argStackTop
+                g_prim_t.t_int64,               // ad
+                g_prim_t.LLVMVoidPtrType(),     // bodyNode
+                g_prim_t.LLVMVoidPtrType(),     // jitImpl
+                g_prim_t.LLVMVoidPtrType(),     // funcInfo
+                g_prim_t.LLVMVoidPtrType(),     // lineInfo
+                g_prim_t.LLVMVoidPtrType()      // context
+            )))
     LLVMAddGlobalMapping(g_engine, jit_make_block, get_jit_make_block())
     LLVMAddAttributesToFunction(jit_make_block, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgument(jit_make_block, 0u, nocapture)
