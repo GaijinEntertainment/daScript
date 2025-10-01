@@ -4886,6 +4886,7 @@ class LlvmJitVisitor : AstVisitor {
             func_ptr,                                                   // bodyNode
             impl_ptr,                                                   // jitImpl
             null_ptr,                                                   // TODO: funcInfo
+            get_line_info_ptr(expr.at),                                 // LineInfo
             get_context_param()                                         // Context
         )
         var typ = g_fn_types[FN_JIT_MAKE_BLOCK]
