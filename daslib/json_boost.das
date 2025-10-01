@@ -440,7 +440,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         if (v == null || !(v.value is _object)) {
             return <- ret
         }
-        apply(ret) <| $(name : string; var field; annotations) {
+        apply(ret) <| $(name : string; var field) {
             (v as _object) |> get(name) <| $(val) {
                 move_to_ref(field, _::from_JV(val, decltype_noref(field)))
             }
