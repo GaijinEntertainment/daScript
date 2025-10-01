@@ -417,12 +417,30 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
             }
             return <- ret
         }
-    } static_elif (typeinfo is_struct(anything) || typeinfo is_tuple(anything)) {
+    } static_elif (typeinfo is_struct(anything)) {
         var ret <- default<TT -const>
         if (v == null || !(v.value is _object)) {
             return <- ret
         }
-        apply(ret) <| $(name : string; var field) {
+        apply(ret) <| $(name : string; var field; annotations) {
+            var argName = name
+            for (ann in annotations) {
+                if (ann.name == "rename") {
+                    argName = ann.data as tString
+                    break
+                }
+            }
+            (v as _object) |> get(argName) <| $(val) {
+                move_to_ref(field, _::from_JV(val, decltype_noref(field)))
+            }
+        }
+        return <- ret
+    } static_elif (typeinfo is_tuple(anything)) {
+        var ret <- default<TT -const>
+        if (v == null || !(v.value is _object)) {
+            return <- ret
+        }
+        apply(ret) <| $(name : string; var field; annotations) {
             (v as _object) |> get(name) <| $(val) {
                 move_to_ref(field, _::from_JV(val, decltype_noref(field)))
             }
@@ -531,7 +549,37 @@ def JV(value) : JsonValue? {
         return JV("{value}")
     } static_elif (typeinfo is_string(value)) {
         return _::JV(value)
-    } static_elif (typeinfo is_struct(value) || typeinfo is_tuple(value)) {
+    } static_elif (typeinfo is_struct(value)) {
+        var map : table<string; JsonValue?>
+        apply(value) <| $(name : string; field; annotation) {
+            static_if (typeinfo is_function(field)) {
+                pass // skip functions
+            } static_elif (typeinfo is_void_pointer(field)) {
+                pass // skip void?
+            } static_elif (typeinfo is_pointer(field)) {
+                var argName = name
+                for (ann in annotation) {
+                    if (ann.name == "rename") {
+                        argName = ann.data as tString
+                        break
+                    }
+                }
+                if (field != null) {
+                    map |> insert(argName, _::JV(field))
+                }
+            } else {
+                var argName = name
+                for (ann in annotation) {
+                    if (ann.name == "rename") {
+                        argName = ann.data as tString
+                        break
+                    }
+                }
+                map |> insert(argName, _::JV(field))
+            }
+        }
+        return _::JV(map)
+    } static_elif (typeinfo is_tuple(value)) {
         var map : table<string; JsonValue?>
         apply(value) <| $(name : string; field) {
             static_if (typeinfo is_function(field)) {
