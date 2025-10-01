@@ -30,9 +30,16 @@ def for_each_subrange(total : int; blk : block<(r : range) : void>) {
         invoke(arg_field1,self.field1)
         invoke(arg_field2,self.field2)
         ...
+
+    or
+
+    def apply`Foo(self:Foo;arg_field1:block<(name:string,value:field1-type; annotations:array<RttiValue>):void>;arg_field2:...)
+        invoke(arg_field1,self.field1, get_rtti_annotations(self, "field1"))
+        invoke(arg_field2,self.field2, get_rtti_annotations(self, "field2"))
+        ...
 */
 [macro_function]
-def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : string; at : LineInfo; var names : array<string>) {
+def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : string; at : LineInfo; var names : array<string>; hasExtraArg : bool) {
     assert(stype.baseType == Type.tStructure)
     assert(stype.dim |> length == 0)
     var inscope selfT <- clone_type(stype)
@@ -44,7 +51,26 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : strin
         if (true) {
             let fld & = unsafe(stype.structType.fields[fldi])
             names |> push(string(fld.name))
-            blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fld.name}"), _`_self.$f(fld.name)))
+            if (hasExtraArg) {
+                var rttiAnnValues : array<tuple<name : string; data : RttiValue>>
+                for (ann in fld.annotation) {
+                    var value : tuple<name : string; data : RttiValue>
+                    value.name = string(ann.name)
+                    if (ann.basicType == Type.tString) {
+                        value.data = RttiValue(tString = string(ann.sValue))
+                    } elif (ann.basicType == Type.tInt) {
+                        value.data = RttiValue(tInt = ann.iValue)
+                    } elif (ann.basicType == Type.tFloat) {
+                        value.data = RttiValue(tFloat = ann.fValue)
+                    } elif (ann.basicType == Type.tBool) {
+                        value.data = RttiValue(tBool = ann.bValue)
+                    }
+                    rttiAnnValues |> emplace(value)
+                }
+                blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fld.name}"), _`_self.$f(fld.name), $v(rttiAnnValues)))
+            } else {
+                blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fld.name}"), _`_self.$f(fld.name)))
+            }
             var inscope argT <- new TypeDecl(baseType = Type.tBlock, at = at)                      // block<(x:field1type)>
             var inscope fldT <- clone_type(fld._type)
             if (stype.flags.constant) {
@@ -54,6 +80,9 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : strin
                 fldT.flags |= TypeDeclFlags.ref
             }
             emplace(argT.argTypes, fldT)
+            if (hasExtraArg) {
+                argT.argTypes |> emplace_new <| qmacro_type(type<array<tuple<name : string; data : RttiValue>>>)
+            }
             move_new(argT.firstType) <| new TypeDecl(baseType = Type.tVoid, at = at)
             argT.flags = TypeDeclFlags.constant
             func_args |> emplace_new <| new Variable(name := "__arg_{fld.name}", _type <- argT)
@@ -67,10 +96,10 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : strin
 }
 
 [macro_function]
-def generateApplyVisitStruct(stype : TypeDeclPtr; fnname : string; at : LineInfo) : array<string> {
+def generateApplyVisitStruct(stype : TypeDeclPtr; fnname : string; at : LineInfo; hasExtraArg : bool) : array<string> {
     var names : array<string>
     for_each_subrange(length(stype.structType.fields)) <| $(frange) {
-        generateApplyVisitStruct(stype, frange, "{fnname}`{frange.x}`{frange.y}", at, names)
+        generateApplyVisitStruct(stype, frange, "{fnname}`{frange.x}`{frange.y}", at, names, hasExtraArg)
     }
     return <- names
 }
@@ -186,13 +215,17 @@ def generateApplyVisitVariant(stype : TypeDeclPtr; fnname : string; at : LineInf
 }
 
 [macro_function]
-def clone_block_with_name(name : string; blk : ExpressionPtr) {
+def clone_block_with_name(name : string; blk : ExpressionPtr; hasExtraArg : bool) {
     macro_verify(blk is ExprMakeBlock, this_program(), blk.at, "expecting make block, i.e. $(..)")
     var inscope res <- clone_expression(blk)
     var imb = res as ExprMakeBlock
     var rblk = imb._block as ExprBlock
     macro_verify(rblk != null, this_program(), blk.at, "expecting block")
-    macro_verify(rblk.arguments |> length == 2, this_program(), blk.at, "expecting block with 2 arguments")
+    if (hasExtraArg) {
+        macro_verify(length(rblk.arguments) == 3, this_program(), blk.at, "expecting block with 3 arguments")
+    } else {
+        macro_verify(length(rblk.arguments) == 2, this_program(), blk.at, "expecting block with 2 arguments")
+    }
     var inscope eassume <- new ExprAssume(at = blk.at,
         alias := rblk.arguments[0].name,
         subexpr <- new ExprConstString(at = blk.at, value := name)
@@ -225,10 +258,18 @@ class ApplyMacro : AstCallMacro {
             var callName : string
             var nfields : int
             var names : array<string>
+            var hasExtraArg = false
             if (argT.baseType == Type.tStructure) {
+                if (expr.arguments[1] is ExprMakeBlock) {
+                    let emb = expr.arguments[1] as ExprMakeBlock
+                    if (emb._block is ExprBlock) {
+                        let eb = emb._block as ExprBlock
+                        hasExtraArg = length(eb.arguments) == 3
+                    }
+                }
                 callName = "apply`struct`{argT.structType.name}`{expr.at.line}"
                 nfields = argT.structType.fields |> length
-                names <- generateApplyVisitStruct(expr.arguments[0]._type, callName, expr.at)
+                names <- generateApplyVisitStruct(expr.arguments[0]._type, callName, expr.at, hasExtraArg)
             } elif (argT.baseType == Type.tTuple) {
                 callName = "apply`tuple`{expr.arguments[0]._type.get_mnh}`{expr.at.line}"
                 nfields = length(argT.argTypes)
@@ -247,7 +288,7 @@ class ApplyMacro : AstCallMacro {
                 var inscope call <- new ExprCall(name := "_::{callName}`{frange.x}`{frange.y}", at = expr.at)
                 emplace_new(call.arguments, clone_expression(expr.arguments[0]))
                 for (idx in frange) {
-                    emplace_new(call.arguments, clone_block_with_name(names[idx], expr.arguments[1]))
+                    emplace_new(call.arguments, clone_block_with_name(names[idx], expr.arguments[1], hasExtraArg))
                 }
                 calls |> emplace(call)
             }

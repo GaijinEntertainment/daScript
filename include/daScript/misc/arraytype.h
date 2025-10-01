@@ -10,7 +10,7 @@ namespace das
     class JitFn {
     private:
         template <typename RetT, typename ...Args>
-        friend class CallJitFn; // Call it only using this helper
+        friend struct CallJitFn; // Call it only using this helper
         void *jitFn;
     public:
         JitFn() : jitFn(nullptr) {}
