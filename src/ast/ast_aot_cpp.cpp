@@ -3879,7 +3879,7 @@ namespace das {
                 pm->globals.foreach([&](auto pvar) {
                     if (!pvar->used)
                         return;
-                    if ( pvar->index<0 ) {
+                    if ( program.varIndex(pvar)<0 ) {
                         program.error("Internal compiler errors. Simulating variable which is not used" + pvar->name,
                                       "", "", LineInfo());
                         return;
@@ -3906,7 +3906,7 @@ namespace das {
 
         tw << "     // start totalVariables\n";
         for (const auto& pvar: lookupVariableTable) {
-            tw << "    InitGlobalVar(context, &context.globalVariables[" << pvar->index << "/*pvar->index*/], GlobalVarInfo(\""
+            tw << "    InitGlobalVar(context, &context.globalVariables[" << program.varIndex(pvar) << "/*pvar->index*/], GlobalVarInfo(\""
                << pvar->name << "\", \""
                << pvar->getMangledName() << "\", ";
             if (crossPlatform) {
@@ -4021,7 +4021,7 @@ namespace das {
             vector<Variable*> globals;
             prog->library.foreach([&]( Module * pm ) {
                 pm->globals.foreach([&]( VariablePtr pvar ){
-                    if ( pvar->index < 0 || !pvar->used ) return;
+                    if ( prog->varIndex(pvar) < 0 || !pvar->used ) return;
                     if ( pvar->module == prog->thisModule.get() ) return;
                     globals.push_back(pvar.get());
                 });
