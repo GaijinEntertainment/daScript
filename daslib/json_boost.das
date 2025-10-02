@@ -48,54 +48,80 @@ def operator ?[] (var a : json::JsonValue? ==const; idx : int) : JsonValue? {
     return a != null && a.value is _array ? (a.value as _array)?[idx] ?? JVNull() : JVNull()
 }
 
+def private null_coalescing(a : json::JsonValue const?; val : auto(TT)) : TT {
+    //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
+    if (a != null) {
+        if (a.value is _number) {
+            return TT(a.value as _number)
+        } elif (a.value is _longint) {
+            return TT(a.value as _longint)
+        }
+    }
+    return val
+}
+
+def private null_coalescing_with_string(a : json::JsonValue const?; val : auto(TT)) : TT {
+    //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
+    if (a != null) {
+        if (a.value is _number) {
+            return TT(a.value as _number)
+        } elif (a.value is _longint) {
+            return TT(a.value as _longint)
+        } elif (a.value is _string) {
+            return TT(a.value as _string)
+        }
+    }
+    return val
+}
+
 def operator ??(a : json::JsonValue const?; val : double) : double {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? a.value as _number : val
+    return null_coalescing(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : float) : float {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? float(a.value as _number) : val
+    return null_coalescing(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : int8) : int8 {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? int8(a.value as _number) : val
+    return null_coalescing(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : int16) : int16 {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? int16(a.value as _number) : val
+    return null_coalescing(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : int) : int {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? int(a.value as _number) : val
+    return null_coalescing(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : int64) : int64 {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? int64(a.value as _number) : val
+    return null_coalescing_with_string(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : uint8) : uint8 {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? uint8(a.value as _number) : val
+    return null_coalescing(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : uint16) : uint16 {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? uint16(a.value as _number) : val
+    return null_coalescing(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : uint) : uint {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? uint(a.value as _number) : val
+    return null_coalescing(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : uint64) : uint64 {
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
-    return a != null && a.value is _number ? uint64(a.value as _number) : val
+    return null_coalescing_with_string(a, val)
 }
 
 def operator ??(a : json::JsonValue const?; val : bool) : bool {
@@ -204,7 +230,7 @@ class private JsonReader : AstReaderMacro {
 [expect_any_enum(ent), template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = default<EnumT>) : EnumT {
     //! Parse a JSON value and return the corresponding native value.
-    if (v == null || !((v.value is _string) || (v.value is _number))) {
+    if (v == null || !((v.value is _string) || (v.value is _number) || (v.value is _longint))) {
         return defV
     }
     if (v.value is _string) {
@@ -221,7 +247,7 @@ def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = def
         }
         panic("not a valid enumeration {name} in {typeinfo typename(type<EnumT>)}")
     } else {
-        let intValue = int(v.value as _number)
+        let intValue = (v.value is _number) ? int(v.value as _number) : int(v.value as _longint)
         for (it in each_enum(defV)) {
             if (intValue == int(it)) {
                 return it
@@ -252,109 +278,57 @@ def from_JV(v : JsonValue const explicit?; ent : bool; defV : bool = false) {
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : float; defV : float = 0.) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return float(v.value as _number)
-    }
+    return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : double; defV : double = 0.lf) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return v.value as _number
-    }
+    return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : int; defV : int = 0) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return int(v.value as _number)
-    }
+    return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : uint; defV : uint = 0u) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return uint(v.value as _number)
-    }
+    return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : int64; defV : int64 = 0l) {
-    if (v == null) {
-        return defV
-    } elif (v.value is _number) {
-        return int64(v.value as _number)
-    } elif (v.value is _string) {
-        return to_int64(v.value as _string)
-    } else {
-        return defV
-    }
+    return null_coalescing_with_string(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : uint64; defV : uint64 = 0ul) {
-    if (v == null) {
-        return defV
-    } elif (v.value is _number) {
-        return uint64(v.value as _number)
-    } elif (v.value is _string) {
-        return to_uint64(v.value as _string, true)
-    } else {
-        return defV
-    }
+    return null_coalescing_with_string(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : int8; defV : int8 = int8(0)) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return int8(v.value as _number)
-    }
+    return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : uint8; defV : uint8 = uint8(0)) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return uint8(v.value as _number)
-    }
+    return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : int16; defV : int16 = int16(0)) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return int16(v.value as _number)
-    }
+    return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : uint16; defV : uint16 = uint16(0)) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return uint16(v.value as _number)
-    }
+    return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : bitfield; defV : bitfield = bitfield()) {
-    if (v == null || !(v.value is _number)) {
-        return defV
-    } else {
-        return bitfield(v.value as _number)
-    }
+    return null_coalescing(v, defV)
 }
 
 [expect_any_vector_type(v)]
@@ -496,11 +470,12 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
             return <- ret
         }
         let vv : JsonValue? = (v.value as _object)?["$variant"] ?? default<JsonValue?>
-        if (vv == null || !(vv.value is _number)) {
+        if (vv == null || !((vv.value is _number) || (vv.value is _longint))) {
             return <- ret
         }
+        let index = (vv.value is _number) ? int(vv.value as _number) : int(vv.value as _longint)
         unsafe {
-            set_variant_index(ret, int(vv.value as _number))
+            set_variant_index(ret, index)
         }
         apply(ret) <| $(name : string; var field) {
             (v as _object) |> get(name) <| $(val) {
@@ -510,54 +485,6 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         return <- ret
     } else {
         concept_assert(false, "unsupported json serialization type. missing 'fromJV")
-    }
-}
-
-def JV(v : float) {
-    return new JsonValue(value <- JsValue(_number = double(v)))
-}
-
-def JV(v : int) {
-    return new JsonValue(value <- JsValue(_number = double(v)))
-}
-
-def JV(v : bitfield) {
-    return new JsonValue(value <- JsValue(_number = double(v)))
-}
-
-def JV(val : int8) : JsonValue? {
-    return new JsonValue(value <- JsValue(_number = double(val)))
-}
-
-def JV(val : uint8) : JsonValue? {
-    return new JsonValue(value <- JsValue(_number = double(val)))
-}
-
-def JV(val : int16) : JsonValue? {
-    return new JsonValue(value <- JsValue(_number = double(val)))
-}
-
-def JV(val : uint16) : JsonValue? {
-    return new JsonValue(value <- JsValue(_number = double(val)))
-}
-
-def JV(val : uint) : JsonValue? {
-    return new JsonValue(value <- JsValue(_number = double(val)))
-}
-
-def JV(val : int64) : JsonValue? {
-    if (val < int64(INT_MIN) || val > int64(INT_MAX)) {
-        return new JsonValue(value <- JsValue(_string = "{val}"))
-    } else {
-        return new JsonValue(value <- JsValue(_number = double(val)))
-    }
-}
-
-def JV(val : uint64) : JsonValue? {
-    if (val > uint64(UINT_MAX)) {
-        return new JsonValue(value <- JsValue(_string = "{val}"))
-    } else {
-        return new JsonValue(value <- JsValue(_number = double(val)))
     }
 }
 

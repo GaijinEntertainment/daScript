@@ -235,6 +235,9 @@ def flatten_json_reply(var writer : StringBuilderWriter; var reply : JsonValue?)
     } elif (reply is _number) {
         writer |> write("{reply as _number}")
         writer |> write(" ")
+    } elif (reply is _longint) {
+        writer |> write("{reply as _longint}")
+        writer |> write(" ")
     } elif (reply is _bool) {
         writer |> write("{reply as _bool}")
         writer |> write(" ")

@@ -49,11 +49,11 @@ def operator !=(a : SuiteResult | #; b : SuiteResult | #) : bool {
 def SuiteResult(val : JsonValue?) {
     let obj & = unsafe(val as _object)
     return SuiteResult(
-        passed = int((obj?["passed"] ?? JV(0lf)) as _number),
-        failed = int((obj?["failed"] ?? JV(0lf)) as _number),
-        total = int((obj?["total"] ?? JV(0lf)) as _number),
-        errors = int((obj?["errors"] ?? JV(0lf)) as _number),
-        skipped = int((obj?["skipped"] ?? JV(0lf)) as _number)
+        passed = from_JV(obj?["passed"] ?? JV(0), type<int>),
+        failed = from_JV(obj?["failed"] ?? JV(0), type<int>),
+        total = from_JV(obj?["total"] ?? JV(0), type<int>),
+        errors = from_JV(obj?["errors"] ?? JV(0), type<int>),
+        skipped = from_JV(obj?["skipped"] ?? JV(0), type<int>)
     )
 }
 

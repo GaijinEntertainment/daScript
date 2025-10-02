@@ -11,12 +11,13 @@ require daslib/strings_boost
 
 variant JsValue {
     //! Single JSON element.
-    _object : table<string; JsonValue?>
-    _array  : array<JsonValue?>
-    _string : string
-    _number : double
-    _bool   : bool
-    _null   : void?
+    _object  : table<string; JsonValue?>
+    _array   : array<JsonValue?>
+    _string  : string
+    _number  : double
+    _longint : int64   // extension, not part of JSON standard
+    _bool    : bool
+    _null    : void?
 }
 
 struct JsonValue {
@@ -26,12 +27,13 @@ struct JsonValue {
 
 variant Token {
     //! JSON input stream token.
-    _string : string
-    _number : double
-    _bool   : bool
-    _null   : void?
-    _symbol : int
-    _error  : string
+    _string  : string
+    _number  : double
+    _longint : int64   // extension, not part of JSON standard
+    _bool    : bool
+    _null    : void?
+    _symbol  : int
+    _error   : string
 }
 
 struct TokenAt {
@@ -43,6 +45,11 @@ struct TokenAt {
 let private {
     Token_string = typeinfo variant_index<_string>(type<Token>) //! index of the
     Token_symbol = typeinfo variant_index<_symbol>(type<Token>)
+}
+
+def JVNull {
+    //! Creates `JsonValue` representing `null`.
+    return new JsonValue(value <- JsValue(_null = null))
 }
 
 def JV(v : string) {
@@ -58,17 +65,60 @@ def JV(v : bool) {
     return new JsonValue(value <- JsValue(_bool = v))
 }
 
-def JVNull {
-    //! Creates `JsonValue` representing `null`.
-    return new JsonValue(value <- JsValue(_null = null))
-}
-
 def JV(var v : table<string; JsonValue?>) {
     return new JsonValue(value <- JsValue(_object <- v))
 }
 
 def JV(var v : array<JsonValue?>) {
     return new JsonValue(value <- JsValue(_array <- v))
+}
+
+def JV(v : float) {
+    return new JsonValue(value <- JsValue(_number = double(v)))
+}
+
+def JV(v : int) {
+    return new JsonValue(value <- JsValue(_longint = int64(v)))
+}
+
+def JV(v : bitfield) {
+    return new JsonValue(value <- JsValue(_longint = int64(v)))
+}
+
+def JV(val : int8) : JsonValue? {
+    return new JsonValue(value <- JsValue(_longint = int64(val)))
+}
+
+def JV(val : uint8) : JsonValue? {
+    return new JsonValue(value <- JsValue(_longint = int64(val)))
+}
+
+def JV(val : int16) : JsonValue? {
+    return new JsonValue(value <- JsValue(_longint = int64(val)))
+}
+
+def JV(val : uint16) : JsonValue? {
+    return new JsonValue(value <- JsValue(_longint = int64(val)))
+}
+
+def JV(val : uint) : JsonValue? {
+    return new JsonValue(value <- JsValue(_longint = int64(val)))
+}
+
+def JV(val : int64) : JsonValue? {
+    if (val < int64(INT_MIN) || val > int64(INT_MAX)) {
+        return new JsonValue(value <- JsValue(_string = "{val}"))
+    } else {
+        return new JsonValue(value <- JsValue(_longint = val))
+    }
+}
+
+def JV(val : uint64) : JsonValue? {
+    if (val > uint64(UINT_MAX)) {
+        return new JsonValue(value <- JsValue(_string = "{val}"))
+    } else {
+        return new JsonValue(value <- JsValue(_longint = int64(val)))
+    }
 }
 
 def private lexer(text : string) {
@@ -149,13 +199,16 @@ def private _lexer(var stext : string implicit) {
                 clear(str)
                 next(tin, ahead)
             } elif (ahead == '+' || ahead == '-' || is_number(ahead)) {
+                var is_negative = (ahead == '-')
                 push(str, uint8(ahead))
                 var anyNumbers = is_number(ahead)
                 while (next(tin, ahead, line, row) && is_number(ahead)) {
                     push(str, uint8(ahead))
                     anyNumbers = true
                 }
+                var is_integer = true
                 if (!empty(tin) && ahead == '.') {
+                    is_integer = false
                     push(str, uint8(ahead))
                     while (next(tin, ahead, line, row) && is_number(ahead)) {
                         push(str, uint8(ahead))
@@ -163,6 +216,7 @@ def private _lexer(var stext : string implicit) {
                     }
                 }
                 if (!empty(tin) && (ahead == 'e' || ahead == 'E')) {
+                    is_integer = false
                     push(str, uint8(ahead))
                     next(tin, ahead, line, row)
                     if (ahead == '+' || ahead == '-' || is_number(ahead)) {
@@ -178,7 +232,13 @@ def private _lexer(var stext : string implicit) {
                     yield TokenAt(value = Token(_error = "invalid number {num}"), line = line, row = row)
                     return false
                 }
-                yield TokenAt(value = Token(_number = double(num)), line = line, row = row)
+                if ( is_integer ) {
+                    // we can have big unsigned numbers, which overflow int64 but fit in uint64
+                    var ival = is_negative ? int64(num) : int64(uint64(num))
+                    yield TokenAt(value = Token(_longint = ival), line = line, row = row)
+                } else {
+                    yield TokenAt(value = Token(_number = double(num)), line = line, row = row)
+                }
                 clear(str)
                 unsafe {
                     delete_string(num)
@@ -329,6 +389,8 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
         return JV(ahead.value as _string);
     } elif (ahead.value is _number) {
         return JV(ahead.value as _number);
+    } elif (ahead.value is _longint) {
+        return JV(ahead.value as _longint)
     } elif (ahead.value is _bool) {
         return JV(ahead.value as _bool);
     } elif (ahead.value is _null) {
@@ -398,6 +460,8 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
         } else {
             write(writer, jsv.value as _number)
         }
+    } elif (jsv.value is _longint) {
+        write(writer, jsv.value as _longint)
     } elif (jsv.value is _array) {
         if (length(jsv.value as _array) == 0) {
             write(writer, "[]")
