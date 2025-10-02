@@ -19,6 +19,13 @@ def public static_let(blk : block) {
 }
 
 [tag_function(static_let_tag)]
+def public static_let(name : string; blk : block) {
+    //! Given a scope with the variable declarations, this function will make those variables global.
+    //! Variable will be renamed under the hood, and all local access to it will be renamed as well.
+    pass
+}
+
+[tag_function(static_let_tag)]
 def public static_let_finalize(blk : block) {
     //! This is very similar to regular static_let, but additionally the variable will be deleted on the context shutdown.
     pass
@@ -43,14 +50,35 @@ def private make_shutdown_function(varname : string; at : LineInfo) {
 class StaticLetMacro : AstFunctionAnnotation {
     //! This macro implements the `static_let` and `static_let_finalize` functions.
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
-        assert(call.arguments[0] is ExprMakeBlock)
-        let mblk = call.arguments[0] as ExprMakeBlock
+        var mblk : ExprMakeBlock?
+        var prefix = "`static`at_line_{int(call.at.line)}`"
+        if (length(call.arguments) == 1) {
+            if (!(call.arguments[0] is ExprMakeBlock)) {
+                errors := "expecting block as argument"
+                return <- default<ExpressionPtr>
+            }
+            mblk = call.arguments[0] as ExprMakeBlock
+        } elif (length(call.arguments) == 2) {
+            if (!(call.arguments[0] is ExprConstString)) {
+                errors := "expecting string as first argument"
+                return <- default<ExpressionPtr>
+            }
+            if (!(call.arguments[1] is ExprMakeBlock)) {
+                errors := "expecting block as second argument"
+                return <- default<ExpressionPtr>
+            }
+            mblk = call.arguments[1] as ExprMakeBlock
+            let pname = call.arguments[0] as ExprConstString
+            prefix = "{pname.value}{prefix}"
+        } else {
+            errors := "expecting static_let(block) or static_let(name, block)"
+            return <- default<ExpressionPtr>
+        }
         var blk = mblk._block as ExprBlock
         if (blk.finalList |> length != 0) {
             errors := "not expecting finally section in the static_let"
             return <- default<ExpressionPtr>
         }
-        let prefix = "`static`at_line_{int(call.at.line)}`"
         var inscope renames : array<tuple<old_name : string; new_name : string>>
         for (ex in blk.list) {
             if (!(ex is ExprLet)) {
@@ -88,7 +116,7 @@ class StaticLetMacro : AstFunctionAnnotation {
             } else {
                 apply_template(astc.scopes[astc.scopes |> length - 1]) <| $(rules) {
                     for (r in renames) {
-                        rules |> renameVariable(r.old_name) <| r.new_name
+                        rules |> renameVariable(r.old_name) <| "_::{r.new_name}"
                     }
                 }
             }

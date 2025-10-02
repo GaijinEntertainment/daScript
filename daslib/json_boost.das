@@ -16,7 +16,7 @@ require daslib/templates
 require daslib/strings_boost
 require daslib/apply
 require daslib/macro_boost
-
+require daslib/static_let
 
 def operator ?[] (a : json::JsonValue const? ==const; key : string) : JsonValue? const {
     //! Returns the value of the key in the JSON object, if it exists.
@@ -400,6 +400,33 @@ def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) 
     return <- ret
 }
 
+struct public JsonFieldState {
+    argName : string
+    enumAsInt : bool
+    unescape : bool
+    embed : bool
+    optional : bool
+}
+
+def public parse_json_annotation(name : string; annotation : array<tuple<name : string; data : RttiValue>>) : JsonFieldState {
+    var fieldState : JsonFieldState
+    fieldState.argName = name
+    for (ann in annotation) {
+        if (ann.name == "rename") {
+            fieldState.argName = ann.data as tString
+        } elif (ann.name == "enum_as_int" && ann.data is bool) {
+            fieldState.enumAsInt = ann.data as tBool
+        } elif (ann.name == "unescape" && ann.data is bool) {
+            fieldState.unescape = ann.data as tBool
+        } elif (ann.name == "embed" && ann.data is bool) {
+            fieldState.embed = ann.data as tBool
+        } elif (ann.name == "optional" && ann.data is bool) {
+            fieldState.optional = ann.data as tBool
+        }
+    }
+    return <- fieldState
+}
+
 [unused_argument(anything)]
 def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
     static_if (typeinfo is_dim(anything)) {
@@ -423,14 +450,15 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
             return <- ret
         }
         apply(ret) <| $(name : string; var field; annotations) {
-            var argName = name
-            for (ann in annotations) {
-                if (ann.name == "rename") {
-                    argName = ann.data as tString
-                    break
-                }
+            static_let("{typeinfo typename(type<TT-const-&>)}`{name}") {
+                var fieldState : JsonFieldState
+                var fieldStateParsed : bool = false
             }
-            (v as _object) |> get(argName) <| $(val) {
+            if (!fieldStateParsed) {
+                fieldState <- parse_json_annotation(name, annotations)
+                fieldStateParsed = true
+            }
+            (v as _object) |> get(fieldState.argName) <| $(val) {
                 move_to_ref(field, _::from_JV(val, decltype_noref(field)))
             }
         }
@@ -533,7 +561,7 @@ def JV(val : uint64) : JsonValue? {
     }
 }
 
-def JV(value) : JsonValue? {
+def JV(value : auto(TT)) : JsonValue? {
     static_if (typeinfo is_dim(value)) {
         var arr : array<JsonValue?>
         for (t in value) {
@@ -551,31 +579,56 @@ def JV(value) : JsonValue? {
         return _::JV(value)
     } static_elif (typeinfo is_struct(value)) {
         var map : table<string; JsonValue?>
-        apply(value) <| $(name : string; field; annotation) {
+        apply(value) <| $(name : string; field; annotations) {
             static_if (typeinfo is_function(field)) {
                 pass // skip functions
             } static_elif (typeinfo is_void_pointer(field)) {
                 pass // skip void?
             } static_elif (typeinfo is_pointer(field)) {
-                var argName = name
-                for (ann in annotation) {
-                    if (ann.name == "rename") {
-                        argName = ann.data as tString
-                        break
-                    }
-                }
                 if (field != null) {
-                    map |> insert(argName, _::JV(field))
+                    static_let("{typeinfo typename(type<TT-const-&>)}`{name}") {
+                        var fieldState : JsonFieldState
+                        var fieldStateParsed : bool = false
+                    }
+                    if (!fieldStateParsed) {
+                        fieldState <- parse_json_annotation(name, annotations)
+                        fieldStateParsed = true
+                    }
+                    map |> insert(fieldState.argName, _::JV(field))
                 }
             } else {
-                var argName = name
-                for (ann in annotation) {
-                    if (ann.name == "rename") {
-                        argName = ann.data as tString
-                        break
+                static_let("{typeinfo typename(type<TT-const-&>)}`{name}") {
+                    var fieldState : JsonFieldState
+                    var fieldStateParsed : bool = false
+                }
+                if (!fieldStateParsed) {
+                    fieldState <- parse_json_annotation(name, annotations)
+                    fieldStateParsed = true
+                }
+                if (fieldState.enumAsInt) {     // we only need to handle it as we are writing out, reading handles it at the enum level
+                    static_if (typeinfo is_enum(field)) {
+                        let fieldStateEnumValue : int = int(field)
+                        map |> insert(fieldState.argName, _::JV(fieldStateEnumValue))
+                        return
+                    }
+                } elif (fieldState.unescape) {
+                    static_if (typeinfo is_string(field)) {
+                        map |> insert(fieldState.argName, _::JV(unescape(field)))
+                        return
+                    }
+                } elif (fieldState.embed && typeinfo is_string(field)) {
+                    static_if (typeinfo is_string(field)) {
+                        var errors : string
+                        var subexpr = read_json(field, errors)
+                        if (subexpr == null) {
+                            to_log(LOG_ERROR, "JSON: failed to parse embedded json field '{fieldState.argName}': {errors}\n")
+                            panic("failed to parse embedded json field '{fieldState.argName}': {errors}")
+                        }
+                        map |> insert(fieldState.argName, subexpr)
+                        return
                     }
                 }
-                map |> insert(argName, _::JV(field))
+                map |> insert(fieldState.argName, _::JV(field))
             }
         }
         return _::JV(map)
