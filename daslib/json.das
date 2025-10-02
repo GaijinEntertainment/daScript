@@ -232,7 +232,7 @@ def private _lexer(var stext : string implicit) {
                     yield TokenAt(value = Token(_error = "invalid number {num}"), line = line, row = row)
                     return false
                 }
-                if ( is_integer ) {
+                if (is_integer) {
                     // we can have big unsigned numbers, which overflow int64 but fit in uint64
                     var ival = is_negative ? int64(num) : int64(uint64(num))
                     yield TokenAt(value = Token(_longint = ival), line = line, row = row)
