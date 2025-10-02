@@ -719,7 +719,7 @@ def public type_to_llvm_abi_type(t : TypeDeclPtr) {
             if (tp == null) {
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
                 return g_prim_t.t_int32
-            } elif (!tp.isWorkhorseType) {
+            } elif (!tp.isWorkhorseType && tp.baseType != Type.anyArgument) {
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(t)} at {describe(t.at)}")
                 return g_prim_t.t_int32
             }
@@ -803,7 +803,7 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
             if (tp == null) {
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
                 return g_prim_t.t_int32
-            } elif (!tp.isWorkhorseType) {
+            } elif (!tp.isWorkhorseType && tp.baseType != Type.anyArgument) {
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(t)} at {describe(t.at)}")
                 return g_prim_t.t_int32
             }
@@ -838,12 +838,12 @@ def public build_broadcast_vector(builder : LLVMOpaqueBuilder?; opType : TypeDec
     }
 }
 
-def public LLVMBuildLoadData2Aligned(builder : LLVMOpaqueBuilder?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; alignment : uint; name : string) {
-    if (!LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment != 16u && LLVMIsVector3(typ)) {
+    def public LLVMBuildLoadData2Aligned(builder : LLVMOpaqueBuilder?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; alignment : int; name : string) {
+    if (!LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment != 16 && LLVMIsVector3(typ)) {
         // slow path
         return LLVMBuildLoadVector3(builder, g_prim_t, typ, ptr, name)
     } else {
-        return LLVMBuildLoad2Aligned(builder, typ, ptr, alignment, name)
+        return LLVMBuildLoad2Aligned(builder, typ, ptr, alignment |> uint, name)
     }
 }
 
