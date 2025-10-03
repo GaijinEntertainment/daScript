@@ -8,6 +8,40 @@ module enum_trait shared private
 
 require ast
 require daslib/ast_boost
+require daslib/contracts
+require daslib/templates
+
+[expect_any_enum(arg)]
+def public string(arg) {
+    //! converts enum value to string
+    //!  usage: let s = string(EnumValue)
+    return "{arg}"
+}
+
+[template(ent), unused_argument(ent)]
+def public to_enum(ent : auto(EnumT), name : string) : EnumT {
+    //! converts string to enum value, panics if not found
+    //!  usage: let e = to_enum(type<EnumType>,"EnumValueName")
+    for (e in each_enum(type<EnumT>)) {
+        if ("{e}" == name) {
+            return e
+        }
+    }
+    panic("to_enum: enum value '{name}' not found in enum '{typeinfo typename(type<EnumT>)}'")
+    return default<EnumT>
+}
+
+[template(ent), unused_argument(ent)]
+def public to_enum(ent : auto(EnumT), name : string; defaultValue : EnumT) : EnumT {
+    //! converts string to enum value, returns defaultValue if not found
+    //!  usage: let e = to_enum(type<EnumType>,"EnumValueName", EnumType.DefaultValue)
+    for (e in each_enum(type<EnumT>)) {
+        if ("{e}" == name) {
+            return e
+        }
+    }
+    return defaultValue
+}
 
 [typeinfo_macro(name="enum_length")]
 class TypeInfoGetEnumLength : AstTypeInfoMacro {
