@@ -381,6 +381,8 @@ def jon(val : JsonValue?; id : string; defVal = 0lf) : double {
     get(val.value as _object, id) <| $(v) {
         if (v.value is _number) {
             res = v.value as _number
+        } elif (v.value is _longint) {
+            res = double(v.value as _longint)
         }
     }
     return res
