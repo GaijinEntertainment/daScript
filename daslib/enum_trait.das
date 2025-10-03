@@ -44,19 +44,36 @@ def public to_enum(ent : auto(EnumT), name : string; defaultValue : EnumT) : Enu
     return defaultValue
 }
 
+[template(ent), unused_argument(ent), skip_lock_check]
+def public enum_to_table(ent : auto(EnumT)) : table<string, EnumT -const -&> {
+    //! converts enum type to array of tuples (name, value)
+    //!  usage: let t = enum_to_table(type<EnumType>)
+    var tab : table<string, EnumT -const -&>
+    for (e in each_enum(type<EnumT>)) {
+        unsafe(tab["{e}"]) = e
+    }
+    return <- tab
+}
+
 [enumeration_macro(name="string_to_enum")]
 class EnumFromStringConstruction : AstEnumerationAnnotation {
     def override apply(var enu : EnumerationPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         var inscope enumT <- new TypeDecl(baseType = Type.tEnumeration, enumType = enu.get_ptr())
-        // panicing one
-        var inscope enumFn <- qmacro_function("{enu.name}") <| $(src : string) {
-            return to_enum(type<$t(enumT)>, src)
+        // lets make a table variable
+        let varName = "_`enum`table`{enu.name}"
+        add_global_private_let(compiling_module(), varName, enu.at, qmacro(enum_to_table(type<$t(enumT)>)))
+        // panic one
+        var inscope enumFn <- qmacro_function("{enu.name}") <| $(src : string) : $t(enumT) {
+            if (!key_exists($i(varName), src)) {
+                panic("string_to_enum: enum value '{src}' not found in enum '{typeinfo typename(type<$t(enumT)>)}'")
+            }
+            return $i(varName)?[src] ?? default<$t(enumT)>
         }
         enumFn.flags &= ~FunctionFlags.privateFunction
         compiling_module() |> add_function(enumFn)
         // with default
-        var inscope enumFnDefault <- qmacro_function("{enu.name}") <| $(src : string; defaultValue : $t(enumT)) {
-            return to_enum(type<$t(enumT)>, src, defaultValue)
+        var inscope enumFnDefault <- qmacro_function("{enu.name}") <| $(src : string; defaultValue : $t(enumT)) : $t(enumT) {
+            return $i(varName)?[src] ?? defaultValue
         }
         enumFnDefault.flags &= ~FunctionFlags.privateFunction
         compiling_module() |> add_function(enumFnDefault)
