@@ -106,19 +106,11 @@ def JV(val : uint) : JsonValue? {
 }
 
 def JV(val : int64) : JsonValue? {
-    if (val < int64(INT_MIN) || val > int64(INT_MAX)) {
-        return new JsonValue(value <- JsValue(_string = "{val}"))
-    } else {
-        return new JsonValue(value <- JsValue(_longint = val))
-    }
+    return new JsonValue(value <- JsValue(_longint = val))
 }
 
 def JV(val : uint64) : JsonValue? {
-    if (val > uint64(UINT_MAX)) {
-        return new JsonValue(value <- JsValue(_string = "{val}"))
-    } else {
-        return new JsonValue(value <- JsValue(_longint = int64(val)))
-    }
+    return new JsonValue(value <- JsValue(_longint = int64(val)))
 }
 
 def private lexer(text : string) {
