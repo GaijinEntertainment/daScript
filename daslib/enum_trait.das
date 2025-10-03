@@ -8,8 +8,9 @@ module enum_trait shared private
 
 require ast
 require daslib/ast_boost
-require daslib/contracts
+require daslib/templates_boost
 require daslib/templates
+require daslib/contracts
 
 [expect_any_enum(arg)]
 def public string(arg) {
@@ -41,6 +42,27 @@ def public to_enum(ent : auto(EnumT), name : string; defaultValue : EnumT) : Enu
         }
     }
     return defaultValue
+}
+
+[enumeration_macro(name="string_to_enum")]
+class EnumFromStringConstruction : AstEnumerationAnnotation {
+    def override apply(var enu : EnumerationPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        var inscope enumT <- new TypeDecl(baseType = Type.tEnumeration, enumType = enu.get_ptr())
+        // panicing one
+        var inscope enumFn <- qmacro_function("{enu.name}") <| $(src : string) {
+            return to_enum(type<$t(enumT)>, src)
+        }
+        enumFn.flags &= ~FunctionFlags.privateFunction
+        compiling_module() |> add_function(enumFn)
+        // with default
+        var inscope enumFnDefault <- qmacro_function("{enu.name}") <| $(src : string; defaultValue : $t(enumT)) {
+            return to_enum(type<$t(enumT)>, src, defaultValue)
+        }
+        enumFnDefault.flags &= ~FunctionFlags.privateFunction
+        compiling_module() |> add_function(enumFnDefault)
+        return true
+
+    }
 }
 
 [typeinfo_macro(name="enum_length")]
