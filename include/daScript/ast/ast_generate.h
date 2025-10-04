@@ -22,9 +22,11 @@ namespace das {
 
     // puts all expression's subexpressions at new location
     ExpressionPtr forceAt ( const ExpressionPtr & expr, const LineInfo & at );
+    FunctionPtr forceAtFunction ( const FunctionPtr & func, const LineInfo & at );
 
     // change generated flag for all subexpressions and variables
     ExpressionPtr forceGenerated ( const ExpressionPtr & expr, bool setGenerated );
+    FunctionPtr forceGeneratedFunction ( const FunctionPtr & expr, bool setGenerated );
 
     // gives combined region for all subexpressions
     LineInfo encloseAt ( const ExpressionPtr & expr );

@@ -1660,7 +1660,17 @@ namespace das {
         return expr->visit(swapAt);
     }
 
+    FunctionPtr forceAtFunction ( const FunctionPtr & func, const LineInfo & at ) {
+        LocationSwapVisitor swapAt(at);
+        return func->visit(swapAt);
+    }
+
     ExpressionPtr forceGenerated ( const ExpressionPtr & expr, bool setGenerated ) {
+        SetGeneratedVisitor setGen(setGenerated);
+        return expr->visit(setGen);
+    }
+
+    FunctionPtr forceGeneratedFunction ( const FunctionPtr & expr, bool setGenerated ) {
         SetGeneratedVisitor setGen(setGenerated);
         return expr->visit(setGen);
     }
