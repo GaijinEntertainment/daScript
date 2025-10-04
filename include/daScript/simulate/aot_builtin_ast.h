@@ -566,6 +566,10 @@ namespace das {
     bool canAccessGlobalVariable ( const VariablePtr & pVar, Module * mod, Module * thisMod );
     TypeDeclPtr inferGenericTypeEx ( smart_ptr_raw<TypeDecl> type, smart_ptr_raw<TypeDecl> passType, bool topLevel, bool isPassType );
     void updateAliasMapEx ( smart_ptr_raw<Program> program, smart_ptr_raw<TypeDecl> argType, smart_ptr_raw<TypeDecl> passType, Context * context, LineInfoArg * at );
+    void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at );
+    void forceAtFunctionRaw ( const smart_ptr_raw<Function> & func, const LineInfo & at );
+    void forceGeneratedRaw ( const smart_ptr_raw<Expression> & expr, bool setGenerated );
+    void forceGeneratedFunctionRaw ( const smart_ptr_raw<Function> & func, bool setGenerated );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
