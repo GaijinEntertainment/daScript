@@ -514,8 +514,16 @@ namespace das {
         forceAt(expr, at);
     }
 
+    void forceAtFunctionRaw ( const smart_ptr_raw<Function> & func, const LineInfo & at ) {
+        forceAtFunction(func, at);
+    }
+
     void forceGeneratedRaw ( const smart_ptr_raw<Expression> & expr, bool setGenerated ) {
         forceGenerated(expr, setGenerated);
+    }
+
+    void forceGeneratedFunctionRaw ( const smart_ptr_raw<Function> & func, bool setGenerated ) {
+        forceGeneratedFunction(func, setGenerated);
     }
 
     bool isExprLikeCall ( const ExpressionPtr & expr ) {
@@ -1035,6 +1043,12 @@ namespace das {
         addExtern<DAS_BIND_FUN(forceGeneratedRaw)>(*this, lib,  "force_generated",
             SideEffects::accessExternal, "forceGeneratedRaw")
                 ->args({"expression","value"});
+        addExtern<DAS_BIND_FUN(forceGeneratedFunctionRaw)>(*this, lib,  "force_generated",
+            SideEffects::accessExternal, "forceGeneratedFunctionRaw")
+                ->args({"function","value"});
+        addExtern<DAS_BIND_FUN(forceAtFunctionRaw)>(*this, lib,  "force_at",
+            SideEffects::accessExternal, "forceAtFunctionRaw")
+                ->args({"function","at"});
         addExtern<DAS_BIND_FUN(parseMangledNameFn)>(*this, lib,  "parse_mangled_name",
             SideEffects::none, "parseMangledNameFn")
                 ->args({"txt","lib","thisModule","context","line"});

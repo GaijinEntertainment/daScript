@@ -70,12 +70,16 @@ class EnumFromStringConstruction : AstEnumerationAnnotation {
             return $i(varName)?[src] ?? default<$t(enumT)>
         }
         enumFn.flags &= ~FunctionFlags.privateFunction
+        force_at(enumFn, enu.at)
+        force_generated(enumFn, true)
         compiling_module() |> add_function(enumFn)
         // with default
         var inscope enumFnDefault <- qmacro_function("{enu.name}") <| $(src : string; defaultValue : $t(enumT)) : $t(enumT) {
             return $i(varName)?[src] ?? defaultValue
         }
         enumFnDefault.flags &= ~FunctionFlags.privateFunction
+        force_at(enumFnDefault, enu.at)
+        force_generated(enumFnDefault, true)
         compiling_module() |> add_function(enumFnDefault)
         return true
 
