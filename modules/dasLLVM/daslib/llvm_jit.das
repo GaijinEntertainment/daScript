@@ -4200,7 +4200,7 @@ class LlvmJitVisitor : AstVisitor {
                 pass
             }
             if (varType.flags.ref) {
-                var_ptr = LLVMBuildLoadData2Aligned(g_builder, LLVMPointerType(type_to_llvm_type(expr._type), 0u), var_ptr, expr._type.alignOf, "")
+                var_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(type_to_llvm_type(expr._type), 0u), var_ptr, "")
             }
             if (expr.varFlags.r2v) {
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), var_ptr, expr._type.alignOf, "local_var_r2v_{expr.variable.name}"))
@@ -4855,8 +4855,8 @@ class LlvmJitVisitor : AstVisitor {
                     var a : int& = ...
                     invoke <| a // we capture ref as ref, unless its argument. then ref is ref already
                 */
-                if (c.variable._type.flags.ref) {
-                    v_ptr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(c.variable._type), v_ptr, c.variable._type.alignOf, "")
+                if (c.variable._type.flags.ref && !c.expression.varFlags.argument && !c.expression.varFlags._block) {
+                    v_ptr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(c.variable._type), v_ptr, c.variable._type.alignOf, "{c.variable.name}_ref")
                     c.eref = true
                 }
             }
