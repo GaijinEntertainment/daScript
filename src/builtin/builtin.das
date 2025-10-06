@@ -998,9 +998,17 @@ def emplace_default(var tab : table<auto(keyT), auto(valT)>, key : keyT | #) : v
 def get_with_default(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : block<(var p : valT&) : void>) : void {
     //! Gets the value from the table, add it with a default value if it does not exist. Callback is invoked with the value.
     unsafe {
-        var val & = Tab[at]
+        var pval = Tab?[at]
+        if (pval == null) {
+            pval = addr(Tab[at])
+            static_if (typeinfo is_workhorse(type<valT -const -&>)) {
+                *pval = default<valT -const -&>
+            } else {
+                *pval <- default<valT -const -&>
+            }
+        }
         __builtin_table_lock(Tab)
-        invoke(blk, val)
+        invoke(blk, *pval)
         __builtin_table_unlock(Tab)
     }
 }
@@ -1009,9 +1017,17 @@ def modify(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk :
     //! Modifies the value in the table. Callback is invoked with the value and should return the modified value.
     //! Adds the value with a default value if it does not exist.
     unsafe {
-        var val & = Tab[at]
+        var pval = Tab?[at]
+        if (pval == null) {
+            pval = addr(Tab[at])
+            static_if (typeinfo is_workhorse(type<valT -const -&>)) {
+                *pval = default<valT -const -&>
+            } else {
+                *pval <- default<valT -const -&>
+            }
+        }
         __builtin_table_lock(Tab)
-        val = invoke(blk, val)
+        *pval = invoke(blk, *pval)
         __builtin_table_unlock(Tab)
     }
 }
