@@ -1979,7 +1979,26 @@ def subarray(a : auto(TT)[]; r : urange) {
     return <- ra
 }
 
-def subarray(a : array<auto(TT)>; r : range) {
+def subarray(a : array<auto(TT)> ==const; r : range) {
+    var ra : array<TT -const -&>
+    if (r.x < r.y) {
+        ra |> reserve(r.y - r.x)
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, false))
+            unsafe(set_verify_array_locks(a, false))
+        }
+        for (t in r) {
+            ra |> push_clone(a[t])
+        }
+        static_if (typeinfo need_lock_check(type<TT>)) {
+            unsafe(set_verify_array_locks(ra, true))
+            unsafe(set_verify_array_locks(a, true))
+        }
+    }
+    return <- ra
+}
+
+def subarray(var a : array<auto(TT)> ==const; r : range) {
     var ra : array<TT -const -&>
     if (r.x < r.y) {
         ra |> reserve(r.y - r.x)

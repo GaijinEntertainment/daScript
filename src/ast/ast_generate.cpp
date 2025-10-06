@@ -207,6 +207,7 @@ namespace das {
         pClosure->list.push_back(pRet);
         // make block
         auto pMakeBlock = make_smart<ExprMakeBlock>(expr->at,pClosure);
+        pMakeBlock->alwaysSafe = expr->alwaysSafe;
         // invoke
         auto pInvoke = make_smart<ExprInvoke>(expr->at, "invoke");
         pInvoke->arguments.push_back(pMakeBlock);
@@ -261,6 +262,7 @@ namespace das {
         // generator
         auto pMkGen = make_smart<ExprMakeGenerator>(expr->at, pMakeBlock);
         pMkGen->iterType = make_smart<TypeDecl>(*expr->subexpr->type);
+        pMkGen->alwaysSafe = expr->alwaysSafe;
         return pMkGen;
     }
 
@@ -1012,13 +1014,16 @@ namespace das {
             } else {
                 vtd->constant = false;
             }
-            capture->fields.emplace_back(var->name,
+            // the reason we insert after __lambda and __finalize is so that when we have iterators, we delete them before we delete captured variables
+            capture->fields.insert(
+                capture->fields.begin() + 3,  // after __lambda, __finalize, __yield
+                Structure::FieldDeclaration{var->name,
                                          vtd,
                                          nullptr,
                                          AnnotationArgumentList(),
                                          false,
-                                         expr->at);
-            auto & fldb = capture->fields.back();
+                                         expr->at});
+            auto & fldb = capture->fields[3]; // the one we just inserted
             if ( isRef || var->do_not_delete ) {
                 fldb.doNotDelete = true;
             }
