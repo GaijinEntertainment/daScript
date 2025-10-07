@@ -469,19 +469,24 @@ namespace das {
         fb->at = ls->at;
         // now finalize
         bool needUnsafe = false;
-        for ( const auto & fl : ls->fields ) {
-            if ( !fl.type->constant && !fl.capturedConstant && fl.type->needDelete() ) {
-                if ( !fl.doNotDelete && !fl.capturedRef ) {
-                    if ( fl.type->isPointer() && fl.type->firstType && fl.type->firstType->constant ) continue;
-                    if ( ls->isLambda && !fl.type->isSafeToDelete() ) continue; // we don't do unsafe delete for lambda
-                    auto fva = make_smart<ExprVar>(fl.at, "__this");
-                    auto fld = make_smart<ExprField>(fl.at, fva, fl.name);
-                    fld->ignoreCaptureConst = true;
-                    auto delf = make_smart<ExprDelete>(fl.at, fld);
-                    delf->alwaysSafe = true;
-                    fb->list.emplace_back(delf);
-                    if ( fl.type->isPointer() ) {
-                        needUnsafe = true;
+        for ( int stage=0; stage!=2; ++stage ) {
+            // stage 0 is iterators, stage 1 is everything else
+            for ( const auto & fl : ls->fields ) {
+                if ( !fl.type->constant && !fl.capturedConstant && fl.type->needDelete() ) {
+                    if ( !fl.doNotDelete && !fl.capturedRef ) {
+                        if ( stage==0 && !fl.type->isIterator() ) continue;
+                        if ( stage==1 && fl.type->isIterator() ) continue;
+                        if ( fl.type->isPointer() && fl.type->firstType && fl.type->firstType->constant ) continue;
+                        if ( ls->isLambda && !fl.type->isSafeToDelete() ) continue; // we don't do unsafe delete for lambda
+                        auto fva = make_smart<ExprVar>(fl.at, "__this");
+                        auto fld = make_smart<ExprField>(fl.at, fva, fl.name);
+                        fld->ignoreCaptureConst = true;
+                        auto delf = make_smart<ExprDelete>(fl.at, fld);
+                        delf->alwaysSafe = true;
+                        fb->list.emplace_back(delf);
+                        if ( fl.type->isPointer() ) {
+                            needUnsafe = true;
+                        }
                     }
                 }
             }
@@ -1015,15 +1020,14 @@ namespace das {
                 vtd->constant = false;
             }
             // the reason we insert after __lambda and __finalize is so that when we have iterators, we delete them before we delete captured variables
-            capture->fields.insert(
-                capture->fields.begin() + 3,  // after __lambda, __finalize, __yield
-                Structure::FieldDeclaration{var->name,
-                                         vtd,
-                                         nullptr,
-                                         AnnotationArgumentList(),
-                                         false,
-                                         expr->at});
-            auto & fldb = capture->fields[3]; // the one we just inserted
+            capture->fields.emplace_back(
+                var->name,
+                vtd,
+                nullptr,
+                AnnotationArgumentList(),
+                false,
+                expr->at);
+            auto & fldb = capture->fields.back();
             if ( isRef || var->do_not_delete ) {
                 fldb.doNotDelete = true;
             }
