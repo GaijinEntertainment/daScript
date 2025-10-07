@@ -50,14 +50,6 @@ def test_distinct(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("distinct to sequence") <| @(t : T?) {
-        var qtoseq = distinct_to_sequence(
-            [for (x in 0..5); x]
-        )
-        for (c, i in qtoseq, 0..5) {
-            t |> equal(c, i)
-        }
-    }
     t |> run("distinct in place") <| @(t : T?) {
         var arr = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]
         distinct_inplace(arr)
@@ -105,15 +97,6 @@ def test_distinctby(t : T?) {
             $(_ : int) => _
         )
         for (c, i in qtoarray, 0..5) {
-            t |> equal(c, i)
-        }
-    }
-    t |> run("distinct by to sequence") <| @(t : T?) {
-        var qtoseq = distinct_by_to_sequence(
-            [for (x in 0..5); x],
-            $(_ : int) => _
-        )
-        for (c, i in qtoseq, 0..5) {
             t |> equal(c, i)
         }
     }
@@ -169,16 +152,6 @@ def test_union(t : T?) {
             t |> equal(c, e)
         }
     }
-    t |> run("union to sequence") <| @(t : T?) {
-        var qtoseq = union_to_sequence(
-            [for (x in 0..5); x],
-            [for (x in 3..8); x]
-        )
-        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-        for (c, e in qtoseq, expected) {
-            t |> equal(c, e)
-        }
-    }
 }
 
 [test]
@@ -224,17 +197,6 @@ def test_unionby(t : T?) {
         )
         var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
         for (c, e in qtoarray, expected) {
-            t |> equal(c, e)
-        }
-    }
-    t |> run("union by to sequence") <| @(t : T?) {
-        var qtoseq = union_by_to_sequence(
-            [for (x in 0..5); x],
-            [for (x in 3..8); x],
-            $(_ : int) => _
-        )
-        var expected = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-        for (c, e in qtoseq, expected) {
             t |> equal(c, e)
         }
     }
@@ -297,16 +259,6 @@ def test_except(t : T?) {
             t |> equal(c, e)
         }
     }
-    t |> run("except to sequence") <| @(t : T?) {
-        var qtoseq = except_to_sequence(
-            [for (x in 0..5); x],
-            [for (x in 3..8); x]
-        )
-        var expected = [0, 1, 2]
-        for (c, e in qtoseq, expected) {
-            t |> equal(c, e)
-        }
-    }
 }
 
 [test]
@@ -346,17 +298,6 @@ def test_exceptby(t : T?) {
         )
         var expected = [0, 1, 2]
         for (c, e in qtoarray, expected) {
-            t |> equal(c, e)
-        }
-    }
-    t |> run("except by to sequence") <| @(t : T?) {
-        var qtoseq = _except_by_to_sequence(
-            [for (x in 0..5); x],
-            [for (x in 3..8); x],
-            _
-        )
-        var expected = [0, 1, 2]
-        for (c, e in qtoseq, expected) {
             t |> equal(c, e)
         }
     }
@@ -416,16 +357,6 @@ def test_intersect(t : T?) {
         )
         var expected = [3, 4, 5]
         for (c, e in qtoarray, expected) {
-            t |> equal(c, e)
-        }
-    }
-    t |> run("intersect to sequence") <| @(t : T?) {
-        var qtoseq = intersect_to_sequence(
-            [for (x in 0..5); x],
-            [for (x in 3..8); x]
-        )
-        var expected = [3, 4, 5]
-        for (c, e in qtoseq, expected) {
             t |> equal(c, e)
         }
     }

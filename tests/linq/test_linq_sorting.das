@@ -93,19 +93,6 @@ def test_orderby(t : T?) {
             t |> equal(n, sorted_n[i])
         }
     }
-    t |> run("orderby to sequence") <| @(t : T?) {
-        var numbers = [
-            5, 3, 8, 1, 4
-        ]
-        var query_n = _order_by_to_sequence(
-            numbers,
-            _
-        )
-        var sorted_n = [1, 3, 4, 5, 8]
-        for (n, i in query_n, 0..4) {
-            t |> equal(n, sorted_n[i])
-        }
-    }
     t |> run("orderby in place") <| @(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
@@ -180,19 +167,6 @@ def test_order(t : T?) {
         ]
         var query_n = order_to_array(
             numbers.to_sequence(),
-            $(a, b) => a < b
-        )
-        var sorted_n = [1, 3, 4, 5, 8]
-        for (n, i in query_n, 0..4) {
-            t |> equal(n, sorted_n[i])
-        }
-    }
-    t |> run("order to sequence") <| @(t : T?) {
-        var numbers = [
-            5, 3, 8, 1, 4
-        ]
-        var query_n = order_to_sequence(
-            numbers,
             $(a, b) => a < b
         )
         var sorted_n = [1, 3, 4, 5, 8]

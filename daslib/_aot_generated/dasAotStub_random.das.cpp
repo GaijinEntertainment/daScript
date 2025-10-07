@@ -55,8 +55,8 @@ struct _lambda_random_111_1 {
     Func DAS_COMMENT((bool,random::_lambda_random_111_1,uint32_t &)) __lambda;
     Func DAS_COMMENT((void,random::_lambda_random_111_1 *)) __finalize;
     int32_t __yield;
-    int32_t rnd_seed;
     int4 seed;
+    int32_t rnd_seed;
 };
 }
 extern StructInfo __struct_info__cbf23cd3d353cb53;
@@ -73,8 +73,8 @@ TypeInfo * __type_info__e568005b4bb4b751_arg_types_var_14695875414544599891[1] =
 const char * __type_info__e568005b4bb4b751_arg_names_var_14695875414544599891[1] = { "__this" };
 VarInfo __struct_info__cbf23cd3d353cb53_field_1 =  { Type::tFunction, nullptr, nullptr, nullptr, &__type_info__af63eb4c86020609, nullptr, (TypeInfo **)__type_info__e568005b4bb4b751_arg_types_var_14695875414544599891, __type_info__e568005b4bb4b751_arg_names_var_14695875414544599891, 1, 0, nullptr, 12, TypeSize<Func DAS_COMMENT((void,random::_lambda_random_111_1 *))>::size, UINT64_C(0xe568005b4bb4b751), "__finalize", offsetof(random::_lambda_random_111_1,__finalize), 0 };
 VarInfo __struct_info__cbf23cd3d353cb53_field_2 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int32_t>::size, UINT64_C(0xa88be1f0aee7ad04), "__yield", offsetof(random::_lambda_random_111_1,__yield), 0 };
-VarInfo __struct_info__cbf23cd3d353cb53_field_3 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int32_t>::size, UINT64_C(0xf1dfb90660a0c61a), "rnd_seed", offsetof(random::_lambda_random_111_1,rnd_seed), 0 };
-VarInfo __struct_info__cbf23cd3d353cb53_field_4 =  { Type::tInt4, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int4>::size, UINT64_C(0x158534154e75611d), "seed", offsetof(random::_lambda_random_111_1,seed), 0 };
+VarInfo __struct_info__cbf23cd3d353cb53_field_3 =  { Type::tInt4, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int4>::size, UINT64_C(0x158534154e75611d), "seed", offsetof(random::_lambda_random_111_1,seed), 0 };
+VarInfo __struct_info__cbf23cd3d353cb53_field_4 =  { Type::tInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 28, TypeSize<int32_t>::size, UINT64_C(0xf1dfb90660a0c61a), "rnd_seed", offsetof(random::_lambda_random_111_1,rnd_seed), 0 };
 VarInfo * __struct_info__cbf23cd3d353cb53_fields[5] =  { &__struct_info__cbf23cd3d353cb53_field_0, &__struct_info__cbf23cd3d353cb53_field_1, &__struct_info__cbf23cd3d353cb53_field_2, &__struct_info__cbf23cd3d353cb53_field_3, &__struct_info__cbf23cd3d353cb53_field_4 };
 StructInfo __struct_info__cbf23cd3d353cb53 = {"_lambda_random_111_1", "random", 14, __struct_info__cbf23cd3d353cb53_fields, 5, TypeSize<random::_lambda_random_111_1>::size, UINT64_C(0x0), nullptr, UINT64_C(0xcbf23cd3d353cb53), 5 };
 TypeInfo __type_info__af969b4c86582719 = { Type::tUInt, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 285, TypeSize<uint32_t>::size, UINT64_C(0xaf969b4c86582719) };
@@ -92,13 +92,13 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline uint32_t _FuncrandomTickrandom_uintTick15141358123050100739_ace3444e720a3102 ( Context * __context__, int4 & __seed_rename_at_45_0 );
-inline void finalize_4ae6526745d6b78f ( Context * __context__, random::_lambda_random_111_1 & ____this_rename_at_111_2 );
-inline Sequence DAS_COMMENT((uint32_t)) _FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9 ( Context * __context__, Lambda DAS_COMMENT((bool,uint32_t &)) const  __lam_rename_at_1415_3 );
-inline int4 _FuncrandomTickrandom_seedTick15287272150245073176_dd30826a0cea51ed ( Context * __context__, int32_t __seed_rename_at_16_5 );
-inline bool _Func_lambda_random_111_1Tickfunction_f401add82667d26 ( Context * __context__, random::_lambda_random_111_1 & ____this_rename_at_111_6, uint32_t & ___yield_111_rename_at_111_7 );
-inline void _Func_lambda_random_111_1Tickfinalizer_a949ea6b2586918a ( Context * __context__, random::_lambda_random_111_1 * ____this_rename_at_111_8 );
-inline Sequence DAS_COMMENT((uint32_t)) each_random_uint_afea9e974e8227bf ( Context * __context__, int32_t __rnd_seed_rename_at_110_9 );
+inline uint32_t _FuncrandomTickrandom_uintTick15141358123050100739_eed954c1588766f5 ( Context * __context__, int4 & __seed_rename_at_45_0 );
+inline void finalize_11ee8d03ff30a388 ( Context * __context__, random::_lambda_random_111_1 & ____this_rename_at_111_2 );
+inline Sequence DAS_COMMENT((uint32_t)) _FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9 ( Context * __context__, Lambda DAS_COMMENT((bool,uint32_t &)) const  __lam_rename_at_1443_3 );
+inline int4 _FuncrandomTickrandom_seedTick15287272150245073176_6991510ddb1b5a99 ( Context * __context__, int32_t __seed_rename_at_16_5 );
+inline bool _Func_lambda_random_111_1Tickfunction_6a0acd13806b1cbe ( Context * __context__, random::_lambda_random_111_1 & ____this_rename_at_111_6, uint32_t & ___yield_111_rename_at_111_7 );
+inline void _Func_lambda_random_111_1Tickfinalizer_b0b28f89f8fdfa94 ( Context * __context__, random::_lambda_random_111_1 * ____this_rename_at_111_8 );
+inline Sequence DAS_COMMENT((uint32_t)) each_random_uint_fb6a92a6bb874156 ( Context * __context__, int32_t __rnd_seed_rename_at_110_9 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
@@ -107,31 +107,31 @@ void __init_script ( Context * __context__, bool __init_shared )
     das_global<float,0xe18471da7dd7b153>(__context__) = 3.051851e-05f;/*LCG_IRAND_MAX_FLT*/
 }
 
-inline uint32_t _FuncrandomTickrandom_uintTick15141358123050100739_ace3444e720a3102 ( Context * __context__, int4 & __seed_rename_at_45_0 )
+inline uint32_t _FuncrandomTickrandom_uintTick15141358123050100739_eed954c1588766f5 ( Context * __context__, int4 & __seed_rename_at_45_0 )
 {
     das_copy(__seed_rename_at_45_0,SimPolicy<int4>::Add((SimPolicy<int4>::Mul(int4(214013,214013,214013,214013),__seed_rename_at_45_0,*__context__,nullptr)),int4(2531011,2531011,2531011,2531011),*__context__,nullptr));
     int3 __i123_rename_at_48_1 = ((int3)(SimPolicy<int3>::BinAnd((SimPolicy<int3>::BinShr(das_swizzle_seq<int3,int4,0>::swizzle(__seed_rename_at_45_0) /*xyz*/,cast<int32_t>::from(16),*__context__,nullptr)),int3(32767,32767,32767),*__context__,nullptr)));
     return das_auto_cast<uint32_t>::cast((uint32_t(v_extract_xi(v_cast_vec4i(__i123_rename_at_48_1)) /*x*/) ^ (SimPolicy<uint32_t>::BinShl(uint32_t(v_extract_yi(v_cast_vec4i(__i123_rename_at_48_1)) /*y*/),0xfu,*__context__,nullptr))) ^ (SimPolicy<uint32_t>::BinShl(uint32_t(v_extract_zi(v_cast_vec4i(__i123_rename_at_48_1)) /*z*/),0x1eu,*__context__,nullptr)));
 }
 
-inline void finalize_4ae6526745d6b78f ( Context * __context__, random::_lambda_random_111_1 &  ____this_rename_at_111_2 )
+inline void finalize_11ee8d03ff30a388 ( Context * __context__, random::_lambda_random_111_1 &  ____this_rename_at_111_2 )
 {
     memset((void*)&(____this_rename_at_111_2), 0, TypeSize<random::_lambda_random_111_1>::size);
 }
 
-inline Sequence DAS_COMMENT((uint32_t)) _FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9 ( Context * __context__, Lambda DAS_COMMENT((bool,uint32_t &)) const  __lam_rename_at_1415_3 )
+inline Sequence DAS_COMMENT((uint32_t)) _FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9 ( Context * __context__, Lambda DAS_COMMENT((bool,uint32_t &)) const  __lam_rename_at_1443_3 )
 {
-    Sequence DAS_COMMENT((uint32_t)) __it_rename_at_1417_4;das_zero(__it_rename_at_1417_4);
-    builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((uint32_t))>::pass(__it_rename_at_1417_4),__lam_rename_at_1415_3,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
-    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((uint32_t))>::cast(__it_rename_at_1417_4);
+    Sequence DAS_COMMENT((uint32_t)) __it_rename_at_1445_4;das_zero(__it_rename_at_1445_4);
+    builtin_make_lambda_iterator(das_arg<Sequence DAS_COMMENT((uint32_t))>::pass(__it_rename_at_1445_4),__lam_rename_at_1443_3,4,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((uint32_t))>::cast(__it_rename_at_1445_4);
 }
 
-inline int4 _FuncrandomTickrandom_seedTick15287272150245073176_dd30826a0cea51ed ( Context * __context__, int32_t __seed_rename_at_16_5 )
+inline int4 _FuncrandomTickrandom_seedTick15287272150245073176_6991510ddb1b5a99 ( Context * __context__, int32_t __seed_rename_at_16_5 )
 {
     return das_auto_cast<int4>::cast(int4(__seed_rename_at_16_5,__seed_rename_at_16_5 + 1,__seed_rename_at_16_5 + 2,__seed_rename_at_16_5 + 3));
 }
 
-inline bool _Func_lambda_random_111_1Tickfunction_f401add82667d26 ( Context * __context__, random::_lambda_random_111_1 &  ____this_rename_at_111_6, uint32_t & ___yield_111_rename_at_111_7 )
+inline bool _Func_lambda_random_111_1Tickfunction_6a0acd13806b1cbe ( Context * __context__, random::_lambda_random_111_1 &  ____this_rename_at_111_6, uint32_t & ___yield_111_rename_at_111_7 )
 {
     switch (____this_rename_at_111_6.__yield) {
     case 0: goto label_0;
@@ -141,9 +141,9 @@ inline bool _Func_lambda_random_111_1Tickfunction_f401add82667d26 ( Context * __
     default: __context__->throw_error("invalid label");
     };
     label_0:;;
-    das_copy(____this_rename_at_111_6.seed,_FuncrandomTickrandom_seedTick15287272150245073176_dd30826a0cea51ed(__context__,____this_rename_at_111_6.rnd_seed));
+    das_copy(____this_rename_at_111_6.seed,_FuncrandomTickrandom_seedTick15287272150245073176_6991510ddb1b5a99(__context__,____this_rename_at_111_6.rnd_seed));
     label_1:;;
-    das_copy(___yield_111_rename_at_111_7,_FuncrandomTickrandom_uintTick15141358123050100739_ace3444e720a3102(__context__,____this_rename_at_111_6.seed));
+    das_copy(___yield_111_rename_at_111_7,_FuncrandomTickrandom_uintTick15141358123050100739_eed954c1588766f5(__context__,____this_rename_at_111_6.seed));
     das_copy(____this_rename_at_111_6.__yield,3);
     return das_auto_cast<bool>::cast(true);
     label_3:;;
@@ -152,13 +152,13 @@ inline bool _Func_lambda_random_111_1Tickfunction_f401add82667d26 ( Context * __
     return das_auto_cast<bool>::cast(false);
 }
 
-inline void _Func_lambda_random_111_1Tickfinalizer_a949ea6b2586918a ( Context * __context__, random::_lambda_random_111_1 * ____this_rename_at_111_8 )
+inline void _Func_lambda_random_111_1Tickfinalizer_b0b28f89f8fdfa94 ( Context * __context__, random::_lambda_random_111_1 * ____this_rename_at_111_8 )
 {
-    finalize_4ae6526745d6b78f(__context__,das_arg<random::_lambda_random_111_1>::pass(das_deref(__context__,____this_rename_at_111_8)));
+    finalize_11ee8d03ff30a388(__context__,das_arg<random::_lambda_random_111_1>::pass(das_deref(__context__,____this_rename_at_111_8,__FILE__,__LINE__)));
     das_delete_lambda_struct<random::_lambda_random_111_1 *>::clear(__context__,____this_rename_at_111_8);
 }
 
-inline Sequence DAS_COMMENT((uint32_t)) each_random_uint_afea9e974e8227bf ( Context * __context__, int32_t __rnd_seed_rename_at_110_9 )
+inline Sequence DAS_COMMENT((uint32_t)) each_random_uint_fb6a92a6bb874156 ( Context * __context__, int32_t __rnd_seed_rename_at_110_9 )
 {
     return /* <- */ das_auto_cast_move<Sequence DAS_COMMENT((uint32_t))>::cast(_FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9(__context__,das_ascend<bool,random::_lambda_random_111_1>::make(__context__,&__type_info__9a1e4d1c219d09d2,(([&]() -> random::_lambda_random_111_1 {
         random::_lambda_random_111_1 __mks_111;
@@ -169,13 +169,13 @@ inline Sequence DAS_COMMENT((uint32_t)) each_random_uint_afea9e974e8227bf ( Cont
         return __mks_111;
     })()))));
 }
-static vec4f __wrap__FuncrandomTickrandom_uintTick15141358123050100739_ace3444e720a3102 ( Context * __context__ ) {
+static vec4f __wrap__FuncrandomTickrandom_uintTick15141358123050100739_eed954c1588766f5 ( Context * __context__ ) {
     int4 & arg_seed = cast_aot_arg<int4 &>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<uint32_t>::from(_FuncrandomTickrandom_uintTick15141358123050100739_ace3444e720a3102(__context__, arg_seed));
+    return cast<uint32_t>::from(_FuncrandomTickrandom_uintTick15141358123050100739_eed954c1588766f5(__context__, arg_seed));
 }
-static vec4f __wrap_finalize_4ae6526745d6b78f ( Context * __context__ ) {
+static vec4f __wrap_finalize_11ee8d03ff30a388 ( Context * __context__ ) {
     random::_lambda_random_111_1 &  arg___this = cast_aot_arg<random::_lambda_random_111_1 & >::to(*__context__,__context__->abiArguments()[0]);
-    finalize_4ae6526745d6b78f(__context__, arg___this);
+    finalize_11ee8d03ff30a388(__context__, arg___this);
     return v_zero();
 }
 static vec4f __wrap__FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9 ( Context * __context__ ) {
@@ -183,23 +183,23 @@ static vec4f __wrap__FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9
     *((Sequence DAS_COMMENT((uint32_t)) *) __context__->abiCMRES) = _FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9(__context__, arg_lam);
     return v_zero();
 }
-static vec4f __wrap__FuncrandomTickrandom_seedTick15287272150245073176_dd30826a0cea51ed ( Context * __context__ ) {
+static vec4f __wrap__FuncrandomTickrandom_seedTick15287272150245073176_6991510ddb1b5a99 ( Context * __context__ ) {
     int32_t arg_seed = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<int4>::from(_FuncrandomTickrandom_seedTick15287272150245073176_dd30826a0cea51ed(__context__, arg_seed));
+    return cast<int4>::from(_FuncrandomTickrandom_seedTick15287272150245073176_6991510ddb1b5a99(__context__, arg_seed));
 }
-static vec4f __wrap__Func_lambda_random_111_1Tickfunction_f401add82667d26 ( Context * __context__ ) {
+static vec4f __wrap__Func_lambda_random_111_1Tickfunction_6a0acd13806b1cbe ( Context * __context__ ) {
     random::_lambda_random_111_1 &  arg___this = cast_aot_arg<random::_lambda_random_111_1 & >::to(*__context__,__context__->abiArguments()[0]);
     uint32_t & arg__yield_111 = cast_aot_arg<uint32_t &>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<bool>::from(_Func_lambda_random_111_1Tickfunction_f401add82667d26(__context__, arg___this, arg__yield_111));
+    return cast<bool>::from(_Func_lambda_random_111_1Tickfunction_6a0acd13806b1cbe(__context__, arg___this, arg__yield_111));
 }
-static vec4f __wrap__Func_lambda_random_111_1Tickfinalizer_a949ea6b2586918a ( Context * __context__ ) {
+static vec4f __wrap__Func_lambda_random_111_1Tickfinalizer_b0b28f89f8fdfa94 ( Context * __context__ ) {
     random::_lambda_random_111_1 * arg___this = cast_aot_arg<random::_lambda_random_111_1 *>::to(*__context__,__context__->abiArguments()[0]);
-    _Func_lambda_random_111_1Tickfinalizer_a949ea6b2586918a(__context__, arg___this);
+    _Func_lambda_random_111_1Tickfinalizer_b0b28f89f8fdfa94(__context__, arg___this);
     return v_zero();
 }
-static vec4f __wrap_each_random_uint_afea9e974e8227bf ( Context * __context__ ) {
+static vec4f __wrap_each_random_uint_fb6a92a6bb874156 ( Context * __context__ ) {
     int32_t arg_rnd_seed = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[0]);
-    *((Sequence DAS_COMMENT((uint32_t)) *) __context__->abiCMRES) = each_random_uint_afea9e974e8227bf(__context__, arg_rnd_seed);
+    *((Sequence DAS_COMMENT((uint32_t)) *) __context__->abiCMRES) = each_random_uint_fb6a92a6bb874156(__context__, arg_rnd_seed);
     return v_zero();
 }
 static vec4f __wrap___init_script ( Context * __context__ ) {
@@ -210,13 +210,13 @@ static vec4f __wrap___init_script ( Context * __context__ ) {
 #pragma optimize("", off)
 struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };
 static AotFunction functions[] = {
-    { 0x390bb07ee4f51e50, false, (void*)&_FuncrandomTickrandom_uintTick15141358123050100739_ace3444e720a3102, &__wrap__FuncrandomTickrandom_uintTick15141358123050100739_ace3444e720a3102 },
-    { 0x78e003330fac06f1, false, (void*)&finalize_4ae6526745d6b78f, &__wrap_finalize_4ae6526745d6b78f },
+    { 0x76cda64f6dddfd9e, false, (void*)&_FuncrandomTickrandom_uintTick15141358123050100739_eed954c1588766f5, &__wrap__FuncrandomTickrandom_uintTick15141358123050100739_eed954c1588766f5 },
+    { 0x2c9511fb6b1e0f3b, false, (void*)&finalize_11ee8d03ff30a388, &__wrap_finalize_11ee8d03ff30a388 },
     { 0xbdd618fbc7ac3e7d, true, (void*)&_FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9, &__wrap__FuncbuiltinTickeachTick9663565701927713696_aee705fe23b1c7b9 },
-    { 0x6fb77c0f7353e48d, false, (void*)&_FuncrandomTickrandom_seedTick15287272150245073176_dd30826a0cea51ed, &__wrap__FuncrandomTickrandom_seedTick15287272150245073176_dd30826a0cea51ed },
-    { 0xabd94a563e16633e, false, (void*)&_Func_lambda_random_111_1Tickfunction_f401add82667d26, &__wrap__Func_lambda_random_111_1Tickfunction_f401add82667d26 },
-    { 0xc930f58f7e2fe2df, false, (void*)&_Func_lambda_random_111_1Tickfinalizer_a949ea6b2586918a, &__wrap__Func_lambda_random_111_1Tickfinalizer_a949ea6b2586918a },
-    { 0x60d5f8aa8ce7975b, true, (void*)&each_random_uint_afea9e974e8227bf, &__wrap_each_random_uint_afea9e974e8227bf },
+    { 0xfd37050dd7eb860a, false, (void*)&_FuncrandomTickrandom_seedTick15287272150245073176_6991510ddb1b5a99, &__wrap__FuncrandomTickrandom_seedTick15287272150245073176_6991510ddb1b5a99 },
+    { 0x990697bbb8b21ac0, false, (void*)&_Func_lambda_random_111_1Tickfunction_6a0acd13806b1cbe, &__wrap__Func_lambda_random_111_1Tickfunction_6a0acd13806b1cbe },
+    { 0x40f9e0becfe08467, false, (void*)&_Func_lambda_random_111_1Tickfinalizer_b0b28f89f8fdfa94, &__wrap__Func_lambda_random_111_1Tickfinalizer_b0b28f89f8fdfa94 },
+    { 0xb79176265f3296f2, true, (void*)&each_random_uint_fb6a92a6bb874156, &__wrap_each_random_uint_fb6a92a6bb874156 },
 };
 #pragma optimize("", on)
 
