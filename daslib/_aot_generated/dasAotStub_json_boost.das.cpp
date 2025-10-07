@@ -30,6 +30,7 @@
  // require macro_boost
  // require defer
  // require apply
+ // require static_let
  // require json_boost
 
 #if defined(_MSC_VER)
@@ -71,6 +72,7 @@ namespace _anon_14538537767599647147 {
 
 namespace json_boost { struct BetterJsonMacro; };
 namespace json_boost { struct JsonReader; };
+namespace json_boost { struct JsonFieldState; };
 namespace ast { struct AstFunctionAnnotation; };
 namespace ast { struct AstBlockAnnotation; };
 namespace ast { struct AstStructureAnnotation; };
@@ -88,7 +90,7 @@ namespace ast { struct AstEnumerationAnnotation; };
 namespace ast { struct AstVisitor; };
 namespace json { struct JsonValue; };
 namespace json { struct TokenAt; };
-namespace json { struct _lambda_json_99_1; };
+namespace json { struct _lambda_json_141_1; };
 namespace ast_boost { struct MacroMacro; };
 namespace ast_boost { struct TagFunctionAnnotation; };
 namespace ast_boost { struct TagStructureAnnotation; };
@@ -158,6 +160,7 @@ namespace macro_boost { struct ReturnSkipLockcheck; };
 namespace defer { struct DeferMacro; };
 namespace defer { struct DeferDeleteMacro; };
 namespace apply { struct ApplyMacro; };
+namespace static_let { struct StaticLetMacro; };
 // unused enumeration CompilationError
 // unused enumeration ConstMatters
 // unused enumeration RefMatters
@@ -259,11 +262,11 @@ struct AstReaderMacro {
 namespace json {
 
 struct JsonValue {
-    AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> value;
+    AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> value;
 };
 }
 // unused structure TokenAt
-// unused structure _lambda_json_99_1
+// unused structure _lambda_json_141_1
 // unused structure MacroMacro
 // unused structure TagFunctionAnnotation
 // unused structure TagStructureAnnotation
@@ -333,6 +336,7 @@ struct JsonValue {
 // unused structure DeferMacro
 // unused structure DeferDeleteMacro
 // unused structure ApplyMacro
+// unused structure StaticLetMacro
 namespace json_boost {
 
 struct BetterJsonMacro {
@@ -353,11 +357,17 @@ struct JsonReader {
     Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstReaderMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprReader> const )) visit;
 };
 }
-extern TypeInfo __type_info__8d8d8008262e16ec;
-extern TypeInfo __type_info__b68d800849332aec;
+namespace json_boost {
 
-TypeInfo __type_info__8d8d8008262e16ec = { Type::tInt64, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<int64_t>::size, UINT64_C(0x8d8d8008262e16ec) };
-TypeInfo __type_info__b68d800849332aec = { Type::tUInt64, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr, 60, TypeSize<uint64_t>::size, UINT64_C(0xb68d800849332aec) };
+struct JsonFieldState {
+    char * argName;
+    bool enumAsInt;
+    bool unescape;
+    bool embed;
+    bool optional;
+};
+}
+
 
 static void resolveTypeInfoAnnotations()
 {
@@ -367,521 +377,569 @@ static void resolveTypeInfoAnnotations()
     }
 }
 
-TypeInfo * __tinfo_0[1] = { &__type_info__8d8d8008262e16ec };
-TypeInfo * __tinfo_1[1] = { &__type_info__b68d800849332aec };
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_42a1594b8ce5f90a ( Context * __context__, TArray<ast::AstVariantMacro *> & __Arr_rename_at_181_0, ast::AstVariantMacro * __value_rename_at_181_1 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a504fdd4d2585454 ( Context * __context__, json_boost::BetterJsonMacro const  & __cl_rename_at_116_2 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_d013d9b30ff96e9d ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_63e6deea4cedeb9e ( Context * __context__, json_boost::JsonReader const  & __cl_rename_at_116_5 );
-inline json::JsonValue * _FuncQmarkSqblSqbr_3538a35cc5ccc9d5 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_21_10, char * const  __key_rename_at_21_11 );
-inline json::JsonValue * _FuncQmarkSqblSqbr_5655a09dd3be2073 ( Context * __context__, json::JsonValue * __a_rename_at_26_12, char * const  __key_rename_at_26_13 );
-inline json::JsonValue * _FuncQmarkDot_3538a35cc5ccc9d5 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_31_14, char * const  __key_rename_at_31_15 );
-inline json::JsonValue * _FuncQmarkDot_5655a09dd3be2073 ( Context * __context__, json::JsonValue * __a_rename_at_36_16, char * const  __key_rename_at_36_17 );
-inline json::JsonValue * _FuncQmarkSqblSqbr_ba0b0aab6632dd31 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_41_18, int32_t __idx_rename_at_41_19 );
-inline json::JsonValue * _FuncQmarkSqblSqbr_d744859b79ee77ab ( Context * __context__, json::JsonValue * __a_rename_at_46_20, int32_t __idx_rename_at_46_21 );
-inline double _FuncQmarkQmark_11719d2be16bd01 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_22, double __val_rename_at_51_23 );
-inline float _FuncQmarkQmark_233f48b50ce5f404 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_56_24, float __val_rename_at_56_25 );
-inline int8_t _FuncQmarkQmark_1a8257b5434aa8b3 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_61_26, int8_t __val_rename_at_61_27 );
-inline int16_t _FuncQmarkQmark_f62e6510f721332c ( Context * __context__, json::JsonValue const  * const  __a_rename_at_66_28, int16_t __val_rename_at_66_29 );
-inline int32_t _FuncQmarkQmark_6a40c116b1d48e91 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_71_30, int32_t __val_rename_at_71_31 );
-inline int64_t _FuncQmarkQmark_e763b5dc20b3213 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_76_32, int64_t __val_rename_at_76_33 );
-inline uint8_t _FuncQmarkQmark_e5a6fe7b7f0aecc6 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_81_34, uint8_t __val_rename_at_81_35 );
-inline uint16_t _FuncQmarkQmark_b339f9b2027db27b ( Context * __context__, json::JsonValue const  * const  __a_rename_at_86_36, uint16_t __val_rename_at_86_37 );
-inline uint32_t _FuncQmarkQmark_bab9e0c43667d51a ( Context * __context__, json::JsonValue const  * const  __a_rename_at_91_38, uint32_t __val_rename_at_91_39 );
-inline uint64_t _FuncQmarkQmark_56f43cacc498853c ( Context * __context__, json::JsonValue const  * const  __a_rename_at_96_40, uint64_t __val_rename_at_96_41 );
-inline bool _FuncQmarkQmark_4fa1031aa0e66319 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_101_42, bool __val_rename_at_101_43 );
-inline char * _FuncQmarkQmark_5415a6b0ff5b4eb5 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_106_44, char * const  __val_rename_at_106_45 );
-inline AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> const  * _FuncQmarkDotTickvalue_7c5354fba05537e2 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_111_46 );
-inline AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> * _FuncQmarkDotTickvalue_2bdf5bca6f9d0002 ( Context * __context__, json::JsonValue * __a_rename_at_116_47 );
-inline json::JsonValue * JV_de08d1a11663707 ( Context * __context__, float __v_rename_at_470_48 );
-inline json::JsonValue * JV_2fa74720cd155930 ( Context * __context__, int32_t __v_rename_at_474_49 );
-inline json::JsonValue * JV_549d699b656608a2 ( Context * __context__, Bitfield __v_rename_at_478_50 );
-inline json::JsonValue * JV_840ec78279ac852d ( Context * __context__, int8_t __val_rename_at_482_51 );
-inline json::JsonValue * JV_526f504129917241 ( Context * __context__, uint8_t __val_rename_at_486_52 );
-inline json::JsonValue * JV_17760da7cd1ea0ee ( Context * __context__, int16_t __val_rename_at_490_53 );
-inline json::JsonValue * JV_30573b250fcf268b ( Context * __context__, uint16_t __val_rename_at_494_54 );
-inline json::JsonValue * JV_c85629fe70fc95b5 ( Context * __context__, uint32_t __val_rename_at_498_55 );
-inline json::JsonValue * JV_b0de7f0f7332ba2d ( Context * __context__, int64_t __val_rename_at_502_56 );
-inline json::JsonValue * JV_8425ea1d753a21fb ( Context * __context__, uint64_t __val_rename_at_510_57 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_f48c2068778f40fc ( Context * __context__, TArray<ast::AstVariantMacro *> & __Arr_rename_at_193_0, ast::AstVariantMacro * __value_rename_at_193_1 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_cf0160de1d445158 ( Context * __context__, json_boost::BetterJsonMacro const  & __cl_rename_at_116_2 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037 ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b6fac9ff288281f8 ( Context * __context__, json_boost::JsonReader const  & __cl_rename_at_116_5 );
+inline double _Funcjson_boostTicknull_coalescingTick1995797521634879908_8fbbb4240d44885d ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_6, double __val_rename_at_51_7 );
+inline float _Funcjson_boostTicknull_coalescingTick1995797521634879908_ead902b85619d258 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_8, float __val_rename_at_51_9 );
+inline int8_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_d0093ecc91229ecc ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_10, int8_t __val_rename_at_51_11 );
+inline int16_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_d6faf761491ca623 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_12, int16_t __val_rename_at_51_13 );
+inline int32_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_744dd4d9925d97b1 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_14, int32_t __val_rename_at_51_15 );
+inline int64_t _Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_819dc553133662ca ( Context * __context__, json::JsonValue const  * const  __a_rename_at_63_16, int64_t __val_rename_at_63_17 );
+inline uint8_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_27b76fd8a8dd527 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_18, uint8_t __val_rename_at_51_19 );
+inline uint16_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_5daf3d80d07511e ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_20, uint16_t __val_rename_at_51_21 );
+inline uint32_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_6e9046b44d12b5eb ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_22, uint32_t __val_rename_at_51_23 );
+inline uint64_t _Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_8023ba51029c7098 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_63_24, uint64_t __val_rename_at_63_25 );
+inline json::JsonValue * _FuncQmarkSqblSqbr_e9328f6170fe6cb3 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_21_30, char * const  __key_rename_at_21_31 );
+inline json::JsonValue * _FuncQmarkSqblSqbr_3be067089959d28e ( Context * __context__, json::JsonValue * __a_rename_at_26_32, char * const  __key_rename_at_26_33 );
+inline json::JsonValue * _FuncQmarkDot_e9328f6170fe6cb3 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_31_34, char * const  __key_rename_at_31_35 );
+inline json::JsonValue * _FuncQmarkDot_3be067089959d28e ( Context * __context__, json::JsonValue * __a_rename_at_36_36, char * const  __key_rename_at_36_37 );
+inline json::JsonValue * _FuncQmarkSqblSqbr_b2d602c94fddb7f ( Context * __context__, json::JsonValue const  * const  __a_rename_at_41_38, int32_t __idx_rename_at_41_39 );
+inline json::JsonValue * _FuncQmarkSqblSqbr_36044daf219b4cbe ( Context * __context__, json::JsonValue * __a_rename_at_46_40, int32_t __idx_rename_at_46_41 );
+inline double _FuncQmarkQmark_7332895b1643f71c ( Context * __context__, json::JsonValue const  * const  __a_rename_at_77_42, double __val_rename_at_77_43 );
+inline float _FuncQmarkQmark_6f06728cdb5e60fe ( Context * __context__, json::JsonValue const  * const  __a_rename_at_82_44, float __val_rename_at_82_45 );
+inline int8_t _FuncQmarkQmark_e717a5d55b585f35 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_87_46, int8_t __val_rename_at_87_47 );
+inline int16_t _FuncQmarkQmark_fcd9c5165d602e50 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_92_48, int16_t __val_rename_at_92_49 );
+inline int32_t _FuncQmarkQmark_25e128ab4bfa5aed ( Context * __context__, json::JsonValue const  * const  __a_rename_at_97_50, int32_t __val_rename_at_97_51 );
+inline int64_t _FuncQmarkQmark_ed8e2eede721bca7 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_102_52, int64_t __val_rename_at_102_53 );
+inline uint8_t _FuncQmarkQmark_f5a4edc5eab56f39 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_107_54, uint8_t __val_rename_at_107_55 );
+inline uint16_t _FuncQmarkQmark_827e6b2c09f2ea08 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_112_56, uint16_t __val_rename_at_112_57 );
+inline uint32_t _FuncQmarkQmark_b8e048755988acd1 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_117_58, uint32_t __val_rename_at_117_59 );
+inline uint64_t _FuncQmarkQmark_33f823af48560a7 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_122_60, uint64_t __val_rename_at_122_61 );
+inline bool _FuncQmarkQmark_e610d3205f9cd42d ( Context * __context__, json::JsonValue const  * const  __a_rename_at_127_62, bool __val_rename_at_127_63 );
+inline char * _FuncQmarkQmark_72f652f743dfb7f ( Context * __context__, json::JsonValue const  * const  __a_rename_at_132_64, char * const  __val_rename_at_132_65 );
+inline AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> const  * _FuncQmarkDotTickvalue_851df370d2854bc6 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_137_66 );
+inline AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> * _FuncQmarkDotTickvalue_85758251285208c6 ( Context * __context__, json::JsonValue * __a_rename_at_142_67 );
+inline json_boost::JsonFieldState parse_json_annotation_f52572bc7c71335d ( Context * __context__, char * const  __name_rename_at_385_68, TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const  & __annotation_rename_at_385_69 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_42a1594b8ce5f90a ( Context * __context__, TArray<ast::AstVariantMacro *> &  __Arr_rename_at_181_0, ast::AstVariantMacro * __value_rename_at_181_1 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_f48c2068778f40fc ( Context * __context__, TArray<ast::AstVariantMacro *> &  __Arr_rename_at_193_0, ast::AstVariantMacro * __value_rename_at_193_1 )
 {
-    das_copy(__Arr_rename_at_181_0(builtin_array_push_back(das_arg<TArray<ast::AstVariantMacro *>>::pass(__Arr_rename_at_181_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_1);
+    das_copy(__Arr_rename_at_193_0(builtin_array_push_back(das_arg<TArray<ast::AstVariantMacro *>>::pass(__Arr_rename_at_193_0),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_193_1);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_a504fdd4d2585454 ( Context * __context__, json_boost::BetterJsonMacro const  &  __cl_rename_at_116_2 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_cf0160de1d445158 ( Context * __context__, json_boost::BetterJsonMacro const  &  __cl_rename_at_116_2 )
 {
-    return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti))).getStructType())));
+    return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_2.__rtti),__FILE__,__LINE__)).getStructType())));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_d013d9b30ff96e9d ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_181_3, ast::AstReaderMacro * __value_rename_at_181_4 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037 ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 )
 {
-    das_copy(__Arr_rename_at_181_3(builtin_array_push_back(das_arg<TArray<ast::AstReaderMacro *>>::pass(__Arr_rename_at_181_3),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_181_4);
+    das_copy(__Arr_rename_at_193_3(builtin_array_push_back(das_arg<TArray<ast::AstReaderMacro *>>::pass(__Arr_rename_at_193_3),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_193_4);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_63e6deea4cedeb9e ( Context * __context__, json_boost::JsonReader const  &  __cl_rename_at_116_5 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_b6fac9ff288281f8 ( Context * __context__, json_boost::JsonReader const  &  __cl_rename_at_116_5 )
 {
-    return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti))).getStructType())));
+    return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti),__FILE__,__LINE__)).getStructType())));
 }
 
-inline json::JsonValue * _FuncQmarkSqblSqbr_3538a35cc5ccc9d5 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_21_10, char * const  __key_rename_at_21_11 )
+inline double _Funcjson_boostTicknull_coalescingTick1995797521634879908_8fbbb4240d44885d ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_6, double __val_rename_at_51_7 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_21_10 != nullptr) && das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_21_10->value)) ? das_auto_cast<json::JsonValue * const >::cast(das_null_coalescing<json::JsonValue *>::get(TTable<char *,json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_21_10->value,__context__)),__key_rename_at_21_11,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue * const >::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
+    if ( __a_rename_at_51_6 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_6->value) )
+        {
+            return das_auto_cast<double>::cast(double(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_6->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_6->value) )
+        {
+            return das_auto_cast<double>::cast(double(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_6->value,__context__)));
+        };
+    };
+    return das_auto_cast<double>::cast(__val_rename_at_51_7);
 }
 
-inline json::JsonValue * _FuncQmarkSqblSqbr_5655a09dd3be2073 ( Context * __context__, json::JsonValue * __a_rename_at_26_12, char * const  __key_rename_at_26_13 )
+inline float _Funcjson_boostTicknull_coalescingTick1995797521634879908_ead902b85619d258 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_8, float __val_rename_at_51_9 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_26_12 != nullptr) && das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_26_12->value)) ? das_auto_cast<json::JsonValue *>::cast(das_null_coalescing<json::JsonValue *>::get(TTable<char *,json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_26_12->value,__context__)),__key_rename_at_26_13,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue *>::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
+    if ( __a_rename_at_51_8 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_8->value) )
+        {
+            return das_auto_cast<float>::cast(float(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_8->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_8->value) )
+        {
+            return das_auto_cast<float>::cast(float(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_8->value,__context__)));
+        };
+    };
+    return das_auto_cast<float>::cast(__val_rename_at_51_9);
 }
 
-inline json::JsonValue * _FuncQmarkDot_3538a35cc5ccc9d5 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_31_14, char * const  __key_rename_at_31_15 )
+inline int8_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_d0093ecc91229ecc ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_10, int8_t __val_rename_at_51_11 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_31_14 != nullptr) && das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_31_14->value)) ? das_auto_cast<json::JsonValue * const >::cast(das_null_coalescing<json::JsonValue *>::get(TTable<char *,json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_31_14->value,__context__)),__key_rename_at_31_15,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue * const >::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
+    if ( __a_rename_at_51_10 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_10->value) )
+        {
+            return das_auto_cast<int8_t>::cast(int8_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_10->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_10->value) )
+        {
+            return das_auto_cast<int8_t>::cast(int8_t(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_10->value,__context__)));
+        };
+    };
+    return das_auto_cast<int8_t>::cast(__val_rename_at_51_11);
 }
 
-inline json::JsonValue * _FuncQmarkDot_5655a09dd3be2073 ( Context * __context__, json::JsonValue * __a_rename_at_36_16, char * const  __key_rename_at_36_17 )
+inline int16_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_d6faf761491ca623 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_12, int16_t __val_rename_at_51_13 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_36_16 != nullptr) && das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_36_16->value)) ? das_auto_cast<json::JsonValue *>::cast(das_null_coalescing<json::JsonValue *>::get(TTable<char *,json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_36_16->value,__context__)),__key_rename_at_36_17,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue *>::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
+    if ( __a_rename_at_51_12 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_12->value) )
+        {
+            return das_auto_cast<int16_t>::cast(int16_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_12->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_12->value) )
+        {
+            return das_auto_cast<int16_t>::cast(int16_t(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_12->value,__context__)));
+        };
+    };
+    return das_auto_cast<int16_t>::cast(__val_rename_at_51_13);
 }
 
-inline json::JsonValue * _FuncQmarkSqblSqbr_ba0b0aab6632dd31 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_41_18, int32_t __idx_rename_at_41_19 )
+inline int32_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_744dd4d9925d97b1 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_14, int32_t __val_rename_at_51_15 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_41_18 != nullptr) && das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_41_18->value)) ? das_auto_cast<json::JsonValue * const >::cast(das_null_coalescing<json::JsonValue *>::get(TArray<json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_41_18->value,__context__)),__idx_rename_at_41_19,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue * const >::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
+    if ( __a_rename_at_51_14 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_14->value) )
+        {
+            return das_auto_cast<int32_t>::cast(int32_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_14->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_14->value) )
+        {
+            return das_auto_cast<int32_t>::cast(int32_t(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_14->value,__context__)));
+        };
+    };
+    return das_auto_cast<int32_t>::cast(__val_rename_at_51_15);
 }
 
-inline json::JsonValue * _FuncQmarkSqblSqbr_d744859b79ee77ab ( Context * __context__, json::JsonValue * __a_rename_at_46_20, int32_t __idx_rename_at_46_21 )
+inline int64_t _Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_819dc553133662ca ( Context * __context__, json::JsonValue const  * const  __a_rename_at_63_16, int64_t __val_rename_at_63_17 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_46_20 != nullptr) && das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_46_20->value)) ? das_auto_cast<json::JsonValue *>::cast(das_null_coalescing<json::JsonValue *>::get(TArray<json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_46_20->value,__context__)),__idx_rename_at_46_21,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue *>::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
+    if ( __a_rename_at_63_16 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_63_16->value) )
+        {
+            return das_auto_cast<int64_t>::cast(int64_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_63_16->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_63_16->value) )
+        {
+            return das_auto_cast<int64_t>::cast(int64_t(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_63_16->value,__context__)));
+        } else if ( das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_63_16->value) )
+        {
+            return das_auto_cast<int64_t>::cast(string_to_int64(das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_63_16->value,__context__),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))));
+        };
+    };
+    return das_auto_cast<int64_t>::cast(__val_rename_at_63_17);
 }
 
-inline double _FuncQmarkQmark_11719d2be16bd01 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_22, double __val_rename_at_51_23 )
+inline uint8_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_27b76fd8a8dd527 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_18, uint8_t __val_rename_at_51_19 )
 {
-    return das_auto_cast<double>::cast(((__a_rename_at_51_22 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_51_22->value)) ? das_auto_cast<double>::cast(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_51_22->value,__context__)) : das_auto_cast<double>::cast(__val_rename_at_51_23));
+    if ( __a_rename_at_51_18 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_18->value) )
+        {
+            return das_auto_cast<uint8_t>::cast(uint8_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_18->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_18->value) )
+        {
+            return das_auto_cast<uint8_t>::cast(uint8_t(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_18->value,__context__)));
+        };
+    };
+    return das_auto_cast<uint8_t>::cast(__val_rename_at_51_19);
 }
 
-inline float _FuncQmarkQmark_233f48b50ce5f404 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_56_24, float __val_rename_at_56_25 )
+inline uint16_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_5daf3d80d07511e ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_20, uint16_t __val_rename_at_51_21 )
 {
-    return das_auto_cast<float>::cast(((__a_rename_at_56_24 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_56_24->value)) ? das_auto_cast<float>::cast(float(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_56_24->value,__context__))) : das_auto_cast<float>::cast(__val_rename_at_56_25));
+    if ( __a_rename_at_51_20 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_20->value) )
+        {
+            return das_auto_cast<uint16_t>::cast(uint16_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_20->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_20->value) )
+        {
+            return das_auto_cast<uint16_t>::cast(uint16_t(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_20->value,__context__)));
+        };
+    };
+    return das_auto_cast<uint16_t>::cast(__val_rename_at_51_21);
 }
 
-inline int8_t _FuncQmarkQmark_1a8257b5434aa8b3 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_61_26, int8_t __val_rename_at_61_27 )
+inline uint32_t _Funcjson_boostTicknull_coalescingTick1995797521634879908_6e9046b44d12b5eb ( Context * __context__, json::JsonValue const  * const  __a_rename_at_51_22, uint32_t __val_rename_at_51_23 )
 {
-    return das_auto_cast<int8_t>::cast(((__a_rename_at_61_26 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_61_26->value)) ? das_auto_cast<int8_t>::cast(int8_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_61_26->value,__context__))) : das_auto_cast<int8_t>::cast(__val_rename_at_61_27));
+    if ( __a_rename_at_51_22 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_22->value) )
+        {
+            return das_auto_cast<uint32_t>::cast(uint32_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_22->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_51_22->value) )
+        {
+            return das_auto_cast<uint32_t>::cast(uint32_t(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_51_22->value,__context__)));
+        };
+    };
+    return das_auto_cast<uint32_t>::cast(__val_rename_at_51_23);
 }
 
-inline int16_t _FuncQmarkQmark_f62e6510f721332c ( Context * __context__, json::JsonValue const  * const  __a_rename_at_66_28, int16_t __val_rename_at_66_29 )
+inline uint64_t _Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_8023ba51029c7098 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_63_24, uint64_t __val_rename_at_63_25 )
 {
-    return das_auto_cast<int16_t>::cast(((__a_rename_at_66_28 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_66_28->value)) ? das_auto_cast<int16_t>::cast(int16_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_66_28->value,__context__))) : das_auto_cast<int16_t>::cast(__val_rename_at_66_29));
+    if ( __a_rename_at_63_24 != nullptr )
+    {
+        if ( das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_63_24->value) )
+        {
+            return das_auto_cast<uint64_t>::cast(uint64_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_63_24->value,__context__)));
+        } else if ( das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_63_24->value) )
+        {
+            return das_auto_cast<uint64_t>::cast(uint64_t(das_get_auto_variant_field<int64_t,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_63_24->value,__context__)));
+        } else if ( das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_63_24->value) )
+        {
+            return das_auto_cast<uint64_t>::cast(string_to_uint64(das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_63_24->value,__context__),__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))));
+        };
+    };
+    return das_auto_cast<uint64_t>::cast(__val_rename_at_63_25);
 }
 
-inline int32_t _FuncQmarkQmark_6a40c116b1d48e91 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_71_30, int32_t __val_rename_at_71_31 )
+inline json::JsonValue * _FuncQmarkSqblSqbr_e9328f6170fe6cb3 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_21_30, char * const  __key_rename_at_21_31 )
 {
-    return das_auto_cast<int32_t>::cast(((__a_rename_at_71_30 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_71_30->value)) ? das_auto_cast<int32_t>::cast(int32_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_71_30->value,__context__))) : das_auto_cast<int32_t>::cast(__val_rename_at_71_31));
+    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_21_30 != nullptr) && das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_21_30->value)) ? das_auto_cast<json::JsonValue * const >::cast(das_null_coalescing<json::JsonValue *>::get(TTable<char *,json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_21_30->value,__context__)),__key_rename_at_21_31,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue * const >::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
 }
 
-inline int64_t _FuncQmarkQmark_e763b5dc20b3213 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_76_32, int64_t __val_rename_at_76_33 )
+inline json::JsonValue * _FuncQmarkSqblSqbr_3be067089959d28e ( Context * __context__, json::JsonValue * __a_rename_at_26_32, char * const  __key_rename_at_26_33 )
 {
-    return das_auto_cast<int64_t>::cast(((__a_rename_at_76_32 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_76_32->value)) ? das_auto_cast<int64_t>::cast(int64_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_76_32->value,__context__))) : das_auto_cast<int64_t>::cast(__val_rename_at_76_33));
+    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_26_32 != nullptr) && das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_26_32->value)) ? das_auto_cast<json::JsonValue *>::cast(das_null_coalescing<json::JsonValue *>::get(TTable<char *,json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_26_32->value,__context__)),__key_rename_at_26_33,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue *>::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
 }
 
-inline uint8_t _FuncQmarkQmark_e5a6fe7b7f0aecc6 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_81_34, uint8_t __val_rename_at_81_35 )
+inline json::JsonValue * _FuncQmarkDot_e9328f6170fe6cb3 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_31_34, char * const  __key_rename_at_31_35 )
 {
-    return das_auto_cast<uint8_t>::cast(((__a_rename_at_81_34 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_81_34->value)) ? das_auto_cast<uint8_t>::cast(uint8_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_81_34->value,__context__))) : das_auto_cast<uint8_t>::cast(__val_rename_at_81_35));
+    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_31_34 != nullptr) && das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_31_34->value)) ? das_auto_cast<json::JsonValue * const >::cast(das_null_coalescing<json::JsonValue *>::get(TTable<char *,json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_31_34->value,__context__)),__key_rename_at_31_35,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue * const >::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
 }
 
-inline uint16_t _FuncQmarkQmark_b339f9b2027db27b ( Context * __context__, json::JsonValue const  * const  __a_rename_at_86_36, uint16_t __val_rename_at_86_37 )
+inline json::JsonValue * _FuncQmarkDot_3be067089959d28e ( Context * __context__, json::JsonValue * __a_rename_at_36_36, char * const  __key_rename_at_36_37 )
 {
-    return das_auto_cast<uint16_t>::cast(((__a_rename_at_86_36 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_86_36->value)) ? das_auto_cast<uint16_t>::cast(uint16_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_86_36->value,__context__))) : das_auto_cast<uint16_t>::cast(__val_rename_at_86_37));
+    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_36_36 != nullptr) && das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_36_36->value)) ? das_auto_cast<json::JsonValue *>::cast(das_null_coalescing<json::JsonValue *>::get(TTable<char *,json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TTable<char *,json::JsonValue *>,0,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_36_36->value,__context__)),__key_rename_at_36_37,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue *>::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
 }
 
-inline uint32_t _FuncQmarkQmark_bab9e0c43667d51a ( Context * __context__, json::JsonValue const  * const  __a_rename_at_91_38, uint32_t __val_rename_at_91_39 )
+inline json::JsonValue * _FuncQmarkSqblSqbr_b2d602c94fddb7f ( Context * __context__, json::JsonValue const  * const  __a_rename_at_41_38, int32_t __idx_rename_at_41_39 )
 {
-    return das_auto_cast<uint32_t>::cast(((__a_rename_at_91_38 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_91_38->value)) ? das_auto_cast<uint32_t>::cast(uint32_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_91_38->value,__context__))) : das_auto_cast<uint32_t>::cast(__val_rename_at_91_39));
+    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_41_38 != nullptr) && das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_41_38->value)) ? das_auto_cast<json::JsonValue * const >::cast(das_null_coalescing<json::JsonValue *>::get(TArray<json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_41_38->value,__context__)),__idx_rename_at_41_39,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue * const >::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
 }
 
-inline uint64_t _FuncQmarkQmark_56f43cacc498853c ( Context * __context__, json::JsonValue const  * const  __a_rename_at_96_40, uint64_t __val_rename_at_96_41 )
+inline json::JsonValue * _FuncQmarkSqblSqbr_36044daf219b4cbe ( Context * __context__, json::JsonValue * __a_rename_at_46_40, int32_t __idx_rename_at_46_41 )
 {
-    return das_auto_cast<uint64_t>::cast(((__a_rename_at_96_40 != nullptr) && das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_96_40->value)) ? das_auto_cast<uint64_t>::cast(uint64_t(das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_96_40->value,__context__))) : das_auto_cast<uint64_t>::cast(__val_rename_at_96_41));
+    return das_auto_cast<json::JsonValue *>::cast(((__a_rename_at_46_40 != nullptr) && das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_46_40->value)) ? das_auto_cast<json::JsonValue *>::cast(das_null_coalescing<json::JsonValue *>::get(TArray<json::JsonValue *>::safe_index(&(das_get_auto_variant_field<TArray<json::JsonValue *>,1,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_46_40->value,__context__)),__idx_rename_at_46_41,__context__),das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877))))) : das_auto_cast<json::JsonValue *>::cast(das_invoke_function<json::JsonValue *>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*@json::JVNull*/ 0xf1223cf59835e877)))));
 }
 
-inline bool _FuncQmarkQmark_4fa1031aa0e66319 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_101_42, bool __val_rename_at_101_43 )
+inline double _FuncQmarkQmark_7332895b1643f71c ( Context * __context__, json::JsonValue const  * const  __a_rename_at_77_42, double __val_rename_at_77_43 )
 {
-    return das_auto_cast<bool>::cast(((__a_rename_at_101_42 != nullptr) && das_get_auto_variant_field<bool,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_101_42->value)) ? das_auto_cast<bool>::cast(das_get_auto_variant_field<bool,4,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_101_42->value,__context__)) : das_auto_cast<bool>::cast(__val_rename_at_101_43));
+    return das_auto_cast<double>::cast(_Funcjson_boostTicknull_coalescingTick1995797521634879908_8fbbb4240d44885d(__context__,__a_rename_at_77_42,__val_rename_at_77_43));
 }
 
-inline char * _FuncQmarkQmark_5415a6b0ff5b4eb5 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_106_44, char * const  __val_rename_at_106_45 )
+inline float _FuncQmarkQmark_6f06728cdb5e60fe ( Context * __context__, json::JsonValue const  * const  __a_rename_at_82_44, float __val_rename_at_82_45 )
 {
-    return das_auto_cast<char *>::cast(((__a_rename_at_106_44 != nullptr) && das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::is(__a_rename_at_106_44->value)) ? das_auto_cast<char * const >::cast(das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::as(__a_rename_at_106_44->value,__context__)) : das_auto_cast<char * const >::cast(__val_rename_at_106_45));
+    return das_auto_cast<float>::cast(_Funcjson_boostTicknull_coalescingTick1995797521634879908_ead902b85619d258(__context__,__a_rename_at_82_44,__val_rename_at_82_45));
 }
 
-inline AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> const  * _FuncQmarkDotTickvalue_7c5354fba05537e2 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_111_46 )
+inline int8_t _FuncQmarkQmark_e717a5d55b585f35 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_87_46, int8_t __val_rename_at_87_47 )
 {
-    return das_auto_cast<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> const  *>::cast(das_safe_navigation<json::JsonValue const ,AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>,&json::JsonValue::value>::get(__a_rename_at_111_46));
+    return das_auto_cast<int8_t>::cast(_Funcjson_boostTicknull_coalescingTick1995797521634879908_d0093ecc91229ecc(__context__,__a_rename_at_87_46,__val_rename_at_87_47));
 }
 
-inline AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> * _FuncQmarkDotTickvalue_2bdf5bca6f9d0002 ( Context * __context__, json::JsonValue * __a_rename_at_116_47 )
+inline int16_t _FuncQmarkQmark_fcd9c5165d602e50 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_92_48, int16_t __val_rename_at_92_49 )
 {
-    return das_auto_cast<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> *>::cast(das_safe_navigation<json::JsonValue,AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>,&json::JsonValue::value>::get(__a_rename_at_116_47));
+    return das_auto_cast<int16_t>::cast(_Funcjson_boostTicknull_coalescingTick1995797521634879908_d6faf761491ca623(__context__,__a_rename_at_92_48,__val_rename_at_92_49));
 }
 
-inline json::JsonValue * JV_de08d1a11663707 ( Context * __context__, float __v_rename_at_470_48 )
+inline int32_t _FuncQmarkQmark_25e128ab4bfa5aed ( Context * __context__, json::JsonValue const  * const  __a_rename_at_97_50, int32_t __val_rename_at_97_51 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_471;
-        das_zero(__mks_471);
-        das_move((__mks_471.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_471;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_471) = double(__v_rename_at_470_48);
-            return __mkv_471;
-        })())));
-        return __mks_471;
-    })())));
+    return das_auto_cast<int32_t>::cast(_Funcjson_boostTicknull_coalescingTick1995797521634879908_744dd4d9925d97b1(__context__,__a_rename_at_97_50,__val_rename_at_97_51));
 }
 
-inline json::JsonValue * JV_2fa74720cd155930 ( Context * __context__, int32_t __v_rename_at_474_49 )
+inline int64_t _FuncQmarkQmark_ed8e2eede721bca7 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_102_52, int64_t __val_rename_at_102_53 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_475;
-        das_zero(__mks_475);
-        das_move((__mks_475.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_475;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_475) = double(__v_rename_at_474_49);
-            return __mkv_475;
-        })())));
-        return __mks_475;
-    })())));
+    return das_auto_cast<int64_t>::cast(_Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_819dc553133662ca(__context__,__a_rename_at_102_52,__val_rename_at_102_53));
 }
 
-inline json::JsonValue * JV_549d699b656608a2 ( Context * __context__, Bitfield __v_rename_at_478_50 )
+inline uint8_t _FuncQmarkQmark_f5a4edc5eab56f39 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_107_54, uint8_t __val_rename_at_107_55 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_479;
-        das_zero(__mks_479);
-        das_move((__mks_479.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_479;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_479) = double(__v_rename_at_478_50);
-            return __mkv_479;
-        })())));
-        return __mks_479;
-    })())));
+    return das_auto_cast<uint8_t>::cast(_Funcjson_boostTicknull_coalescingTick1995797521634879908_27b76fd8a8dd527(__context__,__a_rename_at_107_54,__val_rename_at_107_55));
 }
 
-inline json::JsonValue * JV_840ec78279ac852d ( Context * __context__, int8_t __val_rename_at_482_51 )
+inline uint16_t _FuncQmarkQmark_827e6b2c09f2ea08 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_112_56, uint16_t __val_rename_at_112_57 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_483;
-        das_zero(__mks_483);
-        das_move((__mks_483.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_483;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_483) = double(__val_rename_at_482_51);
-            return __mkv_483;
-        })())));
-        return __mks_483;
-    })())));
+    return das_auto_cast<uint16_t>::cast(_Funcjson_boostTicknull_coalescingTick1995797521634879908_5daf3d80d07511e(__context__,__a_rename_at_112_56,__val_rename_at_112_57));
 }
 
-inline json::JsonValue * JV_526f504129917241 ( Context * __context__, uint8_t __val_rename_at_486_52 )
+inline uint32_t _FuncQmarkQmark_b8e048755988acd1 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_117_58, uint32_t __val_rename_at_117_59 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_487;
-        das_zero(__mks_487);
-        das_move((__mks_487.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_487;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_487) = double(__val_rename_at_486_52);
-            return __mkv_487;
-        })())));
-        return __mks_487;
-    })())));
+    return das_auto_cast<uint32_t>::cast(_Funcjson_boostTicknull_coalescingTick1995797521634879908_6e9046b44d12b5eb(__context__,__a_rename_at_117_58,__val_rename_at_117_59));
 }
 
-inline json::JsonValue * JV_17760da7cd1ea0ee ( Context * __context__, int16_t __val_rename_at_490_53 )
+inline uint64_t _FuncQmarkQmark_33f823af48560a7 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_122_60, uint64_t __val_rename_at_122_61 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_491;
-        das_zero(__mks_491);
-        das_move((__mks_491.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_491;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_491) = double(__val_rename_at_490_53);
-            return __mkv_491;
-        })())));
-        return __mks_491;
-    })())));
+    return das_auto_cast<uint64_t>::cast(_Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_8023ba51029c7098(__context__,__a_rename_at_122_60,__val_rename_at_122_61));
 }
 
-inline json::JsonValue * JV_30573b250fcf268b ( Context * __context__, uint16_t __val_rename_at_494_54 )
+inline bool _FuncQmarkQmark_e610d3205f9cd42d ( Context * __context__, json::JsonValue const  * const  __a_rename_at_127_62, bool __val_rename_at_127_63 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_495;
-        das_zero(__mks_495);
-        das_move((__mks_495.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_495;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_495) = double(__val_rename_at_494_54);
-            return __mkv_495;
-        })())));
-        return __mks_495;
-    })())));
+    return das_auto_cast<bool>::cast(((__a_rename_at_127_62 != nullptr) && das_get_auto_variant_field<bool,5,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_127_62->value)) ? das_auto_cast<bool>::cast(das_get_auto_variant_field<bool,5,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_127_62->value,__context__)) : das_auto_cast<bool>::cast(__val_rename_at_127_63));
 }
 
-inline json::JsonValue * JV_c85629fe70fc95b5 ( Context * __context__, uint32_t __val_rename_at_498_55 )
+inline char * _FuncQmarkQmark_72f652f743dfb7f ( Context * __context__, json::JsonValue const  * const  __a_rename_at_132_64, char * const  __val_rename_at_132_65 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_499;
-        das_zero(__mks_499);
-        das_move((__mks_499.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_499;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_499) = double(__val_rename_at_498_55);
-            return __mkv_499;
-        })())));
-        return __mks_499;
-    })())));
+    return das_auto_cast<char *>::cast(((__a_rename_at_132_64 != nullptr) && das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::is(__a_rename_at_132_64->value)) ? das_auto_cast<char * const >::cast(das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>::as(__a_rename_at_132_64->value,__context__)) : das_auto_cast<char * const >::cast(__val_rename_at_132_65));
 }
 
-inline json::JsonValue * JV_b0de7f0f7332ba2d ( Context * __context__, int64_t __val_rename_at_502_56 )
+inline AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> const  * _FuncQmarkDotTickvalue_851df370d2854bc6 ( Context * __context__, json::JsonValue const  * const  __a_rename_at_137_66 )
 {
-    return das_auto_cast<json::JsonValue *>::cast(((__val_rename_at_502_56 < INT64_C(-2147483648)) || (__val_rename_at_502_56 > INT64_C(2147483647))) ? das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_504;
-        das_zero(__mks_504);
-        das_move((__mks_504.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_504;
-            das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_504) = das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_0, cast<int64_t>::from(__val_rename_at_502_56)));
-            return __mkv_504;
-        })())));
-        return __mks_504;
-    })()))) : das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_506;
-        das_zero(__mks_506);
-        das_move((__mks_506.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_506;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_506) = double(__val_rename_at_502_56);
-            return __mkv_506;
-        })())));
-        return __mks_506;
-    })()))));
+    return das_auto_cast<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> const  *>::cast(das_safe_navigation<json::JsonValue const ,AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>,&json::JsonValue::value>::get(__a_rename_at_137_66));
 }
 
-inline json::JsonValue * JV_8425ea1d753a21fb ( Context * __context__, uint64_t __val_rename_at_510_57 )
+inline AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> * _FuncQmarkDotTickvalue_85758251285208c6 ( Context * __context__, json::JsonValue * __a_rename_at_142_67 )
 {
-    return das_auto_cast<json::JsonValue *>::cast((__val_rename_at_510_57 > UINT64_C(0xffffffff)) ? das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_512;
-        das_zero(__mks_512);
-        das_move((__mks_512.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_512;
-            das_get_auto_variant_field<char *,2,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_512) = das_string_builder(__context__,SimNode_AotInterop<1>(__tinfo_1, cast<uint64_t>::from(__val_rename_at_510_57)));
-            return __mkv_512;
-        })())));
-        return __mks_512;
-    })()))) : das_auto_cast<json::JsonValue *>::cast(das_ascend<json::JsonValue,json::JsonValue>::make(__context__,nullptr,(([&]() -> json::JsonValue {
-        json::JsonValue __mks_514;
-        das_zero(__mks_514);
-        das_move((__mks_514.value),((([&]() -> AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> {
-            AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> __mkv_514;
-            das_get_auto_variant_field<double,3,TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *>::set(__mkv_514) = double(__val_rename_at_510_57);
-            return __mkv_514;
-        })())));
-        return __mks_514;
-    })()))));
+    return das_auto_cast<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> *>::cast(das_safe_navigation<json::JsonValue,AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *>,&json::JsonValue::value>::get(__a_rename_at_142_67));
 }
-static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_42a1594b8ce5f90a ( Context * __context__ ) {
+
+inline json_boost::JsonFieldState parse_json_annotation_f52572bc7c71335d ( Context * __context__, char * const  __name_rename_at_385_68, TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const  &  __annotation_rename_at_385_69 )
+{
+    json_boost::JsonFieldState __fieldState_rename_at_386_70;das_zero(__fieldState_rename_at_386_70);
+    das_copy(__fieldState_rename_at_386_70.argName,__name_rename_at_385_68);
+    {
+        bool __need_loop_388 = true;
+        // ann: tuple<name:string;data:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any> aka RttiValue> const&
+        das_iterator<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const > __ann_iterator(__annotation_rename_at_385_69);
+        AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>> const  * __ann_rename_at_388_71;
+        __need_loop_388 = __ann_iterator.first(__context__,(__ann_rename_at_388_71)) && __need_loop_388;
+        for ( ; __need_loop_388 ; __need_loop_388 = __ann_iterator.next(__context__,(__ann_rename_at_388_71)) )
+        {
+            if ( SimPolicy<char *>::Equ(cast<char *>::from(das_get_auto_tuple_field<char *,0,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71))),cast<char *>::from(((char *) "rename")),*__context__,nullptr) )
+            {
+                das_copy(__fieldState_rename_at_386_70.argName,das_get_auto_variant_field<char *,7,bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>::as(das_get_auto_tuple_field<AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>,1,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71)),__context__));
+            } else if ( (SimPolicy<char *>::Equ(cast<char *>::from(das_get_auto_tuple_field<char *,0,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71))),cast<char *>::from(((char *) "enum_as_int")),*__context__,nullptr)) && false )
+            {
+                das_copy(__fieldState_rename_at_386_70.enumAsInt,das_get_auto_variant_field<bool,0,bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>::as(das_get_auto_tuple_field<AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>,1,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71)),__context__));
+            } else if ( (SimPolicy<char *>::Equ(cast<char *>::from(das_get_auto_tuple_field<char *,0,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71))),cast<char *>::from(((char *) "unescape")),*__context__,nullptr)) && false )
+            {
+                das_copy(__fieldState_rename_at_386_70.unescape,das_get_auto_variant_field<bool,0,bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>::as(das_get_auto_tuple_field<AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>,1,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71)),__context__));
+            } else if ( (SimPolicy<char *>::Equ(cast<char *>::from(das_get_auto_tuple_field<char *,0,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71))),cast<char *>::from(((char *) "embed")),*__context__,nullptr)) && false )
+            {
+                das_copy(__fieldState_rename_at_386_70.embed,das_get_auto_variant_field<bool,0,bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>::as(das_get_auto_tuple_field<AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>,1,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71)),__context__));
+            } else if ( (SimPolicy<char *>::Equ(cast<char *>::from(das_get_auto_tuple_field<char *,0,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71))),cast<char *>::from(((char *) "optional")),*__context__,nullptr)) && false )
+            {
+                das_copy(__fieldState_rename_at_386_70.optional,das_get_auto_variant_field<bool,0,bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>::as(das_get_auto_tuple_field<AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>,1,char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>::get((*__ann_rename_at_388_71)),__context__));
+            };
+        }
+        __ann_iterator.close(__context__,(__ann_rename_at_388_71));
+    };
+    return /* <- */ das_auto_cast_move<json_boost::JsonFieldState>::cast(__fieldState_rename_at_386_70);
+}
+static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_f48c2068778f40fc ( Context * __context__ ) {
     TArray<ast::AstVariantMacro *> &  arg_Arr = cast_aot_arg<TArray<ast::AstVariantMacro *> & >::to(*__context__,__context__->abiArguments()[0]);
     ast::AstVariantMacro * arg_value = cast_aot_arg<ast::AstVariantMacro *>::to(*__context__,__context__->abiArguments()[1]);
-    _FuncbuiltinTickpushTick10769833213962245646_42a1594b8ce5f90a(__context__, arg_Arr, arg_value);
+    _FuncbuiltinTickpushTick10769833213962245646_f48c2068778f40fc(__context__, arg_Arr, arg_value);
     return v_zero();
 }
-static vec4f __wrap__FuncrttiTickclass_infoTick15801393167907430156_a504fdd4d2585454 ( Context * __context__ ) {
+static vec4f __wrap__FuncrttiTickclass_infoTick15801393167907430156_cf0160de1d445158 ( Context * __context__ ) {
     json_boost::BetterJsonMacro const  &  arg_cl = cast_aot_arg<json_boost::BetterJsonMacro const  & >::to(*__context__,__context__->abiArguments()[0]);
-    return cast<StructInfo const  *>::from(_FuncrttiTickclass_infoTick15801393167907430156_a504fdd4d2585454(__context__, arg_cl));
+    return cast<StructInfo const  *>::from(_FuncrttiTickclass_infoTick15801393167907430156_cf0160de1d445158(__context__, arg_cl));
 }
-static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_d013d9b30ff96e9d ( Context * __context__ ) {
+static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037 ( Context * __context__ ) {
     TArray<ast::AstReaderMacro *> &  arg_Arr = cast_aot_arg<TArray<ast::AstReaderMacro *> & >::to(*__context__,__context__->abiArguments()[0]);
     ast::AstReaderMacro * arg_value = cast_aot_arg<ast::AstReaderMacro *>::to(*__context__,__context__->abiArguments()[1]);
-    _FuncbuiltinTickpushTick10769833213962245646_d013d9b30ff96e9d(__context__, arg_Arr, arg_value);
+    _FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037(__context__, arg_Arr, arg_value);
     return v_zero();
 }
-static vec4f __wrap__FuncrttiTickclass_infoTick15801393167907430156_63e6deea4cedeb9e ( Context * __context__ ) {
+static vec4f __wrap__FuncrttiTickclass_infoTick15801393167907430156_b6fac9ff288281f8 ( Context * __context__ ) {
     json_boost::JsonReader const  &  arg_cl = cast_aot_arg<json_boost::JsonReader const  & >::to(*__context__,__context__->abiArguments()[0]);
-    return cast<StructInfo const  *>::from(_FuncrttiTickclass_infoTick15801393167907430156_63e6deea4cedeb9e(__context__, arg_cl));
+    return cast<StructInfo const  *>::from(_FuncrttiTickclass_infoTick15801393167907430156_b6fac9ff288281f8(__context__, arg_cl));
 }
-static vec4f __wrap__FuncQmarkSqblSqbr_3538a35cc5ccc9d5 ( Context * __context__ ) {
-    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
-    char * const  arg_key = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
-    return cast<json::JsonValue *>::from(_FuncQmarkSqblSqbr_3538a35cc5ccc9d5(__context__, arg_a, arg_key));
-}
-static vec4f __wrap__FuncQmarkSqblSqbr_5655a09dd3be2073 ( Context * __context__ ) {
-    json::JsonValue * arg_a = cast_aot_arg<json::JsonValue *>::to(*__context__,__context__->abiArguments()[0]);
-    char * const  arg_key = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
-    return cast<json::JsonValue *>::from(_FuncQmarkSqblSqbr_5655a09dd3be2073(__context__, arg_a, arg_key));
-}
-static vec4f __wrap__FuncQmarkDot_3538a35cc5ccc9d5 ( Context * __context__ ) {
-    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
-    char * const  arg_key = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
-    return cast<json::JsonValue *>::from(_FuncQmarkDot_3538a35cc5ccc9d5(__context__, arg_a, arg_key));
-}
-static vec4f __wrap__FuncQmarkDot_5655a09dd3be2073 ( Context * __context__ ) {
-    json::JsonValue * arg_a = cast_aot_arg<json::JsonValue *>::to(*__context__,__context__->abiArguments()[0]);
-    char * const  arg_key = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
-    return cast<json::JsonValue *>::from(_FuncQmarkDot_5655a09dd3be2073(__context__, arg_a, arg_key));
-}
-static vec4f __wrap__FuncQmarkSqblSqbr_ba0b0aab6632dd31 ( Context * __context__ ) {
-    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
-    int32_t arg_idx = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<json::JsonValue *>::from(_FuncQmarkSqblSqbr_ba0b0aab6632dd31(__context__, arg_a, arg_idx));
-}
-static vec4f __wrap__FuncQmarkSqblSqbr_d744859b79ee77ab ( Context * __context__ ) {
-    json::JsonValue * arg_a = cast_aot_arg<json::JsonValue *>::to(*__context__,__context__->abiArguments()[0]);
-    int32_t arg_idx = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<json::JsonValue *>::from(_FuncQmarkSqblSqbr_d744859b79ee77ab(__context__, arg_a, arg_idx));
-}
-static vec4f __wrap__FuncQmarkQmark_11719d2be16bd01 ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_8fbbb4240d44885d ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     double arg_val = cast_aot_arg<double>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<double>::from(_FuncQmarkQmark_11719d2be16bd01(__context__, arg_a, arg_val));
+    return cast<double>::from(_Funcjson_boostTicknull_coalescingTick1995797521634879908_8fbbb4240d44885d(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_233f48b50ce5f404 ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_ead902b85619d258 ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     float arg_val = cast_aot_arg<float>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<float>::from(_FuncQmarkQmark_233f48b50ce5f404(__context__, arg_a, arg_val));
+    return cast<float>::from(_Funcjson_boostTicknull_coalescingTick1995797521634879908_ead902b85619d258(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_1a8257b5434aa8b3 ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_d0093ecc91229ecc ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     int8_t arg_val = cast_aot_arg<int8_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<int8_t>::from(_FuncQmarkQmark_1a8257b5434aa8b3(__context__, arg_a, arg_val));
+    return cast<int8_t>::from(_Funcjson_boostTicknull_coalescingTick1995797521634879908_d0093ecc91229ecc(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_f62e6510f721332c ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_d6faf761491ca623 ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     int16_t arg_val = cast_aot_arg<int16_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<int16_t>::from(_FuncQmarkQmark_f62e6510f721332c(__context__, arg_a, arg_val));
+    return cast<int16_t>::from(_Funcjson_boostTicknull_coalescingTick1995797521634879908_d6faf761491ca623(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_6a40c116b1d48e91 ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_744dd4d9925d97b1 ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     int32_t arg_val = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<int32_t>::from(_FuncQmarkQmark_6a40c116b1d48e91(__context__, arg_a, arg_val));
+    return cast<int32_t>::from(_Funcjson_boostTicknull_coalescingTick1995797521634879908_744dd4d9925d97b1(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_e763b5dc20b3213 ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_819dc553133662ca ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     int64_t arg_val = cast_aot_arg<int64_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<int64_t>::from(_FuncQmarkQmark_e763b5dc20b3213(__context__, arg_a, arg_val));
+    return cast<int64_t>::from(_Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_819dc553133662ca(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_e5a6fe7b7f0aecc6 ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_27b76fd8a8dd527 ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     uint8_t arg_val = cast_aot_arg<uint8_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<uint8_t>::from(_FuncQmarkQmark_e5a6fe7b7f0aecc6(__context__, arg_a, arg_val));
+    return cast<uint8_t>::from(_Funcjson_boostTicknull_coalescingTick1995797521634879908_27b76fd8a8dd527(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_b339f9b2027db27b ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_5daf3d80d07511e ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     uint16_t arg_val = cast_aot_arg<uint16_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<uint16_t>::from(_FuncQmarkQmark_b339f9b2027db27b(__context__, arg_a, arg_val));
+    return cast<uint16_t>::from(_Funcjson_boostTicknull_coalescingTick1995797521634879908_5daf3d80d07511e(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_bab9e0c43667d51a ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_6e9046b44d12b5eb ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     uint32_t arg_val = cast_aot_arg<uint32_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<uint32_t>::from(_FuncQmarkQmark_bab9e0c43667d51a(__context__, arg_a, arg_val));
+    return cast<uint32_t>::from(_Funcjson_boostTicknull_coalescingTick1995797521634879908_6e9046b44d12b5eb(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_56f43cacc498853c ( Context * __context__ ) {
+static vec4f __wrap__Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_8023ba51029c7098 ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     uint64_t arg_val = cast_aot_arg<uint64_t>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<uint64_t>::from(_FuncQmarkQmark_56f43cacc498853c(__context__, arg_a, arg_val));
+    return cast<uint64_t>::from(_Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_8023ba51029c7098(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_4fa1031aa0e66319 ( Context * __context__ ) {
+static vec4f __wrap__FuncQmarkSqblSqbr_e9328f6170fe6cb3 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    char * const  arg_key = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
+    return cast<json::JsonValue *>::from(_FuncQmarkSqblSqbr_e9328f6170fe6cb3(__context__, arg_a, arg_key));
+}
+static vec4f __wrap__FuncQmarkSqblSqbr_3be067089959d28e ( Context * __context__ ) {
+    json::JsonValue * arg_a = cast_aot_arg<json::JsonValue *>::to(*__context__,__context__->abiArguments()[0]);
+    char * const  arg_key = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
+    return cast<json::JsonValue *>::from(_FuncQmarkSqblSqbr_3be067089959d28e(__context__, arg_a, arg_key));
+}
+static vec4f __wrap__FuncQmarkDot_e9328f6170fe6cb3 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    char * const  arg_key = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
+    return cast<json::JsonValue *>::from(_FuncQmarkDot_e9328f6170fe6cb3(__context__, arg_a, arg_key));
+}
+static vec4f __wrap__FuncQmarkDot_3be067089959d28e ( Context * __context__ ) {
+    json::JsonValue * arg_a = cast_aot_arg<json::JsonValue *>::to(*__context__,__context__->abiArguments()[0]);
+    char * const  arg_key = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
+    return cast<json::JsonValue *>::from(_FuncQmarkDot_3be067089959d28e(__context__, arg_a, arg_key));
+}
+static vec4f __wrap__FuncQmarkSqblSqbr_b2d602c94fddb7f ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    int32_t arg_idx = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<json::JsonValue *>::from(_FuncQmarkSqblSqbr_b2d602c94fddb7f(__context__, arg_a, arg_idx));
+}
+static vec4f __wrap__FuncQmarkSqblSqbr_36044daf219b4cbe ( Context * __context__ ) {
+    json::JsonValue * arg_a = cast_aot_arg<json::JsonValue *>::to(*__context__,__context__->abiArguments()[0]);
+    int32_t arg_idx = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<json::JsonValue *>::from(_FuncQmarkSqblSqbr_36044daf219b4cbe(__context__, arg_a, arg_idx));
+}
+static vec4f __wrap__FuncQmarkQmark_7332895b1643f71c ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    double arg_val = cast_aot_arg<double>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<double>::from(_FuncQmarkQmark_7332895b1643f71c(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_6f06728cdb5e60fe ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    float arg_val = cast_aot_arg<float>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<float>::from(_FuncQmarkQmark_6f06728cdb5e60fe(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_e717a5d55b585f35 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    int8_t arg_val = cast_aot_arg<int8_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<int8_t>::from(_FuncQmarkQmark_e717a5d55b585f35(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_fcd9c5165d602e50 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    int16_t arg_val = cast_aot_arg<int16_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<int16_t>::from(_FuncQmarkQmark_fcd9c5165d602e50(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_25e128ab4bfa5aed ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    int32_t arg_val = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<int32_t>::from(_FuncQmarkQmark_25e128ab4bfa5aed(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_ed8e2eede721bca7 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    int64_t arg_val = cast_aot_arg<int64_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<int64_t>::from(_FuncQmarkQmark_ed8e2eede721bca7(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_f5a4edc5eab56f39 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    uint8_t arg_val = cast_aot_arg<uint8_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<uint8_t>::from(_FuncQmarkQmark_f5a4edc5eab56f39(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_827e6b2c09f2ea08 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    uint16_t arg_val = cast_aot_arg<uint16_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<uint16_t>::from(_FuncQmarkQmark_827e6b2c09f2ea08(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_b8e048755988acd1 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    uint32_t arg_val = cast_aot_arg<uint32_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<uint32_t>::from(_FuncQmarkQmark_b8e048755988acd1(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_33f823af48560a7 ( Context * __context__ ) {
+    json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
+    uint64_t arg_val = cast_aot_arg<uint64_t>::to(*__context__,__context__->abiArguments()[1]);
+    return cast<uint64_t>::from(_FuncQmarkQmark_33f823af48560a7(__context__, arg_a, arg_val));
+}
+static vec4f __wrap__FuncQmarkQmark_e610d3205f9cd42d ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     bool arg_val = cast_aot_arg<bool>::to(*__context__,__context__->abiArguments()[1]);
-    return cast<bool>::from(_FuncQmarkQmark_4fa1031aa0e66319(__context__, arg_a, arg_val));
+    return cast<bool>::from(_FuncQmarkQmark_e610d3205f9cd42d(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkQmark_5415a6b0ff5b4eb5 ( Context * __context__ ) {
+static vec4f __wrap__FuncQmarkQmark_72f652f743dfb7f ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
     char * const  arg_val = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[1]);
-    return cast<char *>::from(_FuncQmarkQmark_5415a6b0ff5b4eb5(__context__, arg_a, arg_val));
+    return cast<char *>::from(_FuncQmarkQmark_72f652f743dfb7f(__context__, arg_a, arg_val));
 }
-static vec4f __wrap__FuncQmarkDotTickvalue_7c5354fba05537e2 ( Context * __context__ ) {
+static vec4f __wrap__FuncQmarkDotTickvalue_851df370d2854bc6 ( Context * __context__ ) {
     json::JsonValue const  * const  arg_a = cast_aot_arg<json::JsonValue const  * const >::to(*__context__,__context__->abiArguments()[0]);
-    return cast<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> const  *>::from(_FuncQmarkDotTickvalue_7c5354fba05537e2(__context__, arg_a));
+    return cast<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> const  *>::from(_FuncQmarkDotTickvalue_851df370d2854bc6(__context__, arg_a));
 }
-static vec4f __wrap__FuncQmarkDotTickvalue_2bdf5bca6f9d0002 ( Context * __context__ ) {
+static vec4f __wrap__FuncQmarkDotTickvalue_85758251285208c6 ( Context * __context__ ) {
     json::JsonValue * arg_a = cast_aot_arg<json::JsonValue *>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,bool,void *> *>::from(_FuncQmarkDotTickvalue_2bdf5bca6f9d0002(__context__, arg_a));
+    return cast<AutoVariant<TTable<char *,json::JsonValue *>,TArray<json::JsonValue *>,char *,double,int64_t,bool,void *> *>::from(_FuncQmarkDotTickvalue_85758251285208c6(__context__, arg_a));
 }
-static vec4f __wrap_JV_de08d1a11663707 ( Context * __context__ ) {
-    float arg_v = cast_aot_arg<float>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_de08d1a11663707(__context__, arg_v));
-}
-static vec4f __wrap_JV_2fa74720cd155930 ( Context * __context__ ) {
-    int32_t arg_v = cast_aot_arg<int32_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_2fa74720cd155930(__context__, arg_v));
-}
-static vec4f __wrap_JV_549d699b656608a2 ( Context * __context__ ) {
-    Bitfield arg_v = cast_aot_arg<Bitfield>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_549d699b656608a2(__context__, arg_v));
-}
-static vec4f __wrap_JV_840ec78279ac852d ( Context * __context__ ) {
-    int8_t arg_val = cast_aot_arg<int8_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_840ec78279ac852d(__context__, arg_val));
-}
-static vec4f __wrap_JV_526f504129917241 ( Context * __context__ ) {
-    uint8_t arg_val = cast_aot_arg<uint8_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_526f504129917241(__context__, arg_val));
-}
-static vec4f __wrap_JV_17760da7cd1ea0ee ( Context * __context__ ) {
-    int16_t arg_val = cast_aot_arg<int16_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_17760da7cd1ea0ee(__context__, arg_val));
-}
-static vec4f __wrap_JV_30573b250fcf268b ( Context * __context__ ) {
-    uint16_t arg_val = cast_aot_arg<uint16_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_30573b250fcf268b(__context__, arg_val));
-}
-static vec4f __wrap_JV_c85629fe70fc95b5 ( Context * __context__ ) {
-    uint32_t arg_val = cast_aot_arg<uint32_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_c85629fe70fc95b5(__context__, arg_val));
-}
-static vec4f __wrap_JV_b0de7f0f7332ba2d ( Context * __context__ ) {
-    int64_t arg_val = cast_aot_arg<int64_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_b0de7f0f7332ba2d(__context__, arg_val));
-}
-static vec4f __wrap_JV_8425ea1d753a21fb ( Context * __context__ ) {
-    uint64_t arg_val = cast_aot_arg<uint64_t>::to(*__context__,__context__->abiArguments()[0]);
-    return cast<json::JsonValue *>::from(JV_8425ea1d753a21fb(__context__, arg_val));
+static vec4f __wrap_parse_json_annotation_f52572bc7c71335d ( Context * __context__ ) {
+    char * const  arg_name = cast_aot_arg<char * const >::to(*__context__,__context__->abiArguments()[0]);
+    TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const  &  arg_annotation = cast_aot_arg<TArray<AutoTuple<char *,AutoVariant<bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>>> const  & >::to(*__context__,__context__->abiArguments()[1]);
+    *((json_boost::JsonFieldState *) __context__->abiCMRES) = parse_json_annotation_f52572bc7c71335d(__context__, arg_name, arg_annotation);
+    return v_zero();
 }
 
 #pragma optimize("", off)
 struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };
 static AotFunction functions[] = {
-    { 0xbcd68b55f7578ddb, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_42a1594b8ce5f90a, &__wrap__FuncbuiltinTickpushTick10769833213962245646_42a1594b8ce5f90a },
-    { 0xfa80a13e757b86fc, false, (void*)&_FuncrttiTickclass_infoTick15801393167907430156_a504fdd4d2585454, &__wrap__FuncrttiTickclass_infoTick15801393167907430156_a504fdd4d2585454 },
-    { 0x152dd5b51aa80cc0, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_d013d9b30ff96e9d, &__wrap__FuncbuiltinTickpushTick10769833213962245646_d013d9b30ff96e9d },
-    { 0x878b5698e1990fb8, false, (void*)&_FuncrttiTickclass_infoTick15801393167907430156_63e6deea4cedeb9e, &__wrap__FuncrttiTickclass_infoTick15801393167907430156_63e6deea4cedeb9e },
-    { 0xf020fec97fe5f7be, false, (void*)&_FuncQmarkSqblSqbr_3538a35cc5ccc9d5, &__wrap__FuncQmarkSqblSqbr_3538a35cc5ccc9d5 },
-    { 0x90ce6642cb555679, false, (void*)&_FuncQmarkSqblSqbr_5655a09dd3be2073, &__wrap__FuncQmarkSqblSqbr_5655a09dd3be2073 },
-    { 0xf020fec97fe5f7be, false, (void*)&_FuncQmarkDot_3538a35cc5ccc9d5, &__wrap__FuncQmarkDot_3538a35cc5ccc9d5 },
-    { 0x90ce6642cb555679, false, (void*)&_FuncQmarkDot_5655a09dd3be2073, &__wrap__FuncQmarkDot_5655a09dd3be2073 },
-    { 0xa661d1639a571f4f, false, (void*)&_FuncQmarkSqblSqbr_ba0b0aab6632dd31, &__wrap__FuncQmarkSqblSqbr_ba0b0aab6632dd31 },
-    { 0xbb4bf8b0c412ba3f, false, (void*)&_FuncQmarkSqblSqbr_d744859b79ee77ab, &__wrap__FuncQmarkSqblSqbr_d744859b79ee77ab },
-    { 0xf547858929db469a, false, (void*)&_FuncQmarkQmark_11719d2be16bd01, &__wrap__FuncQmarkQmark_11719d2be16bd01 },
-    { 0x2052bfec09897f36, false, (void*)&_FuncQmarkQmark_233f48b50ce5f404, &__wrap__FuncQmarkQmark_233f48b50ce5f404 },
-    { 0x5a64b7c5f16f6e6e, false, (void*)&_FuncQmarkQmark_1a8257b5434aa8b3, &__wrap__FuncQmarkQmark_1a8257b5434aa8b3 },
-    { 0x34750f0e2f5ba325, false, (void*)&_FuncQmarkQmark_f62e6510f721332c, &__wrap__FuncQmarkQmark_f62e6510f721332c },
-    { 0x90f79a17f2b92360, false, (void*)&_FuncQmarkQmark_6a40c116b1d48e91, &__wrap__FuncQmarkQmark_6a40c116b1d48e91 },
-    { 0x73710cf5db3981a, false, (void*)&_FuncQmarkQmark_e763b5dc20b3213, &__wrap__FuncQmarkQmark_e763b5dc20b3213 },
-    { 0x4e8da125f981ecca, false, (void*)&_FuncQmarkQmark_e5a6fe7b7f0aecc6, &__wrap__FuncQmarkQmark_e5a6fe7b7f0aecc6 },
-    { 0x18007b7d06aaa2f2, false, (void*)&_FuncQmarkQmark_b339f9b2027db27b, &__wrap__FuncQmarkQmark_b339f9b2027db27b },
-    { 0xb86241de1e2d6a52, false, (void*)&_FuncQmarkQmark_bab9e0c43667d51a, &__wrap__FuncQmarkQmark_bab9e0c43667d51a },
-    { 0x98aebb33edcc1a02, false, (void*)&_FuncQmarkQmark_56f43cacc498853c, &__wrap__FuncQmarkQmark_56f43cacc498853c },
-    { 0x96c21fd35188e801, false, (void*)&_FuncQmarkQmark_4fa1031aa0e66319, &__wrap__FuncQmarkQmark_4fa1031aa0e66319 },
-    { 0x788a314f4ed9aff0, false, (void*)&_FuncQmarkQmark_5415a6b0ff5b4eb5, &__wrap__FuncQmarkQmark_5415a6b0ff5b4eb5 },
-    { 0xaac7aaf08c3470bf, false, (void*)&_FuncQmarkDotTickvalue_7c5354fba05537e2, &__wrap__FuncQmarkDotTickvalue_7c5354fba05537e2 },
-    { 0xf4e4a4de8ae59bb1, false, (void*)&_FuncQmarkDotTickvalue_2bdf5bca6f9d0002, &__wrap__FuncQmarkDotTickvalue_2bdf5bca6f9d0002 },
-    { 0xc4c8feb11410cd0a, false, (void*)&JV_de08d1a11663707, &__wrap_JV_de08d1a11663707 },
-    { 0xa1a929ec68f6efa5, false, (void*)&JV_2fa74720cd155930, &__wrap_JV_2fa74720cd155930 },
-    { 0xac6ad6292aec793d, false, (void*)&JV_549d699b656608a2, &__wrap_JV_549d699b656608a2 },
-    { 0xabb40867ec5a2a4b, false, (void*)&JV_840ec78279ac852d, &__wrap_JV_840ec78279ac852d },
-    { 0x7eebfe09b878d154, false, (void*)&JV_526f504129917241, &__wrap_JV_526f504129917241 },
-    { 0xb187bc5951542f77, false, (void*)&JV_17760da7cd1ea0ee, &__wrap_JV_17760da7cd1ea0ee },
-    { 0xb7aed417e8aa85cc, false, (void*)&JV_30573b250fcf268b, &__wrap_JV_30573b250fcf268b },
-    { 0xfba41459b91c9a0d, false, (void*)&JV_c85629fe70fc95b5, &__wrap_JV_c85629fe70fc95b5 },
-    { 0xa239927c68d23b11, false, (void*)&JV_b0de7f0f7332ba2d, &__wrap_JV_b0de7f0f7332ba2d },
-    { 0x432b947077ba23da, false, (void*)&JV_8425ea1d753a21fb, &__wrap_JV_8425ea1d753a21fb },
+    { 0xba03eb35ed0072a5, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_f48c2068778f40fc, &__wrap__FuncbuiltinTickpushTick10769833213962245646_f48c2068778f40fc },
+    { 0xf8d003be80e506fd, false, (void*)&_FuncrttiTickclass_infoTick15801393167907430156_cf0160de1d445158, &__wrap__FuncrttiTickclass_infoTick15801393167907430156_cf0160de1d445158 },
+    { 0x7c28b4ec7bf60ced, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037, &__wrap__FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037 },
+    { 0x2ddcdb3e9bdff7b9, false, (void*)&_FuncrttiTickclass_infoTick15801393167907430156_b6fac9ff288281f8, &__wrap__FuncrttiTickclass_infoTick15801393167907430156_b6fac9ff288281f8 },
+    { 0x3d726dde4ac5fff5, false, (void*)&_Funcjson_boostTicknull_coalescingTick1995797521634879908_8fbbb4240d44885d, &__wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_8fbbb4240d44885d },
+    { 0x169838a2b29d60d5, false, (void*)&_Funcjson_boostTicknull_coalescingTick1995797521634879908_ead902b85619d258, &__wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_ead902b85619d258 },
+    { 0xcbccdb0499e15b25, false, (void*)&_Funcjson_boostTicknull_coalescingTick1995797521634879908_d0093ecc91229ecc, &__wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_d0093ecc91229ecc },
+    { 0x9da52a1258776394, false, (void*)&_Funcjson_boostTicknull_coalescingTick1995797521634879908_d6faf761491ca623, &__wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_d6faf761491ca623 },
+    { 0x66ac5f332425bb9e, false, (void*)&_Funcjson_boostTicknull_coalescingTick1995797521634879908_744dd4d9925d97b1, &__wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_744dd4d9925d97b1 },
+    { 0x868431d34bf38969, false, (void*)&_Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_819dc553133662ca, &__wrap__Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_819dc553133662ca },
+    { 0xb5fbc3a638c62b39, false, (void*)&_Funcjson_boostTicknull_coalescingTick1995797521634879908_27b76fd8a8dd527, &__wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_27b76fd8a8dd527 },
+    { 0xd6924a5e6bb4907b, false, (void*)&_Funcjson_boostTicknull_coalescingTick1995797521634879908_5daf3d80d07511e, &__wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_5daf3d80d07511e },
+    { 0x358fb25c5d89bfb9, false, (void*)&_Funcjson_boostTicknull_coalescingTick1995797521634879908_6e9046b44d12b5eb, &__wrap__Funcjson_boostTicknull_coalescingTick1995797521634879908_6e9046b44d12b5eb },
+    { 0x4ee511d034bc73d0, false, (void*)&_Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_8023ba51029c7098, &__wrap__Funcjson_boostTicknull_coalescing_with_stringTick3281489010087647503_8023ba51029c7098 },
+    { 0xa1e5143ef322e677, false, (void*)&_FuncQmarkSqblSqbr_e9328f6170fe6cb3, &__wrap__FuncQmarkSqblSqbr_e9328f6170fe6cb3 },
+    { 0xfccd8fea33a56a67, false, (void*)&_FuncQmarkSqblSqbr_3be067089959d28e, &__wrap__FuncQmarkSqblSqbr_3be067089959d28e },
+    { 0xa1e5143ef322e677, false, (void*)&_FuncQmarkDot_e9328f6170fe6cb3, &__wrap__FuncQmarkDot_e9328f6170fe6cb3 },
+    { 0xfccd8fea33a56a67, false, (void*)&_FuncQmarkDot_3be067089959d28e, &__wrap__FuncQmarkDot_3be067089959d28e },
+    { 0xf3fa8720226d307f, false, (void*)&_FuncQmarkSqblSqbr_b2d602c94fddb7f, &__wrap__FuncQmarkSqblSqbr_b2d602c94fddb7f },
+    { 0x86b2744551803031, false, (void*)&_FuncQmarkSqblSqbr_36044daf219b4cbe, &__wrap__FuncQmarkSqblSqbr_36044daf219b4cbe },
+    { 0xe88a024aa5a00a26, false, (void*)&_FuncQmarkQmark_7332895b1643f71c, &__wrap__FuncQmarkQmark_7332895b1643f71c },
+    { 0xe25dedc9c460cdfe, false, (void*)&_FuncQmarkQmark_6f06728cdb5e60fe, &__wrap__FuncQmarkQmark_6f06728cdb5e60fe },
+    { 0xceefa993590e0c2a, false, (void*)&_FuncQmarkQmark_e717a5d55b585f35, &__wrap__FuncQmarkQmark_e717a5d55b585f35 },
+    { 0xc65d82b9cec2c957, false, (void*)&_FuncQmarkQmark_fcd9c5165d602e50, &__wrap__FuncQmarkQmark_fcd9c5165d602e50 },
+    { 0xcd99cebd3599115, false, (void*)&_FuncQmarkQmark_25e128ab4bfa5aed, &__wrap__FuncQmarkQmark_25e128ab4bfa5aed },
+    { 0x2d5ab0ccef34363d, false, (void*)&_FuncQmarkQmark_ed8e2eede721bca7, &__wrap__FuncQmarkQmark_ed8e2eede721bca7 },
+    { 0xbda29d452cd8c9a5, false, (void*)&_FuncQmarkQmark_f5a4edc5eab56f39, &__wrap__FuncQmarkQmark_f5a4edc5eab56f39 },
+    { 0xfa98f94aff0bf0c6, false, (void*)&_FuncQmarkQmark_827e6b2c09f2ea08, &__wrap__FuncQmarkQmark_827e6b2c09f2ea08 },
+    { 0xa64b445da41a283a, false, (void*)&_FuncQmarkQmark_b8e048755988acd1, &__wrap__FuncQmarkQmark_b8e048755988acd1 },
+    { 0x3df04f8c8d9d6d74, false, (void*)&_FuncQmarkQmark_33f823af48560a7, &__wrap__FuncQmarkQmark_33f823af48560a7 },
+    { 0x94edede839951630, false, (void*)&_FuncQmarkQmark_e610d3205f9cd42d, &__wrap__FuncQmarkQmark_e610d3205f9cd42d },
+    { 0xfebf93959e3b0030, false, (void*)&_FuncQmarkQmark_72f652f743dfb7f, &__wrap__FuncQmarkQmark_72f652f743dfb7f },
+    { 0xe24452c5f8be7a2, false, (void*)&_FuncQmarkDotTickvalue_851df370d2854bc6, &__wrap__FuncQmarkDotTickvalue_851df370d2854bc6 },
+    { 0xb97b1d6b5e0ed815, false, (void*)&_FuncQmarkDotTickvalue_85758251285208c6, &__wrap__FuncQmarkDotTickvalue_85758251285208c6 },
+    { 0x266df3558bec9a71, true, (void*)&parse_json_annotation_f52572bc7c71335d, &__wrap_parse_json_annotation_f52572bc7c71335d },
 };
 #pragma optimize("", on)
 

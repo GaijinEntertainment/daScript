@@ -114,15 +114,6 @@ def test_where(t : T?) {
             t |> equal(c, i * 2)
         }
     }
-    t |> run("where to sequence") <| @(t : T?) {
-        var query = _where_to_sequence(
-            [for (x in 0..5); x],
-            _ % 2 == 0
-        )
-        for (c, i in query, 0..3) {
-            t |> equal(c, i * 2)
-        }
-    }
 }
 
 [test]

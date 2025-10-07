@@ -55,16 +55,6 @@ def test_skip(t : T?) {
             t |> equal(c, i + 2)
         }
     }
-    t |> run("skip to sequence") <| @(t : T?) {
-        var query_seq = skip_to_sequence(
-            [0, 1, 2, 3, 4, 5],
-            2
-        )
-        static_assert(typeinfo is_iterator(query_seq))
-        for (c, i in query_seq, 0..3) {
-            t |> equal(c, i + 2)
-        }
-    }
     t |> run("skip in place") <| @(t : T?) {
         var arr = [0, 1, 2, 3, 4, 5]
         skip_inplace(arr, 2)
@@ -133,16 +123,6 @@ def test_take(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("take to sequence") <| @(t : T?) {
-        var query_seq = take_to_sequence(
-            [0, 1, 2, 3, 4, 5],
-            3
-        )
-        static_assert(typeinfo is_iterator(query_seq))
-        for (c, i in query_seq, 0..3) {
-            t |> equal(c, i)
-        }
-    }
     t |> run("take in place") <| @(t : T?) {
         var arr = [0, 1, 2, 3, 4, 5]
         take_inplace(arr, 3)
@@ -169,19 +149,6 @@ def test_take(t : T?) {
         for (c, i in query_array, 0..3) {
             t |> equal(c, i + 1)
         }
-    }
-    t |> run("take range to sequence") <| @(t : T?) {
-        var query_seq = take_to_sequence(
-            [0, 1, 2, 3, 4, 5],
-            1..4
-        )
-        static_assert(typeinfo is_iterator(query_seq))
-        var count = 0
-        for (c, i in query_seq, 0..3) {
-            t |> equal(c, i + 1)
-            count ++
-        }
-        t |> equal(3, count)
     }
 }
 
@@ -235,26 +202,6 @@ def text_chunk(t : T?) {
             for (i, v in c, e) {
                 t |> equal(i, v)
             }
-        }
-    }
-    t |> run("chunk to sequence") <| @(t : T?) {
-        var query_seq = chunk_to_sequence(
-            [0, 1, 2, 3, 4, 5, 6],
-            2
-        )
-        static_assert(typeinfo is_iterator(query_seq))
-        var expected = [
-            [0, 1],
-            [2, 3],
-            [4, 5]
-        ]
-        for (c, e in query_seq, expected) {
-            var count = 0
-            for (i, v in c, e) {
-                t |> equal(i, v)
-                count ++
-            }
-            t |> equal(2, count)
         }
     }
 }

@@ -12,24 +12,24 @@ requirement:
 
 OPERATIONS
 Sorting data (*)
-     reverse, reverse_inplace, reverse_to_array, reverse_to_sequence - Reverses the order of elements in an iterable
-     order, order_inplace, order_to_array, order_to_sequence - Sorts the elements of an iterable
-     order_descending,  order_descending_inplace, order_descending_to_array, order_descending_to_sequence - Sorts the elements of an iterable in descending order
-     order_by, order_by_inplace, order_by_to_array, order_by_to_sequence - Sorts the elements of an iterable
-     order_by_descending,  order_by_descending_inplace, order_by_descending_to_array, order_by_descending_to_sequence - Sorts the elements of an iterable in descending order
+     reverse, reverse_inplace, reverse_to_array - Reverses the order of elements in an iterable
+     order, order_inplace, order_to_array - Sorts the elements of an iterable
+     order_descending,  order_descending_inplace, order_descending_to_array - Sorts the elements of an iterable in descending order
+     order_by, order_by_inplace, order_by_to_array - Sorts the elements of an iterable
+     order_by_descending,  order_by_descending_inplace, order_by_descending_to_array - Sorts the elements of an iterable in descending order
 Set operations (*)
-     distinct, distinct_inplace, distinct_to_array, distinct_to_sequence, distinct_by_to_array - Returns distinct elements from an iterable
-     distinct_by, distinct_by_inplace, distinct_by_to_array, distinct_by_to_sequence - Returns distinct elements from an iterable (or by key)
-     union, union_to_array, union_to_sequence - Returns the union of two iterables
-     union_by, union_by_to_array, union_by_to_sequence - Returns the union of two iterables (or by key)
-     except, except_to_array, except_to_sequence - Returns elements from the first iterable that are not in the second iterable
-     except_by, except_by_to_array, except_by_to_sequence - Returns elements from the first iterable that are not in the second iterable (or by key)
+     distinct, distinct_inplace, distinct_to_array, distinct_by_to_array - Returns distinct elements from an iterable
+     distinct_by, distinct_by_inplace, distinct_by_to_array - Returns distinct elements from an iterable (or by key)
+     union, union_to_array - Returns the union of two iterables
+     union_by, union_by_to_array - Returns the union of two iterables (or by key)
+     except, except_to_array - Returns elements from the first iterable that are not in the second iterable
+     except_by, except_by_to_array - Returns elements from the first iterable that are not in the second iterable (or by key)
      intersect - Returns elements that are present in both iterables (or by key)
      intersect_by - Returns elements that are present in both iterables (or by key)
 Concatenation operations (*)
-     append, append_to_array, append_to_sequence, append_inplace - Appends an element to the end of an iterable
-     prepend, prepend_to_array, prepend_to_sequence, prepend_inplace - Prepends an element to the beginning of an iterable
-     concat, concat_to_array, concat_to_sequence, concat_inplace - Concatenates two iterables
+     append, append_to_array, append_inplace - Appends an element to the end of an iterable
+     prepend, prepend_to_array, prepend_inplace - Prepends an element to the beginning of an iterable
+     concat, concat_to_array, concat_inplace - Concatenates two iterables
 Generation operations (-)
      empty - Returns an empty iterable of a default type
      default_empty - Returns the elements of the iterable, or a default value if the iterable is empty
@@ -46,17 +46,17 @@ Aggregation operations (*)
      average - Averages the elements in an iterable
      aggregate - Aggregates the elements in an iterable
 Filtering data (*)
-     where_, where_to_array, where_to_sequence - Filters elements in an iterable
+     where_, where_to_array - Filters elements in an iterable
 Partitioning data (*)
      skip, skip_to_array, skip_impl, skip_inplace - Skips the first `n` elements of an iterable
-     skip_while, skip_while_to_array, skip_while_to_sequence - Skips all elements of an iterable while the predicate is true
+     skip_while, skip_while_to_array - Skips all elements of an iterable while the predicate is true
      take, take_to_array, take_impl, take_inplace - Takes the first `n` elements of an iterable or range of elements in the iterable
-     take_while, take_while_to_array, take_while_to_sequence - Takes elements from an iterable while the predicate is true
-     chunk, chunk_to_array, chunk_to_sequence - Splits an iterable into chunks of a specified size
+     take_while, take_while_to_array - Takes elements from an iterable while the predicate is true
+     chunk, chunk_to_array - Splits an iterable into chunks of a specified size
 Join and group operations (*)
-     join, join_to_array, join_to_sequence - Joins two iterables based on a key (inner join)
-     group_join, group_join_to_array, group_join_to_sequence - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
-     group_by, group_by_to_array, group_by_to_sequence - Groups elements in an iterable by a key
+     join, join_to_array - Joins two iterables based on a key (inner join)
+     group_join, group_join_to_array - Joins two iterables based on a key, passing a sequence of the second iterable to the result (group join)
+     group_by, group_by_to_array - Groups elements in an iterable by a key
 Querying data (*)
      any - Returns true if the iterable has at least one element (or at least one element which satisfies the predicate)
      all - Returns true if all elements in the iterable satisfy the predicate
@@ -71,9 +71,9 @@ Element operations (*)
      single - Returns the only element of an iterable, and throws if there is not exactly one element
      single_or_default - Returns the only element of an iterable, or a default value if there is not exactly one element
 Transform operations (*)
-     select, select_to_array, select_to_sequence - Projects each element of an iterable into a new form
-     select_many, select_many_to_array, select_many_to_sequence - Projects each element of an iterable to an iterable and flattens the resulting iterables into one iterable
-     zip, zip_to_array, zip_to_sequence - Merges iterables into an iterable of tuples
+     select, select_to_array - Projects each element of an iterable into a new form
+     select_many, select_many_to_array - Projects each element of an iterable to an iterable and flattens the resulting iterables into one iterable
+     zip, zip_to_array - Merges iterables into an iterable of tuples
 Converting sequence (*)
      to_table - Converts an iterable to a table
      to_sequence - Converts an array to an iterable
@@ -167,11 +167,6 @@ def concat(a, b : array<auto(TT)>) : array<TT -const -&> {
 [skip_lock_check]
 def concat_to_array(var a, b : iterator<auto(TT)>) : array<TT -const -&> {
     return <- concat_impl(a, b, type<TT -const -&>, 0)
-}
-
-[skip_lock_check]
-def concat_to_sequence(a, b : array<auto(TT)>) : iterator<TT -const -&> {
-    return <- concat_impl_const(a, b, type<TT -const -&>, length(a) + length(b)).to_sequence_move()
 }
 
 [skip_lock_check]
@@ -280,14 +275,6 @@ def reverse_to_array(var a : iterator<auto(TT)>) : array<TT -const -&> {
 }
 
 [skip_lock_check]
-def reverse_to_sequence(a : array<auto(TT)>) : iterator<TT -const -&> {
-    //! Reverses an array and returns an iterator
-    var b := a
-    reverse_inplace(b)
-    return to_sequence_move(b)
-}
-
-[skip_lock_check]
 def order_inplace(var buffer : array<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) {
     //! Sorts an array in place
     sort(buffer, fun)
@@ -318,14 +305,6 @@ def order_to_array(var a : iterator<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT 
 }
 
 [skip_lock_check]
-def order_to_sequence(a : array<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) : iterator<TT -const -&> {
-    //! Sorts an array and returns an iterator
-    var b := a
-    sort(b, fun)
-    return to_sequence_move(b)
-}
-
-[skip_lock_check]
 def order_descending_inplace(var buffer : array<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) {
     //! Sorts an array in descending order in place
     sort(buffer, $(v1, v2) => fun(v2, v1))
@@ -353,14 +332,6 @@ def order_descending_to_array(var a : iterator<auto(TT)>; fun : block<(v1 : TT -
     var arr <- to_array(a)
     sort(arr, $(v1, v2) => fun(v2, v1))
     return <- arr
-}
-
-[skip_lock_check]
-def order_descending_to_sequence(a : array<auto(TT)>; fun : block<(v1 : TT -&, v2 : TT -&) : bool>) : iterator<TT -const -&> {
-    //! Sorts an array in descending order and returns an iterator
-    var b := a
-    sort(b, $(v1, v2) => fun(v2, v1))
-    return to_sequence_move(b)
 }
 
 def less(a, b) : bool {
@@ -426,14 +397,6 @@ def order_by_to_array(var a : iterator<auto(TT)>; key) : array<TT -const -&> {
 }
 
 [skip_lock_check]
-def order_by_to_sequence(a : array<auto(TT)>; key) : iterator<TT -const -&> {
-    //! Sorts an array and returns an iterator
-    var b := a
-    sort(b, $(v1, v2) => _::less(key(v1), key(v2)))
-    return to_sequence_move(b)
-}
-
-[skip_lock_check]
 def order_by_descending_inplace(var buffer : array<auto(TT)>; key) {
     //! Sorts an array in descending order in place
     sort(buffer, $(v1, v2) => _::less(key(v2), key(v1)))
@@ -461,14 +424,6 @@ def order_by_descending_to_array(var a : iterator<auto(TT)>; key) : array<TT -co
     var arr <- to_array(a)
     sort(arr, $(v1, v2) => _::less(key(v2), key(v1)))
     return <- arr
-}
-
-[skip_lock_check]
-def order_by_descending_to_sequence(a : array<auto(TT)>; key) : iterator<TT -const -&> {
-    //! Sorts an array in descending order and returns an iterator
-    var b := a
-    sort(b, $(v1, v2) => _::less(key(v2), key(v1)))
-    return to_sequence_move(b)
 }
 
 def unique_key(a) {
@@ -516,13 +471,6 @@ def distinct(a : array<auto(TT)>) : array<TT -const -&> {
 def distinct_to_array(var a : iterator<auto(TT)>) : array<TT -const -&> {
     //! Returns distinct elements from an iterator and returns an array
     return <- distinct_impl(a, type<TT -const -&>)
-}
-
-[skip_lock_check]
-def distinct_to_sequence(a : array<auto(TT)>) : iterator<TT -const -&> {
-    //! Returns distinct elements from an array and returns an iterator
-    var b := a
-    return distinct_impl_const(b, type<TT -const -&>).to_sequence_move()
 }
 
 [skip_lock_check]
@@ -607,13 +555,6 @@ def distinct_by(a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<
 def distinct_by_to_array(var a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns distinct elements from an iterator based on a key and returns an array
     return <- distinct_by_impl(a, type<TT -const -&>, key)
-}
-
-[skip_lock_check]
-def distinct_by_to_sequence(a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
-    //! Returns distinct elements from an array based on a key and returns an iterator
-    var b := a
-    return distinct_by_impl_const(b, type<TT -const -&>, key).to_sequence_move()
 }
 
 [skip_lock_check]
@@ -724,12 +665,6 @@ def where_to_array(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&)
 }
 
 [skip_lock_check]
-def where_to_sequence(src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
-    //! Filters elements in an array based on a predicate and returns an iterator
-    return <- where_impl_const(src, type<TT -& -const>, length(src), predicate).to_sequence_move()
-}
-
-[skip_lock_check]
 def skip(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
     //! Yields all but the first `total` elements
     let len = length(arr)
@@ -786,12 +721,6 @@ def private skip_impl(var src; tt : auto(TT); var total : int) : iterator<TT -& 
 def skip(var src : iterator<auto(TT)>; var total : int) : iterator<TT -& -const> {
     //! Yields all but the first `total` elements
     return skip_impl(src, type<TT -& -const>, total)
-}
-
-[skip_lock_check]
-def skip_to_sequence(src : array<auto(TT)>; var total : int) : iterator<TT -& -const> {
-    //! Yields all but the first `total` elements and returns an iterator
-    return skip_impl(clone_to_move(src), type<TT -& -const>, total)
 }
 
 [skip_lock_check]
@@ -863,12 +792,6 @@ def skip_while_to_array(var src : iterator<auto(TT)>; predicate : block<(arg : T
 }
 
 [skip_lock_check]
-def skip_while_to_sequence(src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
-    //! Skips all elements of an array while the predicate is true and returns an iterator
-    return <- skip_while_impl_const(src, type<TT -& -const>, predicate).to_sequence_move()
-}
-
-[skip_lock_check]
 def take(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
     //! Yields only the first `total` elements
     let len = length(arr)
@@ -907,12 +830,6 @@ def private take_impl(var src; tt : auto(TT); var total : int) : iterator<TT -& 
 def take(var src : iterator<auto(TT)>; var total : int) : iterator<TT -& -const> {
     //! Yields only the first `total` elements
     return take_impl(src, type<TT -& -const>, total)
-}
-
-[skip_lock_check]
-def take_to_sequence(src : array<auto(TT)>; var total : int) : iterator<TT -& -const> {
-    //! Yields only the first `total` elements and returns an iterator
-    return take_impl(clone_to_move(src), type<TT -& -const>, total)
 }
 
 [skip_lock_check]
@@ -993,18 +910,6 @@ def take_to_array(var src : iterator<auto(TT)>; from : range) : array<TT -& -con
 }
 
 [skip_lock_check]
-def take_to_sequence(src : array<auto(TT)>; from : range) : iterator<TT -& -const> {
-    //! Yields a range of elements from an array and returns an iterator
-    let len = length(src)
-    let start = (from.x < 0) ? 0 : ((from.x > len) ? len : from.x)
-    var end = (from.y < 0) ? 0 : ((from.y > len) ? len : from.y)
-    if (end < start) {
-        end = start
-    }
-    return <- subarray(src, start..end).to_sequence_move()
-}
-
-[skip_lock_check]
 def take_inplace(var arr : array<auto(TT)>; from : range) {
     //! Keeps only a range of elements in an array in place
     static_if (typeinfo need_lock_check(arr)) {
@@ -1071,12 +976,6 @@ def take_while(src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) :
 def take_while_to_array(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
     //! Yields only the elements of an iterator while the predicate is true and returns an array
     return <- take_while_impl(src, type<TT -& -const>, predicate)
-}
-
-[skip_lock_check]
-def take_while_to_sequence(src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
-    //! Yields only the elements of an array while the predicate is true and returns an iterator
-    return <- take_while_impl_const(src, type<TT -& -const>, predicate).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -1611,12 +1510,6 @@ def join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; 
     return <- join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 }
 
-[skip_lock_check]
-def join_to_sequence(srca : array<auto(TA)>; srcb : array<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
-    //! Joins two arrays based on matching keys (inner join) and returns an iterator
-    return <- join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
-}
-
 [skip_lock_check, unused_argument(ta, tb)]
 def private group_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
     // we pass TA, and sequence of TB to 'result'
@@ -1662,12 +1555,6 @@ def group_join(srca : array<auto(TA)>; srcb : array<auto(TB)>; keya, keyb; resul
 def group_join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
     // we pass TA, and sequence of TB to 'result'
     return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
-}
-
-[skip_lock_check]
-def group_join_to_sequence(srca : array<auto(TA)>; srcb : array<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    // we pass TA, and sequence of TB to 'result'
-    return <- group_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -1716,12 +1603,6 @@ def group_by(source : array<auto(TT)>; key; element_selector; result_selector)  
 def group_by_to_array(var source : iterator<auto(TT)>; key; element_selector; result_selector)  {
     //! Groups the elements of an iterator according to a specified key selector function and returns an array
     return <- group_by_impl(source, type<TT -const -&>, key, element_selector, result_selector)
-}
-
-[skip_lock_check]
-def group_by_to_sequence(source : array<auto(TT)>; key; element_selector; result_selector)  {
-    //! Groups the elements of an array according to a specified key selector function and returns an iterator
-    return <- group_by_impl_const(source, type<TT -const -&>, key, element_selector, result_selector).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -1775,12 +1656,6 @@ def union_to_array(var srca, srcb : iterator<auto(TT)>) : array<TT -const -&> {
     return <- union_impl(srca, srcb, type<TT -const -&>)
 }
 
-[skip_lock_check]
-def union_to_sequence(srca, srcb : array<auto(TT)>) : iterator<TT -const -&> {
-    //! Returns distinct elements from the concatenation of two arrays and returns an iterator
-    return <- union_impl_const(srca, srcb, type<TT -const -&>).to_sequence_move()
-}
-
 [skip_lock_check, unused_argument(tt)]
 def private union_by_impl(var srca; var srcb; tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns distinct elements from the concatenation of two iterators by key
@@ -1830,12 +1705,6 @@ def union_by(srca, srcb : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : 
 def union_by_to_array(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns distinct elements from the concatenation of two iterators by key and returns an array
     return <- union_by_impl(srca, srcb, type<TT -const -&>, key)
-}
-
-[skip_lock_check]
-def union_by_to_sequence(srca, srcb : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
-    //! Returns distinct elements from the concatenation of two arrays by key and returns an iterator
-    return <- union_by_impl_const(srca, srcb, type<TT -const -&>, key).to_sequence_move()
 }
 
 [skip_lock_check]
@@ -1952,12 +1821,6 @@ def except_to_array(var src, exclude : iterator<auto(TT)>) : array<TT -const -&>
     return <- except_impl(src, exclude, type<TT -const -&>)
 }
 
-[skip_lock_check]
-def except_to_sequence(src, exclude : array<auto(TT)>) : iterator<TT -const -&> {
-    //! Returns elements from the first array that are not in the second array and returns an iterator
-    return <- except_impl_const(src, exclude, type<TT -const -&>).to_sequence_move()
-}
-
 [skip_lock_check, unused_argument(tt)]
 def private except_by_impl(var src, exclude; tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns elements from the first iterator that are not in the second iterator by key
@@ -2001,12 +1864,6 @@ def except_by(src, exclude : array<auto(TT)>; key : block<(arg : TT -&) : auto>)
 def except_by_to_array(var src, exclude : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns elements from the first iterator that are not in the second iterator by key and returns an array
     return <- except_by_impl(src, exclude, type<TT -const -&>, key)
-}
-
-[skip_lock_check]
-def except_by_to_sequence(src, exclude : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
-    //! Returns elements from the first array that are not in the second array by key and returns an iterator
-    return <- except_by_impl_const(src, exclude, type<TT -const -&>, key).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -2054,12 +1911,6 @@ def intersect_to_array(var srca, srcb : iterator<auto(TT)>) : array<TT -const -&
     return <- intersect_impl(srca, srcb, type<TT -const -&>)
 }
 
-[skip_lock_check]
-def intersect_to_sequence(srca, srcb : array<auto(TT)>) : iterator<TT -const -&> {
-    //! Returns elements that are present in both arrays and returns an iterator
-    return <- intersect_impl_const(srca, srcb, type<TT -const -&>).to_sequence_move()
-}
-
 [skip_lock_check, unused_argument(tt)]
 def private intersect_by_impl(var srca, srcb; tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns elements that are present in both iterators by key
@@ -2103,12 +1954,6 @@ def intersect_by(srca, srcb : array<auto(TT)>; key : block<(arg : TT -&) : auto>
 def intersect_by_to_array(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns elements that are present in both iterators by key and returns an array
     return <- intersect_by_impl(srca, srcb, type<TT -const -&>, key)
-}
-
-[skip_lock_check]
-def intersect_by_to_sequence(srca, srcb : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
-    //! Returns elements that are present in both arrays by key and returns an iterator
-    return <- intersect_by_impl_const(srca, srcb, type<TT -const -&>, key).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -2561,12 +2406,6 @@ def prepend_to_array(var it : iterator<auto(TT)>; value : TT -&) : array<TT -con
 }
 
 [skip_lock_check]
-def prepend_to_sequence(arr : array<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
-    //! Prepends a value to the beginning of an array and returns an iterator
-    return <- prepend_impl_const(arr, type<TT -const -&>, length(arr) + 1, value).to_sequence_move()
-}
-
-[skip_lock_check]
 def prepend(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
     //! Prepends a value to the beginning of an iterator
     return generator<TT -const -&> capture(<- it, := value) () <| $ {
@@ -2627,12 +2466,6 @@ def append(arr : array<auto(TT)>; value : TT -&) : array<TT -const -&> {
 def append_to_array(var it : iterator<auto(TT)>; value : TT -&) : array<TT -const -&> {
     //! Appends a value to the end of an iterator and returns an array
     return <- append_impl(it, type<TT -const -&>, 0, value)
-}
-
-[skip_lock_check]
-def append_to_sequence(arr : array<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
-    //! Appends a value to the end of an array and returns an iterator
-    return <- append_impl_const(arr, type<TT -const -&>, length(arr) + 1, value).to_sequence_move()
 }
 
 [skip_lock_check]
@@ -2700,12 +2533,6 @@ def select_to_array(var src : iterator<auto(TT)>) : array<tuple<int, TT -const -
     return <- select_impl(src, type<TT -const -&>)
 }
 
-[skip_lock_check]
-def select_to_sequence(src : array<auto(TT)>) : iterator<tuple<int, TT -const -&>> {
-    //! Projects each element of an array into a new form and returns an iterator
-    return <- select_impl_const(src, type<TT -const -&>).to_sequence_move()
-}
-
 [skip_lock_check, unused_argument(tt)]
 def private select_impl(var src; tt : auto(TT); len : int; selector) : array<typedecl(selector(type<TT>)) -const -&> {
     //! Projects each element of an iterator into a new form using a selector function
@@ -2741,11 +2568,6 @@ def select(src : array<auto(TT)>; result_selector) : array<typedecl(result_selec
 [skip_lock_check]
 def select_to_array(var src : iterator<auto(TT)>; result_selector) : array<typedecl(result_selector(type<TT>)) -const -&> {
     return <- select_impl(src, type<TT -const -&>, 0, result_selector)
-}
-
-[skip_lock_check]
-def select_to_sequence(src : array<auto(TT)>; result_selector) : iterator<typedecl(result_selector(type<TT>)) -const -&> {
-    return <- select_impl_const(src, type<TT -const -&>, length(src), result_selector).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -2793,12 +2615,6 @@ def chunk(src : array<auto(TT)>; size : int) : array<array<TT -const -&>> {
 def chunk_to_array(var src : iterator<auto(TT)>; size : int) : array<array<TT -const -&>> {
     //! Splits an iterator into chunks of a specified size and returns an array
     return <- chunk_impl(src, type<TT -const -&>, size)
-}
-
-[skip_lock_check]
-def chunk_to_sequence(src : array<auto(TT)>; size : int) : iterator<array<TT -const -&>> {
-    //! Splits an iterator into chunks of a specified size and returns a sequence
-    return <- chunk_impl_const(src, type<TT -const -&>, size).to_sequence_move()
 }
 
 [skip_lock_check]
@@ -2862,12 +2678,6 @@ def select_many_to_array(var src : iterator<auto(TT)>; result_selector) : array<
     return <- select_many_impl(src, type<TT -const -&>, result_selector)
 }
 
-[skip_lock_check]
-def select_many_to_sequence(src : array<auto(TT)>; result_selector) : iterator<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
-    //! Projects each element of an array to an iterator and flattens the resulting iterators into one iterator
-    return <- select_many_impl_const(src, type<TT -const -&>, result_selector).to_sequence_move()
-}
-
 [skip_lock_check, unused_argument(tt)]
 def private select_many_impl(var src; tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
@@ -2909,12 +2719,6 @@ def select_many_to_array(var src : iterator<auto(TT)>; collection_selector; resu
     return <- select_many_impl(src, type<TT -const -&>, collection_selector, result_selector)
 }
 
-[skip_lock_check]
-def select_many_to_sequence(src : array<auto(TT)>; collection_selector; result_selector) : iterator<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
-    //! Projects each element of an array to an iterator and flattens the resulting iterators into one iterator
-    return <- select_many_impl_const(src, type<TT -const -&>, collection_selector, result_selector).to_sequence_move()
-}
-
 [skip_lock_check, unused_argument(tt, uu)]
 def private zip_impl(var a; tt : auto(TT); var b; var uu : auto(UU)) : array<tuple<TT -const -&, UU -const -&>> {
     //! Merges two iterators into an array of tuples
@@ -2952,12 +2756,6 @@ def zip(a : array<auto(TT)>; b : array<auto(UU)>) : array<tuple<TT -const -&, UU
 def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : array<tuple<TT -const -&, UU -const -&>> {
     //! Merges two iterators into an array of tuples
     return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>)
-}
-
-[skip_lock_check]
-def zip_to_sequence(a : array<auto(TT)>; b : array<auto(UU)>) : iterator<tuple<TT -const -&, UU -const -&>> {
-    //! Merges two iterators into an iterator of tuples
-    return <- zip_impl_const(a, type<TT -const -&>, b, type<UU -const -&>).to_sequence_move()
 }
 
 [skip_lock_check, unused_argument(tt, uu)]
@@ -2998,8 +2796,3 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_
     return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>, result_selector)
 }
 
-[skip_lock_check]
-def zip_to_sequence(a : array<auto(TT)>; b : array<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
-    //! Merges two arrays into an iterator by applying a specified function
-    return <- zip_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, result_selector).to_sequence_move()
-}

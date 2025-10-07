@@ -42,6 +42,52 @@ def test_comprehension_fold(t : T?) {
             t |> equal(i * 2, v)
         }
     }
+
+    t |> run("selct-where comprehension") <| @(t : T?) {
+        var t4 <- ([1, 2, 3, 4, 5].to_sequence()
+            ._select(_ * 2)
+            ._where(_ <= 6)
+            ._fold()) // note - if fold fails, it won't compile
+        t |> equal(typeinfo typename(t4), "iterator<int>")
+        for (i, v in 0..3, t4) {
+            t |> equal((i + 1) * 2, v)
+        }
+    }
+
+    t |> run("select-where from array comprehension") <| @(t : T?) {
+        var t5 <- ([1, 2, 3, 4, 5]
+            ._select(_ * 2)
+            ._where(_ <= 6)
+            ._fold()) // note - if fold fails, it won't compile
+        t |> equal(typeinfo typename(t5), "array<int>")
+        for (i, v in 0..3, t5) {
+            t |> equal((i + 1) * 2, v)
+        }
+    }
+
+    // returns array of ComplexType
+    t |> run("ComplexType select-where comprehension") <| @(t : T?) {
+        var t6 <- ([1, 2, 3, 4, 5].to_sequence()
+            ._select(ComplexType(a = [_ * 2, _ * 3]))
+            ._where(_.a[0] <= 6)
+            .to_array()
+            ._fold()) // note - if fold fails, it won't compile
+        t |> equal(typeinfo typename(t6), "array<_common::ComplexType>")
+        for (i, v in 0..3, t6) {
+            t |> success(v.a.Equal([(i + 1) * 2, (i + 1) * 3]))
+        }
+    }
+    // return iterator of ComplexType
+    t |> run("ComplexType where-select comprehension") <| @(t : T?) {
+        var t7 <- ([1, 2, 3, 4, 5].to_sequence()
+            ._select(ComplexType(a = [_ * 2, _ * 3]))
+            ._where(_.a[0] <= 3)
+            ._fold()) // note - if fold fails, it won't compile
+        t |> equal(typeinfo typename(t7), "iterator<_common::ComplexType>")
+        for (i, v in 0..3, t7) {
+            t |> success(v.a.Equal([(i + 1) * 2, (i + 1) * 3]))
+        }
+    }
 }
 
 [test]
