@@ -30,6 +30,7 @@ Set operations
     _ _union_by(it1, it2, expr) => union_by(it1, it2, $(_) => expr)
     - _except_by(it1, it2, expr) => except_by(it1, it2, $(_) => expr)
     - _intersect_by(it1, it2, expr) => intersect_by(it1, it2, $(_) => expr)
+    - _unique_by(it, expr) => unique_by(it, $(_) => expr)
 Sorting data
     - _order_by(it, expr)       => order_by(it, $(_) => expr)
     - _order_by_descending(it, expr) => order_by_descending(it, $(_) => expr)
@@ -40,7 +41,6 @@ require daslib/linq public
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
-
 
 def private clone_iterator_type(it : TypeDeclPtr) : TypeDeclPtr {
     var inscope res <- clone_type(it.firstType)
@@ -128,6 +128,16 @@ class private LinqAll : AstCallMacro_LinqPred2 {
 [call_macro(name="_any")]
 class private LinqAny : AstCallMacro_LinqPred2 {
     override predName = "any"
+}
+
+[call_macro(name="_unique_by")]
+class private LinqUnique : AstCallMacro_LinqPred2 {
+    override predName = "unique_by"
+}
+
+[call_macro(name="_unique_by_to_array")]
+class private LinqUniqueToArray : AstCallMacro_LinqPred2 {
+    override predName = "unique_by_to_array"
 }
 
 [call_macro(name="_distinct_by")]
@@ -335,6 +345,10 @@ var private linqCalls = {
     "intersect_to_array" => LinqCall(name = "intersect", recursive = [1]),
     "intersect_by" => LinqCall(name = "intersect_by", recursive = [1]),
     "intersect_by_to_array" => LinqCall(name = "intersect_by", recursive = [1]),
+    "unique" => LinqCall(name = "unique", inplace = true),
+    "unique_to_array" => LinqCall(name = "unique", inplace = true),
+    "unique_by" => LinqCall(name = "unique_by", inplace = true),
+    "unique_by_to_array" => LinqCall(name = "unique_by", inplace = true),
 // element operations
     "element_at" => LinqCall(name = "element_at"),
     "element_at_or_default" => LinqCall(name = "element_at_or_default"),
@@ -423,6 +437,16 @@ struct private FoldSequence {
 }
 
 var private g_foldSeq = [               // those are applied in order
+// order and distinct (for both orders)
+    FoldSequence(
+        calls = ["order", "distinct" ],
+        folder = @@fold_order_distinct
+    ),
+    FoldSequence(
+        calls = ["distinct", "order" ],
+        folder = @@fold_order_distinct
+    ),
+// select and where
     FoldSequence(
         calls = ["where_", "select" ],
         folder = @@fold_where_select
@@ -442,7 +466,7 @@ var private g_foldSeq = [               // those are applied in order
 ]
 
 [macro_function]
-def private append_comprehension(argIndex : int; var comprehension : ExpressionPtr; var blk : ExprBlock?; at : LineInfo) : ExpressionPtr {
+def private append_comprehension(argIndex : int; var topValue : ExpressionPtr; var comprehension : ExpressionPtr; var blk : ExprBlock?; at : LineInfo) : ExpressionPtr {
     comprehension.force_at(at)
     comprehension.force_generated(true)
     let newArgName = "pass_{argIndex}"
@@ -450,7 +474,26 @@ def private append_comprehension(argIndex : int; var comprehension : ExpressionP
         var $i(newArgName) <- $e(comprehension)
     }
     (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
+    if (argIndex != 0) {
+        blk.list |> emplace_new <| qmacro_expr() {
+            delete $e(topValue)
+        }
+    }
     return <- qmacro($i(newArgName))
+}
+
+[macro_function]
+def private fold_order_distinct(argIndex : int; var topValue : ExpressionPtr; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : ExpressionPtr {
+    //! replaces order + distinct into a single order + unique
+    var eOrder = calls[0]._0
+    var eDistinct = calls[1]._0
+    if (argIndex == 0) {
+        var inscope comprehension <- qmacro(order_unique_folded($e(topValue)))
+        return <- append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
+    } else {
+        blk.list |> emplace_new <| qmacro(order_unique_folded_inplace($e(topValue)))
+        return <- clone_expression(topValue)
+    }
 }
 
 [macro_function]
@@ -468,29 +511,27 @@ def private fold_where_select(argIndex : int; var topValue : ExpressionPtr; var 
         selectExpr |> move_new <| new ExprVar(name := "it", at = topValue.at, _type := iterType)
     }
     var inscope comprehension <- qmacro([for (it in $e(topValue)); $e(selectExpr); where $e(whereCond)])
-    return <- append_comprehension(argIndex, comprehension, blk, calls[0]._0.at)
+    return <- append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
 }
 
 [macro_function]
 def private fold_where(argIndex : int; var topValue : ExpressionPtr; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : ExpressionPtr {
     //! folds where + select into a single comprehension
     var eWhere = calls[0]._0
-    var inscope iterType <- clone_type(eWhere.arguments[0]._type.firstType)
     var inscope whereCond : ExpressionPtr
     whereCond |> move_new <| fold_linq_cond(eWhere.arguments[1], "it")
     var inscope comprehension <- qmacro([for (it in $e(topValue)); it; where $e(whereCond)])
-    return <- append_comprehension(argIndex, comprehension, blk, calls[0]._0.at)
+    return <- append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
 }
 
 [macro_function]
 def private fold_select(argIndex : int; var topValue : ExpressionPtr; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : ExpressionPtr {
     //! folds select into a single comprehension
     var eSelect = calls[0]._0
-    var inscope iterType <- clone_type(eSelect.arguments[0]._type.firstType)
     var inscope selectExpr : ExpressionPtr
     selectExpr |> move_new <| fold_linq_cond(eSelect.arguments[1], "it")
     var inscope comprehension <- qmacro([for (it in $e(topValue)); $e(selectExpr)])
-    return <- append_comprehension(argIndex, comprehension, blk, calls[0]._0.at)
+    return <- append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
 }
 
 [macro_function]
@@ -500,7 +541,6 @@ def private fold_select_where(argIndex : int; var topValue : ExpressionPtr; var 
     var eWhere = calls[1]._0
     var eSelect = calls[0]._0
     var inscope iterType <- clone_type(eWhere.arguments[0]._type.firstType)
-    iterType.flags &= ~TypeDeclFlags.ref
     var inscope whereCond : ExpressionPtr
     let srcName = "`source`{argIndex}`{eSelect.at.line}`{eSelect.at.column}"
     let valName = "`value`{argIndex}`{eSelect.at.line}`{eSelect.at.column}"
@@ -532,7 +572,7 @@ def private fold_select_where(argIndex : int; var topValue : ExpressionPtr; var 
             unsafe(set_verify_array_locks($i(arrName), true))
             return <- $i(arrName)
         }, $e(topValue)))
-    return <- append_comprehension(argIndex, comprehension, blk, calls[0]._0.at)
+    return <- append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
 }
 
 [macro_function]
@@ -585,7 +625,9 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
             }
             if (found != null) {
                 var sub = subarray(calls, argIndex .. argIndex + found.calls |> length)
+                print("before topValue = {describe(topValue)}\n")
                 topValue |> move_new <| found.folder(argIndex, topValue, blk.get_ptr(), sub)
+                print("after topValue = {describe(topValue)}\n")
                 argIndex += found.calls |> length
             } else {
                 if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {
@@ -635,6 +677,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
             return <- $e(topValue)
         }
     }
+    print("BLOCK IS\n{describe(blk)}\n")
     topExpr.genFlags |= ExprGenFlags.alwaysSafe
     var inscope res <- qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
     (((res as ExprInvoke).arguments[0] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
@@ -649,7 +692,7 @@ class private LinqFold : AstCallMacro {
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
         var inscope res : ExpressionPtr <- fold_linq_default(call.arguments[0])
         if (res == null) {
-            prog |> macro_error(call.at, "cannot fold LINQ expression")
+            prog |> macro_error(call.at, "cannot fold LINQ expression\n{describe(call.arguments[0])}")
             return <- res
         }
         return <- res

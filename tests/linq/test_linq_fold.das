@@ -696,3 +696,31 @@ def test_zip(t : T?) {
         }
     }
 }
+
+[test]
+def test_order_distinct(t : T?) {
+    t |> run("basic order distinct") <| @(t : T?) {
+        var t7 = (
+            [5, 4, 4, 3, 4, 2, 1, 1, 4, 3]
+            ._select(_ * 10)
+            .order()
+            .distinct()
+            .min()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t7), "int")
+        t |> equal(10, t7)
+    }
+    t |> run("first position order distinct") <| @(t : T?) {
+        var t7 = (
+            [5, 4, 4, 3, 4, 2, 1, 1, 4, 3]
+            .order()
+            .distinct()
+            .min()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(t7), "int")
+        t |> equal(1, t7)
+    }
+}
+
