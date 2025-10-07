@@ -451,7 +451,7 @@ def private is_linq_call(var expr : Expression?) : bool {
 [macro_function]
 def private flatten_linq(var expr : ExpressionPtr)  {
     var top = get_ptr(expr)
-    var calls : array<tuple<ExprCall?; LinqCall const?>>
+    var calls : array<tuple<ExprCall?; LinqCall?>>
     while (top != null) {
         if (top is ExprCall) {
             var topCall = top as ExprCall
@@ -463,7 +463,7 @@ def private flatten_linq(var expr : ExpressionPtr)  {
             if (!linqCalls.key_exists(funcName)) {
                 break
             }
-            let linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
+            var linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
             if (linqCall.moduleName != string(topFunc._module.name)) {
                 break
             }
@@ -478,6 +478,53 @@ def private flatten_linq(var expr : ExpressionPtr)  {
     calls.reverse_inplace()
     // ok, at this point top is source
     return <- (top, calls)
+}
+
+struct private FoldSequence {
+    calls : array<string>
+    folder : function<(
+        argIndex : int;
+        var topValue : ExpressionPtr;
+        var blk : ExprBlock?;
+        var calls : array<tuple<ExprCall?; LinqCall?>>;
+        toSeq : bool
+    ) : ExpressionPtr>
+}
+
+var private g_foldSeq = [
+    FoldSequence(
+        calls = ["where_", "select" ],
+        folder = @@fold_where_select
+    ),
+]
+
+[macro_function]
+def private fold_where_select(argIndex : int; var topValue : ExpressionPtr; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>; toSeq : bool) : ExpressionPtr {
+    //! folds where + select into a single comprehension
+    var eWhere = calls[0]._0
+    var eSelect = calls[1]._0
+    var inscope iterType <- clone_type(eWhere.arguments[0]._type.firstType)
+    var inscope whereCond : ExpressionPtr
+    whereCond |> move_new <| fold_linq_cond(eWhere.arguments[1], "it")
+    var inscope selectExpr : ExpressionPtr
+    if (eSelect != null) {
+        selectExpr |> move_new <| fold_linq_cond(eSelect.arguments[1], "it")
+    } else {
+        selectExpr |> move_new <| new ExprVar(name := "it", at = topValue.at, _type := iterType)
+    }
+    var inscope comprehension : ExpressionPtr
+    if (toSeq) {
+        comprehension |> move_new <| qmacro(unsafe([iterator for(it in $e(topValue)); $e(selectExpr); where $e(whereCond)]))
+    } else {
+        comprehension |> move_new <| qmacro([for (it in $e(topValue)); $e(selectExpr); where $e(whereCond)])
+    }
+    comprehension.force_at(calls[0]._0.at)
+    let newArgName = "pass_{argIndex}"
+    blk.list |> emplace_new <| qmacro_expr() {
+        var $i(newArgName) <- $e(comprehension)
+    }
+    (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
+    return <- qmacro($i(newArgName))
 }
 
 [macro_function]
@@ -503,46 +550,79 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
     var inscope topExprType <- clone_type(top._type)
     var inscope topValue = qmacro(source)
     let lastCallIndex = calls |> length - 1
-    for (cll, argIndex in calls, count()) {
+    var argIndex = 0
+    let argMax = length(calls)
+    while (argIndex < argMax) {
         if (true) {
+            var cll & = unsafe(calls[argIndex])
             let newArgName = "pass_{argIndex}"
             var callName = cll._1.name
             var inplace = false
-            if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {
-                if (argIndex == 0 && top._type.isIterator) {
-                    callName = "{callName}_to_array"
-                } elif (argIndex == lastCallIndex && expr._type.isIterator) {
-                    callName = "{callName}_to_sequence"
-                } elif (argIndex != 0 && cll._1.inplace) {
-                    callName = "{callName}_inplace"
-                    inplace = true
-                }
-            }
-            for (i in cll._1.recursive) {   // this is where we make recursion
-                if (i >= 1 && i < cll._0.arguments |> length) {
-                    var inscope argExpr <- make_call(cll._0.at, "_fold")
-                    (argExpr as ExprCallMacro).arguments |> emplace <| cll._0.arguments[i]
-                    cll._0.arguments[i] |> move <| argExpr
-                }
-            }
-            var inscope newCall = qmacro($c(callName)($e(topValue)))
-            let numArgs = cll._0.arguments |> length
-            for (i in 1..numArgs) {
-                (newCall as ExprCall).arguments |> emplace_new <| clone_expression(cll._0.arguments[i])
-            }
-            if (inplace) {
-                blk.list |> emplace(newCall)
-            } else {
-                blk.list |> emplace_new <| qmacro_expr() {
-                    var $i(newArgName) = $e(newCall)
-                }
-                (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
-                if (argIndex != 0) {
-                    blk.list |> emplace_new <| qmacro_expr() {
-                        delete $e(topValue)
+            // lets find folding sequences
+            var found : FoldSequence?
+            for (fs in g_foldSeq) {
+                if (fs.calls |> length + argIndex - 1 < argMax) {
+                    var match = true
+                    for (i in 0 .. fs.calls |> length) {
+                        if (fs.calls[i] != unsafe(calls[argIndex + i]._1.name)) {
+                            match = false
+                            break
+                        }
+                    }
+                    if (match) {
+                        found = unsafe(addr(fs))
+                        break
                     }
                 }
-                topValue |> move_new <| qmacro($i(newArgName))
+            }
+            if (found != null) {
+                var toSeq = false
+                if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {
+                    if (argIndex + found.calls |> length - 1 == lastCallIndex && expr._type.isIterator) {
+                        toSeq = true
+                    }
+                }
+                var sub = subarray(calls, argIndex .. argIndex + found.calls |> length)
+                topValue |> move_new <| found.folder(argIndex, topValue, blk.get_ptr(), sub, toSeq)
+                argIndex += found.calls |> length
+            } else {
+                if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {
+                    if (argIndex == 0 && top._type.isIterator) {
+                        callName = "{callName}_to_array"
+                    } elif (argIndex == lastCallIndex && expr._type.isIterator) {
+                        callName = "{callName}_to_sequence"
+                    } elif (argIndex != 0 && cll._1.inplace) {
+                        callName = "{callName}_inplace"
+                        inplace = true
+                    }
+                }
+                for (i in cll._1.recursive) {   // this is where we make recursion
+                    if (i >= 1 && i < cll._0.arguments |> length) {
+                        var inscope argExpr <- make_call(cll._0.at, "_fold")
+                        (argExpr as ExprCallMacro).arguments |> emplace <| cll._0.arguments[i]
+                        cll._0.arguments[i] |> move <| argExpr
+                    }
+                }
+                var inscope newCall = qmacro($c(callName)($e(topValue)))
+                let numArgs = cll._0.arguments |> length
+                for (i in 1..numArgs) {
+                    (newCall as ExprCall).arguments |> emplace_new <| clone_expression(cll._0.arguments[i])
+                }
+                if (inplace) {
+                    blk.list |> emplace(newCall)
+                } else {
+                    blk.list |> emplace_new <| qmacro_expr() {
+                        var $i(newArgName) = $e(newCall)
+                    }
+                    (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
+                    if (argIndex != 0) {
+                        blk.list |> emplace_new <| qmacro_expr() {
+                            delete $e(topValue)
+                        }
+                    }
+                    topValue |> move_new <| qmacro($i(newArgName))
+                }
+                argIndex ++
             }
         }
     }
@@ -556,64 +636,12 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
     return <- res
 }
 
-[macro_function]
-def private fold_linq_where_expr(var expr : ExpressionPtr) : ExpressionPtr {
-    //! fold the following sequence
-    //!   src.optional to_array_move().optional to_sequence().where(...).optional select().optional to_array()
-    //! into comprehension. remove unnecessary to_array_move/to_sequence
-    //! if to_array() is present, then output is array comprehension, otherwise iterator comprehension
-    var inscope res : ExpressionPtr
-    //! fold src.where(...).to_array()
-    var top : Expression? = expr.get_ptr()
-    // check for to_array(foo)
-    var e_to_array = top.is_call_or_generic_arg0("to_array", "$")
-    top = e_to_array != null ? e_to_array : top
-    // check for select
-    var e_select = top.is_call_or_generic("select", "linq")
-    top = e_select != null ? e_select.arguments[0].get_ptr() : top
-    // check for where(foo)
-    var e_where = top.is_call_or_generic("where_", "linq")
-    top = e_where != null ? e_where.arguments[0].get_ptr() : top
-    // source is iterable
-    return <- res if (top._type == null || !(top._type.isIterator || top._type.isGoodArrayType))
-    return <- res if (is_linq_call(top))    // if  its just begining of the linq chain, bail out
-    var inscope iterType <- clone_type(top._type.firstType)
-    // now, let's check for to_sequence(foo), and skip
-    var e_to_sequence = top.is_call_or_generic_arg0("to_sequence", "linq")
-    top = e_to_sequence != null ? e_to_sequence : top
-    // to_array_move(foo), and skip
-    var e_to_array_move = top.is_call_or_generic_arg0("to_array_move", "$")
-    top = e_to_array_move != null ? e_to_array_move : top
-    // output is array or iterator
-    var inscope top_e <- clone_expression(unsafe(reinterpret<ExpressionPtr>(top)))
-    var inscope select_e : ExpressionPtr
-    if (e_select != null) {
-        select_e |> move_new <| fold_linq_cond(e_select.arguments[1], "it")
-    } else {
-        select_e |> move_new <| new ExprVar(name := "it", at = expr.at, _type := iterType)
-    }
-    // if to_array was present, then array comprehension, otherwise iterator comprehension
-    var inscope comprehension : smart_ptr<ExprArrayComprehension>
-    comprehension |> move_new <| qmacro([for (it in $e(top_e)); $e(select_e)])
-    comprehension.force_at(expr.at)
-    if (e_where != null) {
-        comprehension.exprWhere |> move_new <| fold_linq_cond(e_where.arguments[1], "it")
-    }
-    let input_is_sequence = e_to_sequence != null || top._type.isIterator
-    let output_is_array = e_to_array != null
-    comprehension.generatorSyntax = input_is_sequence && !output_is_array
-    return <- comprehension
-}
-
 [call_macro(name="_fold")]
 class private LinqFold : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")
-        var inscope res : ExpressionPtr <- fold_linq_where_expr(call.arguments[0])
-        if (res == null) {
-            res |> move_new <| fold_linq_default(call.arguments[0])
-        }
+        var inscope res : ExpressionPtr <- fold_linq_default(call.arguments[0])
         if (res == null) {
             prog |> macro_error(call.at, "cannot fold LINQ expression")
             return <- res
@@ -621,6 +649,4 @@ class private LinqFold : AstCallMacro {
         return <- res
     }
 }
-
-
 

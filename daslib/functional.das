@@ -197,8 +197,6 @@ def cycle(var src : iterator<auto(TT)>) {
                 }
             }
             return false
-        } finally {
-            __builtin_array_clear_lock(arr)
         }
     } else {
         return <- generator<TT&> capture(<- src) () <| $() {
@@ -213,8 +211,6 @@ def cycle(var src : iterator<auto(TT)>) {
                 }
             }
             return false
-        } finally {
-            __builtin_array_clear_lock(arr)
         }
     }
 }
