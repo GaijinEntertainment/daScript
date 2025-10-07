@@ -79,10 +79,10 @@ struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
 // c++ -> llvm ir
 template <typename RetT, typename ...Args>
 struct CallJitFn {   // no cmres, wrap
-    static RetT static_call (const JitFn &fn, Args... args ) {
-        typedef typename WrapType<RetT>::type (* FuncType)(typename WrapType<Args>::type...);
+    static RetT static_call (const JitFn &fn, Args... args ) { // Explicitly cast arguments
+        typedef typename WrapType<RetT>::type (* FuncType)(typename WrapType<Args>::rettype...);
         auto fnPtr = reinterpret_cast<FuncType>(fn.jitFn);
-        return static_cast<RetT>(fnPtr(args...));   // note explicit cast
+        return static_cast<typename WrapArgType<RetT>::type>(fnPtr(static_cast<typename WrapRetType<Args>::type>(args)...));
     }
 };
 
