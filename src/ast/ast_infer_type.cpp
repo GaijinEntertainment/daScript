@@ -2432,7 +2432,7 @@ namespace das {
             return false;
         }
         virtual bool canVisitFunction ( Function * fun ) override {
-            if ( debugInferFlag ) {
+            if ( verbose || debugInferFlag ) {      // it can be fully inferred, and fail concept assert
                 return !fun->isTemplate;            // we don't do a thing with templates
             } else {
                 return !fun->isTemplate             // we don't do a thing with templates
@@ -3095,7 +3095,7 @@ namespace das {
             }
 
             // check if we can give more info this early (buy only if we are already reporting errors)
-            if ( expr->arguments[0]->rtti_isConstant() ) {
+            if ( verbose && expr->arguments[0]->rtti_isConstant() ) {
                 bool pass = ((ExprConstBool *)(expr->arguments[0].get()))->getValue();
                 if ( !pass ) {
                     bool iscf = expr->name=="concept_assert";
@@ -3111,7 +3111,7 @@ namespace das {
                     if ( iscf ) {
                         LineInfo atC = expr->at;
                         string extra;
-                        if ( verbose && func ) {
+                        if ( func ) {
                             extra = "\nconcept_assert at " + expr->at.describe();
                             extra += func->getLocationExtra();
                             atC = func->getConceptLocation(atC);
@@ -3119,7 +3119,7 @@ namespace das {
                         program->error(message, extra,"",atC, CompilationError::concept_failed);
                     } else {
                         string extra;
-                        if ( verbose && func ) {
+                        if ( func ) {
                             extra = func->getLocationExtra();
                         }
                         program->error(message, extra,"",expr->at, CompilationError::static_assert_failed);
