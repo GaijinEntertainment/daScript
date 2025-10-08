@@ -24,8 +24,10 @@ Set operations (*)
      union_by, union_by_to_array - Returns the union of two iterables (or by key)
      except, except_to_array - Returns elements from the first iterable that are not in the second iterable
      except_by, except_by_to_array - Returns elements from the first iterable that are not in the second iterable (or by key)
-     intersect - Returns elements that are present in both iterables (or by key)
-     intersect_by - Returns elements that are present in both iterables (or by key)
+     intersect, intersect_to_array - Returns elements that are present in both iterables
+     intersect_by, intersect_by_to_array - Returns elements that are present in both iterables (or by key)
+     unique, unique_inplace, unique_to_array - Returns unique elements from a sorted iterable (by compare function)
+     unique_by, unique_by_inplace, unique_by_to_array - Returns unique elements from a sorted iterable (or by key)
 Concatenation operations (*)
      append, append_to_array, append_inplace - Appends an element to the end of an iterable
      prepend, prepend_to_array, prepend_inplace - Prepends an element to the beginning of an iterable
@@ -272,6 +274,36 @@ def reverse_to_array(var a : iterator<auto(TT)>) : array<TT -const -&> {
     }
     reverse_inplace(buffer)
     return <- buffer
+}
+
+[skip_lock_check]
+def order_inplace(var buffer : array<auto(TT)>) {
+    //! Sorts an array in place
+    sort(buffer, $(a, b) => _::unique_key(a) < _::unique_key(b))
+}
+
+[skip_lock_check]
+def order(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! Sorts an iterator
+    var arr <- to_array(a)
+    sort(arr, $(a, b) => _::unique_key(a) < _::unique_key(b))
+    return to_sequence_move(arr)
+}
+
+[skip_lock_check]
+def order(arr : array<auto(TT)>) : array<TT -const -&> {
+    //! Sorts an array
+    var brr := arr
+    sort(brr, $(a, b) => _::unique_key(a) < _::unique_key(b))
+    return <- brr
+}
+
+[skip_lock_check]
+def order_to_array(var a : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Sorts an iterator and returns an array
+    var arr <- to_array(a)
+    sort(arr, $(a, b) => _::unique_key(a) < _::unique_key(b))
+    return <- arr
 }
 
 [skip_lock_check]
@@ -585,6 +617,92 @@ def distinct_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : aut
         }
     }
     a.resize(to_index)
+    static_if (typeinfo need_lock_check(a)) {
+        set_verify_array_locks(a, true)
+    }
+}
+
+[skip_lock_check]
+def unique(a : iterator<auto(TT)>) : iterator<TT -const -&> {
+    //! sort and remove duplicate elements from an iterator
+    var inscope buffer <- to_array(a)
+    unique_inplace(buffer)
+    return to_sequence_move(buffer)
+}
+
+[skip_lock_check]
+def unique(a : array<auto(TT)>) : array<TT -const -&> {
+    //! sort and remove duplicate elements from an array
+    var b := a
+    unique_inplace(b)
+    return <- b
+}
+
+[skip_lock_check]
+def unique_to_array(a : iterator<auto(TT)>) : array<TT -const -&> {
+    //! sort and remove duplicate elements from an iterator and returns an array
+    var inscope buffer <- to_array(a)
+    unique_inplace(buffer)
+    return <- buffer
+}
+
+[skip_lock_check]
+def unique_inplace(var a : array<auto(TT)>) {
+    //! remove duplicate elements from sorted array in place
+    static_if (typeinfo need_lock_check(a)) {
+        _builtin_verify_locks(a)
+        set_verify_array_locks(a, false)
+    }
+    var write_index = 1
+    for (from_index in 1 .. length(a)) {
+        if (_::unique_key(a[from_index]) != _::unique_key(a[write_index - 1])) {
+            a[write_index++] <- a[from_index]
+        }
+    }
+    a.resize(write_index)
+    static_if (typeinfo need_lock_check(a)) {
+        set_verify_array_locks(a, true)
+    }
+}
+
+[skip_lock_check]
+def unique_by(a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
+    //! sort and remove duplicate elements from an iterator based on a key
+    var inscope buffer <- to_array(a)
+    unique_by_inplace(buffer, key)
+    return to_sequence_move(buffer)
+}
+
+[skip_lock_check]
+def unique_by(a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! sort and remove duplicate elements from an array based on a key
+    var b := a
+    unique_by_inplace(b, key)
+    return <- b
+}
+
+[skip_lock_check]
+def unique_by_to_array(a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
+    //! sort and remove duplicate elements from an iterator based on a key and returns an array
+    var inscope buffer <- to_array(a)
+    unique_by_inplace(buffer, key)
+    return <- buffer
+}
+
+[skip_lock_check]
+def unique_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) {
+    //! remove duplicate elements from an array based on a key in place
+    static_if (typeinfo need_lock_check(a)) {
+        _builtin_verify_locks(a)
+        set_verify_array_locks(a, false)
+    }
+    var write_index = 1
+    for (from_index in 1 .. length(a)) {
+        if (key(a[from_index]) != key(a[write_index - 1])) {
+            a[write_index++] <- a[from_index]
+        }
+    }
+    a.resize(write_index)
     static_if (typeinfo need_lock_check(a)) {
         set_verify_array_locks(a, true)
     }
@@ -2796,3 +2914,26 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_
     return <- zip_impl(a, type<TT -const -&>, b, type<UU -const -&>, result_selector)
 }
 
+[skip_lock_check]
+def public order_unique_folded(var a : array<auto(TT)>) : array<TT -const -&> {
+    //! sort and remove duplicate elements from an array
+    var arr <- order(a)
+    unique_inplace(arr)
+    return <- arr
+}
+
+[skip_lock_check]
+def public order_unique_folded(var a : iterator<auto(TT)>) : array<TT -const -&> {
+    //! sort and remove duplicate elements from an iterator
+    var arr <- to_array(a)
+    order_inplace(arr)
+    unique_inplace(arr)
+    return <- arr
+}
+
+[skip_lock_check]
+def public order_unique_folded_inplace(var a : array<auto(TT)>) {
+    //! sort and remove duplicate elements from an array
+    order_inplace(a)
+    unique_inplace(a)
+}

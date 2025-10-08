@@ -189,3 +189,80 @@ def test_order(t : T?) {
     }
 }
 
+[test]
+def test_unique(t : T?) {
+    t |> run("basic unique") <| @(t : T?) {
+        var numbers = [
+            1, 1, 1, 2, 2, 3, 4, 5, 1, 4
+        ]
+        var query_n = unique(numbers)
+        var expected_n = [1, 2, 3, 4, 5, 1, 4]
+        t |> equal(length(query_n), length(expected_n))
+        for (q, e in query_n, expected_n) {
+            t |> equal(q, e)
+        }
+    }
+    t |> run("complex unique") <| @(t : T?) {
+        var complex_numbers = [
+            ComplexType(a = [1, 10]),
+            ComplexType(a = [1, 10]),
+            ComplexType(a = [2, 20]),
+            ComplexType(a = [2, 20]),
+            ComplexType(a = [3, 30]),
+            ComplexType(a = [1, 10])
+        ]
+        var query_c = unique(complex_numbers)
+        var expected_c = [
+            ComplexType(a = [1, 10]),
+            ComplexType(a = [2, 20]),
+            ComplexType(a = [3, 30]),
+            ComplexType(a = [1, 10])
+        ]
+        t |> equal(length(query_c), length(expected_c))
+        for (q, e in query_c, expected_c) {
+            t |> success(q == e)
+        }
+    }
+}
+
+[test]
+def test_unique_by(t : T?) {
+    t |> run("basic unique by") <| @(t : T?) {
+        var numbers = [
+            1, 1, 1, 2, 2, 3, 4, 5, 1, 4
+        ]
+        var query_n = _unique_by(
+            numbers,
+            _
+        )
+        var expected_n = [1, 2, 3, 4, 5, 1, 4]
+        t |> equal(length(query_n), length(expected_n))
+        for (q, e in query_n, expected_n) {
+            t |> equal(q, e)
+        }
+    }
+    t |> run("complex unique by") <| @(t : T?) {
+        var complex_numbers = [
+            ComplexType(a = [1, 10]),
+            ComplexType(a = [1, 10]),
+            ComplexType(a = [2, 20]),
+            ComplexType(a = [2, 20]),
+            ComplexType(a = [3, 30]),
+            ComplexType(a = [1, 10])
+        ]
+        var query_c = _unique_by(
+            complex_numbers,
+            _.a[0]
+        )
+        var expected_c = [
+            ComplexType(a = [1, 10]),
+            ComplexType(a = [2, 20]),
+            ComplexType(a = [3, 30]),
+            ComplexType(a = [1, 10])
+        ]
+        t |> equal(length(query_c), length(expected_c))
+        for (q, e in query_c, expected_c) {
+            t |> success(q == e)
+        }
+    }
+}
