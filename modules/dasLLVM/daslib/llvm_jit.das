@@ -4643,7 +4643,7 @@ class LlvmJitVisitor : AstVisitor {
                 // TODO: check? (we don't check, we just cast for now)
                 var cres = LLVMBuildPointerCast(g_builder, resPtr, type_to_llvm_abi_type(returnType), "")
                 expr_res = cres
-            } elif (expr.returnFlags.moveSemantics && expr.subexpr._type.isWorkhorseType) {
+            } elif (expr.subexpr._type.flags.ref && expr.returnFlags.moveSemantics && expr.subexpr._type.isWorkhorseType) {
                 // return <- blah // where blah is string and such
                 var lres = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), getE(expr.subexpr), expr.subexpr._type.alignOf, "")
                 expr_res = lres
