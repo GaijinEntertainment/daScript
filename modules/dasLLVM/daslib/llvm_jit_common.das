@@ -93,7 +93,6 @@ var public g_mod : LLVMOpaqueModule?
 var public g_engine : LLVMExecutionEngineRef
 var public g_failed : bool = false
 var public g_errors : array<string>
-var public g_dynamic_lib_handle : void?
 var public g_loading_from_dll : bool = true
 
 var public g_t_simFunction : LLVMOpaqueType?
