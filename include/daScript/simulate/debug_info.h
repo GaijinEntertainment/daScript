@@ -147,8 +147,16 @@ namespace das
         vector<FileInfo *>  chain;
     };
 
+    enum class MissingHint {
+        ModuleInfoNotFound,
+        FileNotFound,
+        DuplicateModule,
+    };
+
     struct MissingRecord : RequireRecord {
+        MissingHint         hintType;
         string              hintName;
+        string              hintName2;
     };
 
     struct NamelessModuleReq {

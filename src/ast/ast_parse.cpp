@@ -310,7 +310,7 @@ namespace das {
                                 if ( log ) {
                                     *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
                                 }
-                                missing.push_back({mod,chain});
+                                missing.push_back({mod,chain,MissingHint::ModuleInfoNotFound});
                                 return false;
                             }
                             string fileModName;
@@ -323,7 +323,7 @@ namespace das {
                                     if ( log ) {
                                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND; did you mean '" << fileModName << "'?\n";
                                     }
-                                    missing.push_back({mod,chain,fileModName});
+                                    missing.push_back({mod,chain,MissingHint::ModuleInfoNotFound,fileModName});
                                     return false;
                                 }
                                 info.moduleName = fileModName;
@@ -357,7 +357,7 @@ namespace das {
                                     *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - module name collision\n"
                                          << string(tab+1,'\t') << "requested from " << it_r->fileName << " and from " << info.fileName << "\n";
                                 }
-                                missing.push_back({mod, chain});
+                                missing.push_back({mod, chain, MissingHint::DuplicateModule, info.fileName, it_r->fileName});
                                 return false;
                             } else {
                                 if ( log ) {
@@ -394,7 +394,7 @@ namespace das {
                 *log    << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n"
                         << string(tab+1,'\t') << "getDasRoot()='" << getDasRoot() << "'\n";
             }
-            missing.push_back({fileName,chain});
+            missing.push_back({fileName,chain,MissingHint::FileNotFound});
             return false;
         }
     }
@@ -883,11 +883,28 @@ namespace das {
         program->thisModuleGroup = &libGroup;
         TextWriter err;
         for ( auto & mis : missing ) {
-            err << "missing prerequisit '" << mis.name;
-            if ( !mis.hintName.empty() ) {
-                err << "'; did you mean '" << mis.hintName << "'?\n";
-            } else {
-                err << "'\n";
+            switch ( mis.hintType ) {
+                case MissingHint::FileNotFound: {
+                    err << "missing prerequisite '" << mis.name << "'; file not found\n";
+                    break;
+                }
+                case MissingHint::ModuleInfoNotFound: {
+                    err << "missing prerequisite '" << mis.name << "'; module info not found";
+                    if ( !mis.hintName.empty() ) {
+                        err << "', did you mean '" << mis.hintName << "'?\n";
+                    } else {
+                        err << "'\n";
+                    }
+                    break;
+                }
+                case MissingHint::DuplicateModule: {
+                    err << "several modules with the same name '" << mis.name << "'\nnamely '" << mis.hintName << "' and '" << mis.hintName2 << "'\n";
+                    break;
+                }
+                default: {
+                    err << "'\n";
+                    break;
+                }
             }
             reportChain(err, mis.chain);
         }
@@ -927,7 +944,7 @@ namespace das {
         for ( auto & r : req ) {
             if ( fullName.find(r.moduleName) != fullName.end() ) {
                 logs << "several modules with the same name '" << r.moduleName << "'\n" <<
-                        "namely " << r.fileName << "\n\tand " << fullName[r.moduleName] << "\n";
+                        "namely '" << r.fileName << "' and '" << fullName[r.moduleName] << "'\n";
                 return false;
             }
             fullName[r.moduleName] = r.fileName;
