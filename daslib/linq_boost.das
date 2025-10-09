@@ -677,7 +677,6 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
             return <- $e(topValue)
         }
     }
-    print("BLOCK IS\n{describe(blk)}\n")
     topExpr.genFlags |= ExprGenFlags.alwaysSafe
     var inscope res <- qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
     (((res as ExprInvoke).arguments[0] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
