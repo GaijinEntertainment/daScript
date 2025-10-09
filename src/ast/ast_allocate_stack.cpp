@@ -277,7 +277,8 @@ namespace das {
                         auto block = static_pointer_cast<ExprBlock>(func->body);
                         if ( func->result->isWorkhorseType() ) {
                             if (block->list.size()==1 && block->finalList.size()==0 && block->list.back()->rtti_isReturn()) {
-                                func->fastCall = true;
+                                auto ret = (ExprReturn *) block->list.back().get();
+                                if ( !ret->moveSemantics ) func->fastCall = true;   // can't fast-call return <-
                             }
                         } else if ( func->result->isVoid() ) {
                             if ( block->list.size()==1 && block->finalList.size()==0 && !block->list.back()->rtti_isBlock() ) {
