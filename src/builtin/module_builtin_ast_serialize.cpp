@@ -1197,7 +1197,7 @@ namespace das {
 
     void Variable::serialize ( AstSerializer & ser ) {
         ser.tag(HASH_TAG("Variable"));
-        ser << name << aka << type << init << source << at << index << stackTop
+        ser << name << aka << type << init << source << at << stackTop
             << extraLocalOffset << module
             << initStackSize << flags << access_flags << annotation;
         ptr_ref_count::serialize(ser);

@@ -368,16 +368,16 @@ namespace das {
                 program->error("[init] is disabled in the options or CodeOfPolicies", "", "",
                         var->at, CompilationError::no_init);
             }
-            globalVar->index = -3; // initialized. -1 by default
+            program->varIndex(globalVar) = -3; // initialized. -1 by default
             globalVar = nullptr;
             return Visitor::visitGlobalLetInit(var,that);;
         }
         virtual void preVisit(ExprVar * expr) override {
             Visitor::preVisit(expr);
             if ( globalVar && expr->isGlobalVariable() ) {
-                if ( expr->variable->index!=-3 ) {
+                if ( program->varIndex(expr->variable) != -3 ) {
                     if ( expr->variable->module==globalVar->module ) {
-                        program->error("global variable " + expr->name + " is initialized after " + globalVar->name + " (" + to_string(expr->variable->index) + ")",
+                        program->error("global variable " + expr->name + " is initialized after " + globalVar->name + " (" + to_string(program->varIndex(expr->variable)) + ")",
                             "", "", expr->at, CompilationError::variable_not_found);
                     }
                 }
