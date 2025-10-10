@@ -228,6 +228,21 @@ namespace das
         return str;
     }
 
+    int builtin_string_stricmp( const char *a, const char *b )
+    {
+        int d;
+        for (;; ++a, ++b){
+            d = to_lower(*a) - to_lower(*b);
+            if ( d ) {
+              return d;
+            }
+            if ( !*a || !*b ) {
+              break;
+            }
+        }
+        return d;
+    }
+
     template <typename TT>
     TT string_to_int_number ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");

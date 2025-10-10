@@ -53,6 +53,7 @@ namespace das {
     char* builtin_string_toupper ( const char *str, Context * context, LineInfoArg * at );
     char* builtin_string_toupper_in_place ( char* str );
     char* builtin_string_chop( const char * str, int start, int length, Context * context, LineInfoArg * at );
+    int builtin_string_stricmp( const char * a, const char * b );
 
     uint8_t string_to_uint8 ( const char *str, Context * context, LineInfoArg * at );
     int8_t string_to_int8 ( const char *str, Context * context, LineInfoArg * at );
