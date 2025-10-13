@@ -606,6 +606,7 @@ namespace das {
         with->with = make_smart<ExprVar>(block->at, "__this");
         with->with->generated = true;
         with->body = block->clone();
+        ((ExprBlock *) with->body.get())->isLambdaBlock = false;    // this is now a body of the function, not a lambda block
         static_pointer_cast<ExprBlock>(with->body)->finalList.clear();
         if ( genFlags & generator_needYield ) {
             pFunc->generator = true;

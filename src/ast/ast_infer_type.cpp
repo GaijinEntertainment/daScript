@@ -7856,6 +7856,11 @@ namespace das {
                                     return Visitor::visitLet(expr,var,last);
                                 }
 
+                            } else if ( scopes.back()->isLambdaBlock ) {
+                                var->inScope = false;
+                                error("internal error. in-scope variable in lambda gets converted as part of the lambda function", "", "",
+                                    var->at, CompilationError::invalid_variable_type);
+                                return Visitor::visitLet(expr,var,last);
                             } else {
                                 scopes.back()->finalList.insert(scopes.back()->finalList.begin(), exprDel);
                             }
