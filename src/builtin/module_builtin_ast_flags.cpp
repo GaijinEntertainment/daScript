@@ -51,7 +51,7 @@ namespace das {
         ft->argNames = { "isClosure", "hasReturn", "copyOnReturn", "moveOnReturn",
             "inTheLoop", "finallyBeforeBody", "finallyDisabled","aotSkipMakeBlock",
             "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse", "hasMakeBlock",
-            "hasEarlyOut", "forLoop" };
+            "hasEarlyOut", "forLoop", "hasExitByLabel", "isLambdaBlock" };
         return ft;
     }
 
