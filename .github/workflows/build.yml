@@ -41,6 +41,7 @@ jobs:
         target: [linux, linux_arm, darwin15, darwin26, windows]
         architecture: [32, 64, arm64]
         cmake_preset: [ Debug, Release ]
+        sanitizers: [none]
 
         include:
           - target: linux
@@ -48,6 +49,20 @@ jobs:
             release_arch: x86_64
             runner: ubuntu-latest
             archive_ext: tar.gz
+            sanitizers: none
+
+          # single asan build
+          - target: linux
+            release_target: linux
+            release_arch: x86_64
+            architecture: 64
+            runner: ubuntu-latest
+            archive_ext: tar.gz
+            cmake_preset: Debug
+            sanitizers: asan
+            build_name: linux_asan
+            build_system: cmake
+            cmake_generator: Ninja
 
           - target: linux_arm
             release_target: linux
@@ -203,7 +218,8 @@ jobs:
           cmake)
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
-                cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
+                        "${{ matrix.cmake_generator }}" ${{ matrix.cmake_extra_args }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }}
                 cd build
                 ninja daslang
                 ninja
@@ -273,6 +289,9 @@ jobs:
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            linux64)
             cd bin
+            # when exceptions disabled, we still throw in tests and there'll be memory leaks
+            echo -e "leak:format_error\nleak:builtin_verify_locks" > suppressions.txt
+            export LSAN_OPTIONS="suppressions='suppressions.txt'"
             ./daScriptTest
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;

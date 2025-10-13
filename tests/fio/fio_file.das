@@ -33,7 +33,7 @@ def test_fopen(t : T?) {
                     fclose(f)
                     var written = false
                     fopen(fname, "a") <| $(ff) {
-                        fwrite(f, "test")
+                        fwrite(ff, "test")
                         written = true
                     }
                     t |> success(written)
