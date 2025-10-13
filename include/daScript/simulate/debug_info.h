@@ -150,6 +150,7 @@ namespace das
 
     enum class MissingHint {
         ModuleInfoNotFound,
+        WrongModuleName,
         FileNotFound,
         DuplicateModule,
     };
@@ -161,6 +162,7 @@ namespace das
     };
 
     struct NamelessModuleReq {
+        string              name;
         string              moduleName;
         string              fileName;
         string              fromFile;
@@ -169,10 +171,10 @@ namespace das
     struct NamelessMismatch {
         vector<FileInfo *>  chain;
         int32_t             line;
-        string              moduleName1;
+        string              name1;
         string              fileName1;
         string              fromFile1;
-        string              moduleName2;
+        string              name2;
         string              fileName2;
         string              fromFile2;
     };

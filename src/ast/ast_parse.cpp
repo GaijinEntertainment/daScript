@@ -85,7 +85,7 @@ namespace das {
                 while ( src < src_end && !(src[0]=='\n') ) {
                     src ++;
                 }
-                if ( src[0]=='\n' )
+                if ( src < src_end && src[0]=='\n' )
                     line ++;
                 src ++;
                 wb = true;
@@ -273,7 +273,8 @@ namespace das {
                           TextWriter * log,
                           int tab,
                           bool allowPromoted,
-                          int32_t line ) {
+                          const string & reqNameHint,
+                          int32_t reqLineHint ) {
         if ( auto fi = access->getFileInfo(fileName) ) {
             ChainGuard guard(chain,fi);
             if ( log ) {
@@ -281,7 +282,7 @@ namespace das {
             }
             vector<RequireRecord> ownReq = getAllRequire(fi, modName, chain, access);
             for ( auto & modRec : ownReq ) {
-                string & mod = modRec.name;
+                string mod = modRec.name;
                 if ( log ) {
                     *log << string(tab,'\t') << "require " << mod << "\n";
                 }
@@ -311,9 +312,9 @@ namespace das {
                             if ( dependencies.find(mod) != dependencies.end() ) {
                                 // circular dependency
                                 if ( log ) {
-                                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
+                                    *log << string(tab,'\t') << "from " << fileName << " require " << modRec.name << " - CIRCULAR DEPENDENCY\n";
                                 }
-                                circular.push_back({mod, modRec.line, chain});
+                                circular.push_back({modRec.name, modRec.line, chain});
                                 return false;
                             }
                             dependencies.insert(mod);
@@ -321,14 +322,14 @@ namespace das {
                             if ( info.moduleName.empty() ) {
                                 // request can't be translated to module name
                                 if ( log ) {
-                                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
+                                    *log << string(tab,'\t') << "from " << fileName << " require " << modRec.name << " - MODULE INFO NOT FOUND\n";
                                 }
-                                missing.push_back({mod, modRec.line, chain, MissingHint::ModuleInfoNotFound});
+                                missing.push_back({modRec.name, modRec.line, chain, MissingHint::ModuleInfoNotFound});
                                 return false;
                             }
                             string fileModName;
                             if ( !getPrerequisits(info.fileName, access, fileModName, req, missing, circular, notAllowed, chain, dependencies,
-                                                  namelessReq, namelessMismatches, libGroup, log, tab + 1, allowPromoted, modRec.line) ) {
+                                                  namelessReq, namelessMismatches, libGroup, log, tab + 1, allowPromoted, modRec.name, modRec.line) ) {
                                 return false;
                             }
                             if ( !fileModName.empty() ) {
@@ -336,7 +337,7 @@ namespace das {
                                     if ( log ) {
                                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND; did you mean '" << fileModName << "'?\n";
                                     }
-                                    missing.push_back({mod, modRec.line, chain, MissingHint::ModuleInfoNotFound, fileModName});
+                                    missing.push_back({modRec.name, modRec.line, chain, MissingHint::WrongModuleName, mod, fileModName});
                                     return false;
                                 }
                                 info.moduleName = fileModName;
@@ -345,17 +346,17 @@ namespace das {
                                 builtin_string_tolower_in_place(caseInsensitiveName.data());
                                 auto prevMod = namelessReq.find(caseInsensitiveName);
                                 if ( prevMod == namelessReq.end() ) {
-                                    namelessReq[caseInsensitiveName] = NamelessModuleReq{info.moduleName, info.fileName, fileName};
+                                    namelessReq[caseInsensitiveName] = NamelessModuleReq{mod, info.moduleName, info.fileName, fileName};
                                 } else if ( prevMod->second.fileName != info.fileName ) {
                                     if ( log ) {
-                                        *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE NAME CASE CONFLICT; "
-                                             << prevMod->second.moduleName << " (" << prevMod->second.fileName << ") vs " << info.moduleName << " (" << info.fileName << ")\n"
-                                             << string(tab+1,'\t') << prevMod->second.moduleName << " (" << prevMod->second.fileName << ") from " << prevMod->second.fromFile << "\n"
-                                             << string(tab+1,'\t') << info.moduleName << " (" << info.fileName << ") from " << fileName << "\n";
+                                        *log << string(tab,'\t') << "from " << fileName << " require " << modRec.name << " - MODULE NAME CASE CONFLICT; "
+                                             << prevMod->second.name << " vs " << modRec.name << " \n"
+                                             << string(tab+1,'\t') << prevMod->second.name << " from " << prevMod->second.fromFile << "\n"
+                                             << string(tab+1,'\t') << modRec.name << " from " << fileName << "\n";
                                     }
                                     namelessMismatches.push_back(NamelessMismatch{chain, modRec.line,
-                                        prevMod->second.moduleName, prevMod->second.fileName,
-                                        info.fileName, fileName
+                                        modRec.name, info.fileName, fileName,
+                                        prevMod->second.name, prevMod->second.fileName, prevMod->second.fromFile
                                     });
                                     return false;
                                 }
@@ -372,16 +373,16 @@ namespace das {
                                     if ( builtin_string_stricmp(it_r->fileName.c_str(), info.fileName.c_str()) == 0 ) {
                                         // same file names, different case - probably typo
                                          if ( log ) {
-                                            *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND; did you mean '" << it_r->fileName << "'?\n";
+                                            *log << string(tab,'\t') << "from " << fileName << " require " << modRec.name << " - MODULE INFO NOT FOUND; did you mean '" << it_r->fileName << "'?\n";
                                         }
-                                        missing.push_back({mod, modRec.line, chain, MissingHint::ModuleInfoNotFound, it_r->fileName});
+                                        missing.push_back({modRec.name, modRec.line, chain, MissingHint::ModuleInfoNotFound, it_r->fileName});
                                     } else {
                                         // different file names - most likely module name collision
                                         if ( log ) {
-                                            *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE NAME COLLISION\n"
-                                            << string(tab+1,'\t') << "requested from " << it_r->fileName << " and from " << info.fileName << "\n";
+                                            *log << string(tab,'\t') << "from " << fileName << " require " << modRec.name << " - MODULE NAME COLLISION\n"
+                                            << string(tab+1,'\t') << "requested from " << info.fileName << " and from " << it_r->fileName << "\n";
                                         }
-                                        missing.push_back({mod, modRec.line, chain, MissingHint::DuplicateModule, info.fileName, it_r->fileName});
+                                        missing.push_back({modRec.name, modRec.line, chain, MissingHint::DuplicateModule, info.fileName, it_r->fileName});
                                     }
                                 } else {
                                     // not found, suggest the one we have
@@ -390,9 +391,9 @@ namespace das {
                                     auto prevMod = namelessReq.find(caseInsensitiveName);
                                     const string & maybeName = prevMod != namelessReq.end() ? prevMod->second.fileName : it_r->fileName;
                                     if ( log ) {
-                                        *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND; did you mean '" << maybeName << "'?\n";
+                                        *log << string(tab,'\t') << "from " << fileName << " require " << modRec.name << " - MODULE INFO NOT FOUND; did you mean '" << maybeName << "'?\n";
                                     }
-                                    missing.push_back({mod, modRec.line, chain, MissingHint::ModuleInfoNotFound, maybeName});
+                                    missing.push_back({modRec.name, modRec.line, chain, MissingHint::ModuleInfoNotFound, maybeName});
                                 }
                                 return false;
                             } else {
@@ -414,9 +415,9 @@ namespace das {
                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
                     }
                     if ( !access->isModuleAllowed(module->name, fileName) ) {
-                        notAllowed.push_back({mod, modRec.line, chain});
+                        notAllowed.push_back({modRec.name, modRec.line, chain});
                         if ( log ) {
-                            *log << string(tab,'\t') << "in " << fileName << " module " << module->name << " - NOT ALLOWED\n";
+                            *log << string(tab,'\t') << "in " << fileName << " module " << modRec.name << " - NOT ALLOWED\n";
                         }
                         return false;
                     } else {
@@ -430,7 +431,7 @@ namespace das {
                 *log    << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n"
                         << string(tab+1,'\t') << "getDasRoot()='" << getDasRoot() << "'\n";
             }
-            missing.push_back({fileName, line, chain, MissingHint::FileNotFound});
+            missing.push_back({reqNameHint, reqLineHint, chain, MissingHint::FileNotFound});
             return false;
         }
     }
@@ -924,11 +925,17 @@ namespace das {
             if ( first && !mis.chain.empty() ) {
                 at.fileInfo = mis.chain.back();
                 at.line = at.last_line = mis.line;
+                at.column = 8;
+                at.last_column = at.column + (int)mis.name.size();
                 first = false;
             }
             switch ( mis.hintType ) {
                 case MissingHint::FileNotFound: {
                     err << "missing prerequisite '" << mis.name << "'; file not found\n";
+                    break;
+                }
+                case MissingHint::WrongModuleName: {
+                    err << "wrong module name '" << mis.hintName << "'; did you mean '" << mis.hintName2 << "'?\n";
                     break;
                 }
                 case MissingHint::ModuleInfoNotFound: {
@@ -955,6 +962,8 @@ namespace das {
             if ( first && !mis.chain.empty() ) {
                 at.fileInfo = mis.chain.back();
                 at.line = at.last_line = mis.line;
+                at.column = 8;
+                at.last_column = at.column + (int)mis.name.size();
                 first = false;
             }
             err << "circular dependency '" << mis.name << "'\n";
@@ -964,6 +973,8 @@ namespace das {
             if ( first && !mis.chain.empty() ) {
                 at.fileInfo = mis.chain.back();
                 at.line = at.last_line = mis.line;
+                at.column = 8;
+                at.last_column = at.column + (int)mis.name.size();
                 first = false;
             }
             err << "module not allowed '" << mis.name << "'\n";
@@ -973,11 +984,13 @@ namespace das {
             if ( first && !nameless.chain.empty() ) {
                 at.fileInfo = nameless.chain.back();
                 at.line = at.last_line = nameless.line;
+                at.column = 8;
+                at.last_column = at.column + (int)nameless.name1.size();
                 first = false;
             }
-            err << "module name case conflict: '" << nameless.moduleName1 << " (" << nameless.fileName1 << ")' vs '" << nameless.moduleName2 << " (" << nameless.fileName2 << ")'\n"
-                << "'" << nameless.moduleName1 << "' (" << nameless.fileName1 << ") from " << nameless.fromFile1 << "\n"
-                << "'" << nameless.moduleName2 << "' (" << nameless.fileName2 << ") from " << nameless.fromFile2 << "\n\n";
+            err << "module name case conflict: '" << nameless.name1 << "' vs '" << nameless.name2 << "'\n"
+                << "'" << nameless.name1 << "' (" << nameless.fileName1 << ") from " << nameless.fromFile1 << "\n"
+                << "'" << nameless.name2 << "' (" << nameless.fileName2 << ") from " << nameless.fromFile2 << "\n\n";
             reportChain(err, nameless.chain);
         }
         program->error(err.str(), "", "", at,

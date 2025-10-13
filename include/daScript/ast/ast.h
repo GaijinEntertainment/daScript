@@ -1742,7 +1742,8 @@ namespace das
                           TextWriter * log,
                           int tab,
                           bool allowPromoted,
-                          int32_t line = 0 );
+                          const string & reqNameHint = "",
+                          int32_t reqLineHint = 0 );
 
     void getAllRequireReq ( FileInfo * fi, const FileAccessPtr & access, das::string &modName, vector<RequireRecord> & req, vector<FileInfo *> & chain, das_set<FileInfo *> & collected );
 
