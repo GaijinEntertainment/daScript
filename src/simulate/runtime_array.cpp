@@ -31,7 +31,9 @@ namespace das
         char * newData = nullptr;
         if ( context.verySafeContext ) {
             newData = (char *)context.allocate(newCapacity*stride, at);
-            memcpy(newData, arr.data, arr.size*stride);
+            if ( newData && arr.data ) {
+                memcpy(newData, arr.data, arr.size*stride);
+            }
         } else {
             newData = (char *)context.reallocate(arr.data, arr.capacity*stride, newCapacity*stride, at);
         }
