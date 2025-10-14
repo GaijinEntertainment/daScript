@@ -1067,6 +1067,8 @@ namespace das
             if (!simFunc) context.throw_error("invoke null function");
             aotFunc = (lambdaFunc) simFunc->aotFunction;
         }
+
+        DAS_SUPPRESS_UB
         __forceinline bool InvokeLambda ( Context & context, char * ptr ) {
             if ( aotFunc ) {
                 return (*aotFunc) ( &context, lambda.capture, ptr );

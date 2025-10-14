@@ -21,6 +21,7 @@ namespace das {
         return h <= HASH_KILLED64 ? UINT64_C(1099511628211) : h;
     }
 
+    DAS_SUPPRESS_UB
     static NO_ASAN_INLINE uint64_t hash_blockz64 ( const uint8_t * block ) {
         auto FNV_offset_basis = UINT64_C(14695981039346656037);
         auto FNV_prime = UINT64_C(1099511628211);

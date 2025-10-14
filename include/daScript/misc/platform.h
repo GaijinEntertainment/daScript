@@ -102,7 +102,7 @@
 #endif
 
 #if defined(__has_feature)
-    #if __has_feature(address_sanitizer)
+    #if __has_feature(undefined_behavior_sanitizer)
         #define DAS_SUPPRESS_UB  __attribute__((no_sanitize("undefined")))
     #endif
 #endif
