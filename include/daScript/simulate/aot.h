@@ -161,18 +161,25 @@ namespace das {
         memset(__context__->shared + offset, 0, sizeof(TT));
     }
 
+    // Suppress null argument with size = 0
+    DAS_SUPPRESS_UB
     __forceinline int das_memcmp ( void * left, void * right, int size ) {
         return memcmp(left, right, size);
     }
 
+    // Suppress null argument with size = 0
+    DAS_SUPPRESS_UB
     __forceinline void das_memcpy ( void * left, void * right, int size ) {
         memcpy(left, right, size);
     }
 
+    // Suppress null argument with size = 0
+    DAS_SUPPRESS_UB
     __forceinline void das_memset8 ( void * left, uint8_t value, int size ) {
         memset(left, value, size);
     }
 
+    // Suppress incorrect alignment
     DAS_SUPPRESS_UB
     __forceinline void das_memset128u ( void * left, vec4f value, int size ) {
         vec4f * ptr = (vec4f *) left;

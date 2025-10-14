@@ -333,17 +333,20 @@ namespace das
         }
         if ( failed ) {
             LineInfo atProblem = rtti_get_line_info(1,&context,(LineInfoArg *) &node->debugInfo);
-            string errorPath;
+            const char *errorPath;
             uint32_t totalLockCount = 0;
             {
                 LockErrorReporter reporter;
                 reporter.walk(value,typeInfo);
                 reporter.collectPath();
                 totalLockCount = reporter.totalLockCount;
-                errorPath = reporter.pathStr;
+                errorPath = context.allocateString(reporter.pathStr, &atProblem);
+
             }
+            // Separate variable to avoid std string leak
+            const char* errorMsg = context.allocateString(debug_type(typeInfo), &atProblem);
             context.throw_error_at(&atProblem, "object type<%s>%s contains locked elements (count=%u) and can't be modified (resized, pushed to, erased from, cleared, deleted, moved, or returned via move)",
-                debug_type(typeInfo).c_str(), errorPath.c_str(), totalLockCount);
+                errorMsg, errorPath, totalLockCount);
         }
         return v_zero();
     }
