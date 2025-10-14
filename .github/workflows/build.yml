@@ -53,14 +53,21 @@ jobs:
 
           # single asan build
           - target: linux
-            release_target: linux
-            release_arch: x86_64
             architecture: 64
             runner: ubuntu-latest
-            archive_ext: tar.gz
             cmake_preset: Debug
             sanitizers: asan
             build_name: linux_asan
+            build_system: cmake
+            cmake_generator: Ninja
+
+          # single ubsan build
+          - target: linux
+            architecture: 64
+            runner: ubuntu-latest
+            cmake_preset: Debug
+            sanitizers: ubsan
+            build_name: linux_ubsan
             build_system: cmake
             cmake_generator: Ninja
 
