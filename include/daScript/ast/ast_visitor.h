@@ -306,6 +306,7 @@ namespace das {
         virtual void preVisitProgram ( Program * prog ) override;
         virtual void visitProgram ( Program * prog ) override;
         virtual void reportFolding();
+        virtual bool canVisitFunction ( Function * func ) override { return !func->isTemplate; }
         __forceinline bool didAnything() const { return anyFolding; }
     protected:
         bool        anyFolding = false;
