@@ -4050,7 +4050,7 @@ namespace das {
                 allowMissingTypeExpr = true;
             }
             bool allowMissingType = false;
-            if ( expr->trait=="builtin_annotation_exists" ) {
+            if ( expr->trait=="builtin_annotation_exists" || expr->trait=="ast_typedecl" ) {
                 allowMissingType = true;
             }
             //
