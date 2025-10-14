@@ -2466,8 +2466,9 @@ namespace das {
             res->addRef();
         }
         return res;
+    }
 
-        void visitEnumeration ( ProgramPtr program, smart_ptr_raw<Enumeration> enumeration, smart_ptr_raw<VisitorAdapter> adapter, Context * , LineInfoArg * ) {
+    void visitEnumeration ( ProgramPtr program, smart_ptr_raw<Enumeration> enumeration, smart_ptr_raw<VisitorAdapter> adapter, Context * , LineInfoArg * ) {
         program->visitEnumeration(*adapter, enumeration.get());
     }
 
