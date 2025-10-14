@@ -216,9 +216,6 @@ namespace das {
             }
         }
     protected:
-        virtual bool canVisitFunction ( Function * func ) override {
-            return !func->isTemplate;
-    }
         virtual void preVisit ( ExprGoto * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->subexpr ) {
