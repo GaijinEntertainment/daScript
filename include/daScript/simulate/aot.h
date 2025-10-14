@@ -173,6 +173,7 @@ namespace das {
         memset(left, value, size);
     }
 
+    DAS_SUPPRESS_UB
     __forceinline void das_memset128u ( void * left, vec4f value, int size ) {
         vec4f * ptr = (vec4f *) left;
         if ( size&1 ) { v_stu(ptr, value); ptr ++; size --; }
@@ -185,6 +186,7 @@ namespace das {
         }
     }
 
+    DAS_SUPPRESS_UB
     __forceinline void das_memset64 ( void * left, uint64_t value, int size ) {
         uint64_t * ptr = (uint64_t *) left;
         if ( size&1 ) { ptr[0] = value; ptr ++; size --; }
@@ -192,12 +194,14 @@ namespace das {
         das_memset128u(ptr, v_ldu((const float *)tv), size>>1);
     }
 
+    DAS_SUPPRESS_UB
     __forceinline void das_memset32 ( void * left, uint32_t value, int size ) {
         uint32_t * ptr = (uint32_t *) left;
         if ( size&1 ) { ptr[0] = value; ptr ++; size --; }
         das_memset64(ptr, value | (uint64_t(value)<<32), size>>1);
     }
 
+    DAS_SUPPRESS_UB
     __forceinline void das_memset16 ( void * left, uint16_t value, int size ) {
         uint16_t * ptr = (uint16_t *) left;
         if ( size&1 ) { ptr[0] = value; ptr ++; size --; }
@@ -1072,7 +1076,7 @@ namespace das {
         __forceinline void moveT ( const Tuple & arr ) {
             memcpy ( data, &arr, tupleSize );
         }
-        char data[tupleSize];
+        alignas(max_alignof<TA...>()) char data[tupleSize];
     };
 
     template <typename ...TA>
@@ -2262,6 +2266,7 @@ namespace das {
     template <typename ResType, int methodOffset>
     struct das_invoke_method {
         template <typename FirstArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const FirstArgType & blk ) {
             char * classPtr = (char *)&blk;
             SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
@@ -2277,6 +2282,7 @@ namespace das {
             }
         }
         template <typename FirstArgType, typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const FirstArgType & blk, ArgType ...arg ) {
             char * classPtr = (char *)&blk;
             SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
@@ -2292,6 +2298,7 @@ namespace das {
             }
         }
         template <typename FirstArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const FirstArgType & blk ) {
             char * classPtr = (char *)&blk;
             SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
@@ -2308,6 +2315,7 @@ namespace das {
             }
         }
         template <typename FirstArgType, typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const FirstArgType & blk, ArgType ...arg ) {
             char * classPtr = (char *)&blk;
             SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
@@ -2328,6 +2336,7 @@ namespace das {
     template <int methodOffset>
     struct das_invoke_method<void,methodOffset> {
         template <typename FirstArgType>
+        DAS_SUPPRESS_UB
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const FirstArgType & blk ) {
             char * classPtr = (char *)&blk;
             SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
@@ -2336,6 +2345,7 @@ namespace das {
             __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
         }
         template <typename FirstArgType, typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const FirstArgType & blk, ArgType ...arg ) {
             char * classPtr = (char *)&blk;
             SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
@@ -2347,6 +2357,7 @@ namespace das {
 
     template <typename ResType>
     struct das_invoke_function {
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = blk.PTR;
             if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
@@ -2360,6 +2371,7 @@ namespace das {
             }
         }
         template <typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             SimFunction * simFunc = blk.PTR;
             if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
@@ -2373,6 +2385,7 @@ namespace das {
                 return cast<ResType>::to(result);
             }
         }
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = blk.PTR;
             if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
@@ -2387,6 +2400,7 @@ namespace das {
             }
         }
         template <typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = blk.PTR;
@@ -2405,12 +2419,14 @@ namespace das {
 
     template <>
     struct das_invoke_function<void> {
+        DAS_SUPPRESS_UB
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = blk.PTR;
             if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
         }
         template <typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = blk.PTR;
@@ -2421,6 +2437,7 @@ namespace das {
 
     template <typename ResType>
     struct das_invoke_function_by_name {
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName ) {
             if (!funcName) __context__->throw_error_at(__lineinfo__, "invoke null function");
             bool unique = false;
@@ -2439,6 +2456,7 @@ namespace das {
             }
         }
         template <typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName, ArgType ...arg ) {
             if (!funcName) __context__->throw_error_at(__lineinfo__, "invoke null function");
             bool unique = false;
@@ -2461,6 +2479,7 @@ namespace das {
 
     template <>
     struct das_invoke_function_by_name<void> {
+        DAS_SUPPRESS_UB
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName ) {
             if (!funcName) __context__->throw_error_at(__lineinfo__, "invoke null function");
             bool unique = false;
@@ -2472,6 +2491,7 @@ namespace das {
             __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
         }
         template <typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             if (!funcName) __context__->throw_error_at(__lineinfo__, "invoke null function");
@@ -2488,6 +2508,7 @@ namespace das {
 
     template <typename ResType>
     struct das_invoke_lambda {
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
             if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
@@ -2505,6 +2526,7 @@ namespace das {
             }
         }
         template <typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
             if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
@@ -2520,6 +2542,7 @@ namespace das {
                 return cast<ResType>::to(result);
             }
         }
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
             if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
@@ -2538,6 +2561,7 @@ namespace das {
             }
         }
         template <typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
             if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
@@ -2558,6 +2582,7 @@ namespace das {
 
     template <>
     struct das_invoke_lambda<void> {
+        DAS_SUPPRESS_UB
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
             if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
@@ -2574,6 +2599,7 @@ namespace das {
             }
         }
         template <typename ...ArgType>
+        DAS_SUPPRESS_UB
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
             if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");

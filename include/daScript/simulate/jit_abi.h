@@ -68,6 +68,7 @@ struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // w
 
 template <typename RetT, typename ...Args, RetT(*fn)(Args...)>
 struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
+    DAS_SUPPRESS_UB
     static typename WrapType<RetT>::rettype static_call (typename WrapType<Args>::type... args ) {
         typedef typename WrapRetType<RetT>::type (* FuncType)(typename WrapArgType<Args>::type...);
         auto fnPtr = reinterpret_cast<FuncType>(fn);
