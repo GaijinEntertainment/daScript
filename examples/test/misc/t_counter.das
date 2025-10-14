@@ -18,11 +18,11 @@ template struct TemplateCounter {
 [type_macro(name="counter")]
 class CounterMacro : AstTypeMacro {
     def override visit(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
-        if ( length(td.dimExpr) != 2 ) {
+        if (length(td.dimExpr) != 2) {
             macro_error(compiling_program(), td.at, "expecting 1 argument")
             return <- default<TypeDeclPtr>
         }
-        if ( !(td.dimExpr[1] is ExprTypeDecl) ) {
+        if (!(td.dimExpr[1] is ExprTypeDecl)) {
             macro_error(compiling_program(), td.at, "expecting counter type")
             return <- default<TypeDeclPtr>
         }
@@ -36,7 +36,7 @@ class CounterMacro : AstTypeMacro {
         var struct_name = "Counter`{describe(counter_type)}"
 
         var existing_struct = prog.find_unique_structure(struct_name)
-        if ( existing_struct != null ) {
+        if (existing_struct != null) {
             return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = td.at)
         }
 
@@ -50,8 +50,8 @@ class CounterMacro : AstTypeMacro {
 
         // now, lets clone all methods in the module
         var template_module = template_type.structType._module
-        for_each_function(template_module,"", $(func){
-            if ( func.flags.isClassMethod && func.classParent == template_type.structType ) {
+        for_each_function(template_module, "", $(func){
+            if (func.flags.isClassMethod && func.classParent == template_type.structType) {
                 var inscope func_clone <- clone_function(func)
                 // we rename methods
                 var method_name_parts = split(string(func.name), "`")
@@ -61,7 +61,7 @@ class CounterMacro : AstTypeMacro {
                 func_clone.moreFlags &= ~(MoreFunctionFlags.isTemplate)
                 func_clone.classParent = get_ptr(structure)
                 func_clone.result |> move_new <| apply_template(rules, func.at, clone_type(func.result))
-                for ( arg in func_clone.arguments ) {
+                for (arg in func_clone.arguments) {
                     arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
                 }
                 rules |> renameVariable(string(func.name), func_clone_name)
@@ -71,9 +71,9 @@ class CounterMacro : AstTypeMacro {
         })
 
         // now we fix up fields
-        for ( fld in structure.fields ) {
+        for (fld in structure.fields) {
             fld._type |> move_new <| apply_template(rules, fld.at, clone_type(fld._type))
-            if ( fld.init != null ) {
+            if (fld.init != null) {
                 fld.init |> move_new <| apply_template(rules, fld.at, clone_expression(fld.init))
             }
         }
