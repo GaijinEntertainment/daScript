@@ -1,6 +1,13 @@
+#include "daScript/ast/aot_templates.h"
 #include "daScript/daScript.h"
+#include "daScript/das_common.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "../dasFormatter/fmt.h"
+#include "daScript/ast/ast_aot_cpp.h"
+
+// aot das-mode temporary disabled
+// #include "../../src/das/ast/_standalone_ctx_generated/ast_aot_cpp.das.h"
+// #include "../../src/das/ast/_standalone_ctx_generated/standalone_contexts.das.h"
 
 using namespace das;
 
@@ -12,40 +19,38 @@ das::FileAccessPtr get_file_access( char * pak );//link time resolved dependenci
 TextPrinter tout;
 
 static string projectFile;
+static bool aotMacros = false;
 static bool profilerRequired = false;
 static bool debuggerRequired = false;
+static bool scopedStackAllocator = true;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
 static bool paranoid_validation = false;
 static bool jitEnabled = false;
 static bool isAotLib = false;
-static bool version2syntax = false;
+static bool version2syntax = true;
+static bool gen2MakeSyntax = false;
 
-das::Context * get_context ( int stackSize=0 );
-
-bool saveToFile ( const string & fname, const string & str ) {
-    if ( !quiet )  {
-        tout << "saving to " << fname << "\n";
-    }
-    FILE * f = fopen ( fname.c_str(), "w" );
-    if ( !f ) {
-        tout << "can't open " << fname << "\n";
-        return false;
-    }
-    fwrite ( str.c_str(), str.length(), 1, f );
-    fclose ( f );
-    return true;
-}
-
-bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
-    auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
-    ModuleGroup dummyGroup;
+static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
     policies.aot = false;
     policies.aot_module = true;
+    if (aotMacros) {
+        policies.aot_macros = true;
+        policies.export_all = true; // need it for aot to export macros
+        policies.stack = 1 * 1024 * 1024; // For now, we need huge stack to aot macros
+    }
     policies.fail_on_lack_of_aot_export = true;
     policies.version_2_syntax = version2syntax;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
+    policies.gen2_make_syntax = gen2MakeSyntax;
+    policies.scoped_stack_allocator = scopedStackAllocator;
+    return policies;
+}
+
+bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_platform ) {
+    auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
+    ModuleGroup dummyGroup;
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,getPolicies()) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -53,27 +58,22 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
             }
             return false;
         } else {
-            shared_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
-            if ( !program->simulate(*pctx, tout) ) {
-                tout << "failed to simulate\n";
-                for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-                }
+            auto pctx = SimulateWithErrReport(program, tout);
+            if (!pctx) {
                 return false;
             }
+            if ( dryRun ) {
+                tout << "dry run success, no changes will be written\n";
+                return true;
+            }
+
             // AOT time
             TextWriter tw;
-            bool noAotOption = program->options.getBoolOption("no_aot",false);
             bool noAotModule = false;
             // header
-            tw << "#include \"daScript/misc/platform.h\"\n\n";
-
-            tw << "#include \"daScript/simulate/simulate.h\"\n";
-            tw << "#include \"daScript/simulate/aot.h\"\n";
-            tw << "#include \"daScript/simulate/aot_library.h\"\n";
-            tw << "\n";
+            tw << AOT_INCLUDES;
             // lets comment on required modules
-            program->library.foreach([&](Module * mod){
+            program->library.foreach_in_order([&](Module * mod){
                 if ( mod->name=="" ) {
                     // nothing, its main program module. i.e ::
                 } else {
@@ -88,95 +88,45 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                     }
                 }
                 return true;
-            },"*");
-            if ( dryRun ) {
-                tout << "dry run success, no changes will be written\n";
-                return true;
-            }
-            if ( noAotOption ) {
+            }, program->getThisModule());
+            if ( program->options.getBoolOption("no_aot",false) ) {
                 TextWriter noTw;
                 if (!noAotModule)
                   noTw << "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n";
                 else
                   noTw << "// AOT disabled due to options no_aot=true. There are also some modules which require no_aot\n\n";
-                return saveToFile(cppFn, noTw.str());
+                return saveToFile(tout, cppFn, noTw.str(), quiet);
             } else if ( noAotModule ) {
                 TextWriter noTw;
                 noTw << "// AOT disabled due to module requirements\n";
                 noTw << "#if 0\n\n";
                 noTw << tw.str();
                 noTw << "\n#endif\n";
-                return saveToFile(cppFn, noTw.str());
+                return saveToFile(tout, cppFn, noTw.str(), quiet);
             } else {
-                tw << "\n";
-                tw << "#if defined(_MSC_VER)\n";
-                tw << "#pragma warning(push)\n";
-                tw << "#pragma warning(disable:4100)   // unreferenced formal parameter\n";
-                tw << "#pragma warning(disable:4189)   // local variable is initialized but not referenced\n";
-                tw << "#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n";
-                tw << "#pragma warning(disable:4114)   // same qualifier more than once\n";
-                tw << "#pragma warning(disable:4623)   // default constructor was implicitly defined as deleted\n";
-                tw << "#pragma warning(disable:4946)   // reinterpret_cast used between related classes\n";
-                tw << "#pragma warning(disable:4269)   // 'const' automatic data initialized with compiler generated default constructor produces unreliable results\n";
-                tw << "#pragma warning(disable:4555)   // result of expression not used\n";
-                tw << "#endif\n";
-                tw << "#if defined(__EDG__)\n";
-                tw << "#pragma diag_suppress 826\n";
-                tw << "#elif defined(__GNUC__) && !defined(__clang__)\n";
-                tw << "#pragma GCC diagnostic push\n";
-                tw << "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n";
-                tw << "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n";
-                tw << "#pragma GCC diagnostic ignored \"-Wunused-function\"\n";
-                tw << "#pragma GCC diagnostic ignored \"-Wwrite-strings\"\n";
-                tw << "#pragma GCC diagnostic ignored \"-Wreturn-local-addr\"\n";
-                tw << "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n";
-                tw << "#pragma GCC diagnostic ignored \"-Wsign-compare\"\n";
-                tw << "#pragma GCC diagnostic ignored \"-Wsubobject-linkage\"\n";
-                tw << "#endif\n";
-                tw << "#if defined(__clang__)\n";
-                tw << "#pragma clang diagnostic push\n";
-                tw << "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n";
-                tw << "#pragma clang diagnostic ignored \"-Wwritable-strings\"\n";
-                tw << "#pragma clang diagnostic ignored \"-Wunused-variable\"\n";
-                tw << "#pragma clang diagnostic ignored \"-Wunused-but-set-variable\"\n";
-                tw << "#pragma clang diagnostic ignored \"-Wunsequenced\"\n";
-                tw << "#pragma clang diagnostic ignored \"-Wunused-function\"\n";
-                tw << "#endif\n";
-                tw << "\n";
-                tw << "namespace das {\n";
-
-                tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
-                daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
-                program->aotCpp(*pctx, tw);
-                daScriptEnvironment::bound->g_Program.reset();
-                // list STUFF
-                tw << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
-                program->registerAotCpp(tw, *pctx, false);
-                tw << "\tresolveTypeInfoAnnotations();\n";
-                tw << "};\n";
-                tw << "\n";
-                if ( !isAotLib ) tw << "AotListBase impl(registerAotFunctions);\n";
-                // validation stuff
-                if ( paranoid_validation ) {
-                    program->validateAotCpp(tw,*pctx);
-                    tw << "\n";
+                tw << AOT_HEADERS;
+                {
+                    NamespaceGuard das_guard(tw, "das");
+                    {
+                        NamespaceGuard anon_guard(tw, program->thisNamespace); // anonymous
+                        (*daScriptEnvironment::bound)->g_Program = program;    // setting it for the AOT macros
+                        program->aotCpp(*pctx, tw, cross_platform);
+                        (*daScriptEnvironment::bound)->g_Program.reset();
+                        // list STUFF
+                        program->registerAotCpp(tw, *pctx, false);
+                        tw << "\n";
+                        if ( !isAotLib ) tw << "static AotListBase impl(registerAotFunctions);\n";
+                        // validation stuff
+                        if ( paranoid_validation ) {
+                            program->validateAotCpp(tw,*pctx);
+                            tw << "\n";
+                        }
+                        // footer
+                    }
+                    if ( isAotLib ) tw << "AotListBase impl_aot_" << program->thisModule->name << "(" << program->thisNamespace << "::registerAotFunctions);\n";
                 }
-                // footer
-                tw << "}\n";
-                if ( isAotLib ) tw << "AotListBase impl_aot_" << program->thisModule->name << "(" << program->thisNamespace << "::registerAotFunctions);\n";
-                tw << "}\n";
-                tw << "#if defined(_MSC_VER)\n";
-                tw << "#pragma warning(pop)\n";
-                tw << "#endif\n";
-                tw << "#if defined(__EDG__)\n";
-                tw << "#pragma diag_default 826\n";
-                tw << "#elif defined(__GNUC__) && !defined(__clang__)\n";
-                tw << "#pragma GCC diagnostic pop\n";
-                tw << "#endif\n";
-                tw << "#if defined(__clang__)\n";
-                tw << "#pragma clang diagnostic pop\n";
-                tw << "#endif\n";
-                return saveToFile(cppFn, tw.str());
+                tw << AOT_FOOTER;
+                return saveToFile(tout, cppFn, tw.str(), quiet);
             }
         }
     } else {
@@ -185,19 +135,12 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     }
 }
 
-namespace das {
-    extern void runStandaloneVisitor ( ProgramPtr prog, string cppOutputDir, string standaloneContextName );
-}
-
-bool compileStandalone ( const string & fn, const string & cppFn, bool /*dryRun*/, char * standaloneContextName ) {
+bool compileStandalone ( const string & inputFile, const string & outDir, const StandaloneContextCfg &cfg ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     ModuleGroup dummyGroup;
-    CodeOfPolicies policies;
-    policies.aot = false;
-    policies.aot_module = true;
-    policies.fail_on_lack_of_aot_export = true;
-    policies.version_2_syntax = version2syntax;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
+    auto policies = getPolicies();
+    policies.ignore_shared_modules = true;
+    if ( auto program = compileDaScript(inputFile,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -205,7 +148,7 @@ bool compileStandalone ( const string & fn, const string & cppFn, bool /*dryRun*
             }
             return false;
         } else {
-            runStandaloneVisitor(program, cppFn, standaloneContextName);
+            runStandaloneVisitor(program, outDir, cfg);
             return true;
         }
     } else {
@@ -221,13 +164,16 @@ int das_aot_main ( int argc, char * argv[] ) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
     if ( argc<=3 ) {
-        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-standalone-context <ctx_name>] [-q] [-j] [-dry-run]\n";
+        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-standalone-context <ctx_name>] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform] [-standalone-class <class_name>]\n";
         return -1;
     }
     bool dryRun = false;
+    bool cross_platform = false; // strcmp("-aotlib", argv[1]) == 0;
     bool scriptArgs = false;
     bool standaloneContext = false;
+    bool das_mode = false;
     char * standaloneContextName = nullptr;
+    char * standaloneClassName = nullptr;
     if ( argc>3  ) {
         for (int ai = 4; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
@@ -236,9 +182,18 @@ int das_aot_main ( int argc, char * argv[] ) {
                 paranoid_validation = true;
             } else if ( strcmp(argv[ai],"-dry-run")==0 ) {
                 dryRun = true;
+            } else if ( strcmp(argv[ai],"-das-mode")==0 ) {
+                das_mode = true;
+            } else if ( strcmp(argv[ai],"-cross-platform")==0 ) {
+                cross_platform = true;
+            } else if ( strcmp(argv[ai],"-aot-macros")==0 ) {
+                aotMacros = true;
             } else if ( strcmp(argv[ai],"-standalone-context")==0 ) {
                 standaloneContextName = argv[ai + 1];
                 standaloneContext = true;
+                ai += 1;
+            } else if ( strcmp(argv[ai],"-standalone-class")==0 ) {
+                standaloneClassName = argv[ai + 1];
                 ai += 1;
             } else if ( strcmp(argv[ai],"-project")==0 ) {
                 if ( ai+1 > argc ) {
@@ -254,6 +209,13 @@ int das_aot_main ( int argc, char * argv[] ) {
                 }
                 setDasRoot(argv[ai+1]);
                 ai += 1;
+            } else if ( strcmp(argv[ai],"-v2syntax")==0 ) {
+                version2syntax = true;
+            } else if ( strcmp(argv[ai],"-v1syntax")==0 ) {
+                version2syntax = false;
+            } else if ( strcmp(argv[ai],"-v2makeSyntax")==0 ) {
+                version2syntax = false;
+                gen2MakeSyntax = true;
             } else if ( strcmp(argv[ai],"--")==0 ) {
                 scriptArgs = true;
             } else if ( !scriptArgs ) {
@@ -305,12 +267,31 @@ int das_aot_main ( int argc, char * argv[] ) {
     require_project_specific_modules();
     #include "modules/external_need.inc"
     Module::Initialize();
-    daScriptEnvironment::bound->g_isInAot = true;
+    (*daScriptEnvironment::bound)->g_isInAot = true;
     bool compiled = false;
     if ( standaloneContext ) {
-        compiled = compileStandalone(argv[2], argv[3], dryRun, standaloneContextName);
+        if (das_mode) {
+            // aot das-mode temporary disabled
+            DAS_FATAL_LOG("aot das mode is not ready");
+            // standalone_contexts::Standalone st;
+            // st.standalone_aot(argv[2], argv[3], isAotLib, cross_platform, paranoid_validation, getPolicies());
+        } else {
+            StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
+            cfg.cross_platform = cross_platform;
+            compiled = compileStandalone(argv[2], argv[3], cfg);
+        }
     } else {
-        compiled = compile(argv[2], argv[3], dryRun);
+        if (das_mode) {
+            // aot das-mode temporary disabled
+            DAS_FATAL_LOG("aot das mode is not ready");
+            // ast_aot_cpp::Standalone st;
+            // auto res = st.aot(argv[2], isAotLib, paranoid_validation, cross_platform, getPolicies());
+            // TextPrinter printer;
+            // saveToFile(printer, argv[3], res);
+            // compiled = true;
+        } else {
+            compiled = compile(argv[2], argv[3], dryRun, cross_platform);
+        }
     }
     Module::Shutdown();
     return compiled ? 0 : -1;
@@ -338,6 +319,8 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
     policies.version_2_syntax = version2syntax;
+    policies.gen2_make_syntax = gen2MakeSyntax;
+    policies.scoped_stack_allocator = scopedStackAllocator;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
@@ -349,12 +332,9 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
         } else {
             if ( outputProgramCode )
                 tout << *program << "\n";
-            shared_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
-            if ( !program->simulate(*pctx, tout) ) {
-                tout << "failed to simulate\n";
-                for ( auto & err : program->errors ) {
-                    tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-                }
+            auto pctx = SimulateWithErrReport(program, tout);
+            if ( !pctx ) {
+                success = false;
             } else if ( program->thisModule->isModule ) {
                 tout<< "WARNING: program is setup as both module, and endpoint.\n";
             } else if ( dryRun ) {
@@ -406,10 +386,12 @@ void print_help() {
     tout
         << "daslang version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n"
         << "daslang scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
-        << "    -v2syntax   enable version 2 syntax (experimental)\n"
-        << "    -jit        enable JIT\n"
+        << "    -v2syntax   enable version 2 syntax (uses braces {} for code blocks) [default]\n"
+        << "    -v1syntax   enable version 1 syntax (uses Python-style indentation for code blocks)\n"
+        << "    -v2makeSyntax enable version 1 syntax with version 2 constructors syntax (for arrays/structures)\n"
+        << "    -jit        enable Just-In-Time compilation\n"
         << "    -project <path.das_project> path to project file\n"
-        << "    -run-fmt    <inplace/dry> <v2/v1> run formatter, requires 2 arguments\n"
+        << "    -run-fmt    <inplace/dry> <v2/v1> <semicolon> run formatter, requires 2 or more arguments\n"
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
         << "    -dry-run    compile and simulate script without execution\n"
@@ -417,6 +399,7 @@ void print_help() {
 #if DAS_SMART_PTR_ID
         << "    -track-smart-ptr <id> track smart pointer with id\n"
 #endif
+        << "    -linear-stack-allocator  disable scoped stack allocator\n"
         << "    -das-wait-debugger wait for debugger to attach\n"
         << "    -das-profiler enable profiler\n"
         << "    -das-profiler-log-file <file> set profiler log file\n"
@@ -439,8 +422,20 @@ void print_help() {
 #include <inttypes.h>
 #endif
 
+namespace das {
+    extern AotListBase impl_aot_ast_boost;
+    extern AotListBase impl_aot_printer_flags_visitor;
+    extern AotListBase impl_aot_functional;
+    extern AotListBase impl_aot_math_boost;
+    extern AotListBase impl_aot_utf8_utils;
+    extern AotListBase impl_aot_templates_boost;
+
+}
+
 int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool isArgAot = false;
+    // // aot das-mode temporary disabled
+    // force_aot_stub();
     if (argc > 1) {
         isArgAot = strcmp(argv[1],"-aot")==0;
         isAotLib = !isArgAot && strcmp(argv[1],"-aotlib")==0;
@@ -486,6 +481,11 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="v2syntax" ) {
                 version2syntax = true;
+            } else if ( cmd=="v1syntax" ) {
+                version2syntax = false;
+            } else if ( cmd=="v2makeSyntax" ) {
+                version2syntax = false;
+                gen2MakeSyntax = true;
             } else if ( cmd=="jit") {
                 jitEnabled = true;
             } else if ( cmd=="log" ) {
@@ -517,6 +517,13 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                     return -1;
                 }
                 i++;
+
+                if (i + 1 < argc)  {
+                    if (string(argv[i + 1]) == "--semicolon") {
+                        formatter->insert(format::FormatOpt::SemicolonEOL);
+                        ++i;
+                    }
+                }
             } else if ( cmd=="args" ) {
                 break;
             } else if ( cmd=="pause" ) {
@@ -552,6 +559,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 #endif
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
+            } else if ( cmd=="-linear-stack-allocator") {
+                scopedStackAllocator = false;
             } else if ( cmd=="-das-profiler") {
                 profilerRequired = true;
             } else if ( cmd=="-das-profiler-log-file") {

@@ -47,7 +47,7 @@ namespace das {
         ,"thread_local","throw","true","try","typedef","typeid","typename","union","unsigned","using"
         ,"virtual","void","volatile","wchar_t","while","xor","xor_eq"
         /* extra */
-        ,"override","final","import","module","transaction_safe","transaction_safe_dynamic"
+        ,"override","final","import","module","transaction_safe","transaction_safe_dynamic","super"
     };
 
     bool isCppKeyword(const string & str) {
@@ -168,6 +168,8 @@ namespace das {
         bool checkDeprecated;
         bool disableInit;
         bool noLocalClassMembers;
+        bool noWritingToNameless;
+        bool alwaysCallSuper;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -181,8 +183,23 @@ namespace das {
             checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
             noLocalClassMembers = prog->options.getBoolOption("no_local_class_members", prog->policies.no_local_class_members);
+            noWritingToNameless = prog->options.getBoolOption("no_writing_to_nameless", prog->policies.no_writing_to_nameless);
+            alwaysCallSuper = prog->options.getBoolOption("always_call_super", prog->policies.always_call_super);
+        }
+    public:
+        void reportUnsafeTypeExpressions() {
+            for ( auto expr : usedTypeExprs ) {
+                program->error("type expression result is used, and not just passed",
+                    "consider default<" + expr->type->describe() + ">", "",
+                        expr->at, CompilationError::invalid_type);
+            }
         }
     protected:
+
+        bool jitEnabled() const {
+            return program->policies.jit && (!func || !func->requestNoJit);
+        }
+
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
             if ( !checkOnlyFastAot ) return;
             if ( _func && _func->builtIn ) {
@@ -266,6 +283,15 @@ namespace das {
         }
         virtual void preVisitExpression ( Expression * expr ) override {
             if ( expr->alwaysSafe && expr->userSaidItsSafe && !expr->generated ) {
+                if (func == nullptr) {
+                    // we're in global scope
+                    anyUnsafe = true;
+                    if ( checkUnsafe ) {
+                        program->error("unsafe in global initializer.", "unsafe are prohibited by CodeOfPolicies", "",
+                            expr->at, CompilationError::unsafe_function);
+                    }
+                    return;
+                }
                 auto origin = func->getOrigin();
                 if ( !(origin && origin->generated) && !func->generated )
                 {
@@ -408,8 +434,9 @@ namespace das {
             if ( expr->arguments[0]->rtti_isMakeArray() ) {
                 auto ma = static_cast<ExprMakeArray *>(expr->arguments[0].get());
                 if ( ma->values.size()==0 ) return;
-                if ( ma->recordType->isTuple() ) {
-                    if ( ma->recordType->argTypes[0]->isString() ) {
+                auto recType = ma->recordType ? ma->recordType : ma->makeType;
+                if ( recType->isTuple() ) {
+                    if ( recType->argTypes[0]->isString() ) {
                         das_set<const char *,hash_ccs,equalto_ccs> seen;
                         for ( const auto & arg : ma->values ) {
                             if ( arg->rtti_isMakeTuple() ) {
@@ -447,7 +474,7 @@ namespace das {
                         }
                     }
                 } else {
-                    if ( ma->recordType->isString() ) {
+                    if ( recType->isString() ) {
                         das_set<const char *,hash_ccs,equalto_ccs> seen;
                         for ( const auto & arg : ma->values ) {
                             if ( arg->rtti_isStringConstant() ) {
@@ -477,9 +504,19 @@ namespace das {
                 }
             }
         }
+        void verifyNoWrite ( ExprCallFunc * expr ) {
+            // TODO: add support for ExprInvoke
+            if ( noWritingToNameless ) {
+                if ( expr->write && !(expr->type->ref || expr->type->isPointer()) ) {
+                    program->error("dead write is prohibited by CodeOfPolicies", "\tin " + expr->describe(), "",
+                        expr->at, CompilationError::no_writing_to_nameless);
+                }
+            }
+        }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            verifyNoWrite(expr);
             if ( checkDeprecated && expr->func->deprecated ) {
                 string message = "";
                 for ( auto & ann : expr->func->annotations ) {
@@ -520,6 +557,21 @@ namespace das {
                     }
                 }
             }
+            if (expr->name == "builtin_try_recover") {
+                DAS_ASSERTF(expr->arguments.size() == 4,
+                    "builtin_try_recover somehow called with wrong number of arguments = %i (%i), expected 2.",
+                    int(expr->arguments.size() - 2), int(expr->arguments.size()));
+                if (!expr->arguments.at(0)->rtti_isMakeBlock() ||
+                    !expr->arguments.at(1)->rtti_isMakeBlock()) {
+                    program->error("builtin_try_recover shouldn't be called directly.",
+                        "", "Use `try { ... } recover { ... }` instead.",
+                        expr->at, CompilationError::invalid_argument_type );
+                } else if (exprReturns(static_pointer_cast<ExprMakeBlock>(expr->arguments.front())->block)) {
+                    program->error("try { ... } recover { ... } can't have return inside in jit mode",
+                        "This feature is not implemented yet.", "",
+                        expr->at, CompilationError::not_expecting_return_value );
+                }
+            }
             for ( size_t i=0, is=expr->arguments.size(); i!=is; ++i ) {
                 const auto & arg = expr->arguments[i];
                 const auto & funArg = expr->func->arguments[i];
@@ -532,14 +584,54 @@ namespace das {
             if ( starts_with(expr->func->name,"builtin`to_table_move`") && expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
                 verifyToTableMove(expr);
             }
+            if ( isClassCtor ) {
+                auto baseClass = func->classParent->parent;
+                if ( expr->func->name==(baseClass->name+"`"+baseClass->name) ) {
+                    anySuperCalls = true;
+                }
+            }
+        }
+        virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
+            Visitor::visit(expr);
+            if ( expr->isInvokeMethod ) {
+                auto arg0 = expr->arguments[0].get();
+                if ( arg0->rtti_isR2V() ) {
+                    arg0 = static_cast<ExprRef2Value*>(arg0)->subexpr.get();
+                }
+                if ( arg0->rtti_isField() ) {
+                    auto field = static_cast<ExprField*>(arg0);
+                    if ( field->value->rtti_isTypeDecl() ) {
+                        usedTypeExprs.erase(field->value.get());
+                    }
+                }
+            }
+            return expr;
+        }
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            Visitor::visit(expr);
+            if ( expr->func ) {
+                size_t argIndex = 0;
+                for ( auto & arg : expr->func->arguments ) {
+                    if ( arg->isAccessUnused() ) {
+                        auto & earg = expr->arguments[argIndex];
+                        if ( earg->rtti_isTypeDecl() ) {
+                            usedTypeExprs.erase(earg.get());
+                        }
+                    }
+                    ++argIndex;
+                }
+            }
+            return expr;
         }
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            verifyNoWrite(expr);
         }
         virtual void preVisit ( ExprOp2 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            verifyNoWrite(expr);
             if ( checkAotSideEffects ) {
                 if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
                     program->error("side effects may affect evaluation order", "", "", expr->at,
@@ -629,6 +721,7 @@ namespace das {
         }
         virtual void preVisit ( ExprUnsafe * expr ) override {
             if ( !expr->generated ) {
+                DAS_ASSERTF(func, "internal compiler error: ExprUnsafe should always be inside function");
                 auto origin = func->getOrigin();
                 if ( !(origin && origin->generated) && !func->generated )
                 {
@@ -649,6 +742,8 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->isTemplate;    // we don't do a thing with templates
         }
+        bool isClassCtor = false;
+        bool anySuperCalls = false;
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
             func = fn;
@@ -690,8 +785,17 @@ namespace das {
                 program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
                     fn->at, CompilationError::no_init);
             }
+            if ( alwaysCallSuper && fn->isClassMethod && fn->classParent && fn->classParent->parent && fn->name==(fn->classParent->name+"`"+fn->classParent->name)) {
+                isClassCtor = true; // detect class constructor, but only if we always call super
+            }
         }
         virtual FunctionPtr visit ( Function * fn ) override {
+            if ( isClassCtor && !anySuperCalls ) {
+                program->error("class constructor " + fn->name + " does not call super initializer", "",
+                    "", fn->at, CompilationError::invalid_member_function);
+            }
+            anySuperCalls = false;
+            isClassCtor = false;
             func = nullptr;
             return Visitor::visit(fn);
         }
@@ -722,6 +826,10 @@ namespace das {
                             block->at, CompilationError::not_all_paths_return_value);
                     }
                 }
+            }
+            if (jitEnabled() && !block->finalList.empty() && block->hasExitByLabel) {
+                program->error("jit blocks can't have finally and goto", "", "",
+                    block->at, CompilationError::invalid_label);
             }
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
@@ -759,11 +867,17 @@ namespace das {
                     mks->at, CompilationError::unspecified);
             }
         }
+        virtual void preVisit ( ExprTypeDecl * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->alwaysSafe ) return;
+            usedTypeExprs.insert(expr);
+        }
     public:
         ProgramPtr program;
         Function * func = nullptr;
         Variable * globalVar = nullptr;
         bool anyUnsafe = false;
+        das_hash_set<Expression *> usedTypeExprs;
     };
 
     struct Option {
@@ -772,33 +886,12 @@ namespace das {
     } g_allOptions [] = {
     // lint
         "lint",                         Type::tBool,
-        "only_fast_aot",                Type::tBool,
-        "aot_order_side_effects",       Type::tBool,
-        "no_global_heap",               Type::tBool,
-        "no_global_variables",          Type::tBool,
-        "no_global_variables_at_all",   Type::tBool,
-        "no_unused_function_arguments", Type::tBool,
-        "no_unused_block_arguments",    Type::tBool,
-        "no_deprecated",                Type::tBool,
-        "no_aliasing",                  Type::tBool,
-        "strict_smart_pointers",        Type::tBool,
-        "no_init",                      Type::tBool,
-        "no_local_class_members",       Type::tBool,
-        "report_invisible_functions",   Type::tBool,
-        "report_private_functions",     Type::tBool,
-        "strict_properties",            Type::tBool,
-        "very_safe_context",            Type::tBool,
+        "no_writing_to_nameless",       Type::tBool,
+        "always_call_super",            Type::tBool,
     // memory
-        "stack",                        Type::tInt,
-        "intern_strings",               Type::tBool,
-        "multiple_contexts",            Type::tBool,
-        "persistent_heap",              Type::tBool,
-        "heap_size_hint",               Type::tInt,
         "heap_size_limit",              Type::tInt,
-        "string_heap_size_hint",        Type::tInt,
         "string_heap_size_limit",       Type::tInt,
         "gc",                           Type::tBool,
-        "solid_context",                Type::tBool,    // we will not have AOT or patches
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,
@@ -818,8 +911,6 @@ namespace das {
         "log_aot",                      Type::tBool,
         "log_infer_passes",             Type::tBool,
         "log_require",                  Type::tBool,
-        "log_compile_time",             Type::tBool,
-        "log_total_compile_time",       Type::tBool,
         "log_generics",                 Type::tBool,
         "log_mn_hash",                  Type::tBool,
         "log_gmn_hash",                 Type::tBool,
@@ -828,34 +919,22 @@ namespace das {
         "print_ref",                    Type::tBool,
         "print_var_access",             Type::tBool,
         "print_c_style",                Type::tBool,
-        "print_func_use",               Type::tBool,
-        "gen2_make_syntax",             Type::tBool,
-        "relaxed_assign",               Type::tBool,
-    // rtti
-        "rtti",                         Type::tBool,
+        "print_use",                    Type::tBool,
     // optimization
         "optimize",                     Type::tBool,
+        "no_optimization",              Type::tBool,
         "fusion",                       Type::tBool,
         "remove_unused_symbols",        Type::tBool,
-        "no_fast_call",                 Type::tBool,
+        "scoped_stack_allocator",       Type::tBool,
     // language
         "always_export_initializer",    Type::tBool,
         "infer_time_folding",           Type::tBool,
         "disable_run",                  Type::tBool,
-        "max_infer_passes",             Type::tInt,
         "indenting",                    Type::tInt,
         "no_unsafe_uninitialized_structures", Type::tBool,
-        "relaxed_pointer_const",        Type::tBool,
-        "unsafe_table_lookup",          Type::tBool,
-    // debugger
-        "debugger",                     Type::tBool,
-    // profiler
-        "profiler",                     Type::tBool,
     // runtime checks
         "skip_lock_checks",             Type::tBool,
         "skip_module_lock_checks",      Type::tBool,
-    // pinvoke
-        "threadlock_context",           Type::tBool,
     // version_2_syntax
         "gen2",                         Type::tBool,
     };
@@ -871,6 +950,8 @@ namespace das {
         DAS_VERIFYF(!failed, "verifyOptions failed");
     }
 
+    vector<pair<string,Type>> getCodeOfPolicyOptions();
+
     void Program::lint ( TextWriter & /*logs*/, ModuleGroup & libGroup ) {
         if (!options.getBoolOption("lint", true)) {
             return;
@@ -881,11 +962,27 @@ namespace das {
         // lint it
         LintVisitor lintV(this);
         visit(lintV);
+        lintV.reportUnsafeTypeExpressions();
         unsafe = lintV.anyUnsafe;
         // check for invalid options
         das_map<string,Type> ao;
         for ( const auto & opt : g_allOptions ) {
-            ao[opt.name] = opt.type;
+            auto it = ao.find(opt.name);
+            if ( it != ao.end() ) {
+                error("internal error: option '" + string(opt.name) + "' is already defined",
+                    "", "", LineInfo(), CompilationError::internal_error);
+            } else {
+                ao[opt.name] = opt.type;
+            }
+        }
+        for ( const auto & opt : getCodeOfPolicyOptions() ) {
+            auto it = ao.find(opt.first);
+            if ( it != ao.end() ) {
+                error("internal error: option '" + opt.first + "' is already defined",
+                    "", "", LineInfo(), CompilationError::internal_error);
+            } else {
+                ao[opt.first] = opt.second;
+            }
         }
         for ( const auto & opt : options ) {
             Type optT = Type::none;
@@ -927,6 +1024,31 @@ namespace das {
             }
             return true;
         },"*");
+    }
+
+    class InferLintVisitor : public Visitor {
+    public:
+        InferLintVisitor ( const ProgramPtr & prog ) : program(prog) {
+        }
+    public:
+        virtual ExpressionPtr visitExpression ( Expression * expr ) override {
+            if ( !expr->type ) return expr;
+            if ( expr->rtti_isTypeDecl() ) return expr;
+            if ( expr->type->isAliasOrExpr() ) {
+                program->error("internal error. leaking alias or expression type",expr->type->describe(),"",
+                    expr->at,CompilationError::internal_error);
+            }
+            return expr;
+        }
+    public:
+        ProgramPtr program;
+
+    };
+
+    void Program::inferLint(TextWriter &) {
+        if ( !policies.verify_infer_types ) return;
+        InferLintVisitor lintV(this);
+        visit(lintV);
     }
 }
 

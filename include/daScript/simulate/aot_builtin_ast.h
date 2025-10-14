@@ -1,11 +1,13 @@
 #pragma once
 
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
+
 namespace das {
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at );
-    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context, LineInfoArg * at );
+    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, bool d_ChooseSmartPtr, Context * context, LineInfoArg * at );
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at );
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at );
     char * ast_das_to_string ( Type bt, Context * context, LineInfoArg * at );
@@ -37,6 +39,58 @@ namespace das {
 
     Module * compileModule ( Context * context, LineInfoArg * at );
     smart_ptr_raw<Program> compileProgram ( Context * context, LineInfoArg * at );
+
+
+    void aotSuffix( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context * context, LineInfoArg * at);
+    void aotMacroPrefix( TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr);
+    void aotMacroSuffix( TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr);
+    const char *getAotName(Function* func, ExprCallFunc *call, Context * context, LineInfoArg * at );
+    void aotBody( StructureAnnotation *structure, StructurePtr st, const AnnotationArgumentList & args, StringBuilderWriter *writer, Context * context, LineInfoArg * at);
+    void aotPreVisitGetFieldPtr(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at);
+    void aotPreVisitGetField(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at);
+    void aotVisitGetField(TypeAnnotation *ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at);
+    bool aotNeedTypeInfo(const TypeInfoMacro *macro, ExpressionPtr expr);
+    void aotVisitGetFieldPtr( TypeAnnotation* ann, StringBuilderWriter *ss, const char *name, Context * context, LineInfoArg * at );
+    const char * getAotArgumentSuffix(Function* func, ExprCallFunc * call, int argIndex, Context * context, LineInfoArg * at );
+    const char * getAotArgumentPrefix(Function* func, ExprCallFunc * call, int argIndex, Context * context, LineInfoArg * at );
+    bool isAstSameType(smart_ptr<TypeDecl> argType, smart_ptr<TypeDecl> passType, bool refMatters,
+                       bool constMatters,
+                       bool temporaryMatters,
+                       bool allowSubstitute, Context * context, LineInfoArg * at );
+    void aotFuncPrefix(FunctionAnnotation* ann, StringBuilderWriter * stg, ExprCallFunc *call, Context * context, LineInfoArg * at );
+    void aotStructPrefix(StructureAnnotation* ann, Structure *structure, const AnnotationArgumentList &args,
+                         StringBuilderWriter * stg, Context * context, LineInfoArg * at );
+    const char * stringBuilderStr(StringBuilderWriter *ss, Context * context, LineInfoArg * at);
+    void stringBuilderClear(StringBuilderWriter *ss);
+
+    const Structure * findFieldParent( smart_ptr_raw<Structure> structure, const char *name, Context * context, LineInfoArg * at );
+    TypeDeclPtr makeBlockType(ExprBlock *blk);
+    // Note: it will be removed once DebugInfoHelper rewritten in das
+
+    TypeInfo * makeTypeInfo ( smart_ptr<DebugInfoHelper> helper, TypeInfo * info, const TypeDeclPtr & type );
+    VarInfo * makeVariableDebugInfo ( smart_ptr<DebugInfoHelper> helper, Variable *var );
+    VarInfo * makeStructVariableDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Structure * st, const Structure::FieldDeclaration * var );
+    StructInfo * makeStructureDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Structure * st );
+    FuncInfo * makeFunctionDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Function * fn );
+    EnumInfo * makeEnumDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Enumeration * en );
+    FuncInfo * makeInvokeableTypeDebugInfo ( smart_ptr<DebugInfoHelper> helper, TypeDeclPtr blk, const LineInfo & at );
+
+    template <typename T>
+    using DebugBlockT = TBlock<void,const char *, T>;
+
+    void debug_helper_iter_structs(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at);
+    void debug_helper_iter_types(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<TypeInfo*> & block, Context * context, LineInfoArg * at);
+    void debug_helper_iter_vars(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<VarInfo*> & block, Context * context, LineInfoArg * at);
+    void debug_helper_iter_funcs(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<FuncInfo*> & block, Context * context, LineInfoArg * at);
+    void debug_helper_iter_enums(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<EnumInfo*> & block, Context * context, LineInfoArg * at);
+    const char *debug_helper_find_type_cppname(const smart_ptr<DebugInfoHelper> &helper, TypeInfo *info, Context * context, LineInfoArg * at);
+    const char *debug_helper_find_struct_cppname(const smart_ptr<DebugInfoHelper> &helper, StructInfo *info, Context * context, LineInfoArg * at);
+    bool macro_aot_infix(TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr);
+    FileInfo *clone_file_info(const char *name, int tabSize, Context * context, LineInfoArg * at);
+    void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at);
+    uint64_t getInitSemanticHashWithDep(ProgramPtr program, uint64_t semH);
+    uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * context, LineInfoArg * at);
+    bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * context, LineInfoArg * at);
 
     #include "daScript/builtin/ast_gen.inc"
 
@@ -74,6 +128,9 @@ namespace das {
             }
         }
         */
+
+        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression *subexpr ) override;
+
         /*
         // TODO: implement
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override {
@@ -81,19 +138,6 @@ namespace das {
                 bool result = true;
                 runMacroFunction(context, "canVisitIfSubexpr", [&]() {
                     result = invoke_canVisitIfSubexpr(context,fnCanVisit,classPtr);
-                });
-                return result;
-            } else {
-                return true;
-            }
-        }
-        */
-        /* TODO: implement
-        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) override {
-            if ( auto fnCanVisit = get_canVisitExpr(classPtr) ) {
-                bool result = true;
-                runMacroFunction(context, "canVisitExpr", [&]() {
-                    result = invoke_canVisitExpr(context,fnCanVisit,classPtr,expr,subexpr);
                 });
                 return result;
             } else {
@@ -141,6 +185,7 @@ namespace das {
         // STRUCTURE
         virtual void preVisit ( Structure * var ) override;
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override;
+        virtual bool canVisitStructureFieldInit ( Structure * var ) override;
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override;
         virtual StructurePtr visit ( Structure * var ) override;
         // REAL THINGS (AFTER STRUCTS AND ENUMS)
@@ -258,8 +303,6 @@ namespace das {
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override;
         virtual void preVisitArrayComprehensionWhere ( ExprArrayComprehension * expr, Expression * where ) override;
         // DELETE
-        /*
-        // TODO: implement
         virtual void preVisitDeleteSizeExpression ( ExprDelete * expr, Expression * that ) override {
             if ( auto fnPreVisit = get_preVisitExprDeleteSizeExpression(classPtr) ) {
                 runMacroFunction(context, "preVisitDeleteSizeExpression", [&]() {
@@ -267,7 +310,6 @@ namespace das {
                 });
             }
         }
-        */
 
 #define VISIT_EXPR(ExprType) \
        virtual void preVisit ( ExprType * that ) override { \
@@ -398,6 +440,8 @@ namespace das {
     Module * thisModule ( Context * context, LineInfoArg * lineinfo );
     smart_ptr_raw<Program> thisProgram ( Context * context );
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
+    void astVisitModule ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter,
+                      Module* module, Context * context, LineInfoArg * line_info );
     void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
     void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
     smart_ptr_raw<Expression> astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
@@ -453,6 +497,8 @@ namespace das {
     void addBlockBlockAnnotation ( smart_ptr_raw<ExprBlock> block, FunctionAnnotationPtr & _ann, Context * context, LineInfoArg * at );
     void addAndApplyBlockAnnotation ( smart_ptr_raw<ExprBlock> blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
     void addAndApplyStructAnnotation ( smart_ptr_raw<Structure> st, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
+    void visitEnumeration ( ProgramPtr program, smart_ptr_raw<Enumeration> enumeration, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
+    void visitStructure ( ProgramPtr program, smart_ptr_raw<Structure> structure, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value ?value->clone() : nullptr; }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value ? value->clone() : nullptr; }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return value ? make_smart<TypeDecl>(*value) : nullptr; }
@@ -465,6 +511,7 @@ namespace das {
     char * get_mangled_name_v ( smart_ptr_raw<Variable> var, Context * context, LineInfoArg * at );
     char * get_mangled_name_b ( smart_ptr_raw<ExprBlock> expr, Context * context, LineInfoArg * at );
     TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
+    void notInferred ( Function * func, Context * context, LineInfoArg * at );
     void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line );
     bool isExprLikeCall ( const ExpressionPtr & expr );
     bool isExprConst ( const ExpressionPtr & expr );
@@ -475,13 +522,17 @@ namespace das {
     bool builtin_hasField ( TypeDeclPtr ptr, const char * field, bool constant );
     TypeDeclPtr builtin_fieldType ( TypeDeclPtr ptr, const char * field, bool constant );
     Module * findRttiModule ( smart_ptr<Program> THAT_PROGRAM, const char * name, Context *, LineInfoArg *);
-    smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info );
+    smart_ptr_raw<Annotation> module_find_annotation ( const Module* module, const char *name );
+    TypeAnnotation* module_find_type_annotation ( const Module* module, const char *name );
+    smart_ptr_raw<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info );
     void for_each_module ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at );
-    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDeclPtr> & block, Context * context, LineInfoArg * at );
-    void for_each_enumeration ( Module * mod, const TBlock<void,EnumerationPtr> & block, Context * context, LineInfoArg * at );
-    void for_each_structure ( Module * mod, const TBlock<void,StructurePtr> & block, Context * context, LineInfoArg * at );
-    void for_each_generic ( Module * mod, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at );
-    void for_each_global ( Module * mod, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at );
+    void for_each_module_no_order ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at );
+    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,smart_ptr_raw<TypeDecl>> & block, Context * context, LineInfoArg * at );
+    void for_each_enumeration ( Module * mod, const TBlock<void,smart_ptr_raw<Enumeration>> & block, Context * context, LineInfoArg * at );
+    void for_each_structure ( Module * mod, const TBlock<void,smart_ptr_raw<Structure>> & block, Context * context, LineInfoArg * at );
+    void for_each_generic ( Module * mod, const TBlock<void,smart_ptr_raw<Function>> & block, Context * context, LineInfoArg * at );
+    void for_each_global ( Module * mod, const TBlock<void,smart_ptr_raw<Variable>> & block, Context * context, LineInfoArg * at );
+    void for_each_annotation_ordered ( Module * mod, const TBlock<void,uint64_t, uint64_t> & block, Context * context, LineInfoArg * at );
     void for_each_call_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
     void for_each_reader_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
     void for_each_variant_macro ( Module * mod, const TBlock<void,VariantMacroPtr> & block, Context * context, LineInfoArg * at );
@@ -489,6 +540,7 @@ namespace das {
     void for_each_for_loop_macro ( Module * mod, const TBlock<void,ForLoopMacroPtr> & block, Context * context, LineInfoArg * at );
     Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at );
     Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at );
+    Structure * module_find_structure ( const Module* module, const char * name, Context * context, LineInfoArg * at );
     void get_use_global_variables ( smart_ptr_raw<Function> func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at );
     void get_use_functions ( smart_ptr_raw<Function> func, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at );
     Structure::FieldDeclaration * ast_findStructureField ( Structure * structType, const char * field, Context * context, LineInfoArg * at );
@@ -496,18 +548,29 @@ namespace das {
     void das_comp_log ( const char * text, Context * context, LineInfoArg * at );
     TypeInfo * das_make_type_info_structure ( Context & ctx, TypeDeclPtr ptr, Context * context, LineInfoArg * at );
     bool isSameAstType ( TypeDeclPtr THIS, TypeDeclPtr decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, Context * context, LineInfoArg * at );
+    void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
+                                            const TBlock<void,char *,char*,smart_ptr_raw<TypeDecl>,uint32_t> & block, Context * context, LineInfoArg * at );
     void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at );
     TypeDeclPtr getUnderlyingValueType ( smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at );
     uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> type, char * name, Context * context, LineInfoArg * at );
+    void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
+                                        const TBlock<void,char *,char*,smart_ptr_raw<TypeDecl>,uint32_t> & block, Context * context, LineInfoArg * at );
     TypeInfo * getHandledTypeFieldType ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at );
     TypeDeclPtr getHandledTypeFieldTypeDecl ( smart_ptr_raw<TypeAnnotation> annotation, char * name, bool isConst, Context * context, LineInfoArg * at );
+    TypeDeclPtr getHandledTypeIndexTypeDecl ( TypeAnnotation *annotation, Expression *src, Expression *idx, Context * context, LineInfoArg * at );
+    void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * context, LineInfoArg * at);
+    int32_t getVectorLength(void* vec, smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at);
     bool addModuleRequire ( Module * module, Module * reqModule, bool publ );
     void findMatchingVariable ( Program * program, Function * func, const char * _name, bool seePrivate,
-        const TBlock<void,TTemporary<TArray<VariablePtr>>> & block, Context * context, LineInfoArg * arg );
+        const TBlock<void,TTemporary<TArray<smart_ptr_raw<Variable>>>> & block, Context * context, LineInfoArg * arg );
     Module * getCurrentSearchModule(Program * program, Function * func, const char * _moduleName);
     bool canAccessGlobalVariable ( const VariablePtr & pVar, Module * mod, Module * thisMod );
     TypeDeclPtr inferGenericTypeEx ( smart_ptr_raw<TypeDecl> type, smart_ptr_raw<TypeDecl> passType, bool topLevel, bool isPassType );
     void updateAliasMapEx ( smart_ptr_raw<Program> program, smart_ptr_raw<TypeDecl> argType, smart_ptr_raw<TypeDecl> passType, Context * context, LineInfoArg * at );
+    void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at );
+    void forceAtFunctionRaw ( const smart_ptr_raw<Function> & func, const LineInfo & at );
+    void forceGeneratedRaw ( const smart_ptr_raw<Expression> & expr, bool setGenerated );
+    void forceGeneratedFunctionRaw ( const smart_ptr_raw<Function> & func, bool setGenerated );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

@@ -1,5 +1,5 @@
 options gen2
-[sideeffects]
+[sideeffects, no_jit] // return inside try
 def div_by_zero(num : auto(numT)) {
     var ex = false
     try {
@@ -11,7 +11,7 @@ def div_by_zero(num : auto(numT)) {
     return num
 }
 
-[sideeffects]
+[sideeffects, no_jit] // return inside try
 def mod_by_zero(num : auto(numT)) {
     var ex = false
     try {

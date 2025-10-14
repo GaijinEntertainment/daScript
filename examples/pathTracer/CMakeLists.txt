@@ -1,6 +1,6 @@
 ### 1. setup custom AOT utility
 SET(PATHTRACER_DASAOT_MAIN_SRC
-${CMAKE_SOURCE_DIR}/examples/pathTracer/path_tracer_aot.cpp
+${CMAKE_CURRENT_SOURCE_DIR}/examples/pathTracer/path_tracer_aot.cpp
 ${DAS_DASCRIPT_MAIN_SRC}
 )
 add_executable(pathtracer_dasAot ${PATHTRACER_DASAOT_MAIN_SRC} )
@@ -17,9 +17,9 @@ DAS_AOT("examples/pathTracer/path_tracer.das" PATHTRACER_AOT_GENERATED_SRC patht
 
 ### setup main path tracer executable
 SET(PATHTRACER_AOT_SRC
-${CMAKE_SOURCE_DIR}/examples/pathTracer/path_tracer.cpp
-${CMAKE_SOURCE_DIR}/examples/pathTracer/path_tracer.das
-${CMAKE_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_profile.das
+${CMAKE_CURRENT_SOURCE_DIR}/examples/pathTracer/path_tracer.cpp
+${CMAKE_CURRENT_SOURCE_DIR}/examples/pathTracer/path_tracer.das
+${CMAKE_CURRENT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_profile.das
 )
 add_executable(path_tracer ${PATHTRACER_AOT_SRC} ${PATHTRACER_AOT_GENERATED_SRC})
 target_include_directories(path_tracer PUBLIC ${PROJECT_SOURCE_DIR}/examples/pathTracer)

@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_aot = true
 options strict_smart_pointers = true
 
 module spoof shared private
@@ -60,7 +59,7 @@ def spoof_args(invocation : string; blk : block<(var res : array<tuple<string; s
 }
 
 [macro_function]
-def next_ident(it : iterator<int>; var Ch : int&; var ident : string&) : bool {
+def next_ident(var it : iterator<int>; var Ch : int&; var ident : string&) : bool {
     var id : array<uint8>
     Ch = -1
     while (next(it, Ch)) {
@@ -155,7 +154,9 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
 [reader_macro(name="spoof_template")]
 class SpoofTemplateReader : AstReaderMacro {
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
-        append(expr.sequence, ch)
+        if (ch != '\r') {
+            append(expr.sequence, ch)
+        }
         if (ends_with(expr.sequence, "%%")) {
             let len = length(expr.sequence)
             resize(expr.sequence, len - 2)
@@ -230,7 +231,9 @@ def instance_args(invocation : string; blk : block<(var res : SpoofInvocation; e
 [reader_macro(name="spoof_instance")]
 class SpoofInstanceReader : AstReaderMacro {
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
-        append(expr.sequence, ch)
+        if (ch != '\r') {
+            append(expr.sequence, ch)
+        }
         if (ends_with(expr.sequence, "%%")) {
             let len = length(expr.sequence)
             resize(expr.sequence, len - 2)

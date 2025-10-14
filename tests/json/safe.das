@@ -10,7 +10,7 @@ def safe_operators(t : T?) {
         var js = read_json(data, err)
         t |> equal(err, "")
 
-        t |> equal((js?["a"] ?as _number) ?? -1lf, 1lf)
+        t |> equal((js?["a"] ?as _longint) ?? -1l, 1l)
         t |> equal(js?.a ?? -1, 1)
         t |> equal(js?.b ?? false, true)
         t |> equal(js?.c is _null, true)

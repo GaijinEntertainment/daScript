@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_aot = true
 options strict_smart_pointers
 
 module ast_boost shared public
@@ -13,39 +12,6 @@ require strings
 require daslib/strings_boost
 
 typedef AnnotationDeclarationPtr = smart_ptr<AnnotationDeclaration>
-
-def clone(var args : dasvector`das_string; var nargs : array<string>) {
-    let tot = length(nargs)
-    args |> resize(tot)
-    for (i in range(tot)) {
-        args[i] := nargs[i]
-    }
-    delete nargs
-}
-
-def clone(var args : dasvector`smart_ptr`TypeDecl; var nargs : array<TypeDeclPtr>) {
-    args |> clear
-    for (narg in nargs) {
-        args |> emplace(narg)
-    }
-    delete nargs
-}
-
-def clone(var args : dasvector`smart_ptr`Variable; var nargs : array<VariablePtr>) {
-    args |> clear
-    for (narg in nargs) {
-        args |> emplace(narg)
-    }
-    delete nargs
-}
-
-def clone(var args : dasvector`smart_ptr`Expression; var nargs : array<ExpressionPtr>) {
-    args |> clear
-    for (narg in nargs) {
-        args |> emplace(narg)
-    }
-    delete nargs
-}
 
 def isVectorType(typ : Type) {
     return (
@@ -580,6 +546,77 @@ class BetterRttiVisitor : AstVariantMacro {
     }
 }
 
+def operator is BuiltInFunction(anything) {
+    return false
+}
+
+def operator is BuiltInFunction(foo : Function?) {
+    return foo.flags.builtIn
+}
+
+def operator as BuiltInFunction(foo : Function?) {
+    verify(foo is BuiltInFunction)
+    return unsafe(reinterpret<BuiltInFunction?>(foo));
+}
+
+def operator is ExternalFnBase(anything) {
+    return false
+}
+
+def operator is ExternalFnBase(foo : Function?) {
+    return foo.moreFlags.propertyFunction && foo.flags.builtIn
+}
+
+def operator as ExternalFnBase(foo : Function?) {
+    verify(foo is ExternalFnBase)
+    return unsafe(reinterpret<ExternalFnBase?>(foo));
+}
+
+def operator is FunctionAnnotation(anything) {
+    return false
+}
+
+def operator is FunctionAnnotation(foo : Annotation?) {
+    return foo.isFunctionAnnotation
+}
+
+def operator is FunctionAnnotation(foo : smart_ptr<Annotation>) {
+    return foo.isFunctionAnnotation
+}
+
+def operator as FunctionAnnotation(foo : Annotation?) {
+    verify(foo is FunctionAnnotation)
+    return unsafe(reinterpret<FunctionAnnotation?>(foo));
+}
+
+def operator as FunctionAnnotation(foo : smart_ptr<Annotation>) {
+    verify(foo is FunctionAnnotation)
+    return unsafe(reinterpret<FunctionAnnotation?>(foo.get_ptr()));
+}
+
+
+def operator is StructureAnnotation(anything) {
+    return false
+}
+
+def operator is StructureAnnotation(foo : Annotation?) {
+    return foo.isStructureAnnotation
+}
+
+def operator is StructureAnnotation(foo : smart_ptr<Annotation>) {
+    return foo.isStructureAnnotation
+}
+
+def operator as StructureAnnotation(foo : Annotation?) {
+    verify(foo is StructureAnnotation)
+    return unsafe(reinterpret<StructureAnnotation?>(foo));
+}
+
+def operator as StructureAnnotation(foo : smart_ptr<Annotation>) {
+    verify(foo is StructureAnnotation)
+    return unsafe(reinterpret<StructureAnnotation?>(foo.get_ptr()));
+}
+
 def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     let total = any_array_size(data)
     if (total != 0) {
@@ -697,13 +734,21 @@ def private walk_and_convert_table(data : uint8 const?; info : TypeDeclPtr; at :
 
 def private walk_and_convert_basic(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     unsafe {
-        if (info.baseType == Type.tInt) {
+        if (info.baseType == Type.tInt8) {
+            return new ExprConstInt8(at = at, value = *reinterpret<int8?> data)
+        } elif (info.baseType == Type.tInt16) {
+            return new ExprConstInt16(at = at, value = *reinterpret<int16?> data)
+        } elif (info.baseType == Type.tInt) {
             return new ExprConstInt(at = at, value = *reinterpret<int?> data)
-        } elif (info.baseType == Type.tUInt) {
-            return new ExprConstUInt(at = at, value = *reinterpret<uint?> data)
         } elif (info.baseType == Type.tInt64) {
             return new ExprConstInt64(at = at, value = *reinterpret<int64?> data)
-        } elif (info.baseType == Type.tUInt64) {
+        } elif (info.baseType == Type.tUInt8) {
+            return new ExprConstUInt8(at = at, value = *reinterpret<uint8?> data)
+        } elif (info.baseType == Type.tUInt16) {
+            return new ExprConstUInt16(at = at, value = *reinterpret<uint16?> data)
+        } elif (info.baseType == Type.tUInt) {
+            return new ExprConstUInt(at = at, value = *reinterpret<uint?> data)
+        }  elif (info.baseType == Type.tUInt64) {
             return new ExprConstUInt64(at = at, value = *reinterpret<uint64?> data)
         } elif (info.baseType == Type.tFloat) {
             return new ExprConstFloat(at = at, value = *reinterpret<float?> data)
@@ -750,7 +795,7 @@ def private walk_and_convert_enumeration(data : uint8 const?; info : TypeDeclPtr
         value := name)
 }
 
-def private walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+def walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     // print("0x{intptr(data)} {describe(info)}\n")
     if (info.dim |> length != 0) {
         return <- walk_and_convert_dim(data, info, at)
@@ -1028,6 +1073,13 @@ def public isMakeLocal(expr : ExpressionPtr) {
         ||  (expr.__rtti == "ExprMakeVariant")
         ||  (expr.__rtti == "ExprMakeArray")
         ||  (expr.__rtti == "ExprMakeTuple"))
+}
+
+def public isExprCallFunc(expr : ExpressionPtr) {
+    return ((expr.__rtti == "ExprCallFunc")
+        ||  (expr.__rtti == "ExprOp")
+        ||  (expr.__rtti == "ExprNew")
+        ||  (expr.__rtti == "ExprCall"))
 }
 
 def public get_workhorse_types {

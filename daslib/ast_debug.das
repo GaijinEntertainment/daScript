@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_aot = true
 options strict_smart_pointers = true
 
 module ast_debug shared private
@@ -105,9 +104,7 @@ class SampleStackWalker : DapiStackWalker {
     ctxid : Context?
     def override onArgument(info : FuncInfo; index : int; vinfo : VarInfo; arg : float4) : void {
         if (vinfo.flags.ref || vinfo.flags.refType) {
-            unsafe {
-                describe_arg(*ctxid, vinfo, *reinterpret<void ??>(addr(arg)))
-            }
+            describe_arg(*ctxid, vinfo, *unsafe(reinterpret<void ??>(unsafe(addr(arg)))))
         } else {
             describe_arg(*ctxid, vinfo, unsafe(addr(arg)))
         }
@@ -117,9 +114,7 @@ class SampleStackWalker : DapiStackWalker {
             return
         }
         if (vinfo.flags.ref || vinfo.flags.refType) {
-            unsafe {
-                describe_arg(*ctxid, vinfo, *reinterpret<void ??>(arg))
-            }
+            describe_arg(*ctxid, vinfo, *unsafe(reinterpret<void ??>(arg)))
         } else {
             describe_arg(*ctxid, vinfo, arg)
         }
@@ -134,9 +129,7 @@ class ContextStateAgent : DapiDebugAgent {
     walker : SampleStackWalker?
     def ContextStateAgent {
         walker = new SampleStackWalker()
-        unsafe {
-            walker_adapter <- make_stack_walker(walker)
-        }
+        move_new(walker_adapter, make_stack_walker(walker))
     }
     def operator delete {
         unsafe {

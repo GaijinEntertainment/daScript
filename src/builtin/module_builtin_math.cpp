@@ -267,7 +267,7 @@ namespace das {
                 return context.code->makeNode<SimNode_At>(at,
                                                           rv->simulate(context),
                                                           idx->simulate(context),
-                                                          uint32_t(sizeof(float)*ColC), ofs, RowC);
+                                                          uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
             }
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & readType,
@@ -279,7 +279,7 @@ namespace das {
                 return context.code->makeValueNode<SimNode_AtR2V>(  r2vType, at,
                                                                     rv->simulate(context),
                                                                     idx->simulate(context),
-                                                                    uint32_t(sizeof(float)*ColC), ofs, RowC);
+                                                                    uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
             }
         }
         virtual bool isRawPod() const override {
@@ -297,7 +297,7 @@ namespace das {
 
     template <typename MatT>
     struct SimNode_MatrixCtor : SimNode_CallBase {
-        SimNode_MatrixCtor(const LineInfo & at) : SimNode_CallBase(at) {}
+        SimNode_MatrixCtor(const LineInfo & at) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();
             V_OP(MatrixCtor);
@@ -709,6 +709,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(dcos)>(*this, lib, "cos",     SideEffects::none, "dcos")->arg("x");
             addExtern<DAS_BIND_FUN(dasin)>(*this, lib, "asin",   SideEffects::none, "dasin")->arg("x");
             addExtern<DAS_BIND_FUN(dacos)>(*this, lib, "acos",   SideEffects::none, "dacos")->arg("x");
+            addExtern<DAS_BIND_FUN(dsafe_asin)>(*this, lib, "safe_asin",   SideEffects::none, "dsafe_asin")->arg("x");
+            addExtern<DAS_BIND_FUN(dsafe_acos)>(*this, lib, "safe_acos",   SideEffects::none, "dsafe_acos")->arg("x");
             addExtern<DAS_BIND_FUN(dtan)>(*this, lib, "tan",     SideEffects::none, "dtan")->arg("x");
             addExtern<DAS_BIND_FUN(datan)>(*this, lib, "atan",   SideEffects::none, "datan")->arg("x");
             addExtern<DAS_BIND_FUN(datan2)>(*this, lib, "atan2", SideEffects::none, "datan2")->args({"y","x"});
@@ -717,6 +719,8 @@ namespace das {
             // too big for intrinsic
             addExtern<DAS_BIND_FUN(fasin)>(*this, lib, "asin", SideEffects::none, "fasin")->arg("x");
             addExtern<DAS_BIND_FUN(facos)>(*this, lib, "acos", SideEffects::none, "facos")->arg("x");
+            addExtern<DAS_BIND_FUN(fsafe_asin)>(*this, lib, "safe_asin", SideEffects::none, "fsafe_asin")->arg("x");
+            addExtern<DAS_BIND_FUN(fsafe_acos)>(*this, lib, "safe_acos", SideEffects::none, "fsafe_acos")->arg("x");
             addExtern<DAS_BIND_FUN(fatan)>(*this, lib, "atan", SideEffects::none, "fatan")->arg("x");
             addExtern<DAS_BIND_FUN(fatan_est)>(*this, lib, "atan_est", SideEffects::none, "fatan_est")->arg("x");
             addExtern<DAS_BIND_FUN(fatan2)>(*this, lib, "atan2", SideEffects::none, "fatan2")->args({"y","x"});
@@ -727,6 +731,12 @@ namespace das {
             addExternEx<float2(float2),DAS_BIND_FUN(vacos)>(*this, lib, "acos", SideEffects::none, "vacos")->arg("x");
             addExternEx<float3(float3),DAS_BIND_FUN(vacos)>(*this, lib, "acos", SideEffects::none, "vacos")->arg("x");
             addExternEx<float4(float4),DAS_BIND_FUN(vacos)>(*this, lib, "acos", SideEffects::none, "vacos")->arg("x");
+            addExternEx<float2(float2),DAS_BIND_FUN(vsafe_asin)>(*this, lib, "safe_asin", SideEffects::none, "vsafe_asin")->arg("x");
+            addExternEx<float3(float3),DAS_BIND_FUN(vsafe_asin)>(*this, lib, "safe_asin", SideEffects::none, "vsafe_asin")->arg("x");
+            addExternEx<float4(float4),DAS_BIND_FUN(vsafe_asin)>(*this, lib, "safe_asin", SideEffects::none, "vsafe_asin")->arg("x");
+            addExternEx<float2(float2),DAS_BIND_FUN(vsafe_acos)>(*this, lib, "safe_acos", SideEffects::none, "vsafe_acos")->arg("x");
+            addExternEx<float3(float3),DAS_BIND_FUN(vsafe_acos)>(*this, lib, "safe_acos", SideEffects::none, "vsafe_acos")->arg("x");
+            addExternEx<float4(float4),DAS_BIND_FUN(vsafe_acos)>(*this, lib, "safe_acos", SideEffects::none, "vsafe_acos")->arg("x");
             addExternEx<float2(float2),DAS_BIND_FUN(vatan)>(*this, lib, "atan", SideEffects::none, "vatan")->arg("x");
             addExternEx<float3(float3),DAS_BIND_FUN(vatan)>(*this, lib, "atan", SideEffects::none, "vatan")->arg("x");
             addExternEx<float4(float4),DAS_BIND_FUN(vatan)>(*this, lib, "atan", SideEffects::none, "vatan")->arg("x");
@@ -832,11 +842,11 @@ namespace das {
             addExtern<DAS_BIND_FUN(float3x4_det)>(*this, lib, "determinant",
                 SideEffects::none,"float3x4_det")->arg("x");
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_ati<float3x4>)), SimNode_ExtFuncCallRef>(*this, lib,
-                "[]", SideEffects::none, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
+                "[]", SideEffects::modifyArgument, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_atci<float3x4>)), SimNode_ExtFuncCallRef>(*this, lib,
                 "[]", SideEffects::none, "floatNxN_atci<float4>")->args({"m","i","context","at"}));
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_atu<float3x4>)), SimNode_ExtFuncCallRef>(*this, lib,
-                "[]", SideEffects::none, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
+                "[]", SideEffects::modifyArgument, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_atcu<float3x4>)), SimNode_ExtFuncCallRef>(*this, lib,
                 "[]", SideEffects::none, "floatNxN_atci<float4>")->args({"m","i","context","at"}));
             // quat
@@ -886,11 +896,11 @@ namespace das {
             addExtern<DAS_BIND_FUN(float3x3_det)>(*this, lib, "determinant",
                 SideEffects::none,"float3x3_det")->arg("x");
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_ati<float3x3>)), SimNode_ExtFuncCallRef>(*this, lib,
-                "[]", SideEffects::none, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
+                "[]", SideEffects::modifyArgument, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_atci<float3x3>)), SimNode_ExtFuncCallRef>(*this, lib,
                 "[]", SideEffects::none, "floatNxN_atci<float4>")->args({"m","i","context","at"}));
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_atu<float3x3>)), SimNode_ExtFuncCallRef>(*this, lib,
-                "[]", SideEffects::none, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
+                "[]", SideEffects::modifyArgument, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_atcu<float3x3>)), SimNode_ExtFuncCallRef>(*this, lib,
                 "[]", SideEffects::none, "floatNxN_atci<float4>")->args({"m","i","context","at"}));
             // packing

@@ -144,7 +144,39 @@ namespace das
 
     struct RequireRecord {
         string              name;
+        int32_t             line;
         vector<FileInfo *>  chain;
+    };
+
+    enum class MissingHint {
+        ModuleInfoNotFound,
+        WrongModuleName,
+        FileNotFound,
+        DuplicateModule,
+    };
+
+    struct MissingRecord : RequireRecord {
+        MissingHint         hintType;
+        string              hintName;
+        string              hintName2;
+    };
+
+    struct NamelessModuleReq {
+        string              name;
+        string              moduleName;
+        string              fileName;
+        string              fromFile;
+    };
+
+    struct NamelessMismatch {
+        vector<FileInfo *>  chain;
+        int32_t             line;
+        string              name1;
+        string              fileName1;
+        string              fromFile1;
+        string              name2;
+        string              fileName2;
+        string              fromFile2;
     };
 
     typedef smart_ptr<class FileAccess> FileAccessPtr;

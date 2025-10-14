@@ -21,13 +21,13 @@ class SampleDebugAgent : DapiDebugAgent {
     def override onFree(var ctx : Context; data : void?; at : LineInfo) : void {
         print("{ctx} {ctx.name} : free at {describe(at)}\n")
     }
-    def override onAllocateString(var ctx : Context; data : void?; size : uint64; at : LineInfo) : void {
+    def override onAllocateString(var ctx : Context; data : void?; size : uint64; tempString : bool, at : LineInfo) : void {
         let str = escape(unsafe(reinterpret<string> data))
-        print("{ctx} {ctx.name} : allocate string {intptr(data)} '{str}' of length {size} bytes at {describe(at)}\n")
+        print("{ctx} {ctx.name} : allocate string (temp:{tempString}) {intptr(data)} '{str}' of length {size} bytes at {describe(at)}\n")
     }
-    def override onFreeString(var ctx : Context; data : void?; at : LineInfo) : void {
+    def override onFreeString(var ctx : Context; data : void?; tempString : bool, at : LineInfo) : void {
         let str = escape(unsafe(reinterpret<string> data))
-        print("{ctx} {ctx.name} : free string {intptr(data)} `{str}` at {describe(at)}\n")
+        print("{ctx} {ctx.name} : free string (temp:{tempString}) {intptr(data)} `{str}` at {describe(at)}\n")
     }
 }
 

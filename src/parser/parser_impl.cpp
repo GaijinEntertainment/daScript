@@ -49,20 +49,19 @@ namespace das {
 
     vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
         vector<ExpressionPtr> argList;
-        auto arg = arguments;
-        if ( arg->rtti_isSequence() ) {
-            while ( arg->rtti_isSequence() ) {
-                auto pSeq = static_cast<ExprSequence *>(arg);
-                DAS_ASSERT(!pSeq->right->rtti_isSequence());
-                argList.push_back(pSeq->right);
-                arg = pSeq->left.get();
-            }
-            argList.push_back(arg);
-            reverse(argList.begin(),argList.end());
-            delete arguments;
-        } else {
-            argList.push_back(arg);
+        if (arguments == nullptr) {
+            return argList;
         }
+
+        ExpressionPtr arg = arguments; // `arguments` will be freed by smart ptr destructor
+        while ( arg->rtti_isSequence() ) {
+            auto pSeq = static_pointer_cast<ExprSequence>(arg);
+            DAS_ASSERT(!pSeq->right->rtti_isSequence());
+            argList.push_back(pSeq->right);
+            arg = pSeq->left;
+        }
+        argList.emplace_back(arg);
+        reverse(argList.begin(),argList.end());
         return argList;
     }
 
@@ -206,6 +205,7 @@ namespace das {
                     CompilationError::invalid_aka);
             }
             pFor->iteratorsAt.push_back(np.at);
+            pFor->iteratorsTupleExpansion.push_back(np.isTupleExpansion);
             pFor->iteratorsTags.push_back(np.tag);
         }
         delete iters;
@@ -295,6 +295,7 @@ namespace das {
             }
             for ( auto pDecl : *list ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
+                    /*
                     if ( !pStruct->isClass && pDecl->isPrivate ) {
                         das_yyerror(scanner,"only class member can be private "+name_at.name,name_at.at,
                             CompilationError::invalid_private);
@@ -303,6 +304,7 @@ namespace das {
                         das_yyerror(scanner,"only class member can be static "+name_at.name,name_at.at,
                             CompilationError::invalid_static);
                     }
+                    */
                     if ( (pDecl->override || pDecl->sealed) && pDecl->isStatic ) {
                         das_yyerror(scanner,"static member can't be sealed or override "+name_at.name,name_at.at,
                             CompilationError::invalid_static);
@@ -594,7 +596,7 @@ namespace das {
                 auto varName = func->name;
                 func->name = yyextra->g_thisStructure->name + "`" + func->name;
                 auto vars = new vector<VariableNameAndPosition>();
-                vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
+                vars->emplace_back(VariableNameAndPosition(varName,"",func->at));
                 TypeDecl * funcType = new TypeDecl(Type::tFunction);
                 funcType->at = func->at;
                 swap ( funcType->firstType, func->result );
@@ -687,10 +689,14 @@ namespace das {
                     auto varName = func->name;
                     func->name = yyextra->g_thisStructure->name + "`" + func->name;
                     auto vars = new vector<VariableNameAndPosition>();
-                    vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
+                    vars->emplace_back(VariableNameAndPosition(varName,"",func->at));
                     Expression * finit = new ExprAddr(func->at, inThisModule(func->name));
-                    if ( ovr == OVERRIDE_OVERRIDE || ovr == OVERRIDE_SEALED ) {
+                    if ( ovr == OVERRIDE_OVERRIDE ) {
                         finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                    } else if ( ovr == OVERRIDE_SEALED ) {
+                        if ( yyextra->g_thisStructure->findField(varName) ) { // only if we are actually overriding a field
+                            finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                        }
                     }
                     VariableDeclaration * decl = new VariableDeclaration(
                         vars,
@@ -1060,6 +1066,7 @@ namespace das {
             pFor->iterators.push_back(np.name);
             pFor->iteratorsAka.push_back(np.aka);
             pFor->iteratorsAt.push_back(np.at);
+            pFor->iteratorsTupleExpansion.push_back(np.isTupleExpansion);
             pFor->iteratorsTags.push_back(np.tag);
         }
         delete iters;
@@ -1085,18 +1092,36 @@ namespace das {
     }
 
     Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt ) {
-        if ( fncall->rtti_isCallLikeExpr() ) {
-            auto pCall = (ExprLooksLikeCall *) fncall;
+        Expression * pipeCall = fncall->tail();
+        if ( pipeCall->rtti_isCallLikeExpr() ) {
+            auto pCall = (ExprLooksLikeCall *) pipeCall;
             pCall->arguments.push_back(arg);
             return fncall;
-        } else if ( fncall->rtti_isVar() ) {
-            auto pVar = (ExprVar *) fncall;
+        } else if ( pipeCall->rtti_isVar() ) {
+            // a += b <| c
+            auto pVar = (ExprVar *) pipeCall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
-            delete pVar;
             pCall->arguments.push_back(arg);
-            return pCall;
+            if ( !fncall->swap_tail(pVar,pCall) ) {
+                delete pVar;
+                return pCall;
+            } else {
+                return fncall;
+            }
+        } else if ( pipeCall->rtti_isMakeStruct() ) {
+            auto pMS = (ExprMakeStruct *) pipeCall;
+            if ( pMS->block ) {
+                das_yyerror(scanner,"can't pipe into make " + pMS->type->describe() + ". it already has where closure",
+                    locAt,CompilationError::cant_pipe);
+                delete arg;
+            } else {
+                pMS->block = arg;
+            }
+            return fncall;
         } else {
-            das_yyerror(scanner,"can only lpipe into a function call",locAt,CompilationError::cant_pipe);
+            das_yyerror(scanner,"can only pipe into function call or make type",
+                locAt,CompilationError::cant_pipe);
+            delete arg;
             return fncall;
         }
     }

@@ -49,6 +49,7 @@ string help() {
            "das-fmt {-i} filename1 {filename2} ...:\n"
            "   -i inplace conversion, write to the same file. Multiple filenames only allowed in inplace mode\n"
            "   --tests Run tests, no filenames required\n"
+           "   --semicolon Keep semicolon after convertion\n"
            "";
 }
 
@@ -73,19 +74,19 @@ vector<TestData> test_cases() {
     vector<TestData> base = {
         {"[[/**/Foo/*0*/a/*a*/=/**/1/*a*///abc\n,//dsa\n/*dsa*/\nb=2.0/**/\n//dsa\n]]",
                                                                 "/**/Foo(/*0*/a/*a*/=/**/1/*a*///abc\n,//dsa\n/*dsa*/\nb=2.0/**/\n//dsa\n)"}, // 1 // no uninit because it's redundant
-        {"[[/**/Foo/**/]]",                                     "/**/Foo(/**/)"}, // 2
-        {"[[/*a*/Foo(/*b*/)/*c*/]]",                            "/*a*/Foo(/*b*/)/*c*/"}, // 3
+        {"[[/**/Foo/**/]]",                                     "Foo(/**//**/)"}, // 2
+        {"[[/*a*/Foo(/*b*/)/*c*/]]",                            "Foo(/*a*//*b*//*c*/)"}, // 3
         {"[[/*a*/Foo(/*b*/)/*c*/ a=1/*d*/,/*e*/b=2.0/*f*/]]",   "/*a*//*b*/Foo(/*c*/ a=1/*d*/,/*e*/b=2.0/*f*/)"}, // 4
         {"[[/*a*/auto/*b*/1/*c*/,/*d*/2/*e*/]]",                "/*a*//*b*/(1/*c*/,/*d*/2/*e*/)"}, // 13
 //        {"[[for x in [1, 20]; x*x; where x%2 == 0]];", "[iterator for x in [1, 20]; x*x; where x%2 == 0];"}, // 5 // each result is discarded, which is unsaf
         {"[{/*a*/Foo/*b*/a=1/*c*/,/*d*/b=2./*e*/;/*f*/a=2/*g*/,/*h*/b=1./*i*/}]",
-                                                                "/*a*/[Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*f*/a=2/*g*/,/*h*/b=1./*i*/)]"}, // 6
+                                                                "[/*a*/Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*f*/a=2/*g*/,/*h*/b=1./*i*/)]"}, // 6
         {"[{/*a*/Foo()/*b*/a=1/*c*/,/*d*/b=2./*e*/;/*g*/a=2/*h*/,/*i*/b=1./*j*/}]",
-                                                                "/*a*/[Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*g*/a=2/*h*/,/*i*/b=1./*j*/)]"}, // 7
+                                                                "[/*a*/Foo(/*b*/a=1/*c*/,/*d*/b=2./*e*/), Foo(/*g*/a=2/*h*/,/*i*/b=1./*j*/)]"}, // 7
 //        {"[{Foo a=1,b=2.;a=2,b=1. <optional_block>}]", "[Foo(a=1,b=2.),Foo(a=2,b=1.)]"}, // what about optional block in new syntax
         {"[{/*a*/auto/*b*/1/*c*/;/*d*/2/*e*/;/*f*/3/*g*/;/*h*/4/*i*/}]",
-                                                                "/*a*/[/*b*/1/*c*/,/*d*/2/*e*/,/*f*/3/*g*/,/*h*/4/*i*/]"}, // 8
-        {"[{/*a*/auto/*b*/1/*c*/,/*d*/2.2/*e*/}]",              "/*a*/[/*b*/(1/*c*/,/*d*/2.2/*e*/)]"}, // 8
+                                                                "[/*a*//*b*/1/*c*/,/*d*/2/*e*/,/*f*/3/*g*/,/*h*/4/*i*/]"}, // 8
+        {"[{/*a*/auto/*b*/1/*c*/,/*d*/2.2/*e*/}]",              "[/*a*//*b*/(1/*c*/,/*d*/2.2/*e*/)]"}, // 8
         {"[{/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/}]",
                                                                 "[/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/]"}, // 9
         {"{{/*a*/for/*b*/x/*c*/in/*d*/0..10/*e*/;/*f*/x*x/*g*/;/*h*/where/*i*/x%2==0/*j*/}}",
@@ -94,13 +95,13 @@ vector<TestData> test_cases() {
         {R"({{/*a*/1=>"a"/*b*/;/*c*/2=>"b"/*d*/;/*e*/3=>"c"/*f*/;/*g*/4=>"d"/*h*/}})",
                                                                 R"({/*a*/1=>"a"/*b*/,/*c*/2=>"b"/*d*/,/*e*/3=>"c"/*f*/,/*g*/4=>"d"/*h*/})"}, // 10
         {R"([[/*a*/auto/*b*/1/*c*/,/*d*/2./*e*/,/*f*/"3"/*g*/;/*h*/1/*i*/,/*j*/4./*k*/,/*l*/"2"/*m*/]])",
-                                                                R"(/*a*/fixed_array(/*b*/(1/*c*/,/*d*/2./*e*/,/*f*/"3"/*g*/),/*h*/(1/*i*/,/*j*/4./*k*/,/*l*/"2"/*m*/)))"}, // 13
+                                                                R"(fixed_array(/*a*//*b*/(1/*c*/,/*d*/2./*e*/,/*f*/"3"/*g*/),/*h*/(1/*i*/,/*j*/4./*k*/,/*l*/"2"/*m*/)))"}, // 13
 //
 //        // anything
         {"[[/*a*/auto/*b*/1/*c*/;/*d*/2/*e*/]]",
-                                                                "/*a*/fixed_array(/*b*/1/*c*/,/*d*/2/*e*/)"},
-        {"[[/*a*/Foo?/*b*/]]",                                  "/*a*/default<Foo?>/*b*/"},
-        {"[[/*a*/Foo#/*b*/]]",                                  "/*a*/struct<Foo#>(/*b*/)"},
+                                                                "fixed_array(/*a*//*b*/1/*c*/,/*d*/2/*e*/)"},
+        {"[[/*a*/Foo?/*b*/]]",                                  "default<Foo?>/*a*//*b*/"},
+        {"[[/*a*/Foo#/*b*/]]",                                  "struct<Foo#>(/*a*//*b*/)"},
         {"[[tuple<string; float>\n"
          "    \"a\", 1.0;\n"
          "    \"b\", 2.0;"
@@ -108,6 +109,11 @@ vector<TestData> test_cases() {
          "fixed_array<tuple<string; float>>(\n"
          "    (\"a\", 1.0),\n"
          "    (\"b\", 2.0))"},
+        {
+            "[[auto[] \"a\" ]]\n",
+            "fixed_array( \"a\" )\n",
+        },
+
 
         // nested
 
@@ -132,7 +138,7 @@ vector<TestData> test_cases() {
         {"typedef \n    A = int\n    B = string",            "typedef A = int;\ntypedef B = string;\n"},
         {"def b()/**/\n    /**/let a = 5",                   "def b()/**/ {\n    /**/let a = 5;\n}"},
         {"def b()/**/\n    /**/let a = 5",                   "def b()/**/ {\n    /**/let a = 5;\n}"},
-        {"def b() /**/{\n    let a = 5;/**/\n}",             "def b() /**/{\n    let a = 5;/**/\n}"},
+        {"def b() /**/\n    let a = 5/**/;\n",             "def b() /**/ {\n    let a = 5/**/;\n}\n"},
         {"def b(it)\n    let x = typeinfo is_iterable (it)", "def b(it) {\n    let x = typeinfo is_iterable (it);\n}"},
 
         {"class C\n"
@@ -194,7 +200,7 @@ vector<TestData> test_cases() {
             "def main() {\n"
             "    foo(123) $() {} \n"
             "}\n",
-            "def foo(x){}\n"
+            "def foo(x, y){}\n"
             "def main() {\n"
             "    foo(123, $() {}); \n"
             "}\n"
@@ -225,6 +231,30 @@ vector<TestData> test_cases() {
             "    assume x = 1",
             "def f() {\n"
             "    assume x = 1;\n"
+            "}",
+        },
+        {
+            "def main() {\n"
+            "    let x = 1\n"
+            "+\n"
+            "2;\n"
+            "}",
+            "def main() {\n"
+            "    let x = (1\n"
+            "+\n"
+            "2);\n"
+            "}",
+        },
+        {
+            "def main() {\n"
+            "    let x = (1\n"
+            "+\n"
+            "2 +\n3 + 4);\n"
+            "}",
+            "def main() {\n"
+            "    let x = (1\n"
+            "+\n"
+            "2 +\n3 + 4);\n"
             "}",
         },
 //        {
@@ -285,6 +315,8 @@ int main(int argc, char** argv) {
                 opts.insert(format::FormatOpt::Inplace);
             } else if (arg == "-v2" || arg == "--v2") {
                 opts.insert(format::FormatOpt::V2Syntax);
+            } else if (arg == "--semicolon") {
+                opts.insert(format::FormatOpt::SemicolonEOL);
             } else {
                 tp << help();
             }

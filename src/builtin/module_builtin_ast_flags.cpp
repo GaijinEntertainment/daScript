@@ -51,7 +51,7 @@ namespace das {
         ft->argNames = { "isClosure", "hasReturn", "copyOnReturn", "moveOnReturn",
             "inTheLoop", "finallyBeforeBody", "finallyDisabled","aotSkipMakeBlock",
             "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse", "hasMakeBlock",
-            "hasEarlyOut", "forLoop" };
+            "hasEarlyOut", "forLoop", "hasExitByLabel", "isLambdaBlock" };
         return ft;
     }
 
@@ -82,7 +82,7 @@ namespace das {
         ft->alias = "ExprMakeStructFlags";
         ft->argNames = { "useInitializer", "isNewHandle", "usedInitializer", "nativeClassInitializer",
             "isNewClass", "forceClass", "forceStruct", "forceVariant", "forceTuple", "alwaysUseInitializer",
-            "igoreVisCheck" };
+            "ignoreVisCheck", "canShadowBlock" };
         return ft;
     }
 

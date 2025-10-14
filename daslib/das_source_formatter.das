@@ -500,21 +500,23 @@ def mark_tokens_as_type(var ctx : FormatterCtx; i : int) {
         return
     }
 
-    if (ctx |> eq(pos, "[") && ctx |> eq(pos + 1, "]")) {
-        pos += 2
-    }
-
-    for (j in range(pos, length(ctx.tokens))) {
-        if (ctx |> eq(j, "-", "==") && ctx |> eq(j + 1, "const", "&", "#", "?")) {
-            pos = j + 2
-        } elif (ctx |> eq(j, "const", "&", "#", "?") || ctx |> eq(j, "implicit")) {
-            pos = j + 1
+    var start = i;
+    while (pos < length(ctx.tokens)) {
+        if (ctx |> eq(pos, "-", "==") && ctx |> eq(pos + 1, "const", "&", "#", "?")) {
+            pos += 1 // skip -
+        } elif (ctx |> eq(pos, "const", "&", "#", "?") || ctx |> eq(pos, "implicit", "explicit")) {
+            // do nothing
+        } elif (ctx |> eq(pos, "[")) {
+            // ignore [expr] in T[expr]
+            mark_range_as_type(ctx, start, pos)
+            pos = ctx |> find_pair_square(pos + 1)
+            start = pos + 1
         } else {
             break
         }
+        pos += 1 // next token
     }
-
-    mark_range_as_type(ctx, i, pos)
+    mark_range_as_type(ctx, start, pos)
 
     if (ctx |> eq(pos, "|")) {
         ctx.tokens[pos].spaces = 1
@@ -720,10 +722,15 @@ def mark_token_context(var ctx : FormatterCtx) {
     // functions
     for (i in range(0, length(ctx.tokens) - 3)) {
         var pos = -1
+        var need_in_func_param = true
         if (ctx |> new_line_before(i) && ctx |> eq(i, "def")) {
             pos = i + 1
         } elif (ctx |> eq(i, "$",  "@", "@@") && ctx |> eq(i + 1, "(", "[")) {
-            pos = i;
+            pos = i
+        } elif (ctx |> eq(i, "@@") && ctx |> eq(i + 1, "<")) {
+            // handle func_addr_expr with type : @@ < (a1: int, ...) : T > func_name
+            need_in_func_param = false
+            pos = i + 1
         }
 
         if (pos == -1) {
@@ -749,8 +756,8 @@ def mark_token_context(var ctx : FormatterCtx) {
             ctx.tokens[beginParams].dontAddSpacesAround = true;
             let endParams = ctx |> find_pair_paren(pos + 1);
             for (j in range(beginParams, endParams + 1)) {
-                ctx.tokens[j].isInFunctionParam = true;
-                if (j - 1 == beginParams || ctx |> eq(j - 1, ";")) {
+                ctx.tokens[j].isInFunctionParam = need_in_func_param;
+                if (j - 1 == beginParams || ctx |> eq(j - 1, ";") || ctx |> eq(j - 1, ",")) {
                     let colonPos = ctx |> search_token_in_line(j, ":");
                     if (colonPos > 0) {
                         ctx |> mark_tokens_as_type(colonPos + 1);
@@ -1092,6 +1099,11 @@ let space_after_keywords <- fixed_array("if", "elif", "while", "switch", "with",
 def fmt_space_after_keyword(var ctx : FormatterCtx) {
     for (i in range(1, length(ctx.tokens) - 1)) {
         if (space_after_keywords |> find_index(ctx.tokens[i].str) >= 0) {
+            if (!new_line_before(ctx, i + 1)) {
+                ctx |> add_space_before(i + 1)
+            }
+        }
+        if (ctx.tokens[i].spaces >= 2 && ctx.tokens[i].str == "match" && ((ctx.tokens[i + 1].str == "(" && !ctx.tokens[i + 1].isInFunctionParam))) {
             if (!new_line_before(ctx, i + 1)) {
                 ctx |> add_space_before(i + 1)
             }

@@ -1,9 +1,9 @@
+options gen2
 require tutorial_02
 
-var a = 2
-
 [export]
-def test
+def test {
+    var a = 2
     print("this tutorial utilizes basic builin module with constant and function\n")
     let sq2 = SQRT2
     print("sq2 = {sq2} // expecting sqrt(2), 1.41421\n")
@@ -14,17 +14,21 @@ def test
     // anonymous invoke
     var isTps = false
     isTps = true
-    let offset = invoke() <|
-        if isTps
+    let offset = invoke() <| $() {
+        if (isTps) {
             return 1
-        else
+        } else {
             return 2
+        }
+    }
     print("offset = {offset} // expecting 2.0\n")
-    let offset2 = invoke($(a : int){
-        return a + 1;
+    let offset2 = invoke($(aa : int){
+        return aa + 1;
     }, 13)
     print("offset2 = {offset2} // expecting 14\n")
-    invoke() <|
+    invoke() <| $() {
         print("this is an anonymous invoke\n")
+    }
+}
 
 

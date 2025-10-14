@@ -51,7 +51,7 @@ def test_type_mismatch(t : T?) {
         // t |> equal( ok, false)
         ok = true
         try {
-            cmp |> get("pos", type<int>)    // mismatch get
+            cmp |> get("pos", default<int>)    // mismatch get
         } recover {
             ok = false
         }

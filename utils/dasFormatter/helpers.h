@@ -7,7 +7,7 @@
 
 namespace das::format {
 
-    static inline constexpr size_t npos = -1;
+    static inline constexpr size_t npos = size_t(-1);
 
     template <typename T>
     string convert_to_string(const vector<T> &vec, string sep = ",", string prev_sep = ",") {
@@ -48,13 +48,17 @@ namespace das::format {
 
     size_t get_indent(Pos loc, size_t tab_size);
 
-    void handle_brace(Pos prev_loc, int value, const string &internal, size_t tab_size, Pos end_loc);
+    void handle_brace(Pos prev_loc, uint32_t value, const string &internal, size_t tab_size, Pos end_loc);
 
     void replace_with(bool v2_only, Pos start, const string &internal, Pos end, const string &open, const string &close);
 
     void replace_with(bool v2_only, Pos start, LineInfo internal, Pos end, const string &open, const string &close);
 
+    bool skip_token(bool v2_only, bool need_skip, LineInfo token);
+
     void wrap_par_expr(LineInfo real_expr, LineInfo info_expr);
+    // wrap with parenthesis only if it is mult line expression
+    void wrap_par_expr_newline(LineInfo real_expr, LineInfo info_expr);
 
     LineInfo concat(LineInfo first, LineInfo last);
 

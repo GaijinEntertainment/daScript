@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_aot = true
 options strict_smart_pointers = true
 
 module temp_strings shared private
@@ -17,7 +16,7 @@ def public build_temp_string(bldr : block<(var writer : StringBuilderWriter) : v
     unsafe {
         cb |> invoke(reinterpret<string#> str)
         if (!is_intern_strings()) {
-            delete_string(reinterpret<string> str)
+            delete_string(reinterpret<string&> str)
         }
     }
 }
@@ -29,7 +28,7 @@ def public temp_string(str : string; cb : block<(res : string#) : void>) {
     unsafe {
         cb |> invoke(reinterpret<string#> str)
         if (!is_intern_strings()) {
-            delete_string(reinterpret<string> str)
+            delete_string(reinterpret<string&> str)
         }
     }
 }
@@ -53,7 +52,7 @@ def public temp_string(arr : array<uint8>; cb : block<(res : string#) : void>) {
     unsafe {
         cb |> invoke(reinterpret<string#> str)
         if (!is_intern_strings()) {
-            delete_string(reinterpret<string> str)
+            delete_string(reinterpret<string&> str)
         }
     }
 }

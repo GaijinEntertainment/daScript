@@ -1,22 +1,11 @@
 options gen2
 def test_find {
     let const_tab <- { "one" => 1, "two" => 2 }
-    find(const_tab, "one") <| $(num) {
-        assert(deref(num) == 1)
-    }
     get(const_tab, "one") <| $(num) {
         assert(num == 1)
     }
-    find(const_tab, "one") <| $(num) {
-        if (num != null) {
-            assert(deref(num) == 1)
-        }
-    }
     assert(const_tab?["one"] ?? 100500 == 1)
     var tab <- { "one" => 1, "two" => 2 }
-    find(tab, "one") <| $(num) {
-        assert(deref(num) == 1)
-    }
     get(tab, "one") <| $(var num) {
         num = 3
     }
@@ -75,13 +64,10 @@ def test : bool {
     // debug(tab)
     i = 0
     while (i < total) {
-        find(tab, string(i)) <| $(pValue) {
-            if (pValue != null) {
-                assert(deref(pValue) == i)
-            } else {
-                assert(i % 7 == 0)
-            }
+        let found = get(tab, string(i)) <| $(pValue) {
+            assert(pValue == i)
         }
+        assert(!found == (i % 7 == 0))
         i ++
     }
     while (i < total) {
@@ -97,27 +83,13 @@ def test : bool {
         var j, k : int = 0
         i = 0
         while (i < total) {
-            find(tab, string(i)) <| $(pVal) {
-                j += pVal ?? 0
+            get(tab, string(i)) <| $(pVal) {
+                j += pVal
             }
             if (i % 7 != 0) {
                 k += i
             } else {
                 assert(i % 7 == 0)
-            }
-            i ++
-        }
-        assert(j == k)
-    }
-    if (true) {
-        var j, k, zero : int = 0
-        i = 0
-        while (i < total) {
-            find(tab, string(i)) <| $(pVal) {
-                j += pVal ?? zero
-            }
-            if (i % 7 != 0) {
-                k += i
             }
             i ++
         }
@@ -158,6 +130,9 @@ def test : bool {
     tab_bool |> insert(false, -1)
     assert(key_exists(tab_bool, false))
 
+    var tab_rng = {0 .. 5};
+    assert(key_exists(tab_rng, 0 .. 5))
+
     var tab_int : table<int; int>
     assert(!key_exists(tab_int, -1))
     tab_int |> insert(-1, -1)
@@ -184,6 +159,8 @@ def test : bool {
 
     test_erase_collision()
     test_lock_panic()
+    test_insert_default()
+    test_get_with_default()
 
     return true
 }
@@ -193,24 +170,23 @@ def test_lock_panic {
     var tab <- { "one" => 1, "two" => 2 }
     var failed = false
     try {
-        find(tab, "one") <| $(t) {
-            assert(t != null)
+        get(tab, "one") <| $(t) {
             tab |> insert("three", 3)
         }
     } recover {
         failed = true
     }
     assert(failed)
+    assert(!key_exists(tab, "three"))
     failed = false
     try {
-        find(tab, "three") <| $(t) {
-            assert(t == null)
+        get(tab, "three") <| $(t) {
             erase(tab, "three")
         }
     } recover {
         failed = true
     }
-    assert(failed)
+    assert(!failed)
     return true
 }
 
@@ -264,4 +240,73 @@ def test_erase_collision {
         erase(t.t, x)
         verify(check(t, deletedEntries))
     }
+}
+
+[sideeffects]
+def test_insert_default() {
+    var t : table<string, int>
+    t.insert_default("one", 1)
+    assert(t?["one"] ?? 100500 == 1)
+    t.insert_default("one", 2) // no effect
+    assert(t?["one"] ?? 100500 == 1)
+
+    assert(!t.key_exists("zero"))
+    t.insert_default("zero")
+    assert(t?["zero"] ?? 100500 == 0)
+
+    var map : table<int, array<int>>
+    map.emplace(1, [1])
+    map.emplace(2, [2, 2])
+    map.emplace_default(1) //no effect
+    map.emplace_default(2) //no effect
+    map.emplace_default(0)
+    map.emplace_default(3)
+    verify(map.length() == 4)
+    for (i in range(0, 4)) {
+        let found = map.get(i, $(val) {
+            if (i == 0 || i == 3) {
+                assert(val.length() == 0)
+            } elif (i == 1) {
+                assert(val.length() == 1 && val[0] == 1)
+            } elif (i == 2) {
+                assert(val.length() == 2 && val[0] == 2 && val[1] == 2)
+            }
+        })
+        verify(found)
+    }
+
+    return true
+}
+
+[sideeffects]
+def test_get_with_default() {
+    var tab <- { 1 => "1", 2 => "2", 3 => "3" }
+
+    get_with_default(tab, 2, $(val) {
+        verify(val == "2")
+    })
+    get_with_default(tab, 1, $(val) {
+        verify(val == "1")
+        val += " modified"
+    })
+    assert(tab?[1] ?? "" == "1 modified")
+
+    // add new entry with default value
+    get_with_default(tab, 4, $(val) {
+        verify(val == "")
+        val += "four"
+    })
+    assert(tab?[4] ?? "" == "four")
+
+    modify(tab, 2, $(val) => val + " modified")
+    assert(tab?[2] ?? "" == "2 modified")
+
+    modify(tab, 4, $(val) => "'{val}'")
+    assert(tab?[4] ?? "" == "'four'")
+
+    // modify non-existing entry, add it with default value
+    modify(tab, 5, $(val) => "{val}five")
+    assert(tab?[5] ?? "" == "five")
+
+    return true
 }

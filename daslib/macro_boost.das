@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_aot = true
 options strict_smart_pointers = true
 
 
@@ -46,9 +45,7 @@ class CaptureBlock : AstVisitor {
         }
         let vptr = get_ptr(expr.variable)
         if (!(scope |> key_exists(vptr))) {
-            unsafe {
-                captured[vptr] = reinterpret<ExprVar?> get_ptr(expr)
-            }
+            captured.insert(vptr, unsafe(reinterpret<ExprVar?>(get_ptr(expr))))
         }
     }
     def override preVisitExprLetVariable(expr : smart_ptr<ExprLet>; arg : VariablePtr; lastArg : bool) : void {

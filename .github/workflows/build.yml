@@ -4,7 +4,8 @@ on:
   push:
   pull_request:
   workflow_dispatch:
-
+  release:
+    types: published
 defaults:
   run:
     shell: bash
@@ -25,7 +26,7 @@ jobs:
         with:
           # All of these options are optional, so you can remove them if you are happy with the defaults
           concurrent_skipping: 'same_content'
-          do_not_skip: '["pull_request", "workflow_dispatch"]'
+          do_not_skip: '["pull_request", "workflow_dispatch", "release"]'
 
   ###########################################################
   build:
@@ -37,25 +38,57 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, linux_arm, darwin, darwin13, windows]
-        architecture: [32, 64]
+        target: [linux, linux_arm, darwin15, darwin26, windows]
+        architecture: [32, 64, arm64]
         cmake_preset: [ Debug, Release ]
+        sanitizers: [none]
 
         include:
           - target: linux
+            release_target: linux
+            release_arch: x86_64
             runner: ubuntu-latest
             archive_ext: tar.gz
+            sanitizers: none
+
+          # single asan build
+          - target: linux
+            release_target: linux
+            release_arch: x86_64
+            architecture: 64
+            runner: ubuntu-latest
+            archive_ext: tar.gz
+            cmake_preset: Debug
+            sanitizers: asan
+            build_name: linux_asan
+            build_system: cmake
+            cmake_generator: Ninja
 
           - target: linux_arm
+            release_target: linux
+            release_arch: arm64
             runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
-          - target: darwin
-            runner: macos-latest # arm64
+          - target: darwin15
+            release_target: darwin15
+            release_arch: x86_64
+            runner: macos-15 # latest with x86_64 https://github.com/actions/runner-images?tab=readme-ov-file#available-images
+            architecture_string: x86_64
             archive_ext: tar.gz
 
-          - target: darwin13
-            runner: macos-13 # x64
+          - target: darwin15
+            release_target: darwin15
+            release_arch: arm64
+            runner: macos-15
+            architecture_string: arm64
+            archive_ext: tar.gz
+
+          - target: darwin26
+            release_target: darwin26
+            release_arch: arm64
+            runner: macos-26 # arm64 only image
+            architecture_string: arm64
             archive_ext: tar.gz
 
           - target: windows
@@ -66,11 +99,11 @@ jobs:
             build_system: cmake
             cmake_generator: Visual Studio 17 2022
 
-          - target: darwin
+          - target: darwin15
             build_system: cmake
             cmake_generator: Ninja
 
-          - target: darwin13
+          - target: darwin26
             build_system: cmake
             cmake_generator: Ninja
 
@@ -83,25 +116,41 @@ jobs:
             cmake_generator: Ninja
 
           - target: windows
+            release_target: windows
+            release_arch: x86
             architecture: 32
             architecture_string: Win32
 
           - target: windows
+            release_target: windows
+            release_arch: x86_64
             architecture: 64
             architecture_string: x64
 
         exclude:
-          - target: darwin
+          - target: darwin15
             architecture: 32
-
-          - target: darwin13
+          
+          - target: darwin26
             architecture: 32
+         
+          - target: darwin26
+            architecture: 64
 
           - target: linux
             architecture: 32
 
+          - target: linux
+            architecture: arm64
+
           - target: linux_arm
             architecture: 32
+
+          - target: linux_arm
+            architecture: arm64 # todo
+
+          - target: windows
+            architecture: arm64 # todo https://github.com/actions/partner-runner-images/tree/main?tab=readme-ov-file#available-images
 
     steps:
     - name: "SCM Checkout"
@@ -113,6 +162,19 @@ jobs:
     - name: "Install: Required Dev Packages"
       run: |
         set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+          darwin15arm64|darwin26arm64)
+            brew install bison
+            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/usr/local/opt/bison/lib"
+            ;;
+          darwin1564|darwin2664)
+            brew install bison
+            echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
+            ;;
+        esac
+
         case "${{ matrix.target }}${{ matrix.architecture }}" in
           linux64)
             echo "MARCH=64" >> $GITHUB_ENV
@@ -135,16 +197,6 @@ jobs:
               libxinerama-dev \
               libxi-dev
             ;;
-          darwin1364)
-            brew install bison
-            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
-            export LDFLAGS="-L/usr/local/opt/bison/lib"
-            ;;
-          darwin64)
-            brew install bison
-            echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
-            export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
-            ;;
         esac
 
     - name: "Clone required repos"
@@ -153,6 +205,11 @@ jobs:
         repository: profelis/das-fmt     # Path to repository with das-fmt scripts
         path: das-fmt
 
+    - name: "Clone submodules"
+      if: matrix.target != 'linux_arm' # support opengl in glfw on linux arm
+      run: |
+        # Some of them will be disabled, but who cares
+        git submodule update --init --recursive $(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f1 | sed 's|^|modules/|' | xargs)
     - name: "Build: Daslang"
       run: |
         set -eux
@@ -161,23 +218,59 @@ jobs:
           cmake)
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
-                cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
+                        "${{ matrix.cmake_generator }}" ${{ matrix.cmake_extra_args }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }}
                 cd build
+                ninja daslang
                 ninja
                 ;;
-              windows*)
+              windows32)
                 cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
+                cmake --build ./build --config ${{ matrix.cmake_preset }}
+                ;;
+              windows64)
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }}
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               *)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
                 cd build
+                ninja daslang
                 ninja
                 ;;
             esac
             ;;
         esac
-
+    # - name: Run dasgen
+    #   run: ./bin/daslang dasgen/gen_bind.das || exit 0 # smart pointers leak
+    # - name: Check for changes
+    #   # Ignore changes which depends on stack top.
+    #   # Also ignore parser generated files.
+    #   run: |
+    #     set -eux
+    #     case "${{ matrix.target }}${{ matrix.architecture }}" in
+    #        windows32)
+    #         # windows32 is not ready yet
+    #         ;;
+    #        *)
+    #         git diff --ignore-all-space --text \
+    #           -I".*FunctionInfo.*" \
+    #           -I".*FuncInfo.*" \
+    #           -I".*das_stack_prologue.*" \
+    #           -I".*smart_ptr_raw<Function>.*" \
+    #           --exit-code \
+    #           -- ':!src/parser/ds2_lexer.cpp' \
+    #              ':!src/parser/ds_lexer.cpp' \
+    #              ':!src/parser/ds2_parser.output' \
+    #              ':!src/parser/ds_parser.output' \
+    #              ':!src/parser/lex2.yy.h' \
+    #              ':!src/parser/lex.yy.h' \
+    #              ':!utils/dasFormatter/ds_parser.cpp' \
+    #         || (echo "Generated code changed! To reproduce use "./bin/daslang dasgen/gen_bind.das" or rebuild "daslang-dev" to regenerate aot files." && exit 1)
+    #         ;;
+    #     esac
     - name: "Run formatter"
       run: |
         set -eux
@@ -196,6 +289,9 @@ jobs:
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            linux64)
             cd bin
+            # when exceptions disabled, we still throw in tests and there'll be memory leaks
+            echo -e "leak:format_error\nleak:builtin_verify_locks" > suppressions.txt
+            export LSAN_OPTIONS="suppressions='suppressions.txt'"
             ./daScriptTest
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
@@ -210,3 +306,21 @@ jobs:
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
         esac
+    - name: "Install binaries"
+      if: matrix.cmake_preset == 'Release'
+      shell: bash
+      run: |
+        mkdir daslang_install
+        mkdir artifacts
+        cmake --install ./build --prefix ./daslang_install --config ${{ matrix.cmake_preset }} --strip
+        7z a artifacts/daslang-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip ./daslang_install
+    - name: "Create release"
+      if: github.event.action == 'published' && matrix.cmake_preset == 'Release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: artifacts/daslang-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip
+        asset_name: daslang-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip
+        asset_content_type: application/zip

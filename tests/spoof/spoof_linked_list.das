@@ -1,19 +1,24 @@
+options gen2
 require dastest/testing_boost public
 
 require daslib/linked_list
 
-class Bar
+class Bar {
     a : int
-    def Bar(A : int)
+    def Bar(A : int) {
         a = A
+    }
+}
 
-%spoof_instance~TLinkedList(LinkedList_Bar,Bar)%%;
+%spoof_instance~TLinkedList(LinkedList_Bar,Bar)%%
 
 [test]
-def test_linked_list(t : T?)
+def test_linked_list(t : T?) {
     var list = new LinkedList_Bar()
     list->add(new Bar(1))
     list->add(new Bar(2))
     list->add(new Bar(3))
-    for node, i in list->each(), 1..4
+    for (node, i in list->each(), 1..4) {
         t |> equal(i, node.a)
+    }
+}

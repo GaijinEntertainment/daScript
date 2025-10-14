@@ -26,6 +26,10 @@ namespace das {
             if ( sw->value ) {
                 return isLocalOrGlobal(sw->value);
             }
+        } else if ( expr->rtti_isCallLikeExpr() ) {
+            if ( expr->type && expr->type->ref ) {
+                return true;
+            }
         }
         return false;
     }
@@ -33,6 +37,15 @@ namespace das {
     // AOT
 
     AotListBase * AotListBase::head = nullptr;
+
+    SimNode* AotFactory::operator()(Context& ctx) const
+    {
+        if (is_cmres) {
+            return ctx.code->makeNode<SimNode_AotCMRES>(fn, wrappedFn);
+        } else {
+            return ctx.code->makeNode<SimNode_Aot>(fn, wrappedFn);
+        }
+    }
 
     AotListBase::AotListBase( RegisterAotFunctions prfn ) {
         tail = head;
@@ -50,18 +63,18 @@ namespace das {
 
     // aot library
 
-    DAS_THREAD_LOCAL unique_ptr<AotLibrary> g_AOT_lib;
+    DAS_THREAD_LOCAL(unique_ptr<AotLibrary>) g_AOT_lib;
 
     AotLibrary & getGlobalAotLibrary() {
-        if ( !g_AOT_lib ) {
-            g_AOT_lib = make_unique<AotLibrary>();
-            AotListBase::registerAot(*g_AOT_lib);
+        if ( !*g_AOT_lib ) {
+            *g_AOT_lib = make_unique<AotLibrary>();
+            AotListBase::registerAot(**g_AOT_lib);
         }
-        return *g_AOT_lib;
+        return **g_AOT_lib;
     }
 
     void clearGlobalAotLibrary() {
-        g_AOT_lib.reset();
+        g_AOT_lib->reset();
     }
 
     // annotations
@@ -368,6 +381,18 @@ namespace das {
         return align;
     }
 
+    Structure::FieldDeclarationRef Structure::findFieldRef ( const string & fieldName ) const {
+        auto pField = findField(fieldName);
+        if ( pField ) {
+            FieldDeclarationRef ref;
+            ref.owner = const_cast<Structure *>(this);
+            ref.index = int32_t(pField - &fields[0]);
+            return ref;
+        } else {
+            return FieldDeclarationRef{};
+        }
+    }
+
     const Structure::FieldDeclaration * Structure::findField ( const string & na ) const {
         if ( fieldLookup.size()==fields.size() ) {
             auto it = fieldLookup.find(na);
@@ -544,6 +569,10 @@ namespace das {
 
     uint64_t Variable::getMangledNameHash() const {
         auto mangledName = getMangledName();
+        return getMNHash(mangledName);
+    }
+
+    uint64_t Variable::getMNHash(const string &mangledName) {
         return hash_blockz64((uint8_t *)mangledName.c_str());
     }
 
@@ -976,6 +1005,12 @@ namespace das {
     }
 
     // expression
+
+    string Expression::describe() const {
+        TextWriter ss;
+        ss << *this;
+        return ss.str();
+    }
 
     ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
         if ( !expr ) {
@@ -1783,6 +1818,10 @@ namespace das {
         return vis.visit(this);
     }
 
+    Structure::FieldDeclaration * ExprField::field() const {
+        return fieldRef.get();
+    }
+
     ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprField>(expr);
         Expression::clone(cexpr);
@@ -1790,9 +1829,10 @@ namespace das {
         if ( value) {
             cexpr->value = value->clone();
         }
-        cexpr->field = field;
+        cexpr->fieldRef = fieldRef;
         cexpr->fieldIndex = fieldIndex;
         cexpr->unsafeDeref = unsafeDeref;
+        cexpr->ignoreCaptureConst = ignoreCaptureConst;
         cexpr->no_promotion = no_promotion;
         cexpr->atField = atField;
         return cexpr;
@@ -2363,6 +2403,7 @@ namespace das {
         cexpr->iterators = iterators;
         cexpr->iteratorsAka = iteratorsAka;
         cexpr->iteratorsAt = iteratorsAt;
+        cexpr->iteratorsTupleExpansion = iteratorsTupleExpansion;
         for ( auto tag : iteratorsTags )
             cexpr->iteratorsTags.push_back(tag ? tag->clone() : nullptr);
         cexpr->visibility = visibility;
@@ -2688,6 +2729,9 @@ namespace das {
             cexpr->values.push_back(val->clone());
         }
         cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        if (recordType) {
+            cexpr->recordType = make_smart<TypeDecl>(*recordType);
+        }
         cexpr->gen2 = gen2;
         return cexpr;
     }
@@ -2731,6 +2775,9 @@ namespace das {
         cexpr->recordNames = recordNames;
         if ( makeType ) {
             cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        }
+        if (recordType) {
+            cexpr->recordType = make_smart<TypeDecl>(*recordType);
         }
         cexpr->isKeyValue = isKeyValue;
         return cexpr;
@@ -3214,7 +3261,12 @@ namespace das {
     }
 
     bool Program::getOptimize() const {
-        return !policies.no_optimizations && options.getBoolOption("optimize",true);
+        if ( policies.no_optimizations ) return false;
+        auto arg = options.find("optimize",Type::tBool);
+        if ( arg ) return arg->bValue;
+        arg = options.find("no_optimization",Type::tBool);
+        if ( arg ) return !arg->bValue;
+        return true;
     }
 
     bool Program::getDebugger() const {

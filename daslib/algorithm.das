@@ -80,7 +80,7 @@ def lower_bound(a : array<auto(TT)>; val : TT const -&) {
     return lower_bound(a, 0, length(a), val)
 }
 
-def lower_bound(a : array<auto(TT)>; f, l : int; value : TT const -&; less : block<(a, b : TT const -&) : bool>) {
+def lower_bound(a : array<auto(TT)>; f, l : int; value : auto(QQ); less : block<(a : TT const -&, b : QQ) : bool>) {
     assert(f >= 0 && f <= l, "lower bound first out of range")
     assert(l >= f && l <= length(a), "lower bound last out of range")
     var count = l - f
@@ -98,7 +98,7 @@ def lower_bound(a : array<auto(TT)>; f, l : int; value : TT const -&; less : blo
     return first
 }
 
-def lower_bound(a : array<auto(TT)>; value : TT const -&; less : block<(a, b : TT const -&) : bool>) {
+def lower_bound(a : array<auto(TT)>; value : auto(QQ); less : block<(a : TT const -&, b : QQ) : bool>) {
     return lower_bound(a, 0, length(a), value, less)
 }
 

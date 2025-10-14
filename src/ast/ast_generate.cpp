@@ -125,6 +125,7 @@ namespace das {
         // temp : Array<expr->subexpr->type>
         auto pVar = make_smart<Variable>();
         pVar->generated = true;
+        pVar->can_shadow = true;
         pVar->at = expr->at;
         pVar->name = compName;
         pVar->type = make_smart<TypeDecl>(Type::tArray);
@@ -206,6 +207,7 @@ namespace das {
         pClosure->list.push_back(pRet);
         // make block
         auto pMakeBlock = make_smart<ExprMakeBlock>(expr->at,pClosure);
+        pMakeBlock->alwaysSafe = expr->alwaysSafe;
         // invoke
         auto pInvoke = make_smart<ExprInvoke>(expr->at, "invoke");
         pInvoke->arguments.push_back(pMakeBlock);
@@ -260,6 +262,7 @@ namespace das {
         // generator
         auto pMkGen = make_smart<ExprMakeGenerator>(expr->at, pMakeBlock);
         pMkGen->iterType = make_smart<TypeDecl>(*expr->subexpr->type);
+        pMkGen->alwaysSafe = expr->alwaysSafe;
         return pMkGen;
     }
 
@@ -315,6 +318,7 @@ namespace das {
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto returnDecl = make_smart<ExprReturn>(str->at,makeT);
         returnDecl->moveSemantics = true;
+        returnDecl->skipLockCheck = true;
         block->list.push_back(returnDecl);
         fn->body = block;
         verifyGenerated(fn->body);
@@ -384,6 +388,7 @@ namespace das {
         if ( ptrType->firstType && ptrType->firstType->isClass() ) {
             if ( ptrType->firstType->structType->macroInterface ) pFunc->macroFunction = true;
             auto sizvar = make_smart<ExprLet>();              // let __size = class_rtti_size(__this)
+            sizvar->at = at;
             auto vsiz = make_smart<Variable>();
             vsiz->at = at;
             vsiz->name = "__size";
@@ -464,19 +469,24 @@ namespace das {
         fb->at = ls->at;
         // now finalize
         bool needUnsafe = false;
-        for ( const auto & fl : ls->fields ) {
-            if ( !fl.type->constant && !fl.capturedConstant && fl.type->needDelete() ) {
-                if ( !fl.doNotDelete && !fl.capturedRef ) {
-                    if ( fl.type->isPointer() && fl.type->firstType && fl.type->firstType->constant ) continue;
-                    if ( ls->isLambda && !fl.type->isSafeToDelete() ) continue; // we don't do unsafe delete for lambda
-                    auto fva = make_smart<ExprVar>(fl.at, "__this");
-                    auto fld = make_smart<ExprField>(fl.at, fva, fl.name);
-                    fld->ignoreCaptureConst = true;
-                    auto delf = make_smart<ExprDelete>(fl.at, fld);
-                    delf->alwaysSafe = true;
-                    fb->list.emplace_back(delf);
-                    if ( fl.type->isPointer() ) {
-                        needUnsafe = true;
+        for ( int stage=0; stage!=2; ++stage ) {
+            // stage 0 is iterators, stage 1 is everything else
+            for ( const auto & fl : ls->fields ) {
+                if ( !fl.type->constant && !fl.capturedConstant && fl.type->needDelete() ) {
+                    if ( !fl.doNotDelete && !fl.capturedRef ) {
+                        if ( stage==0 && !fl.type->isIterator() ) continue;
+                        if ( stage==1 && fl.type->isIterator() ) continue;
+                        if ( fl.type->isPointer() && fl.type->firstType && fl.type->firstType->constant ) continue;
+                        if ( ls->isLambda && !fl.type->isSafeToDelete() ) continue; // we don't do unsafe delete for lambda
+                        auto fva = make_smart<ExprVar>(fl.at, "__this");
+                        auto fld = make_smart<ExprField>(fl.at, fva, fl.name);
+                        fld->ignoreCaptureConst = true;
+                        auto delf = make_smart<ExprDelete>(fl.at, fld);
+                        delf->alwaysSafe = true;
+                        fb->list.emplace_back(delf);
+                        if ( fl.type->isPointer() ) {
+                            needUnsafe = true;
+                        }
                     }
                 }
             }
@@ -517,6 +527,7 @@ namespace das {
             with->with = make_smart<ExprPtr2Ref>(block->at, THISVAR);
             with->with->generated = true;
             auto bbl = make_smart<ExprBlock>();
+            bbl->at = block->at;
             with->body = bbl;
             with->body->at = block->at;
             bbl->list.reserve(block->finalList.size());     // copy finally section of the block body
@@ -595,6 +606,7 @@ namespace das {
         with->with = make_smart<ExprVar>(block->at, "__this");
         with->with->generated = true;
         with->body = block->clone();
+        ((ExprBlock *) with->body.get())->isLambdaBlock = false;    // this is now a body of the function, not a lambda block
         static_pointer_cast<ExprBlock>(with->body)->finalList.clear();
         if ( genFlags & generator_needYield ) {
             pFunc->generator = true;
@@ -801,7 +813,7 @@ namespace das {
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);
             if ( scopes.size()==0 ) {   // only top level for loop
-                for ( int i=0; i!=expr->iterators.size(); ++i ) {
+                for ( size_t i=0; i!=expr->iterators.size(); ++i ) {
                     auto & varName = expr->iterators[i];
                     auto & var = expr->iteratorVariables[i];
                     if ( varName[0]!='_' || varName[1]!='_' ) {
@@ -1008,12 +1020,14 @@ namespace das {
             } else {
                 vtd->constant = false;
             }
-            capture->fields.emplace_back(var->name,
-                                         vtd,
-                                         nullptr,
-                                         AnnotationArgumentList(),
-                                         false,
-                                         expr->at);
+            // the reason we insert after __lambda and __finalize is so that when we have iterators, we delete them before we delete captured variables
+            capture->fields.emplace_back(
+                var->name,
+                vtd,
+                nullptr,
+                AnnotationArgumentList(),
+                false,
+                expr->at);
             auto & fldb = capture->fields.back();
             if ( isRef || var->do_not_delete ) {
                 fldb.doNotDelete = true;
@@ -1152,6 +1166,11 @@ namespace das {
         return blk;
     }
 
+    bool srcNeedTempVar ( Expression * src, TypeDecl * type ) {
+        if ( !type->isRef() ) return false;
+        return src->rtti_isCallLikeExpr() || src->rtti_isMakeLocal();
+    }
+
     ExpressionPtr replaceGeneratorFor ( ExprFor * expr, const FunctionPtr & func ) {
         auto begin_loop_label = func->totalGenLabel ++;
         auto mid_loop_label = func->totalGenLabel ++;
@@ -1198,6 +1217,23 @@ namespace das {
             const string & srcVarName = expr->iterators[si];
             const auto & src = expr->sources[si];
             const auto & iterv = expr->iteratorVariables[si];
+            // if its a temp ref type, we need to create a temp variable
+            smart_ptr<ExprLet> tempLet;
+            if ( srcNeedTempVar(src.get(), src->type.get()) ) {
+                tempLet = make_smart<ExprLet>();
+                tempLet->at = expr->at;
+                tempLet->atInit = expr->at;
+                tempLet->visibility = expr->visibility;
+                auto svar = make_smart<Variable>();
+                svar->generated = true;
+                svar->at = expr->at;
+                svar->name = srcName + "_temp_var";
+                svar->type = make_smart<TypeDecl>(Type::autoinfer);
+                svar->init_via_move = true;
+                svar->init = src->clone();
+                tempLet->variables.push_back(svar);
+                blk->list.push_back(tempLet);
+            }
             // let src0 = each(blah) or let src0 = blah if its iterator
             auto seqt = make_smart<ExprLet>();
             seqt->at = expr->at;
@@ -1215,7 +1251,11 @@ namespace das {
                 auto ceach = make_smart<ExprCall>(expr->at, "each");
                 ceach->generated = true;
                 ceach->alwaysSafe = true;
-                ceach->arguments.push_back(src->clone());
+                if ( tempLet ) {
+                    ceach->arguments.push_back(make_smart<ExprVar>(expr->at, srcName + "_temp_var"));
+                } else {
+                    ceach->arguments.push_back(src->clone());
+                }
                 svar->init = ceach;
             }
             seqt->variables.push_back(svar);
@@ -1341,6 +1381,7 @@ namespace das {
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*tupleType);
         arg0->type->constant = false;
+        arg0->type->explicitConst = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
@@ -1348,6 +1389,7 @@ namespace das {
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*tupleType);
         arg1->type->constant = true;
+        arg1->type->explicitConst = false;
         arg1->type->ref = false;
         arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
@@ -1426,6 +1468,7 @@ namespace das {
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*variantType);
         arg0->type->constant = false;
+        arg0->type->explicitConst = false;
         arg0->type->ref = false;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
@@ -1433,6 +1476,7 @@ namespace das {
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*variantType);
         arg1->type->constant = true;
+        arg1->type->explicitConst = false;
         arg1->type->ref = false;
         arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
@@ -1551,6 +1595,7 @@ namespace das {
         arg0->name = "dest";
         arg0->type = make_smart<TypeDecl>(*left);
         arg0->type->constant = false;
+        arg0->type->explicitConst = false;
         arg0->type->ref = true;
         fn->arguments.push_back(arg0);
         auto arg1 = make_smart<Variable>();
@@ -1560,6 +1605,7 @@ namespace das {
         arg1->type->constant = true;
         arg1->type->ref = false;
         arg1->type->implicit = true;
+        arg1->type->explicitConst = false;
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
         block->at = at;
@@ -1624,7 +1670,17 @@ namespace das {
         return expr->visit(swapAt);
     }
 
+    FunctionPtr forceAtFunction ( const FunctionPtr & func, const LineInfo & at ) {
+        LocationSwapVisitor swapAt(at);
+        return func->visit(swapAt);
+    }
+
     ExpressionPtr forceGenerated ( const ExpressionPtr & expr, bool setGenerated ) {
+        SetGeneratedVisitor setGen(setGenerated);
+        return expr->visit(setGen);
+    }
+
+    FunctionPtr forceGeneratedFunction ( const FunctionPtr & expr, bool setGenerated ) {
         SetGeneratedVisitor setGen(setGenerated);
         return expr->visit(setGen);
     }
@@ -1768,6 +1824,7 @@ namespace das {
         auto returnDecl = make_smart<ExprReturn>(baseClass->at,selfV);
         returnDecl->at = func->at;
         returnDecl->moveSemantics = true;
+        returnDecl->skipLockCheck = true; // this is a constructor, there is no need lock-check
         block->list.push_back(returnDecl);
         // and done
         func->body = block;
@@ -1850,7 +1907,7 @@ namespace das {
         return func;
     }
 
-    ExpressionPtr convertToCloneExpr ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl ) {
+    ExpressionPtr convertToCloneExpr ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool ignoreCaptureConst ) {
         bool needIndex = expr->structs.size()>1;
         DAS_ASSERT(expr->block->rtti_isMakeBlock());
         auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
@@ -1861,6 +1918,7 @@ namespace das {
         if ( !needIndex ) {
             auto vself = make_smart<ExprVar>(decl->at, selfName);
             auto fdecl = make_smart<ExprField>(decl->at, vself, decl->name);
+            fdecl->ignoreCaptureConst = ignoreCaptureConst;
             auto op2c = make_smart<ExprClone>(decl->at, fdecl, decl->value->clone());
             return op2c;
         } else {
@@ -1887,6 +1945,7 @@ namespace das {
         }
         auto argV = make_smart<Variable>();
         argV->name = "__self__" + to_string(mks->at.line) + "_" + to_string(mks->at.column);
+        argV->can_shadow = mks->canShadowBlock;
         argV->type = argT;
         argV->at = mks->at;
         argV->generated = true;

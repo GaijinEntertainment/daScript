@@ -16,6 +16,7 @@ require daslib/apply_in_context
 
 let public SPEED_OF_SOUND = 343.3f
 let public MAX_SPEED_OF_OBJECT = SPEED_OF_SOUND / 2.
+let private LOG2 = log(2.0)
 
 // audio config
 let public MA_SAMPLE_RATE = 48000
@@ -500,7 +501,7 @@ var g_head_position : float3
 var g_head_direction : float3 = float3(0., 1., 0.)
 var g_head_velocity : float3
 
-def update_hrtf {
+def update_hrtf(dt : float) {
     for (ch in g_channels) {
         if (ch.is3D && !ch.stop) {
             var rxy = ch.position3d.xy - g_head_position.xy
@@ -525,7 +526,8 @@ def update_hrtf {
             let vrel = g_head_velocity - ch.velocity3d
             let r = normalize(ch.position3d - g_head_position)
             let v = clamp(dot(vrel, r), -MAX_SPEED_OF_OBJECT, MAX_SPEED_OF_OBJECT)
-            ch.doppler = 1. + v / SPEED_OF_SOUND
+            let doppler = 1. + v / SPEED_OF_SOUND
+            ch.doppler = lerp(ch.doppler, doppler, 1.0 - exp(-max(LOG2 * dt, FLT_MIN) / 0.15))
         }
     }
 }
@@ -833,7 +835,7 @@ def mixer(var data : array<float>#; channels, rate : int; dt : float) {
             memset32(addr(data[0]), 0u, length(data))
         }
     } else {
-        update_hrtf()
+        update_hrtf(dt)
         let output_samples = length(data) / channels
         let input_samples = int(ma_limiter_get_required_input_frame_count(unsafe(addr(g_limiter)), uint64(output_samples)))
         let current_samples = length(g_mix_buffer) / channels

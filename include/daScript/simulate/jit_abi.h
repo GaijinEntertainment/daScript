@@ -43,6 +43,7 @@ template <typename Ret, typename ... Args> struct NeedVectorWrap< Ret(*)(Args...
     };
 };
 
+// llvm ir -> c++
 template <int CMRES, int wrap, typename FuncT, FuncT fn> struct ImplWrapCall;
 
 template <typename FuncT, FuncT fn>     // no cmres, no wrap
@@ -70,48 +71,63 @@ struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
     static typename WrapType<RetT>::rettype static_call (typename WrapType<Args>::type... args ) {
         typedef typename WrapRetType<RetT>::type (* FuncType)(typename WrapArgType<Args>::type...);
         auto fnPtr = reinterpret_cast<FuncType>(fn);
-        return (typename WrapType<RetT>::rettype) fnPtr(args...);   // note explicit cast
+        return static_cast<typename WrapType<RetT>::rettype>(fnPtr(args...));   // note explicit cast
     };
     static void * get_builtin_address() { return (void *) &static_call; }
+};
+
+// c++ -> llvm ir
+template <typename RetT, typename ...Args>
+struct CallJitFn {   // no cmres, wrap
+    static RetT static_call (const JitFn &fn, Args... args ) { // Explicitly cast arguments
+        typedef typename WrapType<RetT>::type (* FuncType)(typename WrapType<Args>::rettype...);
+        auto fnPtr = reinterpret_cast<FuncType>(fn.jitFn);
+        return static_cast<typename WrapArgType<RetT>::type>(fnPtr(static_cast<typename WrapRetType<Args>::type>(args)...));
+    }
 };
 
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
 
+namespace detail {
+    template <typename Fn, Fn fn>
+    using TableWrap = ImplWrapCall<false, NeedVectorWrap<decltype(fn)>::value, Fn, fn>;
+}
+
 #define JIT_TABLE_FUNCTION(TAB_FUN) \
     switch ( baseType ) { \
-        case Type::tBool:           return (void *) &TAB_FUN<bool>; \
-        case Type::tInt8:           return (void *) &TAB_FUN<int8_t>; \
-        case Type::tUInt8:          return (void *) &TAB_FUN<uint8_t>; \
-        case Type::tInt16:          return (void *) &TAB_FUN<int16_t>; \
-        case Type::tUInt16:         return (void *) &TAB_FUN<uint16_t>; \
-        case Type::tInt64:          return (void *) &TAB_FUN<int64_t>; \
-        case Type::tUInt64:         return (void *) &TAB_FUN<uint64_t>; \
-        case Type::tEnumeration:    return (void *) &TAB_FUN<int32_t>; \
-        case Type::tEnumeration8:   return (void *) &TAB_FUN<int8_t>; \
-        case Type::tEnumeration16:  return (void *) &TAB_FUN<int16_t>; \
-        case Type::tEnumeration64:  return (void *) &TAB_FUN<int64_t>; \
-        case Type::tInt:            return (void *) &TAB_FUN<int32_t>; \
-        case Type::tInt2:           return (void *) &TAB_FUN<int2>; \
-        case Type::tInt3:           return (void *) &TAB_FUN<int3>; \
-        case Type::tInt4:           return (void *) &TAB_FUN<int4>; \
-        case Type::tUInt:           return (void *) &TAB_FUN<uint32_t>; \
-        case Type::tBitfield:       return (void *) &TAB_FUN<uint32_t>; \
-        case Type::tUInt2:          return (void *) &TAB_FUN<uint2>; \
-        case Type::tUInt3:          return (void *) &TAB_FUN<uint3>; \
-        case Type::tUInt4:          return (void *) &TAB_FUN<uint4>; \
-        case Type::tFloat:          return (void *) &TAB_FUN<float>; \
-        case Type::tFloat2:         return (void *) &TAB_FUN<float2>; \
-        case Type::tFloat3:         return (void *) &TAB_FUN<float3>; \
-        case Type::tFloat4:         return (void *) &TAB_FUN<float4>; \
-        case Type::tRange:          return (void *) &TAB_FUN<range>; \
-        case Type::tURange:         return (void *) &TAB_FUN<urange>; \
-        case Type::tRange64:        return (void *) &TAB_FUN<range64>; \
-        case Type::tURange64:       return (void *) &TAB_FUN<urange64>; \
-        case Type::tString:         return (void *) &TAB_FUN<char *>; \
-        case Type::tDouble:         return (void *) &TAB_FUN<double>; \
-        case Type::tPointer:        return (void *) &TAB_FUN<void *>; \
+        case Type::tBool:           return detail::TableWrap<decltype(TAB_FUN<bool>), TAB_FUN<bool>>::get_builtin_address(); \
+        case Type::tInt8:           return detail::TableWrap<decltype(TAB_FUN<int8_t>), TAB_FUN<int8_t>>::get_builtin_address(); \
+        case Type::tUInt8:          return detail::TableWrap<decltype(TAB_FUN<uint8_t>), TAB_FUN<uint8_t>>::get_builtin_address(); \
+        case Type::tInt16:          return detail::TableWrap<decltype(TAB_FUN<int16_t>), TAB_FUN<int16_t>>::get_builtin_address(); \
+        case Type::tUInt16:         return detail::TableWrap<decltype(TAB_FUN<uint16_t>), TAB_FUN<uint16_t>>::get_builtin_address(); \
+        case Type::tInt64:          return detail::TableWrap<decltype(TAB_FUN<int64_t>), TAB_FUN<int64_t>>::get_builtin_address(); \
+        case Type::tUInt64:         return detail::TableWrap<decltype(TAB_FUN<uint64_t>), TAB_FUN<uint64_t>>::get_builtin_address(); \
+        case Type::tEnumeration:    return detail::TableWrap<decltype(TAB_FUN<int32_t>), TAB_FUN<int32_t>>::get_builtin_address(); \
+        case Type::tEnumeration8:   return detail::TableWrap<decltype(TAB_FUN<int8_t>), TAB_FUN<int8_t>>::get_builtin_address(); \
+        case Type::tEnumeration16:  return detail::TableWrap<decltype(TAB_FUN<int16_t>), TAB_FUN<int16_t>>::get_builtin_address(); \
+        case Type::tEnumeration64:  return detail::TableWrap<decltype(TAB_FUN<int64_t>), TAB_FUN<int64_t>>::get_builtin_address(); \
+        case Type::tInt:            return detail::TableWrap<decltype(TAB_FUN<int32_t>), TAB_FUN<int32_t>>::get_builtin_address(); \
+        case Type::tInt2:           return detail::TableWrap<decltype(TAB_FUN<int2>), TAB_FUN<int2>>::get_builtin_address(); \
+        case Type::tInt3:           return detail::TableWrap<decltype(TAB_FUN<int3>), TAB_FUN<int3>>::get_builtin_address(); \
+        case Type::tInt4:           return detail::TableWrap<decltype(TAB_FUN<int4>), TAB_FUN<int4>>::get_builtin_address(); \
+        case Type::tUInt:           return detail::TableWrap<decltype(TAB_FUN<uint32_t>), TAB_FUN<uint32_t>>::get_builtin_address(); \
+        case Type::tBitfield:       return detail::TableWrap<decltype(TAB_FUN<uint32_t>), TAB_FUN<uint32_t>>::get_builtin_address(); \
+        case Type::tUInt2:          return detail::TableWrap<decltype(TAB_FUN<uint2>), TAB_FUN<uint2>>::get_builtin_address(); \
+        case Type::tUInt3:          return detail::TableWrap<decltype(TAB_FUN<uint3>), TAB_FUN<uint3>>::get_builtin_address(); \
+        case Type::tUInt4:          return detail::TableWrap<decltype(TAB_FUN<uint4>), TAB_FUN<uint4>>::get_builtin_address(); \
+        case Type::tFloat:          return detail::TableWrap<decltype(TAB_FUN<float>), TAB_FUN<float>>::get_builtin_address(); \
+        case Type::tFloat2:         return detail::TableWrap<decltype(TAB_FUN<float2>), TAB_FUN<float2>>::get_builtin_address(); \
+        case Type::tFloat3:         return detail::TableWrap<decltype(TAB_FUN<float3>), TAB_FUN<float3>>::get_builtin_address(); \
+        case Type::tFloat4:         return detail::TableWrap<decltype(TAB_FUN<float4>), TAB_FUN<float4>>::get_builtin_address(); \
+        case Type::tRange:          return detail::TableWrap<decltype(TAB_FUN<range>), TAB_FUN<range>>::get_builtin_address(); \
+        case Type::tURange:         return detail::TableWrap<decltype(TAB_FUN<urange>), TAB_FUN<urange>>::get_builtin_address(); \
+        case Type::tRange64:        return detail::TableWrap<decltype(TAB_FUN<range64>), TAB_FUN<range64>>::get_builtin_address(); \
+        case Type::tURange64:       return detail::TableWrap<decltype(TAB_FUN<urange64>), TAB_FUN<urange64>>::get_builtin_address(); \
+        case Type::tString:         return detail::TableWrap<decltype(TAB_FUN<char *>), TAB_FUN<char *>>::get_builtin_address(); \
+        case Type::tDouble:         return detail::TableWrap<decltype(TAB_FUN<double>), TAB_FUN<double>>::get_builtin_address(); \
+        case Type::tPointer:        return detail::TableWrap<decltype(TAB_FUN<void *>), TAB_FUN<void *>>::get_builtin_address(); \
         default:                    context->throw_error_at(at, "unsupported key type %s", das_to_string(Type(baseType)).c_str() ); \
     } \
     return nullptr;

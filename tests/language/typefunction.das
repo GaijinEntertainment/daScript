@@ -1,3 +1,4 @@
+options gen2 = false
 require dastest/testing_boost public
 
 [type_function]

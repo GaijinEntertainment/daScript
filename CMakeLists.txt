@@ -93,29 +93,71 @@ SETUP_COMPILER()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-MACRO(DAS_AOT_EXT input genList mainTarget dasAotTool dasAotToolArg)
+
+MACRO (ADD_AOT_EXT_FILE genList mainTarget input)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
     set(out_dir ${input_dir}/_aot_generated)
     set(out_src "${out_dir}/${mainTarget}_${input_name}.cpp")
+    set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
+    list(APPEND ${genList} ${out_src})
+ENDMACRO()
+
+MACRO(DAS_AOT_EXT input genList mainTarget dasAotTool dasAotToolArg)
+    ADD_AOT_EXT_FILE(${genList} ${mainTarget} ${input})
+    list(GET ${genList} -1 out_src)
+    get_filename_component(input_src ${input} ABSOLUTE)
+    get_filename_component(out_dir ${out_src} DIRECTORY)
     file(MAKE_DIRECTORY ${out_dir})
-	  ADD_CUSTOM_COMMAND(
-		    DEPENDS ${input_src}
-        DEPENDS ${dasAotTool}
+    if("${dasAotToolArg}" STREQUAL "-aotlib")
+        set(CROSS_PLATFORM "-cross-platform")
+    endif()
+    ADD_CUSTOM_COMMAND(
+        DEPENDS ${input_src}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-        COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_src}
+        COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_src} ${CROSS_PLATFORM}
     )
-    list(APPEND ${genList} ${out_src})
     set(custom_name ${mainTarget}_${input_name}_aot)
     ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
+    set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
     SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
     ADD_DEPENDENCIES(${mainTarget} ${custom_name})
 ENDMACRO()
 
 MACRO(DAS_AOT input genList mainTarget dasAotTool)
     DAS_AOT_EXT(${input} ${genList} ${mainTarget} ${dasAotTool} -aot)
+ENDMACRO()
+
+MACRO(ADD_STANDALONE_FILE genList input)
+    get_filename_component(input_src ${input} ABSOLUTE)
+    get_filename_component(input_dir ${input_src} DIRECTORY)
+    get_filename_component(input_name ${input} NAME)
+    set(out_dir ${input_dir}/_standalone_ctx_generated)
+    set(out_inc ${out_dir}/${input_name}.h)
+    set(out_src ${out_dir}/${input_name}.cpp)
+    set_source_files_properties(${out_inc} ${out_src} PROPERTIES GENERATED TRUE)
+    list(APPEND ${genList} ${out_inc} ${out_src})
+ENDMACRO()
+
+MACRO(DAS_AOT_STANDALONE input genList mainTarget dasAotTool dasAotToolArg)
+    get_filename_component(ctx_name ${input} NAME_WE)
+    ADD_STANDALONE_FILE(${genList} ${input})
+    list(GET ${genList} -1 out_src)
+    get_filename_component(out_dir ${out_src} DIRECTORY)
+    file(MAKE_DIRECTORY ${out_dir})
+    ADD_CUSTOM_COMMAND(
+            DEPENDS ${input_src}
+            OUTPUT  ${out_src}
+            COMMENT "AOT precompiling ${input_src} -> ${out_src}"
+            COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_dir} -cross-platform -standalone-context ${ctx_name} -standalone-class Standalone
+    )
+    set(custom_name ${mainTarget}_${input_name}_standalone)
+    ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
+    set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
+    SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
+    ADD_DEPENDENCIES(${mainTarget} ${custom_name})
 ENDMACRO()
 
 MACRO(DAS_AOT_LIB input genList mainTarget dasAotTool)
@@ -204,7 +246,7 @@ IF(CLANG_BIN_EXE)
             WORKING_DIRECTORY ${src_dir}
             VERBATIM
             COMMAND ${CLANG_BIN_EXE} -Xclang -ast-dump=json -x c++ -c ${header_from} -I${inc_dirs} > ${header_from}.json 2> ${header_from}.json.log || cmd /c exit /b 0
-            COMMENT "Generating JSON AST for ${header_from} to ${header_from}.json\ninclude directoryes are ${inc_dirs}\n"
+            COMMENT "Generating JSON AST for ${header_from} to ${header_from}.json\ninclude directories are ${inc_dirs}\n"
         )
         ADD_CUSTOM_COMMAND(
             TARGET ${tgt}
@@ -577,6 +619,7 @@ src/simulate/runtime_string.cpp
 src/simulate/runtime_array.cpp
 src/simulate/runtime_table.cpp
 src/simulate/runtime_profile.cpp
+src/simulate/standalone_ctx_utils.cpp
 src/simulate/simulate.cpp
 src/simulate/simulate_exceptions.cpp
 src/simulate/simulate_gc.cpp
@@ -689,29 +732,198 @@ list(SORT DAS_LIB_SRC)
 
 include_directories(include)
 include_directories(3rdparty/fmt/include)
-ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
-    ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
-	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
-ADD_DEPENDENCIES(libDaScript need_and_resolve)
-ADD_PROJECT_XXD_DEPENDS(libDaScript)
-target_include_directories(libDaScript PUBLIC
-    ${DAS_SMMALLOC_DIR}
-    ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
-    ${CMAKE_SOURCE_DIR}/include
+set(AotDaslibList
+        # daslib/algorithm.das
+        # daslib/apply.das
+        # daslib/apply_in_context.das
+        # daslib/archive.das
+        # daslib/array_boost.das
+        # daslib/assert_once.das
+        # daslib/ast_block_to_loop.das
+        daslib/ast_boost.das
+        # daslib/ast_debug.das
+        # daslib/ast_used.das
+        # daslib/async_boost.das
+        # daslib/base64.das
+        # daslib/bitfield_trait.das
+        # daslib/constant_expression.das
+        # daslib/contracts.das
+        # daslib/coroutines.das
+        # daslib/cpp_bind.das
+        # daslib/cpp_gen.das
+        # daslib/dap.das
+        # daslib/das_source_formatter.das
+        # daslib/das_source_formatter_fio.das
+        # daslib/debug.das
+        # daslib/debug_eval.das
+        # daslib/decs_boost.das
+        # daslib/decs.das
+        # daslib/decs_state.das
+        # daslib/defer.das
+        # daslib/dynamic_cast_rtti.das
+        # daslib/enum_trait.das
+        # daslib/export_constructor.das
+        # daslib/faker.das
+        daslib/functional.das
+        # daslib/fuzzer.das
+        # daslib/generic_return.das
+        # daslib/hash_map.das
+        # daslib/heartbeat.das
+        # daslib/if_not_null.das
+        # daslib/instance_function.das
+        # daslib/interfaces.das
+        # daslib/is_local.das
+        # daslib/jobque_boost.das # We need to add it in a stub. Will do it later for all files
+        daslib/json_boost.das
+        daslib/json.das
+        # daslib/just_in_time.das # jit disabled by default
+        # daslib/linked_list.das
+        # daslib/lint.das
+        # daslib/lint_everything.das
+        # daslib/live.das # depends on filesystem
+        # daslib/lpipe.das
+        # daslib/macro_boost.das
+        # daslib/match.das
+        # daslib/math_bits.das
+        daslib/math_boost.das
+        # daslib/profiler_boost.das
+        # daslib/profiler.das
+        daslib/random.das
+        # daslib/raster_boost.das # fails on windows
+        # daslib/refactor.das
+        daslib/regex_boost.das
+        daslib/regex.das
+        # daslib/remove_call_args.das
+        # daslib/rst_comment.das
+        # daslib/rst.das # depends on filesystem
+        # daslib/safe_addr.das
+        # daslib/soa.das
+        # daslib/sort_boost.das
+        # daslib/spoof.das
+        # daslib/static_let.das
+        # daslib/stringify.das
+        daslib/strings_boost.das
+        # daslib/stub.das
+        daslib/templates_boost.das
+        # daslib/templates.das
+        # daslib/temp_strings.das
+        # daslib/typemacro_boost.das
+        # daslib/type_traits.das
+        # daslib/unroll.das
+        # daslib/uriparser_boost.das
+        daslib/utf8_utils.das
+        # daslib/validate_code.das
+
+        # src/das/ast/printer_flags_visitor.das # aot das-mode temporary disabled
 )
-target_link_libraries(libDaScript libUriParser)
-#target_link_libraries(libDaScript fmt::fmt)
-IF(LINUX_UUID)
-target_link_libraries(libDaScript uuid)
-ENDIF()
-IF(UNIX AND NOT APPLE)
-    TARGET_LINK_LIBRARIES(libDaScript ${CMAKE_DL_LIBS})
-ENDIF()
-IF(HAIKU)
-    TARGET_LINK_LIBRARIES(libDaScript network uuid)
-ENDIF()
-SETUP_CPP11(libDaScript)
-#target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
+
+SET(AOT_GENERATED_SRC)
+FOREACH(inF IN LISTS AotDaslibList)
+    ADD_AOT_EXT_FILE(AOT_GENERATED_SRC dasAotStub ${inF})
+ENDFOREACH()
+
+# one-shot target
+set(AOT_STAGE0_PATH ${CMAKE_CURRENT_BINARY_DIR}/_daslib_gen_stage0)
+foreach(FILE ${AOT_GENERATED_SRC})
+    get_filename_component(FILENAME ${FILE} NAME)
+    set(DST_FILE ${AOT_STAGE0_PATH}/${FILENAME})
+    if (EXISTS ${FILE}) # if file doesn't exist - ignore it. It will be generated on next iteration
+        add_custom_command(
+                OUTPUT ${DST_FILE}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${FILE}
+                ${DST_FILE}
+        )
+        list(APPEND AOT_GENERATED_SRC_STAGE0 "${DST_FILE}")
+    endif()
+endforeach()
+
+add_custom_target(dasAotStub)
+SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
+
+set(StandaloneFilesList
+    # # aot das-mode temporary disabled
+    # src/das/ast/ast_print.das
+    # src/das/ast/ast_aot_cpp.das
+    # src/das/ast/aot_constants.das
+    # src/das/ast/standalone_contexts.das
+)
+
+SET(STANDALONE_SRC)
+FOREACH(inF IN LISTS StandaloneFilesList)
+    ADD_STANDALONE_FILE(STANDALONE_SRC ${inF})
+ENDFOREACH()
+
+set(STANDALONE_STAGE0_PATH ${CMAKE_CURRENT_BINARY_DIR}/_standalone_gen_stage0)
+foreach(FILE ${STANDALONE_SRC})
+    get_filename_component(FILENAME ${FILE} NAME)
+    if (EXISTS ${FILE}) # if file doesn't exist - ignore it. It will be generated on next iteration
+        set(DST_FILE ${STANDALONE_STAGE0_PATH}/${FILENAME})
+        add_custom_command(
+                OUTPUT ${DST_FILE}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${FILE}
+                ${DST_FILE}
+        )
+        list(APPEND STANDALONE_SRC_STAGE0 "${DST_FILE}")
+    endif()
+endforeach()
+
+SET(AOT_STUB_SRC
+        src/misc/aot_stub.cpp
+)
+
+MACRO(SETUP_LIBDASCRIPT library aotFiles standaloneFiles)
+    ADD_LIBRARY(${library} STATIC ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
+            ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
+            ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC}
+            ${standaloneFiles} ${aotFiles})
+    ADD_DEPENDENCIES(${library} need_and_resolve)
+    ADD_TARGET_PROJECT_XXD_DEPENDS(${library} libDaScript)
+    target_include_directories(${library} PUBLIC
+            ${DAS_SMMALLOC_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(${library} libUriParser)
+    #target_link_libraries(${library} fmt::fmt)
+    IF(LINUX_UUID)
+        target_link_libraries(${library} uuid)
+    ENDIF()
+    IF(UNIX AND NOT APPLE)
+        TARGET_LINK_LIBRARIES(${library} ${CMAKE_DL_LIBS})
+    ENDIF()
+    IF(HAIKU)
+        TARGET_LINK_LIBRARIES(${library} network uuid)
+    ENDIF()
+    SETUP_CPP11(${library})
+    #target_precompile_headers(${library} PUBLIC include/daScript/misc/platform.h)
+ENDMACRO()
+
+SETUP_LIBDASCRIPT(libDaScriptStage0 "${AOT_GENERATED_SRC_STAGE0}" "${STANDALONE_SRC_STAGE0}")
+SETUP_LIBDASCRIPT(libDaScript "${AOT_GENERATED_SRC}" "${STANDALONE_SRC}")
+
+if(WIN32)
+    if (CMAKE_CONFIGURATION_TYPES)
+        set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/$<CONFIG>/daslang.exe")
+    else()
+        set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/daslang.exe")
+    endif()
+else()
+    set(DASLANG_STAGE0_PATH "${PROJECT_SOURCE_DIR}/${DAS_INSTALL_BINDIR}/daslang")
+endif()
+add_custom_target(standaloneGeneratedSrc)
+
+FOREACH(inF IN LISTS StandaloneFilesList)
+    DAS_AOT_STANDALONE(${inF} unused_standaloneSrc standaloneGeneratedSrc ${DASLANG_STAGE0_PATH} "-aotlib")
+ENDFOREACH()
+
+
+FOREACH(inF IN LISTS AotDaslibList)
+    DAS_AOT_LIB("${inF}" unused_aot_src dasAotStub ${DASLANG_STAGE0_PATH})
+ENDFOREACH()
+
+ADD_DEPENDENCIES(libDaScript standaloneGeneratedSrc dasAotStub)
 
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
@@ -720,25 +932,10 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
         message(FATAL_ERROR "DAS_AOT_EXAMPLES_DISABLED requires DAS_TOOLS_DISABLED to be OFF")
     endif()
 
-    add_custom_target(dasAotStub)
-    SET(AOT_GENERATED_SRC)
-    DAS_AOT_LIB("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/json.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/random.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daslang)
-    DAS_AOT_LIB("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daslang)
-    SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
-    SET(AOT_STUB_SRC
-        utils/daScript/aot_stub.cpp
-    )
     add_library(libDaScriptAot STATIC ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
-    ADD_DEPENDENCIES(libDaScriptAot dasAotStub daslang libDaScript)
+    ADD_DEPENDENCIES(libDaScriptAot dasAotStub libDaScript)
     TARGET_LINK_LIBRARIES(libDaScriptAot libDaScript)
     SETUP_CPP11(libDaScriptAot)
 endif()
@@ -754,17 +951,22 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
-    SET(SRC_LIBRARIES libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+    SET(SRC_LIBRARIES libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
 
-    add_executable(daslang ${DAS_DASCRIPT_MAIN_SRC})
-    TARGET_LINK_LIBRARIES(daslang ${SRC_LIBRARIES})
-    # ADD_DEPENDENCIES(daslang libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
-    SETUP_CPP11(daslang)
-    SETUP_LTO(daslang)
+    MACRO(SETUP_COMPILER_BINARY target_name library_name)
+        add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
+        TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES})
+        ADD_DEPENDENCIES(${target_name} ${library_name} libDaScriptTest ${DAS_MODULES_LIBS})
+        SETUP_CPP11(${target_name})
+        SETUP_LTO(${target_name})
+    ENDMACRO()
 
+    SETUP_COMPILER_BINARY(daslang libDaScriptStage0)
     INSTALL(TARGETS daslang
-        RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
+            RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     )
+    set_property(TARGET daslang PROPERTY GENERATED TRUE)
+    SETUP_COMPILER_BINARY(daslang-dev libDaScript)
 
     file(GLOB DASLIB_SOURCES
         ${PROJECT_SOURCE_DIR}/daslib/*.das
@@ -774,14 +976,10 @@ if (NOT ${DAS_TOOLS_DISABLED})
     )
 
     add_executable(das-fmt ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
-    TARGET_LINK_LIBRARIES(das-fmt ${SRC_LIBRARIES})
+    TARGET_LINK_LIBRARIES(das-fmt libDaScript ${SRC_LIBRARIES})
 
     SETUP_CPP11(das-fmt)
     SETUP_LTO(das-fmt)
-
-    INSTALL(TARGETS das-fmt
-        RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
-    )
 
     #IF(APPLE)
     #  add_executable(daslangOsx MACOSX_BUNDLE ${DAS_DASCRIPT_MAIN_SRC})
@@ -798,6 +996,8 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
 endif()
 
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/dastest DESTINATION .) # It's temporary, daslib should not depend on dastest
+
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS_INSTALL_DOCDIR} RENAME URIPARSER.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
@@ -808,6 +1008,8 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_IN
 # Test module
 
 SET(TEST_MAIN_LIB_SRC
+examples/test/bytecode.cpp
+examples/test/bytecode.h
 examples/test/test_handles.cpp
 examples/test/test_enum.cpp
 examples/test/module_unitTest.h

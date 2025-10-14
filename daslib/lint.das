@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_aot = true
 options strict_smart_pointers = true
 
 module lint shared private
@@ -129,11 +128,11 @@ class LintVisitor : AstVisitor {
             }
             return
         }
-        if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
+        if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
             self->lint_error("variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         }
-        if (can_make_const && v._type.baseType == Type.tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !(v.access_flags.access_ref || v.access_flags.access_pass) && v._type.canCloneFromConst) {
+        if (can_make_const && v._type.baseType == Type.tPointer && !v._type.flags.constant && !(v.access_flags.access_ref || v.access_flags.access_pass) && v._type.canCloneFromConst) {
             self->lint_error("variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         }

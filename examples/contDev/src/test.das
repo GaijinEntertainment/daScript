@@ -1,13 +1,17 @@
+options gen2
 //require baseCoreEvent//not working!
-struct BaseCoreEvent
-    [skipCpp=true] vtbl__ : uint?
-    [skipCpp=true] eventName : string
-    [skipCpp=true] eventType : uint
-/*
-struct SomeEvent
-    pos,vel:float3
 
-struct TestEvent
+struct BaseCoreEvent {
+    @skipCpp = true vtbl__ : uint?
+    @skipCpp = true eventName : string
+    @skipCpp = true eventType : uint
+}
+/*
+struct SomeEvent {
+    pos,vel:float3
+}
+
+struct TestEvent {
     i :int
     i2:int2
     i3:int3
@@ -23,6 +27,7 @@ struct TestEvent
     ev:SomeEvent
     ai:int[2]
     aai:int[3][4]
+}
 */
 
 

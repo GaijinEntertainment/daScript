@@ -50,23 +50,6 @@ struct Capabilities {
 
 
 
-
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
-struct SetDataBreakpointsArguments {
-    breakpoints : array<DataBreakpoint>
-}
-
-def SetDataBreakpointsArguments(data : JsonValue?) {
-    var res <- SetDataBreakpointsArguments()
-    var breakpoints = joj(data, "breakpoints")
-    if (breakpoints != null) {
-        for (it in breakpoints.value as _array) {
-            res.breakpoints |> emplace(DataBreakpoint(it))
-        }
-    }
-    return <- res
-}
-
 // https://microsoft.github.io/debug-adapter-protocol/specification#Types_DataBreakpoint
 struct DataBreakpoint {
     dataId : string
@@ -87,6 +70,22 @@ def DataBreakpoint(data : JsonValue?) {
             )
 }
 
+// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
+struct SetDataBreakpointsArguments {
+    breakpoints : array<DataBreakpoint>
+}
+
+def SetDataBreakpointsArguments(data : JsonValue?) {
+    var res <- SetDataBreakpointsArguments()
+    var breakpoints = joj(data, "breakpoints")
+    if (breakpoints != null) {
+        for (it in breakpoints.value as _array) {
+            res.breakpoints |> emplace(DataBreakpoint(it))
+        }
+    }
+    return <- res
+}
+
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_DataBreakpointInfo
 struct DataBreakpointInfoArguments {
     variablesReference : double
@@ -103,8 +102,29 @@ def DataBreakpointInfoArguments(data : JsonValue?) {
 struct DataBreakpointInfoResponse {
     dataId : string
     description : string
-}
     //accessTypes: DataBreakpointAccessType[];
+}
+
+
+// https://microsoft.github.io/debug-adapter-protocol/specification#Types_SourceBreakpoint
+struct SourceBreakpoint {
+    line : double
+}
+
+def SourceBreakpoint(data : JsonValue?) {
+    return SourceBreakpoint(line = jon(data, "line"))
+}
+
+// https://microsoft.github.io/debug-adapter-protocol/specification#Types_Source
+struct Source {
+    name : string
+    path : string
+}
+
+def Source(data : JsonValue?) {
+    return Source(name = jos(data, "name"), path = jos(data, "path"))
+}
+
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
 struct SetBreakpointsArguments {
@@ -126,33 +146,6 @@ def SetBreakpointsArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_Source
-struct Source {
-    name : string
-    path : string
-}
-
-def Source(data : JsonValue?) {
-    return Source(name = jos(data, "name"), path = jos(data, "path"))
-}
-
-
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_SourceBreakpoint
-struct SourceBreakpoint {
-    line : double
-}
-
-def SourceBreakpoint(data : JsonValue?) {
-    return SourceBreakpoint(line = jon(data, "line"))
-}
-
-
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
-struct SetBreakpointsResponse {
-    breakpoints : array<Breakpoint>
-}
-
-
 // https://microsoft.github.io/debug-adapter-protocol/specification#Types_Breakpoint
 struct Breakpoint {
     id : double
@@ -162,17 +155,23 @@ struct Breakpoint {
     message : string
 }
 
-
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Threads
-struct ThreadsResponseBody {
-    threads : array<Thread>
+// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
+struct SetBreakpointsResponse {
+    breakpoints : array<Breakpoint>
 }
+
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Types_Thread
 struct Thread {
     id : double
     name : string
+}
+
+
+// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Threads
+struct ThreadsResponseBody {
+    threads : array<Thread>
 }
 
 
@@ -187,17 +186,17 @@ def StackTraceArguments(data : JsonValue?) {
     return <- StackTraceArguments(threadId = jon(data, "threadId"), startFrame = jon(data, "startFrame"), levels = jon(data, "levels"))
 }
 
-struct StackTraceResponseBody {
-    stackFrames : array<StackFrame>
-    totalFrames : double
-}
-
 struct StackFrame {
     id : double
     name : string
     source : Source
     line : double
     column : double
+}
+
+struct StackTraceResponseBody {
+    stackFrames : array<StackFrame>
+    totalFrames : double
 }
 
 
@@ -210,15 +209,16 @@ def ScopesArguments(data : JsonValue?) {
     return <- ScopesArguments(frameId = jon(data, "frameId"))
 }
 
-struct ScopesResponseBody {
-    scopes : array<Scope>
-}
-
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Types_Scope
 struct Scope {
     name : string
     variablesReference : double
+}
+
+
+struct ScopesResponseBody {
+    scopes : array<Scope>
 }
 
 
@@ -237,10 +237,6 @@ def VariablesArguments(data : JsonValue?) {
     )
 }
 
-struct VariablesResponseBody {
-    variables : array<Variable>
-}
-
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Types_Variable
 struct Variable {
@@ -250,6 +246,11 @@ struct Variable {
     @rename _type : string
     indexedVariables : double
 }
+
+struct VariablesResponseBody {
+    variables : array<Variable>
+}
+
 
 def JV(data : Variable) {
     let valStr = unescape(data.value)
@@ -380,6 +381,8 @@ def jon(val : JsonValue?; id : string; defVal = 0lf) : double {
     get(val.value as _object, id) <| $(v) {
         if (v.value is _number) {
             res = v.value as _number
+        } elif (v.value is _longint) {
+            res = double(v.value as _longint)
         }
     }
     return res

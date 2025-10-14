@@ -270,7 +270,7 @@ extern int das2_yydebug;
     UNSIGNED_INTEGER = 413,        /* "unsigned integer constant"  */
     UNSIGNED_LONG_INTEGER = 414,   /* "unsigned long integer constant"  */
     UNSIGNED_INT8 = 415,           /* "unsigned int8 constant"  */
-    FLOAT = 416,                   /* "floating point constant"  */
+    DAS_FLOAT = 416,               /* "floating point constant"  */
     DOUBLE = 417,                  /* "double constant"  */
     NAME = 418,                    /* "name"  */
     DAS_EMIT_COMMA = 419,          /* "new line, comma"  */

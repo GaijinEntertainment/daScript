@@ -3,23 +3,16 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
+#include "daScript/misc/hash.h"
 #include <optional>
 #include <utility>
 
+// enable this one if serialization breaks on tag, to get more info
+#ifndef DAS_SERIALIZE_DTAG
+#define DAS_SERIALIZE_DTAG      0
+#endif
+
 namespace das {
-
-    // use FNV32 hash for tags. it's fast and good enough for our purposes
-    constexpr uint32_t hash_tag(const char* block) {
-        constexpr uint32_t FNV_offset_basis = 2166136261u;
-        constexpr uint32_t FNV_prime = 16777619u;
-        uint32_t h = FNV_offset_basis;
-        while (*block) {
-            h ^= uint8_t(*block++);
-            h *= FNV_prime;
-        }
-        return h;
-    }
-
     struct SerializationStorage {
         vector<uint8_t> buffer;
         size_t bufferPos = 0;
@@ -90,6 +83,8 @@ namespace das {
         size_t              readOffset = 0;
         SerializationStorage * buffer = nullptr;
         bool                seenNewModule = false;
+    // expression lookup
+        das_hash_map<uint32_t, Annotation *> rttiHash2Annotation;
     // file info clean up
         vector<FileInfo*>         deleteUponFinish; // these pointers are for builtins (which we don't serialize) and need to be cleaned manually
         das_hash_set<FileInfo*>   doNotDelete;
@@ -116,13 +111,18 @@ namespace das {
         vector<pair<Structure **,uint64_t>>         structureRefs;
         vector<pair<Enumeration **,uint64_t>>       enumerationRefs;
         // fieldRefs tuple contains: fieldptr, module, structname, fieldname
-        vector<tuple<const Structure::FieldDeclaration **, Module *, string, string>>       fieldRefs;
+        vector<tuple<Structure::FieldDeclarationRef*, Module *, string, string>>       fieldRefs;
         // parseModule tuple contains: moduleName, mtime, thisModule, thisModule
         vector<tuple<string, uint64_t, ProgramPtr, Module*>> parsedModules;
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         bool                                        ignoreEmptyExternal = false;
         void tag   ( const char * name, uint32_t hash );
+#if DAS_SERIALIZE_DTAG
+        __forceinline void dtag ( const char * name, uint32_t hash ) { tag(name,hash); }
+#else
+        __forceinline void dtag ( const char *, uint32_t ) {}
+#endif
         template<typename T>
         void read  ( T & data ) { buffer->read(data); }
         void read  ( void * data, size_t size );
@@ -211,7 +211,7 @@ namespace das {
 
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
-            tag("Vector",hash_tag("Vector"));
+            dtag("Vector",hash_tag("Vector"));
             if ( writing ) {
                 uint64_t size = value.size();
                 serializeAdaptiveSize64(size);
@@ -259,6 +259,7 @@ namespace das {
         void fillOrPatchLater ( Variable * & ptr, uint64_t id );
 
         auto readModuleAndName () -> pair<Module *, string>;
+        auto readModuleAndNameHash () -> pair<Module *, uint64_t>;
 
         void findExternal ( Function * & func );
         void findExternal ( Enumeration * & ptr );

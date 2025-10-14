@@ -3,6 +3,11 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 
+#if defined(STANDALONE_MODE)
+#include "../das/ast/_standalone_ctx_generated/ast_print.das.h"
+#endif
+
+
 namespace das {
 
     class SetPrinterFlags : public Visitor {
@@ -80,7 +85,7 @@ namespace das {
                 printRef = program->options.getBoolOption("print_ref");
                 printVarAccess = program->options.getBoolOption("print_var_access");
                 printAliases= program->options.getBoolOption("log_aliasing");
-                printFuncUse= program->options.getBoolOption("print_func_use");
+                printUse = program->options.getBoolOption("print_use");
                 gen2 = program->policies.version_2_syntax;
                 printCStyle = program->options.getBoolOption("print_c_style") || gen2;
             }
@@ -90,7 +95,7 @@ namespace das {
         bool printVarAccess = false;
         bool printCStyle = false;
         bool printAliases = false;
-        bool printFuncUse = false;
+        bool printUse = false;
         bool gen2 = false;
     protected:
         void newLine () {
@@ -239,7 +244,7 @@ namespace das {
     // global
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
-            if ( printFuncUse ) {
+            if ( printUse ) {
                 if ( var->useFunctions.size() ) {
                     ss << "// use functions";
                     for ( auto & ufn : var->useFunctions ) {
@@ -260,7 +265,7 @@ namespace das {
                 << (var->private_variable ? " private" : "")
                 << "\n\t";
             outputVariableAnnotation(var->annotation);
-            if ( var->isAccessUnused() ) ss << " /*unused*/ ";
+            if ( printUse && var->isAccessUnused() ) ss << " /*unused*/ ";
             if ( printVarAccess && !var->access_ref ) ss << "$";
             if ( printVarAccess && !var->access_pass ) ss << "%";
             ss << var->name << " : " << var->type->describe();
@@ -307,7 +312,7 @@ namespace das {
                 ss << "\n";
             }
             if ( fn->fastCall ) { ss << "[fastcall]\n"; }
-            if ( fn->addr ) { ss << "[addr]\n"; }
+            // if ( fn->addr ) { ss << "[addr]\n"; }
             if ( fn->exports ) { ss << "[export]\n"; }
             if ( fn->init ) { ss << "[init" << (fn->lateInit ? "(late)" : "") << "]\n"; }
             if ( fn->macroInit ) { ss << "[macro_init]\n"; }
@@ -336,7 +341,7 @@ namespace das {
                     }
                 }
             }
-            if ( printFuncUse ) {
+            if ( printUse ) {
                 if ( fn->useFunctions.size() ) {
                     ss << "// use functions";
                     for ( auto & ufn : fn->useFunctions ) {
@@ -375,8 +380,8 @@ namespace das {
                 ss << "] ";
             }
             if ( !arg->type->isConst() ) ss << "var ";
-            if ( arg->isAccessUnused() ) ss << " /*unused*/ ";
-            if ( arg->no_capture ) ss << " /*no_capture*/ ";
+            if ( printUse && arg->isAccessUnused() ) ss << " /*unused*/ ";
+            if ( printUse && arg->no_capture ) ss << " /*no_capture*/ ";
             if ( printVarAccess && !arg->access_ref ) ss << "$";
             if ( printVarAccess && !arg->access_pass ) ss << "%";
             ss << arg->name;
@@ -556,7 +561,7 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
-            if ( var->isAccessUnused() ) ss << " /*unused*/ ";
+            if ( printUse && var->isAccessUnused() ) ss << " /*unused*/ ";
             if ( printVarAccess && !var->access_ref ) ss << "$";
             if ( printVarAccess && !var->access_pass ) ss << "%";
             ss << var->name;
@@ -1375,8 +1380,13 @@ namespace das {
     };
 
     void Program::setPrintFlags() {
+#if defined(STANDALONE_MODE)
+        ast_print::Standalone ctx;
+        ctx.setFlags(this);
+#else
         SetPrinterFlags pflags;
         visit(pflags);
+#endif
     }
 
     template <typename TT>

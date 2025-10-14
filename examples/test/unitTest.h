@@ -5,6 +5,8 @@
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/jit_abi.h"
 
+#include "bytecode.h"
+
 enum class SomeEnum {
     zero
 ,   one
@@ -43,14 +45,33 @@ enum SomeEnum_16 : int16_t {
 };
 DAS_BIND_ENUM_CAST_98(SomeEnum_16);
 
+DAS_BIND_ENUM_CAST_98(OpCode);
+
 Goo::GooEnum efn_flip ( Goo::GooEnum goo );
 SomeEnum efn_takeOne_giveTwo ( SomeEnum one );
 SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
 SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
-class Point3 { public: float x, y, z; };
+class Point3 {
+public:
+    float x, y, z;
+    Point3() = default;
+    Point3(float x, float y, float z) : x(x), y(y), z(z) {}
+};
 
+
+namespace das {
+
+    template <> struct WrapArgType<Point3> { typedef WrapVec3Arg<Point3, float> type; };
+    template <> struct WrapRetType<Point3> { typedef WrapVec3Arg<Point3, float> type; };
+
+    template <> struct WrapType<Point3> {
+        enum { value = true };
+        typedef vec3f type;
+        typedef vec3f rettype;
+    };
+}
 template <> struct das::das_alias<Point3> : das::das_alias_vec<Point3,float3> {};
 
 typedef das::vector<Point3> Point3Array;
@@ -222,6 +243,42 @@ __forceinline int32_t testCallLine ( das::LineInfoArg * arg ) { return arg ? arg
 
 void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context, das::LineInfoArg * lineinfo );
 
+struct BigEntityId {
+    union {
+        uint32_t    value[4];
+        vec4f       v_value;
+    };
+    __forceinline BigEntityId() {
+        v_value = v_zero();
+    }
+    __forceinline BigEntityId(const BigEntityId & t) {
+        v_value = t.v_value;
+    }
+    __forceinline BigEntityId & operator = ( const BigEntityId & t ) {
+        v_value = t.v_value;
+        return *this;
+    }
+    __forceinline BigEntityId(vec4f v) {
+        v_value = v;
+    }
+    __forceinline operator vec4f () const {
+        return v_value;
+    }
+};
+
+namespace das {
+    template <>
+    struct cast<BigEntityId> {
+        static __forceinline BigEntityId to ( vec4f x )            { BigEntityId id; id.v_value = x; return id; }
+        static __forceinline vec4f from ( BigEntityId x )          { return x.v_value; }
+    };
+    template <> struct WrapType<BigEntityId> {
+        enum { value = true };
+        typedef vec4f type;
+        typedef vec4f rettype;
+    };
+}
+
 struct EntityId {
     int32_t value = 0;
     EntityId() : value(0) {}
@@ -292,3 +349,4 @@ inline void deleteFancyClassDummy(FancyClass& ) {  } // this one in AOT version,
 
 void test_abi_lambda_and_function ( das::Lambda lambda, das::Func fn, int32_t lambdaSize, das::Context * context, das::LineInfoArg * lineinfo );
 
+bool testBindEnumFunction ( das::Context * context, das::LineInfoArg * at );

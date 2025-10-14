@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/ast/ast_typefactory.h"
+#include "daScript/simulate/jit_abi.h"
 #include "daScript/misc/free_list.h"
 #include <limits.h> // ULLONG_MAX
 
@@ -228,11 +229,13 @@ namespace das {
         void serialize ( AstSerializer & ser );
         string typeMacroName() const;
         uint64_t getOwnSemanticHash() const;
+        uint64_t getMangledNameHash() const;
         uint64_t getOwnSemanticHash(HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep) const;
         uint64_t getSemanticHash() const;
         uint64_t getSemanticHash(HashBuilder & hb) const;
         void getLookupHash(uint64_t & hash) const;
         static void clone ( TypeDeclPtr & dest, const TypeDeclPtr & src );
+        Type getR2VType() const;
     public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
@@ -645,6 +648,16 @@ namespace das {
     template <typename TT>
     ___noinline TypeDeclPtr makeArgumentType(const ModuleLibrary & ctx) {
         auto tt = typeFactory<TT>::make(ctx);
+        if (tt->isVectorType()) {
+            bool is_same_type = is_same_v<typename WrapType<remove_cv_t<remove_reference_t<TT>>>::type, vec4f>;
+            bool is_same_rettype = is_same_v<typename WrapType<remove_cv_t<remove_reference_t<TT>>>::type, vec4f>;
+            DAS_VERIFYF(is_same_type, "To make c++-jit interop work vec-types should be provided with WrapType::type "
+                                      "and optionally WrapArgType, WrapRetType (if vec4f conversion is not implemented "
+                                      "in type itself). Failed TT: %s", debug_type_name<TT>());
+            DAS_VERIFYF(is_same_rettype, "To make c++-jit interop work vec-types should be provided with WrapType::rettype "
+                                         "and optionally WrapArgType, WrapRetType (if vec4f conversion is not implemented "
+                                         "in type itself). Failed TT: %s", debug_type_name<TT>());
+        }
         if (tt->isRefType()) {
             tt->ref = false;
         } else if (!tt->isRef() && !tt->isAnyType()) {
@@ -668,12 +681,14 @@ namespace das {
     enum class CpptSkipRef { no, yes };
     enum class CpptSkipConst { no, yes };
     enum class CpptRedundantConst { no, yes };
+    enum class ChooseSmartPtr { no, yes };
 
-    string describeCppType(const TypeDeclPtr & type,
+    string describeCppType(const smart_ptr_raw<TypeDecl> & type,
                            CpptSubstitureRef substituteRef = CpptSubstitureRef::no,
                            CpptSkipRef skipRef = CpptSkipRef::no,
                            CpptSkipConst skipConst = CpptSkipConst::no,
-                           CpptRedundantConst redundantConst = CpptRedundantConst::yes );
+                           CpptRedundantConst redundantConst = CpptRedundantConst::yes,
+                           ChooseSmartPtr chooseSmartPtr = ChooseSmartPtr::no);
 
     class MangledNameParser {
     protected:

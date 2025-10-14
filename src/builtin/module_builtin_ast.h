@@ -7,6 +7,8 @@ MAKE_EXTERNAL_TYPE_FACTORY(EnumEntry,das::Enumeration::EnumEntry)
 MAKE_EXTERNAL_TYPE_FACTORY(Enumeration,das::Enumeration)
 MAKE_EXTERNAL_TYPE_FACTORY(Expression,das::Expression)
 MAKE_EXTERNAL_TYPE_FACTORY(Function,das::Function)
+MAKE_EXTERNAL_TYPE_FACTORY(BuiltInFunction,das::BuiltInFunction)
+MAKE_EXTERNAL_TYPE_FACTORY(ExternalFnBase,das::ExternalFnBase)
 MAKE_EXTERNAL_TYPE_FACTORY(InferHistory,das::InferHistory)
 MAKE_EXTERNAL_TYPE_FACTORY(Variable,das::Variable)
 MAKE_EXTERNAL_TYPE_FACTORY(VisitorAdapter,das::VisitorAdapter)
@@ -293,6 +295,7 @@ namespace das {
                 using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(recordType)>("recordType");
             this->template addField<DAS_BIND_MANAGED_FIELD(values)>("values");
+            this->template addField<DAS_BIND_MANAGED_FIELD(gen2)>("gen2");
         }
     };
 
@@ -311,7 +314,7 @@ namespace das {
             this->template addField<DAS_BIND_MANAGED_FIELD(value)>("value");
             this->template addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             this->template addField<DAS_BIND_MANAGED_FIELD(atField)>("atField");
-            this->template addField<DAS_BIND_MANAGED_FIELD(field)>("field");
+            this->template addProperty<decltype(&EXPR::field), &EXPR::field>("field");
             this->template addField<DAS_BIND_MANAGED_FIELD(fieldIndex)>("fieldIndex");
             this->template addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
             this->addFieldEx ( "derefFlags", "derefFlags", offsetof(ExprField, derefFlags), makeExprFieldDerefFlags() );
@@ -331,14 +334,6 @@ namespace das {
             auto cpptype = makeType<TT>(ml);
             string cppname = "cvalue<" + describeCppType(cpptype) + ">()";
             this->addFieldEx ( "value", cppname, offsetof(ExprConst, value), cpptype );
-        }
-    };
-
-    template <typename EXPR, typename TT>
-    struct AstExprConstTAnnotation : AstExprConstAnnotation<EXPR> {
-        AstExprConstTAnnotation(const string & na, ModuleLibrary & ml)
-            :  AstExprConstAnnotation<EXPR> (na, ml) {
-            this->template init<TT>(ml);
         }
     };
 

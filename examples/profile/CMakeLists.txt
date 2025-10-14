@@ -8,23 +8,23 @@ ADD_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
 SETUP_CPP11(libDaScriptProfile)
 
 file(GLOB PROFILE_SRC
-"${CMAKE_SOURCE_DIR}/examples/profile/tests/*.das"
-"${CMAKE_SOURCE_DIR}/examples/profile/extra_test/*.das"
-"${CMAKE_SOURCE_DIR}/examples/profile/hash_test/*.das"
+"${CMAKE_CURRENT_SOURCE_DIR}/examples/profile/tests/*.das"
+"${CMAKE_CURRENT_SOURCE_DIR}/examples/profile/extra_test/*.das"
+"${CMAKE_CURRENT_SOURCE_DIR}/examples/profile/hash_test/*.das"
 )
 list(SORT PROFILE_SRC)
 SOURCE_GROUP_FILES("profile" PROFILE_SRC)
 
 SET(PROFILE_MAIN_SRC
-${CMAKE_SOURCE_DIR}/examples/profile/main.cpp
-${CMAKE_SOURCE_DIR}/examples/profile/test_profile.h
+${CMAKE_CURRENT_SOURCE_DIR}/examples/profile/main.cpp
+${CMAKE_CURRENT_SOURCE_DIR}/examples/profile/test_profile.h
 )
 list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)
 
 ### 1. setup custom AOT utility
 SET(PROFILER_DASAOT_MAIN_SRC
-${CMAKE_SOURCE_DIR}/examples/profile/main_aot.cpp
+${CMAKE_CURRENT_SOURCE_DIR}/examples/profile/main_aot.cpp
 ${DAS_DASCRIPT_MAIN_SRC}
 )
 add_executable(profiler_dasAot ${PROFILER_DASAOT_MAIN_SRC} )

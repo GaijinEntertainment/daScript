@@ -26,6 +26,16 @@ namespace das
     {
     }
 
+    Type TypeDecl::getR2VType() const {
+        if ( baseType==Type::tHandle ) {
+            auto valueType = annotation->makeValueType();
+            DAS_ASSERTF(valueType, "internal integration error. handle type %s has no value type", annotation->name.c_str());
+            return valueType->baseType;
+        } else {
+            return baseType;
+        }
+    }
+
     bool TypeDecl::isClass() const { // CANT BE INLINED DUE TO STRUCT TYPE
         return isStructure() && structType && structType->isClass;
     }
@@ -415,6 +425,11 @@ namespace das
         }
         if ( secondType ) {
             secondType->getLookupHash(hash);
+        }
+        if (baseType == Type::tBitfield) {
+            for ( const auto & name : argNames ) {
+                hash = hashmix(hash, hash_block64(reinterpret_cast<const uint8_t *>(name.c_str()), name.size()));
+            }
         }
         for ( auto & argT : argTypes ) {
             argT->getLookupHash(hash);
@@ -1241,10 +1256,13 @@ namespace das
                     return true;
                 }
             }
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+        }
+        /*
+            // NOT REALLY. array<FancyClass> can stay uninitialized
+            else if ( baseType==Type::tArray || baseType==Type::tTable ) {
             if ( firstType && firstType->hasNonTrivialCtor(dep) ) return true;
             if ( secondType && secondType->hasNonTrivialCtor(dep) ) return true;
-        }
+        } */
         return false;
     }
 
@@ -1477,6 +1495,7 @@ namespace das
 
     void TypeDecl::sanitize ( ) {
         isExplicit = false;
+        explicitConst = false;
         if ( firstType ) firstType->sanitize();
         if ( secondType ) secondType->sanitize();
         for ( auto & argT : argTypes ) argT->sanitize();
@@ -2047,7 +2066,7 @@ namespace das
 
     bool TypeDecl::isAutoArrayResolved() const {
         for ( auto di : dim ) {
-            if ( di==TypeDecl::dimAuto ) {
+            if ( di==TypeDecl::dimAuto || di==TypeDecl::dimConst ) {
                 return false;
             }
         }
@@ -2055,7 +2074,7 @@ namespace das
     }
 
     bool TypeDecl::isAuto() const {
-        // auto is auto.... or auto....?
+        // auto is auto.... or auto....?5
         // also dim[] is aito
         for (auto di : dim) {
             if (di == TypeDecl::dimAuto) {
@@ -2898,8 +2917,8 @@ namespace das
     }
 
     int TypeDecl::findArgumentIndex( const string & name ) const {
-        for (int index=0, indexs=int(argNames.size()); index!=indexs; ++index) {
-            if (argNames[index] == name) return index;
+        for (size_t index=0, indexs=argNames.size(); index!=indexs; ++index) {
+            if (argNames[index] == name) return int(index);
         }
         return -1;
     }
@@ -3172,7 +3191,7 @@ namespace das
 
     int TypeDecl::tupleFieldIndex( const string & name ) const {
         int index = 0;
-        if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
+        if ( sscanf(name.c_str(),"_%d",&index)==1 ) {
             return index;
         } else {
             auto vT = isPointer() ? firstType.get() : this;
@@ -3193,6 +3212,8 @@ namespace das
         if (!vT) return -1;
         return vT->findArgumentIndex(name);
     }
+
+    uint64_t TypeDecl::getMangledNameHash() const { return hash_blockz64((uint8_t *)getMangledName().c_str()); }
 
     // Mangled name parser
 

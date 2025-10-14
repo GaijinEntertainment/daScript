@@ -2,7 +2,6 @@ options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_aot = true
 options strict_smart_pointers
 
 module templates_boost shared public
@@ -334,7 +333,7 @@ class private TemplateVisitor : AstVisitor {
     }
 }
 
-def private visit_expression(var expr : ExpressionPtr&; var adapter : smart_ptr<VisitorAdapter>) {
+def visit_expression(var expr : ExpressionPtr&; var adapter : smart_ptr<VisitorAdapter>) {
     unsafe {
         // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
         var newExpr <- expr |> visit(adapter)
@@ -990,16 +989,6 @@ class private QBlockExprMacro : AstQCallMacro {
 class private QTypeMacro : AstQCallMacro {
     override apply_call = "apply_qtype"
     override macro_call = "qmacro_type"
-}
-
-def public emplace_new(var arr : array<ExpressionPtr>; var expr : ExpressionPtr) {
-    //! Unifies emplace and emplace_new for the array<ExpressionPtr>
-    arr |> emplace(expr)
-}
-
-def public emplace_new(var arr : array<VariablePtr>; var expr : VariablePtr) {
-    //! Unifies emplace and emplace_new for the array<VariablePtr>
-    arr |> emplace(expr)
 }
 
 def public apply_qmacro_function(fname : string; var expr : smart_ptr<Expression>; blk : block<(var rules : Template) : void>) : FunctionPtr {

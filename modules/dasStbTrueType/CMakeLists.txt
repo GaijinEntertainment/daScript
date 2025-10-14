@@ -30,9 +30,9 @@ IF ((NOT DAS_STBTRUETYPE_INCLUDED) AND ((NOT ${DAS_STBTRUETYPE_DISABLED}) OR (NO
         PATTERN "*.das"
     )
 
-    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/runtime/font/droidsansmono.ttf
-        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
-    )
-
-
+	IF ((NOT ${DAS_BGFX_DISABLED}) OR (NOT DEFINED DAS_BGFX_DISABLED))
+		install(FILES ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/runtime/font/droidsansmono.ttf
+			DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
+		)
+	ENDIF()
 ENDIF()

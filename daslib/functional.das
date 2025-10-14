@@ -81,7 +81,7 @@ def map(var src : iterator<auto(TT)>; blk : function<(what : TT -&) : auto(QQ)>)
 }
 
 // reduce value, any invokable
-def private reduce_any(it : iterator<auto(TT)>; functor) {
+def private reduce_any(var it : iterator<auto(TT)>; functor) {
     var left : TT -&
     var first = true
     for (right in it) {
@@ -103,24 +103,24 @@ def private reduce_any(it : iterator<auto(TT)>; functor) {
 }
 
 // reduce with lambda
-def reduce(it : iterator<auto(TT)>; blk : lambda<(left, right : TT -&) : TT const -&>) {
+def reduce(var it : iterator<auto(TT)>; blk : lambda<(left, right : TT -&) : TT const -&>) {
     //! iterates over `it` and yields the reduced (combined) result of `blk` for each element
     //! and previous reduction result
     return reduce_any(it, blk)
 }
 
 // reduce with function
-def reduce(it : iterator<auto(TT)>; blk : function<(left, right : TT -&) : TT const -&>) {
+def reduce(var it : iterator<auto(TT)>; blk : function<(left, right : TT -&) : TT const -&>) {
     return reduce_any(it, blk)
 }
 
 // reduce with block
-def reduce(it : iterator<auto(TT)>; blk : block<(left, right : TT -&) : TT const -&>) {
+def reduce(var it : iterator<auto(TT)>; blk : block<(left, right : TT -&) : TT const -&>) {
     return reduce_any(it, blk)
 }
 
 // summ of all elements
-def sum(it : iterator<auto(TT)>) {
+def sum(var it : iterator<auto(TT)>) {
     //! iterates over `it` and yields the sum of all elements
     //! same as reduce(it, @(a,b) => a + b)
     var temp : TT -&
@@ -146,6 +146,16 @@ def any(it) {
     }
 }
 
+def any(var it : iterator<auto(TT)>) {
+    //! iterates over `it` and yields true if any element is true
+    for (x in it) {
+        if (x) {
+            return true
+        }
+    }
+    return false
+}
+
 // all
 def all(it) {
     //! iterates over `it` and yields true if all elements are true
@@ -160,6 +170,16 @@ def all(it) {
         }
         return true
     }
+}
+
+def all(var it : iterator<auto(TT)>) {
+    //! iterates over `it` and yields true if all elements are true
+    for (x in it) {
+        if (!x) {
+            return false
+        }
+    }
+    return true
 }
 
 def cycle(var src : iterator<auto(TT)>) {
@@ -177,8 +197,6 @@ def cycle(var src : iterator<auto(TT)>) {
                 }
             }
             return false
-        } finally {
-            __builtin_array_clear_lock(arr)
         }
     } else {
         return <- generator<TT&> capture(<- src) () <| $() {
@@ -193,8 +211,6 @@ def cycle(var src : iterator<auto(TT)>) {
                 }
             }
             return false
-        } finally {
-            __builtin_array_clear_lock(arr)
         }
     }
 }

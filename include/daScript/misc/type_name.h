@@ -5,6 +5,15 @@
 #include "daScript/misc/rangetype.h"
 
 namespace das {
+    template <typename T>
+    const char *debug_type_name() {
+#if defined(_MSC_VER)
+        return __FUNCSIG__;
+#else
+        return __PRETTY_FUNCTION__;
+#endif
+    }
+
 
     template <typename TT>
     struct typeName;
@@ -56,4 +65,5 @@ namespace das {
     template <> struct typeName<Block>    { constexpr static const char * name() { return "Block"; } };
     template <> struct typeName<Tuple>    { constexpr static const char * name() { return "Tuple"; } };
     template <> struct typeName<Variant>  { constexpr static const char * name() { return "Variant"; } };
+    template <> struct typeName<vec4f>    { constexpr static const char * name() { return "vec4f"; } }; // this is anyType, but practically only used for managed values
 }

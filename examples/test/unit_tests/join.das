@@ -1,10 +1,11 @@
+options gen2
 require daslib/strings_boost
 
 [export]
-def test
+def test {
     // dim
-    verify(join([[int[] 1]], ",") == "1")
-    verify(join([[int 1; 2; 3; 4]], ",") == "1,2,3,4")
+    verify(join([1], ",") == "1")
+    verify(join(fixed_array<int>(1, 2, 3, 4), ",") == "1,2,3,4")
     // array
     var a : array<int>
     verify(join(a, " ") == "")
@@ -17,6 +18,7 @@ def test
     // string
     verify(join("hello", " ") == "h e l l o")
     // iterator
-    let rit <- each(range(1, 4))
+    var rit <- each(range(1, 4))
     verify(join(rit, "*") == "1*2*3")
     return true
+}

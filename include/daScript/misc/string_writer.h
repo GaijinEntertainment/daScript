@@ -128,6 +128,7 @@ namespace das {
 
         // DEBUG - information useful for application developers. (DEBUG is defaut level)
         debug       = 10000,
+        defaultPrint = debug,
 
         // TRACE - information useful for developers of subsystems, libraries, daScript etc.
         // For example: application activation/deactivation, key pressed, texture loaded from a file, sound file loaded.
@@ -143,7 +144,7 @@ namespace das {
         virtual void output() override {
             auto newPos = tellp();
             if (newPos != pos) {
-                string st(data() + pos, newPos - pos);
+                string st(data() + pos, size_t(newPos - pos));
                 logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
                 useMarker = false;
                 clear();

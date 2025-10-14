@@ -1,0 +1,10 @@
+# This file is used in CI to choose what modules will be enabled in release files.
+# It should be done in format: <module_name>:<cmake_module_option>=<VALUE(ON/OFF)>
+dasHV:DAS_HV_DISABLED=OFF
+dasLLVM:DAS_LLVM_DISABLED=OFF
+dasImgui:DAS_IMGUI_DISABLED=OFF
+dasMinfft:DAS_MINFFT_DISABLED=OFF
+dasAudio:DAS_AUDIO_DISABLED=OFF
+dasPUGIXML:DAS_PUGIXML_DISABLED=OFF
+dasSQLITE:DAS_SQLITE_DISABLED=OFF
+dasGlfw:DAS_GLFW_DISABLED=OFF

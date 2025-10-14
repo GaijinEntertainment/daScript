@@ -57,7 +57,7 @@ namespace das {
     class HashBuilder {
         uint64_t seed = DAS_WYHASH_SEED;
     public:
-        uint64_t getHash() {
+        __forceinline uint64_t getHash() {
             return seed <= HASH_KILLED64 ? UINT64_C(1099511628211) : seed;
         }
         __forceinline void updateString ( const char * str ) {
@@ -68,12 +68,27 @@ namespace das {
             if (!str) str = "";
             seed = wyhash((const uint8_t *)str, len, seed);
         }
-        __forceinline void updateString ( const string & str ) {
+        __forceinline HashBuilder& updateString ( const string & str ) {
             seed = wyhash((const uint8_t *)str.c_str(), str.size(), seed);
+            return *this;
         }
         template <typename TT>
-        __forceinline void update ( const TT & data ) {
+        __forceinline HashBuilder& update ( const TT & data ) {
             seed = wyhash((const uint8_t *)&data, sizeof(data), seed);
+            return *this;
         }
     };
+
+    inline uint64_t _builtin_hash_int8 ( int8_t value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_uint8 ( uint8_t value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_int16 ( int16_t value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_uint16 ( uint16_t value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_int32 ( int32_t value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_uint32 ( uint32_t value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_int64 ( int64_t value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_uint64 ( uint64_t value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_ptr ( void * value ) { return HashBuilder().update(uint64_t(intptr_t(value))).getHash(); }
+    inline uint64_t _builtin_hash_float ( float value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_double ( double value ) { return HashBuilder().update(value).getHash(); }
+    inline uint64_t _builtin_hash_das_string ( const string & str ) { return hash_blockz64((uint8_t *)str.c_str()); }
 }

@@ -7,12 +7,26 @@ namespace das
     struct FuncInfo;
     struct LineInfoArg;
 
+    class JitFn {
+    private:
+        template <typename RetT, typename ...Args>
+        friend struct CallJitFn; // Call it only using this helper
+        void *jitFn;
+    public:
+        JitFn() : jitFn(nullptr) {}
+        JitFn(void *jitFn) : jitFn(jitFn) {}
+
+        operator bool() const {
+            return jitFn != nullptr;
+        }
+    };
+
     struct Block {
         uint32_t    stackOffset;
         uint32_t    argumentsOffset;
         SimNode *   body;
         void *      aotFunction;
-        void *      jitFunction;
+        JitFn      jitFunction;
         vec4f *     functionArguments;
         FuncInfo *  info;
         __forceinline bool operator == ( const Block & b ) const {
@@ -166,6 +180,7 @@ namespace das
     void table_clear ( Context & context, Table & arr, LineInfo * at );
     void table_lock ( Context & context, Table & arr, LineInfo * at );
     void table_unlock ( Context & context, Table & arr, LineInfo * at );
+    void table_reserve_impl ( Context & context, Table & arr, int32_t baseType, uint32_t newCapacity, uint32_t valueTypeSize, LineInfo * at );
 
     struct Sequence;
     void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at );
@@ -216,7 +231,7 @@ namespace das
 
 namespace std {
     template <> struct hash<das::Bitfield> {
-        std::size_t operator() ( das::Bitfield b ) const {
+        size_t operator() ( das::Bitfield b ) const {
             return hash<uint32_t>()(b.value);
         }
     };

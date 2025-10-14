@@ -14,29 +14,29 @@ namespace das
 
     #if (!defined(DAS_ENABLE_EXCEPTIONS)) || (!DAS_ENABLE_EXCEPTIONS)
 
-    DAS_THREAD_LOCAL jmp_buf * g_throwBuf = nullptr;
-    DAS_THREAD_LOCAL string g_throwMsg;
+    DAS_THREAD_LOCAL(jmp_buf *) g_throwBuf;
+    DAS_THREAD_LOCAL(string) g_throwMsg;
 
     void das_throw(const char * msg) {
-        if ( g_throwBuf ) {
-            g_throwMsg = msg;
-            longjmp(*g_throwBuf,1);
+        if ( *g_throwBuf ) {
+            *g_throwMsg = msg;
+            longjmp(**g_throwBuf,1);
         } else {
             DAS_FATAL_ERROR("unhanded das_throw, %s\n", msg);
         }
     }
 
     void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody) {
-        DAS_ASSERTF(g_throwBuf==nullptr, "das_trycatch without g_throwBuf");
+        DAS_ASSERTF(*g_throwBuf==nullptr, "das_trycatch without g_throwBuf");
         jmp_buf ev;
-        g_throwBuf = &ev;
+        *g_throwBuf = &ev;
         if ( !setjmp(ev) ) {
             tryBody();
         } else {
-            g_throwBuf = nullptr;
-            catchBody(g_throwMsg.c_str());
+            *g_throwBuf = nullptr;
+            catchBody(g_throwMsg->c_str());
         }
-        g_throwBuf = nullptr;
+        *g_throwBuf = nullptr;
     }
     #endif
 
@@ -423,8 +423,9 @@ namespace das
                 default:
                     if ( ch <= 0x1f ) {
                         result.append("\\u00");
-                        result.append(1,(ch>>4)+'0');
-                        result.append(1,(ch&15)+'0');
+                        const char tohex[] = "0123456789abcdef";
+                        result.append(1,tohex[ch>>4]);
+                        result.append(1,tohex[ch&15]);
                     } else {
                         result.append(1, ch);
                     }
@@ -434,13 +435,13 @@ namespace das
         return result;
     }
 
-    string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int LROW, int LCOL, int TAB ) {
+    string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int /*LROW*/, int LCOL, int TAB ) {
         TextWriter text;
         int col=0, row=1;
         auto it = st;
         auto itend = st + stlen;
         if ( ROW>1 ) {
-            while ( *it && it!=itend ) {
+            while ( it!=itend && *it ) {
                 auto CH = *it++;
                 if ( CH=='\n' ) {
                     row++;
@@ -452,7 +453,7 @@ namespace das
         if ( row!=ROW ) return "";
         auto beginOfLine = it;
         for (;;) {
-            if (*it == 0 || it == itend)
+            if (it == itend || *it == 0)
             {
                 text << "\n";
                 break;
@@ -477,7 +478,7 @@ namespace das
         }
         it = beginOfLine;
         const char * tail = it + COL;
-        while ( *it && it!=tail && it!=itend ) {
+        while ( it!=tail && it!=itend && *it ) {
             auto CH = *it++;
             if ( CH=='\t' ) {
                 int tcol = (col + TAB) & ~(TAB-1);
@@ -585,7 +586,7 @@ namespace das
         }
         uint64_t length = writer.tellp();
         if ( length ) {
-            auto pStr = context.allocateString(writer.c_str(), uint32_t(length), &debugInfo);
+            auto pStr = context.allocateString(writer.c_str(), uint32_t(length), &debugInfo, isTempString);
             if ( !pStr  ) {
                 context.throw_out_of_memory(true, uint32_t(length), &debugInfo);
             }

@@ -8,7 +8,7 @@ namespace das::format {
     optional<string> type_to_string(const TypeDecl *type_decl, LineInfo loc) {
         if (type_decl->isTemp(false) || type_decl->alias == "``MACRO``TAG``") {
             return "struct<" + format::get_substring(loc) + ">";
-        } else if (type_decl->isAuto() && !type_decl->isPointer()) {
+        } else if (type_decl->isAuto() && !type_decl->isArray() && !type_decl->isPointer()) {
             return nullopt;
         } else {
             return get_substring(loc);
@@ -36,7 +36,7 @@ namespace das::format {
             auto prev_end = concat.find(prev_sep);
             assert(i == 0 || prev_end != npos); // incorrect prev_sep
             {
-                auto can_init = can_init_with(type_name, el->size());
+                auto can_init = can_init_with(type_name, uint32_t(el->size()));
                 switch (can_init) {
                     case CanInit::Can: maybe_uninit.clear(); break;
                     case CanInit::Cannot: maybe_uninit = "uninitialized"; break;
@@ -70,7 +70,7 @@ namespace das::format {
         const string prev_sep = ";";
         const string sep = ",";
 
-        const auto &front = static_cast<ExprMakeTuple *>(values.front().get())->values;
+        // const auto &front = static_cast<ExprMakeTuple *>(values.front().get())->values;
         string result;
         string suffix;
         Pos last = Pos::from_last(start);
@@ -82,12 +82,12 @@ namespace das::format {
             Pos to;
             auto real_sep = suffix + sep;
             if ( el->rtti_isMakeTuple() ) {
-                const auto &values = static_cast<ExprMakeTuple *>(el.get())->values;
+                const auto & Values = static_cast<ExprMakeTuple *>(el.get())->values;
                 prefix = "(";
                 suffix = ")";
-                middle = convert_to_string(values);
-                from = Pos::from(values.front()->at);
-                to = Pos::from_last(values.back()->at);
+                middle = convert_to_string(Values);
+                from = Pos::from(Values.front()->at);
+                to = Pos::from_last(Values.back()->at);
             } else {
                 suffix.clear();
                 middle = format::get_substring(el->at);
@@ -117,10 +117,10 @@ namespace das::format {
             return 0;
         }
         if (comment_start != npos) {
-            const auto &maybe_comment = line.substr(comment_start);
-            const auto quotes = count(maybe_comment.begin(), maybe_comment.end(), '"');
-            if (quotes % 2 != 0) {
-                comment_start = line.size();
+            const auto code_part = line.substr(0, comment_start);
+            const auto quotes_code = count(code_part.begin(), code_part.end(), '"');
+            if (quotes_code % 2 != 0) {
+                comment_start = line.size(); // should be recursive call to find_comma_place, let's simply put to the end
             }
         }
         return line.find_last_not_of(" \t\r", comment_start == npos ? npos : comment_start - 1);
@@ -134,7 +134,7 @@ namespace das::format {
                 // it means EOF.
                 return;
             }
-            loc.column = comma_place + 1;
+            loc.column = uint32_t(comma_place + 1);
             if (line.at(comma_place) != sep && // ad-hoc, fix location
                 format::prepare_rule(loc)) {
                 format::get_writer() << sep;
@@ -166,10 +166,10 @@ namespace das::format {
         return result;
     }
 
-    void handle_brace(Pos prev_loc, int value, const string &internal, size_t tab_size, Pos end_loc) {
+    void handle_brace(Pos prev_loc, uint32_t value, const string &internal, size_t tab_size, Pos end_loc) {
         const auto &line = format::get_line(prev_loc.line);
         auto brace_column = format::find_comma_place(line);
-        prev_loc.column = brace_column + 1;
+        prev_loc.column = uint32_t(brace_column + 1);
         if (format::is_replace_braces() && value != 0xdeadbeef &&
             format::prepare_rule(prev_loc)) {
 
@@ -191,13 +191,36 @@ namespace das::format {
         replace_with(v2_only, start, format::get_substring(internal), end, open, close);
     }
 
+    bool skip_token(bool v2_only, bool need_skip, LineInfo token) {
+        if (!need_skip) {
+            return false;
+        }
+        auto start = format::Pos::from(token);
+        auto end = format::Pos::from_last(token);
+        if (start == end) {
+            return false;
+        }
+        if ((!v2_only || format::is_replace_braces()) && format::prepare_rule(start)) {
+            format::finish_rule(end);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     void wrap_par_expr(LineInfo real_expr, LineInfo info_expr) {
         if (format::is_replace_braces() && real_expr == info_expr && format::prepare_rule(Pos::from(real_expr))) {
             format::get_writer() << "(" << format::get_substring(real_expr) << ")";
             format::finish_rule(Pos::from_last(real_expr));
         }
-
     }
+
+    void wrap_par_expr_newline(LineInfo real_expr, LineInfo info_expr) {
+        if (real_expr.line != real_expr.last_line) {
+            wrap_par_expr(real_expr, info_expr);
+        }
+    }
+
 
     LineInfo concat(LineInfo first, LineInfo last) {
         return LineInfo(
@@ -213,7 +236,7 @@ namespace das::format {
         { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; });
     }
 
-    void skip_spaces_or_print(LineInfo prev, LineInfo block, LineInfo next, size_t tab_size, const string& change) {
+    void skip_spaces_or_print(LineInfo /*prev*/, LineInfo block, LineInfo next, size_t tab_size, const string& change) {
         auto internal = format::substring_between(block, next);
         auto same_depth = format::get_indent(format::Pos::from_last(block), tab_size) ==
                           format::get_indent(format::Pos::from(next), tab_size);

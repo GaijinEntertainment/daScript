@@ -24,10 +24,16 @@ namespace das
     void array_reserve(Context & context, Array & arr, uint32_t newCapacity, uint32_t stride, LineInfo * at) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't change capacity of a locked array");
         if ( arr.capacity >= newCapacity ) return;
+        uint64_t memSize64 = uint64_t(newCapacity) * uint64_t(stride);
+        if ( memSize64>=0xffffffff ) {
+            context.throw_error_at(at, "can't grow array, out of index space [capacity=%i] [stride=%i]", newCapacity, stride);
+        }
         char * newData = nullptr;
         if ( context.verySafeContext ) {
             newData = (char *)context.allocate(newCapacity*stride, at);
-            memcpy(newData, arr.data, arr.size*stride);
+            if ( newData && arr.data ) {
+                memcpy(newData, arr.data, arr.size*stride);
+            }
         } else {
             newData = (char *)context.reallocate(arr.data, arr.capacity*stride, newCapacity*stride, at);
         }
@@ -136,7 +142,7 @@ namespace das
                     uint32_t oldSize = pArray->capacity*stride;
                     context.free(pArray->data, oldSize, &debugInfo);
                 } else {
-                    context.throw_error_at(debugInfo, "deleting locked array");
+                    context.throw_error_at(debugInfo, "deleting locked array%s", errorMessage);
                     return v_zero();
                 }
             }

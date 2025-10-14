@@ -22,6 +22,37 @@ bool g_reportCompilationFailErrors = false;
 bool g_collectSharedModules = true;
 bool g_failOnSmartPtrLeaks = true;
 
+enum class RuntimeMode {
+    Interpreter,
+    AOT,
+    JIT
+};
+
+void SetRuntimeMode(CodeOfPolicies &policies, RuntimeMode mode) {
+    switch (mode) {
+        case RuntimeMode::AOT:
+            policies.aot = true;
+            break;
+        case RuntimeMode::JIT:
+            policies.jit = true;
+            policies.jit_module = getDasRoot() + "/daslib/just_in_time.das";
+            break;
+        case RuntimeMode::Interpreter: break;
+    }
+}
+
+const char *toString(RuntimeMode mode) {
+    switch (mode) {
+        case RuntimeMode::AOT:
+            return "aot";
+        case RuntimeMode::JIT:
+            return "jit";
+        case RuntimeMode::Interpreter:
+            return "";
+    }
+    DAS_FATAL_ERROR("Unreachable");
+}
+
 TextPrinter tout;
 
 template <typename F>
@@ -71,7 +102,7 @@ bool run_all_standalone_context_tests () {
     return res;
 }
 
-bool compilation_fail_test ( const string & fn, bool, bool ) {
+bool compilation_fail_test ( const string & fn, RuntimeMode, bool ) {
     uint64_t timeStamp = ref_time_ticks();
     tout << fn << " ";
     auto fAccess = make_smart<FsFileAccess>();
@@ -132,15 +163,15 @@ bool compilation_fail_test ( const string & fn, bool, bool ) {
     }
 }
 
-bool unit_test ( const string & fn, bool useAot, bool useSer ) {
+bool unit_test ( const string & fn, RuntimeMode mode, bool useSer ) {
     uint64_t timeStamp = ref_time_ticks();
     tout << fn << " ";
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
-    policies.aot = useAot;
     policies.fail_on_no_aot = true;
     policies.ignore_shared_modules = useSer;
+    SetRuntimeMode(policies, mode);
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
     // policies.no_unsafe = true;
@@ -152,7 +183,7 @@ bool unit_test ( const string & fn, bool useAot, bool useSer ) {
             }
             return false;
         } else {
-            auto F = [ &dummyLibGroup, timeStamp, useAot ] ( ProgramPtr program ) {
+            auto F = [ &dummyLibGroup, timeStamp, mode ] ( ProgramPtr program ) {
                 if (program->unsafe) tout << "[unsafe] ";
                 Context ctx(program->getContextStackSize());
                 if ( !program->simulate(ctx, tout) ) {
@@ -178,7 +209,7 @@ bool unit_test ( const string & fn, bool useAot, bool useSer ) {
                         return false;
                     }
                     int usec = get_time_usec(timeStamp);
-                    tout << (useAot ? "ok AOT " : "ok ") << ((usec/1000)/1000.0) << "\n";
+                    tout << "ok " << toString(mode) << " " << ((usec/1000)/1000.0) << "\n";
                     return true;
                 } else {
                     tout << "function 'test' not found\n";
@@ -196,12 +227,12 @@ bool unit_test ( const string & fn, bool useAot, bool useSer ) {
     }
 }
 
-bool exception_test ( const string & fn, bool useAot, bool ) {
+bool exception_test ( const string & fn, RuntimeMode mode, bool ) {
     tout << fn << " ";
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
-    policies.aot = useAot;
+    SetRuntimeMode(policies, mode);
     if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
@@ -225,8 +256,8 @@ bool exception_test ( const string & fn, bool useAot, bool ) {
                 }
                 ctx.restart();
                 ctx.evalWithCatch(fnTest, nullptr);
-                if ( auto ex = ctx.getException() ) {
-                    tout << "with exception " << ex << ", " << (useAot ? "ok AOT\n" : "ok\n");
+                if (const auto ex = ctx.getException() ) {
+                    tout << "with exception " << ex << ", ok " << toString(mode) << "\n";
                     return true;
                 }
                 tout << "failed, finished without exception\n";
@@ -241,12 +272,12 @@ bool exception_test ( const string & fn, bool useAot, bool ) {
     }
 }
 
-bool performance_test ( const string & fn, bool useAot ) {
+bool performance_test ( const string & fn, RuntimeMode mode ) {
     // tout << fn << "\n";
     auto fAccess = make_smart<FsFileAccess>();
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
-    policies.aot = useAot;
+    SetRuntimeMode(policies, mode);
     policies.fail_on_no_aot = true;
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
@@ -275,7 +306,7 @@ bool performance_test ( const string & fn, bool useAot ) {
 }
 
 
-bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot, bool useSer), bool useAot, bool useSer = false ) {
+bool run_tests( const string & path, bool (*test_fn)(const string &, RuntimeMode mode, bool useSer), RuntimeMode mode, bool useSer = false ) {
 #ifdef _MSC_VER
     bool ok = true;
     _finddata_t c_file;
@@ -285,7 +316,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
         do {
             const char * atDas = strstr(c_file.name,".das");
             if ( atDas && strcmp(atDas,".das")==0 && c_file.name[0]!='_' ) {
-                ok = test_fn(path + "/" + c_file.name, useAot, useSer) && ok;
+                ok = test_fn(path + "/" + c_file.name, mode, useSer) && ok;
                 if ( g_collectSharedModules ) Module::CollectSharedModules();
             }
         } while (_findnext(hFile, &c_file) == 0);
@@ -300,7 +331,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
         while ((ent = readdir (dir)) != NULL) {
             const char * atDas = strstr(ent->d_name,".das");
             if ( atDas && strcmp(atDas,".das")==0 && ent->d_name[0]!='_' ) {
-                ok = test_fn(path + "/" + ent->d_name, useAot, useSer) && ok;
+                ok = test_fn(path + "/" + ent->d_name, mode, useSer) && ok;
             }
         }
         closedir (dir);
@@ -309,15 +340,13 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 #endif
 }
 
-bool run_unit_tests( const string & path, bool check_aot = false, bool useSer = false ) {
-    if ( check_aot ) {
-        return run_tests(path, unit_test, false, useSer ) && run_tests(path, unit_test, true, useSer);
-    } else {
-        return run_tests(path, unit_test, false, useSer);
-    }
+bool run_unit_tests( const string & path, bool check_aot = false, bool useSer = false, bool check_jit = true ) {
+    return run_tests(path, unit_test, RuntimeMode::Interpreter, useSer ) &&
+          (!check_aot || run_tests(path, unit_test, RuntimeMode::AOT, useSer)) &&
+          (!check_jit || run_tests(path, unit_test, RuntimeMode::JIT, useSer));
 }
 
-bool isolated_unit_test ( const string & fn, bool useAot, bool useSer ) {
+bool isolated_unit_test ( const string & fn, RuntimeMode mode, bool useSer ) {
     // register modules
     g_collectSharedModules = false;
     NEED_MODULE(Module_BuiltIn);
@@ -333,8 +362,12 @@ bool isolated_unit_test ( const string & fn, bool useAot, bool useSer ) {
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_DASBIND);
+    if (mode == RuntimeMode::JIT) {
+        NEED_MODULE(Module_Jit);
+        #include "modules/external_need.inc"
+    }
     Module::Initialize();
-    bool result = unit_test(fn,useAot, useSer);
+    bool result = unit_test(fn,mode, useSer);
     // shutdown
     Module::Shutdown();
 #if DAS_SMART_PTR_TRACKER
@@ -349,20 +382,20 @@ bool isolated_unit_test ( const string & fn, bool useAot, bool useSer ) {
     return result;
 }
 
-bool run_isolated_unit_tests( const string & path, bool check_aot = false, bool use_ser = false ) {
-    if ( check_aot ) {
-        return run_tests(path, isolated_unit_test, false, use_ser) && run_tests(path, unit_test, true, use_ser);
-    } else {
-        return run_tests(path, isolated_unit_test, false, use_ser);
-    }
+bool run_isolated_unit_tests( const string & path, bool check_aot = false, bool use_ser = false, bool check_jit = true ) {
+    return run_tests(path, isolated_unit_test, RuntimeMode::Interpreter, use_ser ) &&
+          (!check_aot || run_tests(path, isolated_unit_test, RuntimeMode::AOT, use_ser)) &&
+          (!check_jit || run_tests(path, isolated_unit_test, RuntimeMode::JIT, use_ser));
 }
 
 bool run_compilation_fail_tests( const string & path ) {
-    return run_tests(path, compilation_fail_test, false, false);
+    return run_tests(path, compilation_fail_test, RuntimeMode::Interpreter, false);
 }
 
-bool run_exception_tests( const string & path ) {
-    return run_tests(path, exception_test, false, false) && run_tests(path, exception_test, true, false);
+bool run_exception_tests( const string & path, bool check_jit = false ) {
+    return run_tests(path, exception_test, RuntimeMode::Interpreter, false ) &&
+           run_tests(path, exception_test, RuntimeMode::AOT, false) &&
+          (!check_jit || run_tests(path, exception_test, RuntimeMode::JIT, false));
 }
 
 
@@ -427,11 +460,23 @@ namespace das { vector<void *> force_aot_stub(); }
 int main( int argc, char * argv[] ) {
     // force libDaScriptAot linking
     force_aot_stub();
-    if ( argc>2 ) {
-        tout << "daScriptTest [pathToDasRoot]\n";
+    bool enable_jit = false;
+    if ( argc>3 ) {
+        tout << "daScriptTest [pathToDasRoot] [-jit]\n";
         return -1;
-    }  else if ( argc==2 ) {
+    }  else if ( argc==3 ) {
+        if (argv[2] != string("-jit")) {
+            tout << "daScriptTest [pathToDasRoot] [-jit]\n";
+            return -1;
+        }
+        enable_jit = true;
         setDasRoot(argv[1]);
+    } else if (argc == 2) {
+        if (argv[1] == string("-jit")) {
+            enable_jit = true;
+        } else {
+            setDasRoot(argv[1]);
+        }
     }
     setCommandLineArguments(argc,argv);
     // ptr_ref_count::ref_count_track = 0x1242c;
@@ -463,6 +508,11 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_DASBIND);
+    if (enable_jit) {
+        NEED_MODULE(Module_Jit);
+        #include "modules/external_need.inc"
+    }
+
     Module::Initialize();
     // aot library
 #if 0 // Debug this one test
@@ -489,11 +539,11 @@ int main( int argc, char * argv[] ) {
     // #define TEST_NAME   "/examples/test/unit_tests/aonce.das"
     // #define TEST_NAME   "/examples/test/unit_tests/check_defer.das"
     #define TEST_NAME   "/examples/test/unit_tests/return_reference.das"
-    unit_test(getDasRoot() +  TEST_NAME,false);
-    unit_test(getDasRoot() +  TEST_NAME,true);
+    unit_test(getDasRoot() +  TEST_NAME,RuntimeMode::Interpreter);
+    unit_test(getDasRoot() +  TEST_NAME,RuntimeMode::AOT);
     // extra
     //  #define TEST_NAME   "/examples/test/unit_tests/apply_macro_example.das"
-    //  unit_test(getDasRoot() +  TEST_NAME,false);
+    //  unit_test(getDasRoot() +  TEST_NAME,RuntimeMode::Interpreter);
     Module::Shutdown();
 #if DAS_ENABLE_SMART_PTR_TRACKING
     dumpTrackingLeaks();
@@ -549,9 +599,9 @@ int main( int argc, char * argv[] ) {
     bool ok = true;
     // ok = run_all_standalone_context_tests() && ok;
     ok = run_compilation_fail_tests(getDasRoot() + "/examples/test/compilation_fail_tests") && ok;
-    ok = run_unit_tests(getDasRoot() +  "/examples/test/unit_tests",    true,  g_useSerialization) && ok;
-    ok = run_unit_tests(getDasRoot() +  "/examples/test/optimizations", false, g_useSerialization) && ok;
-    ok = run_exception_tests(getDasRoot() +  "/examples/test/runtime_errors") && ok;
+    ok = run_unit_tests(getDasRoot() +  "/examples/test/unit_tests",    true,  g_useSerialization, enable_jit) && ok;
+    ok = run_unit_tests(getDasRoot() +  "/examples/test/optimizations", false, g_useSerialization, enable_jit) && ok;
+    ok = run_exception_tests(getDasRoot() +  "/examples/test/runtime_errors", enable_jit) && ok;
     ok = run_module_test(getDasRoot() +  "/examples/test/module", "main.das",        true, g_useSerialization) && ok;
     ok = run_module_test(getDasRoot() +  "/examples/test/module", "main_inc.das",    true, g_useSerialization)  && ok;
     ok = run_module_test(getDasRoot() +  "/examples/test/module", "main_default.das", false, g_useSerialization) && ok;

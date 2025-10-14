@@ -74,8 +74,7 @@ def public go_main {
     delete decsLiveData
     appLive = false
     unsafe {
-        var ctx <- reinterpret<smart_ptr<Context>> addr(this_context())
-        appPtr := ctx
+        move_new(appPtr) <| reinterpret<smart_ptr<Context>> addr(this_context())
     }
 }
 
@@ -196,19 +195,17 @@ def set_new_context(var ptr : smart_ptr<Context>; full_restart : bool = false) {
     to_log(LOG_TRACE, "LIVE: set new context {intptr(get_ptr(ptr))}\n")
     invoke_live("shutdown")
     if (appPtr != null) {
-        unsafe {
-            // fixup decs if its there
-            var pvar = get_context_global_variable(appPtr, "decsState")
-            if (pvar != null) {
-                var pstate : array<uint8>? = unsafe(reinterpret<array<uint8>?> get_context_global_variable(appPtr, "decsLiveData"))
-                assert(pstate != null)
-                var css <- @() {
-                    saveLiveContext()
-                }
-                invoke_in_context(appPtr, css)
-                decsLiveData := *pstate
-                delete css
+        // fixup decs if its there
+        var pvar = unsafe(get_context_global_variable(appPtr, "decsState"))
+        if (pvar != null) {
+            var pstate : array<uint8>? = unsafe(reinterpret<array<uint8>?>(unsafe(get_context_global_variable(appPtr, "decsLiveData"))))
+            assert(pstate != null)
+            var css <- @() {
+                saveLiveContext()
             }
+            unsafe(invoke_in_context(appPtr, css))
+            decsLiveData := *pstate
+            delete css
         }
     }
     appPtr := ptr

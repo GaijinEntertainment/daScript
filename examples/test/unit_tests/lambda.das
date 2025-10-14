@@ -1,19 +1,25 @@
+options gen2
 // options log = true
 
 [sideeffects]
-def onlyNull(bar : lambda<(a : int) : int>)
-    if bar != null
+def onlyNull(bar : lambda<(a : int) : int>) {
+    if (bar != null) {
         assert(false, "has to be null")
+    }
+}
 
-def addX(a : int)
-    return @ <| (b : int)
+def addX(a : int) {
+    return @(b : int) {
         return a + b
+    }
+}
 
 [export]
-def test
+def test {
     var CNT = 0
-    let counter <- @ <| (extra : int) : int
+    let counter <- @(extra : int) : int {
         return CNT++ + extra
+    }
     var x = invoke(counter, 13)
     CNT = 100500
     let y = invoke(counter, 13)
@@ -24,8 +30,17 @@ def test
     let q = invoke(t, 2)
     assert(q == 3)
     return true
+}
 
 [export]
-def main
+def delete_null_lambda() {
+    var lmb = default<lambda>;
+    delete lmb // aot do not compiles without tmp variable
+}
+
+[export]
+def main {
     test()
+    delete_null_lambda()
+}
 

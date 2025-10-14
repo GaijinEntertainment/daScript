@@ -274,7 +274,7 @@ char * to_file_name ( const Uri & uri, Context * context, LineInfoArg * at ) {
 
 Uri from_file_name ( const char * str ) {
     Uri uri;
-    if ( !str ) uri.fromFileNameStr(str);
+    if ( str ) uri.fromFileNameStr(str);
     return uri;
 }
 

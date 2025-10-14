@@ -69,7 +69,37 @@ int main() {
 check_cxx_source_runs("${SSE2_TEST_SOURCE}" SSE2_SUPPORTED)
 ENDIF()
 
+MACRO(SETUP_SANITIZERS)
+    # apple | unix | win32 clang
+    IF(APPLE OR UNIX OR (WIN32 AND (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND (NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")))))
+        IF(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
+            MESSAGE(STATUS "Enabling AddressSanitizer")
+            ADD_COMPILE_OPTIONS(-fsanitize=address -fno-sanitize-recover=all -fno-omit-frame-pointer)
+            ADD_LINK_OPTIONS(-fsanitize=address)
+        ELSEIF(DAS_USE_SANITIZER STREQUAL "undefined" OR DAS_USE_SANITIZER STREQUAL "ubsan")
+            MESSAGE(STATUS "Enabling UndefinedBehaviorSanitizer")
+            ADD_COMPILE_OPTIONS(-fsanitize=undefined -fno-sanitize-recover=all)
+            ADD_LINK_OPTIONS(-fsanitize=undefined)
+        ELSEIF(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
+            MESSAGE(STATUS "Enabling ThreadSanitizer")
+            ADD_COMPILE_OPTIONS(-fsanitize=thread)
+            ADD_LINK_OPTIONS(-fsanitize=thread)
+        ENDIF()
+    ELSEIF(MSVC)
+        IF(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
+            MESSAGE(STATUS "Enabling AddressSanitizer")
+            TARGET_COMPILE_OPTIONS(/fsanitize=address)
+        ENDIF()
+    ENDIF()
+ENDMACRO()
+
 MACRO(SETUP_COMPILER)
+    SETUP_SANITIZERS()
+    IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        # GNU uses strict aliasing optimizations too hard, which breaks our code
+        ADD_COMPILE_OPTIONS(-Wno-strict-aliasing) # disable warnings
+        ADD_COMPILE_OPTIONS(-fno-strict-aliasing) # disable strict aliasing optimizations
+    ENDIF()
     IF(EMSCRIPTEN)
         ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof")
@@ -80,8 +110,6 @@ MACRO(SETUP_COMPILER)
 		ADD_DEFINITIONS(-DITS_PLATFORM_APPLE=1)
 		ADD_DEFINITIONS(-Wall -Wextra -pedantic)
 		# UNCOMMENT FOR ASAN
-			# ADD_DEFINITIONS("-fsanitize=address")
-			# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
 		# ADD_DEFINITIONS("-fsanitize=thread")
 		# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
         IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
@@ -111,9 +139,6 @@ MACRO(SETUP_COMPILER)
 			SET(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -s")
         ENDIF()
     ELSEIF(UNIX)
-		# UNCOMMENT THIS FOR ASAN
-			# ADD_DEFINITIONS("-fsanitize=address")
-			# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
         ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof")
 		IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -123,7 +148,7 @@ MACRO(SETUP_COMPILER)
 		SET(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -fno-rtti -fomit-frame-pointer -fno-stack-protector -DDAS_FUSION=1 -DDAS_DEBUGGER=0 -DNDEBUG=1")
 		SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -fno-rtti -fno-stack-protector -DDAS_FUSION=1 -DNDEBUG=1 -DDAS_SMART_PTR_DEBUG=1")
 	ELSEIF(WIN32)
-		IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+		IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND (NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")) # clang only, not clang-cl
 			SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v")
 			ADD_DEFINITIONS(-D_CRT_SECURE_NO_WARNINGS)
 			ADD_COMPILE_OPTIONS(-msse2)
@@ -154,8 +179,6 @@ MACRO(SETUP_COMPILER)
 			string(REPLACE "INCREMENTAL:YES" "INCREMENTAL:NO" CMAKE_EXE_LINKER_FLAGS_DEBUG ${CMAKE_EXE_LINKER_FLAGS_DEBUG})
 			string(REPLACE "INCREMENTAL:YES" "INCREMENTAL:NO" CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO ${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO})
 			ADD_DEFINITIONS("/W4")
-			# UNCOMMENT THIS FOR ASAN
-			# ADD_DEFINITIONS("/fsanitize=address")
 			IF("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4")
 				MESSAGE("32 bit build")
 				ADD_DEFINITIONS("-DDAS_ENABLE_FPE")
@@ -202,7 +225,7 @@ MACRO(SETUP_CPP11 _targetName)
         #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -std=c++1z -stdlib=libc++")
 	ENDIF()
 	IF (WIN32)
-		IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+		IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND (NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")) # clang only, not clang-cl
 			SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -std=c++17")
 		ELSE()
 			SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
@@ -228,12 +251,16 @@ MACRO(CMAKE_TEXT_XXD project_name file_name)
 	)
 ENDMACRO()
 
-MACRO(ADD_PROJECT_XXD_DEPENDS project_name)
-	ADD_CUSTOM_TARGET(${project_name}_xxd ALL
+MACRO(ADD_TARGET_PROJECT_XXD_DEPENDS target project_name)
+	ADD_CUSTOM_TARGET(${target}_xxd ALL
 		DEPENDS ${XXD_DEPENDS_LIST_${project_name}}
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 	)
-	ADD_DEPENDENCIES(${project_name} ${project_name}_xxd)
+	ADD_DEPENDENCIES(${target} ${project_name}_xxd)
+ENDMACRO()
+
+MACRO(ADD_PROJECT_XXD_DEPENDS project_name)
+	ADD_TARGET_PROJECT_XXD_DEPENDS(${project_name} ${project_name})
 ENDMACRO()
 
 
