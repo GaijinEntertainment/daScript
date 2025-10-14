@@ -78,8 +78,9 @@ MACRO(SETUP_SANITIZERS)
             ADD_LINK_OPTIONS(-fsanitize=address)
         ELSEIF(DAS_USE_SANITIZER STREQUAL "undefined" OR DAS_USE_SANITIZER STREQUAL "ubsan")
             MESSAGE(STATUS "Enabling UndefinedBehaviorSanitizer")
-            # Ignore overflows and negative integer shifts (left side)
-            ADD_COMPILE_OPTIONS(-fsanitize=undefined -fno-sanitize-recover=all -fno-sanitize=signed-integer-overflow -fno-sanitize=shift)
+            # Ignore overflows, negative integer shifts (left side), and enums values.
+            # Das allows to create, for e.g. x &= ~EnumT.a, which is technically UB on c++ side
+            ADD_COMPILE_OPTIONS(-fsanitize=undefined -fno-sanitize-recover=all -fno-sanitize=signed-integer-overflow -fno-sanitize=shift -fno-sanitize=enum)
             ADD_LINK_OPTIONS(-fsanitize=undefined)
         ELSEIF(DAS_USE_SANITIZER STREQUAL "thread" OR DAS_USE_SANITIZER STREQUAL "tsan")
             MESSAGE(STATUS "Enabling ThreadSanitizer")
