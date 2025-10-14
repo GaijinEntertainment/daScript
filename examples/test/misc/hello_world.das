@@ -1,11 +1,15 @@
 require t_counter
 
+typedef IntCounter = $counter(type<int>)
+
 [export]
 def main() {
     unsafe {
-        var a : $counter(type<int>)
+        var a = default<IntCounter>
+        a.next_count()
         debug(a)
     }
 }
 
-options log_infer_passes
+options log
+

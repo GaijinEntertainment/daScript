@@ -3,15 +3,16 @@ module t_counter public
 require daslib/ast_boost
 require daslib/macro_boost
 require daslib/templates_boost
+require daslib/strings_boost
 
 template struct TemplateCounter {
     counter : CounterType
-    /*
-    def next
+    def next_count {
         counter ++
-    def value
+    }
+    def value {
         return counter
-    */
+    }
 }
 
 [type_macro(name="counter")]
@@ -45,7 +46,31 @@ class CounterMacro : AstTypeMacro {
 
         var inscope rules : Template
         rules |> replaceTypeWithTypeDecl("CounterType") <| clone_type(counter_type)
+        rules |> replaceStructWithTypeDecl(template_type.structType) <| new TypeDecl(baseType = Type.tStructure, structType = get_ptr(structure), at = td.at)
 
+        // now, lets clone all methods in the module
+        var template_module = template_type.structType._module
+        for_each_function(template_module,"", $(func){
+            if ( func.flags.isClassMethod && func.classParent == template_type.structType ) {
+                var inscope func_clone <- clone_function(func)
+                // we rename methods
+                var method_name_parts = split(string(func.name), "`")
+                method_name_parts[0] = struct_name
+                let func_clone_name = join(method_name_parts, "`")
+                func_clone.name := func_clone_name
+                func_clone.moreFlags &= ~(MoreFunctionFlags.isTemplate)
+                func_clone.classParent = get_ptr(structure)
+                func_clone.result |> move_new <| apply_template(rules, func.at, clone_type(func.result))
+                for ( arg in func_clone.arguments ) {
+                    arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
+                }
+                rules |> renameVariable(string(func.name), func_clone_name)
+                rules |> renameVariable("_::{func.name}", "_::{func_clone_name}")
+                mod |> add_function(func_clone)
+            }
+        })
+
+        // now we fix up fields
         for ( fld in structure.fields ) {
             fld._type |> move_new <| apply_template(rules, fld.at, clone_type(fld._type))
             if ( fld.init != null ) {
@@ -60,6 +85,4 @@ class CounterMacro : AstTypeMacro {
         return <- return_type
     }
 }
-
-
 
