@@ -70,7 +70,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
             errors := "visit field does not exist"
             return false
         }
-        field.init |> move_new <| qmacro(cast<auto> @@$i(visitName))
+        field.init |> move_new <| qmacro(cast<auto>(@@$i(visitName)))
         let name =  ("name", RttiValue(tString = string(func.name)))
         cls |> append_annotation("ast_boost", "type_macro", [
             name
