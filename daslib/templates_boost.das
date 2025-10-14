@@ -20,6 +20,7 @@ struct Template {
     var2exprList : table<string; array<smart_ptr<Expression>>>
     type2type : table<string; string>
     type2etype : table<string; TypeDeclPtr>
+    struct2etype : table<Structure?; TypeDeclPtr>
     blockArgName : table<string; string>
     annArg : table<string; lambda<(var ann : AnnotationDeclaration) : void> >
     blkArg : table<string; array<VariablePtr>>
@@ -84,6 +85,11 @@ def renameField(var self : Template; name : string; newName : das_string) {
 def replaceType(var self : Template; name, newName : string) {
     //! Adds a rule to the template to replace a type alias with another type alias, specified by name.
     self.type2type |> insert(name, newName)
+}
+
+def replaceStructWithTypeDecl(var self : Template; pstruct : Structure?; var expr : TypeDeclPtr) {
+    //! Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
+    self.struct2etype |> emplace(pstruct, expr)
 }
 
 def replaceTypeWithTypeDecl(var self : Template; name : string; var expr : TypeDeclPtr) {
@@ -216,6 +222,11 @@ class private TemplateVisitor : AstVisitor {
                 move_new(typ) <| clone_type(unsafe(rules.type2etype[ta]))
             } elif (key_exists(rules.type2type, ta)) {
                 typ.alias := rules.type2type |> get_value(ta)
+            }
+        } elif (typ.baseType == Type.tStructure && typ.structType != null) {
+            let st = typ.structType
+            if (key_exists(rules.struct2etype, st)) {
+                move_new(typ) <| clone_type(unsafe(rules.struct2etype[st]))
             }
         }
         if (typ.firstType != null) {
@@ -356,6 +367,32 @@ def apply_template(var rules : Template; at : LineInfo; var expr : smart_ptr<Exp
         delete astVisitor
     }
     return <- expr
+}
+
+def private visit_type(var typ : TypeDeclPtr&; var adapter : smart_ptr<VisitorAdapter>) {
+    unsafe {
+        // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
+        var newType <- typ |> visit(adapter)
+        if (typ != newType) {
+            typ := null
+        }
+        typ <- newType
+    }
+}
+
+def apply_template(var rules : Template; at : LineInfo; var typ : smart_ptr<TypeDecl>; forceAt : bool = true) : TypeDeclPtr {
+    //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
+    var astVisitor = new TemplateVisitor(unsafe(addr(rules)))
+    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
+    visit_type(typ, astVisitorAdapter)
+    /*
+    if forceAt
+        expr |> force_at(at)
+    */
+    unsafe {
+        delete astVisitor
+    }
+    return <- typ
 }
 
 def unquote_block(expr : ExpressionPtr) : smart_ptr<ExprBlock> {

@@ -1,14 +1,15 @@
-require daslib/linq_boost
+require t_counter
+
+typedef IntCounter = $counter(type<int>)
 
 [export]
 def main() {
-    let arr = [1, 2, 3, 4, 5]
-    var qarray = to_table(
-        arr,
-        $(x : int) => x,
-        $(x : int) => x * 10
-    )
-
+    unsafe {
+        var a = default<IntCounter>
+        a.next_count()
+        debug(a)
+    }
 }
 
 options log
+
