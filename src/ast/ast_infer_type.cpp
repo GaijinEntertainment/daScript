@@ -9183,7 +9183,7 @@ namespace das {
                         expr->at, CompilationError::invalid_cast);
                     return Visitor::visit(expr);
                 }
-                auto ecast = make_smart<ExprCast>(expr->at, expr->arguments[0]->clone(), expr->aliasSubstitution );
+                auto ecast = make_smart<ExprCast>(expr->at, expr->clone(), expr->aliasSubstitution );
                 ecast->reinterpret = true;
                 ecast->alwaysSafe = true;
                 expr->aliasSubstitution.reset();
