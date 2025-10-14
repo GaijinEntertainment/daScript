@@ -6,6 +6,7 @@ options strict_smart_pointers = false
 options relaxed_pointer_const
 options unsafe_table_lookup = false
 options no_global_variables = false
+options stack = 4_194_304 // On huge files we need huge stack for jit
 
 module llvm_jit shared private
 
@@ -1778,9 +1779,10 @@ class LlvmJitVisitor : AstVisitor {
         return LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_STR_CMP), fixed_array(a, b), "")
     }
 
-    def build_str_cat(a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
+    def build_str_cat(a, b : LLVMOpaqueValue?; at : LineInfo) : LLVMOpaqueValue? {
         var typ = g_fn_types[FN_JIT_STR_CAT]
-        return LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_STR_CAT), fixed_array(a, b, get_context_param()), "")
+        return LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_STR_CAT),
+            fixed_array(a, b, get_context_param(), get_line_info_ptr(at)), "")
     }
 
 
@@ -1854,7 +1856,7 @@ class LlvmJitVisitor : AstVisitor {
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildFAdd(g_builder, left, right, ""))
             } elif (opType.isString) {
-                setE(expr, build_str_cat(left, right))
+                setE(expr, build_str_cat(left, right, expr.at))
             } else {
                 failed_E(expr, "unsupported + type {describe(opType)}")
             }
@@ -1864,7 +1866,7 @@ class LlvmJitVisitor : AstVisitor {
             } elif (opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType == Type.tFloat)) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFAdd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             } elif (opType.isString) {
-                setE(expr, LLVMBuildStoreAligned(g_builder, build_str_cat(r2v_left, right), left, uint(expr.left._type.alignOf)))
+                setE(expr, LLVMBuildStoreAligned(g_builder, build_str_cat(r2v_left, right, expr.at), left, uint(expr.left._type.alignOf)))
             } else {
                 failed_E(expr, "unsupported += type {describe(opType)}")
             }
@@ -2490,10 +2492,11 @@ class LlvmJitVisitor : AstVisitor {
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_LOCK), params, "")
     }
 
-    def build_array_unlock(array_ptr : LLVMOpaqueValue?) {
+    def build_array_unlock(array_ptr : LLVMOpaqueValue?; at : LineInfo) {
         var params = fixed_array(
-            LLVMBuildPointerCast(g_builder, array_ptr, types.LLVMVoidPtrType(), ""),             // array
-            get_context_param()
+            LLVMBuildPointerCast(g_builder, array_ptr, types.LLVMVoidPtrType(), ""), // array
+            get_context_param(),                                                     // context
+            get_line_info_ptr(at)                                                    // at
         )
         var typ = g_fn_types[FN_JIT_ARRAY_UNLOCK]
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_ARRAY_UNLOCK), params, "")
@@ -2777,7 +2780,7 @@ class LlvmJitVisitor : AstVisitor {
             let svar & = unsafe(expr.iteratorVariables[ri])
             let ssrc & = unsafe(expr.sources[ri])
             if (ssrc._type.isGoodArrayType) {
-                build_array_unlock(getE(ssrc))
+                build_array_unlock(getE(ssrc), ssrc.at)
             } elif (ssrc._type.isIterator) {
                 if (is_count_or_ucount(ssrc)) {
                     // we do nothing for count
@@ -3968,22 +3971,28 @@ class LlvmJitVisitor : AstVisitor {
         var res : LLVMOpaqueValue?
         assume ect = expr._type
         assume subT = expr.subexpr._type
+        assume subE = getE(expr.subexpr)
         if (ect.isRef && subT.isRef) {
-            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect), 0u), "")
+            res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
         } elif (ect.isPointer && (subT.isPointer || subT.isRefType)) {
-            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "cast_p")
+            res = LLVMBuildPointerCast(g_builder, subE, type_to_llvm_type(ect), "cast_p")
         } elif (length(ect.dim) != 0 && subT.isPointer) {
-            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect), 0u), "")
+            res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
         } elif (ect.isInteger && (ect.baseType == Type.tInt64 || ect.baseType == Type.tUInt64) && subT.isPointer) {
-            res = LLVMBuildPtrToInt(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "cast_p_i")
+            res = LLVMBuildPtrToInt(g_builder, subE, type_to_llvm_type(ect), "cast_p_i")
         } elif ((ect.isPointer || ect.isString) && subT.isInteger) {
-            res = LLVMBuildIntToPtr(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "cast_i_p")
+            res = LLVMBuildIntToPtr(g_builder, subE, type_to_llvm_type(ect), "cast_i_p")
         } elif (!ect.isRefType && !subT.isRefType) {
             if (ect.sizeOf == subT.sizeOf) {
-                res = LLVMBuildBitCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "cast_r")
+                res = LLVMBuildBitCast(g_builder, subE, type_to_llvm_type(ect), "cast_r")
+            } elif (ect.sizeOf > subT.sizeOf) {
+                if (subT.isSignedInteger) {
+                    res = LLVMBuildSExt(g_builder, subE, type_to_llvm_type(ect), "sext_cast")
+                } else {
+                    res = LLVMBuildZExt(g_builder, subE, type_to_llvm_type(ect), "zext_cast")
+                }
             } else {
-                res = LLVMGetUndef(type_to_llvm_type(ect))
-                failed_E(expr, "cast<{describe(expr.castType)}> is not supported, bitcast size mismatch")
+                res = LLVMBuildTrunc(g_builder, subE, type_to_llvm_type(ect), "trunc_cast")
             }
         } else {
             res = LLVMGetUndef(type_to_llvm_type(ect))
@@ -4749,7 +4758,7 @@ class LlvmJitVisitor : AstVisitor {
         thisFunc = func
         thisBlock = get_ptr(expr)
         let mna = get_mangled_name(expr)
-        let fnmna = "block_{intptr(expr)}_at_{int(expr.at.line)}{mna}"
+        let fnmna = "block_{thisFunc.name}_{intptr(expr)}_at_{int(expr.at.line)}{mna}"
         let isCmres = isCMRESType(expr._type)
         build_llvm_function_pair(fnmna, isCmres, thisBlock.arguments, thisBlock.returnType, captureType, expr.annotations)
         // function pair
@@ -5785,6 +5794,10 @@ class DisableJitVisitor : AstVisitor {
                 return
             }
         }
+    }
+
+    def override preVisitExprClone(expr : smart_ptr<ExprClone>) : void {
+        disable = true
     }
 
     def disable_builtin_call(expr : smart_ptr<ExprCallFunc>) {

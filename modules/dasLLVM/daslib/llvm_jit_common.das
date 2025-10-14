@@ -6,6 +6,7 @@ options no_unused_function_arguments = false
 options relaxed_pointer_const
 options unsafe_table_lookup = false
 options no_global_variables = false
+options stack = 4_194_304 // On huge files we need huge stack for jit
 
 module llvm_jit_common shared private
 
@@ -310,7 +311,12 @@ def public init_jit {
     // void jit_array_unlock ( Array & array, Context * context )
     var jit_array_unlock = LLVMAddFunctionWithType(g_mod, FN_JIT_ARRAY_UNLOCK,
         LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
-            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
+            fixed_array<LLVMTypeRef>(
+                g_prim_t.LLVMVoidPtrType(), // arr
+                g_prim_t.LLVMVoidPtrType(), // ctx
+                g_prim_t.LLVMVoidPtrType(), // lineInfo
+            )
+        ))
     LLVMAddGlobalMapping(g_engine, jit_array_unlock, get_jit_array_unlock())
     LLVMAddAttributesToFunction(jit_array_unlock, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_array_unlock, urange(0, 2), nocapture)
@@ -364,7 +370,13 @@ def public init_jit {
     // char * jit_str_cat ( char * a, char * b, Copntext * context )
     var jit_str_cat = LLVMAddFunctionWithType(g_mod, FN_JIT_STR_CAT,
         LLVMFunctionType(LLVMPointerType(g_prim_t.t_int8, 0u),
-            fixed_array<LLVMTypeRef>(LLVMPointerType(g_prim_t.t_int8, 0u), LLVMPointerType(g_prim_t.t_int8, 0u), g_prim_t.LLVMVoidPtrType())))
+            fixed_array<LLVMTypeRef>(
+                LLVMPointerType(g_prim_t.t_int8, 0u), // sA
+                LLVMPointerType(g_prim_t.t_int8, 0u), // sB
+                g_prim_t.LLVMVoidPtrType(),           // ctx
+                g_prim_t.LLVMVoidPtrType(),           // lineInfo
+            )
+        ))
     LLVMAddGlobalMapping(g_engine, jit_str_cat, get_jit_str_cat())
     LLVMAddAttributesToFunction(jit_str_cat, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_str_cat, urange(0, 3), nocapture)
@@ -718,10 +730,10 @@ def public type_to_llvm_abi_type(t : TypeDeclPtr) {
             var inscope tp <- get_underlying_value_type(t)
             if (tp == null) {
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
-                return g_prim_t.t_int32
+                return g_prim_t.LLVMFloat4Type()
             } elif (!tp.isWorkhorseType && tp.baseType != Type.anyArgument) {
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(t)} at {describe(t.at)}")
-                return g_prim_t.t_int32
+                return g_prim_t.LLVMFloat4Type()
             }
             return type_to_llvm_abi_type(tp)
         }
