@@ -182,6 +182,49 @@ namespace das
         virtual void * getBuiltinAddress() const override { return (void *) &usingFunc; }
     };
 
+    template <typename Func, Func Fn>
+    struct VerifyFn;
+
+    template <typename RetT, typename... Args, RetT(*fn)(Args...)>
+    struct VerifyFn<RetT(*)(Args...), fn> {
+        static void verify(FunctionPtr fn_info) {
+            size_t index = 0;
+            [[maybe_unused]] int dummy[] = {0, (verifySingleArgumentType<Args>(index++, fn_info), 0)...};
+        }
+    private:
+
+        template <typename ArgT>
+        static void verifySingleArgumentType(size_t idx, FunctionPtr fn_info) {
+            // todo: enable once everything else is merged
+            return;
+            auto & type = fn_info->arguments[idx]->type;
+            if (type->isVectorType()) {
+                using CleanType = remove_cv_t<remove_reference_t<ArgT>>;
+                using WrappedType = WrapType<CleanType>;
+
+                bool is_same_type = is_same_v<typename WrappedType::type, vec4f>;
+                bool is_same_rettype = is_same_v<typename WrappedType::rettype, vec4f>;
+
+                DAS_VERIFYF(is_same_type,
+                    "To make c++-jit interop work vec-types should be provided with WrapType::type "
+                    "and optionally WrapArgType, WrapRetType (if vec4f conversion is not implemented "
+                    "in type itself). Failed argument %zu type: %s in function %s",
+                    idx, debug_type_name<ArgT>(), fn_info->name.c_str());
+                DAS_VERIFYF(is_same_rettype,
+                    "To make c++-jit interop work vec-types should be provided with WrapType::rettype "
+                    "and optionally WrapArgType, WrapRetType (if vec4f conversion is not implemented "
+                    "in type itself). Failed argument %zu type: %s in function %s",
+                    idx, debug_type_name<ArgT>(), fn_info->name.c_str());
+            }
+            using ProcessedT = conditional_t<JitConstRefByValue<ArgT>::value,
+                                                  remove_cv_t<remove_reference_t<ArgT>>, ArgT>;
+            DAS_VERIFYF((type->ref || type->isRefType()) == is_reference_v<ProcessedT>,
+                "Reference type mismatch %s in function %s. It makes jit work incorrectly. "
+                "You must be manually changed ref, but not implemented JitConstRefByValue for this type.",
+                debug_type_name<ArgT>(), fn_info->name.c_str());
+        }
+    };
+
     void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
 
 #if DAS_SLOW_CALL_INTEROP
@@ -204,6 +247,7 @@ namespace das
         fnX->setSideEffects(sideEffects);
         fnX->propertyFunction = true;
         DAS_ASSERTF(!fnX->result->isSmartPointer(), "property function can't return smart pointer %s::%s", mod.name.c_str(), name);
+        VerifyFn<FuncT, fn>::verify(fnX);
         mod.addFunction(fnX,true);  // yes, this one can fail. same C++ bound property can be in multiple classes before or after refactor
         return fnX;
     }
@@ -233,6 +277,7 @@ namespace das
         fnX->setSideEffects(sideEffects);
         fnX->propertyFunction = true;
         DAS_ASSERTF(!fnX->result->isSmartPointer(), "property function can't return smart pointer %s::%s", mod.name.c_str(), name);
+        VerifyFn<FuncT, fn>::verify(fnX);
         mod.addFunction(fnX,true);  // yes, this one can fail. same C++ bound property can be in multiple classes before or after refactor
         return fnX;
     }
@@ -253,6 +298,7 @@ namespace das
 #endif
 
         tempFn(fnX.get());
+        VerifyFn<FuncT, fn>::verify(fnX);
         addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
         return fnX;
     }
@@ -283,7 +329,7 @@ namespace das
                     fnX->name.c_str(), fnX->name.c_str());
             }
         }
-
+        VerifyFn<FuncT, fn>::verify(fnX);
         return fnX;
     }
 
@@ -302,6 +348,7 @@ namespace das
         auto fnX = make_smart<ExternalFn<FuncT, fn, SimNodeType, FuncArgT>>(name, lib, cppName);
 #endif
         tempFn(fnX.get());
+        VerifyFn<FuncT, fn>::verify(fnX);
         addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
         return fnX;
     }
@@ -323,6 +370,7 @@ namespace das
 #endif
         tempFn(fnX.get());
         fnX->result->temporary = true;
+        VerifyFn<FuncT, fn>::verify(fnX);
         addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
         return fnX;
     }

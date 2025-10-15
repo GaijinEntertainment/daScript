@@ -27,17 +27,26 @@ struct WrapType<smart_ptr_raw<T>> { enum { value = true }; typedef smart_ptr_jit
 template <typename T>
 struct WrapType<smart_ptr<T>> { enum { value = true }; typedef smart_ptr_jit * type; typedef smart_ptr_jit * rettype; };
 
+template <typename T>
+using JitSideT = WrapType<
+    conditional_t<JitConstRefByValue<T>::value,
+        remove_cv_t<remove_reference_t<T>>,
+        T>
+    >;
+
+template <typename T>
+using JitSideT_t = typename JitSideT<T>::type;
 
 template <typename... Ts> struct AnyVectorType;
 template <> struct AnyVectorType<> { enum { value = false }; };
-template <typename T> struct AnyVectorType<T> { enum { value = WrapType<T>::value }; };
+template <typename T> struct AnyVectorType<T> { enum { value = JitSideT<T>::value }; };
 template <typename Head, typename... Tail> struct AnyVectorType<Head, Tail...>
-    { enum { value = WrapType<Head>::value || AnyVectorType<Tail...>::value }; };
+    { enum { value = JitSideT<Head>::value || AnyVectorType<Tail...>::value }; };
 
 template <typename TT> struct NeedVectorWrap;
 template <typename Ret, typename ... Args> struct NeedVectorWrap< Ret(*)(Args...) > {
     enum {
-        result = WrapType<Ret>::value,
+        result = JitSideT<Ret>::value,
         arguments = AnyVectorType<Args...>::value,
         value = result || arguments
     };
@@ -58,7 +67,10 @@ struct ImplWrapCall<false,false,FuncT,fn> {
 
 template <int wrap, typename RetT, typename ...Args, RetT(*fn)(Args...)>    // cmres
 struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // when cmres, we always wrap
-    static void static_call (typename remove_cv<RetT>::type * result, typename WrapType<Args>::type... args ) {
+    // sanity check
+    static_assert(((JitConstRefByValue<Args>::value <= (is_lvalue_reference_v<Args> && is_const_v<remove_reference_t<Args>>)) && ...),
+            "JitConstRefByValue can be implemented only for const T&!");
+    static void static_call (remove_cv_t<RetT> * result, JitSideT_t<Args>... args ) {
         typedef RetT (* FuncType)(typename WrapArgType<Args>::type...);
         auto fnPtr = reinterpret_cast<FuncType>(fn);
         new (result) RetT (fnPtr(args...));
@@ -69,7 +81,7 @@ struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // w
 template <typename RetT, typename ...Args, RetT(*fn)(Args...)>
 struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
     DAS_SUPPRESS_UB
-    static typename WrapType<RetT>::rettype static_call (typename WrapType<Args>::type... args ) {
+    static typename WrapType<RetT>::rettype static_call (JitSideT_t<Args>... args ) {
         typedef typename WrapRetType<RetT>::type (* FuncType)(typename WrapArgType<Args>::type...);
         auto fnPtr = reinterpret_cast<FuncType>(fn);
         return static_cast<typename WrapType<RetT>::rettype>(fnPtr(args...));   // note explicit cast

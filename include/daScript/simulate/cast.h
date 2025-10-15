@@ -8,6 +8,7 @@
 namespace das
 {
     template <typename TT> struct WrapType { enum { value = false }; typedef TT type; typedef TT rettype; };
+    template <typename TT> struct JitConstRefByValue { enum { value = false }; };
     template <typename TT> struct WrapArgType { typedef TT type; };
     template <typename TT> struct WrapRetType { typedef TT type; };
 
