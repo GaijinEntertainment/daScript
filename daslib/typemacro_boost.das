@@ -203,7 +203,7 @@ def public is_qmacro_template_instance(passArgument, templateType : TypeDeclPtr)
     if (passArgument == null || passArgument.baseType != Type.tStructure || passArgument.structType == null) {
         return false
     }
-    if ( !templateType.isStructure ) {
+    if (!templateType.isStructure) {
         panic("macro implementation error. templateType {describe(templateType)} is not a structure")
         return false
     }
