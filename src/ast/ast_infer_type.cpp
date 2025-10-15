@@ -621,7 +621,7 @@ namespace das {
                     resT->explicitConst = (resT->explicitConst || decl->explicitConst);
                     resT->dim = decl->dim;
                     resT->aotAlias = false;
-                    resT->alias.clear();
+                    // resT->alias.clear(); // this may speed things up, but it breaks typemacro-based aliases
                     return resT;
                 } else {
                     return decl;
@@ -5092,7 +5092,11 @@ namespace das {
                         expr->initializer = false;
                         reportAstChanged();
                     }
-                    error("'" + describeType(expr->type->firstType) + "' does not have default initializer", "", "",
+                    string extraError;
+                    if ( func ) {
+                        extraError = "while compiling function " + func->describe();
+                    }
+                    error("'" + describeType(expr->type->firstType) + "' does not have default initializer", extraError, "",
                         expr->at, CompilationError::invalid_new_type);
                 }
             }
@@ -8917,9 +8921,11 @@ namespace das {
                         }
                         // we build alias map for the generic
                         AliasMap aliases;
+                        bool aliasMapUpdated = false;
                         program->updateAliasMapCallback = [&](const TypeDeclPtr & argType, const TypeDeclPtr & passType) {
                             OptionsMap options;
                             TypeDecl::updateAliasMap(argType, passType, aliases, options);
+                            aliasMapUpdated = true;
                         };
                         vector<bool> defaultRef(types.size());
                         for (;; ) {
@@ -8994,6 +9000,17 @@ namespace das {
                         }
                         // clear callback
                         program->updateAliasMapCallback = nullptr;
+                        // if we updated alias map (via typemacro), we need to reapply it to the result
+                        if ( aliasMapUpdated ) {
+                            for ( auto & arg : clone->arguments ) {
+                                if ( arg->type->isAlias() ) {
+                                    arg->type = inferPartialAliases(arg->type, arg->type, clone, &aliases);
+                                }
+                            }
+                            if ( clone->result && clone->result->isAlias() ) {
+                                clone->result = inferPartialAliases(clone->result, clone->result, clone, &aliases);
+                            }
+                        }
                         // now we verify if tail end can indeed be fully inferred
                         if (!program->addFunction(clone)) {
                             clone->module = thisModule;

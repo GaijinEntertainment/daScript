@@ -580,6 +580,10 @@ namespace das {
         return !(access_get || access_init || access_pass || access_ref);
     }
 
+    bool Variable::isAccessDummy() const {
+        return !(access_get || access_pass || access_ref);
+    }
+
     bool Variable::isCtorInitialized() const {
         if ( !init ) {
             return false;

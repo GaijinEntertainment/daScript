@@ -55,14 +55,15 @@ class TypeMacroMacro : AstFunctionAnnotation {
             return false
         }
         var inscope cls <- make_class(className, parentType.structType, compiling_module())
+        cls.flags &= ~StructureFlags.genCtor
         let cvtFnName = "{func.name}`cvt`arguments"
-        var inscope cvtFn <- qmacro_function(cvtFnName) <| $(prog : ProgramPtr; mod : Module?; td : TypeDeclPtr) : TypeDeclPtr {
+        var inscope cvtFn <- qmacro_function(cvtFnName) <| $(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
             return <- default<TypeDeclPtr>
         }
         compiling_module() |> add_function(cvtFn)
         let visitName = className + "`visit"
-        var inscope visitFn <- qmacro_method(visitName, cls) <| $(var slf : $t(cls); prog : ProgramPtr; mod : Module?; td : TypeDeclPtr) : TypeDeclPtr {
-            return <- $c(cvtFnName)(prog, mod, td)
+        var inscope visitFn <- qmacro_method(visitName, cls) <| $(var slf : $t(cls); prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
+            return <- $c(cvtFnName)(prog, mod, td, passT)
         }
         compiling_module() |> add_function(visitFn)
         var field = find_structure_field(get_ptr(cls), "visit")
@@ -93,9 +94,10 @@ class TypeMacroMacro : AstFunctionAnnotation {
         // prog:ProgramPtr
         // mod:Module?
         // td:TypeDeclPtr
+        // passT:TypeDeclPtr
         // all other arguments (exprt arg 0, which is typemacro name)
-        if (length(func.arguments) < 1) {
-            errors := "expecting at least 1 argument (macroArgument: TypeDeclPtr)"
+        if (length(func.arguments) < 2) {
+            errors := "expecting at least 2 argumentst (macroArgument: TypeDeclPtr, passArgument: TypeDeclPtr)"
             return false
         }
 
@@ -110,7 +112,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
         body.list |> clear
 
         // we need to check, if there are enough arugments
-        let expectedArgs = length(func.arguments)
+        let expectedArgs = length(func.arguments) - 1
         var inscope checkE <- qmacro_block() <| $() {
             if (length(td.dimExpr) != $v(expectedArgs)) {
                 macro_error(compiling_program(), td.at, "expecting {$v(expectedArgs)} arguments, got {length(td.dimExpr)}")
@@ -119,12 +121,12 @@ class TypeMacroMacro : AstFunctionAnnotation {
         }
         append_expressions(body, checkE)
 
-        var inscope retCall <- qmacro($c(func.name)(td))
+        var inscope retCall <- qmacro($c(func.name)(td, passT))
 
         // allowed are basic types (int, float etc) and TypeDeclPtr
-        for (ai in range(1, length(func.arguments))) {
-            let argIndex = ai - 1
-            let macroArgIndex = ai
+        for (ai in range(2, length(func.arguments))) {
+            let argIndex = ai - 2
+            let macroArgIndex = ai - 1
             assume argType = func.arguments[ai]._type
             if (length(argType.dim) > 0) {
                 errors := "expecting non-array arguments"

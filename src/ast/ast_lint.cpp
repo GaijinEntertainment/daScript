@@ -612,7 +612,7 @@ namespace das {
             if ( expr->func ) {
                 size_t argIndex = 0;
                 for ( auto & arg : expr->func->arguments ) {
-                    if ( arg->isAccessUnused() ) {
+                    if ( arg->isAccessDummy() ) {
                         auto & earg = expr->arguments[argIndex];
                         if ( earg->rtti_isTypeDecl() ) {
                             usedTypeExprs.erase(earg.get());
@@ -741,6 +741,9 @@ namespace das {
         }
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->isTemplate;    // we don't do a thing with templates
+        }
+        virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override {
+            return false;
         }
         bool isClassCtor = false;
         bool anySuperCalls = false;

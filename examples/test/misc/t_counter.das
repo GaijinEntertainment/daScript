@@ -4,8 +4,12 @@ require daslib/ast_boost
 require daslib/macro_boost
 require daslib/templates_boost
 require daslib/strings_boost
+require daslib/typemacro_boost
 
-template struct TemplateCounter {
+struct public TemplateCounterBase {
+}
+
+template struct TemplateCounter : TemplateCounterBase {
     counter : $t(counter_type)
     def next_count {
         counter ++
@@ -16,28 +20,55 @@ template struct TemplateCounter {
 }
 
 
-[type_macro(name="counter")]
-class CounterMacro : AstTypeMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
-        if (length(td.dimExpr) != 2) {
-            macro_error(compiling_program(), td.at, "expecting 1 argument")
-            return <- default<TypeDeclPtr>
+[typemacro_function]
+def counter(macroArgument, passArgument : TypeDeclPtr; counter_type : TypeDeclPtr) : TypeDeclPtr {
+    if (passArgument != null) {
+        var pbase = compiling_program() |> find_unique_structure("t_counter::TemplateCounterBase")
+        if (!(passArgument.baseType == Type.tStructure && passArgument.structType.parent == pbase)) {
+            return <- TypeDeclPtr()
         }
-        if (!(td.dimExpr[1] is ExprTypeDecl)) {
-            macro_error(compiling_program(), td.at, "expecting counter type")
-            return <- default<TypeDeclPtr>
+        let field = passArgument.structType |> find_structure_field("counter")
+        if (field == null || field._type == null) {
+            return <- TypeDeclPtr()
+       }
+        var inscope argT <- clone_type((macroArgument.dimExpr[1] as ExprTypeDecl).typeexpr)
+        if (argT == null) {
+            return <- TypeDeclPtr()
         }
-//      if ( td.dimExpr[1]._type == null ) {
-//          // type is not inferred, which means we are inferring generic type
-//          return null // TODO: fix me
-//      }
-        var inscope counter_type := (td.dimExpr[1] as ExprTypeDecl).typeexpr
-        var inscope template_type <- qmacro_type(type<TemplateCounter>)
-        var struct_name = "Counter`{describe(counter_type)}"
-        var existing_struct = prog.find_unique_structure(struct_name)
-        if (existing_struct != null) {
-            return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = td.at)
+        if (argT.isAutoOrAlias) {
+            var inscope fieldT <- clone_type(field._type)
+            var inscope resT <- infer_generic_type(argT, fieldT, true, true)
+            if (resT == null) {
+                macro_error(compiling_program(), macroArgument.at, "type mismatch, expecting {describe(argT)} got {describe(fieldT)}")
+                return <- TypeDeclPtr()
+            }
+            if (!fieldT |> is_same_type(resT, RefMatters.no, ConstMatters.no, TemporaryMatters.yes)) {
+                macro_error(compiling_program(), macroArgument.at, "type mismatch, expecting {describe(argT)} got {describe(fieldT)}")
+                return <- TypeDeclPtr()
+            }
+            compiling_program() |> update_alias_map(argT, resT)
+        } else {
+            // do we need to check if passT is auto and do 2-sided infer?
+            var inscope fieldT <- clone_type(field._type)
+            fieldT.dim |> pop
+            if (!fieldT |> is_same_type(argT, RefMatters.no, ConstMatters.no, TemporaryMatters.yes)) {
+                macro_error(compiling_program(), macroArgument.at, "type mismatch, expecting {describe(argT)} got {describe(fieldT)}")
+                return <- TypeDeclPtr()
+            }
         }
-        return <- qmacro_template_class(struct_name, type<TemplateCounter>)
+
+        // we are inferring generic here
+        var inscope resT <- clone_type(passArgument)
+        resT.flags &= ~TypeDeclFlags.ref
+        return <- resT
     }
+    // we are instantiating concrete type here
+    var inscope template_type <- qmacro_type(type<TemplateCounter>)
+    var struct_name = "Counter`{describe(counter_type)}"
+    var existing_struct = compiling_program().find_unique_structure(struct_name)
+    if (existing_struct != null) {
+        return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = counter_type.at)
+    }
+    return <- qmacro_template_class(struct_name, type<TemplateCounter>)
 }
+

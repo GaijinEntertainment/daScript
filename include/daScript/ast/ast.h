@@ -334,6 +334,7 @@ namespace das
         uint64_t getMangledNameHash() const;
         static uint64_t getMNHash(const string &mangledName);
         bool isAccessUnused() const;
+        bool isAccessDummy() const;
         bool isCtorInitialized() const;
         void serialize ( AstSerializer & ser );
         string          name;
