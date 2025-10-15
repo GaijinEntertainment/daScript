@@ -272,7 +272,8 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             }
 #endif
             fun->userScenario = true;
-            fun->noAot = true;      // TODO: generate custom C++ to invoke the call directly
+            fun->noAot = true;         // TODO: generate custom C++ to invoke the call directly
+            fun->requestNoJit = true;  // TODO: generate custom llvm ir to invoke the call directly
             return true;
         }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & ) override {
