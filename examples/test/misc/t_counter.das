@@ -24,6 +24,7 @@ def counter(macroArgument, passArgument : TypeDeclPtr; counter_type : TypeDeclPt
         // this is a generic argument match, like $counter(type<auto(TT)>)
         return <- TypeDeclPtr() if (!is_qmacro_template_instance(passArgument, "t_counter::TemplateCounter"))
         var inscope inferred_counter_type <- determine_template_type_by_field(passArgument, "counter")
+        return <- TypeDeclPtr() if (inferred_counter_type == null)
         return <- infer_template_type(passArgument, counter_type, inferred_counter_type)
     } else {
         // we are instantiating concrete type here

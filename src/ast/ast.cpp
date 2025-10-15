@@ -3204,7 +3204,7 @@ namespace das {
             vis.preVisit(alsv.get());
             auto alssv = alsv->visit(vis);
             if ( alssv ) alssv = vis.visit(alssv.get());
-            if ( alssv ) alsv = vis.visitAlias(alssv.get(), alssv->alias);
+            if ( alssv ) alssv = vis.visitAlias(alssv.get(), alssv->alias);
             if ( alssv!=alsv ) {
                 thatModule->aliasTypes.replace(alssv->alias, alssv);
                 alsv = alssv;

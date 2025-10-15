@@ -1,3 +1,5 @@
+options gen2
+
 require t_counter
 
 [unused_argument(dummy)]
@@ -12,15 +14,19 @@ def take_another_counter(foo : $counter(type<auto(TT)>)) : TT {
     return default<TT>
 }
 
-def take_int_counter(var foo : $counter(type<int>)) {
+typedef IntCounter = $counter(type<int>)
+
+def take_int_counter(var foo : IntCounter) {
     foo.next()
     print("int counter value is {foo.value()}\n")
 }
 
 [export]
 def main {
-    var foo = default< $counter(type<int>) >
+    var foo = IntCounter()
     take_int_counter(foo)
     take_counter(foo)
     take_another_counter(default< $counter(type<float>) >)
+
 }
+
