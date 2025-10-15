@@ -198,18 +198,21 @@ class TypeMacroMacro : AstFunctionAnnotation {
 }
 
 [macro_function]
-def public is_qmacro_template_instance(passArgument : TypeDeclPtr; templateName : string) {
+def public is_qmacro_template_instance(passArgument, templateType : TypeDeclPtr) {
     //! template instance is determined by having parent == template.parent
     if (passArgument == null || passArgument.baseType != Type.tStructure || passArgument.structType == null) {
         return false
     }
-    var pbase = compiling_program() |> find_unique_structure(templateName)
-    if (pbase == null) {
-        panic("macro implementation error. template {templateName} not found")
+    if ( !templateType.isStructure ) {
+        panic("macro implementation error. templateType {describe(templateType)} is not a structure")
         return false
     }
-    pbase = pbase.parent
-    return pbase != null && passArgument.structType.parent == pbase
+    assume pbase = templateType.structType.parent
+    if (pbase == null) {
+        panic("macro implementation error. template {describe(templateType)} is not derived from another template")
+        return false
+    }
+    return passArgument.structType.parent == pbase
 }
 
 [macro_function]

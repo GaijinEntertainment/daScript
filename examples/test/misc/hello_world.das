@@ -27,6 +27,4 @@ def main {
     take_int_counter(foo)
     take_counter(foo)
     take_another_counter(default< $counter(type<float>) >)
-
 }
-
