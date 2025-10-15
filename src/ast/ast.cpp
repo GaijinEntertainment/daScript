@@ -580,6 +580,10 @@ namespace das {
         return !(access_get || access_init || access_pass || access_ref);
     }
 
+    bool Variable::isAccessDummy() const {
+        return !(access_get || access_pass || access_ref);
+    }
+
     bool Variable::isCtorInitialized() const {
         if ( !init ) {
             return false;
@@ -3200,7 +3204,7 @@ namespace das {
             vis.preVisit(alsv.get());
             auto alssv = alsv->visit(vis);
             if ( alssv ) alssv = vis.visit(alssv.get());
-            if ( alssv ) alsv = vis.visitAlias(alssv.get(), alssv->alias);
+            if ( alssv ) alssv = vis.visitAlias(alssv.get(), alssv->alias);
             if ( alssv!=alsv ) {
                 thatModule->aliasTypes.replace(alssv->alias, alssv);
                 alsv = alssv;

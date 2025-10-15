@@ -572,7 +572,7 @@ def public add_array_ptr_ref(var a : array<smart_ptr<auto(TT)>>) : array<smart_p
     return <- q
 }
 
-def public add_type_ptr_ref(var a : TypeDeclPtr; flags : TypeDeclFlags) : TypeDeclPtr {
+def public add_type_ptr_ref(a : TypeDeclPtr; flags : TypeDeclFlags) : TypeDeclPtr {
     //! Implementation details for the reification. This adds any array to the rules.
     // var q := a
     var inscope q <- clone_type(a)
@@ -1179,6 +1179,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     var template_structure = template_type.structType
     let template_name = string(template_structure.name)
     var inscope instance_structure <- clone_structure(template_structure)
+    instance_structure.parent = template_structure.parent
     instance_structure.name := instance_name
     instance_structure.flags &= ~(StructureFlags.isTemplate)
     var inscope instance_type <- new TypeDecl(at = template_structure.at,
