@@ -173,7 +173,8 @@ class TypeMacroMacro : AstFunctionAnnotation {
                         find_enum_value(td.dimExpr[$v(macroArgIndex)]._type.enumType,
                             string((td.dimExpr[$v(macroArgIndex)] as ExprConstEnumeration).value))))
             } elif (is_typedecl_ptr(argType)) {
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(td.dimExpr[$v(macroArgIndex)]._type)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(
+                    (td.dimExpr[$v(macroArgIndex)] is ExprTypeDecl) ? (td.dimExpr[$v(macroArgIndex)] as ExprTypeDecl).typeexpr : td.dimExpr[$v(macroArgIndex)]._type)
             } else {
                 errors := "unsupported argument type {describe(argType)}"
                 return false
@@ -194,4 +195,42 @@ class TypeMacroMacro : AstFunctionAnnotation {
 
         return true
     }
+}
+
+[macro_function]
+def public is_qmacro_template_instance(passArgument : TypeDeclPtr; templateName : string) {
+    //! template instance is determined by having parent == template.parent
+    if (passArgument == null || passArgument.baseType != Type.tStructure || passArgument.structType == null) {
+        return false
+    }
+    var pbase = compiling_program() |> find_unique_structure(templateName)
+    if (pbase == null) {
+        panic("macro implementation error. template {templateName} not found")
+        return false
+    }
+    pbase = pbase.parent
+    return pbase != null && passArgument.structType.parent == pbase
+}
+
+[macro_function]
+def public determine_template_type_by_field(passArgument : TypeDeclPtr; fieldName : string) : TypeDeclPtr {
+    return <- TypeDeclPtr() if (passArgument.baseType != Type.tStructure || passArgument.structType == null)
+    let field = passArgument.structType |> find_structure_field(fieldName)
+    return <- TypeDeclPtr() if (field == null || field._type == null)
+    return <- clone_type(field._type)
+}
+
+[macro_function]
+def public infer_template_type(passArgument, templateType, inferredTemplateType : TypeDeclPtr) : TypeDeclPtr {
+    if (templateType.isAutoOrAlias) {
+        var inscope resT <- infer_generic_type(templateType, inferredTemplateType, true, true)
+        return <- TypeDeclPtr() if (resT == null)
+        return <- TypeDeclPtr() if (!inferredTemplateType |> is_same_type(resT, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
+        compiling_program() |> update_alias_map(templateType, resT)
+    } else {
+        return <- TypeDeclPtr() if (!inferredTemplateType |> is_same_type(templateType, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
+    }
+    var inscope resT <- clone_type(passArgument)
+    resT.flags &= ~TypeDeclFlags.ref
+    return <- resT
 }
