@@ -2848,12 +2848,8 @@ class LlvmJitVisitor : AstVisitor {
         let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset + field_offset)), "")
         if (decl.value |> isMakeLocal) {
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
-            val.extraOffset = uint(offset + field_offset) // + expr.extraOffset
-            if (expr.makeFlags.useCMRES) {
-                pass
-            } elif (expr.makeFlags.useStackRef) {
-                setE(decl.value, v_ptr)
-            } else {
+            if (!expr.makeFlags.useCMRES) {
+                val.extraOffset = uint(offset + field_offset) // + expr.extraOffset
                 setE(decl.value, v_ptr)
             }
         } elif (make_call_to_cmres(decl.value, field_ptr)) {
@@ -2961,7 +2957,7 @@ class LlvmJitVisitor : AstVisitor {
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
             let stride = expr.makeType.stride
             let offset = index * stride
-            mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(offset)), "")
+            mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(offset)), "mks_index_{index}")
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(type_to_llvm_type(expr.makeType), 0u), "")
             callConstructor(expr, mks_ptr)
         }
@@ -3017,15 +3013,11 @@ class LlvmJitVisitor : AstVisitor {
         var v_ptr = getE(expr)
         verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make struct field, but no pointer")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(types.t_int8, 0u), "")
-        let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "")
+        let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "mks_{decl.name}")
         if (decl.value |> isMakeLocal) {
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
-            val.extraOffset = uint(offset) // + expr.extraOffset
-            if (expr.makeFlags.useCMRES) {
-                pass
-            } elif (expr.makeFlags.useStackRef) {
-                setE(decl.value, v_ptr)
-            } else {
+            if (!expr.makeFlags.useCMRES) {
+                val.extraOffset = uint(offset) // + expr.extraOffset
                 setE(decl.value, v_ptr)
             }
         } elif (make_call_to_cmres(decl.value, field_ptr)) {
@@ -3083,7 +3075,7 @@ class LlvmJitVisitor : AstVisitor {
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
             if (expr.extraOffset != 0u) {
-                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "")
+                mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "ema_{expr.at.line}")
             }
         } else {
             mks_ptr = tryE(expr) <| $() {
@@ -3115,15 +3107,11 @@ class LlvmJitVisitor : AstVisitor {
         let offset =  index * stride
         var v_ptr = getE(expr)
         verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make array index, but no pointer")
-        let record_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "")
+        let record_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "ema_ind_{index}_{expr.at.line}")
         if (init |> isMakeLocal) {
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(init))
-            val.extraOffset = uint(offset) // + expr.extraOffset
-            if (expr.makeFlags.useCMRES) {
-                pass
-            } elif (expr.makeFlags.useStackRef) {
-                setE(init, v_ptr)
-            } else {
+            if (!expr.makeFlags.useCMRES) {
+                val.extraOffset = uint(offset) // + expr.extraOffset
                 setE(init, v_ptr)
             }
         } elif (make_call_to_cmres(init, record_ptr)) {
@@ -3198,12 +3186,8 @@ class LlvmJitVisitor : AstVisitor {
         let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "")
         if (init |> isMakeLocal) {
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(init))
-            val.extraOffset = uint(offset) // + expr.extraOffset
-            if (expr.makeFlags.useCMRES) {
-                pass
-            } elif (expr.makeFlags.useStackRef) {
-                setE(init, v_ptr)
-            } else {
+            if (!expr.makeFlags.useCMRES) {
+                val.extraOffset = uint(offset) // + expr.extraOffset
                 setE(init, v_ptr)
             }
         } elif (make_call_to_cmres(init, field_ptr)) {
