@@ -1776,7 +1776,7 @@ namespace das
                 auto prv = subexpr->simulate(context);
                 auto pidx = index->simulate(context);
                 uint32_t range = seT->getVectorDim();
-                uint32_t stride = type->getSizeOf();
+                uint32_t stride = getTypeBaseSize(seT->getVectorBaseType());
                 return context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range);
             } else {
                 DAS_VERIFY(0 && "TODO: safe-at not implemented");
