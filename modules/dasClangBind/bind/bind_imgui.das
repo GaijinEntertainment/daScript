@@ -10,12 +10,12 @@ class ImguiGen : CppGenBind {
     override generate_constant_decl = true
     imgui_skip_func : table<string; bool>
     def ImguiGen(mod_name, das_mod_name, pfn, pfp : string) {
-        bind_root = "{get_das_root()}/Modules/dasImgui/src"
+        bind_root = "{get_das_root()}/modules/dasImgui/src"
         bind_module = mod_name
         bind_das_module = das_mod_name
-        let i_imgui = "{get_das_root()}/Modules/dasImgui/imgui/"
-        let i_imnodes = "{get_das_root()}/Modules/dasImgui/imnodes/"
-        let i_imgui_node_editor = "{get_das_root()}/Modules/dasImgui/imgui-node-editor/"
+        let i_imgui = "{get_das_root()}/modules/dasImgui/imgui/"
+        let i_imnodes = "{get_das_root()}/modules/dasImgui/imnodes/"
+        let i_imgui_node_editor = "{get_das_root()}/modules/dasImgui/imgui-node-editor/"
         let args <- array<string>(
             "-xc++-header",
             "-std=c++1z",
@@ -132,7 +132,7 @@ class ImguiSubmoduleGen : ImguiGen {
 [export]
 def main {
     if (true) {
-        var cgb = new ImguiGen("dasIMGUI", "imgui", "imgui.h", "{get_das_root()}/Modules/dasImgui/imgui/")
+        var cgb = new ImguiGen("dasIMGUI", "imgui", "imgui.h", "{get_das_root()}/modules/dasImgui/imgui/")
         defer <| $() {
             unsafe {
                 delete cgb
@@ -142,7 +142,7 @@ def main {
         cgb->genCMakeDecl("DAS_IMGUI_BIND")
     }
     if (true) {
-        var cgb = new ImguiSubmoduleGen("dasIMNODES", "imnodes", "imnodes.h", "{get_das_root()}/Modules/dasImgui/imnodes/")
+        var cgb = new ImguiSubmoduleGen("dasIMNODES", "imnodes", "imnodes.h", "{get_das_root()}/modules/dasImgui/imnodes/")
         defer <| $() {
             unsafe {
                 delete cgb
@@ -153,11 +153,12 @@ def main {
             "ImGuiContext" => true
         }
         cgb.cb_extra = "#include \"cb_dasIMNODES.h\"\n"
+        cgb.temp_fn_extra = ", imguiTempFn"
         cgb->generate()
         cgb->genCMakeDecl("DAS_IMNODES_BIND")
     }
     if (true) {
-        var cgb = new ImguiSubmoduleGen("dasIMGUI_NODE_EDITOR", "imgui_node_editor", "imgui_node_editor.h", "{get_das_root()}/Modules/dasImgui/imgui-node-editor/")
+        var cgb = new ImguiSubmoduleGen("dasIMGUI_NODE_EDITOR", "imgui_node_editor", "imgui_node_editor.h", "{get_das_root()}/modules/dasImgui/imgui-node-editor/")
         defer <| $() {
             unsafe {
                 delete cgb
