@@ -3143,6 +3143,7 @@ namespace das
             mod->functions.foreach([&](FunctionPtr & fn){
                 if ( fn->builtIn ) return;
                 if ( !fn->used ) return;
+                if ( fn->isTemplate ) return;
                 das_hash_set<Function *> visited;
                 fn->recursive = isRecursive(fn.get(), visited);
             });
@@ -3263,7 +3264,7 @@ namespace das
         if ( totalFunctions ) {
             for (auto & pm : library.modules) {
                 pm->functions.foreach([&](auto pfun){
-                    if (pfun->index < 0 || !pfun->used)
+                    if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
                         return;
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
@@ -3375,7 +3376,7 @@ namespace das
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used)
+                if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
                     return;
                 auto & gfun = context.functions[pfun->index];
                 for ( const auto & an : pfun->annotations ) {
@@ -3618,7 +3619,7 @@ namespace das
         das_hash_map<int,Function *> indexToFunction;
         for (auto & pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used)
+                if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
                     return;
                 fnn.push_back(pfun.get());
                 indexToFunction[pfun->index] = pfun.get();

@@ -106,6 +106,7 @@ namespace das
     bool Program::patchAnnotations() {
         bool astChanged = false;
         thisModule->functions.foreach([&](auto fn){
+            if ( fn->isTemplate ) return false;
             for ( auto & ann : fn->annotations ) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
                     auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
@@ -167,6 +168,7 @@ namespace das
 
     void Program::fixupAnnotations() {
         thisModule->functions.foreach([&](auto fn){
+            if ( fn->isTemplate ) return;
             for ( auto & ann : fn->annotations ) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
                     auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
