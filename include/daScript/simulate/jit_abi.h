@@ -68,7 +68,7 @@ struct ImplWrapCall<false,false,FuncT,fn> {
 template <int wrap, typename RetT, typename ...Args, RetT(*fn)(Args...)>    // cmres
 struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // when cmres, we always wrap
     // sanity check
-    static_assert(((JitConstRefByValue<Args>::value <= (is_lvalue_reference_v<Args> && is_const_v<remove_reference_t<Args>>)) && ...),
+    static_assert(((!JitConstRefByValue<Args>::value || (is_lvalue_reference_v<Args> && is_const_v<remove_reference_t<Args>>)) && ...),
             "JitConstRefByValue can be implemented only for const T&!");
     static void static_call (remove_cv_t<RetT> * result, JitSideT_t<Args>... args ) {
         typedef RetT (* FuncType)(typename WrapArgType<Args>::type...);

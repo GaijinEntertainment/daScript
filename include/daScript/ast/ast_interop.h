@@ -194,9 +194,9 @@ namespace das
     private:
 
         template <typename ArgT>
-        static void verifySingleArgumentType(size_t idx, FunctionPtr fn_info) {
+        static void verifySingleArgumentType(size_t /*idx*/, FunctionPtr /*fn_info*/) {
             // todo: enable once everything else is merged
-            return;
+            /*
             auto & type = fn_info->arguments[idx]->type;
             if (type->isVectorType()) {
                 using CleanType = remove_cv_t<remove_reference_t<ArgT>>;
@@ -222,6 +222,7 @@ namespace das
                 "Reference type mismatch %s in function %s. It makes jit work incorrectly. "
                 "You must be manually changed ref, but not implemented JitConstRefByValue for this type.",
                 debug_type_name<ArgT>(), fn_info->name.c_str());
+            */
         }
     };
 
