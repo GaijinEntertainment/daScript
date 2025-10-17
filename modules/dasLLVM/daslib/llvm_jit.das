@@ -33,7 +33,6 @@ require llvm/llvm_debug
 */
 
 var modules2mnh : table<Module?; array<string>>
-var created_fileinfos : table<FileInfo?; FileInfo?>
 var active_filenames : table<string>
 
 [macro_function]
@@ -5551,13 +5550,49 @@ def private get_llvm_function_type(func : FunctionPtr; var types : PrimitiveType
     return LLVMFunctionType(res_type, arg_types)
 }
 
+struct DLLHandle {
+    handle : void?
+    created_fileinfos : table<FileInfo?; FileInfo?>
+
+    def reset() {
+        if (handle != null) {
+            handle |> close_dynamic_library()
+            handle = null
+        }
+    }
+
+    def get_function_address(fn : string) {
+        assert(handle != null, "dynamic_lib_handle is null")
+        return handle |> get_function_address(fn);
+    }
+
+
+    def create_fileinfo(fi : FileInfo?) {
+        var res : FileInfo? = null;
+        if (created_fileinfos[fi] == null) {
+            let fi_ptr = unsafe(reinterpret<void?>(fi))
+            var sym = get_function_address("fileinfo_at_{fi_ptr}")
+            var sym_name = get_function_address("fileinfo_at_{fi_ptr}_name")
+            var name = unsafe(reinterpret<string>(sym_name))
+
+            let src_fi = unsafe(reinterpret<FileInfo?>(sym))
+            recreate_fileinfo_name(src_fi, name)
+            return src_fi
+        } else {
+            return created_fileinfos[fi]
+        }
+    }
+
+}
+
+
 [macro_function]
-def private recreate_engine_extern_mappings() {
+def private recreate_engine_extern_mappings(var dll : DLLHandle) {
     // if we are here, then we are loading the dll and we will not recreate it
     for (mod, externs in keys(modules2mnh), values(modules2mnh)) {
         for (extern in externs) {
             let fn <- mod |> find_unique_function(extern)
-            var func_ptr = g_dynamic_lib_handle |> get_function_address(extern)
+            var func_ptr = dll.get_function_address(extern)
             var func_addr = unsafe(reinterpret<void ??> func_ptr)
             let FUNC_PTR = get_builtin_function_address(fn |> get_ptr())
             *func_addr = FUNC_PTR
@@ -5566,14 +5601,14 @@ def private recreate_engine_extern_mappings() {
 }
 
 [macro_function]
-def private restore_modules2mnh() {
-    var mod_count = fetch_uint64_from_dll("mod_count")
+def private restore_modules2mnh(var dll : DLLHandle) {
+    var mod_count = dll |> fetch_uint64_from_dll("mod_count")
     for (i in mod_count |> range64()) {
-        var mod_name = fetch_string_from_dll("mod_name_{i}")
-        var mod_extern_cnt = fetch_uint64_from_dll("mod_extern_cnt_{mod_name}")
+        var mod_name = dll.fetch_string_from_dll("mod_name_{i}")
+        var mod_extern_cnt = dll |> fetch_uint64_from_dll("mod_extern_cnt_{mod_name}")
         var externs : array<string>
         for (j in mod_extern_cnt |> range64()) {
-            var extern_name = fetch_string_from_dll("mod_extern_{mod_name}_{j}")
+            var extern_name = dll.fetch_string_from_dll("mod_extern_{mod_name}_{j}")
             externs |> push(extern_name)
         }
         let module_ = find_module(mod_name)
@@ -5582,48 +5617,31 @@ def private restore_modules2mnh() {
 }
 
 [macro_function]
-def private restore_fileinfo_dummy() {
+def private restore_fileinfo_dummy(dll : DLLHandle) {
     panic("Is it even called somewhere?")
-    // var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_dummy")
+    // var sym = dll.get_function_address("fileinfo_dummy")
     // jit_initialize_fileinfo(symm)
 }
 
-def private create_fileinfo(addr_ : void?) {
-    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
-    var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_at_{addr_}")
-    var sym_name = g_dynamic_lib_handle |> get_function_address("fileinfo_at_{addr_}_name")
-    var val = unsafe(reinterpret<FileInfo?>(sym))
-    var name = unsafe(reinterpret<string>(sym_name))
-    recreate_fileinfo_name(val, name)
-    return val
-}
-
 [macro_function]
-def private fetch_lineinfo_from_dll(name : string) {
-    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
-    var sym = g_dynamic_lib_handle |> get_function_address(name)
+def private fetch_lineinfo_from_dll(var dll : DLLHandle; name : string) {
+    var sym = dll.get_function_address(name)
     var val = unsafe(reinterpret<LineInfo?>(sym))
-    let fi = val.fileInfo
-    if (created_fileinfos[fi] == null) {
-        created_fileinfos[fi] = create_fileinfo(unsafe(reinterpret<void?> fi))
-    }
-    val.fileInfo = created_fileinfos[fi]
+    val.fileInfo = dll.create_fileinfo(val.fileInfo)
     return *val
 }
 
 [macro_function]
-def private fetch_uint64_from_dll(name : string) {
-    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
-    var sym = g_dynamic_lib_handle |> get_function_address(name)
+def private fetch_uint64_from_dll(var dll : DLLHandle; name : string) {
+    var sym = dll.get_function_address(name)
     var val = unsafe(reinterpret<uint64?>(sym))
     return *val
 }
 
 
 [macro_function]
-def private fetch_string_from_dll(name : string) {
-    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
-    var sym = g_dynamic_lib_handle |> get_function_address(name)
+def private fetch_string_from_dll(var dll : DLLHandle; name : string) {
+    var sym = dll.get_function_address(name)
     var val = unsafe(reinterpret<string?>(sym))
     return *val
 }
@@ -5687,10 +5705,10 @@ def private add_constructor_function(func : LLVMOpaqueValue?; var types : Primit
 }
 
 [macro_function]
-def private generate_llvm(ctx : Context?; var types : PrimitiveTypes?; fn : FunctionPtr) {
+def private generate_llvm(ctx : Context?; var dll : DLLHandle; var types : PrimitiveTypes?; fn : FunctionPtr) {
     return if (is_in_completion() || is_compiling_macros() || is_folding())
-    if (g_dynamic_lib_handle != null) {
-        var dll_function_aot_hash = g_dynamic_lib_handle |> get_function_address <| "{get_mangled_name(fn)} hash"
+    if (dll.handle != null) {
+        var dll_function_aot_hash = dll.get_function_address("{get_mangled_name(fn)} hash")
         // debug("dll_function_aot_hash: {dll_function_aot_hash}")
         var written_hash = unsafe(reinterpret<uint64?>(dll_function_aot_hash))
         if (written_hash != null && get_function_aot_hash(fn |> get_ptr) == *written_hash) {
@@ -5723,13 +5741,13 @@ def private generate_llvm(ctx : Context?; var types : PrimitiveTypes?; fn : Func
 }
 
 [macro_function]
-def private generate_llvm_code(fmna : string) {
+def private generate_llvm_code(var dll : DLLHandle; fmna : string) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
     assert(!g_failed)
     var code = LLVMGetFunctionAddress(g_engine, fmna)
     return unsafe(reinterpret<void?> code) if (code != 0ul)
-    if (g_dynamic_lib_handle != null) {
-        let result = g_dynamic_lib_handle |> get_function_address(fmna)
+    if (dll.handle != null) {
+        let result = dll.get_function_address(fmna)
         if (result == null) {
             to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")
         }
@@ -5856,12 +5874,13 @@ class JIT_LLVM : AstSimulateMacro {
             unsafe {
                 delete fake_visitor
             }
+            var g_dynamic_lib_handle = DLLHandle();
             if (LLVM_ENABLE_DLL_LOADING) {
                 // initialize fileinfo
-                g_dynamic_lib_handle = load_dynamic_library(JIT_DLL_OUTPUT)
+                g_dynamic_lib_handle.handle = load_dynamic_library(JIT_DLL_OUTPUT)
             }
             for (fun in funcs) {
-                generate_llvm(ctx, g_prim_t, fun)
+                generate_llvm(ctx, g_dynamic_lib_handle, g_prim_t, fun)
                 let fnmna = get_mangled_name(fun)
                 var fn_impl = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
                 var fn = LLVMGetNamedFunction(g_mod, fnmna)
@@ -5894,14 +5913,13 @@ class JIT_LLVM : AstSimulateMacro {
             if (LLVM_ENABLE_DLL_LOADING) {
                 generate_fileinfo_constructor(*g_prim_t, active_filenames) |> add_constructor_function(g_prim_t)
                 active_filenames = table<string>();
-                if (g_dynamic_lib_handle != null) {
+                if (g_dynamic_lib_handle.handle != null) {
                     if (g_loading_from_dll) {// had no problems with changed semantic hash
-                        restore_modules2mnh()
-                        recreate_engine_extern_mappings()
+                        restore_modules2mnh(g_dynamic_lib_handle)
+                        recreate_engine_extern_mappings(g_dynamic_lib_handle)
                     } else {
                         save_modules2mnh(g_prim_t)
-                        g_dynamic_lib_handle |> close_dynamic_library()
-                        g_dynamic_lib_handle = null
+                        g_dynamic_lib_handle.reset()
                     }
                 } else {
                     save_modules2mnh(g_prim_t)
@@ -5911,7 +5929,7 @@ class JIT_LLVM : AstSimulateMacro {
                 var mangled_name = get_mangled_name(fun)
                 let MNH = hash(mangled_name)
                 var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
-                var gen = generate_llvm_code(mangled_name)
+                var gen = generate_llvm_code(g_dynamic_lib_handle, mangled_name)
                 if (gen != null) {
                     gen |> unsafe(instrument_jit(simfun, *ctx))
                 } else {
