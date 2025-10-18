@@ -5840,6 +5840,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 if ( possibleEnums.size()==1 ) {
+                    reportAstChanged();
                     auto td = make_smart<TypeDecl>(possibleEnums.back());
                     td->constant = true;
                     auto res = make_smart<ExprConstEnumeration>(expr->at, expr->name, td);
@@ -5851,6 +5852,7 @@ namespace das {
                     auto alias = possibleBitfields.back();
                     int bit = alias->findArgumentIndex(expr->name);
                     if ( bit!=-1 ) {
+                        reportAstChanged();
                         auto td = make_smart<TypeDecl>(*alias);
                         td->ref = false;
                         auto bitConst = new ExprConstBitfield(expr->at, 1u << bit);
@@ -5858,9 +5860,23 @@ namespace das {
                         bitConst->type = td;
                         return bitConst;
                     } else {
-                        error("bitfield '" + expr->name + "' not found in " + describeType(alias), "", "",
-                            expr->at, CompilationError::cant_get_field);
-                        return Visitor::visit(expr);
+                        auto varName = "`"+enumName+"`"+expr->name;
+                        auto vars = findMatchingVar(varName, false);
+                        if ( vars.size()==1 ) {
+                            auto varr = vars.back();
+                            if ( varr->init && varr->init->type->constant ) {
+                                reportAstChanged();
+                                return varr->init->clone();
+                            } else {
+                                error("bitfield constant '" + expr->name + "' has not resolve yet, in " + describeType(alias), "", "",
+                                    expr->at, CompilationError::cant_get_field);
+                                return Visitor::visit(expr);
+                            }
+                        } else {
+                            error("bitfield '" + expr->name + "' not found in " + describeType(alias), "", "",
+                                expr->at, CompilationError::cant_get_field);
+                            return Visitor::visit(expr);
+                        }
                     }
                 } else {
                     if ( verbose ) {
@@ -6269,7 +6285,6 @@ namespace das {
                 TypeDecl::clone(expr->type,var->type);
                 expr->type->ref = true;
                 return Visitor::visit(expr);
-
             } else if ( vars.size()==0 ) {
                 if ( verbose ) {
                     vars = findMatchingVar(expr->name, true);

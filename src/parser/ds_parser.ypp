@@ -110,6 +110,7 @@
     double                          fd;
     string *                        s;
     vector<string> *                pNameList;
+    vector<tuple<string,Expression *>> *  pNameExprList;
     vector<VariableNameAndPosition> * pNameWithPosList;
     VariableDeclaration *           pVarDecl;
     vector<VariableDeclaration*> *  pVarDeclList;
@@ -132,6 +133,7 @@
 
 %destructor { delete $$; } <s>
 %destructor { delete $$; } <pNameList>
+%destructor { deleteNameExprList($$); } <pNameExprList>
 %destructor { delete $$; } <pNameWithPosList>
 %destructor { delete $$; } <pVarDecl>
 %destructor { deleteVariableDeclarationList($$); } <pVarDeclList>
@@ -354,7 +356,7 @@
 
 %type <pEnum>           enum_name
 %type <pNameList>       bitfield_bits
-%type <pNameList>       bitfield_alias_bits
+%type <pNameExprList>   bitfield_alias_bits
 %type <pNameList>       tuple_expansion
 %type <pNameWithPosList>variable_name_with_pos_list
 %type <pNameWithPosList>let_variable_name_with_pos_list
@@ -3044,7 +3046,7 @@ bitfield_bits
 
 bitfield_alias_bits
     :   {
-        auto pSL = new vector<string>();
+        auto pSL = new vector<tuple<string,Expression *>>();
         $$ = pSL;
 
     }
@@ -3053,8 +3055,18 @@ bitfield_alias_bits
     }
     |   bitfield_alias_bits[list] NAME[name] semicolon {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
-        $list->push_back(*$name);
         $$ = $list;
+        $$->emplace_back(*$name,nullptr);
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@name);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfieldEntry($name->c_str(),atvname);
+        }
+        delete $name;
+    }
+    |   bitfield_alias_bits[list] NAME[name] '=' expr[value] semicolon {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $$ = $list;
+        $$->emplace_back(*$name,$value);
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@name);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfieldEntry($name->c_str(),atvname);
@@ -3427,11 +3439,20 @@ bitfield_alias_declaration
         auto btype = make_smart<TypeDecl>(Type::tBitfield);
         btype->alias = *$vname;
         btype->at = tokAt(scanner,@vname);
-        btype->argNames = *$list;
         btype->isPrivateAlias = !$pubA;
+        for ( auto & p : *$list ) {
+            if ( !get<1>(p) ) {
+                btype->argNames.push_back(get<0>(p));
+            }
+        }
         if ( btype->argNames.size()>32 ) {
             das_yyerror(scanner,"only 32 different bits are allowed in a bitfield",tokAt(scanner,@vname),
                 CompilationError::invalid_type);
+        }
+        for ( auto & p : *$list ) {
+            if ( get<1>(p) ) {
+                ast_globalBitfieldConst ( scanner, btype, $pubA, get<0>(p), get<1>(p) );
+            }
         }
         if ( !yyextra->g_Program->addAlias(btype) ) {
             das_yyerror(scanner,"type alias is already defined "+*$vname,tokAt(scanner,@vname),

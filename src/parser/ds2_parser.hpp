@@ -309,6 +309,7 @@ union DAS2_YYSTYPE
     double                          fd;
     string *                        s;
     vector<string> *                pNameList;
+    vector<tuple<string,Expression *>> *  pNameExprList;
     vector<VariableNameAndPosition> * pNameWithPosList;
     VariableDeclaration *           pVarDecl;
     vector<VariableDeclaration*> *  pVarDeclList;

@@ -75,6 +75,7 @@ namespace das {
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     void deleteTypeDeclarationList ( vector<Expression *> * list );
+    void deleteNameExprList ( vector<tuple<string,Expression *>> * list );
     void varDeclToTypeDecl ( yyscan_t scanner, TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = true );
     Annotation * findAnnotation ( yyscan_t scanner, const string & name, const LineInfo & at );
     void runFunctionAnnotations ( yyscan_t scanner, DasParserState * extra, Function * func, AnnotationList * annL, const LineInfo & at );
@@ -90,6 +91,7 @@ namespace das {
     void ast_enumDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & atannL, bool pubE, Enumeration * pEnum, Enumeration * pE, Type ebt );
     void ast_globalLetList (  yyscan_t scanner, bool kwd_let, bool glob_shar, bool pub_var, vector<VariableDeclaration*> * list );
     void ast_globalLet (  yyscan_t scanner, bool kwd_let, bool glob_shar, bool pub_var, AnnotationArgumentList * ann, VariableDeclaration * decl );
+    void ast_globalBitfieldConst ( yyscan_t scanner, const TypeDeclPtr & bType, bool pub_var, const string & name, Expression * expr );
     vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
         AnnotationList * annL, bool isPrivate, bool cnst, Function * func );
     vector<VariableDeclaration*> * ast_structVarDef ( yyscan_t scanner, vector<VariableDeclaration*> * list,
