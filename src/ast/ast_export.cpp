@@ -108,6 +108,7 @@ namespace das {
         }
         void markModuleUsedFunctions( ModuleLibrary &, Module * inWhichModule ) {
             for ( auto & fn : inWhichModule->functions.each() ) {
+                if ( fn->isTemplate ) continue;
                 if ( fn->builtIn || fn->macroInit || fn->macroFunction  ) continue;
                 if ( fn->privateFunction && fn->generated && fn->fromGeneric ) continue;    // instances of templates are never roots
                 if ( fn->isClassMethod && fn->classParent->macroInterface ) continue;       // methods of macro interfaces

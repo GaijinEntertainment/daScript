@@ -962,7 +962,7 @@ namespace das {
         }
         for (auto & pm : library.modules) {
             for ( auto & func : pm->functions.each() ) {
-                if ( func->used && !func->builtIn ) {
+                if ( func->used && !func->builtIn && !func->isTemplate ) {
                     func->index = totalFunctions++;
                     if ( log ) {
                         logs << "\t" << func->index << "\t" << func->totalStackSize << "\t" << func->getMangledName();

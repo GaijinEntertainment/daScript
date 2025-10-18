@@ -1193,7 +1193,7 @@ namespace das {
             ss.clear();
             ss << "\n";
             prog->thisModule->functions.foreach([&](auto fn){
-                if ( !fn->builtIn && !fn->noAot ) {
+                if ( !fn->builtIn && !fn->noAot && !fn->isTemplate ) {
                     ss << describeCppFunc(fn.get(),&collector) << ";\n";
                 }
             });
@@ -4097,7 +4097,7 @@ namespace das {
         int fni = 0;
         for ( auto & pm : program->library.getModules() ) {
             pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used)
+                if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
                     return;
                 SimFunction * fn = context.getFunction(fni);
                 pfun->hash = getFunctionHash(pfun.get(), fn->code, &context);
@@ -4108,7 +4108,7 @@ namespace das {
         // its the same as semantic hash, only takes dependencies into account
         for (auto & pm : program->library.getModules() ) {
             pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used)
+                if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
                     return;
                 pfun->aotHash = getFunctionAotHash(pfun.get());
                 fni++;
@@ -4131,7 +4131,7 @@ namespace das {
                 aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << aotStructName(ps.get()) << "; };\n";
             });
             pm->functions.foreach([&](auto fn){
-                if (fn->index < 0 || !fn->used)
+                if (fn->index < 0 || !fn->used || fn->isTemplate)
                     return;
                 fn->visit(utm);
             });

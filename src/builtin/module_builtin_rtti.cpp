@@ -1021,6 +1021,7 @@ namespace das {
         DebugInfoHelper helper;
         helper.rtti = true;
         module->structures.foreach([&](auto structPtr){
+            if ( structPtr->isTemplate ) return;
             StructInfo * info = helper.makeStructureDebugInfo(*structPtr);
             vec4f args[1] = {
                 cast<StructInfo *>::from(info)
@@ -1046,6 +1047,7 @@ namespace das {
         DebugInfoHelper helper;
         helper.rtti = true;
         module->functions.foreach([&](auto funcPtr){
+            if ( funcPtr->isTemplate ) return;
             FuncInfo * info = helper.makeFunctionDebugInfo(*funcPtr);
             vec4f args[1] = {
                 cast<FuncInfo *>::from(info)

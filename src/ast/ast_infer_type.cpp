@@ -838,6 +838,7 @@ namespace das {
             getSearchModule(moduleName);
             program->library.foreach([&](Module * mod) -> bool {
                 mod->functions.foreach([&](const FunctionPtr & fn) -> bool {
+                    if ( fn->isTemplate ) return true;
                     if ( isCloseEnoughName(fn->name,funcName,identicalName) ) {
                         isCloseEnoughName(fn->name,funcName,identicalName);
                         result.push_back(fn.get());
