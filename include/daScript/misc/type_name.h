@@ -35,6 +35,9 @@ namespace das {
     template <> struct typeName<int32_t>  { constexpr static const char * name() { return "int"; } };
     template <> struct typeName<uint32_t> { constexpr static const char * name() { return "uint"; } };
     template <> struct typeName<Bitfield> { constexpr static const char * name() { return "bitfield"; } };
+    template <> struct typeName<Bitfield8> { constexpr static const char * name() { return "bitfield8"; } };
+    template <> struct typeName<Bitfield16> { constexpr static const char * name() { return "bitfield16"; } };
+    template <> struct typeName<Bitfield64> { constexpr static const char * name() { return "bitfield64"; } };
     template <> struct typeName<int8_t>   { constexpr static const char * name() { return "int8"; } };
     template <> struct typeName<uint8_t>  { constexpr static const char * name() { return "uint8"; } };
     template <> struct typeName<int16_t>  { constexpr static const char * name() { return "int16"; } };

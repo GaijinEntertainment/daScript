@@ -223,7 +223,7 @@ namespace das {
         int variantFieldIndex( const string & name ) const;
         __forceinline int bitFieldIndex( const string & name ) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
-        string findBitfieldName ( uint32_t value ) const;
+        string findBitfieldName ( uint64_t value ) const;
         void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
         void collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
         void serialize ( AstSerializer & ser );
@@ -236,6 +236,7 @@ namespace das {
         void getLookupHash(uint64_t & hash) const;
         static void clone ( TypeDeclPtr & dest, const TypeDeclPtr & src );
         Type getR2VType() const;
+        int maxBitfieldBits() const;
     public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
@@ -296,6 +297,9 @@ namespace das {
     };
 
     template<> struct ToBasicType<Bitfield>     { enum { type = Type::tBitfield }; };
+    template<> struct ToBasicType<Bitfield8>    { enum { type = Type::tBitfield8 }; };
+    template<> struct ToBasicType<Bitfield16>   { enum { type = Type::tBitfield16 }; };
+    template<> struct ToBasicType<Bitfield64>   { enum { type = Type::tBitfield64 }; };
     template<> struct ToBasicType<EnumStub>     { enum { type = Type::tEnumeration }; };
     template<> struct ToBasicType<EnumStub8>    { enum { type = Type::tEnumeration8 }; };
     template<> struct ToBasicType<EnumStub16>   { enum { type = Type::tEnumeration16 }; };
@@ -801,7 +805,9 @@ namespace das {
     }
 
     __forceinline bool TypeDecl::isBitfield() const {
-        return (baseType==Type::tBitfield) && (dim.size()==0);
+        return ((baseType==Type::tBitfield) || (baseType==Type::tBitfield8) ||
+                (baseType==Type::tBitfield16) || (baseType==Type::tBitfield64))
+            && (dim.size()==0);
     }
 
     __forceinline bool TypeDecl::isIterator() const {

@@ -40,6 +40,9 @@ namespace das
         {   Type::tInt4,        "int4"  },
         {   Type::tUInt,        "uint"  },
         {   Type::tBitfield,    "bitfield"  },
+        {   Type::tBitfield8,   "bitfield8"  },
+        {   Type::tBitfield16,  "bitfield16"  },
+        {   Type::tBitfield64,  "bitfield64"  },
         {   Type::tUInt2,       "uint2" },
         {   Type::tUInt3,       "uint3" },
         {   Type::tUInt4,       "uint4" },
@@ -539,8 +542,14 @@ namespace das
                 stream << debug_type(info->firstType);
             }
             stream << ">";
-        } else if ( info->type==Type::tBitfield ) {
+        } else if ( info->type==Type::tBitfield || info->type==Type::tBitfield8 || info->type==Type::tBitfield16 || info->type==Type::tBitfield64 ) {
             stream << "bitfield";
+            switch ( info->type ) {
+                case Type::tBitfield8:    stream << ":uint8"; break;
+                case Type::tBitfield16:   stream << ":uint16"; break;
+                case Type::tBitfield64:   stream << ":uint64"; break;
+                default: break;
+            }
             if ( info->argNames ) {
                 stream << "<";
                 for ( uint32_t ai=0, ais=info->argCount; ai!=ais; ++ai ) {

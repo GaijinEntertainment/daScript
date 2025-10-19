@@ -219,6 +219,9 @@ namespace das {
                 case Type::tInt4:       Int4(*((int4 *)pa)); break;
                 case Type::tUInt:       UInt(*((uint32_t *)pa)); break;
                 case Type::tBitfield:   Bitfield(*((uint32_t *)pa),info); break;
+                case Type::tBitfield8:  Bitfield8(*((uint8_t *)pa),info); break;
+                case Type::tBitfield16: Bitfield16(*((uint16_t *)pa),info); break;
+                case Type::tBitfield64: Bitfield64(*((uint64_t *)pa),info); break;
                 case Type::tUInt2:      UInt2(*((uint2 *)pa)); break;
                 case Type::tUInt3:      UInt3(*((uint3 *)pa)); break;
                 case Type::tUInt4:      UInt4(*((uint4 *)pa)); break;

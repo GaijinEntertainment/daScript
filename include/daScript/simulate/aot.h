@@ -44,6 +44,18 @@ namespace das {
         value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
     }
 
+    __forceinline void __bit_set8 ( Bitfield8 & value, Bitfield8 mask, bool on ) {
+        value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
+    }
+
+    __forceinline void __bit_set16 ( Bitfield16 & value, Bitfield16 mask, bool on ) {
+        value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
+    }
+
+    __forceinline void __bit_set64 ( Bitfield64 & value, Bitfield64 mask, bool on ) {
+        value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
+    }
+
     template <typename TT>
     struct das_auto_cast {
         template <typename QQ>

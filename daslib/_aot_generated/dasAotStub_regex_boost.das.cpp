@@ -154,15 +154,15 @@ enum class Type : int32_t {
     tEnumeration16 = int32_t(INT64_C(39)),
     tEnumeration64 = int32_t(INT64_C(40)),
     tBitfield = int32_t(INT64_C(41)),
-    tPointer = int32_t(INT64_C(42)),
-    tFunction = int32_t(INT64_C(43)),
-    tLambda = int32_t(INT64_C(44)),
-    tIterator = int32_t(INT64_C(45)),
-    tArray = int32_t(INT64_C(46)),
-    tTable = int32_t(INT64_C(47)),
-    tBlock = int32_t(INT64_C(48)),
-    tTuple = int32_t(INT64_C(49)),
-    tVariant = int32_t(INT64_C(50)),
+    tPointer = int32_t(INT64_C(45)),
+    tFunction = int32_t(INT64_C(46)),
+    tLambda = int32_t(INT64_C(47)),
+    tIterator = int32_t(INT64_C(48)),
+    tArray = int32_t(INT64_C(49)),
+    tTable = int32_t(INT64_C(50)),
+    tBlock = int32_t(INT64_C(51)),
+    tTuple = int32_t(INT64_C(52)),
+    tVariant = int32_t(INT64_C(53)),
 };
 }
 #endif // external enum
@@ -284,25 +284,25 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void finalize_33949679bbb57f6f ( Context * __context__, AutoTuple<range,char *> & ____this_rename_at_1340_0 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191 ( Context * __context__, TArray<regex::ReNode *> & __a_rename_at_1336_1 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037 ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_75cc95095f62af4d ( Context * __context__, regex_boost::RegexReader const  & __cl_rename_at_116_5 );
-inline void finalize_ce48cc2769f1ff86 ( Context * __context__, regex::ReNode & ____this_rename_at_29_6 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe ( Context * __context__, TArray<AutoTuple<range,char *>> & __a_rename_at_1336_7 );
-inline void finalize_2b29749dbd958221 ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 );
-inline void finalize_53d748a680ec146b ( Context * __context__, regex::Regex & ____this_rename_at_48_10 );
+inline void finalize_535564a980bb75dd ( Context * __context__, AutoTuple<range,char *> & ____this_rename_at_1340_0 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 ( Context * __context__, TArray<regex::ReNode *> & __a_rename_at_1336_1 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155 ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc ( Context * __context__, regex_boost::RegexReader const  & __cl_rename_at_116_5 );
+inline void finalize_99414bba4f5acf94 ( Context * __context__, regex::ReNode & ____this_rename_at_29_6 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae ( Context * __context__, TArray<AutoTuple<range,char *>> & __a_rename_at_1336_7 );
+inline void finalize_8d4bbeab5e980efc ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 );
+inline void finalize_d89c2770b6879426 ( Context * __context__, regex::Regex & ____this_rename_at_48_10 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void finalize_33949679bbb57f6f ( Context * __context__, AutoTuple<range,char *> &  ____this_rename_at_1340_0 )
+inline void finalize_535564a980bb75dd ( Context * __context__, AutoTuple<range,char *> &  ____this_rename_at_1340_0 )
 {
     memset((void*)&(____this_rename_at_1340_0), 0, TypeSize<AutoTuple<range,char *>>::size);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191 ( Context * __context__, TArray<regex::ReNode *> &  __a_rename_at_1336_1 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 ( Context * __context__, TArray<regex::ReNode *> &  __a_rename_at_1336_1 )
 {
     {
         bool __need_loop_1338 = true;
@@ -312,33 +312,33 @@ inline void _FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191 ( 
         __need_loop_1338 = __aV_iterator.first(__context__,(__aV_rename_at_1338_2)) && __need_loop_1338;
         for ( ; __need_loop_1338 ; __need_loop_1338 = __aV_iterator.next(__context__,(__aV_rename_at_1338_2)) )
         {
-            finalize_2b29749dbd958221(__context__,(*__aV_rename_at_1338_2));
+            finalize_8d4bbeab5e980efc(__context__,(*__aV_rename_at_1338_2));
         }
         __aV_iterator.close(__context__,(__aV_rename_at_1338_2));
     };
     builtin_array_free(das_arg<TArray<regex::ReNode *>>::pass(__a_rename_at_1336_1),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037 ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155 ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 )
 {
     das_copy(__Arr_rename_at_193_3(builtin_array_push_back(das_arg<TArray<ast::AstReaderMacro *>>::pass(__Arr_rename_at_193_3),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_193_4);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_75cc95095f62af4d ( Context * __context__, regex_boost::RegexReader const  &  __cl_rename_at_116_5 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc ( Context * __context__, regex_boost::RegexReader const  &  __cl_rename_at_116_5 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti),__FILE__,__LINE__)).getStructType())));
 }
 
-inline void finalize_ce48cc2769f1ff86 ( Context * __context__, regex::ReNode &  ____this_rename_at_29_6 )
+inline void finalize_99414bba4f5acf94 ( Context * __context__, regex::ReNode &  ____this_rename_at_29_6 )
 {
-    _FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191(__context__,das_arg<TArray<regex::ReNode *>>::pass(____this_rename_at_29_6.all));
-    finalize_2b29749dbd958221(__context__,____this_rename_at_29_6.left);
-    finalize_2b29749dbd958221(__context__,____this_rename_at_29_6.right);
-    finalize_2b29749dbd958221(__context__,____this_rename_at_29_6.subexpr);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483(__context__,das_arg<TArray<regex::ReNode *>>::pass(____this_rename_at_29_6.all));
+    finalize_8d4bbeab5e980efc(__context__,____this_rename_at_29_6.left);
+    finalize_8d4bbeab5e980efc(__context__,____this_rename_at_29_6.right);
+    finalize_8d4bbeab5e980efc(__context__,____this_rename_at_29_6.subexpr);
     memset((void*)&(____this_rename_at_29_6), 0, TypeSize<regex::ReNode>::size);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe ( Context * __context__, TArray<AutoTuple<range,char *>> &  __a_rename_at_1336_7 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae ( Context * __context__, TArray<AutoTuple<range,char *>> &  __a_rename_at_1336_7 )
 {
     {
         bool __need_loop_1338 = true;
@@ -348,81 +348,81 @@ inline void _FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe ( 
         __need_loop_1338 = __aV_iterator.first(__context__,(__aV_rename_at_1338_8)) && __need_loop_1338;
         for ( ; __need_loop_1338 ; __need_loop_1338 = __aV_iterator.next(__context__,(__aV_rename_at_1338_8)) )
         {
-            finalize_33949679bbb57f6f(__context__,das_arg<AutoTuple<range,char *>>::pass((*__aV_rename_at_1338_8)));
+            finalize_535564a980bb75dd(__context__,das_arg<AutoTuple<range,char *>>::pass((*__aV_rename_at_1338_8)));
         }
         __aV_iterator.close(__context__,(__aV_rename_at_1338_8));
     };
     builtin_array_free(das_arg<TArray<AutoTuple<range,char *>>>::pass(__a_rename_at_1336_7),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void finalize_2b29749dbd958221 ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 )
+inline void finalize_8d4bbeab5e980efc ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 )
 {
     if ( ____this_rename_at_50_9 != nullptr )
     {
-        finalize_ce48cc2769f1ff86(__context__,das_arg<regex::ReNode>::pass(das_deref(__context__,____this_rename_at_50_9,__FILE__,__LINE__)));
+        finalize_99414bba4f5acf94(__context__,das_arg<regex::ReNode>::pass(das_deref(__context__,____this_rename_at_50_9,__FILE__,__LINE__)));
         das_delete<regex::ReNode *>::clear(__context__,____this_rename_at_50_9);
         das_copy(____this_rename_at_50_9,nullptr);
     };
 }
 
-inline void finalize_53d748a680ec146b ( Context * __context__, regex::Regex &  ____this_rename_at_48_10 )
+inline void finalize_d89c2770b6879426 ( Context * __context__, regex::Regex &  ____this_rename_at_48_10 )
 {
-    finalize_2b29749dbd958221(__context__,____this_rename_at_48_10.root);
-    _FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe(__context__,das_arg<TArray<AutoTuple<range,char *>>>::pass(____this_rename_at_48_10.groups));
+    finalize_8d4bbeab5e980efc(__context__,____this_rename_at_48_10.root);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae(__context__,das_arg<TArray<AutoTuple<range,char *>>>::pass(____this_rename_at_48_10.groups));
     memset((void*)&(____this_rename_at_48_10), 0, TypeSize<regex::Regex>::size);
 }
-static vec4f __wrap_finalize_33949679bbb57f6f ( Context * __context__ ) {
+static vec4f __wrap_finalize_535564a980bb75dd ( Context * __context__ ) {
     AutoTuple<range,char *> &  arg___this = cast_aot_arg<AutoTuple<range,char *> & >::to(*__context__,__context__->abiArguments()[0]);
-    finalize_33949679bbb57f6f(__context__, arg___this);
+    finalize_535564a980bb75dd(__context__, arg___this);
     return v_zero();
 }
-static vec4f __wrap__FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191 ( Context * __context__ ) {
+static vec4f __wrap__FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 ( Context * __context__ ) {
     TArray<regex::ReNode *> &  arg_a = cast_aot_arg<TArray<regex::ReNode *> & >::to(*__context__,__context__->abiArguments()[0]);
-    _FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191(__context__, arg_a);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483(__context__, arg_a);
     return v_zero();
 }
-static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037 ( Context * __context__ ) {
+static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155 ( Context * __context__ ) {
     TArray<ast::AstReaderMacro *> &  arg_Arr = cast_aot_arg<TArray<ast::AstReaderMacro *> & >::to(*__context__,__context__->abiArguments()[0]);
     ast::AstReaderMacro * arg_value = cast_aot_arg<ast::AstReaderMacro *>::to(*__context__,__context__->abiArguments()[1]);
-    _FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037(__context__, arg_Arr, arg_value);
+    _FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155(__context__, arg_Arr, arg_value);
     return v_zero();
 }
-static vec4f __wrap__FuncrttiTickclass_infoTick15801393167907430156_75cc95095f62af4d ( Context * __context__ ) {
+static vec4f __wrap__FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc ( Context * __context__ ) {
     regex_boost::RegexReader const  &  arg_cl = cast_aot_arg<regex_boost::RegexReader const  & >::to(*__context__,__context__->abiArguments()[0]);
-    return cast<StructInfo const  *>::from(_FuncrttiTickclass_infoTick15801393167907430156_75cc95095f62af4d(__context__, arg_cl));
+    return cast<StructInfo const  *>::from(_FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc(__context__, arg_cl));
 }
-static vec4f __wrap_finalize_ce48cc2769f1ff86 ( Context * __context__ ) {
+static vec4f __wrap_finalize_99414bba4f5acf94 ( Context * __context__ ) {
     regex::ReNode &  arg___this = cast_aot_arg<regex::ReNode & >::to(*__context__,__context__->abiArguments()[0]);
-    finalize_ce48cc2769f1ff86(__context__, arg___this);
+    finalize_99414bba4f5acf94(__context__, arg___this);
     return v_zero();
 }
-static vec4f __wrap__FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe ( Context * __context__ ) {
+static vec4f __wrap__FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae ( Context * __context__ ) {
     TArray<AutoTuple<range,char *>> &  arg_a = cast_aot_arg<TArray<AutoTuple<range,char *>> & >::to(*__context__,__context__->abiArguments()[0]);
-    _FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe(__context__, arg_a);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae(__context__, arg_a);
     return v_zero();
 }
-static vec4f __wrap_finalize_2b29749dbd958221 ( Context * __context__ ) {
+static vec4f __wrap_finalize_8d4bbeab5e980efc ( Context * __context__ ) {
     regex::ReNode * & arg___this = cast_aot_arg<regex::ReNode * &>::to(*__context__,__context__->abiArguments()[0]);
-    finalize_2b29749dbd958221(__context__, arg___this);
+    finalize_8d4bbeab5e980efc(__context__, arg___this);
     return v_zero();
 }
-static vec4f __wrap_finalize_53d748a680ec146b ( Context * __context__ ) {
+static vec4f __wrap_finalize_d89c2770b6879426 ( Context * __context__ ) {
     regex::Regex &  arg___this = cast_aot_arg<regex::Regex & >::to(*__context__,__context__->abiArguments()[0]);
-    finalize_53d748a680ec146b(__context__, arg___this);
+    finalize_d89c2770b6879426(__context__, arg___this);
     return v_zero();
 }
 
 #pragma optimize("", off)
 struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };
 static AotFunction functions[] = {
-    { 0xa9e3b6750d79e922, false, (void*)&finalize_33949679bbb57f6f, &__wrap_finalize_33949679bbb57f6f },
-    { 0x97436a6854de4ecb, false, (void*)&_FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191, &__wrap__FuncbuiltinTickfinalizeTick13836114024949725080_6f9d59028ece8191 },
-    { 0x7c28b4ec7bf60ced, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037, &__wrap__FuncbuiltinTickpushTick10769833213962245646_612daa3f783f1037 },
-    { 0xd951d1d0d7f0f3f0, false, (void*)&_FuncrttiTickclass_infoTick15801393167907430156_75cc95095f62af4d, &__wrap__FuncrttiTickclass_infoTick15801393167907430156_75cc95095f62af4d },
-    { 0x7320a4c229042647, false, (void*)&finalize_ce48cc2769f1ff86, &__wrap_finalize_ce48cc2769f1ff86 },
-    { 0x10077f308e6c3336, false, (void*)&_FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe, &__wrap__FuncbuiltinTickfinalizeTick13836114024949725080_ced2994fb9435cfe },
-    { 0xa6fdf7c20a6b2e12, false, (void*)&finalize_2b29749dbd958221, &__wrap_finalize_2b29749dbd958221 },
-    { 0x9ecb3de69df7f3a1, false, (void*)&finalize_53d748a680ec146b, &__wrap_finalize_53d748a680ec146b },
+    { 0x8a2fe33d370097ba, false, (void*)&finalize_535564a980bb75dd, &__wrap_finalize_535564a980bb75dd },
+    { 0xd0d77a877b11e7d7, false, (void*)&_FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483, &__wrap__FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 },
+    { 0x6d7b12572dfbc07f, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155, &__wrap__FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155 },
+    { 0xf7ef9aac74044128, false, (void*)&_FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc, &__wrap__FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc },
+    { 0x74e2e36c42439df0, false, (void*)&finalize_99414bba4f5acf94, &__wrap_finalize_99414bba4f5acf94 },
+    { 0xe5a23bfddf007caa, false, (void*)&_FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae, &__wrap__FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae },
+    { 0xce0cd34c2f4ccf64, false, (void*)&finalize_8d4bbeab5e980efc, &__wrap_finalize_8d4bbeab5e980efc },
+    { 0x17617c4070419877, false, (void*)&finalize_d89c2770b6879426, &__wrap_finalize_d89c2770b6879426 },
 };
 #pragma optimize("", on)
 

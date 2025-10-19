@@ -26,6 +26,17 @@ namespace das
     {
     }
 
+    int TypeDecl::maxBitfieldBits() const {
+        switch ( baseType ) {
+            case Type::tBitfield:    return 32;
+            case Type::tBitfield8:   return 8;
+            case Type::tBitfield16:  return 16;
+            case Type::tBitfield64:  return 64;
+            default:                 return 0;
+        }
+        return 0;
+    }
+
     Type TypeDecl::getR2VType() const {
         if ( baseType==Type::tHandle ) {
             auto valueType = annotation->makeValueType();
@@ -426,7 +437,8 @@ namespace das
         if ( secondType ) {
             secondType->getLookupHash(hash);
         }
-        if (baseType == Type::tBitfield) {
+        if (baseType == Type::tBitfield || baseType == Type::tBitfield8 ||
+            baseType == Type::tBitfield16 || baseType == Type::tBitfield64) {
             for ( const auto & name : argNames ) {
                 hash = hashmix(hash, hash_block64(reinterpret_cast<const uint8_t *>(name.c_str()), name.size()));
             }
@@ -703,8 +715,15 @@ namespace das
                 }
             }
             stream << ">";
-        } else if ( baseType==Type::tBitfield ) {
+        } else if ( baseType==Type::tBitfield || baseType==Type::tBitfield8 ||
+                    baseType==Type::tBitfield16 || baseType==Type::tBitfield64 ) {
             stream << das_to_string(baseType);
+            switch ( baseType ) {
+                case Type::tBitfield8 : stream << ":uint8"; break;
+                case Type::tBitfield16 : stream << ":uint16"; break;
+                case Type::tBitfield64 : stream << ":uint64"; break;
+                default: break;
+            }
             if ( argNames.size() ) {
                 stream << "<";
                 int ai = 0;
@@ -1714,6 +1733,9 @@ namespace das
             }
             break;
         case Type::tBitfield:
+        case Type::tBitfield8:
+        case Type::tBitfield16:
+        case Type::tBitfield64:
             {
                 bool iAmAnyBitfield = argNames.size()==0;
                 bool heIsAnyBitfield = decl.argNames.size()==0;
@@ -2217,6 +2239,9 @@ namespace das
             case Type::tInt64:
             case Type::tUInt:
             case Type::tBitfield:
+            case Type::tBitfield8:
+            case Type::tBitfield16:
+            case Type::tBitfield64:
             case Type::tUInt2:
             case Type::tUInt3:
             case Type::tUInt4:
@@ -2260,6 +2285,9 @@ namespace das
             case Type::tInt4:
             case Type::tUInt:
             case Type::tBitfield:
+            case Type::tBitfield8:
+            case Type::tBitfield16:
+            case Type::tBitfield64:
             case Type::tUInt2:
             case Type::tUInt3:
             case Type::tUInt4:
@@ -2313,6 +2341,9 @@ namespace das
             case Type::tInt4:
             case Type::tUInt:
             case Type::tBitfield:
+            case Type::tBitfield8:
+            case Type::tBitfield16:
+            case Type::tBitfield64:
             case Type::tUInt2:
             case Type::tUInt3:
             case Type::tUInt4:
@@ -2350,6 +2381,9 @@ namespace das
             case Type::tInt:
             case Type::tUInt:
             case Type::tBitfield:
+            case Type::tBitfield8:
+            case Type::tBitfield16:
+            case Type::tBitfield64:
             case Type::tFloat:
             case Type::tDouble:
             case Type::tString:
@@ -2382,6 +2416,9 @@ namespace das
             case Type::tInt:
             case Type::tUInt:
             case Type::tBitfield:
+            case Type::tBitfield8:
+            case Type::tBitfield16:
+            case Type::tBitfield64:
             case Type::tFloat:
             case Type::tDouble:
             case Type::tPointer:
@@ -2587,6 +2624,9 @@ namespace das
         case Type::tInt:
         case Type::tUInt:
         case Type::tBitfield:
+        case Type::tBitfield8:
+        case Type::tBitfield16:
+        case Type::tBitfield64:
         case Type::tInt8:
         case Type::tUInt8:
         case Type::tInt16:
@@ -2617,6 +2657,9 @@ namespace das
         switch (baseType) {
         case Type::tUInt:
         case Type::tBitfield:
+        case Type::tBitfield8:
+        case Type::tBitfield16:
+        case Type::tBitfield64:
         case Type::tUInt8:
         case Type::tUInt16:
         case Type::tUInt64:
@@ -2647,6 +2690,9 @@ namespace das
         switch (baseType) {
         case Type::tUInt:
         case Type::tBitfield:
+        case Type::tBitfield8:
+        case Type::tBitfield16:
+        case Type::tBitfield64:
         case Type::tUInt8:
         case Type::tUInt16:
         case Type::tUInt64:
@@ -2666,6 +2712,9 @@ namespace das
         case Type::tInt:
         case Type::tUInt:
         case Type::tBitfield:
+        case Type::tBitfield8:
+        case Type::tBitfield16:
+        case Type::tBitfield64:
         case Type::tInt8:
         case Type::tUInt8:
         case Type::tInt16:
@@ -2699,6 +2748,9 @@ namespace das
         case Type::tInt:
         case Type::tUInt:
         case Type::tBitfield:
+        case Type::tBitfield8:
+        case Type::tBitfield16:
+        case Type::tBitfield64:
         case Type::tInt64:
         case Type::tUInt64:
         case Type::tFloat:
@@ -2923,10 +2975,10 @@ namespace das
         return -1;
     }
 
-    string TypeDecl::findBitfieldName ( uint32_t val ) const {
+    string TypeDecl::findBitfieldName ( uint64_t val ) const {
        if ( argNames.size() ) {
             if ( val && (val & (val-1))==0 ) {  // if bit is set, and only one bit
-                int index = 31 - das_clz(val);
+                int index = int(63 - das_clz64(val));
                 if ( index < int(argNames.size()) ) {
                     return argNames[index];
                 }
@@ -3079,6 +3131,9 @@ namespace das
                 case Type::tTuple:          ss << "U"; break;
                 case Type::tVariant:        ss << "V"; break;
                 case Type::tBitfield:       ss << "t"; break;
+                case Type::tBitfield8:      ss << "t8"; break;
+                case Type::tBitfield16:     ss << "t16"; break;
+                case Type::tBitfield64:     ss << "t64"; break;
                 case Type::tInt:            ss << "i"; break;
                 case Type::tInt2:           ss << "i2"; break;
                 case Type::tInt3:           ss << "i3"; break;
@@ -3417,7 +3472,12 @@ namespace das
             case '$':   ch++; return make_smart<TypeDecl>(Type::tBlock);
             case 'U':   ch++; return make_smart<TypeDecl>(Type::tTuple);
             case 'V':   ch++; return make_smart<TypeDecl>(Type::tVariant);
-            case 't':   ch++; return make_smart<TypeDecl>(Type::tBitfield);
+            case 't':   {
+                        if ( ch[1]=='8' )                   { ch+=2; return make_smart<TypeDecl>(Type::tBitfield8); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return make_smart<TypeDecl>(Type::tBitfield16); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tBitfield64); }
+                else                                        { ch++; return make_smart<TypeDecl>(Type::tBitfield); }
+            }
             case 'r':   {
                         if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tRange64); }
                 else                                        { ch+=1; return make_smart<TypeDecl>(Type::tRange); }

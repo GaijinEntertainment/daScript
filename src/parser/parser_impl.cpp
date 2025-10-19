@@ -803,7 +803,7 @@ namespace das {
                 if ( bit!=-1 ) {
                     auto td = make_smart<TypeDecl>(*alias);
                     td->ref = false;
-                    auto bitConst = new ExprConstBitfield(eniAt, 1u << bit);
+                    auto bitConst = new ExprConstBitfield(eniAt, 1ull << uint64_t(bit));
                     bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
                     resConst = bitConst;
                 } else {

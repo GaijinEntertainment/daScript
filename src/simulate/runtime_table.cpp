@@ -26,6 +26,9 @@ namespace das
             case Type::tEnumeration16:  table_reserve_internal<int16_t>(context, arr, newCapacity, valueTypeSize, at); break;
             case Type::tEnumeration64:  table_reserve_internal<int64_t>(context, arr, newCapacity, valueTypeSize, at); break;
             case Type::tBitfield:       table_reserve_internal<uint32_t>(context, arr, newCapacity, valueTypeSize, at); break;
+            case Type::tBitfield8:      table_reserve_internal<uint8_t>(context, arr, newCapacity, valueTypeSize, at); break;
+            case Type::tBitfield16:     table_reserve_internal<uint16_t>(context, arr, newCapacity, valueTypeSize, at); break;
+            case Type::tBitfield64:     table_reserve_internal<uint64_t>(context, arr, newCapacity, valueTypeSize, at); break;
             case Type::tInt:            table_reserve_internal<int32_t>(context, arr, newCapacity, valueTypeSize, at); break;
             case Type::tInt2:           table_reserve_internal<int2>(context, arr, newCapacity, valueTypeSize, at); break;
             case Type::tInt3:           table_reserve_internal<int3>(context, arr, newCapacity, valueTypeSize, at); break;

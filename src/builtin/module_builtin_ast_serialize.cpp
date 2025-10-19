@@ -2306,7 +2306,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 63;
+        static constexpr uint32_t currentVersion = 64;
         return currentVersion;
     }
 
