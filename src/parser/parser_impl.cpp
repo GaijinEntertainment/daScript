@@ -535,8 +535,9 @@ namespace das {
         pVar->type->constant = true;
         pVar->init = expr;
         pVar->private_variable = !pub_var;
+        pVar->bitfield_constant = true;
         if ( !yyextra->g_Program->addVariable(pVar) ) {
-            das_yyerror(scanner,"global enum constant is already declared " + name,expr->at,
+            das_yyerror(scanner,"global bitfield constant is already declared " + name,expr->at,
                 CompilationError::global_variable_already_declared);
         }
     }
