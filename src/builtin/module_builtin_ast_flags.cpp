@@ -221,7 +221,7 @@ namespace das {
         ft->argNames = { "init_via_move", "init_via_clone", "used", "aliasCMRES",
             "marked_used", "global_shared", "do_not_delete", "generated", "capture_as_ref",
             "can_shadow", "private_variable", "tag", "global", "inScope", "no_capture", "early_out",
-            "used_in_finally", "static_class_member" };
+            "used_in_finally", "static_class_member", "bitfield_constant" };
         return ft;
     }
 

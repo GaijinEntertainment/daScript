@@ -5862,16 +5862,43 @@ namespace das {
                     } else {
                         auto varName = "`"+enumName+"`"+expr->name;
                         auto vars = findMatchingVar(varName, false);
-                        if ( vars.size()==1 ) {
-                            auto varr = vars.back();
-                            if ( varr->init && varr->init->type->constant ) {
+                        if ( vars.size() ) {
+                            Variable * found = nullptr;
+                            int foundCount = 0;
+                            for ( auto v : vars ) {
+                                if ( v->bitfield_constant ) {
+                                    found = v.get();
+                                    foundCount++;
+                                }
+                            }
+                            if ( foundCount == 1 ) {
+                                if ( !found->init ) {
+                                    error("bitfield constant '" + expr->name + "' of type " + describeType(alias)
+                                        + " is not initialized", "", "",
+                                        expr->at, CompilationError::cant_get_field);
+                                } else if ( !found->init->type || !found->init->type->constant || !found->init->type->isBitfield() ) {
+                                    error("not a valid bitfield constant " + expr->name + " of type " + describeType(found->type), "", "",
+                                        expr->at, CompilationError::cant_get_field);
+                                    return Visitor::visit(expr);
+                                }
                                 reportAstChanged();
-                                return varr->init->clone();
+                                return found->init->clone();
                             } else {
-                                error("bitfield constant '" + expr->name + "' has not resolve yet, in " + describeType(alias), "", "",
+                                TextWriter tw;
+                                if ( verbose ) {
+                                    tw << "possible bitfield constants:\n";
+                                    for ( auto v : vars ) {
+                                        if ( v->bitfield_constant ) {
+                                            tw << "\t" << (v->module->name.empty() ? "_" : v->module->name) << "::" << v->name << "\n";
+                                        }
+                                    }
+                                }
+                                error("bitfield constant '" + expr->name + "' of type " + describeType(alias)
+                                    + " is ambiguous", tw.str(), "",
                                     expr->at, CompilationError::cant_get_field);
                                 return Visitor::visit(expr);
                             }
+
                         } else {
                             error("bitfield '" + expr->name + "' not found in " + describeType(alias), "", "",
                                 expr->at, CompilationError::cant_get_field);

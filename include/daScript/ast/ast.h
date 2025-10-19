@@ -370,6 +370,7 @@ namespace das
                 bool    early_out : 1;              // this variable is potentially uninitialized in the finally section
                 bool    used_in_finally : 1;        // this variable is used in the finally section
                 bool    static_class_member : 1;    // this is a static class member
+                bool    bitfield_constant : 1;      // this is a bitfield constant
             };
             uint32_t flags = 0;
         };
