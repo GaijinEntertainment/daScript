@@ -122,6 +122,9 @@ namespace das
             case tInt4:         return sizeof(int4);
             case tUInt:         return sizeof(uint32_t);
             case tBitfield:     return sizeof(uint32_t);
+            case tBitfield8:    return sizeof(uint8_t);
+            case tBitfield16:   return sizeof(uint16_t);
+            case tBitfield64:   return sizeof(uint64_t);
             case tUInt2:        return sizeof(uint2);
             case tUInt3:        return sizeof(uint3);
             case tUInt4:        return sizeof(uint4);
@@ -176,6 +179,9 @@ namespace das
             case tInt4:         return alignof(int4);
             case tUInt:         return alignof(uint32_t);
             case tBitfield:     return alignof(uint32_t);
+            case tBitfield8:    return alignof(uint8_t);
+            case tBitfield16:   return alignof(uint16_t);
+            case tBitfield64:   return alignof(uint64_t);
             case tUInt2:        return alignof(uint2);
             case tUInt3:        return alignof(uint3);
             case tUInt4:        return alignof(uint4);

@@ -3035,15 +3035,15 @@ bitfield_alias_bits
     ;
 
 bitfield_basic_type_declaration
-    :   DAS_TBITFIELD                      { $$ = Type::tBitfield; }
-    |   DAS_TBITFIELD ':' DAS_TUINT8       { $$ = Type::tBitfield8; }
-    |   DAS_TBITFIELD ':' DAS_TUINT16      { $$ = Type::tBitfield16; }
-    |   DAS_TBITFIELD ':' DAS_TUINT        { $$ = Type::tBitfield; }
-    |   DAS_TBITFIELD ':' DAS_TUINT64      { $$ = Type::tBitfield64; }
+    :                        { $$ = Type::tBitfield; }
+    |   ':' DAS_TUINT8       { $$ = Type::tBitfield8; }
+    |   ':' DAS_TUINT16      { $$ = Type::tBitfield16; }
+    |   ':' DAS_TUINT        { $$ = Type::tBitfield; }
+    |   ':' DAS_TUINT64      { $$ = Type::tBitfield64; }
     ;
 
 bitfield_type_declaration
-    :   bitfield_basic_type_declaration[basicType] '<' { yyextra->das_arrow_depth ++; } bitfield_bits[nl] '>' { yyextra->das_arrow_depth --; } {
+    :   DAS_TBITFIELD bitfield_basic_type_declaration[basicType] '<' { yyextra->das_arrow_depth ++; } bitfield_bits[nl] '>' { yyextra->das_arrow_depth --; } {
             $$ = new TypeDecl($basicType);
             $$->argNames = *$nl;
             auto maxBits = $$->maxBitfieldBits();
@@ -3402,9 +3402,9 @@ variant_alias_declaration
     ;
 
 bitfield_alias_declaration
-    :   bitfield_basic_type_declaration[basicType] {
+    :   DAS_TBITFIELD {
         yyextra->push_nesteds(DAS_EMIT_COMMA);
-    } optional_public_or_private_alias[pubA] NAME[vname] optional_emit_commas {
+    } optional_public_or_private_alias[pubA] NAME[vname] bitfield_basic_type_declaration[basicType] optional_emit_commas {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
