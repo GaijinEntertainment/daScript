@@ -88,7 +88,7 @@
 
 #if _TARGET_PC_MACOSX && __SSE__
    #define DAS_EVAL_ABI [[clang::vectorcall]]
-#elif (defined(_MSC_VER) || defined(__clang__)) && __SSE__ && !defined __HAIKU__
+#elif _TARGET_PC_WIN && (defined(_MSC_VER) || defined(__clang__)) && __SSE__ && !defined __HAIKU__
     #define DAS_EVAL_ABI __vectorcall
 #else
     #define DAS_EVAL_ABI

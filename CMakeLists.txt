@@ -295,8 +295,11 @@ ELSE()
 
 ENDIF()
 
-SET(DAS_MODULES_RESOLVE_INC ${PROJECT_SOURCE_DIR}/include/modules/external_resolve.inc)
-SET(DAS_MODULES_NEED_INC ${PROJECT_SOURCE_DIR}/include/modules/external_need.inc)
+SET(NEED_MODULES_PATH "${CMAKE_CURRENT_BINARY_DIR}/include/modules")
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/include/)
+
+SET(DAS_MODULES_RESOLVE_INC ${NEED_MODULES_PATH}/external_resolve.inc)
+SET(DAS_MODULES_NEED_INC ${NEED_MODULES_PATH}/external_need.inc)
 FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")
 FILE(WRITE ${DAS_MODULES_NEED_INC}.temp "")
 
