@@ -58,7 +58,7 @@ namespace das {
 
     // special bitfield8 operations
     __forceinline bool __bitfield8_eq  ( Bitfield8 left, Bitfield8 right ) { return left.value == right.value; }
-    __forceinline bool __bitfield8_neq ( Bitfield8 left, Bitfield8 right ) { return left.value == right.value; }
+    __forceinline bool __bitfield8_neq ( Bitfield8 left, Bitfield8 right ) { return left.value != right.value; }
     __forceinline Bitfield8 __bitfield8_not ( Bitfield8 value ) { return Bitfield8(~value.value); }
     __forceinline Bitfield8 __bitfield8_and ( Bitfield8 left, Bitfield8 right ) { return Bitfield8(left.value & right.value); }
     __forceinline Bitfield8 __bitfield8_or  ( Bitfield8 left, Bitfield8 right ) { return Bitfield8(left.value | right.value); }
@@ -69,7 +69,7 @@ namespace das {
 
     // special bitfield16 operations
     __forceinline bool __bitfield16_eq  ( Bitfield16 left, Bitfield16 right ) { return left.value == right.value; }
-    __forceinline bool __bitfield16_neq ( Bitfield16 left, Bitfield16 right ) { return left.value == right.value; }
+    __forceinline bool __bitfield16_neq ( Bitfield16 left, Bitfield16 right ) { return left.value != right.value; }
     __forceinline Bitfield16 __bitfield16_not ( Bitfield16 value ) { return Bitfield16(~value.value); }
     __forceinline Bitfield16 __bitfield16_and ( Bitfield16 left, Bitfield16 right ) { return Bitfield16(left.value & right.value); }
     __forceinline Bitfield16 __bitfield16_or  ( Bitfield16 left, Bitfield16 right ) { return Bitfield16(left.value | right.value); }

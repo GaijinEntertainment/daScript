@@ -3108,9 +3108,21 @@ namespace das {
             case Type::tUInt64:         return make_smart<ExprConstUInt64>(at, cast<uint64_t>::to(value));
             case Type::tUInt:           return make_smart<ExprConstUInt>(at, cast<uint32_t>::to(value));
             case Type::tBitfield:       return make_smart<ExprConstBitfield>(at, cast<uint32_t>::to(value));
-            case Type::tBitfield8:      return make_smart<ExprConstBitfield>(at, cast<uint8_t>::to(value));
-            case Type::tBitfield16:     return make_smart<ExprConstBitfield>(at, cast<uint16_t>::to(value));
-            case Type::tBitfield64:     return make_smart<ExprConstBitfield>(at, cast<uint64_t>::to(value));
+            case Type::tBitfield8:      {
+                auto res = make_smart<ExprConstBitfield>(at, cast<uint8_t>::to(value));
+                res->baseType = Type::tBitfield8;
+                return res;
+            }
+            case Type::tBitfield16:     {
+                auto res = make_smart<ExprConstBitfield>(at, cast<uint16_t>::to(value));
+                res->baseType = Type::tBitfield16;
+                return res;
+            }
+            case Type::tBitfield64:     {
+                auto res = make_smart<ExprConstBitfield>(at, cast<uint64_t>::to(value));
+                res->baseType = Type::tBitfield64;
+                return res;
+            }
             case Type::tUInt2:          return make_smart<ExprConstUInt2>(at, cast<uint2>::to(value));
             case Type::tUInt3:          return make_smart<ExprConstUInt3>(at, cast<uint3>::to(value));
             case Type::tUInt4:          return make_smart<ExprConstUInt4>(at, cast<uint4>::to(value));

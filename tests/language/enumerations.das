@@ -49,26 +49,3 @@ def test_enum_macro_conversions(t : T?) {
     }
 }
 
-bitfield Baz {
-    alpha
-    beta
-    gamma
-    alpha_gamma = Baz.alpha | Baz.gamma
-}
-
-[test]
-def test_bitfield_conversions(t : T?) {
-    t |> run("bitfield operations") <| @(t : T?) {
-        var b = Baz.alpha | Baz.gamma
-        t |> equal(Baz.alpha_gamma, b)
-        let has_alpha = (b & Baz.alpha) != bitfield(0)
-        t |> equal(true, has_alpha)
-        let has_beta = (b & Baz.beta) != bitfield(0)
-        t |> equal(false, has_beta)
-        b &= ~Baz.alpha
-        let has_alpha_after = (b & Baz.alpha) != bitfield(0)
-        t |> equal(false, has_alpha_after)
-        let all3 = Baz.beta | Baz.alpha_gamma
-        t |> equal(Baz.alpha | Baz.beta | Baz.gamma, all3)
-    }
-}

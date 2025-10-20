@@ -144,9 +144,11 @@ namespace das
         ADD_NUMERIC_CASTS(bitfield, Bitfield);
         addFunctionBasic<Bitfield,uint32_t>(*this,lib);
         addFunctionBitLogic<Bitfield,uint32_t>(*this,lib);
-        ADD_NUMERIC_CASTS(bitfield8, Bitfield);
-        ADD_NUMERIC_CASTS(bitfield16, Bitfield);
-        ADD_NUMERIC_CASTS(bitfield64, Bitfield);
+        ADD_NUMERIC_CASTS(bitfield8, Bitfield8);
+        ADD_NUMERIC_CASTS(bitfield16, Bitfield16);
+        ADD_NUMERIC_CASTS(bitfield64, Bitfield64);
+        addFunctionBasic<Bitfield64,uint64_t>(*this,lib);
+        addFunctionBitLogic<Bitfield64,uint64_t>(*this,lib);
         // bitfield 8 operations
         addExtern<DAS_BIND_FUN(__bitfield8_eq)>(*this, lib, "==",
             SideEffects::none, "__bitfield8_eq")
