@@ -311,6 +311,9 @@ namespace das {
                 case Type::tInt:        ival = cast<int32_t>::to(value); break;
                 case Type::tUInt:       ival = cast<uint32_t>::to(value); break;
                 case Type::tBitfield:   ival = cast<uint32_t>::to(value); break;
+                case Type::tBitfield8:  ival = cast<uint8_t>::to(value); break;
+                case Type::tBitfield16: ival = cast<uint16_t>::to(value); break;
+                case Type::tBitfield64: ival = cast<uint64_t>::to(value); break;
                 case Type::tInt64:      ival = cast<int64_t>::to(value); break;
                 case Type::tUInt64:     ival = cast<uint64_t>::to(value); break;
                 default: DAS_ASSERTF(0,"we should not be here. unsupported enum type");
@@ -323,6 +326,24 @@ namespace das {
                 sim->at = encloseAt(expr);
                 sim->value = value;
                 sim->foldedNonConst = !expr->type->constant;
+                reportFolding();
+                return sim;
+            } else if ( expr->type->isBitfield() ) {
+                uint64_t ival = 0;
+                switch ( expr->type->baseType ) {
+                case Type::tBitfield8:  ival = cast<uint8_t>::to(value); break;
+                case Type::tBitfield16: ival = cast<uint16_t>::to(value); break;
+                case Type::tBitfield:   ival = cast<uint32_t>::to(value); break;
+                case Type::tBitfield64: ival = cast<uint64_t>::to(value); break;
+                default: DAS_ASSERTF(0,"we should not be here. unsupported bitfield type");
+                }
+                auto sim = make_smart<ExprConstBitfield>(expr->at, ival);
+                sim->type = make_smart<TypeDecl>(*expr->type);
+                sim->constexpression = true;
+                sim->at = encloseAt(expr);
+                sim->foldedNonConst = !expr->type->constant;
+                sim->baseType = expr->type->baseType;
+                sim->bitfieldType = make_smart<TypeDecl>(*expr->type);
                 reportFolding();
                 return sim;
             } else {

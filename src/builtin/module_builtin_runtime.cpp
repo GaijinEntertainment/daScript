@@ -2098,5 +2098,14 @@ namespace das
         addExtern<DAS_BIND_FUN(__bit_set)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set")
                 ->args({"value","mask","on"});
+        addExtern<DAS_BIND_FUN(__bit_set8)>(*this, lib, "__bit_set",
+            SideEffects::modifyArgument, "__bit_set8")
+                ->args({"value","mask","on"});
+        addExtern<DAS_BIND_FUN(__bit_set16)>(*this, lib, "__bit_set",
+            SideEffects::modifyArgument, "__bit_set16")
+                ->args({"value","mask","on"});
+        addExtern<DAS_BIND_FUN(__bit_set64)>(*this, lib, "__bit_set",
+            SideEffects::modifyArgument, "__bit_set64")
+                ->args({"value","mask","on"});
     }
 }

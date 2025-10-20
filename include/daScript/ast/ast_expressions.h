@@ -702,10 +702,10 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct ExprConstBitfield : ExprConstT<uint32_t,ExprConstBitfield> {
-        ExprConstBitfield(uint32_t i = 0)
+    struct ExprConstBitfield : ExprConstT<uint64_t,ExprConstBitfield> {
+        ExprConstBitfield(uint64_t i = 0)
             : ExprConstT(i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
-        ExprConstBitfield(const LineInfo & a, uint32_t i = 0)
+        ExprConstBitfield(const LineInfo & a, uint64_t i = 0)
             : ExprConstT(a,i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
         auto getValue() const { return ExprConstT::getValue(); };

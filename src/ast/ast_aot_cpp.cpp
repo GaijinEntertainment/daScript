@@ -73,6 +73,9 @@ namespace das {
         {   Type::tInt64,       "int64_t"  },
         {   Type::tUInt64,      "uint64_t" },
         {   Type::tBitfield,    "Bitfield" },
+        {   Type::tBitfield8,   "Bitfield8" },
+        {   Type::tBitfield16,  "Bitfield16" },
+        {   Type::tBitfield64,  "Bitfield64" },
         {   Type::tString,      "char *"   },
         {   Type::tInt,         "int32_t"  },
         {   Type::tInt2,        "int2"     },
@@ -147,6 +150,9 @@ namespace das {
             case Type::tEnumeration16:
             case Type::tEnumeration64:
             case Type::tBitfield:
+            case Type::tBitfield8:
+            case Type::tBitfield16:
+            case Type::tBitfield64:
                 return true;
             default:
                 return false;

@@ -127,6 +127,9 @@ namespace detail {
         case Type::tInt4:           return detail::TableWrap<decltype(TAB_FUN<int4>), TAB_FUN<int4>>::get_builtin_address(); \
         case Type::tUInt:           return detail::TableWrap<decltype(TAB_FUN<uint32_t>), TAB_FUN<uint32_t>>::get_builtin_address(); \
         case Type::tBitfield:       return detail::TableWrap<decltype(TAB_FUN<uint32_t>), TAB_FUN<uint32_t>>::get_builtin_address(); \
+        case Type::tBitfield8:      return detail::TableWrap<decltype(TAB_FUN<uint8_t>), TAB_FUN<uint8_t>>::get_builtin_address(); \
+        case Type::tBitfield16:     return detail::TableWrap<decltype(TAB_FUN<uint16_t>), TAB_FUN<uint16_t>>::get_builtin_address(); \
+        case Type::tBitfield64:     return detail::TableWrap<decltype(TAB_FUN<uint64_t>), TAB_FUN<uint64_t>>::get_builtin_address(); \
         case Type::tUInt2:          return detail::TableWrap<decltype(TAB_FUN<uint2>), TAB_FUN<uint2>>::get_builtin_address(); \
         case Type::tUInt3:          return detail::TableWrap<decltype(TAB_FUN<uint3>), TAB_FUN<uint3>>::get_builtin_address(); \
         case Type::tUInt4:          return detail::TableWrap<decltype(TAB_FUN<uint4>), TAB_FUN<uint4>>::get_builtin_address(); \

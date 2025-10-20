@@ -85,6 +85,18 @@ def JV(v : bitfield) {
     return new JsonValue(value <- JsValue(_longint = int64(v)))
 }
 
+def JV(v : bitfield8) {
+    return new JsonValue(value <- JsValue(_longint = int64(v)))
+}
+
+def JV(v : bitfield16) {
+    return new JsonValue(value <- JsValue(_longint = int64(v)))
+}
+
+def JV(v : bitfield64) {
+    return new JsonValue(value <- JsValue(_longint = int64(v)))
+}
+
 def JV(val : int8) : JsonValue? {
     return new JsonValue(value <- JsValue(_longint = int64(val)))
 }

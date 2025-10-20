@@ -2019,6 +2019,9 @@ namespace das {
             case Type::tInt:        nextV = cast<int32_t> ::from(int32_t (nextInt)); break;
             case Type::tUInt:       nextV = cast<uint32_t>::from(uint32_t(nextInt)); break;
             case Type::tBitfield:   nextV = cast<uint32_t>::from(uint32_t(nextInt)); break;
+            case Type::tBitfield8:  nextV = cast<uint8_t>::from(uint8_t(nextInt)); break;
+            case Type::tBitfield16: nextV = cast<uint16_t>::from(uint16_t(nextInt)); break;
+            case Type::tBitfield64: nextV = cast<uint64_t>::from(uint64_t(nextInt)); break;
             case Type::tInt64:      nextV = cast<int64_t> ::from(int64_t (nextInt)); break;
             case Type::tUInt64:     nextV = cast<uint64_t>::from(uint64_t(nextInt)); break;
             default: DAS_ASSERTF(0,"we should not be here. unsupported enum type");
@@ -2650,13 +2653,14 @@ namespace das {
                         c->at, CompilationError::invalid_enumeration);
                     c->type.reset();
                 }
-            } else if ( c->baseType==Type::tBitfield ) {
+            } else if ( c->baseType==Type::tBitfield || c->baseType==Type::tBitfield8 ||
+                        c->baseType==Type::tBitfield16 || c->baseType==Type::tBitfield64 ) {
                 auto cB = static_cast<ExprConstBitfield *>(c);
                 if ( cB->bitfieldType ) {
                     TypeDecl::clone(c->type,cB->bitfieldType);
                     c->type->ref = false;
                 } else {
-                    c->type = make_smart<TypeDecl>(Type::tBitfield);
+                    c->type = make_smart<TypeDecl>(c->baseType);
                 }
                 c->type->constant = isConstantType(c);
             } else if ( c->baseType==Type::tPointer ) {
@@ -5855,7 +5859,7 @@ namespace das {
                         reportAstChanged();
                         auto td = make_smart<TypeDecl>(*alias);
                         td->ref = false;
-                        auto bitConst = new ExprConstBitfield(expr->at, 1u << bit);
+                        auto bitConst = new ExprConstBitfield(expr->at, 1ull << uint64_t(bit));
                         bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
                         bitConst->type = td;
                         return bitConst;
@@ -6895,7 +6899,7 @@ namespace das {
                             auto fidx = efield->value->type->bitFieldIndex(efield->name);
                             if ( fidx != -1 ) {
                                 reportAstChanged();
-                                auto mask = make_smart<ExprConstBitfield>(efield->at,1u<<fidx);
+                                auto mask = make_smart<ExprConstBitfield>(efield->at,1ul<<fidx);
                                 mask->bitfieldType = make_smart<TypeDecl>(*efield->value->type);
                                 auto call = make_smart<ExprCall>(efield->at, "__bit_set");
                                 call->arguments.push_back(value->clone());
@@ -9093,7 +9097,8 @@ namespace das {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
                             expr->name = das_to_string(aliasT->baseType);
-                            if ( aliasT->baseType==Type::tBitfield ) {
+                            if ( aliasT->baseType==Type::tBitfield || aliasT->baseType==Type::tBitfield8 ||
+                                 aliasT->baseType==Type::tBitfield16 || aliasT->baseType==Type::tBitfield64 ) {
                                 expr->aliasSubstitution = aliasT;
                             }
                             reportAstChanged();

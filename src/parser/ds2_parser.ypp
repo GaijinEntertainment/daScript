@@ -364,6 +364,7 @@
 %type <pNameWithPosList>    global_let_variable_name_with_pos_list
 %type <pNameWithPosList>    for_variable_name_with_pos_list
 %type <type>                basic_type_declaration
+%type <type>                bitfield_basic_type_declaration
 %type <type>                enum_basic_type_declaration
 %type <type>                optional_enum_basic_type_declaration
 %type <pTypeDecl>           type_declaration
@@ -3033,12 +3034,21 @@ bitfield_alias_bits
     }
     ;
 
+bitfield_basic_type_declaration
+    :                        { $$ = Type::tBitfield; }
+    |   ':' DAS_TUINT8       { $$ = Type::tBitfield8; }
+    |   ':' DAS_TUINT16      { $$ = Type::tBitfield16; }
+    |   ':' DAS_TUINT        { $$ = Type::tBitfield; }
+    |   ':' DAS_TUINT64      { $$ = Type::tBitfield64; }
+    ;
+
 bitfield_type_declaration
-    :   DAS_TBITFIELD[basicType] '<' { yyextra->das_arrow_depth ++; } bitfield_bits[nl] '>' { yyextra->das_arrow_depth --; } {
-            $$ = new TypeDecl(Type::tBitfield);
+    :   DAS_TBITFIELD bitfield_basic_type_declaration[basicType] '<' { yyextra->das_arrow_depth ++; } bitfield_bits[nl] '>' { yyextra->das_arrow_depth --; } {
+            $$ = new TypeDecl($basicType);
             $$->argNames = *$nl;
-            if ( $$->argNames.size()>32 ) {
-                das2_yyerror(scanner,"only 32 different bits are allowed in a bitfield",tokAt(scanner,@basicType),
+            auto maxBits = $$->maxBitfieldBits();
+            if ( $$->argNames.size()>maxBits ) {
+                das_yyerror(scanner,"only " + to_string(maxBits) + " different bits are allowed in a bitfield",tokAt(scanner,@basicType),
                     CompilationError::invalid_type);
             }
             $$->at = tokAt(scanner,@basicType);
@@ -3394,7 +3404,7 @@ variant_alias_declaration
 bitfield_alias_declaration
     :   DAS_TBITFIELD {
         yyextra->push_nesteds(DAS_EMIT_COMMA);
-    } optional_public_or_private_alias[pubA] NAME[vname] optional_emit_commas {
+    } optional_public_or_private_alias[pubA] NAME[vname] bitfield_basic_type_declaration[basicType] optional_emit_commas {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
@@ -3411,7 +3421,7 @@ bitfield_alias_declaration
         }
         yyextra->pop_nesteds();
     } '}' {
-        auto btype = make_smart<TypeDecl>(Type::tBitfield);
+        auto btype = make_smart<TypeDecl>($basicType);
         btype->alias = *$vname;
         btype->at = tokAt(scanner,@vname);
         btype->isPrivateAlias = !$pubA;
@@ -3420,8 +3430,9 @@ bitfield_alias_declaration
                 btype->argNames.push_back(get<0>(p));
             }
         }
-        if ( btype->argNames.size()>32 ) {
-            das2_yyerror(scanner,"only 32 different bits are allowed in a bitfield",tokAt(scanner,@vname),
+        auto maxBits = btype->maxBitfieldBits();
+        if ( btype->argNames.size()>maxBits ) {
+            das_yyerror(scanner,"only " + to_string(maxBits) + " different bits are allowed in a bitfield",tokAt(scanner,@vname),
                 CompilationError::invalid_type);
         }
         for ( auto & p : *$list ) {

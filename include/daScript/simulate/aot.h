@@ -44,6 +44,40 @@ namespace das {
         value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
     }
 
+    __forceinline void __bit_set8 ( Bitfield8 & value, Bitfield8 mask, bool on ) {
+        value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
+    }
+
+    __forceinline void __bit_set16 ( Bitfield16 & value, Bitfield16 mask, bool on ) {
+        value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
+    }
+
+    __forceinline void __bit_set64 ( Bitfield64 & value, Bitfield64 mask, bool on ) {
+        value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
+    }
+
+    // special bitfield8 operations
+    __forceinline bool __bitfield8_eq  ( Bitfield8 left, Bitfield8 right ) { return left.value == right.value; }
+    __forceinline bool __bitfield8_neq ( Bitfield8 left, Bitfield8 right ) { return left.value != right.value; }
+    __forceinline Bitfield8 __bitfield8_not ( Bitfield8 value ) { return Bitfield8(~value.value); }
+    __forceinline Bitfield8 __bitfield8_and ( Bitfield8 left, Bitfield8 right ) { return Bitfield8(left.value & right.value); }
+    __forceinline Bitfield8 __bitfield8_or  ( Bitfield8 left, Bitfield8 right ) { return Bitfield8(left.value | right.value); }
+    __forceinline Bitfield8 __bitfield8_xor ( Bitfield8 left, Bitfield8 right ) { return Bitfield8(left.value ^ right.value); }
+    __forceinline void __bitfield8_setand ( Bitfield8 & left, Bitfield8 right ) { left.value &= right.value; }
+    __forceinline void __bitfield8_setor  ( Bitfield8 & left, Bitfield8 right ) { left.value |= right.value; }
+    __forceinline void __bitfield8_setxor ( Bitfield8 & left, Bitfield8 right ) { left.value ^= right.value; }
+
+    // special bitfield16 operations
+    __forceinline bool __bitfield16_eq  ( Bitfield16 left, Bitfield16 right ) { return left.value == right.value; }
+    __forceinline bool __bitfield16_neq ( Bitfield16 left, Bitfield16 right ) { return left.value != right.value; }
+    __forceinline Bitfield16 __bitfield16_not ( Bitfield16 value ) { return Bitfield16(~value.value); }
+    __forceinline Bitfield16 __bitfield16_and ( Bitfield16 left, Bitfield16 right ) { return Bitfield16(left.value & right.value); }
+    __forceinline Bitfield16 __bitfield16_or  ( Bitfield16 left, Bitfield16 right ) { return Bitfield16(left.value | right.value); }
+    __forceinline Bitfield16 __bitfield16_xor ( Bitfield16 left, Bitfield16 right ) { return Bitfield16(left.value ^ right.value); }
+    __forceinline void __bitfield16_setand ( Bitfield16 & left, Bitfield16 right ) { left.value &= right.value; }
+    __forceinline void __bitfield16_setor  ( Bitfield16 & left, Bitfield16 right ) { left.value |= right.value; }
+    __forceinline void __bitfield16_setxor ( Bitfield16 & left, Bitfield16 right ) { left.value ^= right.value; }
+
     template <typename TT>
     struct das_auto_cast {
         template <typename QQ>

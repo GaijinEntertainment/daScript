@@ -500,6 +500,9 @@ namespace das {
                 case Type::tDouble:     return makeNode<NodeType<double>>(args...);
                 case Type::tPointer:    return makeNode<NodeType<void *>>(args...);
                 case Type::tBitfield:   return makeNode<NodeType<uint32_t>>(args...);
+                case Type::tBitfield8:  return makeNode<NodeType<uint8_t>>(args...);
+                case Type::tBitfield16: return makeNode<NodeType<uint16_t>>(args...);
+                case Type::tBitfield64: return makeNode<NodeType<uint64_t>>(args...);
                 default:
                     DAS_ASSERTF(0, "we should not even be here. we are calling makeNumericValueNode on an uspported baseType."
                                 "likely new numeric type been added.");
@@ -522,6 +525,9 @@ namespace das {
             case Type::tEnumeration16:  return makeNode<NodeType<int16_t>>(args...);
             case Type::tEnumeration64:  return makeNode<NodeType<int64_t>>(args...);
             case Type::tBitfield:       return makeNode<NodeType<Bitfield>>(args...);
+            case Type::tBitfield8:      return makeNode<NodeType<Bitfield8>>(args...);
+            case Type::tBitfield16:     return makeNode<NodeType<Bitfield16>>(args...);
+            case Type::tBitfield64:     return makeNode<NodeType<Bitfield64>>(args...);
             case Type::tInt:            return makeNode<NodeType<int32_t>>(args...);
             case Type::tInt2:           return makeNode<NodeType<int2>>(args...);
             case Type::tInt3:           return makeNode<NodeType<int3>>(args...);

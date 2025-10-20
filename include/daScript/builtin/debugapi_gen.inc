@@ -63,30 +63,33 @@ protected:
     __fn_Int = 59,
     __fn_UInt = 60,
     __fn_Bitfield = 61,
-    __fn_Int2 = 62,
-    __fn_Int3 = 63,
-    __fn_Int4 = 64,
-    __fn_UInt2 = 65,
-    __fn_UInt3 = 66,
-    __fn_UInt4 = 67,
-    __fn_Float2 = 68,
-    __fn_Float3 = 69,
-    __fn_Float4 = 70,
-    __fn_Range = 71,
-    __fn_URange = 72,
-    __fn_Range64 = 73,
-    __fn_URange64 = 74,
-    __fn_WalkBlock = 75,
-    __fn_WalkFunction = 76,
-    __fn_WalkEnumeration = 77,
-    __fn_WalkEnumeration8 = 78,
-    __fn_WalkEnumeration16 = 79,
-    __fn_WalkEnumeration64 = 80,
-    __fn_FakeContext = 81,
-    __fn_InvalidData = 82,
+    __fn_Bitfield8 = 62,
+    __fn_Bitfield16 = 63,
+    __fn_Bitfield64 = 64,
+    __fn_Int2 = 65,
+    __fn_Int3 = 66,
+    __fn_Int4 = 67,
+    __fn_UInt2 = 68,
+    __fn_UInt3 = 69,
+    __fn_UInt4 = 70,
+    __fn_Float2 = 71,
+    __fn_Float3 = 72,
+    __fn_Float4 = 73,
+    __fn_Range = 74,
+    __fn_URange = 75,
+    __fn_Range64 = 76,
+    __fn_URange64 = 77,
+    __fn_WalkBlock = 78,
+    __fn_WalkFunction = 79,
+    __fn_WalkEnumeration = 80,
+    __fn_WalkEnumeration8 = 81,
+    __fn_WalkEnumeration16 = 82,
+    __fn_WalkEnumeration64 = 83,
+    __fn_FakeContext = 84,
+    __fn_InvalidData = 85,
   };
 protected:
-  int _das_class_method_offset[83];
+  int _das_class_method_offset[86];
 public:
   DapiDataWalker_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_canVisitHandle] = info->fields[2]->offset;
@@ -151,27 +154,30 @@ public:
       _das_class_method_offset[__fn_Int] = info->fields[61]->offset;
       _das_class_method_offset[__fn_UInt] = info->fields[62]->offset;
       _das_class_method_offset[__fn_Bitfield] = info->fields[63]->offset;
-      _das_class_method_offset[__fn_Int2] = info->fields[64]->offset;
-      _das_class_method_offset[__fn_Int3] = info->fields[65]->offset;
-      _das_class_method_offset[__fn_Int4] = info->fields[66]->offset;
-      _das_class_method_offset[__fn_UInt2] = info->fields[67]->offset;
-      _das_class_method_offset[__fn_UInt3] = info->fields[68]->offset;
-      _das_class_method_offset[__fn_UInt4] = info->fields[69]->offset;
-      _das_class_method_offset[__fn_Float2] = info->fields[70]->offset;
-      _das_class_method_offset[__fn_Float3] = info->fields[71]->offset;
-      _das_class_method_offset[__fn_Float4] = info->fields[72]->offset;
-      _das_class_method_offset[__fn_Range] = info->fields[73]->offset;
-      _das_class_method_offset[__fn_URange] = info->fields[74]->offset;
-      _das_class_method_offset[__fn_Range64] = info->fields[75]->offset;
-      _das_class_method_offset[__fn_URange64] = info->fields[76]->offset;
-      _das_class_method_offset[__fn_WalkBlock] = info->fields[77]->offset;
-      _das_class_method_offset[__fn_WalkFunction] = info->fields[78]->offset;
-      _das_class_method_offset[__fn_WalkEnumeration] = info->fields[79]->offset;
-      _das_class_method_offset[__fn_WalkEnumeration8] = info->fields[80]->offset;
-      _das_class_method_offset[__fn_WalkEnumeration16] = info->fields[81]->offset;
-      _das_class_method_offset[__fn_WalkEnumeration64] = info->fields[82]->offset;
-      _das_class_method_offset[__fn_FakeContext] = info->fields[83]->offset;
-      _das_class_method_offset[__fn_InvalidData] = info->fields[84]->offset;
+      _das_class_method_offset[__fn_Bitfield8] = info->fields[64]->offset;
+      _das_class_method_offset[__fn_Bitfield16] = info->fields[65]->offset;
+      _das_class_method_offset[__fn_Bitfield64] = info->fields[66]->offset;
+      _das_class_method_offset[__fn_Int2] = info->fields[67]->offset;
+      _das_class_method_offset[__fn_Int3] = info->fields[68]->offset;
+      _das_class_method_offset[__fn_Int4] = info->fields[69]->offset;
+      _das_class_method_offset[__fn_UInt2] = info->fields[70]->offset;
+      _das_class_method_offset[__fn_UInt3] = info->fields[71]->offset;
+      _das_class_method_offset[__fn_UInt4] = info->fields[72]->offset;
+      _das_class_method_offset[__fn_Float2] = info->fields[73]->offset;
+      _das_class_method_offset[__fn_Float3] = info->fields[74]->offset;
+      _das_class_method_offset[__fn_Float4] = info->fields[75]->offset;
+      _das_class_method_offset[__fn_Range] = info->fields[76]->offset;
+      _das_class_method_offset[__fn_URange] = info->fields[77]->offset;
+      _das_class_method_offset[__fn_Range64] = info->fields[78]->offset;
+      _das_class_method_offset[__fn_URange64] = info->fields[79]->offset;
+      _das_class_method_offset[__fn_WalkBlock] = info->fields[80]->offset;
+      _das_class_method_offset[__fn_WalkFunction] = info->fields[81]->offset;
+      _das_class_method_offset[__fn_WalkEnumeration] = info->fields[82]->offset;
+      _das_class_method_offset[__fn_WalkEnumeration8] = info->fields[83]->offset;
+      _das_class_method_offset[__fn_WalkEnumeration16] = info->fields[84]->offset;
+      _das_class_method_offset[__fn_WalkEnumeration64] = info->fields[85]->offset;
+      _das_class_method_offset[__fn_FakeContext] = info->fields[86]->offset;
+      _das_class_method_offset[__fn_InvalidData] = info->fields[87]->offset;
   }
   __forceinline Func get_canVisitHandle ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitHandle]);
@@ -728,6 +734,33 @@ public:
   __forceinline void invoke_Bitfield ( Context * __context__, Func __funcCall__, void * self, uint32_t & value, TypeInfo const  & ti ) const {
     das_invoke_function<void>::invoke
       <void *,uint32_t &,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,value,ti);
+  }
+  __forceinline Func get_Bitfield8 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_Bitfield8]);
+  }
+  __forceinline void invoke_Bitfield8 ( Context * __context__, Func __funcCall__, void * self, uint8_t & value, TypeInfo const  & ti ) const {
+    das_invoke_function<void>::invoke
+      <void *,uint8_t &,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,value,ti);
+  }
+  __forceinline Func get_Bitfield16 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_Bitfield16]);
+  }
+  __forceinline void invoke_Bitfield16 ( Context * __context__, Func __funcCall__, void * self, uint16_t & value, TypeInfo const  & ti ) const {
+    das_invoke_function<void>::invoke
+      <void *,uint16_t &,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,value,ti);
+  }
+  __forceinline Func get_Bitfield64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_Bitfield64]);
+  }
+  __forceinline void invoke_Bitfield64 ( Context * __context__, Func __funcCall__, void * self, uint64_t & value, TypeInfo const  & ti ) const {
+    das_invoke_function<void>::invoke
+      <void *,uint64_t &,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,value,ti);
   }

@@ -338,17 +338,17 @@ namespace das {
                 ss << "u";
             }
         }
-        virtual void Bitfield ( uint32_t & ui, TypeInfo * info ) override {
+        void anyBitfield ( uint64_t ui, TypeInfo * info ) {
             if ( info->argNames ) {
                 if ( ui ) {
                     ss << "(";
                     bool any = false;
-                    for ( uint32_t bit=0, bits=info->argCount; bit!=bits; ++bit ) {
-                        if ( ui & (1<<bit) ) {
+                    for ( uint64_t bit=0, bits=info->argCount; bit!=bits; ++bit ) {
+                        if ( ui & (1ull<<uint64_t(bit)) ) {
                             if ( any ) ss << "|"; else any = true;
                             ss << info->argNames[bit];
                             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                                ss << "(" << (1u<<bit) << ")";
+                                ss << "(" << (1ull<<bit) << ")";
                             }
                         }
                     }
@@ -362,6 +362,18 @@ namespace das {
                     ss << "u";
                 }
             }
+        }
+        virtual void Bitfield ( uint32_t & ui, TypeInfo * info ) override {
+            anyBitfield( uint64_t(ui), info );
+        }
+        virtual void Bitfield8 ( uint8_t & ui, TypeInfo * info ) override {
+            anyBitfield( uint64_t(ui), info );
+        }
+        virtual void Bitfield16 ( uint16_t & ui, TypeInfo * info ) override {
+            anyBitfield( uint64_t(ui), info );
+        }
+        virtual void Bitfield64 ( uint64_t & ui, TypeInfo * info ) override {
+            anyBitfield( ui, info );
         }
         virtual void Int2 ( int2 & i ) override {
             ss << i;

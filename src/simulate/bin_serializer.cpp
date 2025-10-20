@@ -179,6 +179,15 @@ namespace das {
         virtual void Bitfield ( uint32_t & data, TypeInfo * ) override {
             serialize(data);
         }
+        virtual void Bitfield8 ( uint8_t & data, TypeInfo * ) override {
+            serialize(data);
+        }
+        virtual void Bitfield16 ( uint16_t & data, TypeInfo * ) override {
+            serialize(data);
+        }
+        virtual void Bitfield64 ( uint64_t & data, TypeInfo * ) override {
+            serialize(data);
+        }
         virtual void Int2 ( int2 & data ) override {
             serialize(data);
         }

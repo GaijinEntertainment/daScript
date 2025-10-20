@@ -220,6 +220,15 @@ namespace das {
         virtual void Bitfield ( uint32_t & value, TypeInfo * ) override {
             ss << value;
         }
+        virtual void Bitfield8 ( uint8_t & value, TypeInfo * ) override {
+            ss << int32_t(value);
+        }
+        virtual void Bitfield16 ( uint16_t & value, TypeInfo * ) override {
+            ss << int32_t(value);
+        }
+        virtual void Bitfield64 ( uint64_t & value, TypeInfo * ) override {
+            ss << int64_t(value);
+        }
         virtual void Int2 ( int2 & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }

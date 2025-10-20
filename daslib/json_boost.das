@@ -331,6 +331,21 @@ def from_JV(v : JsonValue const explicit?; ent : bitfield; defV : bitfield = bit
     return null_coalescing(v, defV)
 }
 
+[generic, template(ent), unused_argument(ent)]
+def from_JV(v : JsonValue const explicit?; ent : bitfield8; defV : bitfield8 = bitfield8()) {
+    return null_coalescing(v, defV)
+}
+
+[generic, template(ent), unused_argument(ent)]
+def from_JV(v : JsonValue const explicit?; ent : bitfield16; defV : bitfield16 = bitfield16()) {
+    return null_coalescing(v, defV)
+}
+
+[generic, template(ent), unused_argument(ent)]
+def from_JV(v : JsonValue const explicit?; ent : bitfield64; defV : bitfield64 = bitfield64()) {
+    return null_coalescing(v, defV)
+}
+
 [expect_any_vector_type(v)]
 def JV(v : auto(VecT)) {
     //! Creates `JsonValue` out of value.

@@ -197,36 +197,50 @@ namespace das
     typedef EnumStubAny<int16_t> EnumStub16;
     typedef EnumStubAny<int64_t> EnumStub64;
 
-    struct Bitfield {
-        uint32_t    value;
-        __forceinline Bitfield () {}
-        __forceinline Bitfield ( int32_t v ) : value(uint32_t(v)) {}
-        __forceinline Bitfield ( uint32_t v ) : value(v) {}
-        __forceinline Bitfield ( int64_t v ) : value(uint32_t(v)) {}
-        __forceinline Bitfield ( uint64_t v ) : value(uint32_t(v)) {}
-        __forceinline Bitfield ( int8_t v ) : value(uint32_t(v)) {}
-        __forceinline Bitfield ( uint8_t v ) : value(uint32_t(v)) {}
-        __forceinline Bitfield ( int16_t v ) : value(uint32_t(v)) {}
-        __forceinline Bitfield ( uint16_t v ) : value(uint32_t(v)) {}
-        __forceinline Bitfield ( float v ) : value(uint32_t(v)) {}
-        __forceinline Bitfield ( double v ) : value(uint32_t(v)) {}
-        __forceinline operator uint32_t & () { return value; }
-        __forceinline operator const uint32_t & () const { return value; }
+    template <typename ST>
+    struct BitfieldAny {
+        ST    value;
+        __forceinline BitfieldAny () {}
+        __forceinline BitfieldAny ( int32_t v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( uint32_t v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( int64_t v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( uint64_t v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( int8_t v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( uint8_t v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( int16_t v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( uint16_t v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( float v ) : value(ST(v)) {}
+        __forceinline BitfieldAny ( double v ) : value(ST(v)) {}
+        __forceinline operator ST & () { return value; }
         __forceinline operator float () const { return float(value); }
         __forceinline operator double () const { return double(value); }
+        __forceinline operator int8_t () const { return int8_t(value); }
+        __forceinline operator uint8_t () const { return uint8_t(value); }
+        __forceinline operator uint32_t () const { return uint32_t(value); }
         __forceinline operator int32_t () const { return int32_t(value); }
         __forceinline operator int16_t () const { return int16_t(value); }
         __forceinline operator uint16_t () const { return uint16_t(value); }
         __forceinline operator int64_t () const { return int64_t(value); }
         __forceinline operator uint64_t () const { return uint64_t(value); }
-        __forceinline bool operator == ( const Bitfield & f ) const { return value==f.value; }
-        __forceinline bool operator != ( const Bitfield & f ) const { return value!=f.value; }
-        __forceinline bool operator == ( uint32_t f ) const { return value==f; }
-        __forceinline bool operator != ( uint32_t f ) const { return value!=f; }
+        __forceinline bool operator == ( const BitfieldAny<ST> & f ) const { return value==f.value; }
+        __forceinline bool operator != ( const BitfieldAny<ST> & f ) const { return value!=f.value; }
+        __forceinline bool operator == ( ST f ) const { return value==f; }
+        __forceinline bool operator != ( ST f ) const { return value!=f; }
     };
+
+    typedef BitfieldAny<uint8_t>  Bitfield8;
+    typedef BitfieldAny<uint16_t> Bitfield16;
+    typedef BitfieldAny<uint32_t> Bitfield;
+    typedef BitfieldAny<uint64_t> Bitfield64;
+
+    __forceinline bool operator == ( uint8_t f, const Bitfield8 & t ) { return t.value==f; }
+    __forceinline bool operator != ( uint8_t f, const Bitfield8 & t ) { return t.value!=f; }
+    __forceinline bool operator == ( uint16_t f, const Bitfield16 & t ) { return t.value==f; }
+    __forceinline bool operator != ( uint16_t f, const Bitfield16 & t ) { return t.value!=f; }
     __forceinline bool operator == ( uint32_t f, const Bitfield & t ) { return t.value==f; }
     __forceinline bool operator != ( uint32_t f, const Bitfield & t ) { return t.value!=f; }
-
+    __forceinline bool operator == ( uint64_t f, const Bitfield64 & t ) { return t.value==f; }
+    __forceinline bool operator != ( uint64_t f, const Bitfield64 & t ) { return t.value!=f; }
 }
 
 namespace std {
