@@ -204,3 +204,7 @@
 .. |function-math-quat_slerp| replace:: Spherical linear interpolation between `a` and `b` by `t`.
 
 .. |function-math-round| replace:: Returns the nearest integer to `x`.
+
+.. |function-math-safe_asin| replace:: Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN results.
+
+.. |function-math-safe_acos| replace:: Returns the arccosine of `x`, clamping `x` to the [-1..1] range to avoid NaN results.
