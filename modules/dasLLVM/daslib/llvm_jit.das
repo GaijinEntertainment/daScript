@@ -1752,8 +1752,11 @@ class LlvmJitVisitor : AstVisitor {
         var check_end = append_basic_block("check_end")
         LLVMBuildBr(g_builder, check_div_0)
         LLVMPositionBuilderAtEnd(g_builder, check_div_0)
-        let zero =  LLVMConstInt(base_type_to_llvm_type(opType.baseType), 0ul, 0)
-        let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, right, zero, "cmp_is_zero")
+        var zero = LLVMConstNull(base_type_to_llvm_type(opType.baseType))
+        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, right, zero, "cmp_is_zero")
+        if (opType.isVectorType) {
+            cond = reduce_bit_vector(cond, opType.vectorDim, "!=")
+        }
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder, check_true)
         if (op == "%" || op == "%=") {
@@ -1903,7 +1906,7 @@ class LlvmJitVisitor : AstVisitor {
             }
         } elif (expr.op == "/" || expr.op == "%" || expr.op == "/=" || expr.op == "%=") {
             // for integer division we check division by zero
-            if (opType.isInteger && expr.left._type.isInteger) {
+            if (isNumeric(opType) && isNumeric(expr.left._type)) {
                 if (!isExprIntNZ(expr.right)) {
                     check_divide_by_0(right, expr.at, opType, string(expr.op))
                 }
