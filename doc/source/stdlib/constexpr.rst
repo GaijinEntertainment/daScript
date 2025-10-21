@@ -51,13 +51,13 @@ For example::
 Macro helpers
 +++++++++++++
 
-  *  :ref:`isConstantExpression (expr:smart_ptr\<ast::Expression\> const) : bool <function-_at_constant_expression_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
+  *  :ref:`isConstantExpression (expr:smart_ptr\<ast::Expression\> const) : bool const <function-_at_constant_expression_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
 
 .. _function-_at_constant_expression_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M:
 
 .. das:function:: isConstantExpression(expr: ExpressionPtr)
 
-isConstantExpression returns bool
+isConstantExpression returns bool const
 
 +--------+--------------------------------------------+
 +argument+argument type                               +

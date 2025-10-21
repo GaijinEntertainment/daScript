@@ -35,11 +35,11 @@ For example:::
 Unrolling
 +++++++++
 
-  *  :ref:`unroll (blk:block\<\> const) : void <function-_at_unroll_c__c_unroll_C_builtin_>` 
+  *  :ref:`unroll (blk:block\<void\> const) : void <function-_at_unroll_c__c_unroll_C1_ls_v_gr__builtin_>` 
 
-.. _function-_at_unroll_c__c_unroll_C_builtin_:
+.. _function-_at_unroll_c__c_unroll_C1_ls_v_gr__builtin_:
 
-.. das:function:: unroll(blk: block<> const)
+.. das:function:: unroll(blk: block<void> const)
 
 +--------+-------------+
 +argument+argument type+

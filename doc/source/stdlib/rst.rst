@@ -37,25 +37,25 @@ Group of functions with shared category.
 Document writers
 ++++++++++++++++
 
-  *  :ref:`document (name:string const;mod:rtti::Module? const;fname:string const;substname:string const;groups:array\<rst::DocGroup\> const) : void <function-_at_rst_c__c_document_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__Cs_Cs_C1_ls_S_ls_rst_c__c_DocGroup_gr__gr_A>` 
+  *  :ref:`document (name:string const;mod:rtti::Module? const;fname:string const;substname:string const;groups:array\<rst::DocGroup\> -const) : void <function-_at_rst_c__c_document_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__Cs_Cs_1_ls_S_ls_rst_c__c_DocGroup_gr__gr_A>` 
 
-.. _function-_at_rst_c__c_document_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__Cs_Cs_C1_ls_S_ls_rst_c__c_DocGroup_gr__gr_A:
+.. _function-_at_rst_c__c_document_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__Cs_Cs_1_ls_S_ls_rst_c__c_DocGroup_gr__gr_A:
 
-.. das:function:: document(name: string const; mod: Module? const; fname: string const; substname: string const; groups: array<DocGroup> const)
+.. das:function:: document(name: string const; mod: Module? const; fname: string const; substname: string const; groups: array<DocGroup>)
 
-+---------+---------------------------------------------------------+
-+argument +argument type                                            +
-+=========+=========================================================+
-+name     +string const                                             +
-+---------+---------------------------------------------------------+
-+mod      + :ref:`rtti::Module <handle-rtti-Module>` ? const        +
-+---------+---------------------------------------------------------+
-+fname    +string const                                             +
-+---------+---------------------------------------------------------+
-+substname+string const                                             +
-+---------+---------------------------------------------------------+
-+groups   +array< :ref:`rst::DocGroup <struct-rst-DocGroup>` > const+
-+---------+---------------------------------------------------------+
++---------+---------------------------------------------------+
++argument +argument type                                      +
++=========+===================================================+
++name     +string const                                       +
++---------+---------------------------------------------------+
++mod      + :ref:`rtti::Module <handle-rtti-Module>` ? const  +
++---------+---------------------------------------------------+
++fname    +string const                                       +
++---------+---------------------------------------------------+
++substname+string const                                       +
++---------+---------------------------------------------------+
++groups   +array< :ref:`rst::DocGroup <struct-rst-DocGroup>` >+
++---------+---------------------------------------------------+
 
 
 Document single module given list of `DocGropus`.

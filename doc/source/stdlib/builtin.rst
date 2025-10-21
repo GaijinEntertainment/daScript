@@ -277,6 +277,12 @@ Function annotations
 
 |function_annotation-builtin-unsafe_outside_of_for|
 
+.. _handle-builtin-unsafe_when_not_clone_array:
+
+.. das:attribute:: unsafe_when_not_clone_array
+
+|function_annotation-builtin-unsafe_when_not_clone_array|
+
 .. _handle-builtin-no_aot:
 
 .. das:attribute:: no_aot
@@ -336,6 +342,12 @@ Function annotations
 .. das:attribute:: expect_dim
 
 |function_annotation-builtin-expect_dim|
+
+.. _handle-builtin-expect_ref:
+
+.. das:attribute:: expect_ref
+
+|function_annotation-builtin-expect_ref|
 
 .. _handle-builtin-type_function:
 
@@ -471,6 +483,12 @@ Structure macros
 
 |structure_macro-builtin-comment|
 
+.. _handle-builtin-no_default_initializer:
+
+.. das:attribute:: no_default_initializer
+
+|structure_macro-builtin-no_default_initializer|
+
 .. _handle-builtin-macro_interface:
 
 .. das:attribute:: macro_interface
@@ -506,30 +524,38 @@ Containers
 ++++++++++
 
   *  :ref:`clear (array:array implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_clear_IA_C_c_C_l>` 
-  *  :ref:`length (array:array const implicit) : int <function-_at__builtin__c__c_length_CIA>` 
-  *  :ref:`capacity (array:array const implicit) : int <function-_at__builtin__c__c_capacity_CIA>` 
-  *  :ref:`empty (iterator:iterator const implicit) : bool <function-_at__builtin__c__c_empty_CIG>` 
-  *  :ref:`length (table:table const implicit) : int <function-_at__builtin__c__c_length_CIT>` 
-  *  :ref:`capacity (table:table const implicit) : int <function-_at__builtin__c__c_capacity_CIT>` 
-  *  :ref:`empty (str:string const implicit) : bool <function-_at__builtin__c__c_empty_CIs>` 
-  *  :ref:`empty (str:$::das_string const implicit) : bool <function-_at__builtin__c__c_empty_CIH_ls__builtin__c__c_das_string_gr_>` 
+  *  :ref:`length (array:array const implicit) : int const <function-_at__builtin__c__c_length_CIA>` 
+  *  :ref:`capacity (array:array const implicit) : int const <function-_at__builtin__c__c_capacity_CIA>` 
+  *  :ref:`empty (iterator:iterator const implicit) : bool const <function-_at__builtin__c__c_empty_CIG>` 
+  *  :ref:`length (table:table const implicit) : int const <function-_at__builtin__c__c_length_CIT>` 
+  *  :ref:`capacity (table:table const implicit) : int const <function-_at__builtin__c__c_capacity_CIT>` 
+  *  :ref:`empty (str:string const implicit) : bool const <function-_at__builtin__c__c_empty_CIs>` 
+  *  :ref:`empty (str:$::das_string const implicit) : bool const <function-_at__builtin__c__c_empty_CIH_ls__builtin__c__c_das_string_gr_>` 
   *  :ref:`resize (Arr:array\<auto(numT)\> -const;newSize:int const) : auto <function-_at__builtin__c__c_resize_1_ls_Y_ls_numT_gr_._gr_A_Ci>` 
   *  :ref:`resize_no_init (Arr:array\<auto(numT)\> -const;newSize:int const) : auto <function-_at__builtin__c__c_resize_no_init_1_ls_Y_ls_numT_gr_._gr_A_Ci>` 
   *  :ref:`reserve (Arr:array\<auto(numT)\> -const;newSize:int const) : auto <function-_at__builtin__c__c_reserve_1_ls_Y_ls_numT_gr_._gr_A_Ci>` 
   *  :ref:`pop (Arr:array\<auto(numT)\> -const) : auto <function-_at__builtin__c__c_pop_1_ls_Y_ls_numT_gr_._gr_A>` 
-  *  :ref:`push (Arr:array\<auto(numT)\> -const;value:numT const -#;at:int const) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_CY_ls_numT_gr_L_Ci>` 
-  *  :ref:`push (Arr:array\<auto(numT)\> -const;value:numT const -#) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_CY_ls_numT_gr_L>` 
-  *  :ref:`push (Arr:array\<auto(numT)\> -const;varr:array\<numT\> const -#) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C1_ls_Y_ls_numT_gr_L_gr_A>` 
+  *  :ref:`push (Arr:array\<auto(numT)\> -const;value:numT const ==const -#;at:int const) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C_eq_Y_ls_numT_gr_L_Ci>` 
+  *  :ref:`push (Arr:array\<auto(numT)\> -const;value:numT ==const -const -#;at:int const) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A__eq_Y_ls_numT_gr_L_Ci>` 
+  *  :ref:`push (Arr:array\<auto(numT)\> -const;value:numT const ==const -#) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C_eq_Y_ls_numT_gr_L>` 
+  *  :ref:`push (Arr:array\<auto(numT)\> -const;value:numT ==const -const -#) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A__eq_Y_ls_numT_gr_L>` 
+  *  :ref:`push (Arr:array\<auto(numT)\> -const;varr:array\<numT -#\> const ==const) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C_eq_1_ls_Y_ls_numT_gr_L_gr_A>` 
+  *  :ref:`push (Arr:array\<auto(numT)\> -const;varr:array\<numT -#\> ==const -const) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A__eq_1_ls_Y_ls_numT_gr_L_gr_A>` 
   *  :ref:`push (Arr:array\<auto(numT)\> -const;varr:numT const[] -#) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C_lb_-1_rb_Y_ls_numT_gr_L>` 
-  *  :ref:`push (Arr:array\<auto(numT)[]\> -const;varr:numT const[] -#) : auto <function-_at__builtin__c__c_push_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A_C_lb_-1_rb_Y_ls_numT_gr_L>` 
+  *  :ref:`push (Arr:array\<auto(numT)[]\> -const;varr:numT const[] ==const -#) : auto <function-_at__builtin__c__c_push_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A_C_eq__lb_-1_rb_Y_ls_numT_gr_L>` 
+  *  :ref:`push (Arr:array\<auto(numT)[]\> -const;varr:numT[] ==const -const -#) : auto <function-_at__builtin__c__c_push_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A__eq__lb_-1_rb_Y_ls_numT_gr_L>` 
   *  :ref:`emplace (Arr:array\<auto(numT)\> -const;value:numT& -const -#;at:int const) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_&Y_ls_numT_gr_L_Ci>` 
   *  :ref:`emplace (Arr:array\<auto(numT)\> -const;value:numT& -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_&Y_ls_numT_gr_L>` 
   *  :ref:`emplace (Arr:array\<auto(numT)\> -const;value:numT[] -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A__lb_-1_rb_Y_ls_numT_gr_L>` 
   *  :ref:`emplace (Arr:array\<auto(numT)[]\> -const;value:numT[] -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A__lb_-1_rb_Y_ls_numT_gr_L>` 
-  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;value:numT const|numT const# const;at:int const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_CY_ls_numT_gr_L;C_hh_Y_ls_numT_gr_L_gr_|_Ci>` 
-  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;value:numT const|numT const# const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_CY_ls_numT_gr_L;C_hh_Y_ls_numT_gr_L_gr_|>` 
-  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;varr:numT const[]) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C_lb_-1_rb_Y_ls_numT_gr_L>` 
-  *  :ref:`push_clone (Arr:array\<auto(numT)[]\> -const;varr:numT const[]) : auto <function-_at__builtin__c__c_push_clone_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A_C_lb_-1_rb_Y_ls_numT_gr_L>` 
+  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;value:numT const ==const|numT const# ==const const;at:int const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_C_eq_Y_ls_numT_gr_L;C_hh__eq_Y_ls_numT_gr_L_gr_|_Ci>` 
+  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;value:numT ==const -const|numT# ==const -const -const;at:int const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_0_ls__eq_Y_ls_numT_gr_L;_hh__eq_Y_ls_numT_gr_L_gr_|_Ci>` 
+  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;value:numT const ==const|numT const# ==const const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_C_eq_Y_ls_numT_gr_L;C_hh__eq_Y_ls_numT_gr_L_gr_|>` 
+  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;value:numT ==const -const|numT# ==const -const -const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_0_ls__eq_Y_ls_numT_gr_L;_hh__eq_Y_ls_numT_gr_L_gr_|>` 
+  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;varr:numT const[] ==const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C_eq__lb_-1_rb_Y_ls_numT_gr_L>` 
+  *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;varr:numT[] ==const -const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A__eq__lb_-1_rb_Y_ls_numT_gr_L>` 
+  *  :ref:`push_clone (Arr:array\<auto(numT)[]\> -const;varr:numT const[] ==const) : auto <function-_at__builtin__c__c_push_clone_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A_C_eq__lb_-1_rb_Y_ls_numT_gr_L>` 
+  *  :ref:`push_clone (Arr:array\<auto(numT)[]\> -const;varr:numT[] -const) : auto <function-_at__builtin__c__c_push_clone_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A__lb_-1_rb_Y_ls_numT_gr_L>` 
   *  :ref:`push_clone (A:auto(CT) -const -#;b:auto(TT) const|auto(TT) const# const) : auto <function-_at__builtin__c__c_push_clone_Y_ls_CT_gr_._C0_ls_CY_ls_TT_gr_.;C_hh_Y_ls_TT_gr_._gr_|>` 
   *  :ref:`back (a:array\<auto(TT)\> ==const -const) : TT& <function-_at__builtin__c__c_back__eq_1_ls_Y_ls_TT_gr_._gr_A>` 
   *  :ref:`back (a:array\<auto(TT)\># ==const -const) : TT&# <function-_at__builtin__c__c_back__hh__eq_1_ls_Y_ls_TT_gr_._gr_A>` 
@@ -543,38 +569,43 @@ Containers
   *  :ref:`length (a:auto const|auto const# const) : int <function-_at__builtin__c__c_length_C0_ls_C.;C_hh_._gr_|>` 
   *  :ref:`empty (a:array\<auto\> const|array\<auto\> const# const) : bool <function-_at__builtin__c__c_empty_C0_ls_C1_ls_._gr_A;C_hh_1_ls_._gr_A_gr_|>` 
   *  :ref:`empty (a:table\<auto;auto\> const|table\<auto;auto\> const# const) : bool <function-_at__builtin__c__c_empty_C0_ls_C1_ls_._gr_2_ls_._gr_T;C_hh_1_ls_._gr_2_ls_._gr_T_gr_|>` 
-  *  :ref:`find (Tab:table\<auto(keyT);auto(valT)\> const|table\<auto(keyT);auto(valT)\> const# const;at:keyT const -#;blk:block\<(p:valT? const#):void\> const) : auto <function-_at__builtin__c__c_find_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C_hh_1_ls_Y_ls_valT_gr_L_gr__qm__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find (Tab:table\<auto(keyT);void\> const;at:keyT const|keyT const# const;blk:block\<(p:void? const):void\> const) : auto <function-_at__builtin__c__c_find_C1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)\> const# ==const;at:keyT const -#;blk:block\<(p:valT const&#):void\> const) : auto <function-_at__builtin__c__c_get_C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)\> const ==const;at:keyT const -#;blk:block\<(p:valT const&):void\> const) : auto <function-_at__builtin__c__c_get_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)\># ==const -const;at:keyT const -#;blk:block\<(var p:valT&# -const):void\> const) : auto <function-_at__builtin__c__c_get__hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)\> ==const -const;at:keyT const -#;blk:block\<(var p:valT& -const):void\> const) : auto <function-_at__builtin__c__c_get__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`reserve (Tab:table\<auto(keyT);auto\> -const;newSize:int const) : auto <function-_at__builtin__c__c_reserve_1_ls_Y_ls_keyT_gr_._gr_2_ls_._gr_T_Ci>` 
+  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)\> const# ==const;at:keyT const|keyT const# const;blk:block\<(p:valT const&#):void\> const) : auto <function-_at__builtin__c__c_get_C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)\> const ==const;at:keyT const|keyT const# const;blk:block\<(p:valT const&):void\> const) : auto <function-_at__builtin__c__c_get_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)\># ==const -const;at:keyT const|keyT const# const;blk:block\<(var p:valT&# -const):void\> const) : auto <function-_at__builtin__c__c_get__hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)\> ==const -const;at:keyT const|keyT const# const;blk:block\<(var p:valT& -const):void\> const) : auto <function-_at__builtin__c__c_get__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)[]\> const# ==const;at:keyT const|keyT const# const;blk:block\<(p:valT const[-2]&#):void\> const) : auto <function-_at__builtin__c__c_get_C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&_hh__lb_-2_rb_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)[]\> const ==const;at:keyT const|keyT const# const;blk:block\<(p:valT const[-2]&):void\> const) : auto <function-_at__builtin__c__c_get_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&_lb_-2_rb_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)[]\># ==const -const;at:keyT const|keyT const# const;blk:block\<(var p:valT[-2]&# -const):void\> const) : auto <function-_at__builtin__c__c_get__hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&_hh__lb_-2_rb_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`get (Tab:table\<auto(keyT);auto(valT)[]\> ==const -const;at:keyT const|keyT const# const;blk:block\<(var p:valT[-2]& -const):void\> const) : auto <function-_at__builtin__c__c_get__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&_lb_-2_rb_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`get (Tab:table\<auto(keyT);void\> const;at:keyT const|keyT const# const;blk:block\<(var p:void? -const):void\> const) : auto <function-_at__builtin__c__c_get_C1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_if_exists (Tab:table\<auto(keyT);auto(valT)\> const;at:keyT const -#;blk:block\<(p:valT const&):void\> const) : auto <function-_at__builtin__c__c_find_if_exists_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_if_exists (Tab:table\<auto(keyT);auto(valT)\> const#;at:keyT const -#;blk:block\<(p:valT const&#):void\> const) : auto <function-_at__builtin__c__c_find_if_exists_C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_if_exists (Tab:table\<auto(keyT);void\> const;at:keyT const -#;blk:block\<(p:void? const):void\> const) : auto <function-_at__builtin__c__c_find_if_exists_C1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_for_edit (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const -#;blk:block\<(var p:valT?# -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls__hh_1_ls_Y_ls_valT_gr_L_gr__qm__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_for_edit (Tab:table\<auto(keyT);void\> -const;at:keyT const|keyT const# const;blk:block\<(var p:void? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_for_edit (Tab:table\<auto(keyT);auto(valT)\> -const|table\<auto(keyT);auto(valT)\># -const -const;at:keyT const -#) : valT? <function-_at__builtin__c__c_find_for_edit_0_ls_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_CY_ls_keyT_gr_L>` 
-  *  :ref:`find_for_edit (Tab:table\<auto(keyT);void\> -const;at:keyT const|keyT const# const) : void? <function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|>` 
-  *  :ref:`find_for_edit_if_exists (Tab:table\<auto(keyT);auto(valT)\># -const;at:keyT const -#;blk:block\<(var p:valT&# -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_if_exists__hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_for_edit_if_exists (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const -#;blk:block\<(var p:valT& -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`find_for_edit_if_exists (Tab:table\<auto(keyT);void\> -const;at:keyT const|keyT const# const;blk:block\<(var p:void? -const):void\> const) : auto <function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`erase (Tab:table\<auto(keyT);auto(valT)\> -const;at:string const#) : bool <function-_at__builtin__c__c_erase_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C_hh_s>` 
   *  :ref:`erase (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const|keyT const# const) : bool <function-_at__builtin__c__c_erase_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|>` 
   *  :ref:`insert (Tab:table\<auto(keyT);void\> -const;at:keyT const|keyT const# const) : auto <function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|>` 
+  *  :ref:`insert (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const|keyT const# const;val:valT ==const -const|valT# ==const -const -const) : auto <function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_0_ls__eq_Y_ls_valT_gr_L;_hh__eq_Y_ls_valT_gr_L_gr_|>` 
+  *  :ref:`insert (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const|keyT const# const;val:valT const ==const|valT const# ==const const) : auto <function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_C0_ls_C_eq_Y_ls_valT_gr_L;C_hh__eq_Y_ls_valT_gr_L_gr_|>` 
+  *  :ref:`insert (Tab:table\<auto(keyT);auto(valT)[]\> -const;at:keyT const|keyT const# const;val:valT[] ==const -const|valT[]# ==const -const -const) : auto <function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_0_ls__eq__lb_-1_rb_Y_ls_valT_gr_L;_hh__eq__lb_-1_rb_Y_ls_valT_gr_L_gr_|>` 
+  *  :ref:`insert (Tab:table\<auto(keyT);auto(valT)[]\> -const;at:keyT const|keyT const# const;val:valT const[] ==const|valT const[]# ==const const) : auto <function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_C0_ls_C_eq__lb_-1_rb_Y_ls_valT_gr_L;C_hh__eq__lb_-1_rb_Y_ls_valT_gr_L_gr_|>` 
+  *  :ref:`emplace (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const|keyT const# const;val:valT& -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_&Y_ls_valT_gr_L>` 
+  *  :ref:`emplace (Tab:table\<auto(keyT);smart_ptr\<auto(valT)\>\> -const;at:keyT const|keyT const# const;val:smart_ptr\<valT\>& -const) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_keyT_gr_._gr_2_ls_1_ls_Y_ls_valT_gr_._gr__qm_M_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_&1_ls_Y_ls_valT_gr_L_gr__qm_M>` 
+  *  :ref:`emplace (Tab:table\<auto(keyT);auto(valT)[]\> -const;at:keyT const|keyT const# const;val:valT[]& -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_&_lb_-1_rb_Y_ls_valT_gr_L>` 
+  *  :ref:`emplace (Tab:table\<auto;auto\> -const;key:auto const;value:auto const) : auto <function-_at__builtin__c__c_emplace_1_ls_._gr_2_ls_._gr_T_C._C._%_ls__ex_()_gr_>` 
+  *  :ref:`emplace (a:array\<auto\> -const;value:auto const) : auto <function-_at__builtin__c__c_emplace_1_ls_._gr_A_C._%_ls__ex_()_gr_>` 
   *  :ref:`key_exists (Tab:table\<auto(keyT);auto(valT)\> const|table\<auto(keyT);auto(valT)\> const# const;at:string const#) : bool <function-_at__builtin__c__c_key_exists_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_C_hh_s>` 
   *  :ref:`key_exists (Tab:table\<auto(keyT);auto(valT)\> const|table\<auto(keyT);auto(valT)\> const# const;at:keyT const|keyT const# const) : bool <function-_at__builtin__c__c_key_exists_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|>` 
   *  :ref:`copy_to_local (a:auto(TT) const) : TT -const <function-_at__builtin__c__c_copy_to_local_CY_ls_TT_gr_.>` 
   *  :ref:`move_to_local (a:auto(TT)& -const) : TT -const -& <function-_at__builtin__c__c_move_to_local_&Y_ls_TT_gr_.>` 
-  *  :ref:`keys (a:table\<auto(keyT);auto(valT)\> const|table\<auto(keyT);auto(valT)\> const# const) : iterator\<keyT -const\> <function-_at__builtin__c__c_keys_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|>` 
+  *  :ref:`keys (a:table\<auto(keyT);auto(valT)\> const ==const|table\<auto(keyT);auto(valT)\> const# ==const const) : iterator\<keyT -const\> <function-_at__builtin__c__c_keys_C0_ls_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|>` 
+  *  :ref:`keys (a:table\<auto(keyT);auto(valT)\> ==const -const|table\<auto(keyT);auto(valT)\># ==const -const -const) : iterator\<keyT -const\> <function-_at__builtin__c__c_keys_0_ls__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|>` 
   *  :ref:`values (a:table\<auto(keyT);void\> const ==const|table\<auto(keyT);void\> const# ==const const) : auto <function-_at__builtin__c__c_values_C0_ls_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T;C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_gr_|>` 
   *  :ref:`values (a:table\<auto(keyT);void\> ==const -const|table\<auto(keyT);void\># ==const -const -const) : auto <function-_at__builtin__c__c_values_0_ls__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T;_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_gr_|>` 
   *  :ref:`values (a:table\<auto(keyT);auto(valT)\> const ==const|table\<auto(keyT);auto(valT)\> const# ==const const) : iterator\<valT const&\> <function-_at__builtin__c__c_values_C0_ls_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|>` 
   *  :ref:`values (a:table\<auto(keyT);auto(valT)\> ==const -const|table\<auto(keyT);auto(valT)\># ==const -const -const) : iterator\<valT&\> <function-_at__builtin__c__c_values_0_ls__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|>` 
+  *  :ref:`values (a:table\<auto(keyT);auto(valT)[]\> const ==const|table\<auto(keyT);auto(valT)[]\> const# ==const const) : iterator\<valT const[-2]&\> <function-_at__builtin__c__c_values_C0_ls_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T;C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_gr_|>` 
+  *  :ref:`values (a:table\<auto(keyT);auto(valT)[]\> ==const -const|table\<auto(keyT);auto(valT)[]\># ==const -const -const) : iterator\<valT[-2]&\> <function-_at__builtin__c__c_values_0_ls__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T;_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_gr_|>` 
   *  :ref:`lock (Tab:table\<auto(keyT);auto(valT)\> const|table\<auto(keyT);auto(valT)\> const# const;blk:block\<(t:table\<keyT;valT\> const#):void\> const) : auto <function-_at__builtin__c__c_lock_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_CN_ls_t_gr_0_ls_C_hh_1_ls_Y_ls_keyT_gr_L_gr_2_ls_Y_ls_valT_gr_L_gr_T_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`lock_forever (Tab:table\<auto(keyT);auto(valT)\> -const|table\<auto(keyT);auto(valT)\># -const -const) : table\<keyT;valT\># <function-_at__builtin__c__c_lock_forever_0_ls_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|>` 
-  *  :ref:`next (it:iterator\<auto(TT)\> const;value:TT& -const) : bool <function-_at__builtin__c__c_next_C1_ls_Y_ls_TT_gr_._gr_G_&Y_ls_TT_gr_L>` 
+  *  :ref:`next (it:iterator\<auto(TT)\> -const;value:TT& -const) : bool <function-_at__builtin__c__c_next_1_ls_Y_ls_TT_gr_._gr_G_&Y_ls_TT_gr_L>` 
   *  :ref:`each (rng:range const) : iterator\<int\> <function-_at__builtin__c__c_each_Cr>` 
   *  :ref:`each (str:string const) : iterator\<int\> <function-_at__builtin__c__c_each_Cs>` 
   *  :ref:`each (a:auto(TT) const[]) : iterator\<TT&\> <function-_at__builtin__c__c_each_C_lb_-1_rb_Y_ls_TT_gr_.>` 
@@ -584,16 +615,19 @@ Containers
   *  :ref:`each_ref (lam:lambda\<(var arg:auto(argT)? -const):bool\> const) : iterator\<argT&\> <function-_at__builtin__c__c_each_ref_CN_ls_arg_gr_0_ls_1_ls_Y_ls_argT_gr_._gr__qm__gr_1_ls_b_gr__at_>` 
   *  :ref:`each_enum (tt:auto(TT) const) : iterator\<TT -const -&\> <function-_at__builtin__c__c_each_enum_CY_ls_TT_gr_.>` 
   *  :ref:`nothing (it:iterator\<auto(TT)\> -const) : iterator\<TT\> <function-_at__builtin__c__c_nothing_1_ls_Y_ls_TT_gr_._gr_G>` 
-  *  :ref:`to_array (it:iterator\<auto(TT)\> const) : array\<TT -const -&\> <function-_at__builtin__c__c_to_array_C1_ls_Y_ls_TT_gr_._gr_G>` 
+  *  :ref:`to_array (it:iterator\<auto(TT)\> -const) : array\<TT -const -&\> <function-_at__builtin__c__c_to_array_1_ls_Y_ls_TT_gr_._gr_G>` 
   *  :ref:`to_array (a:auto(TT) const[]) : array\<TT -const\> <function-_at__builtin__c__c_to_array_C_lb_-1_rb_Y_ls_TT_gr_.>` 
   *  :ref:`to_array_move (a:auto(TT)[] -const) : array\<TT -const\> <function-_at__builtin__c__c_to_array_move__lb_-1_rb_Y_ls_TT_gr_.>` 
-  *  :ref:`to_array_move (a:auto(TT) -const) : array\<TT -const\> <function-_at__builtin__c__c_to_array_move_Y_ls_TT_gr_.>` 
+  *  :ref:`to_array_move (a:auto(TT) const ==const) : array\<TT -const\> <function-_at__builtin__c__c_to_array_move_C_eq_Y_ls_TT_gr_.>` 
+  *  :ref:`to_array_move (a:auto(TT) ==const -const) : array\<TT -const\> <function-_at__builtin__c__c_to_array_move__eq_Y_ls_TT_gr_.>` 
   *  :ref:`to_table (a:tuple\<auto(keyT);auto(valT)\> const[]) : table\<keyT -const;valT\> <function-_at__builtin__c__c_to_table_C_lb_-1_rb_0_ls_Y_ls_keyT_gr_.;Y_ls_valT_gr_._gr_U>` 
   *  :ref:`to_table (a:auto(keyT) const[]) : table\<keyT -const;void\> <function-_at__builtin__c__c_to_table_C_lb_-1_rb_Y_ls_keyT_gr_.>` 
-  *  :ref:`to_table_move (a:auto(keyT)[] -const) : table\<keyT -const;void\> <function-_at__builtin__c__c_to_table_move__lb_-1_rb_Y_ls_keyT_gr_.>` 
-  *  :ref:`to_table_move (a:auto(keyT) -const) : table\<keyT -const;void\> <function-_at__builtin__c__c_to_table_move_Y_ls_keyT_gr_.>` 
+  *  :ref:`to_table_move (a:auto(keyT) const[]) : table\<keyT -const;void\> <function-_at__builtin__c__c_to_table_move_C_lb_-1_rb_Y_ls_keyT_gr_.>` 
+  *  :ref:`to_table_move (a:array\<auto(keyT)\> const) : table\<keyT -const;void\> <function-_at__builtin__c__c_to_table_move_C1_ls_Y_ls_keyT_gr_._gr_A>` 
+  *  :ref:`to_table_move (a:auto(keyT) const) : table\<keyT -const;void\> <function-_at__builtin__c__c_to_table_move_CY_ls_keyT_gr_.>` 
   *  :ref:`to_table_move (a:tuple\<auto(keyT);auto(valT)\> -const) : table\<keyT -const;valT\> <function-_at__builtin__c__c_to_table_move_0_ls_Y_ls_keyT_gr_.;Y_ls_valT_gr_._gr_U>` 
   *  :ref:`to_table_move (a:tuple\<auto(keyT);auto(valT)\>[] -const) : table\<keyT -const;valT\> <function-_at__builtin__c__c_to_table_move__lb_-1_rb_0_ls_Y_ls_keyT_gr_.;Y_ls_valT_gr_._gr_U>` 
+  *  :ref:`to_table_move (a:array\<tuple\<auto(keyT);auto(valT)\>\> -const) : table\<keyT -const;valT\> <function-_at__builtin__c__c_to_table_move_1_ls_0_ls_Y_ls_keyT_gr_.;Y_ls_valT_gr_._gr_U_gr_A>` 
   *  :ref:`sort (a:auto(TT)[] -const|auto(TT)[]# -const -const) : auto <function-_at__builtin__c__c_sort_0_ls__lb_-1_rb_Y_ls_TT_gr_.;_hh__lb_-1_rb_Y_ls_TT_gr_._gr_|>` 
   *  :ref:`sort (a:array\<auto(TT)\> -const|array\<auto(TT)\># -const -const) : auto <function-_at__builtin__c__c_sort_0_ls_1_ls_Y_ls_TT_gr_._gr_A;_hh_1_ls_Y_ls_TT_gr_._gr_A_gr_|>` 
   *  :ref:`sort (a:auto(TT)[] -const|auto(TT)[]# -const -const;cmp:block\<(x:TT const;y:TT const):bool\> const) : auto <function-_at__builtin__c__c_sort_0_ls__lb_-1_rb_Y_ls_TT_gr_.;_hh__lb_-1_rb_Y_ls_TT_gr_._gr_|_CN_ls_x;y_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
@@ -602,14 +636,16 @@ Containers
   *  :ref:`lock (a:array\<auto(TT)\> const ==const|array\<auto(TT)\> const# ==const const;blk:block\<(x:array\<TT\> const#):auto\> const) : auto <function-_at__builtin__c__c_lock_C0_ls_C_eq_1_ls_Y_ls_TT_gr_._gr_A;C_hh__eq_1_ls_Y_ls_TT_gr_._gr_A_gr_|_CN_ls_x_gr_0_ls_C_hh_1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_._gr__builtin_>` 
   *  :ref:`find_index (arr:array\<auto(TT)\> const|array\<auto(TT)\> const# const;key:TT const) : auto <function-_at__builtin__c__c_find_index_C0_ls_C1_ls_Y_ls_TT_gr_._gr_A;C_hh_1_ls_Y_ls_TT_gr_._gr_A_gr_|_CY_ls_TT_gr_L>` 
   *  :ref:`find_index (arr:auto(TT) const[]|auto(TT) const[]# const;key:TT const) : auto <function-_at__builtin__c__c_find_index_C0_ls_C_lb_-1_rb_Y_ls_TT_gr_.;C_hh__lb_-1_rb_Y_ls_TT_gr_._gr_|_CY_ls_TT_gr_L>` 
-  *  :ref:`find_index (arr:iterator\<auto(TT)\> const;key:TT const -&) : auto <function-_at__builtin__c__c_find_index_C1_ls_Y_ls_TT_gr_._gr_G_CY_ls_TT_gr_L>` 
+  *  :ref:`find_index (arr:iterator\<auto(TT)\> -const;key:TT const -&) : auto <function-_at__builtin__c__c_find_index_1_ls_Y_ls_TT_gr_._gr_G_CY_ls_TT_gr_L>` 
   *  :ref:`find_index_if (arr:array\<auto(TT)\> const|array\<auto(TT)\> const# const;blk:block\<(key:TT const):bool\> const) : auto <function-_at__builtin__c__c_find_index_if_C0_ls_C1_ls_Y_ls_TT_gr_._gr_A;C_hh_1_ls_Y_ls_TT_gr_._gr_A_gr_|_CN_ls_key_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
   *  :ref:`find_index_if (arr:auto(TT) const[]|auto(TT) const[]# const;blk:block\<(key:TT const):bool\> const) : auto <function-_at__builtin__c__c_find_index_if_C0_ls_C_lb_-1_rb_Y_ls_TT_gr_.;C_hh__lb_-1_rb_Y_ls_TT_gr_._gr_|_CN_ls_key_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
-  *  :ref:`find_index_if (arr:iterator\<auto(TT)\> const;blk:block\<(key:TT const -&):bool\> const) : auto <function-_at__builtin__c__c_find_index_if_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_key_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`find_index_if (arr:iterator\<auto(TT)\> -const;blk:block\<(key:TT const -&):bool\> const) : auto <function-_at__builtin__c__c_find_index_if_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_key_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
   *  :ref:`has_value (a:auto const;key:auto const) : auto <function-_at__builtin__c__c_has_value_C._C.>` 
+  *  :ref:`has_value (a:iterator\<auto\> -const;key:auto const) : auto <function-_at__builtin__c__c_has_value_1_ls_._gr_G_C.>` 
   *  :ref:`subarray (a:auto(TT) const[];r:range const) : auto <function-_at__builtin__c__c_subarray_C_lb_-1_rb_Y_ls_TT_gr_._Cr>` 
   *  :ref:`subarray (a:auto(TT) const[];r:urange const) : auto <function-_at__builtin__c__c_subarray_C_lb_-1_rb_Y_ls_TT_gr_._Cz>` 
-  *  :ref:`subarray (a:array\<auto(TT)\> const;r:range const) : auto <function-_at__builtin__c__c_subarray_C1_ls_Y_ls_TT_gr_._gr_A_Cr>` 
+  *  :ref:`subarray (a:array\<auto(TT)\> const ==const;r:range const) : auto <function-_at__builtin__c__c_subarray_C_eq_1_ls_Y_ls_TT_gr_._gr_A_Cr>` 
+  *  :ref:`subarray (a:array\<auto(TT)\> ==const -const;r:range const) : auto <function-_at__builtin__c__c_subarray__eq_1_ls_Y_ls_TT_gr_._gr_A_Cr>` 
   *  :ref:`subarray (a:array\<auto(TT)\> const;r:urange const) : auto <function-_at__builtin__c__c_subarray_C1_ls_Y_ls_TT_gr_._gr_A_Cz>` 
   *  :ref:`move_to_ref (a:auto& -const;b:auto -const) : auto <function-_at__builtin__c__c_move_to_ref_&._.>` 
   *  :ref:`clear (t:table\<auto(KT);auto(VT)\> -const) : auto <function-_at__builtin__c__c_clear_1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T>` 
@@ -631,7 +667,7 @@ Containers
 
 .. das:function:: length(array: array const implicit)
 
-length returns int
+length returns int const
 
 +--------+--------------------+
 +argument+argument type       +
@@ -646,7 +682,7 @@ length returns int
 
 .. das:function:: capacity(array: array const implicit)
 
-capacity returns int
+capacity returns int const
 
 +--------+--------------------+
 +argument+argument type       +
@@ -661,7 +697,7 @@ capacity returns int
 
 .. das:function:: empty(iterator: iterator const implicit)
 
-empty returns bool
+empty returns bool const
 
 +--------+-----------------------+
 +argument+argument type          +
@@ -676,7 +712,7 @@ empty returns bool
 
 .. das:function:: length(table: table const implicit)
 
-length returns int
+length returns int const
 
 +--------+--------------------+
 +argument+argument type       +
@@ -691,7 +727,7 @@ length returns int
 
 .. das:function:: capacity(table: table const implicit)
 
-capacity returns int
+capacity returns int const
 
 +--------+--------------------+
 +argument+argument type       +
@@ -706,7 +742,7 @@ capacity returns int
 
 .. das:function:: empty(str: string const implicit)
 
-empty returns bool
+empty returns bool const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -721,7 +757,7 @@ empty returns bool
 
 .. das:function:: empty(str: das_string const implicit)
 
-empty returns bool
+empty returns bool const
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -798,9 +834,9 @@ pop returns auto
 
 |function-builtin-pop|
 
-.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_CY_ls_numT_gr_L_Ci:
+.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C_eq_Y_ls_numT_gr_L_Ci:
 
-.. das:function:: push(Arr: array<auto(numT)>; value: numT const; at: int const)
+.. das:function:: push(Arr: array<auto(numT)>; value: numT const ==const; at: int const)
 
 push returns auto
 
@@ -809,7 +845,7 @@ push returns auto
 +========+=================+
 +Arr     +array<auto(numT)>+
 +--------+-----------------+
-+value   +numT const       +
++value   +numT const!      +
 +--------+-----------------+
 +at      +int const        +
 +--------+-----------------+
@@ -817,9 +853,9 @@ push returns auto
 
 |function-builtin-push|
 
-.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_CY_ls_numT_gr_L:
+.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A__eq_Y_ls_numT_gr_L_Ci:
 
-.. das:function:: push(Arr: array<auto(numT)>; value: numT const)
+.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const; at: int const)
 
 push returns auto
 
@@ -828,15 +864,17 @@ push returns auto
 +========+=================+
 +Arr     +array<auto(numT)>+
 +--------+-----------------+
-+value   +numT const       +
++value   +numT!            +
++--------+-----------------+
++at      +int const        +
 +--------+-----------------+
 
 
 |function-builtin-push|
 
-.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C1_ls_Y_ls_numT_gr_L_gr_A:
+.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C_eq_Y_ls_numT_gr_L:
 
-.. das:function:: push(Arr: array<auto(numT)>; varr: array<numT> const)
+.. das:function:: push(Arr: array<auto(numT)>; value: numT const ==const)
 
 push returns auto
 
@@ -845,7 +883,58 @@ push returns auto
 +========+=================+
 +Arr     +array<auto(numT)>+
 +--------+-----------------+
-+varr    +array<numT> const+
++value   +numT const!      +
++--------+-----------------+
+
+
+|function-builtin-push|
+
+.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A__eq_Y_ls_numT_gr_L:
+
+.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const)
+
+push returns auto
+
++--------+-----------------+
++argument+argument type    +
++========+=================+
++Arr     +array<auto(numT)>+
++--------+-----------------+
++value   +numT!            +
++--------+-----------------+
+
+
+|function-builtin-push|
+
+.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C_eq_1_ls_Y_ls_numT_gr_L_gr_A:
+
+.. das:function:: push(Arr: array<auto(numT)>; varr: array<numT> const ==const)
+
+push returns auto
+
++--------+------------------+
++argument+argument type     +
++========+==================+
++Arr     +array<auto(numT)> +
++--------+------------------+
++varr    +array<numT> const!+
++--------+------------------+
+
+
+|function-builtin-push|
+
+.. _function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A__eq_1_ls_Y_ls_numT_gr_L_gr_A:
+
+.. das:function:: push(Arr: array<auto(numT)>; varr: array<numT> ==const)
+
+push returns auto
+
++--------+-----------------+
++argument+argument type    +
++========+=================+
++Arr     +array<auto(numT)>+
++--------+-----------------+
++varr    +array<numT>!     +
 +--------+-----------------+
 
 
@@ -868,9 +957,9 @@ push returns auto
 
 |function-builtin-push|
 
-.. _function-_at__builtin__c__c_push_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A_C_lb_-1_rb_Y_ls_numT_gr_L:
+.. _function-_at__builtin__c__c_push_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A_C_eq__lb_-1_rb_Y_ls_numT_gr_L:
 
-.. das:function:: push(Arr: array<auto(numT)[]>; varr: numT const[])
+.. das:function:: push(Arr: array<auto(numT)[]>; varr: numT const[] ==const)
 
 push returns auto
 
@@ -879,7 +968,24 @@ push returns auto
 +========+=====================+
 +Arr     +array<auto(numT)[-1]>+
 +--------+---------------------+
-+varr    +numT const[-1]       +
++varr    +numT const[-1]!      +
++--------+---------------------+
+
+
+|function-builtin-push|
+
+.. _function-_at__builtin__c__c_push_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A__eq__lb_-1_rb_Y_ls_numT_gr_L:
+
+.. das:function:: push(Arr: array<auto(numT)[]>; varr: numT[] ==const)
+
+push returns auto
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++Arr     +array<auto(numT)[-1]>+
++--------+---------------------+
++varr    +numT[-1]!            +
 +--------+---------------------+
 
 
@@ -955,9 +1061,9 @@ emplace returns auto
 
 |function-builtin-emplace|
 
-.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_CY_ls_numT_gr_L;C_hh_Y_ls_numT_gr_L_gr_|_Ci:
+.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_C_eq_Y_ls_numT_gr_L;C_hh__eq_Y_ls_numT_gr_L_gr_|_Ci:
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT const|numT const# const; at: int const)
+.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT const ==const|numT const# ==const const; at: int const)
 
 push_clone returns auto
 
@@ -974,9 +1080,28 @@ push_clone returns auto
 
 |function-builtin-push_clone|
 
-.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_CY_ls_numT_gr_L;C_hh_Y_ls_numT_gr_L_gr_|:
+.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_0_ls__eq_Y_ls_numT_gr_L;_hh__eq_Y_ls_numT_gr_L_gr_|_Ci:
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT const|numT const# const)
+.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT# ==const; at: int const)
+
+push_clone returns auto
+
++--------+-----------------+
++argument+argument type    +
++========+=================+
++Arr     +array<auto(numT)>+
++--------+-----------------+
++value   +option           +
++--------+-----------------+
++at      +int const        +
++--------+-----------------+
+
+
+|function-builtin-push_clone|
+
+.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_C_eq_Y_ls_numT_gr_L;C_hh__eq_Y_ls_numT_gr_L_gr_|:
+
+.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT const ==const|numT const# ==const const)
 
 push_clone returns auto
 
@@ -991,9 +1116,9 @@ push_clone returns auto
 
 |function-builtin-push_clone|
 
-.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C_lb_-1_rb_Y_ls_numT_gr_L:
+.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_0_ls__eq_Y_ls_numT_gr_L;_hh__eq_Y_ls_numT_gr_L_gr_|:
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT const[])
+.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT# ==const)
 
 push_clone returns auto
 
@@ -1002,15 +1127,49 @@ push_clone returns auto
 +========+=================+
 +Arr     +array<auto(numT)>+
 +--------+-----------------+
-+varr    +numT const[-1]   +
++value   +option           +
 +--------+-----------------+
 
 
 |function-builtin-push_clone|
 
-.. _function-_at__builtin__c__c_push_clone_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A_C_lb_-1_rb_Y_ls_numT_gr_L:
+.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C_eq__lb_-1_rb_Y_ls_numT_gr_L:
 
-.. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT const[])
+.. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT const[] ==const)
+
+push_clone returns auto
+
++--------+-----------------+
++argument+argument type    +
++========+=================+
++Arr     +array<auto(numT)>+
++--------+-----------------+
++varr    +numT const[-1]!  +
++--------+-----------------+
+
+
+|function-builtin-push_clone|
+
+.. _function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A__eq__lb_-1_rb_Y_ls_numT_gr_L:
+
+.. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT[] ==const)
+
+push_clone returns auto
+
++--------+-----------------+
++argument+argument type    +
++========+=================+
++Arr     +array<auto(numT)>+
++--------+-----------------+
++varr    +numT[-1]!        +
++--------+-----------------+
+
+
+|function-builtin-push_clone|
+
+.. _function-_at__builtin__c__c_push_clone_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A_C_eq__lb_-1_rb_Y_ls_numT_gr_L:
+
+.. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT const[] ==const)
 
 push_clone returns auto
 
@@ -1019,7 +1178,24 @@ push_clone returns auto
 +========+=====================+
 +Arr     +array<auto(numT)[-1]>+
 +--------+---------------------+
-+varr    +numT const[-1]       +
++varr    +numT const[-1]!      +
++--------+---------------------+
+
+
+|function-builtin-push_clone|
+
+.. _function-_at__builtin__c__c_push_clone_1_ls__lb_-1_rb_Y_ls_numT_gr_._gr_A__lb_-1_rb_Y_ls_numT_gr_L:
+
+.. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT[])
+
+push_clone returns auto
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++Arr     +array<auto(numT)[-1]>+
++--------+---------------------+
++varr    +numT[-1]             +
 +--------+---------------------+
 
 
@@ -1230,53 +1406,26 @@ empty returns bool
 
 |function-builtin-empty|
 
-.. _function-_at__builtin__c__c_find_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C_hh_1_ls_Y_ls_valT_gr_L_gr__qm__gr_1_ls_v_gr__builtin_:
+.. _function-_at__builtin__c__c_reserve_1_ls_Y_ls_keyT_gr_._gr_2_ls_._gr_T_Ci:
 
-.. das:function:: find(Tab: table<auto(keyT);auto(valT)> const|table<auto(keyT);auto(valT)> const# const; at: keyT const; blk: block<(p:valT? const#):void> const)
+.. das:function:: reserve(Tab: table<auto(keyT);auto>; newSize: int const)
 
-find returns auto
+reserve returns auto
 
-.. warning:: 
-  This function is deprecated.
-
-+--------+----------------------------------+
-+argument+argument type                     +
-+========+==================================+
-+Tab     +option const                      +
-+--------+----------------------------------+
-+at      +keyT const                        +
-+--------+----------------------------------+
-+blk     +block<(p:valT? const#):void> const+
-+--------+----------------------------------+
++--------+----------------------+
++argument+argument type         +
++========+======================+
++Tab     +table<auto(keyT);auto>+
++--------+----------------------+
++newSize +int const             +
++--------+----------------------+
 
 
-|function-builtin-find|
+|function-builtin-reserve|
 
-.. _function-_at__builtin__c__c_find_C1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_:
+.. _function-_at__builtin__c__c_get_C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: find(Tab: table<auto(keyT);void> const; at: keyT const|keyT const# const; blk: block<(p:void? const):void> const)
-
-find returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+---------------------------------+
-+argument+argument type                    +
-+========+=================================+
-+Tab     +table<auto(keyT);void> const     +
-+--------+---------------------------------+
-+at      +option const                     +
-+--------+---------------------------------+
-+blk     +block<(p:void? const):void> const+
-+--------+---------------------------------+
-
-
-|function-builtin-find|
-
-.. _function-_at__builtin__c__c_get_C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
-
-.. das:function:: get(Tab: table<auto(keyT);auto(valT)> const# ==const; at: keyT const; blk: block<(p:valT const&#):void> const)
+.. das:function:: get(Tab: table<auto(keyT);auto(valT)> const# ==const; at: keyT const|keyT const# const; blk: block<(p:valT const&#):void> const)
 
 get returns auto
 
@@ -1285,7 +1434,7 @@ get returns auto
 +========+====================================+
 +Tab     +table<auto(keyT);auto(valT)> const#!+
 +--------+------------------------------------+
-+at      +keyT const                          +
++at      +option const                        +
 +--------+------------------------------------+
 +blk     +block<(p:valT const&#):void> const  +
 +--------+------------------------------------+
@@ -1293,9 +1442,9 @@ get returns auto
 
 |function-builtin-get|
 
-.. _function-_at__builtin__c__c_get_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
+.. _function-_at__builtin__c__c_get_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: get(Tab: table<auto(keyT);auto(valT)> const ==const; at: keyT const; blk: block<(p:valT const&):void> const)
+.. das:function:: get(Tab: table<auto(keyT);auto(valT)> const ==const; at: keyT const|keyT const# const; blk: block<(p:valT const&):void> const)
 
 get returns auto
 
@@ -1304,7 +1453,7 @@ get returns auto
 +========+===================================+
 +Tab     +table<auto(keyT);auto(valT)> const!+
 +--------+-----------------------------------+
-+at      +keyT const                         +
++at      +option const                       +
 +--------+-----------------------------------+
 +blk     +block<(p:valT const&):void> const  +
 +--------+-----------------------------------+
@@ -1312,9 +1461,9 @@ get returns auto
 
 |function-builtin-get|
 
-.. _function-_at__builtin__c__c_get__hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
+.. _function-_at__builtin__c__c_get__hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: get(Tab: table<auto(keyT);auto(valT)># ==const; at: keyT const; blk: block<(var p:valT&#):void> const)
+.. das:function:: get(Tab: table<auto(keyT);auto(valT)># ==const; at: keyT const|keyT const# const; blk: block<(var p:valT&#):void> const)
 
 get returns auto
 
@@ -1323,7 +1472,7 @@ get returns auto
 +========+==============================+
 +Tab     +table<auto(keyT);auto(valT)>#!+
 +--------+------------------------------+
-+at      +keyT const                    +
++at      +option const                  +
 +--------+------------------------------+
 +blk     +block<(p:valT&#):void> const  +
 +--------+------------------------------+
@@ -1331,9 +1480,9 @@ get returns auto
 
 |function-builtin-get|
 
-.. _function-_at__builtin__c__c_get__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
+.. _function-_at__builtin__c__c_get__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: get(Tab: table<auto(keyT);auto(valT)> ==const; at: keyT const; blk: block<(var p:valT&):void> const)
+.. das:function:: get(Tab: table<auto(keyT);auto(valT)> ==const; at: keyT const|keyT const# const; blk: block<(var p:valT&):void> const)
 
 get returns auto
 
@@ -1342,10 +1491,86 @@ get returns auto
 +========+=============================+
 +Tab     +table<auto(keyT);auto(valT)>!+
 +--------+-----------------------------+
-+at      +keyT const                   +
++at      +option const                 +
 +--------+-----------------------------+
 +blk     +block<(p:valT&):void> const  +
 +--------+-----------------------------+
+
+
+|function-builtin-get|
+
+.. _function-_at__builtin__c__c_get_C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&_hh__lb_-2_rb_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
+
+.. das:function:: get(Tab: table<auto(keyT);auto(valT)[]> const# ==const; at: keyT const|keyT const# const; blk: block<(p:valT const[-2]&#):void> const)
+
+get returns auto
+
++--------+----------------------------------------+
++argument+argument type                           +
++========+========================================+
++Tab     +table<auto(keyT);auto(valT)[-1]> const#!+
++--------+----------------------------------------+
++at      +option const                            +
++--------+----------------------------------------+
++blk     +block<(p:valT const[-2]&#):void> const  +
++--------+----------------------------------------+
+
+
+|function-builtin-get|
+
+.. _function-_at__builtin__c__c_get_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&_lb_-2_rb_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
+
+.. das:function:: get(Tab: table<auto(keyT);auto(valT)[]> const ==const; at: keyT const|keyT const# const; blk: block<(p:valT const[-2]&):void> const)
+
+get returns auto
+
++--------+---------------------------------------+
++argument+argument type                          +
++========+=======================================+
++Tab     +table<auto(keyT);auto(valT)[-1]> const!+
++--------+---------------------------------------+
++at      +option const                           +
++--------+---------------------------------------+
++blk     +block<(p:valT const[-2]&):void> const  +
++--------+---------------------------------------+
+
+
+|function-builtin-get|
+
+.. _function-_at__builtin__c__c_get__hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&_hh__lb_-2_rb_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
+
+.. das:function:: get(Tab: table<auto(keyT);auto(valT)[]># ==const; at: keyT const|keyT const# const; blk: block<(var p:valT[-2]&#):void> const)
+
+get returns auto
+
++--------+----------------------------------+
++argument+argument type                     +
++========+==================================+
++Tab     +table<auto(keyT);auto(valT)[-1]>#!+
++--------+----------------------------------+
++at      +option const                      +
++--------+----------------------------------+
++blk     +block<(p:valT[-2]&#):void> const  +
++--------+----------------------------------+
+
+
+|function-builtin-get|
+
+.. _function-_at__builtin__c__c_get__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&_lb_-2_rb_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
+
+.. das:function:: get(Tab: table<auto(keyT);auto(valT)[]> ==const; at: keyT const|keyT const# const; blk: block<(var p:valT[-2]&):void> const)
+
+get returns auto
+
++--------+---------------------------------+
++argument+argument type                    +
++========+=================================+
++Tab     +table<auto(keyT);auto(valT)[-1]>!+
++--------+---------------------------------+
++at      +option const                     +
++--------+---------------------------------+
++blk     +block<(p:valT[-2]&):void> const  +
++--------+---------------------------------+
 
 
 |function-builtin-get|
@@ -1368,228 +1593,6 @@ get returns auto
 
 
 |function-builtin-get|
-
-.. _function-_at__builtin__c__c_find_if_exists_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
-
-.. das:function:: find_if_exists(Tab: table<auto(keyT);auto(valT)> const; at: keyT const; blk: block<(p:valT const&):void> const)
-
-find_if_exists returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+----------------------------------+
-+argument+argument type                     +
-+========+==================================+
-+Tab     +table<auto(keyT);auto(valT)> const+
-+--------+----------------------------------+
-+at      +keyT const                        +
-+--------+----------------------------------+
-+blk     +block<(p:valT const&):void> const +
-+--------+----------------------------------+
-
-
-|function-builtin-find_if_exists|
-
-.. _function-_at__builtin__c__c_find_if_exists_C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
-
-.. das:function:: find_if_exists(Tab: table<auto(keyT);auto(valT)> const#; at: keyT const; blk: block<(p:valT const&#):void> const)
-
-find_if_exists returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+-----------------------------------+
-+argument+argument type                      +
-+========+===================================+
-+Tab     +table<auto(keyT);auto(valT)> const#+
-+--------+-----------------------------------+
-+at      +keyT const                         +
-+--------+-----------------------------------+
-+blk     +block<(p:valT const&#):void> const +
-+--------+-----------------------------------+
-
-
-|function-builtin-find_if_exists|
-
-.. _function-_at__builtin__c__c_find_if_exists_C1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_C1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_:
-
-.. das:function:: find_if_exists(Tab: table<auto(keyT);void> const; at: keyT const; blk: block<(p:void? const):void> const)
-
-find_if_exists returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+---------------------------------+
-+argument+argument type                    +
-+========+=================================+
-+Tab     +table<auto(keyT);void> const     +
-+--------+---------------------------------+
-+at      +keyT const                       +
-+--------+---------------------------------+
-+blk     +block<(p:void? const):void> const+
-+--------+---------------------------------+
-
-
-|function-builtin-find_if_exists|
-
-.. _function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls__hh_1_ls_Y_ls_valT_gr_L_gr__qm__gr_1_ls_v_gr__builtin_:
-
-.. das:function:: find_for_edit(Tab: table<auto(keyT);auto(valT)>; at: keyT const; blk: block<(var p:valT?#):void> const)
-
-find_for_edit returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+----------------------------+
-+argument+argument type               +
-+========+============================+
-+Tab     +table<auto(keyT);auto(valT)>+
-+--------+----------------------------+
-+at      +keyT const                  +
-+--------+----------------------------+
-+blk     +block<(p:valT?#):void> const+
-+--------+----------------------------+
-
-
-|function-builtin-find_for_edit|
-
-.. _function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_:
-
-.. das:function:: find_for_edit(Tab: table<auto(keyT);void>; at: keyT const|keyT const# const; blk: block<(var p:void?):void> const)
-
-find_for_edit returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+---------------------------+
-+argument+argument type              +
-+========+===========================+
-+Tab     +table<auto(keyT);void>     +
-+--------+---------------------------+
-+at      +option const               +
-+--------+---------------------------+
-+blk     +block<(p:void?):void> const+
-+--------+---------------------------+
-
-
-|function-builtin-find_for_edit|
-
-.. _function-_at__builtin__c__c_find_for_edit_0_ls_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_CY_ls_keyT_gr_L:
-
-.. das:function:: find_for_edit(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; at: keyT const)
-
-find_for_edit returns valT?
-
-.. warning:: 
-  This is unsafe operation.
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+Tab     +option       +
-+--------+-------------+
-+at      +keyT const   +
-+--------+-------------+
-
-
-|function-builtin-find_for_edit|
-
-.. _function-_at__builtin__c__c_find_for_edit_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|:
-
-.. das:function:: find_for_edit(Tab: table<auto(keyT);void>; at: keyT const|keyT const# const)
-
-find_for_edit returns void?
-
-.. warning:: 
-  This is unsafe operation.
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+Tab     +table<auto(keyT);void>+
-+--------+----------------------+
-+at      +option const          +
-+--------+----------------------+
-
-
-|function-builtin-find_for_edit|
-
-.. _function-_at__builtin__c__c_find_for_edit_if_exists__hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_&_hh_Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
-
-.. das:function:: find_for_edit_if_exists(Tab: table<auto(keyT);auto(valT)>#; at: keyT const; blk: block<(var p:valT&#):void> const)
-
-find_for_edit_if_exists returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+-----------------------------+
-+argument+argument type                +
-+========+=============================+
-+Tab     +table<auto(keyT);auto(valT)>#+
-+--------+-----------------------------+
-+at      +keyT const                   +
-+--------+-----------------------------+
-+blk     +block<(p:valT&#):void> const +
-+--------+-----------------------------+
-
-
-|function-builtin-find_for_edit_if_exists|
-
-.. _function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_CY_ls_keyT_gr_L_CN_ls_p_gr_0_ls_&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
-
-.. das:function:: find_for_edit_if_exists(Tab: table<auto(keyT);auto(valT)>; at: keyT const; blk: block<(var p:valT&):void> const)
-
-find_for_edit_if_exists returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+----------------------------+
-+argument+argument type               +
-+========+============================+
-+Tab     +table<auto(keyT);auto(valT)>+
-+--------+----------------------------+
-+at      +keyT const                  +
-+--------+----------------------------+
-+blk     +block<(p:valT&):void> const +
-+--------+----------------------------+
-
-
-|function-builtin-find_for_edit_if_exists|
-
-.. _function-_at__builtin__c__c_find_for_edit_if_exists_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_1_ls_v_gr__qm__gr_1_ls_v_gr__builtin_:
-
-.. das:function:: find_for_edit_if_exists(Tab: table<auto(keyT);void>; at: keyT const|keyT const# const; blk: block<(var p:void?):void> const)
-
-find_for_edit_if_exists returns auto
-
-.. warning:: 
-  This function is deprecated.
-
-+--------+---------------------------+
-+argument+argument type              +
-+========+===========================+
-+Tab     +table<auto(keyT);void>     +
-+--------+---------------------------+
-+at      +option const               +
-+--------+---------------------------+
-+blk     +block<(p:void?):void> const+
-+--------+---------------------------+
-
-
-|function-builtin-find_for_edit_if_exists|
 
 .. _function-_at__builtin__c__c_erase_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C_hh_s:
 
@@ -1641,6 +1644,175 @@ insert returns auto
 
 
 |function-builtin-insert|
+
+.. _function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_0_ls__eq_Y_ls_valT_gr_L;_hh__eq_Y_ls_valT_gr_L_gr_|:
+
+.. das:function:: insert(Tab: table<auto(keyT);auto(valT)>; at: keyT const|keyT const# const; val: valT ==const|valT# ==const)
+
+insert returns auto
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++Tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++at      +option const                +
++--------+----------------------------+
++val     +option                      +
++--------+----------------------------+
+
+
+|function-builtin-insert|
+
+.. _function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_C0_ls_C_eq_Y_ls_valT_gr_L;C_hh__eq_Y_ls_valT_gr_L_gr_|:
+
+.. das:function:: insert(Tab: table<auto(keyT);auto(valT)>; at: keyT const|keyT const# const; val: valT const ==const|valT const# ==const const)
+
+insert returns auto
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++Tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++at      +option const                +
++--------+----------------------------+
++val     +option const                +
++--------+----------------------------+
+
+
+|function-builtin-insert|
+
+.. _function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_0_ls__eq__lb_-1_rb_Y_ls_valT_gr_L;_hh__eq__lb_-1_rb_Y_ls_valT_gr_L_gr_|:
+
+.. das:function:: insert(Tab: table<auto(keyT);auto(valT)[]>; at: keyT const|keyT const# const; val: valT[] ==const|valT[]# ==const)
+
+insert returns auto
+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++Tab     +table<auto(keyT);auto(valT)[-1]>+
++--------+--------------------------------+
++at      +option const                    +
++--------+--------------------------------+
++val     +option                          +
++--------+--------------------------------+
+
+
+|function-builtin-insert|
+
+.. _function-_at__builtin__c__c_insert_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_C0_ls_C_eq__lb_-1_rb_Y_ls_valT_gr_L;C_hh__eq__lb_-1_rb_Y_ls_valT_gr_L_gr_|:
+
+.. das:function:: insert(Tab: table<auto(keyT);auto(valT)[]>; at: keyT const|keyT const# const; val: valT const[] ==const|valT const[]# ==const const)
+
+insert returns auto
+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++Tab     +table<auto(keyT);auto(valT)[-1]>+
++--------+--------------------------------+
++at      +option const                    +
++--------+--------------------------------+
++val     +option const                    +
++--------+--------------------------------+
+
+
+|function-builtin-insert|
+
+.. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_&Y_ls_valT_gr_L:
+
+.. das:function:: emplace(Tab: table<auto(keyT);auto(valT)>; at: keyT const|keyT const# const; val: valT&)
+
+emplace returns auto
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++Tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++at      +option const                +
++--------+----------------------------+
++val     +valT&                       +
++--------+----------------------------+
+
+
+|function-builtin-emplace|
+
+.. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_keyT_gr_._gr_2_ls_1_ls_Y_ls_valT_gr_._gr__qm_M_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_&1_ls_Y_ls_valT_gr_L_gr__qm_M:
+
+.. das:function:: emplace(Tab: table<auto(keyT);smart_ptr<auto(valT)>>; at: keyT const|keyT const# const; val: smart_ptr<valT>&)
+
+emplace returns auto
+
++--------+---------------------------------------+
++argument+argument type                          +
++========+=======================================+
++Tab     +table<auto(keyT);smart_ptr<auto(valT)>>+
++--------+---------------------------------------+
++at      +option const                           +
++--------+---------------------------------------+
++val     +smart_ptr<valT>&                       +
++--------+---------------------------------------+
+
+
+|function-builtin-emplace|
+
+.. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_&_lb_-1_rb_Y_ls_valT_gr_L:
+
+.. das:function:: emplace(Tab: table<auto(keyT);auto(valT)[]>; at: keyT const|keyT const# const; val: valT[]&)
+
+emplace returns auto
+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++Tab     +table<auto(keyT);auto(valT)[-1]>+
++--------+--------------------------------+
++at      +option const                    +
++--------+--------------------------------+
++val     +valT[-1]&                       +
++--------+--------------------------------+
+
+
+|function-builtin-emplace|
+
+.. _function-_at__builtin__c__c_emplace_1_ls_._gr_2_ls_._gr_T_C._C._%_ls__ex_()_gr_:
+
+.. das:function:: emplace(Tab: table<auto;auto>; key: auto const; value: auto const)
+
+emplace returns auto
+
++--------+----------------+
++argument+argument type   +
++========+================+
++Tab     +table<auto;auto>+
++--------+----------------+
++key     +auto const      +
++--------+----------------+
++value   +auto const      +
++--------+----------------+
+
+
+|function-builtin-emplace|
+
+.. _function-_at__builtin__c__c_emplace_1_ls_._gr_A_C._%_ls__ex_()_gr_:
+
+.. das:function:: emplace(a: array<auto>; value: auto const)
+
+emplace returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +array<auto>  +
++--------+-------------+
++value   +auto const   +
++--------+-------------+
+
+
+|function-builtin-emplace|
 
 .. _function-_at__builtin__c__c_key_exists_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_C_hh_s:
 
@@ -1706,9 +1878,9 @@ move_to_local returns TT
 
 |function-builtin-move_to_local|
 
-.. _function-_at__builtin__c__c_keys_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|:
+.. _function-_at__builtin__c__c_keys_C0_ls_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|:
 
-.. das:function:: keys(a: table<auto(keyT);auto(valT)> const|table<auto(keyT);auto(valT)> const# const)
+.. das:function:: keys(a: table<auto(keyT);auto(valT)> const ==const|table<auto(keyT);auto(valT)> const# ==const const)
 
 keys returns iterator<keyT>
 
@@ -1716,6 +1888,21 @@ keys returns iterator<keyT>
 +argument+argument type+
 +========+=============+
 +a       +option const +
++--------+-------------+
+
+
+|function-builtin-keys|
+
+.. _function-_at__builtin__c__c_keys_0_ls__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|:
+
+.. das:function:: keys(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)># ==const)
+
+keys returns iterator<keyT>
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +option       +
 +--------+-------------+
 
 
@@ -1781,6 +1968,36 @@ values returns iterator<valT&>
 
 |function-builtin-values|
 
+.. _function-_at__builtin__c__c_values_C0_ls_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T;C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_gr_|:
+
+.. das:function:: values(a: table<auto(keyT);auto(valT)[]> const ==const|table<auto(keyT);auto(valT)[]> const# ==const const)
+
+values returns iterator<valT const[-2]&>
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +option const +
++--------+-------------+
+
+
+|function-builtin-values|
+
+.. _function-_at__builtin__c__c_values_0_ls__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T;_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_gr_|:
+
+.. das:function:: values(a: table<auto(keyT);auto(valT)[]> ==const|table<auto(keyT);auto(valT)[]># ==const)
+
+values returns iterator<valT[-2]&>
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +option       +
++--------+-------------+
+
+
+|function-builtin-values|
+
 .. _function-_at__builtin__c__c_lock_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;C_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_CN_ls_t_gr_0_ls_C_hh_1_ls_Y_ls_keyT_gr_L_gr_2_ls_Y_ls_valT_gr_L_gr_T_gr_1_ls_v_gr__builtin_:
 
 .. das:function:: lock(Tab: table<auto(keyT);auto(valT)> const|table<auto(keyT);auto(valT)> const# const; blk: block<(t:table<keyT;valT> const#):void> const)
@@ -1813,19 +2030,19 @@ lock_forever returns table<keyT;valT>#
 
 |function-builtin-lock_forever|
 
-.. _function-_at__builtin__c__c_next_C1_ls_Y_ls_TT_gr_._gr_G_&Y_ls_TT_gr_L:
+.. _function-_at__builtin__c__c_next_1_ls_Y_ls_TT_gr_._gr_G_&Y_ls_TT_gr_L:
 
-.. das:function:: next(it: iterator<auto(TT)> const; value: TT&)
+.. das:function:: next(it: iterator<auto(TT)>; value: TT&)
 
 next returns bool
 
-+--------+------------------------+
-+argument+argument type           +
-+========+========================+
-+it      +iterator<auto(TT)> const+
-+--------+------------------------+
-+value   +TT&                     +
-+--------+------------------------+
++--------+------------------+
++argument+argument type     +
++========+==================+
++it      +iterator<auto(TT)>+
++--------+------------------+
++value   +TT&               +
++--------+------------------+
 
 
 |function-builtin-next|
@@ -1965,17 +2182,17 @@ nothing returns iterator<TT>
 
 |function-builtin-nothing|
 
-.. _function-_at__builtin__c__c_to_array_C1_ls_Y_ls_TT_gr_._gr_G:
+.. _function-_at__builtin__c__c_to_array_1_ls_Y_ls_TT_gr_._gr_G:
 
-.. das:function:: to_array(it: iterator<auto(TT)> const)
+.. das:function:: to_array(it: iterator<auto(TT)>)
 
 to_array returns array<TT>
 
-+--------+------------------------+
-+argument+argument type           +
-+========+========================+
-+it      +iterator<auto(TT)> const+
-+--------+------------------------+
++--------+------------------+
++argument+argument type     +
++========+==================+
++it      +iterator<auto(TT)>+
++--------+------------------+
 
 
 |function-builtin-to_array|
@@ -2010,16 +2227,31 @@ to_array_move returns array<TT>
 
 |function-builtin-to_array_move|
 
-.. _function-_at__builtin__c__c_to_array_move_Y_ls_TT_gr_.:
+.. _function-_at__builtin__c__c_to_array_move_C_eq_Y_ls_TT_gr_.:
 
-.. das:function:: to_array_move(a: auto(TT))
+.. das:function:: to_array_move(a: auto(TT) const ==const)
+
+to_array_move returns array<TT>
+
++--------+---------------+
++argument+argument type  +
++========+===============+
++a       +auto(TT) const!+
++--------+---------------+
+
+
+|function-builtin-to_array_move|
+
+.. _function-_at__builtin__c__c_to_array_move__eq_Y_ls_TT_gr_.:
+
+.. das:function:: to_array_move(a: auto(TT) ==const)
 
 to_array_move returns array<TT>
 
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+a       +auto(TT)     +
++a       +auto(TT)!    +
 +--------+-------------+
 
 
@@ -2055,32 +2287,47 @@ to_table returns table<keyT;void>
 
 |function-builtin-to_table|
 
-.. _function-_at__builtin__c__c_to_table_move__lb_-1_rb_Y_ls_keyT_gr_.:
+.. _function-_at__builtin__c__c_to_table_move_C_lb_-1_rb_Y_ls_keyT_gr_.:
 
-.. das:function:: to_table_move(a: auto(keyT)[])
+.. das:function:: to_table_move(a: auto(keyT) const[])
 
 to_table_move returns table<keyT;void>
 
-+--------+--------------+
-+argument+argument type +
-+========+==============+
-+a       +auto(keyT)[-1]+
-+--------+--------------+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++a       +auto(keyT) const[-1]+
++--------+--------------------+
 
 
 |function-builtin-to_table_move|
 
-.. _function-_at__builtin__c__c_to_table_move_Y_ls_keyT_gr_.:
+.. _function-_at__builtin__c__c_to_table_move_C1_ls_Y_ls_keyT_gr_._gr_A:
 
-.. das:function:: to_table_move(a: auto(keyT))
+.. das:function:: to_table_move(a: array<auto(keyT)> const)
 
 to_table_move returns table<keyT;void>
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto(keyT)   +
-+--------+-------------+
++--------+-----------------------+
++argument+argument type          +
++========+=======================+
++a       +array<auto(keyT)> const+
++--------+-----------------------+
+
+
+|function-builtin-to_table_move|
+
+.. _function-_at__builtin__c__c_to_table_move_CY_ls_keyT_gr_.:
+
+.. das:function:: to_table_move(a: auto(keyT) const)
+
+to_table_move returns table<keyT;void>
+
++--------+----------------+
++argument+argument type   +
++========+================+
++a       +auto(keyT) const+
++--------+----------------+
 
 
 |function-builtin-to_table_move|
@@ -2111,6 +2358,21 @@ to_table_move returns table<keyT;valT>
 +========+================================+
 +a       +tuple<auto(keyT);auto(valT)>[-1]+
 +--------+--------------------------------+
+
+
+|function-builtin-to_table_move|
+
+.. _function-_at__builtin__c__c_to_table_move_1_ls_0_ls_Y_ls_keyT_gr_.;Y_ls_valT_gr_._gr_U_gr_A:
+
+.. das:function:: to_table_move(a: array<tuple<auto(keyT);auto(valT)>>)
+
+to_table_move returns table<keyT;valT>
+
++--------+-----------------------------------+
++argument+argument type                      +
++========+===================================+
++a       +array<tuple<auto(keyT);auto(valT)>>+
++--------+-----------------------------------+
 
 
 |function-builtin-to_table_move|
@@ -2247,19 +2509,19 @@ find_index returns auto
 
 |function-builtin-find_index|
 
-.. _function-_at__builtin__c__c_find_index_C1_ls_Y_ls_TT_gr_._gr_G_CY_ls_TT_gr_L:
+.. _function-_at__builtin__c__c_find_index_1_ls_Y_ls_TT_gr_._gr_G_CY_ls_TT_gr_L:
 
-.. das:function:: find_index(arr: iterator<auto(TT)> const; key: TT const)
+.. das:function:: find_index(arr: iterator<auto(TT)>; key: TT const)
 
 find_index returns auto
 
-+--------+------------------------+
-+argument+argument type           +
-+========+========================+
-+arr     +iterator<auto(TT)> const+
-+--------+------------------------+
-+key     +TT const                +
-+--------+------------------------+
++--------+------------------+
++argument+argument type     +
++========+==================+
++arr     +iterator<auto(TT)>+
++--------+------------------+
++key     +TT const          +
++--------+------------------+
 
 
 |function-builtin-find_index|
@@ -2298,16 +2560,16 @@ find_index_if returns auto
 
 |function-builtin-find_index_if|
 
-.. _function-_at__builtin__c__c_find_index_if_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_key_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
+.. _function-_at__builtin__c__c_find_index_if_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_key_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
-.. das:function:: find_index_if(arr: iterator<auto(TT)> const; blk: block<(key:TT const):bool> const)
+.. das:function:: find_index_if(arr: iterator<auto(TT)>; blk: block<(key:TT const):bool> const)
 
 find_index_if returns auto
 
 +--------+--------------------------------+
 +argument+argument type                   +
 +========+================================+
-+arr     +iterator<auto(TT)> const        +
++arr     +iterator<auto(TT)>              +
 +--------+--------------------------------+
 +blk     +block<(key:TT const):bool> const+
 +--------+--------------------------------+
@@ -2328,6 +2590,23 @@ has_value returns auto
 +--------+-------------+
 +key     +auto const   +
 +--------+-------------+
+
+
+|function-builtin-has_value|
+
+.. _function-_at__builtin__c__c_has_value_1_ls_._gr_G_C.:
+
+.. das:function:: has_value(a: iterator<auto>; key: auto const)
+
+has_value returns auto
+
++--------+--------------+
++argument+argument type +
++========+==============+
++a       +iterator<auto>+
++--------+--------------+
++key     +auto const    +
++--------+--------------+
 
 
 |function-builtin-has_value|
@@ -2366,19 +2645,36 @@ subarray returns auto
 
 |function-builtin-subarray|
 
-.. _function-_at__builtin__c__c_subarray_C1_ls_Y_ls_TT_gr_._gr_A_Cr:
+.. _function-_at__builtin__c__c_subarray_C_eq_1_ls_Y_ls_TT_gr_._gr_A_Cr:
 
-.. das:function:: subarray(a: array<auto(TT)> const; r: range const)
+.. das:function:: subarray(a: array<auto(TT)> const ==const; r: range const)
 
 subarray returns auto
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+a       +array<auto(TT)> const+
-+--------+---------------------+
-+r       +range const          +
-+--------+---------------------+
++--------+----------------------+
++argument+argument type         +
++========+======================+
++a       +array<auto(TT)> const!+
++--------+----------------------+
++r       +range const           +
++--------+----------------------+
+
+
+|function-builtin-subarray|
+
+.. _function-_at__builtin__c__c_subarray__eq_1_ls_Y_ls_TT_gr_._gr_A_Cr:
+
+.. das:function:: subarray(a: array<auto(TT)> ==const; r: range const)
+
+subarray returns auto
+
++--------+----------------+
++argument+argument type   +
++========+================+
++a       +array<auto(TT)>!+
++--------+----------------+
++r       +range const     +
++--------+----------------+
 
 
 |function-builtin-subarray|
@@ -2457,14 +2753,14 @@ das::string manipulation
 Heap reporting
 ++++++++++++++
 
-  *  :ref:`heap_allocation_stats (context:__context const) : urange64 <function-_at__builtin__c__c_heap_allocation_stats_C_c>` 
-  *  :ref:`heap_allocation_count (context:__context const) : uint64 <function-_at__builtin__c__c_heap_allocation_count_C_c>` 
-  *  :ref:`string_heap_allocation_stats (context:__context const) : urange64 <function-_at__builtin__c__c_string_heap_allocation_stats_C_c>` 
-  *  :ref:`string_heap_allocation_count (context:__context const) : uint64 <function-_at__builtin__c__c_string_heap_allocation_count_C_c>` 
-  *  :ref:`heap_bytes_allocated (context:__context const) : uint64 <function-_at__builtin__c__c_heap_bytes_allocated_C_c>` 
-  *  :ref:`heap_depth (context:__context const) : int <function-_at__builtin__c__c_heap_depth_C_c>` 
-  *  :ref:`string_heap_bytes_allocated (context:__context const) : uint64 <function-_at__builtin__c__c_string_heap_bytes_allocated_C_c>` 
-  *  :ref:`string_heap_depth (context:__context const) : int <function-_at__builtin__c__c_string_heap_depth_C_c>` 
+  *  :ref:`heap_allocation_stats (context:__context const) : urange64 const <function-_at__builtin__c__c_heap_allocation_stats_C_c>` 
+  *  :ref:`heap_allocation_count (context:__context const) : uint64 const <function-_at__builtin__c__c_heap_allocation_count_C_c>` 
+  *  :ref:`string_heap_allocation_stats (context:__context const) : urange64 const <function-_at__builtin__c__c_string_heap_allocation_stats_C_c>` 
+  *  :ref:`string_heap_allocation_count (context:__context const) : uint64 const <function-_at__builtin__c__c_string_heap_allocation_count_C_c>` 
+  *  :ref:`heap_bytes_allocated (context:__context const) : uint64 const <function-_at__builtin__c__c_heap_bytes_allocated_C_c>` 
+  *  :ref:`heap_depth (context:__context const) : int const <function-_at__builtin__c__c_heap_depth_C_c>` 
+  *  :ref:`string_heap_bytes_allocated (context:__context const) : uint64 const <function-_at__builtin__c__c_string_heap_bytes_allocated_C_c>` 
+  *  :ref:`string_heap_depth (context:__context const) : int const <function-_at__builtin__c__c_string_heap_depth_C_c>` 
   *  :ref:`heap_collect (string_heap:bool const;validate:bool const;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_heap_collect_Cb_Cb_C_c_C_l>` 
   *  :ref:`string_heap_report (context:__context const;line:__lineInfo const) : void <function-_at__builtin__c__c_string_heap_report_C_c_C_l>` 
   *  :ref:`heap_report (context:__context const;line:__lineInfo const) : void <function-_at__builtin__c__c_heap_report_C_c_C_l>` 
@@ -2474,7 +2770,7 @@ Heap reporting
 
 .. das:function:: heap_allocation_stats()
 
-heap_allocation_stats returns urange64
+heap_allocation_stats returns urange64 const
 
 |function-builtin-heap_allocation_stats|
 
@@ -2482,7 +2778,7 @@ heap_allocation_stats returns urange64
 
 .. das:function:: heap_allocation_count()
 
-heap_allocation_count returns uint64
+heap_allocation_count returns uint64 const
 
 |function-builtin-heap_allocation_count|
 
@@ -2490,7 +2786,7 @@ heap_allocation_count returns uint64
 
 .. das:function:: string_heap_allocation_stats()
 
-string_heap_allocation_stats returns urange64
+string_heap_allocation_stats returns urange64 const
 
 |function-builtin-string_heap_allocation_stats|
 
@@ -2498,7 +2794,7 @@ string_heap_allocation_stats returns urange64
 
 .. das:function:: string_heap_allocation_count()
 
-string_heap_allocation_count returns uint64
+string_heap_allocation_count returns uint64 const
 
 |function-builtin-string_heap_allocation_count|
 
@@ -2506,7 +2802,7 @@ string_heap_allocation_count returns uint64
 
 .. das:function:: heap_bytes_allocated()
 
-heap_bytes_allocated returns uint64
+heap_bytes_allocated returns uint64 const
 
 |function-builtin-heap_bytes_allocated|
 
@@ -2514,7 +2810,7 @@ heap_bytes_allocated returns uint64
 
 .. das:function:: heap_depth()
 
-heap_depth returns int
+heap_depth returns int const
 
 |function-builtin-heap_depth|
 
@@ -2522,7 +2818,7 @@ heap_depth returns int
 
 .. das:function:: string_heap_bytes_allocated()
 
-string_heap_bytes_allocated returns uint64
+string_heap_bytes_allocated returns uint64 const
 
 |function-builtin-string_heap_bytes_allocated|
 
@@ -2530,7 +2826,7 @@ string_heap_bytes_allocated returns uint64
 
 .. das:function:: string_heap_depth()
 
-string_heap_depth returns int
+string_heap_depth returns int const
 
 |function-builtin-string_heap_depth|
 
@@ -2662,8 +2958,8 @@ Smart ptr infrastructure
   *  :ref:`move (dest:smart_ptr\<void\>& implicit;src:smart_ptr\<void\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_move_&I1_ls_v_gr__qm_M_&I1_ls_v_gr__qm_M_C_c_C_l>` 
   *  :ref:`smart_ptr_clone (dest:smart_ptr\<void\>& implicit;src:void? const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr__qm_M_CI_qm__C_c_C_l>` 
   *  :ref:`smart_ptr_clone (dest:smart_ptr\<void\>& implicit;src:smart_ptr\<void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr__qm_M_CI1_ls_v_gr__qm_M_C_c_C_l>` 
-  *  :ref:`smart_ptr_use_count (ptr:smart_ptr\<void\> const implicit;context:__context const;at:__lineInfo const) : uint <function-_at__builtin__c__c_smart_ptr_use_count_CI1_ls_v_gr__qm_M_C_c_C_l>` 
-  *  :ref:`smart_ptr_is_valid (dest:smart_ptr\<void\> const implicit) : bool <function-_at__builtin__c__c_smart_ptr_is_valid_CI1_ls_v_gr__qm_M>` 
+  *  :ref:`smart_ptr_use_count (ptr:smart_ptr\<void\> const implicit;context:__context const;at:__lineInfo const) : uint const <function-_at__builtin__c__c_smart_ptr_use_count_CI1_ls_v_gr__qm_M_C_c_C_l>` 
+  *  :ref:`smart_ptr_is_valid (dest:smart_ptr\<void\> const implicit) : bool const <function-_at__builtin__c__c_smart_ptr_is_valid_CI1_ls_v_gr__qm_M>` 
   *  :ref:`get_ptr (src:smart_ptr\<auto(TT)\> const ==const) : TT? const <function-_at__builtin__c__c_get_ptr_C_eq_1_ls_Y_ls_TT_gr_._gr__qm_M>` 
   *  :ref:`get_ptr (src:smart_ptr\<auto(TT)\> ==const -const) : TT? <function-_at__builtin__c__c_get_ptr__eq_1_ls_Y_ls_TT_gr_._gr__qm_M>` 
   *  :ref:`get_const_ptr (src:smart_ptr\<auto(TT)\> const) : TT? const <function-_at__builtin__c__c_get_const_ptr_C1_ls_Y_ls_TT_gr_._gr__qm_M>` 
@@ -2748,7 +3044,7 @@ Smart ptr infrastructure
 
 .. das:function:: smart_ptr_use_count(ptr: smart_ptr<void> const implicit)
 
-smart_ptr_use_count returns uint
+smart_ptr_use_count returns uint const
 
 +--------+------------------------------+
 +argument+argument type                 +
@@ -2763,7 +3059,7 @@ smart_ptr_use_count returns uint
 
 .. das:function:: smart_ptr_is_valid(dest: smart_ptr<void> const implicit)
 
-smart_ptr_is_valid returns bool
+smart_ptr_is_valid returns bool const
 
 +--------+------------------------------+
 +argument+argument type                 +
@@ -2838,18 +3134,18 @@ add_ptr_ref returns smart_ptr<TT>
 Macro infrastructure
 ++++++++++++++++++++
 
-  *  :ref:`is_compiling () : bool <function-_at__builtin__c__c_is_compiling>` 
-  *  :ref:`is_compiling_macros () : bool <function-_at__builtin__c__c_is_compiling_macros>` 
-  *  :ref:`is_compiling_macros_in_module (name:string const implicit) : bool <function-_at__builtin__c__c_is_compiling_macros_in_module_CIs>` 
-  *  :ref:`is_reporting_compilation_errors () : bool <function-_at__builtin__c__c_is_reporting_compilation_errors>` 
-  *  :ref:`is_in_completion () : bool <function-_at__builtin__c__c_is_in_completion>` 
-  *  :ref:`is_folding () : bool <function-_at__builtin__c__c_is_folding>` 
+  *  :ref:`is_compiling () : bool const <function-_at__builtin__c__c_is_compiling>` 
+  *  :ref:`is_compiling_macros () : bool const <function-_at__builtin__c__c_is_compiling_macros>` 
+  *  :ref:`is_compiling_macros_in_module (name:string const implicit) : bool const <function-_at__builtin__c__c_is_compiling_macros_in_module_CIs>` 
+  *  :ref:`is_reporting_compilation_errors () : bool const <function-_at__builtin__c__c_is_reporting_compilation_errors>` 
+  *  :ref:`is_in_completion () : bool const <function-_at__builtin__c__c_is_in_completion>` 
+  *  :ref:`is_folding () : bool const <function-_at__builtin__c__c_is_folding>` 
 
 .. _function-_at__builtin__c__c_is_compiling:
 
 .. das:function:: is_compiling()
 
-is_compiling returns bool
+is_compiling returns bool const
 
 |function-builtin-is_compiling|
 
@@ -2857,7 +3153,7 @@ is_compiling returns bool
 
 .. das:function:: is_compiling_macros()
 
-is_compiling_macros returns bool
+is_compiling_macros returns bool const
 
 |function-builtin-is_compiling_macros|
 
@@ -2865,7 +3161,7 @@ is_compiling_macros returns bool
 
 .. das:function:: is_compiling_macros_in_module(name: string const implicit)
 
-is_compiling_macros_in_module returns bool
+is_compiling_macros_in_module returns bool const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -2880,7 +3176,7 @@ is_compiling_macros_in_module returns bool
 
 .. das:function:: is_reporting_compilation_errors()
 
-is_reporting_compilation_errors returns bool
+is_reporting_compilation_errors returns bool const
 
 |function-builtin-is_reporting_compilation_errors|
 
@@ -2888,7 +3184,7 @@ is_reporting_compilation_errors returns bool
 
 .. das:function:: is_in_completion()
 
-is_in_completion returns bool
+is_in_completion returns bool const
 
 |function-builtin-is_in_completion|
 
@@ -2896,7 +3192,7 @@ is_in_completion returns bool
 
 .. das:function:: is_folding()
 
-is_folding returns bool
+is_folding returns bool const
 
 |function-builtin-is_folding|
 
@@ -2906,8 +3202,8 @@ Profiler
 
   *  :ref:`reset_profiler (context:__context const) : void <function-_at__builtin__c__c_reset_profiler_C_c>` 
   *  :ref:`dump_profile_info (context:__context const) : void <function-_at__builtin__c__c_dump_profile_info_C_c>` 
-  *  :ref:`collect_profile_info (context:__context const;at:__lineInfo const) : string <function-_at__builtin__c__c_collect_profile_info_C_c_C_l>` 
-  *  :ref:`profile (count:int const;category:string const implicit;block:block\<\> const implicit;context:__context const;line:__lineInfo const) : float <function-_at__builtin__c__c_profile_Ci_CIs_CI_builtin__C_c_C_l>` 
+  *  :ref:`collect_profile_info (context:__context const;at:__lineInfo const) : string const <function-_at__builtin__c__c_collect_profile_info_C_c_C_l>` 
+  *  :ref:`profile (count:int const;category:string const implicit;block:block\<\> const implicit;context:__context const;line:__lineInfo const) : float const <function-_at__builtin__c__c_profile_Ci_CIs_CI_builtin__C_c_C_l>` 
 
 .. _function-_at__builtin__c__c_reset_profiler_C_c:
 
@@ -2925,7 +3221,7 @@ Profiler
 
 .. das:function:: collect_profile_info()
 
-collect_profile_info returns string
+collect_profile_info returns string const
 
 |function-builtin-collect_profile_info|
 
@@ -2933,7 +3229,7 @@ collect_profile_info returns string
 
 .. das:function:: profile(count: int const; category: string const implicit; block: block<> const implicit)
 
-profile returns float
+profile returns float const
 
 +--------+----------------------+
 +argument+argument type         +
@@ -2952,27 +3248,27 @@ profile returns float
 System infastructure
 ++++++++++++++++++++
 
-  *  :ref:`get_das_root (context:__context const;at:__lineInfo const) : string <function-_at__builtin__c__c_get_das_root_C_c_C_l>` 
+  *  :ref:`get_das_root (context:__context const;at:__lineInfo const) : string const <function-_at__builtin__c__c_get_das_root_C_c_C_l>` 
   *  :ref:`panic (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_panic_CIs_C_c_C_l>` 
   *  :ref:`print (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_print_CIs_C_c_C_l>` 
   *  :ref:`error (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_error_CIs_C_c_C_l>` 
-  *  :ref:`sprint (value:any;flags:bitfield\<escapeString;namesAndDimensions;typeQualifiers;refAddresses;singleLine;fixedPoint\> const) : string <function-_at__builtin__c__c_sprint_*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;singleLine;fixedPoint_gr_t>` 
-  *  :ref:`sprint_json (value:any;humanReadable:bool const) : string <function-_at__builtin__c__c_sprint_json_*_Cb>` 
+  *  :ref:`sprint (value:any;flags:bitfield\<escapeString;namesAndDimensions;typeQualifiers;refAddresses;singleLine;fixedPoint\> const) : string const <function-_at__builtin__c__c_sprint_*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;singleLine;fixedPoint_gr_t>` 
+  *  :ref:`sprint_json (value:any;humanReadable:bool const) : string const <function-_at__builtin__c__c_sprint_json_*_Cb>` 
   *  :ref:`terminate (context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_terminate_C_c_C_l>` 
   *  :ref:`breakpoint () : void <function-_at__builtin__c__c_breakpoint>` 
   *  :ref:`stackwalk (args:bool const;vars:bool const;context:__context const;lineinfo:__lineInfo const) : void <function-_at__builtin__c__c_stackwalk_Cb_Cb_C_c_C_l>` 
-  *  :ref:`is_intern_strings (context:__context const) : bool <function-_at__builtin__c__c_is_intern_strings_C_c>` 
-  *  :ref:`is_in_aot () : bool <function-_at__builtin__c__c_is_in_aot>` 
+  *  :ref:`is_intern_strings (context:__context const) : bool const <function-_at__builtin__c__c_is_intern_strings_C_c>` 
+  *  :ref:`is_in_aot () : bool const <function-_at__builtin__c__c_is_in_aot>` 
   *  :ref:`to_log (level:int const;text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_to_log_Ci_CIs_C_c_C_l>` 
   *  :ref:`to_compiler_log (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_to_compiler_log_CIs_C_c_C_l>` 
   *  :ref:`eval_main_loop (block:block\<bool\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_eval_main_loop_CI1_ls_b_gr__builtin__C_c_C_l>` 
-  *  :ref:`aot_enabled (context:__context const;at:__lineInfo const) : bool <function-_at__builtin__c__c_aot_enabled_C_c_C_l>` 
+  *  :ref:`aot_enabled (context:__context const;at:__lineInfo const) : bool const <function-_at__builtin__c__c_aot_enabled_C_c_C_l>` 
 
 .. _function-_at__builtin__c__c_get_das_root_C_c_C_l:
 
 .. das:function:: get_das_root()
 
-get_das_root returns string
+get_das_root returns string const
 
 |function-builtin-get_das_root|
 
@@ -3019,7 +3315,7 @@ get_das_root returns string
 
 .. das:function:: sprint(value: any; flags: print_flags)
 
-sprint returns string
+sprint returns string const
 
 +--------+----------------------------------------+
 +argument+argument type                           +
@@ -3036,7 +3332,7 @@ sprint returns string
 
 .. das:function:: sprint_json(value: any; humanReadable: bool const)
 
-sprint_json returns string
+sprint_json returns string const
 
 +-------------+-------------+
 +argument     +argument type+
@@ -3080,7 +3376,7 @@ sprint_json returns string
 
 .. das:function:: is_intern_strings()
 
-is_intern_strings returns bool
+is_intern_strings returns bool const
 
 |function-builtin-is_intern_strings|
 
@@ -3088,7 +3384,7 @@ is_intern_strings returns bool
 
 .. das:function:: is_in_aot()
 
-is_in_aot returns bool
+is_in_aot returns bool const
 
 |function-builtin-is_in_aot|
 
@@ -3137,7 +3433,7 @@ is_in_aot returns bool
 
 .. das:function:: aot_enabled()
 
-aot_enabled returns bool
+aot_enabled returns bool const
 
 |function-builtin-aot_enabled|
 
@@ -3145,24 +3441,24 @@ aot_enabled returns bool
 Memory manipulation
 +++++++++++++++++++
 
-  *  :ref:`variant_index (arg0:variant\<\> const implicit) : int <function-_at__builtin__c__c_variant_index_CIV>` 
+  *  :ref:`variant_index (arg0:variant\<\> const implicit) : int const <function-_at__builtin__c__c_variant_index_CIV>` 
   *  :ref:`set_variant_index (variant:variant\<\> implicit;index:int const) : void <function-_at__builtin__c__c_set_variant_index_IV_Ci>` 
-  *  :ref:`hash (data:any) : uint64 <function-_at__builtin__c__c_hash_*>` 
-  *  :ref:`hash (data:string const implicit) : uint64 <function-_at__builtin__c__c_hash_CIs>` 
-  *  :ref:`hash (value:int8 const) : uint64 <function-_at__builtin__c__c_hash_Ci8>` 
-  *  :ref:`hash (value:uint8 const) : uint64 <function-_at__builtin__c__c_hash_Cu8>` 
-  *  :ref:`hash (value:int16 const) : uint64 <function-_at__builtin__c__c_hash_Ci16>` 
-  *  :ref:`hash (value:uint16 const) : uint64 <function-_at__builtin__c__c_hash_Cu16>` 
-  *  :ref:`hash (value:int const) : uint64 <function-_at__builtin__c__c_hash_Ci>` 
-  *  :ref:`hash (value:uint const) : uint64 <function-_at__builtin__c__c_hash_Cu>` 
-  *  :ref:`hash (value:int64 const) : uint64 <function-_at__builtin__c__c_hash_Ci64>` 
-  *  :ref:`hash (value:uint64 const) : uint64 <function-_at__builtin__c__c_hash_Cu64>` 
-  *  :ref:`hash (value:void? const implicit) : uint64 <function-_at__builtin__c__c_hash_CI_qm_>` 
-  *  :ref:`hash (value:float const) : uint64 <function-_at__builtin__c__c_hash_Cf>` 
-  *  :ref:`hash (value:double const) : uint64 <function-_at__builtin__c__c_hash_Cd>` 
-  *  :ref:`hash (value:$::das_string const implicit) : uint64 <function-_at__builtin__c__c_hash_CIH_ls__builtin__c__c_das_string_gr_>` 
+  *  :ref:`hash (data:any) : uint64 const <function-_at__builtin__c__c_hash_*>` 
+  *  :ref:`hash (data:string const implicit) : uint64 const <function-_at__builtin__c__c_hash_CIs>` 
+  *  :ref:`hash (value:int8 const) : uint64 const <function-_at__builtin__c__c_hash_Ci8>` 
+  *  :ref:`hash (value:uint8 const) : uint64 const <function-_at__builtin__c__c_hash_Cu8>` 
+  *  :ref:`hash (value:int16 const) : uint64 const <function-_at__builtin__c__c_hash_Ci16>` 
+  *  :ref:`hash (value:uint16 const) : uint64 const <function-_at__builtin__c__c_hash_Cu16>` 
+  *  :ref:`hash (value:int const) : uint64 const <function-_at__builtin__c__c_hash_Ci>` 
+  *  :ref:`hash (value:uint const) : uint64 const <function-_at__builtin__c__c_hash_Cu>` 
+  *  :ref:`hash (value:int64 const) : uint64 const <function-_at__builtin__c__c_hash_Ci64>` 
+  *  :ref:`hash (value:uint64 const) : uint64 const <function-_at__builtin__c__c_hash_Cu64>` 
+  *  :ref:`hash (value:void? const implicit) : uint64 const <function-_at__builtin__c__c_hash_CI_qm_>` 
+  *  :ref:`hash (value:float const) : uint64 const <function-_at__builtin__c__c_hash_Cf>` 
+  *  :ref:`hash (value:double const) : uint64 const <function-_at__builtin__c__c_hash_Cd>` 
+  *  :ref:`hash (value:$::das_string const implicit) : uint64 const <function-_at__builtin__c__c_hash_CIH_ls__builtin__c__c_das_string_gr_>` 
   *  :ref:`memcpy (left:void? const implicit;right:void? const implicit;size:int const) : void <function-_at__builtin__c__c_memcpy_CI_qm__CI_qm__Ci>` 
-  *  :ref:`memcmp (left:void? const implicit;right:void? const implicit;size:int const) : int <function-_at__builtin__c__c_memcmp_CI_qm__CI_qm__Ci>` 
+  *  :ref:`memcmp (left:void? const implicit;right:void? const implicit;size:int const) : int const <function-_at__builtin__c__c_memcmp_CI_qm__CI_qm__Ci>` 
   *  :ref:`intptr (p:void? const) : uint64 <function-_at__builtin__c__c_intptr_C1_ls_v_gr__qm_>` 
   *  :ref:`intptr (p:smart_ptr\<auto\> const) : uint64 <function-_at__builtin__c__c_intptr_C1_ls_._gr__qm_M>` 
   *  :ref:`lock_data (a:array\<auto(TT)\> ==const -const|array\<auto(TT)\># ==const -const -const;blk:block\<(var p:TT?# -const;s:int const):auto\> const) : auto <function-_at__builtin__c__c_lock_data_0_ls__eq_1_ls_Y_ls_TT_gr_._gr_A;_hh__eq_1_ls_Y_ls_TT_gr_._gr_A_gr_|_CN_ls_p;s_gr_0_ls__hh_1_ls_Y_ls_TT_gr_L_gr__qm_;Ci_gr_1_ls_._gr__builtin_>` 
@@ -3174,7 +3470,7 @@ Memory manipulation
 
 .. das:function:: variant_index(arg0: variant<> const implicit)
 
-variant_index returns int
+variant_index returns int const
 
 +--------+------------------------+
 +argument+argument type           +
@@ -3207,7 +3503,7 @@ variant_index returns int
 
 .. das:function:: hash(data: any)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3222,7 +3518,7 @@ hash returns uint64
 
 .. das:function:: hash(data: string const implicit)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -3237,7 +3533,7 @@ hash returns uint64
 
 .. das:function:: hash(value: int8 const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3252,7 +3548,7 @@ hash returns uint64
 
 .. das:function:: hash(value: uint8 const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3267,7 +3563,7 @@ hash returns uint64
 
 .. das:function:: hash(value: int16 const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3282,7 +3578,7 @@ hash returns uint64
 
 .. das:function:: hash(value: uint16 const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3297,7 +3593,7 @@ hash returns uint64
 
 .. das:function:: hash(value: int const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3312,7 +3608,7 @@ hash returns uint64
 
 .. das:function:: hash(value: uint const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3327,7 +3623,7 @@ hash returns uint64
 
 .. das:function:: hash(value: int64 const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3342,7 +3638,7 @@ hash returns uint64
 
 .. das:function:: hash(value: uint64 const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3357,7 +3653,7 @@ hash returns uint64
 
 .. das:function:: hash(value: void? const implicit)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+--------------------+
 +argument+argument type       +
@@ -3372,7 +3668,7 @@ hash returns uint64
 
 .. das:function:: hash(value: float const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3387,7 +3683,7 @@ hash returns uint64
 
 .. das:function:: hash(value: double const)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3402,7 +3698,7 @@ hash returns uint64
 
 .. das:function:: hash(value: das_string const implicit)
 
-hash returns uint64
+hash returns uint64 const
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -3437,7 +3733,7 @@ hash returns uint64
 
 .. das:function:: memcmp(left: void? const implicit; right: void? const implicit; size: int const)
 
-memcmp returns int
+memcmp returns int const
 
 .. warning:: 
   This is unsafe operation.
@@ -3567,39 +3863,39 @@ map_to_ro_array returns auto
 Binary serializer
 +++++++++++++++++
 
-  *  :ref:`binary_save (obj:auto const;subexpr:block\<(data:array\<uint8\> const):void\> const) : auto <function-_at__builtin__c__c_binary_save_C._CN_ls_data_gr_0_ls_C1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`binary_load (obj:auto -const;data:array\<uint8\> const) : auto <function-_at__builtin__c__c_binary_load_._C1_ls_u8_gr_A>` 
+  *  :ref:`binary_save (obj:auto const;subexpr:block\<(data:array\<uint8\> const#):void\> const) : auto <function-_at__builtin__c__c_binary_save_C._CN_ls_data_gr_0_ls_C_hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`binary_load (obj:auto -const;data:array\<uint8\> const implicit) : auto <function-_at__builtin__c__c_binary_load_._CI1_ls_u8_gr_A>` 
 
-.. _function-_at__builtin__c__c_binary_save_C._CN_ls_data_gr_0_ls_C1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_:
+.. _function-_at__builtin__c__c_binary_save_C._CN_ls_data_gr_0_ls_C_hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: binary_save(obj: auto const; subexpr: block<(data:array<uint8> const):void> const)
+.. das:function:: binary_save(obj: auto const; subexpr: block<(data:array<uint8> const#):void> const)
 
 binary_save returns auto
 
-+--------+-------------------------------------------+
-+argument+argument type                              +
-+========+===========================================+
-+obj     +auto const                                 +
-+--------+-------------------------------------------+
-+subexpr +block<(data:array<uint8> const):void> const+
-+--------+-------------------------------------------+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++obj     +auto const                                  +
++--------+--------------------------------------------+
++subexpr +block<(data:array<uint8> const#):void> const+
++--------+--------------------------------------------+
 
 
 |function-builtin-binary_save|
 
-.. _function-_at__builtin__c__c_binary_load_._C1_ls_u8_gr_A:
+.. _function-_at__builtin__c__c_binary_load_._CI1_ls_u8_gr_A:
 
-.. das:function:: binary_load(obj: auto; data: array<uint8> const)
+.. das:function:: binary_load(obj: auto; data: array<uint8> const implicit)
 
 binary_load returns auto
 
-+--------+------------------+
-+argument+argument type     +
-+========+==================+
-+obj     +auto              +
-+--------+------------------+
-+data    +array<uint8> const+
-+--------+------------------+
++--------+---------------------------+
++argument+argument type              +
++========+===========================+
++obj     +auto                       +
++--------+---------------------------+
++data    +array<uint8> const implicit+
++--------+---------------------------+
 
 
 |function-builtin-binary_load|
@@ -3624,9 +3920,9 @@ Time and date
 
   *  :ref:`get_clock () : $::clock <function-_at__builtin__c__c_get_clock>` 
   *  :ref:`mktime (year:int const;month:int const;mday:int const;hour:int const;min:int const;sec:int const) : $::clock <function-_at__builtin__c__c_mktime_Ci_Ci_Ci_Ci_Ci_Ci>` 
-  *  :ref:`ref_time_ticks () : int64 <function-_at__builtin__c__c_ref_time_ticks>` 
-  *  :ref:`get_time_usec (ref:int64 const) : int <function-_at__builtin__c__c_get_time_usec_Ci64>` 
-  *  :ref:`get_time_nsec (ref:int64 const) : int64 <function-_at__builtin__c__c_get_time_nsec_Ci64>` 
+  *  :ref:`ref_time_ticks () : int64 const <function-_at__builtin__c__c_ref_time_ticks>` 
+  *  :ref:`get_time_usec (ref:int64 const) : int const <function-_at__builtin__c__c_get_time_usec_Ci64>` 
+  *  :ref:`get_time_nsec (ref:int64 const) : int64 const <function-_at__builtin__c__c_get_time_nsec_Ci64>` 
 
 .. _function-_at__builtin__c__c_get_clock:
 
@@ -3665,7 +3961,7 @@ mktime returns  :ref:`builtin::clock <handle-builtin-clock>`
 
 .. das:function:: ref_time_ticks()
 
-ref_time_ticks returns int64
+ref_time_ticks returns int64 const
 
 |function-builtin-ref_time_ticks|
 
@@ -3673,7 +3969,7 @@ ref_time_ticks returns int64
 
 .. das:function:: get_time_usec(ref: int64 const)
 
-get_time_usec returns int
+get_time_usec returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3688,7 +3984,7 @@ get_time_usec returns int
 
 .. das:function:: get_time_nsec(ref: int64 const)
 
-get_time_nsec returns int64
+get_time_nsec returns int64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3703,15 +3999,15 @@ get_time_nsec returns int64
 Lock checking
 +++++++++++++
 
-  *  :ref:`lock_count (array:array const implicit) : int <function-_at__builtin__c__c_lock_count_CIA>` 
-  *  :ref:`set_verify_array_locks (array:array implicit;check:bool const) : bool <function-_at__builtin__c__c_set_verify_array_locks_IA_Cb>` 
-  *  :ref:`set_verify_table_locks (table:table implicit;check:bool const) : bool <function-_at__builtin__c__c_set_verify_table_locks_IT_Cb>` 
+  *  :ref:`lock_count (array:array const implicit) : int const <function-_at__builtin__c__c_lock_count_CIA>` 
+  *  :ref:`set_verify_array_locks (array:array implicit;check:bool const) : bool const <function-_at__builtin__c__c_set_verify_array_locks_IA_Cb>` 
+  *  :ref:`set_verify_table_locks (table:table implicit;check:bool const) : bool const <function-_at__builtin__c__c_set_verify_table_locks_IT_Cb>` 
 
 .. _function-_at__builtin__c__c_lock_count_CIA:
 
 .. das:function:: lock_count(array: array const implicit)
 
-lock_count returns int
+lock_count returns int const
 
 +--------+--------------------+
 +argument+argument type       +
@@ -3726,7 +4022,7 @@ lock_count returns int
 
 .. das:function:: set_verify_array_locks(array: array implicit; check: bool const)
 
-set_verify_array_locks returns bool
+set_verify_array_locks returns bool const
 
 .. warning:: 
   This is unsafe operation.
@@ -3746,7 +4042,7 @@ set_verify_array_locks returns bool
 
 .. das:function:: set_verify_table_locks(table: table implicit; check: bool const)
 
-set_verify_table_locks returns bool
+set_verify_table_locks returns bool const
 
 .. warning:: 
   This is unsafe operation.
@@ -3839,19 +4135,19 @@ _at_with_lockcheck returns valT&
 Bit operations
 ++++++++++++++
 
-  *  :ref:`clz (bits:uint const) : uint <function-_at__builtin__c__c_clz_Cu>` 
-  *  :ref:`clz (bits:uint64 const) : uint64 <function-_at__builtin__c__c_clz_Cu64>` 
-  *  :ref:`ctz (bits:uint const) : uint <function-_at__builtin__c__c_ctz_Cu>` 
-  *  :ref:`ctz (bits:uint64 const) : uint64 <function-_at__builtin__c__c_ctz_Cu64>` 
-  *  :ref:`popcnt (bits:uint const) : uint <function-_at__builtin__c__c_popcnt_Cu>` 
-  *  :ref:`popcnt (bits:uint64 const) : uint64 <function-_at__builtin__c__c_popcnt_Cu64>` 
-  *  :ref:`mul128 (a:uint64 const;b:uint64 const) : urange64 <function-_at__builtin__c__c_mul128_Cu64_Cu64>` 
+  *  :ref:`clz (bits:uint const) : uint const <function-_at__builtin__c__c_clz_Cu>` 
+  *  :ref:`clz (bits:uint64 const) : uint64 const <function-_at__builtin__c__c_clz_Cu64>` 
+  *  :ref:`ctz (bits:uint const) : uint const <function-_at__builtin__c__c_ctz_Cu>` 
+  *  :ref:`ctz (bits:uint64 const) : uint64 const <function-_at__builtin__c__c_ctz_Cu64>` 
+  *  :ref:`popcnt (bits:uint const) : uint const <function-_at__builtin__c__c_popcnt_Cu>` 
+  *  :ref:`popcnt (bits:uint64 const) : uint64 const <function-_at__builtin__c__c_popcnt_Cu64>` 
+  *  :ref:`mul128 (a:uint64 const;b:uint64 const) : urange64 const <function-_at__builtin__c__c_mul128_Cu64_Cu64>` 
 
 .. _function-_at__builtin__c__c_clz_Cu:
 
 .. das:function:: clz(bits: uint const)
 
-clz returns uint
+clz returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -3866,7 +4162,7 @@ clz returns uint
 
 .. das:function:: clz(bits: uint64 const)
 
-clz returns uint64
+clz returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3881,7 +4177,7 @@ clz returns uint64
 
 .. das:function:: ctz(bits: uint const)
 
-ctz returns uint
+ctz returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -3896,7 +4192,7 @@ ctz returns uint
 
 .. das:function:: ctz(bits: uint64 const)
 
-ctz returns uint64
+ctz returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3911,7 +4207,7 @@ ctz returns uint64
 
 .. das:function:: popcnt(bits: uint const)
 
-popcnt returns uint
+popcnt returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -3926,7 +4222,7 @@ popcnt returns uint
 
 .. das:function:: popcnt(bits: uint64 const)
 
-popcnt returns uint64
+popcnt returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3941,7 +4237,7 @@ popcnt returns uint64
 
 .. das:function:: mul128(a: uint64 const; b: uint64 const)
 
-mul128 returns urange64
+mul128 returns urange64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3958,16 +4254,16 @@ mul128 returns urange64
 Intervals
 +++++++++
 
-  *  :ref:`interval (arg0:int const;arg1:int const) : range <function-_at__builtin__c__c_interval_Ci_Ci>` 
-  *  :ref:`interval (arg0:uint const;arg1:uint const) : urange <function-_at__builtin__c__c_interval_Cu_Cu>` 
-  *  :ref:`interval (arg0:int64 const;arg1:int64 const) : range64 <function-_at__builtin__c__c_interval_Ci64_Ci64>` 
-  *  :ref:`interval (arg0:uint64 const;arg1:uint64 const) : urange64 <function-_at__builtin__c__c_interval_Cu64_Cu64>` 
+  *  :ref:`interval (arg0:int const;arg1:int const) : range const <function-_at__builtin__c__c_interval_Ci_Ci>` 
+  *  :ref:`interval (arg0:uint const;arg1:uint const) : urange const <function-_at__builtin__c__c_interval_Cu_Cu>` 
+  *  :ref:`interval (arg0:int64 const;arg1:int64 const) : range64 const <function-_at__builtin__c__c_interval_Ci64_Ci64>` 
+  *  :ref:`interval (arg0:uint64 const;arg1:uint64 const) : urange64 const <function-_at__builtin__c__c_interval_Cu64_Cu64>` 
 
 .. _function-_at__builtin__c__c_interval_Ci_Ci:
 
 .. das:function:: interval(arg0: int const; arg1: int const)
 
-interval returns range
+interval returns range const
 
 +--------+-------------+
 +argument+argument type+
@@ -3984,7 +4280,7 @@ interval returns range
 
 .. das:function:: interval(arg0: uint const; arg1: uint const)
 
-interval returns urange
+interval returns urange const
 
 +--------+-------------+
 +argument+argument type+
@@ -4001,7 +4297,7 @@ interval returns urange
 
 .. das:function:: interval(arg0: int64 const; arg1: int64 const)
 
-interval returns range64
+interval returns range64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4018,7 +4314,7 @@ interval returns range64
 
 .. das:function:: interval(arg0: uint64 const; arg1: uint64 const)
 
-interval returns urange64
+interval returns urange64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4035,13 +4331,13 @@ interval returns urange64
 RTTI
 ++++
 
-  *  :ref:`class_rtti_size (ptr:void? const implicit) : int <function-_at__builtin__c__c_class_rtti_size_CI_qm_>` 
+  *  :ref:`class_rtti_size (ptr:void? const implicit) : int const <function-_at__builtin__c__c_class_rtti_size_CI_qm_>` 
 
 .. _function-_at__builtin__c__c_class_rtti_size_CI_qm_:
 
 .. das:function:: class_rtti_size(ptr: void? const implicit)
 
-class_rtti_size returns int
+class_rtti_size returns int const
 
 +--------+--------------------+
 +argument+argument type       +
@@ -4056,13 +4352,13 @@ class_rtti_size returns int
 Lock verification
 +++++++++++++++++
 
-  *  :ref:`set_verify_context_locks (check:bool const;context:__context const) : bool <function-_at__builtin__c__c_set_verify_context_locks_Cb_C_c>` 
+  *  :ref:`set_verify_context_locks (check:bool const;context:__context const) : bool const <function-_at__builtin__c__c_set_verify_context_locks_Cb_C_c>` 
 
 .. _function-_at__builtin__c__c_set_verify_context_locks_Cb_C_c:
 
 .. das:function:: set_verify_context_locks(check: bool const)
 
-set_verify_context_locks returns bool
+set_verify_context_locks returns bool const
 
 .. warning:: 
   This is unsafe operation.
@@ -4286,7 +4582,7 @@ Malloc
 
   *  :ref:`malloc (size:uint64 const) : void? <function-_at__builtin__c__c_malloc_Cu64>` 
   *  :ref:`free (ptr:void? const implicit) : void <function-_at__builtin__c__c_free_CI_qm_>` 
-  *  :ref:`malloc_usable_size (ptr:void? const implicit) : uint64 <function-_at__builtin__c__c_malloc_usable_size_CI_qm_>` 
+  *  :ref:`malloc_usable_size (ptr:void? const implicit) : uint64 const <function-_at__builtin__c__c_malloc_usable_size_CI_qm_>` 
 
 .. _function-_at__builtin__c__c_malloc_Cu64:
 
@@ -4326,7 +4622,7 @@ malloc returns void?
 
 .. das:function:: malloc_usable_size(ptr: void? const implicit)
 
-malloc_usable_size returns uint64
+malloc_usable_size returns uint64 const
 
 .. warning:: 
   This is unsafe operation.
@@ -4343,6 +4639,102 @@ malloc_usable_size returns uint64
 +++++++++++++
 Uncategorized
 +++++++++++++
+
+.. _function-_at__builtin__c__c_set_aot:
+
+.. das:function:: set_aot()
+
+|function-builtin-set_aot|
+
+.. _function-_at__builtin__c__c_reset_aot:
+
+.. das:function:: reset_aot()
+
+|function-builtin-reset_aot|
+
+.. _function-_at__builtin__c__c_compiling_file_name:
+
+.. das:function:: compiling_file_name()
+
+compiling_file_name returns string const
+
+|function-builtin-compiling_file_name|
+
+.. _function-_at__builtin__c__c_compiling_module_name:
+
+.. das:function:: compiling_module_name()
+
+compiling_module_name returns string const
+
+|function-builtin-compiling_module_name|
+
+.. _function-_at__builtin__c__c___bit_set_&It_Ct_Cb:
+
+.. das:function:: __bit_set(value: bitfield& implicit; mask: bitfield const; on: bool const)
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++value   +bitfield<>& implicit+
++--------+--------------------+
++mask    +bitfield<> const    +
++--------+--------------------+
++on      +bool const          +
++--------+--------------------+
+
+
+|function-builtin-__bit_set|
+
+.. _function-_at__builtin__c__c___bit_set_&It8_Ct8_Cb:
+
+.. das:function:: __bit_set(value: bitfield8:uint8& implicit; mask: bitfield8:uint8 const; on: bool const)
+
++--------+-------------------+
++argument+argument type      +
++========+===================+
++value   +bitfield8& implicit+
++--------+-------------------+
++mask    +bitfield8 const    +
++--------+-------------------+
++on      +bool const         +
++--------+-------------------+
+
+
+|function-builtin-__bit_set|
+
+.. _function-_at__builtin__c__c___bit_set_&It16_Ct16_Cb:
+
+.. das:function:: __bit_set(value: bitfield16:uint16& implicit; mask: bitfield16:uint16 const; on: bool const)
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++value   +bitfield16& implicit+
++--------+--------------------+
++mask    +bitfield16 const    +
++--------+--------------------+
++on      +bool const          +
++--------+--------------------+
+
+
+|function-builtin-__bit_set|
+
+.. _function-_at__builtin__c__c___bit_set_&It64_Ct64_Cb:
+
+.. das:function:: __bit_set(value: bitfield64:uint64& implicit; mask: bitfield64:uint64 const; on: bool const)
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++value   +bitfield64& implicit+
++--------+--------------------+
++mask    +bitfield64 const    +
++--------+--------------------+
++on      +bool const          +
++--------+--------------------+
+
+
+|function-builtin-__bit_set|
 
 .. _function-_at__builtin__c__c_resize_and_init_1_ls_Y_ls_numT_gr_._gr_A_Ci:
 
@@ -4397,175 +4789,282 @@ erase_if returns auto
 
 |function-builtin-erase_if|
 
-.. _function-_at__builtin__c__c_float2_C._C.:
+.. _function-_at__builtin__c__c_get_value_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|:
 
-.. das:function:: float2(a: auto const; b: auto const)
+.. das:function:: get_value(Tab: table<auto(keyT);auto(valT)> const ==const; at: keyT const|keyT const# const)
 
-float2 returns auto
+get_value returns valT
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-
-
-|function-builtin-float2|
-
-.. _function-_at__builtin__c__c_float3_C._C._C.:
-
-.. das:function:: float3(a: auto const; b: auto const; c: auto const)
-
-float3 returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-+c       +auto const   +
-+--------+-------------+
++--------+-----------------------------------+
++argument+argument type                      +
++========+===================================+
++Tab     +table<auto(keyT);auto(valT)> const!+
++--------+-----------------------------------+
++at      +option const                       +
++--------+-----------------------------------+
 
 
-|function-builtin-float3|
+|function-builtin-get_value|
 
-.. _function-_at__builtin__c__c_float4_C._C._C._C.:
+.. _function-_at__builtin__c__c_get_value_1_ls_Y_ls_keyT_gr_._gr_2_ls_1_ls_Y_ls_valT_gr_._gr__qm_M_gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|:
 
-.. das:function:: float4(a: auto const; b: auto const; c: auto const; d: auto const)
+.. das:function:: get_value(Tab: table<auto(keyT);smart_ptr<auto(valT)>>; at: keyT const|keyT const# const)
 
-float4 returns auto
+get_value returns smart_ptr<valT>
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-+c       +auto const   +
-+--------+-------------+
-+d       +auto const   +
-+--------+-------------+
++--------+---------------------------------------+
++argument+argument type                          +
++========+=======================================+
++Tab     +table<auto(keyT);smart_ptr<auto(valT)>>+
++--------+---------------------------------------+
++at      +option const                           +
++--------+---------------------------------------+
 
 
-|function-builtin-float4|
+|function-builtin-get_value|
 
-.. _function-_at__builtin__c__c_int2_C._C.:
+.. _function-_at__builtin__c__c_get_value_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|:
 
-.. das:function:: int2(a: auto const; b: auto const)
+.. das:function:: get_value(Tab: table<auto(keyT);auto(valT)>; at: keyT const|keyT const# const)
 
-int2 returns auto
+get_value returns valT
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-
-
-|function-builtin-int2|
-
-.. _function-_at__builtin__c__c_int3_C._C._C.:
-
-.. das:function:: int3(a: auto const; b: auto const; c: auto const)
-
-int3 returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-+c       +auto const   +
-+--------+-------------+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++Tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++at      +option const                +
++--------+----------------------------+
 
 
-|function-builtin-int3|
+|function-builtin-get_value|
 
-.. _function-_at__builtin__c__c_int4_C._C._C._C.:
+.. _function-_at__builtin__c__c_get_value_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|:
 
-.. das:function:: int4(a: auto const; b: auto const; c: auto const; d: auto const)
+.. das:function:: get_value(Tab: table<auto(keyT);auto(valT)[]>; at: keyT const|keyT const# const)
 
-int4 returns auto
+get_value returns valT[-2]
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-+c       +auto const   +
-+--------+-------------+
-+d       +auto const   +
-+--------+-------------+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++Tab     +table<auto(keyT);auto(valT)[-1]>+
++--------+--------------------------------+
++at      +option const                    +
++--------+--------------------------------+
 
 
-|function-builtin-int4|
+|function-builtin-get_value|
 
-.. _function-_at__builtin__c__c_uint2_C._C.:
+.. _function-_at__builtin__c__c_insert_clone_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_0_ls__eq_Y_ls_valT_gr_L;_hh__eq_Y_ls_valT_gr_L_gr_|:
 
-.. das:function:: uint2(a: auto const; b: auto const)
+.. das:function:: insert_clone(Tab: table<auto(keyT);auto(valT)>; at: keyT const|keyT const# const; val: valT ==const|valT# ==const)
 
-uint2 returns auto
+insert_clone returns auto
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-
-
-|function-builtin-uint2|
-
-.. _function-_at__builtin__c__c_uint3_C._C._C.:
-
-.. das:function:: uint3(a: auto const; b: auto const; c: auto const)
-
-uint3 returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-+c       +auto const   +
-+--------+-------------+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++Tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++at      +option const                +
++--------+----------------------------+
++val     +option                      +
++--------+----------------------------+
 
 
-|function-builtin-uint3|
+|function-builtin-insert_clone|
 
-.. _function-_at__builtin__c__c_uint4_C._C._C._C.:
+.. _function-_at__builtin__c__c_insert_clone_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_C0_ls_C_eq_Y_ls_valT_gr_L;C_hh__eq_Y_ls_valT_gr_L_gr_|:
 
-.. das:function:: uint4(a: auto const; b: auto const; c: auto const; d: auto const)
+.. das:function:: insert_clone(Tab: table<auto(keyT);auto(valT)>; at: keyT const|keyT const# const; val: valT const ==const|valT const# ==const const)
 
-uint4 returns auto
+insert_clone returns auto
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-+c       +auto const   +
-+--------+-------------+
-+d       +auto const   +
-+--------+-------------+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++Tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++at      +option const                +
++--------+----------------------------+
++val     +option const                +
++--------+----------------------------+
 
 
-|function-builtin-uint4|
+|function-builtin-insert_clone|
+
+.. _function-_at__builtin__c__c_insert_clone_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_0_ls__eq__lb_-1_rb_Y_ls_valT_gr_L;_hh__eq__lb_-1_rb_Y_ls_valT_gr_L_gr_|:
+
+.. das:function:: insert_clone(Tab: table<auto(keyT);auto(valT)[]>; at: keyT const|keyT const# const; val: valT[] ==const|valT[]# ==const)
+
+insert_clone returns auto
+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++Tab     +table<auto(keyT);auto(valT)[-1]>+
++--------+--------------------------------+
++at      +option const                    +
++--------+--------------------------------+
++val     +option                          +
++--------+--------------------------------+
+
+
+|function-builtin-insert_clone|
+
+.. _function-_at__builtin__c__c_insert_clone_1_ls_Y_ls_keyT_gr_._gr_2_ls__lb_-1_rb_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_C0_ls_C_eq__lb_-1_rb_Y_ls_valT_gr_L;C_hh__eq__lb_-1_rb_Y_ls_valT_gr_L_gr_|:
+
+.. das:function:: insert_clone(Tab: table<auto(keyT);auto(valT)[]>; at: keyT const|keyT const# const; val: valT const[] ==const|valT const[]# ==const const)
+
+insert_clone returns auto
+
++--------+--------------------------------+
++argument+argument type                   +
++========+================================+
++Tab     +table<auto(keyT);auto(valT)[-1]>+
++--------+--------------------------------+
++at      +option const                    +
++--------+--------------------------------+
++val     +option const                    +
++--------+--------------------------------+
+
+
+|function-builtin-insert_clone|
+
+.. _function-_at__builtin__c__c_emplace_new_1_ls_Y_ls_kT_gr_._gr_2_ls_1_ls_Y_ls_vT_gr_._gr__qm_M_gr_T_CY_ls_kT_gr_L_1_ls_Y_ls_vT_gr_L_gr__qm_M:
+
+.. das:function:: emplace_new(tab: table<auto(kT);smart_ptr<auto(vT)>>; key: kT const; value: smart_ptr<vT>)
+
+emplace_new returns auto
+
++--------+-----------------------------------+
++argument+argument type                      +
++========+===================================+
++tab     +table<auto(kT);smart_ptr<auto(vT)>>+
++--------+-----------------------------------+
++key     +kT const                           +
++--------+-----------------------------------+
++value   +smart_ptr<vT>                      +
++--------+-----------------------------------+
+
+
+|function-builtin-emplace_new|
+
+.. _function-_at__builtin__c__c_emplace_new_1_ls_1_ls_Y_ls_numT_gr_._gr__qm_M_gr_A_1_ls_Y_ls_numT_gr_L_gr__qm_M:
+
+.. das:function:: emplace_new(Arr: array<smart_ptr<auto(numT)>>; value: smart_ptr<numT>)
+
+emplace_new returns auto
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++Arr     +array<smart_ptr<auto(numT)>>+
++--------+----------------------------+
++value   +smart_ptr<numT>             +
++--------+----------------------------+
+
+
+|function-builtin-emplace_new|
+
+.. _function-_at__builtin__c__c_insert_default_1_ls_Y_ls_TT_gr_._gr_2_ls_Y_ls_QQ_gr_._gr_T_C0_ls_CY_ls_TT_gr_L;C_hh_Y_ls_TT_gr_L_gr_|_0_ls__eq_Y_ls_QQ_gr_L;_hh__eq_Y_ls_QQ_gr_L_gr_|:
+
+.. das:function:: insert_default(tab: table<auto(TT);auto(QQ)>; key: TT const|TT const# const; value: QQ ==const|QQ# ==const)
+
++--------+------------------------+
++argument+argument type           +
++========+========================+
++tab     +table<auto(TT);auto(QQ)>+
++--------+------------------------+
++key     +option const            +
++--------+------------------------+
++value   +option                  +
++--------+------------------------+
+
+
+|function-builtin-insert_default|
+
+.. _function-_at__builtin__c__c_insert_default_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_C0_ls_C_eq_Y_ls_valT_gr_L;C_hh__eq_Y_ls_valT_gr_L_gr_|:
+
+.. das:function:: insert_default(tab: table<auto(keyT);auto(valT)>; key: keyT const|keyT const# const; value: valT const ==const|valT const# ==const const)
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++key     +option const                +
++--------+----------------------------+
++value   +option const                +
++--------+----------------------------+
+
+
+|function-builtin-insert_default|
+
+.. _function-_at__builtin__c__c_insert_default_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|:
+
+.. das:function:: insert_default(tab: table<auto(keyT);auto(valT)>; key: keyT const|keyT const# const)
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++key     +option const                +
++--------+----------------------------+
+
+
+|function-builtin-insert_default|
+
+.. _function-_at__builtin__c__c_emplace_default_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|:
+
+.. das:function:: emplace_default(tab: table<auto(keyT);auto(valT)>; key: keyT const|keyT const# const)
+
++--------+----------------------------+
++argument+argument type               +
++========+============================+
++tab     +table<auto(keyT);auto(valT)>+
++--------+----------------------------+
++key     +option const                +
++--------+----------------------------+
+
+
+|function-builtin-emplace_default|
+
+.. _function-_at__builtin__c__c_get_with_default__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_&Y_ls_valT_gr_L_gr_1_ls_v_gr__builtin_:
+
+.. das:function:: get_with_default(Tab: table<auto(keyT);auto(valT)> ==const; at: keyT const|keyT const# const; blk: block<(var p:valT&):void> const)
+
++--------+-----------------------------+
++argument+argument type                +
++========+=============================+
++Tab     +table<auto(keyT);auto(valT)>!+
++--------+-----------------------------+
++at      +option const                 +
++--------+-----------------------------+
++blk     +block<(p:valT&):void> const  +
++--------+-----------------------------+
+
+
+|function-builtin-get_with_default|
+
+.. _function-_at__builtin__c__c_modify__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|_CN_ls_p_gr_0_ls_C&Y_ls_valT_gr_L_gr_1_ls_Y_ls_valT_gr_L_gr__builtin_:
+
+.. das:function:: modify(Tab: table<auto(keyT);auto(valT)> ==const; at: keyT const|keyT const# const; blk: block<(p:valT const&):valT> const)
+
++--------+---------------------------------+
++argument+argument type                    +
++========+=================================+
++Tab     +table<auto(keyT);auto(valT)>!    +
++--------+---------------------------------+
++at      +option const                     +
++--------+---------------------------------+
++blk     +block<(p:valT const&):valT> const+
++--------+---------------------------------+
+
+
+|function-builtin-modify|
 
 

@@ -188,7 +188,7 @@ Returns copy of the data from the seiralizer.
 
 .. das:function:: MemSerializer.getLastError(self: MemSerializer)
 
-getLastError returns string
+getLastError returns string const
 
 Returns last serialization error.
 

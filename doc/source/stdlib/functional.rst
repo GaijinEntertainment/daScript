@@ -21,12 +21,14 @@ Map, reduce
   *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_>` 
   *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_>` 
   *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_>` 
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:lambda\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_>` 
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:function\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_>` 
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:block\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_>` 
-  *  :ref:`sum (it:iterator\<auto(TT)\> const) : auto <function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> -const;blk:lambda\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> -const;blk:function\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> -const;blk:block\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_>` 
+  *  :ref:`sum (it:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_sum_1_ls_Y_ls_TT_gr_._gr_G>` 
   *  :ref:`any (it:auto const) : auto <function-_at_functional_c__c_any_C.>` 
+  *  :ref:`any (it:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_any_1_ls_Y_ls_TT_gr_._gr_G>` 
   *  :ref:`all (it:auto const) : auto <function-_at_functional_c__c_all_C.>` 
+  *  :ref:`all (it:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_all_1_ls_Y_ls_TT_gr_._gr_G>` 
   *  :ref:`cycle (src:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr_._gr_G>` 
   *  :ref:`islice (src:iterator\<auto(TT)\> -const;start:int const;stop:int const) : auto <function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr_._gr_G_Ci_Ci>` 
   *  :ref:`repeat_ref (value:auto(TT) const;total:int -const) : auto <function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i>` 
@@ -51,7 +53,6 @@ filter returns auto
 
 
 iterates over `src` and yields only those elements for which `blk` returns true
-filter with function
 
 .. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_:
 
@@ -69,7 +70,6 @@ filter returns auto
 
 
 iterates over `src` and yields only those elements for which `blk` returns true
-filter with function
 
 .. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_:
 
@@ -86,7 +86,7 @@ map returns auto
 +--------+--------------------------------------+
 
 
-reduce value, any invokable
+iterates over `src` and yields the result of `blk` for each element
 
 .. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_:
 
@@ -103,75 +103,77 @@ map returns auto
 +--------+----------------------------------------+
 
 
-reduce value, any invokable
+iterates over `src` and yields the result of `blk` for each element
 
-.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_:
+.. _function-_at_functional_c__c_reduce_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_:
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: lambda<(left:TT const;right:TT const):TT const> const)
+.. das:function:: reduce(it: iterator<auto(TT)>; blk: lambda<(left:TT const;right:TT const):TT const> const)
 
 reduce returns auto
 
 +--------+-----------------------------------------------------+
 +argument+argument type                                        +
 +========+=====================================================+
-+it      +iterator<auto(TT)> const                             +
++it      +iterator<auto(TT)>                                   +
 +--------+-----------------------------------------------------+
 +blk     +lambda<(left:TT const;right:TT const):TT const> const+
 +--------+-----------------------------------------------------+
 
 
-summ of all elements
+iterates over `it` and yields the reduced (combined) result of `blk` for each element
+and previous reduction result
 
-.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_:
+.. _function-_at_functional_c__c_reduce_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_:
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: function<(left:TT const;right:TT const):TT const> const)
+.. das:function:: reduce(it: iterator<auto(TT)>; blk: function<(left:TT const;right:TT const):TT const> const)
 
 reduce returns auto
 
 +--------+-------------------------------------------------------+
 +argument+argument type                                          +
 +========+=======================================================+
-+it      +iterator<auto(TT)> const                               +
++it      +iterator<auto(TT)>                                     +
 +--------+-------------------------------------------------------+
 +blk     +function<(left:TT const;right:TT const):TT const> const+
 +--------+-------------------------------------------------------+
 
 
-summ of all elements
+iterates over `it` and yields the reduced (combined) result of `blk` for each element
+and previous reduction result
 
-.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_:
+.. _function-_at_functional_c__c_reduce_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_:
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: block<(left:TT const;right:TT const):TT const> const)
+.. das:function:: reduce(it: iterator<auto(TT)>; blk: block<(left:TT const;right:TT const):TT const> const)
 
 reduce returns auto
 
 +--------+----------------------------------------------------+
 +argument+argument type                                       +
 +========+====================================================+
-+it      +iterator<auto(TT)> const                            +
++it      +iterator<auto(TT)>                                  +
 +--------+----------------------------------------------------+
 +blk     +block<(left:TT const;right:TT const):TT const> const+
 +--------+----------------------------------------------------+
 
 
-summ of all elements
+iterates over `it` and yields the reduced (combined) result of `blk` for each element
+and previous reduction result
 
-.. _function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G:
+.. _function-_at_functional_c__c_sum_1_ls_Y_ls_TT_gr_._gr_G:
 
-.. das:function:: sum(it: iterator<auto(TT)> const)
+.. das:function:: sum(it: iterator<auto(TT)>)
 
 sum returns auto
 
-+--------+------------------------+
-+argument+argument type           +
-+========+========================+
-+it      +iterator<auto(TT)> const+
-+--------+------------------------+
++--------+------------------+
++argument+argument type     +
++========+==================+
++it      +iterator<auto(TT)>+
++--------+------------------+
 
 
 iterates over `it` and yields the sum of all elements
 same as reduce(it, @(a,b) => a + b)
-any
 
 .. _function-_at_functional_c__c_any_C.:
 
@@ -187,7 +189,21 @@ any returns auto
 
 
 iterates over `it` and yields true if any element is true
-all
+
+.. _function-_at_functional_c__c_any_1_ls_Y_ls_TT_gr_._gr_G:
+
+.. das:function:: any(it: iterator<auto(TT)>)
+
+any returns auto
+
++--------+------------------+
++argument+argument type     +
++========+==================+
++it      +iterator<auto(TT)>+
++--------+------------------+
+
+
+iterates over `it` and yields true if any element is true
 
 .. _function-_at_functional_c__c_all_C.:
 
@@ -200,6 +216,21 @@ all returns auto
 +========+=============+
 +it      +auto const   +
 +--------+-------------+
+
+
+iterates over `it` and yields true if all elements are true
+
+.. _function-_at_functional_c__c_all_1_ls_Y_ls_TT_gr_._gr_G:
+
+.. das:function:: all(it: iterator<auto(TT)>)
+
+all returns auto
+
++--------+------------------+
++argument+argument type     +
++========+==================+
++it      +iterator<auto(TT)>+
++--------+------------------+
 
 
 iterates over `it` and yields true if all elements are true
@@ -237,7 +268,6 @@ islice returns auto
 
 
 iterates over `src` and yields only the elements in the range [start,stop)
-[[ value; value; value; .... count times ]]
 
 .. _function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i:
 
@@ -255,7 +285,6 @@ repeat_ref returns auto
 
 
 yields `value` by reference `count` times
-[[ value; value; value; .... count times ]]
 
 .. _function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i:
 

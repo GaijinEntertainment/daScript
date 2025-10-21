@@ -21,10 +21,10 @@ All functions and symbols are in "fuzzer" module, use require to get access to i
 Fuzzer tests
 ++++++++++++
 
-  *  :ref:`fuzz (blk:block\<\> const) : void <function-_at_fuzzer_c__c_fuzz_C_builtin_>` 
-  *  :ref:`fuzz (fuzz_count:int const;blk:block\<\> const) : void <function-_at_fuzzer_c__c_fuzz_Ci_C_builtin_>` 
-  *  :ref:`fuzz_debug (blk:block\<\> const) : void <function-_at_fuzzer_c__c_fuzz_debug_C_builtin_>` 
-  *  :ref:`fuzz_debug (fuzz_count:int const;blk:block\<\> const) : void <function-_at_fuzzer_c__c_fuzz_debug_Ci_C_builtin_>` 
+  *  :ref:`fuzz (blk:block\<void\> const) : void <function-_at_fuzzer_c__c_fuzz_C1_ls_v_gr__builtin_>` 
+  *  :ref:`fuzz (fuzz_count:int const;blk:block\<void\> const) : void <function-_at_fuzzer_c__c_fuzz_Ci_C1_ls_v_gr__builtin_>` 
+  *  :ref:`fuzz_debug (blk:block\<void\> const) : void <function-_at_fuzzer_c__c_fuzz_debug_C1_ls_v_gr__builtin_>` 
+  *  :ref:`fuzz_debug (fuzz_count:int const;blk:block\<void\> const) : void <function-_at_fuzzer_c__c_fuzz_debug_Ci_C1_ls_v_gr__builtin_>` 
   *  :ref:`fuzz_numeric_and_vector_op1 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_and_vector_op1_C1_ls_S_ls_testing_c__c_T_gr__gr__qm__S_ls_faker_c__c_Faker_gr__Cs>` 
   *  :ref:`fuzz_numeric_and_vector_signed_op1 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_and_vector_signed_op1_C1_ls_S_ls_testing_c__c_T_gr__gr__qm__S_ls_faker_c__c_Faker_gr__Cs>` 
   *  :ref:`fuzz_numeric_op1 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_op1_C1_ls_S_ls_testing_c__c_T_gr__gr__qm__S_ls_faker_c__c_Faker_gr__Cs>` 
@@ -51,9 +51,9 @@ Fuzzer tests
   *  :ref:`fuzz_float_double_or_float_vec_op3 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_float_double_or_float_vec_op3_C1_ls_S_ls_testing_c__c_T_gr__gr__qm__S_ls_faker_c__c_Faker_gr__Cs>` 
   *  :ref:`fuzz_numeric_op4 (t:testing::T? const;fake:faker::Faker -const;funcname:string const) : void <function-_at_fuzzer_c__c_fuzz_numeric_op4_C1_ls_S_ls_testing_c__c_T_gr__gr__qm__S_ls_faker_c__c_Faker_gr__Cs>` 
 
-.. _function-_at_fuzzer_c__c_fuzz_C_builtin_:
+.. _function-_at_fuzzer_c__c_fuzz_C1_ls_v_gr__builtin_:
 
-.. das:function:: fuzz(blk: block<> const)
+.. das:function:: fuzz(blk: block<void> const)
 
 +--------+-------------+
 +argument+argument type+
@@ -65,9 +65,9 @@ Fuzzer tests
 run block however many times
 ignore panic, so that we can see that runtime crashes
 
-.. _function-_at_fuzzer_c__c_fuzz_Ci_C_builtin_:
+.. _function-_at_fuzzer_c__c_fuzz_Ci_C1_ls_v_gr__builtin_:
 
-.. das:function:: fuzz(fuzz_count: int const; blk: block<> const)
+.. das:function:: fuzz(fuzz_count: int const; blk: block<void> const)
 
 +----------+-------------+
 +argument  +argument type+
@@ -81,9 +81,9 @@ ignore panic, so that we can see that runtime crashes
 run block however many times
 ignore panic, so that we can see that runtime crashes
 
-.. _function-_at_fuzzer_c__c_fuzz_debug_C_builtin_:
+.. _function-_at_fuzzer_c__c_fuzz_debug_C1_ls_v_gr__builtin_:
 
-.. das:function:: fuzz_debug(blk: block<> const)
+.. das:function:: fuzz_debug(blk: block<void> const)
 
 +--------+-------------+
 +argument+argument type+
@@ -96,9 +96,9 @@ run block however many times
 do not ignore panic, so that we can see where the runtime fails
 this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the purpose of debugging
 
-.. _function-_at_fuzzer_c__c_fuzz_debug_Ci_C_builtin_:
+.. _function-_at_fuzzer_c__c_fuzz_debug_Ci_C1_ls_v_gr__builtin_:
 
-.. das:function:: fuzz_debug(fuzz_count: int const; blk: block<> const)
+.. das:function:: fuzz_debug(fuzz_count: int const; blk: block<void> const)
 
 +----------+-------------+
 +argument  +argument type+

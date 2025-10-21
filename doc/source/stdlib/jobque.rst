@@ -25,13 +25,13 @@ Handled structures
 
 JobStatus property operators are
 
-+-------+----+
-+isReady+bool+
-+-------+----+
-+isValid+bool+
-+-------+----+
-+size   +int +
-+-------+----+
++-------+----------+
++isReady+bool const+
++-------+----------+
++isValid+bool const+
++-------+----------+
++size   +int const +
++-------+----------+
 
 
 |structure_annotation-jobque-JobStatus|
@@ -42,11 +42,11 @@ JobStatus property operators are
 
 Channel property operators are
 
-+-------+----+
-+isEmpty+bool+
-+-------+----+
-+total  +int +
-+-------+----+
++-------+----------+
++isEmpty+bool const+
++-------+----------+
++total  +int const +
++-------+----------+
 
 
 |structure_annotation-jobque-Channel|
@@ -75,7 +75,7 @@ Channel, JobStatus, Lockbox
 
   *  :ref:`lock_box_create (context:__context const;line:__lineInfo const) : jobque::LockBox? <function-_at_jobque_c__c_lock_box_create_C_c_C_l>` 
   *  :ref:`lock_box_remove (box:jobque::LockBox?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_lock_box_remove_&I1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`append (channel:jobque::JobStatus? const implicit;size:int const;context:__context const;line:__lineInfo const) : int <function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__Ci_C_c_C_l>` 
+  *  :ref:`append (channel:jobque::JobStatus? const implicit;size:int const;context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__Ci_C_c_C_l>` 
   *  :ref:`channel_create (context:__context const;line:__lineInfo const) : jobque::Channel? <function-_at_jobque_c__c_channel_create_C_c_C_l>` 
   *  :ref:`channel_remove (channel:jobque::Channel?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_channel_remove_&I1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C_c_C_l>` 
   *  :ref:`add_ref (status:jobque::JobStatus? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_add_ref_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l>` 
@@ -114,7 +114,7 @@ lock_box_create returns  :ref:`jobque::LockBox <handle-jobque-LockBox>` ?
 
 .. das:function:: append(channel: JobStatus? const implicit; size: int const)
 
-append returns int
+append returns int const
 
 +--------+--------------------------------------------------------------------+
 +argument+argument type                                                       +
@@ -247,15 +247,15 @@ job_status_create returns  :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?
 Queries
 +++++++
 
-  *  :ref:`get_total_hw_jobs (context:__context const;line:__lineInfo const) : int <function-_at_jobque_c__c_get_total_hw_jobs_C_c_C_l>` 
-  *  :ref:`get_total_hw_threads () : int <function-_at_jobque_c__c_get_total_hw_threads>` 
-  *  :ref:`is_job_que_shutting_down () : bool <function-_at_jobque_c__c_is_job_que_shutting_down>` 
+  *  :ref:`get_total_hw_jobs (context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_get_total_hw_jobs_C_c_C_l>` 
+  *  :ref:`get_total_hw_threads () : int const <function-_at_jobque_c__c_get_total_hw_threads>` 
+  *  :ref:`is_job_que_shutting_down () : bool const <function-_at_jobque_c__c_is_job_que_shutting_down>` 
 
 .. _function-_at_jobque_c__c_get_total_hw_jobs_C_c_C_l:
 
 .. das:function:: get_total_hw_jobs()
 
-get_total_hw_jobs returns int
+get_total_hw_jobs returns int const
 
 |function-jobque-get_total_hw_jobs|
 
@@ -263,7 +263,7 @@ get_total_hw_jobs returns int
 
 .. das:function:: get_total_hw_threads()
 
-get_total_hw_threads returns int
+get_total_hw_threads returns int const
 
 |function-jobque-get_total_hw_threads|
 
@@ -271,7 +271,7 @@ get_total_hw_threads returns int
 
 .. das:function:: is_job_que_shutting_down()
 
-is_job_que_shutting_down returns bool
+is_job_que_shutting_down returns bool const
 
 |function-jobque-is_job_que_shutting_down|
 
@@ -417,16 +417,16 @@ Atomic
   *  :ref:`atomic32_remove (atomic:jobque::Atomic32?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_atomic32_remove_&I1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
   *  :ref:`with_atomic32 (block:block\<(var arg0:jobque::Atomic32?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_atomic32_CI0_ls_1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`set (atomic:jobque::Atomic32? const implicit;value:int const;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_set_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__Ci_C_c_C_l>` 
-  *  :ref:`get (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int <function-_at_jobque_c__c_get_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`inc (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int <function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`dec (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int <function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`get (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_get_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`inc (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`dec (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
   *  :ref:`atomic64_create (context:__context const;line:__lineInfo const) : jobque::Atomic64? <function-_at_jobque_c__c_atomic64_create_C_c_C_l>` 
   *  :ref:`atomic64_remove (atomic:jobque::Atomic64?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_atomic64_remove_&I1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
   *  :ref:`with_atomic64 (block:block\<(var arg0:jobque::Atomic64?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_atomic64_CI0_ls_1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`set (atomic:jobque::Atomic64? const implicit;value:int64 const;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_set_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__Ci64_C_c_C_l>` 
-  *  :ref:`get (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 <function-_at_jobque_c__c_get_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`inc (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 <function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`dec (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 <function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`get (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 const <function-_at_jobque_c__c_get_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`inc (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 const <function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`dec (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 const <function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
 
 .. _function-_at_jobque_c__c_atomic32_create_C_c_C_l:
 
@@ -484,7 +484,7 @@ atomic32_create returns  :ref:`jobque::Atomic32 <handle-jobque-Atomic32>` ?
 
 .. das:function:: get(atomic: Atomic32? const implicit)
 
-get returns int
+get returns int const
 
 +--------+------------------------------------------------------------------+
 +argument+argument type                                                     +
@@ -499,7 +499,7 @@ get returns int
 
 .. das:function:: inc(atomic: Atomic32? const implicit)
 
-inc returns int
+inc returns int const
 
 +--------+------------------------------------------------------------------+
 +argument+argument type                                                     +
@@ -514,7 +514,7 @@ inc returns int
 
 .. das:function:: dec(atomic: Atomic32? const implicit)
 
-dec returns int
+dec returns int const
 
 +--------+------------------------------------------------------------------+
 +argument+argument type                                                     +
@@ -581,7 +581,7 @@ atomic64_create returns  :ref:`jobque::Atomic64 <handle-jobque-Atomic64>` ?
 
 .. das:function:: get(atomic: Atomic64? const implicit)
 
-get returns int64
+get returns int64 const
 
 +--------+------------------------------------------------------------------+
 +argument+argument type                                                     +
@@ -596,7 +596,7 @@ get returns int64
 
 .. das:function:: inc(atomic: Atomic64? const implicit)
 
-inc returns int64
+inc returns int64 const
 
 +--------+------------------------------------------------------------------+
 +argument+argument type                                                     +
@@ -611,7 +611,7 @@ inc returns int64
 
 .. das:function:: dec(atomic: Atomic64? const implicit)
 
-dec returns int64
+dec returns int64 const
 
 +--------+------------------------------------------------------------------+
 +argument+argument type                                                     +

@@ -119,13 +119,13 @@ Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and
 Type queries
 ++++++++++++
 
-  *  :ref:`isYetAnotherVectorTemplate (td:smart_ptr\<ast::TypeDecl\> const) : bool <function-_at_contracts_c__c_isYetAnotherVectorTemplate_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M>` 
+  *  :ref:`isYetAnotherVectorTemplate (td:smart_ptr\<ast::TypeDecl\> const) : bool const <function-_at_contracts_c__c_isYetAnotherVectorTemplate_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M>` 
 
 .. _function-_at_contracts_c__c_isYetAnotherVectorTemplate_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M:
 
 .. das:function:: isYetAnotherVectorTemplate(td: TypeDeclPtr)
 
-isYetAnotherVectorTemplate returns bool
+isYetAnotherVectorTemplate returns bool const
 
 +--------+----------------------------------------+
 +argument+argument type                           +

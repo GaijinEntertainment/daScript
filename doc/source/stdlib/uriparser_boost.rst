@@ -18,7 +18,7 @@ Split and compose
 +++++++++++++++++
 
   *  :ref:`uri_split_full_path (uri:uriparser::Uri const implicit) : array\<string\> <function-_at_uriparser_boost_c__c_uri_split_full_path_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`uri_compose_query (query:table\<string;string\> const) : string <function-_at_uriparser_boost_c__c_uri_compose_query_C1_ls_s_gr_2_ls_s_gr_T>` 
+  *  :ref:`uri_compose_query (query:table\<string;string\> const) : string const <function-_at_uriparser_boost_c__c_uri_compose_query_C1_ls_s_gr_2_ls_s_gr_T>` 
   *  :ref:`uri_compose_query_in_order (query:table\<string;string\> const) : string const <function-_at_uriparser_boost_c__c_uri_compose_query_in_order_C1_ls_s_gr_2_ls_s_gr_T>` 
   *  :ref:`uri_compose (scheme:string const;userInfo:string const;hostText:string const;portText:string const;path:string const;query:string const;fragment:string const) : uriparser::Uri <function-_at_uriparser_boost_c__c_uri_compose_Cs_Cs_Cs_Cs_Cs_Cs_Cs>` 
 
@@ -41,7 +41,7 @@ Split the full path of a URI into its components.
 
 .. das:function:: uri_compose_query(query: table<string;string> const)
 
-uri_compose_query returns string
+uri_compose_query returns string const
 
 +--------+--------------------------+
 +argument+argument type             +
@@ -98,19 +98,19 @@ Compose a URI from its components.
 Component accessors
 +++++++++++++++++++
 
-  *  :ref:`scheme (uri:uriparser::Uri const implicit) : string <function-_at_uriparser_boost_c__c_scheme_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`user_info (uri:uriparser::Uri const implicit) : string <function-_at_uriparser_boost_c__c_user_info_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`host (uri:uriparser::Uri const implicit) : string <function-_at_uriparser_boost_c__c_host_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`port (uri:uriparser::Uri const implicit) : string <function-_at_uriparser_boost_c__c_port_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`path (uri:uriparser::Uri const implicit) : string <function-_at_uriparser_boost_c__c_path_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`query (uri:uriparser::Uri const implicit) : string <function-_at_uriparser_boost_c__c_query_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`fragment (uri:uriparser::Uri const implicit) : string <function-_at_uriparser_boost_c__c_fragment_CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`scheme (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_scheme_CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`user_info (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_user_info_CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`host (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_host_CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`port (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_port_CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`path (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_path_CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`query (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_query_CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`fragment (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_fragment_CIH_ls_uriparser_c__c_Uri_gr_>` 
 
 .. _function-_at_uriparser_boost_c__c_scheme_CIH_ls_uriparser_c__c_Uri_gr_:
 
 .. das:function:: scheme(uri: Uri const implicit)
 
-scheme returns string
+scheme returns string const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -125,7 +125,7 @@ Returns the scheme of a URI.
 
 .. das:function:: user_info(uri: Uri const implicit)
 
-user_info returns string
+user_info returns string const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -140,7 +140,7 @@ Return the user info of a URI.
 
 .. das:function:: host(uri: Uri const implicit)
 
-host returns string
+host returns string const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -155,7 +155,7 @@ Return the host of a URI.
 
 .. das:function:: port(uri: Uri const implicit)
 
-port returns string
+port returns string const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -170,7 +170,7 @@ Return the port of a URI.
 
 .. das:function:: path(uri: Uri const implicit)
 
-path returns string
+path returns string const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -185,7 +185,7 @@ Return the path of a URI.
 
 .. das:function:: query(uri: Uri const implicit)
 
-query returns string
+query returns string const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -200,7 +200,7 @@ Return the query of a URI.
 
 .. das:function:: fragment(uri: Uri const implicit)
 
-fragment returns string
+fragment returns string const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +

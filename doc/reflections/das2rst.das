@@ -87,7 +87,8 @@ def document_module_builtin(root : string) {
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|resize_no_init|reserve|each|emplace|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|back|sort|to_array|to_table|to_array_move|
-to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get|remove_value)$%%),
+to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get|remove_value|erase_if|resize_and_init|
+get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_default|modify)$%%),
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%),
         group_by_regex("das::string manipulation", mod, %regex~(peek|set)$%%),
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%),
@@ -104,7 +105,7 @@ to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get|
         group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime)$%%),
         group_by_regex("Lock checking", mod, %regex~(lock_count|set_verify_array_locks|set_verify_table_locks)$%%),
         group_by_regex("Lock checking internals", mod, %regex~(_move_with_lockcheck|_return_with_lockcheck|_at_with_lockcheck)$%%),
-        group_by_regex("Bit operations", mod, %regex~(popcnt|clz|ctz|mul128)$%%),
+        group_by_regex("Bit operations", mod, %regex~(popcnt|clz|ctz|mul128|__bit_set)$%%),
         group_by_regex("Intervals", mod, %regex~(interval)$%%),
         group_by_regex("RTTI", mod, %regex~(class_rtti_size)$%%),
         hide_group(group_by_regex("Jit", mod,%regex~(invoke_code|.*jit.*)$%%)),
@@ -112,7 +113,8 @@ to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get|
         group_by_regex("Initialization and finalization", mod, %regex~(using|clone|finalize)$%%),
         group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount)$%%),
         group_by_regex("Memset", mod, %regex~(memset.*)$%%),
-        group_by_regex("Malloc", mod, %regex~(malloc|free|malloc_usable_size)$%%));
+        group_by_regex("Malloc", mod, %regex~(malloc|free|malloc_usable_size)$%%),
+        group_by_regex("Compilation and AOT", mod, %regex~(is_aot_enabled|set_aot|reset_aot|compiling_file_name|compiling_module_name)$%%))
     document("Built-in runtime", mod, "{root}/builtin.rst", "{root}/detail/builtin.rst", groups);
 }
 

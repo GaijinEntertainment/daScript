@@ -87,7 +87,7 @@ FStat fields are
 FStat property operators are
 
 +------+----------------------------------------------+
-+size  +uint64                                        +
++size  +uint64 const                                  +
 +------+----------------------------------------------+
 +atime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
@@ -95,9 +95,9 @@ FStat property operators are
 +------+----------------------------------------------+
 +mtime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
-+is_reg+bool                                          +
++is_reg+bool const                                    +
 +------+----------------------------------------------+
-+is_dir+bool                                          +
++is_dir+bool const                                    +
 +------+----------------------------------------------+
 
 
@@ -117,25 +117,25 @@ Handled types
 File manipulation
 +++++++++++++++++
 
-  *  :ref:`remove (name:string const implicit) : bool <function-_at_fio_c__c_remove_CIs>` 
-  *  :ref:`rename (old_name:string const implicit;new_name:string const implicit) : bool <function-_at_fio_c__c_rename_CIs_CIs>` 
+  *  :ref:`remove (name:string const implicit) : bool const <function-_at_fio_c__c_remove_CIs>` 
+  *  :ref:`rename (old_name:string const implicit;new_name:string const implicit) : bool const <function-_at_fio_c__c_rename_CIs_CIs>` 
   *  :ref:`fopen (name:string const implicit;mode:string const implicit) : fio::FILE const? const <function-_at_fio_c__c_fopen_CIs_CIs>` 
   *  :ref:`fclose (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fclose_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
   *  :ref:`fflush (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fflush_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
   *  :ref:`fprint (file:fio::FILE const? const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fprint_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIs_C_c_C_l>` 
-  *  :ref:`fread (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_fread_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`fread (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string const <function-_at_fio_c__c_fread_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
   *  :ref:`fmap (file:fio::FILE const? const implicit;block:block\<(var arg0:array\<uint8\>#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fmap_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`fgets (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_fgets_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`fgets (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string const <function-_at_fio_c__c_fgets_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
   *  :ref:`fwrite (file:fio::FILE const? const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fwrite_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIs_C_c_C_l>` 
-  *  :ref:`feof (file:fio::FILE const? const implicit) : bool <function-_at_fio_c__c_feof_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm_>` 
-  *  :ref:`fseek (file:fio::FILE const? const implicit;offset:int64 const;mode:int const;context:__context const;line:__lineInfo const) : int64 <function-_at_fio_c__c_fseek_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__Ci64_Ci_C_c_C_l>` 
-  *  :ref:`ftell (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : int64 <function-_at_fio_c__c_ftell_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`fstat (file:fio::FILE const? const implicit;stat:fio::FStat implicit;context:__context const;line:__lineInfo const) : bool <function-_at_fio_c__c_fstat_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__IH_ls_fio_c__c_FStat_gr__C_c_C_l>` 
-  *  :ref:`stat (file:string const implicit;stat:fio::FStat implicit) : bool <function-_at_fio_c__c_stat_CIs_IH_ls_fio_c__c_FStat_gr_>` 
+  *  :ref:`feof (file:fio::FILE const? const implicit) : bool const <function-_at_fio_c__c_feof_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm_>` 
+  *  :ref:`fseek (file:fio::FILE const? const implicit;offset:int64 const;mode:int const;context:__context const;line:__lineInfo const) : int64 const <function-_at_fio_c__c_fseek_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__Ci64_Ci_C_c_C_l>` 
+  *  :ref:`ftell (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : int64 const <function-_at_fio_c__c_ftell_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`fstat (file:fio::FILE const? const implicit;stat:fio::FStat implicit;context:__context const;line:__lineInfo const) : bool const <function-_at_fio_c__c_fstat_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__IH_ls_fio_c__c_FStat_gr__C_c_C_l>` 
+  *  :ref:`stat (file:string const implicit;stat:fio::FStat implicit) : bool const <function-_at_fio_c__c_stat_CIs_IH_ls_fio_c__c_FStat_gr_>` 
   *  :ref:`fstdin () : fio::FILE const? const <function-_at_fio_c__c_fstdin>` 
   *  :ref:`fstdout () : fio::FILE const? const <function-_at_fio_c__c_fstdout>` 
   *  :ref:`fstderr () : fio::FILE const? const <function-_at_fio_c__c_fstderr>` 
-  *  :ref:`getchar () : int <function-_at_fio_c__c_getchar>` 
+  *  :ref:`getchar () : int const <function-_at_fio_c__c_getchar>` 
   *  :ref:`fload (file:fio::FILE const? const;size:int const;blk:block\<(data:array\<uint8\> const):void\> const) : void <function-_at_fio_c__c_fload_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__Ci_CN_ls_data_gr_0_ls_C1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`fopen (name:string const;mode:string const;blk:block\<(f:fio::FILE const? const):void\> const) : auto <function-_at_fio_c__c_fopen_Cs_Cs_CN_ls_f_gr_0_ls_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`stat (path:string const) : fio::FStat <function-_at_fio_c__c_stat_Cs>` 
@@ -152,7 +152,7 @@ File manipulation
 
 .. das:function:: remove(name: string const implicit)
 
-remove returns bool
+remove returns bool const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -167,7 +167,7 @@ remove returns bool
 
 .. das:function:: rename(old_name: string const implicit; new_name: string const implicit)
 
-rename returns bool
+rename returns bool const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -242,7 +242,7 @@ fopen returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 .. das:function:: fread(file: FILE const? const implicit)
 
-fread returns string
+fread returns string const
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -272,7 +272,7 @@ fread returns string
 
 .. das:function:: fgets(file: FILE const? const implicit)
 
-fgets returns string
+fgets returns string const
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -302,7 +302,7 @@ fgets returns string
 
 .. das:function:: feof(file: FILE const? const implicit)
 
-feof returns bool
+feof returns bool const
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -317,7 +317,7 @@ feof returns bool
 
 .. das:function:: fseek(file: FILE const? const implicit; offset: int64 const; mode: int const)
 
-fseek returns int64
+fseek returns int64 const
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -336,7 +336,7 @@ fseek returns int64
 
 .. das:function:: ftell(file: FILE const? const implicit)
 
-ftell returns int64
+ftell returns int64 const
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -351,7 +351,7 @@ ftell returns int64
 
 .. das:function:: fstat(file: FILE const? const implicit; stat: FStat implicit)
 
-fstat returns bool
+fstat returns bool const
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -368,7 +368,7 @@ fstat returns bool
 
 .. das:function:: stat(file: string const implicit; stat: FStat implicit)
 
-stat returns bool
+stat returns bool const
 
 +--------+-----------------------------------------------+
 +argument+argument type                                  +
@@ -409,7 +409,7 @@ fstderr returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
 
 .. das:function:: getchar()
 
-getchar returns int
+getchar returns int const
 
 |function-fio-getchar|
 
@@ -602,15 +602,15 @@ fwrite returns auto
 Path manipulation
 +++++++++++++++++
 
-  *  :ref:`dir_name (name:string const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_dir_name_CIs_C_c_C_l>` 
-  *  :ref:`base_name (name:string const implicit;context:__context const;line:__lineInfo const) : string <function-_at_fio_c__c_base_name_CIs_C_c_C_l>` 
-  *  :ref:`get_full_file_name (path:string const implicit;context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_get_full_file_name_CIs_C_c_C_l>` 
+  *  :ref:`dir_name (name:string const implicit;context:__context const;line:__lineInfo const) : string const <function-_at_fio_c__c_dir_name_CIs_C_c_C_l>` 
+  *  :ref:`base_name (name:string const implicit;context:__context const;line:__lineInfo const) : string const <function-_at_fio_c__c_base_name_CIs_C_c_C_l>` 
+  *  :ref:`get_full_file_name (path:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_get_full_file_name_CIs_C_c_C_l>` 
 
 .. _function-_at_fio_c__c_dir_name_CIs_C_c_C_l:
 
 .. das:function:: dir_name(name: string const implicit)
 
-dir_name returns string
+dir_name returns string const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -625,7 +625,7 @@ dir_name returns string
 
 .. das:function:: base_name(name: string const implicit)
 
-base_name returns string
+base_name returns string const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -640,7 +640,7 @@ base_name returns string
 
 .. das:function:: get_full_file_name(path: string const implicit)
 
-get_full_file_name returns string
+get_full_file_name returns string const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -655,16 +655,16 @@ get_full_file_name returns string
 Directory manipulation
 ++++++++++++++++++++++
 
-  *  :ref:`mkdir (path:string const implicit) : bool <function-_at_fio_c__c_mkdir_CIs>` 
-  *  :ref:`chdir (path:string const implicit) : bool <function-_at_fio_c__c_chdir_CIs>` 
-  *  :ref:`getcwd (context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_getcwd_C_c_C_l>` 
+  *  :ref:`mkdir (path:string const implicit) : bool const <function-_at_fio_c__c_mkdir_CIs>` 
+  *  :ref:`chdir (path:string const implicit) : bool const <function-_at_fio_c__c_chdir_CIs>` 
+  *  :ref:`getcwd (context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_getcwd_C_c_C_l>` 
   *  :ref:`dir (path:string const;blk:block\<(filename:string const):void\> const) : auto <function-_at_fio_c__c_dir_Cs_CN_ls_filename_gr_0_ls_Cs_gr_1_ls_v_gr__builtin_>` 
 
 .. _function-_at_fio_c__c_mkdir_CIs:
 
 .. das:function:: mkdir(path: string const implicit)
 
-mkdir returns bool
+mkdir returns bool const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -679,7 +679,7 @@ mkdir returns bool
 
 .. das:function:: chdir(path: string const implicit)
 
-chdir returns bool
+chdir returns bool const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -694,7 +694,7 @@ chdir returns bool
 
 .. das:function:: getcwd()
 
-getcwd returns string
+getcwd returns string const
 
 |function-fio-getcwd|
 
@@ -721,10 +721,10 @@ OS specific routines
 
   *  :ref:`sleep (msec:uint const) : void <function-_at_fio_c__c_sleep_Cu>` 
   *  :ref:`exit (exitCode:int const) : void <function-_at_fio_c__c_exit_Ci>` 
-  *  :ref:`popen (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`popen_binary (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`get_env_variable (var:string const implicit;context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_get_env_variable_CIs_C_c_C_l>` 
-  *  :ref:`sanitize_command_line (var:string const implicit;context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l>` 
+  *  :ref:`popen (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int const <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`popen_binary (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int const <function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`get_env_variable (var:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_get_env_variable_CIs_C_c_C_l>` 
+  *  :ref:`sanitize_command_line (var:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l>` 
 
 .. _function-_at_fio_c__c_sleep_Cu:
 
@@ -759,7 +759,7 @@ OS specific routines
 
 .. das:function:: popen(command: string const implicit; scope: block<(arg0:FILE const? const):void> const implicit)
 
-popen returns int
+popen returns int const
 
 .. warning:: 
   This is unsafe operation.
@@ -779,7 +779,7 @@ popen returns int
 
 .. das:function:: popen_binary(command: string const implicit; scope: block<(arg0:FILE const? const):void> const implicit)
 
-popen_binary returns int
+popen_binary returns int const
 
 .. warning:: 
   This is unsafe operation.
@@ -799,7 +799,7 @@ popen_binary returns int
 
 .. das:function:: get_env_variable(var: string const implicit)
 
-get_env_variable returns string
+get_env_variable returns string const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -814,7 +814,7 @@ get_env_variable returns string
 
 .. das:function:: sanitize_command_line(var: string const implicit)
 
-sanitize_command_line returns string
+sanitize_command_line returns string const
 
 +--------+---------------------+
 +argument+argument type        +
@@ -824,5 +824,24 @@ sanitize_command_line returns string
 
 
 |function-fio-sanitize_command_line|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_fio_c__c_has_env_variable_CIs_C_c_C_l:
+
+.. das:function:: has_env_variable(var: string const implicit)
+
+has_env_variable returns bool const
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++var     +string const implicit+
++--------+---------------------+
+
+
+|function-fio-has_env_variable|
 
 

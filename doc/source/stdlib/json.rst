@@ -23,19 +23,21 @@ Type aliases
 
 .. das:attribute:: JsValue is a variant type
 
-+-------+------------------------+
-+_object+table<string;JsonValue?>+
-+-------+------------------------+
-+_array +array<JsonValue?>       +
-+-------+------------------------+
-+_string+string                  +
-+-------+------------------------+
-+_number+double                  +
-+-------+------------------------+
-+_bool  +bool                    +
-+-------+------------------------+
-+_null  +void?                   +
-+-------+------------------------+
++--------+---------------------------------------------------------------+
++_object +table<string; :ref:`json::JsonValue <struct-json-JsonValue>` ?>+
++--------+---------------------------------------------------------------+
++_array  +array< :ref:`json::JsonValue <struct-json-JsonValue>` ?>       +
++--------+---------------------------------------------------------------+
++_string +string                                                         +
++--------+---------------------------------------------------------------+
++_number +double                                                         +
++--------+---------------------------------------------------------------+
++_longint+int64                                                          +
++--------+---------------------------------------------------------------+
++_bool   +bool                                                           +
++--------+---------------------------------------------------------------+
++_null   +void?                                                          +
++--------+---------------------------------------------------------------+
 
 
 Single JSON element.
@@ -44,19 +46,21 @@ Single JSON element.
 
 .. das:attribute:: Token is a variant type
 
-+-------+------+
-+_string+string+
-+-------+------+
-+_number+double+
-+-------+------+
-+_bool  +bool  +
-+-------+------+
-+_null  +void? +
-+-------+------+
-+_symbol+int   +
-+-------+------+
-+_error +string+
-+-------+------+
++--------+------+
++_string +string+
++--------+------+
++_number +double+
++--------+------+
++_longint+int64 +
++--------+------+
++_bool   +bool  +
++--------+------+
++_null   +void? +
++--------+------+
++_symbol +int   +
++--------+------+
++_error  +string+
++--------+------+
 
 
 JSON input stream token.
@@ -99,12 +103,33 @@ JSON parsing token. Contains token and its position.
 Value conversion
 ++++++++++++++++
 
+  *  :ref:`JVNull () : json::JsonValue? <function-_at_json_c__c_JVNull>` 
   *  :ref:`JV (v:string const) : json::JsonValue? <function-_at_json_c__c_JV_Cs>` 
   *  :ref:`JV (v:double const) : json::JsonValue? <function-_at_json_c__c_JV_Cd>` 
   *  :ref:`JV (v:bool const) : json::JsonValue? <function-_at_json_c__c_JV_Cb>` 
-  *  :ref:`JVNull () : json::JsonValue? <function-_at_json_c__c_JVNull>` 
   *  :ref:`JV (v:table\<string;json::JsonValue?\> -const) : json::JsonValue? <function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm__gr_T>` 
   *  :ref:`JV (v:array\<json::JsonValue?\> -const) : json::JsonValue? <function-_at_json_c__c_JV_1_ls_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm__gr_A>` 
+  *  :ref:`JV (v:float const) : json::JsonValue? <function-_at_json_c__c_JV_Cf>` 
+  *  :ref:`JV (v:int const) : json::JsonValue? <function-_at_json_c__c_JV_Ci>` 
+  *  :ref:`JV (v:bitfield const) : json::JsonValue? <function-_at_json_c__c_JV_Ct>` 
+  *  :ref:`JV (v:bitfield8:uint8 const) : json::JsonValue? <function-_at_json_c__c_JV_Ct8>` 
+  *  :ref:`JV (v:bitfield16:uint16 const) : json::JsonValue? <function-_at_json_c__c_JV_Ct16>` 
+  *  :ref:`JV (v:bitfield64:uint64 const) : json::JsonValue? <function-_at_json_c__c_JV_Ct64>` 
+  *  :ref:`JV (val:int8 const) : json::JsonValue? <function-_at_json_c__c_JV_Ci8>` 
+  *  :ref:`JV (val:uint8 const) : json::JsonValue? <function-_at_json_c__c_JV_Cu8>` 
+  *  :ref:`JV (val:int16 const) : json::JsonValue? <function-_at_json_c__c_JV_Ci16>` 
+  *  :ref:`JV (val:uint16 const) : json::JsonValue? <function-_at_json_c__c_JV_Cu16>` 
+  *  :ref:`JV (val:uint const) : json::JsonValue? <function-_at_json_c__c_JV_Cu>` 
+  *  :ref:`JV (val:int64 const) : json::JsonValue? <function-_at_json_c__c_JV_Ci64>` 
+  *  :ref:`JV (val:uint64 const) : json::JsonValue? <function-_at_json_c__c_JV_Cu64>` 
+
+.. _function-_at_json_c__c_JVNull:
+
+.. das:function:: JVNull()
+
+JVNull returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
+Creates `JsonValue` representing `null`.
 
 .. _function-_at_json_c__c_JV_Cs:
 
@@ -151,14 +176,6 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 Creates `JsonValue` out of value.
 
-.. _function-_at_json_c__c_JVNull:
-
-.. das:function:: JVNull()
-
-JVNull returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
-
-Creates `JsonValue` representing `null`.
-
 .. _function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm__gr_T:
 
 .. das:function:: JV(v: table<string;JsonValue?>)
@@ -189,14 +206,209 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 Creates `JsonValue` out of value.
 
+.. _function-_at_json_c__c_JV_Cf:
+
+.. das:function:: JV(v: float const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +float const  +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Ci:
+
+.. das:function:: JV(v: int const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +int const    +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Ct:
+
+.. das:function:: JV(v: bitfield const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+----------------+
++argument+argument type   +
++========+================+
++v       +bitfield<> const+
++--------+----------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Ct8:
+
+.. das:function:: JV(v: bitfield8:uint8 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+---------------+
++argument+argument type  +
++========+===============+
++v       +bitfield8 const+
++--------+---------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Ct16:
+
+.. das:function:: JV(v: bitfield16:uint16 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+----------------+
++argument+argument type   +
++========+================+
++v       +bitfield16 const+
++--------+----------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Ct64:
+
+.. das:function:: JV(v: bitfield64:uint64 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+----------------+
++argument+argument type   +
++========+================+
++v       +bitfield64 const+
++--------+----------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Ci8:
+
+.. das:function:: JV(val: int8 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++val     +int8 const   +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Cu8:
+
+.. das:function:: JV(val: uint8 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++val     +uint8 const  +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Ci16:
+
+.. das:function:: JV(val: int16 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++val     +int16 const  +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Cu16:
+
+.. das:function:: JV(val: uint16 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++val     +uint16 const +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Cu:
+
+.. das:function:: JV(val: uint const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++val     +uint const   +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Ci64:
+
+.. das:function:: JV(val: int64 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++val     +int64 const  +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
+.. _function-_at_json_c__c_JV_Cu64:
+
+.. das:function:: JV(val: uint64 const)
+
+JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++val     +uint64 const +
++--------+-------------+
+
+
+Creates `JsonValue` out of value.
+
 ++++++++++++++
 Read and write
 ++++++++++++++
 
   *  :ref:`read_json (text:string const implicit;error:string& -const) : json::JsonValue? <function-_at_json_c__c_read_json_CIs_&s>` 
   *  :ref:`read_json (text:array\<uint8\> const;error:string& -const) : json::JsonValue? <function-_at_json_c__c_read_json_C1_ls_u8_gr_A_&s>` 
-  *  :ref:`write_json (val:json::JsonValue? const) : string <function-_at_json_c__c_write_json_C1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm_>` 
-  *  :ref:`write_json (val:json::JsonValue? const#) : string <function-_at_json_c__c_write_json_C_hh_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm_>` 
+  *  :ref:`write_json (val:json::JsonValue? const) : string const <function-_at_json_c__c_write_json_C1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm_>` 
+  *  :ref:`write_json (val:json::JsonValue? const#) : string const <function-_at_json_c__c_write_json_C_hh_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm_>` 
 
 .. _function-_at_json_c__c_read_json_CIs_&s:
 
@@ -238,7 +450,7 @@ if `error` is not empty, it contains the parsing error message.
 
 .. das:function:: write_json(val: JsonValue? const)
 
-write_json returns string
+write_json returns string const
 
 +--------+-------------------------------------------------------+
 +argument+argument type                                          +
@@ -254,7 +466,7 @@ Fine, as json doesn't escape the function
 
 .. das:function:: write_json(val: JsonValue? const#)
 
-write_json returns string
+write_json returns string const
 
 +--------+--------------------------------------------------------+
 +argument+argument type                                           +
@@ -318,19 +530,18 @@ set_allow_duplicate_keys returns bool const
 
 
 if `value` is true, then duplicate keys are allowed in objects. the later key overwrites the earlier one.
-note - we use StringBuilderWriter for performance reasons here
 
 +++++++++++
 Broken JSON
 +++++++++++
 
-  *  :ref:`try_fixing_broken_json (bad:string -const) : string <function-_at_json_c__c_try_fixing_broken_json_s>` 
+  *  :ref:`try_fixing_broken_json (bad:string -const) : string const <function-_at_json_c__c_try_fixing_broken_json_s>` 
 
 .. _function-_at_json_c__c_try_fixing_broken_json_s:
 
 .. das:function:: try_fixing_broken_json(bad: string)
 
-try_fixing_broken_json returns string
+try_fixing_broken_json returns string const
 
 +--------+-------------+
 +argument+argument type+

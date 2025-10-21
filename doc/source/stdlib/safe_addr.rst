@@ -32,6 +32,12 @@ I.e. if the object can `expire` while in scope, with delete, garbage collection,
 This macro reports an error if shared_addr is attempted on anything other that shared global variables.
 I.e. only global variables are safe to use with shared_addr.
 
+.. _handle-safe_addr-TempValueMacro:
+
+.. das:attribute:: TempValueMacro
+
+This macro reports an error if temp_value is attempted outside of function arguments.
+
 ++++++++++++++++++++++
 Safe temporary address
 ++++++++++++++++++++++
@@ -139,5 +145,39 @@ temp_ptr returns T?#
 
 
 returns temporary pointer from a given pointer
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_safe_addr_c__c_temp_value_C&_eq_Y_ls_T_gr_.:
+
+.. das:function:: temp_value(x: auto(T) const& ==const)
+
+temp_value returns T const&#
+
++--------+---------------+
++argument+argument type  +
++========+===============+
++x       +auto(T) const&!+
++--------+---------------+
+
+
+returns temporary pointer to the given expression
+
+.. _function-_at_safe_addr_c__c_temp_value_&_eq_Y_ls_T_gr_.:
+
+.. das:function:: temp_value(x: auto(T)& ==const)
+
+temp_value returns T&#
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +auto(T)&!    +
++--------+-------------+
+
+
+returns temporary pointer to the given expression
 
 

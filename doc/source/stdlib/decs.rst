@@ -261,15 +261,15 @@ Contains pass name and list of all pass calblacks.
 Comparison and access
 +++++++++++++++++++++
 
-  *  :ref:`== (a:decs::EntityId const implicit;b:decs::EntityId const implicit) : bool <function-_at_decs_c__c__eq__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_>` 
-  *  :ref:`\!= (a:decs::EntityId const implicit;b:decs::EntityId const implicit) : bool <function-_at_decs_c__c__ex__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_>` 
+  *  :ref:`== (a:decs::EntityId const implicit;b:decs::EntityId const implicit) : bool const <function-_at_decs_c__c__eq__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_>` 
+  *  :ref:`\!= (a:decs::EntityId const implicit;b:decs::EntityId const implicit) : bool const <function-_at_decs_c__c__ex__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_>` 
   *  :ref:`. (cmp:array\<decs::ComponentValue\> -const;name:string const) : decs::ComponentValue& <function-_at_decs_c__c_._Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
 
 .. _function-_at_decs_c__c__eq__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_:
 
 .. das:function:: operator ==(a: EntityId const implicit; b: EntityId const implicit)
 
-== returns bool
+== returns bool const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -286,7 +286,7 @@ Equality operator for entity IDs.
 
 .. das:function:: operator !=(a: EntityId const implicit; b: EntityId const implicit)
 
-!= returns bool
+!= returns bool const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -353,8 +353,8 @@ Access (get/set/clone)
   *  :ref:`clone (cv:decs::ComponentValue -const;val:math::float4x4 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float4x4_gr_>` 
   *  :ref:`clone (cv:decs::ComponentValue -const;val:double const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cd>` 
   *  :ref:`clone (dst:decs::Component -const;src:decs::Component const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_Component_gr__CS_ls_decs_c__c_Component_gr_>` 
-  *  :ref:`has (arch:decs::Archetype const;name:string const) : bool <function-_at_decs_c__c_has_CS_ls_decs_c__c_Archetype_gr__Cs>` 
-  *  :ref:`has (cmp:array\<decs::ComponentValue\> -const;name:string const) : bool <function-_at_decs_c__c_has_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
+  *  :ref:`has (arch:decs::Archetype const;name:string const) : bool const <function-_at_decs_c__c_has_CS_ls_decs_c__c_Archetype_gr__Cs>` 
+  *  :ref:`has (cmp:array\<decs::ComponentValue\> -const;name:string const) : bool const <function-_at_decs_c__c_has_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
   *  :ref:`remove (cmp:array\<decs::ComponentValue\> -const;name:string const) : void <function-_at_decs_c__c_remove_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
   *  :ref:`set (cv:decs::ComponentValue -const;val:auto const) : auto <function-_at_decs_c__c_set_S_ls_decs_c__c_ComponentValue_gr__C.>` 
   *  :ref:`get (arch:decs::Archetype const;name:string const;value:auto(TT) const) : auto <function-_at_decs_c__c_get_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr_.>` 
@@ -815,7 +815,7 @@ Clones component value.
 
 .. das:function:: has(arch: Archetype const; name: string const)
 
-has returns bool
+has returns bool const
 
 +--------+------------------------------------------------------+
 +argument+argument type                                         +
@@ -832,7 +832,7 @@ Returns true if object has specified subobjec.
 
 .. das:function:: has(cmp: ComponentMap; name: string const)
 
-has returns bool
+has returns bool const
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -946,7 +946,7 @@ insert new one
 Deubg and serialization
 +++++++++++++++++++++++
 
-  *  :ref:`describe (info:decs::CTypeInfo const) : string <function-_at_decs_c__c_describe_CS_ls_decs_c__c_CTypeInfo_gr_>` 
+  *  :ref:`describe (info:decs::CTypeInfo const) : string const <function-_at_decs_c__c_describe_CS_ls_decs_c__c_CTypeInfo_gr_>` 
   *  :ref:`serialize (arch:archive::Archive -const;src:decs::Component -const) : void <function-_at_decs_c__c_serialize_S_ls_archive_c__c_Archive_gr__S_ls_decs_c__c_Component_gr_>` 
   *  :ref:`finalize (cmp:decs::Component -const) : void <function-_at_decs_c__c_finalize_S_ls_decs_c__c_Component_gr_>` 
   *  :ref:`debug_dump () : void <function-_at_decs_c__c_debug_dump>` 
@@ -955,7 +955,7 @@ Deubg and serialization
 
 .. das:function:: describe(info: CTypeInfo const)
 
-describe returns string
+describe returns string const
 
 +--------+------------------------------------------------------+
 +argument+argument type                                         +
@@ -1214,7 +1214,6 @@ for_each_archetype_find returns bool const
 Invokes block for each entity of each archetype that can be processed by the request.
 Request is returned by a specified function.
 If block returns true, iteration is stopped.
-[template(atype)]
 
 .. _function-_at_decs_c__c_decs_array_CY_ls_TT_gr_._C1_ls_u8_gr_A_Ci:
 
@@ -1320,7 +1319,7 @@ Request
   *  :ref:`EcsRequestPos (at:rtti::LineInfo const) : decs::EcsRequestPos <function-_at_decs_c__c_EcsRequestPos_CH_ls_rtti_c__c_LineInfo_gr_>` 
   *  :ref:`verify_request (erq:decs::EcsRequest -const) : tuple\<ok:bool;error:string\> <function-_at_decs_c__c_verify_request_S_ls_decs_c__c_EcsRequest_gr_>` 
   *  :ref:`compile_request (erq:decs::EcsRequest -const) : void <function-_at_decs_c__c_compile_request_S_ls_decs_c__c_EcsRequest_gr_>` 
-  *  :ref:`lookup_request (erq:decs::EcsRequest -const) : int <function-_at_decs_c__c_lookup_request_S_ls_decs_c__c_EcsRequest_gr_>` 
+  *  :ref:`lookup_request (erq:decs::EcsRequest -const) : int const <function-_at_decs_c__c_lookup_request_S_ls_decs_c__c_EcsRequest_gr_>` 
 
 .. _function-_at_decs_c__c_EcsRequestPos_CH_ls_rtti_c__c_LineInfo_gr_:
 
@@ -1371,7 +1370,7 @@ Compiles ESC request, by creating request hash.
 
 .. das:function:: lookup_request(erq: EcsRequest)
 
-lookup_request returns int
+lookup_request returns int const
 
 +--------+--------------------------------------------------+
 +argument+argument type                                     +
