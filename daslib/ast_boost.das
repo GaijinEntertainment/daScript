@@ -1084,14 +1084,18 @@ def public isExprCallFunc(expr : ExpressionPtr) {
 
 def public get_workhorse_types {
     return fixed_array(
-        Type.tBool,             Type.tInt8,             Type.tUInt8,            Type.tInt16,
-        Type.tUInt16,           Type.tInt64,            Type.tUInt64,           Type.tEnumeration,
-        Type.tEnumeration8,     Type.tEnumeration16,    Type.tEnumeration64,    Type.tInt,              Type.tInt2,
-        Type.tInt3,             Type.tInt4,             Type.tUInt,             Type.tBitfield,
-        Type.tUInt2,            Type.tUInt3,            Type.tUInt4,            Type.tFloat,
-        Type.tFloat2,           Type.tFloat3,           Type.tFloat4,           Type.tRange,
-        Type.tURange,           Type.tRange64,          Type.tURange64,         Type.tString,
-        Type.tDouble,           Type.tPointer
+        Type.tBool,
+        Type.tString,           Type.tPointer,
+        Type.tFloat,            Type.tDouble,
+        Type.tEnumeration,      Type.tEnumeration8,     Type.tEnumeration16,    Type.tEnumeration64,
+        Type.tBitfield,         Type.tBitfield8,        Type.tBitfield16,       Type.tBitfield64,
+        Type.tInt,              Type.tInt8,             Type.tInt16,            Type.tInt64,
+        Type.tUInt,             Type.tUInt8,            Type.tUInt16,           Type.tUInt64,
+        Type.tInt2,             Type.tInt3,             Type.tInt4,
+        Type.tUInt2,            Type.tUInt3,            Type.tUInt4,
+        Type.tFloat2,           Type.tFloat3,           Type.tFloat4,
+        Type.tRange,            Type.tRange64,
+        Type.tURange,           Type.tURange64,
     )
 }
 

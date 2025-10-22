@@ -1078,7 +1078,10 @@ namespace das {
                 DAS_VERIFYF_MULTI(!annotation, !structType, !!enumType, !firstType, !secondType,
                                 argTypes.empty(), argNames.empty());
                 break;
-            case tBitfield:  // blow up!
+            case tBitfield:
+            case tBitfield8:
+            case tBitfield16:
+            case tBitfield64:
                 ser << alias << argNames << dim << dimExpr;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
                                 argTypes.empty());
@@ -2306,7 +2309,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 64;
+        static constexpr uint32_t currentVersion = 65;
         return currentVersion;
     }
 

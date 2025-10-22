@@ -3682,12 +3682,12 @@ variant_alias_declaration
     ;
 
 bitfield_alias_declaration
-    :   DAS_TBITFIELD optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] bitfield_basic_type_declaration[basicType] {
+    :   DAS_TBITFIELD optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
         }
-    } open_block[blk] bitfield_alias_bits[list] close_block[close] {
+    } bitfield_basic_type_declaration[basicType] open_block[blk] bitfield_alias_bits[list] close_block[close] {
         const auto prev_loc = format::Pos::from(tokAt(scanner,@blk));
         handle_brace(prev_loc, $blk,
                      format::get_substring(prev_loc, format::Pos::from_last(tokAt(scanner,@list))),
