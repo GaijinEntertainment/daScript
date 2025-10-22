@@ -125,7 +125,7 @@ def document_module_fio(root : string) {
         group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove|rename)%%),
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name)$%%),
         group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir|chdir|getcwd)$%%),
-        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen|popen_binary|get_env_variable|sanitize_command_line)$%%)
+        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen|popen_binary|get_env_variable|sanitize_command_line|has_env_variable)$%%)
     )
     document("File input output library", mod, "{root}/fio.rst", "{root}/detail/fio.rst", groups)
 }

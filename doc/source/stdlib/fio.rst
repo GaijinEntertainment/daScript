@@ -724,6 +724,7 @@ OS specific routines
   *  :ref:`popen (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int const <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`popen_binary (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int const <function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`get_env_variable (var:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_get_env_variable_CIs_C_c_C_l>` 
+  *  :ref:`has_env_variable (var:string const implicit;context:__context const;at:__lineInfo const) : bool const <function-_at_fio_c__c_has_env_variable_CIs_C_c_C_l>` 
   *  :ref:`sanitize_command_line (var:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l>` 
 
 .. _function-_at_fio_c__c_sleep_Cu:
@@ -810,25 +811,6 @@ get_env_variable returns string const
 
 |function-fio-get_env_variable|
 
-.. _function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l:
-
-.. das:function:: sanitize_command_line(var: string const implicit)
-
-sanitize_command_line returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+var     +string const implicit+
-+--------+---------------------+
-
-
-|function-fio-sanitize_command_line|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
 .. _function-_at_fio_c__c_has_env_variable_CIs_C_c_C_l:
 
 .. das:function:: has_env_variable(var: string const implicit)
@@ -843,5 +825,20 @@ has_env_variable returns bool const
 
 
 |function-fio-has_env_variable|
+
+.. _function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l:
+
+.. das:function:: sanitize_command_line(var: string const implicit)
+
+sanitize_command_line returns string const
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++var     +string const implicit+
++--------+---------------------+
+
+
+|function-fio-sanitize_command_line|
 
 
