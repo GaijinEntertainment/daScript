@@ -146,6 +146,15 @@
 
 .. |function-strings-fmt| replace:: Converts value to string given specified format (that of libfmt or C++20 std::format).
 
+.. |function-strings-is_alnum| replace:: Returns true if character is alphanumeric [A-Za-z0-9].
+
+.. |function-strings-is_hex| replace:: Returns true if character is hexadecimal [0-9A-Fa-f].
+
+.. |function-strings-is_tab_or_space| replace:: Returns true if character is tab or space [ \t].
+
+.. |function-strings-to_cpp_float| replace:: Convert string to float using C++ fmt::format_to, while also recognizing FLT_MIN, FLT_MAX, etc.
+
+
 
 
 

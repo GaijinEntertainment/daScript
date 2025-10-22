@@ -759,6 +759,34 @@ def document_structure_annotations(doc_file : file; mod : Module?) {
     }
 }
 
+def document_enumeration_annotation(doc_file : file; mod : Module?; value) {
+    fwrite(doc_file, make_label(handle_label_name(value)))
+    fwrite(doc_file, make_domain("das:attribute"))
+    fwrite(doc_file, "{value.name}\n\n")
+    document_topic(doc_file, topic("enumeration_macro", mod, string(value.name)))
+}
+
+def document_enumeration_annotations(doc_file : file; mod : Module?) {
+    var any = false
+    module_for_each_annotation(mod) <| $(value) {
+        if (!value.isEnumerationAnnotation) {
+            return
+        }
+        any = true
+    }
+    if (!any) {
+        return
+    }
+    fwrite(doc_file, make_group("Handled enumerations"))
+    module_for_each_annotation(mod) <| $(value) {
+        if (!value.isEnumerationAnnotation) {
+            return
+        }
+        document_enumeration_annotation(doc_file, mod, value)
+    }
+}
+
+
 def document_function_annotation(doc_file : file; mod : Module?; value) {
     fwrite(doc_file, make_label(handle_label_name(value)))
     fwrite(doc_file, make_domain("das:attribute"))
@@ -796,7 +824,7 @@ def document_annotation(doc_file : file; mod : Module?; value) {
 def document_annotations(doc_file : file; mod : Module?) {
     var any = false
     module_for_each_annotation(mod) <| $(value) {
-        if (!value.isTypeAnnotation || value.isBasicStructureAnnotation) {
+        if (!value.isTypeAnnotation || value.isBasicStructureAnnotation || value.isEnumerationAnnotation) {
             return
         }
         any = true
@@ -806,7 +834,7 @@ def document_annotations(doc_file : file; mod : Module?) {
     }
     fwrite(doc_file, make_group("Handled types"))
     module_for_each_annotation(mod) <| $(value) {
-        if (!value.isTypeAnnotation || value.isBasicStructureAnnotation) {
+        if (!value.isTypeAnnotation || value.isBasicStructureAnnotation || value.isEnumerationAnnotation) {
             return
         }
         if (string(value.name) |> starts_with("dasvector`")) {
@@ -826,7 +854,7 @@ def document_structure_macro(doc_file : file; mod : Module?; value) {
 def document_structure_macros(doc_file : file; mod : Module?) {
     var any = false
     module_for_each_annotation(mod) <| $(value) {
-        if (value.isTypeAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) {
+        if (value.isTypeAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation || value.isEnumerationAnnotation) {
             return
         }
         any = true
@@ -836,7 +864,7 @@ def document_structure_macros(doc_file : file; mod : Module?) {
     }
     fwrite(doc_file, make_group("Structure macros"))
     module_for_each_annotation(mod) <| $(value) {
-        if (value.isTypeAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) {
+        if (value.isTypeAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation || value.isEnumerationAnnotation) {
             return
         }
         document_structure_macro(doc_file, mod, value)
@@ -1254,6 +1282,7 @@ def public document(name : string; mod : Module?; fname, substname : string; var
     document_variant_macros(doc_file, mod)
     document_typeinfo_macros(doc_file, mod)
     document_annotations(doc_file, mod)
+    document_enumeration_annotations(doc_file, mod)
     document_structure_macros(doc_file, mod)
     document_classes(doc_file, mod)
     document_functions(doc_file, mod, groups)

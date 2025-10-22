@@ -29,15 +29,15 @@ Implements typeinfo(enum_names EnumOrEnumType) which returns array of strings wi
 
 Implements typeinfo(enum_length EnumOrEnumType) which returns total number of elements in enumeration.
 
-++++++++++++++++
-Structure macros
-++++++++++++++++
+++++++++++++++++++++
+Handled enumerations
+++++++++++++++++++++
 
 .. _handle-enum_trait-string_to_enum:
 
 .. das:attribute:: string_to_enum
 
-|structure_macro-enum_trait-string_to_enum|
+Enumeration annotation which implements string constructor for enumeration.
 
 +++++++++++++
 Uncategorized
