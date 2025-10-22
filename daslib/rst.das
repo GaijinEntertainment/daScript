@@ -252,8 +252,15 @@ def describe_type(td : TypeDeclPtr) {
                 }
             }
             write(writer, ">")
-        } elif (baseType == Type.tBitfield) {
+        } elif (baseType == Type.tBitfield || baseType == Type.tBitfield8 || baseType == Type.tBitfield16 || baseType == Type.tBitfield64) {
             write(writer, das_to_string(baseType))
+            if (baseType == Type.tBitfield8) {
+                write(writer, " : uint8")
+            } elif (baseType == Type.tBitfield16) {
+                write(writer, " : uint16")
+            } elif (baseType == Type.tBitfield64) {
+                write(writer, " : uint64")
+            }
             write(writer, "<")
             var first = true
             for (an in td.argNames) {
@@ -420,7 +427,7 @@ def document_typedef(doc_file : file; mod : Module?; name : string implicit; val
     fwrite(doc_file, make_label(alias_label_name(value)))
     fwrite(doc_file, make_domain("das:attribute"))
     fwrite(doc_file, name)
-    if (value.baseType == Type.tBitfield) {
+    if (value.baseType == Type.tBitfield || value.baseType == Type.tBitfield8 || value.baseType == Type.tBitfield16 || value.baseType == Type.tBitfield64) {
         fwrite(doc_file, " is a bitfield\n\n")
         document_bitfield(doc_file, value)
     } elif (value.baseType == Type.tVariant) {

@@ -150,7 +150,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
                 }
                 append_expressions(body, expr)
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstBool).value)
-            } elif (argType.baseType == Type.tBitfield) {
+            } elif (argType.baseType == Type.tBitfield || argType.baseType == Type.tBitfield8 || argType.baseType == Type.tBitfield16 || argType.baseType == Type.tBitfield64) {
                 var inscope expr <- qmacro_block() <| $() {
                     if (!(td.dimExpr[$v(macroArgIndex)] is ExprConstBitfield)) {
                         macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be bool const")
@@ -158,7 +158,17 @@ class TypeMacroMacro : AstFunctionAnnotation {
                     }
                 }
                 append_expressions(body, expr)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(bitfield((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value))
+                var inscope valueConst : ExpressionPtr
+                if (argType.baseType == Type.tBitfield8) {
+                    valueConst |> move_new <| qmacro(bitfield8(uint8((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value)))
+                } elif (argType.baseType == Type.tBitfield16) {
+                    valueConst |> move_new <| qmacro(bitfield16(uint16((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value)))
+                } elif (argType.baseType == Type.tBitfield64) {
+                    valueConst |> move_new <| qmacro(bitfield64(uint64((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value)))
+                } else {
+                    valueConst |> move_new <| qmacro(bitfield((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value))
+                }
+                (retCall as ExprCall).arguments |> emplace <| valueConst
             } elif (argType.baseType == Type.tEnumeration || argType.baseType == Type.tEnumeration16 || argType.baseType == Type.tEnumeration64 || argType.baseType == Type.tEnumeration8) {
                 let argTypeName = describe(argType)
                 var inscope expr <- qmacro_block() <| $() {
