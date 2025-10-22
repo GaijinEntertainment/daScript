@@ -14,3 +14,6 @@
 
 .. |function-json_boost-from_JV| replace:: to be documented in |function-json_boost-from_JV|.rst
 
+.. |structure-json_boost-JsonFieldState| replace:: options for JSON field serialization.
+
+.. |function-json_boost-parse_json_annotation| replace:: parse structure field annotations to deterimine JSON serialization options.

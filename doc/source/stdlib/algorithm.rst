@@ -20,8 +20,8 @@ Search
 
   *  :ref:`lower_bound (a:array\<auto(TT)\> const;f:int const;l:int const;val:TT const -&) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L>` 
   *  :ref:`lower_bound (a:array\<auto(TT)\> const;val:TT const -&) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L>` 
-  *  :ref:`lower_bound (a:array\<auto(TT)\> const;f:int const;l:int const;value:TT const -&;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
-  *  :ref:`lower_bound (a:array\<auto(TT)\> const;value:TT const -&;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`lower_bound (a:array\<auto(TT)\> const;f:int const;l:int const;value:auto(QQ) const;less:block\<(a:TT const -&;b:QQ const):bool\> const) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_QQ_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_QQ_gr_L_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`lower_bound (a:array\<auto(TT)\> const;value:auto(QQ) const;less:block\<(a:TT const -&;b:QQ const):bool\> const) : auto <function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_QQ_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_QQ_gr_L_gr_1_ls_b_gr__builtin_>` 
   *  :ref:`binary_search (a:array\<auto(TT)\> const;val:TT const -&) : auto <function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L>` 
   *  :ref:`binary_search (a:array\<auto(TT)\> const;f:int const;last:int const;val:TT const -&) : auto <function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L>` 
   *  :ref:`binary_search (a:array\<auto(TT)\> const;val:TT const -&;less:block\<(a:TT const -&;b:TT const -&):bool\> const) : auto <function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_>` 
@@ -73,9 +73,9 @@ lower_bound returns auto
 
 Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
-.. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
+.. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_QQ_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_QQ_gr_L_gr_1_ls_b_gr__builtin_:
 
-.. das:function:: lower_bound(a: array<auto(TT)> const; f: int const; l: int const; value: TT const; less: block<(a:TT const;b:TT const):bool> const)
+.. das:function:: lower_bound(a: array<auto(TT)> const; f: int const; l: int const; value: auto(QQ) const; less: block<(a:TT const;b:QQ const):bool> const)
 
 lower_bound returns auto
 
@@ -88,17 +88,17 @@ lower_bound returns auto
 +--------+-----------------------------------------+
 +l       +int const                                +
 +--------+-----------------------------------------+
-+value   +TT const                                 +
++value   +auto(QQ) const                           +
 +--------+-----------------------------------------+
-+less    +block<(a:TT const;b:TT const):bool> const+
++less    +block<(a:TT const;b:QQ const):bool> const+
 +--------+-----------------------------------------+
 
 
 Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
-.. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
+.. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_QQ_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_QQ_gr_L_gr_1_ls_b_gr__builtin_:
 
-.. das:function:: lower_bound(a: array<auto(TT)> const; value: TT const; less: block<(a:TT const;b:TT const):bool> const)
+.. das:function:: lower_bound(a: array<auto(TT)> const; value: auto(QQ) const; less: block<(a:TT const;b:QQ const):bool> const)
 
 lower_bound returns auto
 
@@ -107,9 +107,9 @@ lower_bound returns auto
 +========+=========================================+
 +a       +array<auto(TT)> const                    +
 +--------+-----------------------------------------+
-+value   +TT const                                 +
++value   +auto(QQ) const                           +
 +--------+-----------------------------------------+
-+less    +block<(a:TT const;b:TT const):bool> const+
++less    +block<(a:TT const;b:QQ const):bool> const+
 +--------+-----------------------------------------+
 
 
@@ -130,7 +130,8 @@ binary_search returns auto
 +--------+---------------------+
 
 
-now for all the other types
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L:
 
@@ -151,7 +152,8 @@ binary_search returns auto
 +--------+---------------------+
 
 
-now for all the other types
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -170,7 +172,8 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-now for all the other types
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
@@ -193,7 +196,8 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-now for all the other types
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_lower_bound_C._Ci_Ci_C._%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
@@ -290,7 +294,8 @@ binary_search returns auto
 +--------+-------------+
 
 
-now for all the other types
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C._Ci_Ci_C._%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
@@ -311,7 +316,8 @@ binary_search returns auto
 +--------+-------------+
 
 
-now for all the other types
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C._CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin__%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
@@ -330,7 +336,8 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-now for all the other types
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C._Ci_Ci_CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin__%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
@@ -353,7 +360,8 @@ binary_search returns auto
 +--------+-----------------------------------------+
 
 
-now for all the other types
+Returns true if an val appears within the range [f, last).
+Array a must be sorted.
 
 ++++++++++++++++++
 Array manipulation

@@ -27,7 +27,7 @@ Uncategorized
 
 .. das:function:: utf16_to_utf32(high: uint const; low: uint const)
 
-utf16_to_utf32 returns uint
+utf16_to_utf32 returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -104,7 +104,7 @@ Converts UTF-32 string to UTF-8 and returns it as a UTF-8 byte array
 
 .. das:function:: utf8_length(utf8_string: array<uint8> const implicit)
 
-utf8_length returns int
+utf8_length returns int const
 
 +-----------+---------------------------+
 +argument   +argument type              +
@@ -119,7 +119,7 @@ Returns the number of characters in the UTF-8 string
 
 .. das:function:: utf8_length(utf8_string: string const)
 
-utf8_length returns int
+utf8_length returns int const
 
 +-----------+-------------+
 +argument   +argument type+
@@ -134,7 +134,7 @@ Returns the number of characters in the UTF-8 string
 
 .. das:function:: is_first_byte_of_utf8_char(ch: uint8 const)
 
-is_first_byte_of_utf8_char returns bool
+is_first_byte_of_utf8_char returns bool const
 
 +--------+-------------+
 +argument+argument type+
@@ -149,7 +149,7 @@ is_first_byte_of_utf8_char returns bool
 
 .. das:function:: contains_utf8_bom(utf8_string: array<uint8> const implicit)
 
-contains_utf8_bom returns bool
+contains_utf8_bom returns bool const
 
 +-----------+---------------------------+
 +argument   +argument type              +
@@ -165,7 +165,7 @@ See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
 
 .. das:function:: contains_utf8_bom(utf8_string: string const)
 
-contains_utf8_bom returns bool
+contains_utf8_bom returns bool const
 
 +-----------+-------------+
 +argument   +argument type+
@@ -181,7 +181,7 @@ See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
 
 .. das:function:: is_utf8_string_valid(utf8_string: array<uint8> const implicit)
 
-is_utf8_string_valid returns bool
+is_utf8_string_valid returns bool const
 
 +-----------+---------------------------+
 +argument   +argument type              +
@@ -196,7 +196,7 @@ is_utf8_string_valid returns bool
 
 .. das:function:: is_utf8_string_valid(utf8_string: string const)
 
-is_utf8_string_valid returns bool
+is_utf8_string_valid returns bool const
 
 +-----------+-------------+
 +argument   +argument type+
@@ -271,7 +271,7 @@ Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-3
 
 .. das:function:: decode_unicode_escape(str: string const)
 
-decode_unicode_escape returns string
+decode_unicode_escape returns string const
 
 +--------+-------------+
 +argument+argument type+

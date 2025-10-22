@@ -28,12 +28,13 @@ This macro implements the `static_let` and `static_let_finalize` functions.
 Static variable declarations
 ++++++++++++++++++++++++++++
 
-  *  :ref:`static_let (blk:block\<\> const) : void <function-_at_static_let_c__c_static_let_C_builtin_>` 
-  *  :ref:`static_let_finalize (blk:block\<\> const) : void <function-_at_static_let_c__c_static_let_finalize_C_builtin_>` 
+  *  :ref:`static_let (blk:block\<void\> const) : void <function-_at_static_let_c__c_static_let_C1_ls_v_gr__builtin_>` 
+  *  :ref:`static_let (name:string const;blk:block\<void\> const) : void <function-_at_static_let_c__c_static_let_Cs_C1_ls_v_gr__builtin_>` 
+  *  :ref:`static_let_finalize (blk:block\<void\> const) : void <function-_at_static_let_c__c_static_let_finalize_C1_ls_v_gr__builtin_>` 
 
-.. _function-_at_static_let_c__c_static_let_C_builtin_:
+.. _function-_at_static_let_c__c_static_let_C1_ls_v_gr__builtin_:
 
-.. das:function:: static_let(blk: block<> const)
+.. das:function:: static_let(blk: block<void> const)
 
 +--------+-------------+
 +argument+argument type+
@@ -45,9 +46,25 @@ Static variable declarations
 Given a scope with the variable declarations, this function will make those variables global.
 Variable will be renamed under the hood, and all local access to it will be renamed as well.
 
-.. _function-_at_static_let_c__c_static_let_finalize_C_builtin_:
+.. _function-_at_static_let_c__c_static_let_Cs_C1_ls_v_gr__builtin_:
 
-.. das:function:: static_let_finalize(blk: block<> const)
+.. das:function:: static_let(name: string const; blk: block<void> const)
+
++--------+-------------+
++argument+argument type+
++========+=============+
++name    +string const +
++--------+-------------+
++blk     +block<> const+
++--------+-------------+
+
+
+Given a scope with the variable declarations, this function will make those variables global.
+Variable will be renamed under the hood, and all local access to it will be renamed as well.
+
+.. _function-_at_static_let_c__c_static_let_finalize_C1_ls_v_gr__builtin_:
+
+.. das:function:: static_let_finalize(blk: block<void> const)
 
 +--------+-------------+
 +argument+argument type+

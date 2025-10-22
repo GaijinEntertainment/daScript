@@ -105,42 +105,42 @@ float3x3 fields are
 all numerics (uint*, int*, float*, double)
 ++++++++++++++++++++++++++++++++++++++++++
 
-  *  :ref:`min (x:int const;y:int const) : int <function-_at_math_c__c_min_Ci_Ci>` 
-  *  :ref:`max (x:int const;y:int const) : int <function-_at_math_c__c_max_Ci_Ci>` 
-  *  :ref:`min (x:int2 const;y:int2 const) : int2 <function-_at_math_c__c_min_Ci2_Ci2>` 
-  *  :ref:`max (x:int2 const;y:int2 const) : int2 <function-_at_math_c__c_max_Ci2_Ci2>` 
-  *  :ref:`min (x:int3 const;y:int3 const) : int3 <function-_at_math_c__c_min_Ci3_Ci3>` 
-  *  :ref:`max (x:int3 const;y:int3 const) : int3 <function-_at_math_c__c_max_Ci3_Ci3>` 
-  *  :ref:`min (x:int4 const;y:int4 const) : int4 <function-_at_math_c__c_min_Ci4_Ci4>` 
-  *  :ref:`max (x:int4 const;y:int4 const) : int4 <function-_at_math_c__c_max_Ci4_Ci4>` 
-  *  :ref:`min (x:uint const;y:uint const) : uint <function-_at_math_c__c_min_Cu_Cu>` 
-  *  :ref:`max (x:uint const;y:uint const) : uint <function-_at_math_c__c_max_Cu_Cu>` 
-  *  :ref:`min (x:uint2 const;y:uint2 const) : uint2 <function-_at_math_c__c_min_Cu2_Cu2>` 
-  *  :ref:`max (x:uint2 const;y:uint2 const) : uint2 <function-_at_math_c__c_max_Cu2_Cu2>` 
-  *  :ref:`min (x:uint3 const;y:uint3 const) : uint3 <function-_at_math_c__c_min_Cu3_Cu3>` 
-  *  :ref:`max (x:uint3 const;y:uint3 const) : uint3 <function-_at_math_c__c_max_Cu3_Cu3>` 
-  *  :ref:`min (x:uint4 const;y:uint4 const) : uint4 <function-_at_math_c__c_min_Cu4_Cu4>` 
-  *  :ref:`max (x:uint4 const;y:uint4 const) : uint4 <function-_at_math_c__c_max_Cu4_Cu4>` 
-  *  :ref:`min (x:float const;y:float const) : float <function-_at_math_c__c_min_Cf_Cf>` 
-  *  :ref:`max (x:float const;y:float const) : float <function-_at_math_c__c_max_Cf_Cf>` 
-  *  :ref:`min (x:float2 const;y:float2 const) : float2 <function-_at_math_c__c_min_Cf2_Cf2>` 
-  *  :ref:`max (x:float2 const;y:float2 const) : float2 <function-_at_math_c__c_max_Cf2_Cf2>` 
-  *  :ref:`min (x:float3 const;y:float3 const) : float3 <function-_at_math_c__c_min_Cf3_Cf3>` 
-  *  :ref:`max (x:float3 const;y:float3 const) : float3 <function-_at_math_c__c_max_Cf3_Cf3>` 
-  *  :ref:`min (x:float4 const;y:float4 const) : float4 <function-_at_math_c__c_min_Cf4_Cf4>` 
-  *  :ref:`max (x:float4 const;y:float4 const) : float4 <function-_at_math_c__c_max_Cf4_Cf4>` 
-  *  :ref:`min (x:double const;y:double const) : double <function-_at_math_c__c_min_Cd_Cd>` 
-  *  :ref:`max (x:double const;y:double const) : double <function-_at_math_c__c_max_Cd_Cd>` 
-  *  :ref:`min (x:int64 const;y:int64 const) : int64 <function-_at_math_c__c_min_Ci64_Ci64>` 
-  *  :ref:`max (x:int64 const;y:int64 const) : int64 <function-_at_math_c__c_max_Ci64_Ci64>` 
-  *  :ref:`min (x:uint64 const;y:uint64 const) : uint64 <function-_at_math_c__c_min_Cu64_Cu64>` 
-  *  :ref:`max (x:uint64 const;y:uint64 const) : uint64 <function-_at_math_c__c_max_Cu64_Cu64>` 
+  *  :ref:`min (x:int const;y:int const) : int const <function-_at_math_c__c_min_Ci_Ci>` 
+  *  :ref:`max (x:int const;y:int const) : int const <function-_at_math_c__c_max_Ci_Ci>` 
+  *  :ref:`min (x:int2 const;y:int2 const) : int2 const <function-_at_math_c__c_min_Ci2_Ci2>` 
+  *  :ref:`max (x:int2 const;y:int2 const) : int2 const <function-_at_math_c__c_max_Ci2_Ci2>` 
+  *  :ref:`min (x:int3 const;y:int3 const) : int3 const <function-_at_math_c__c_min_Ci3_Ci3>` 
+  *  :ref:`max (x:int3 const;y:int3 const) : int3 const <function-_at_math_c__c_max_Ci3_Ci3>` 
+  *  :ref:`min (x:int4 const;y:int4 const) : int4 const <function-_at_math_c__c_min_Ci4_Ci4>` 
+  *  :ref:`max (x:int4 const;y:int4 const) : int4 const <function-_at_math_c__c_max_Ci4_Ci4>` 
+  *  :ref:`min (x:uint const;y:uint const) : uint const <function-_at_math_c__c_min_Cu_Cu>` 
+  *  :ref:`max (x:uint const;y:uint const) : uint const <function-_at_math_c__c_max_Cu_Cu>` 
+  *  :ref:`min (x:uint2 const;y:uint2 const) : uint2 const <function-_at_math_c__c_min_Cu2_Cu2>` 
+  *  :ref:`max (x:uint2 const;y:uint2 const) : uint2 const <function-_at_math_c__c_max_Cu2_Cu2>` 
+  *  :ref:`min (x:uint3 const;y:uint3 const) : uint3 const <function-_at_math_c__c_min_Cu3_Cu3>` 
+  *  :ref:`max (x:uint3 const;y:uint3 const) : uint3 const <function-_at_math_c__c_max_Cu3_Cu3>` 
+  *  :ref:`min (x:uint4 const;y:uint4 const) : uint4 const <function-_at_math_c__c_min_Cu4_Cu4>` 
+  *  :ref:`max (x:uint4 const;y:uint4 const) : uint4 const <function-_at_math_c__c_max_Cu4_Cu4>` 
+  *  :ref:`min (x:float const;y:float const) : float const <function-_at_math_c__c_min_Cf_Cf>` 
+  *  :ref:`max (x:float const;y:float const) : float const <function-_at_math_c__c_max_Cf_Cf>` 
+  *  :ref:`min (x:float2 const;y:float2 const) : float2 const <function-_at_math_c__c_min_Cf2_Cf2>` 
+  *  :ref:`max (x:float2 const;y:float2 const) : float2 const <function-_at_math_c__c_max_Cf2_Cf2>` 
+  *  :ref:`min (x:float3 const;y:float3 const) : float3 const <function-_at_math_c__c_min_Cf3_Cf3>` 
+  *  :ref:`max (x:float3 const;y:float3 const) : float3 const <function-_at_math_c__c_max_Cf3_Cf3>` 
+  *  :ref:`min (x:float4 const;y:float4 const) : float4 const <function-_at_math_c__c_min_Cf4_Cf4>` 
+  *  :ref:`max (x:float4 const;y:float4 const) : float4 const <function-_at_math_c__c_max_Cf4_Cf4>` 
+  *  :ref:`min (x:double const;y:double const) : double const <function-_at_math_c__c_min_Cd_Cd>` 
+  *  :ref:`max (x:double const;y:double const) : double const <function-_at_math_c__c_max_Cd_Cd>` 
+  *  :ref:`min (x:int64 const;y:int64 const) : int64 const <function-_at_math_c__c_min_Ci64_Ci64>` 
+  *  :ref:`max (x:int64 const;y:int64 const) : int64 const <function-_at_math_c__c_max_Ci64_Ci64>` 
+  *  :ref:`min (x:uint64 const;y:uint64 const) : uint64 const <function-_at_math_c__c_min_Cu64_Cu64>` 
+  *  :ref:`max (x:uint64 const;y:uint64 const) : uint64 const <function-_at_math_c__c_max_Cu64_Cu64>` 
 
 .. _function-_at_math_c__c_min_Ci_Ci:
 
 .. das:function:: min(x: int const; y: int const)
 
-min returns int
+min returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -157,7 +157,7 @@ min returns int
 
 .. das:function:: max(x: int const; y: int const)
 
-max returns int
+max returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -174,7 +174,7 @@ max returns int
 
 .. das:function:: min(x: int2 const; y: int2 const)
 
-min returns int2
+min returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -191,7 +191,7 @@ min returns int2
 
 .. das:function:: max(x: int2 const; y: int2 const)
 
-max returns int2
+max returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -208,7 +208,7 @@ max returns int2
 
 .. das:function:: min(x: int3 const; y: int3 const)
 
-min returns int3
+min returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -225,7 +225,7 @@ min returns int3
 
 .. das:function:: max(x: int3 const; y: int3 const)
 
-max returns int3
+max returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -242,7 +242,7 @@ max returns int3
 
 .. das:function:: min(x: int4 const; y: int4 const)
 
-min returns int4
+min returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -259,7 +259,7 @@ min returns int4
 
 .. das:function:: max(x: int4 const; y: int4 const)
 
-max returns int4
+max returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -276,7 +276,7 @@ max returns int4
 
 .. das:function:: min(x: uint const; y: uint const)
 
-min returns uint
+min returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -293,7 +293,7 @@ min returns uint
 
 .. das:function:: max(x: uint const; y: uint const)
 
-max returns uint
+max returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -310,7 +310,7 @@ max returns uint
 
 .. das:function:: min(x: uint2 const; y: uint2 const)
 
-min returns uint2
+min returns uint2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -327,7 +327,7 @@ min returns uint2
 
 .. das:function:: max(x: uint2 const; y: uint2 const)
 
-max returns uint2
+max returns uint2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -344,7 +344,7 @@ max returns uint2
 
 .. das:function:: min(x: uint3 const; y: uint3 const)
 
-min returns uint3
+min returns uint3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -361,7 +361,7 @@ min returns uint3
 
 .. das:function:: max(x: uint3 const; y: uint3 const)
 
-max returns uint3
+max returns uint3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -378,7 +378,7 @@ max returns uint3
 
 .. das:function:: min(x: uint4 const; y: uint4 const)
 
-min returns uint4
+min returns uint4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -395,7 +395,7 @@ min returns uint4
 
 .. das:function:: max(x: uint4 const; y: uint4 const)
 
-max returns uint4
+max returns uint4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -412,7 +412,7 @@ max returns uint4
 
 .. das:function:: min(x: float const; y: float const)
 
-min returns float
+min returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -429,7 +429,7 @@ min returns float
 
 .. das:function:: max(x: float const; y: float const)
 
-max returns float
+max returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -446,7 +446,7 @@ max returns float
 
 .. das:function:: min(x: float2 const; y: float2 const)
 
-min returns float2
+min returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -463,7 +463,7 @@ min returns float2
 
 .. das:function:: max(x: float2 const; y: float2 const)
 
-max returns float2
+max returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -480,7 +480,7 @@ max returns float2
 
 .. das:function:: min(x: float3 const; y: float3 const)
 
-min returns float3
+min returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -497,7 +497,7 @@ min returns float3
 
 .. das:function:: max(x: float3 const; y: float3 const)
 
-max returns float3
+max returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -514,7 +514,7 @@ max returns float3
 
 .. das:function:: min(x: float4 const; y: float4 const)
 
-min returns float4
+min returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -531,7 +531,7 @@ min returns float4
 
 .. das:function:: max(x: float4 const; y: float4 const)
 
-max returns float4
+max returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -548,7 +548,7 @@ max returns float4
 
 .. das:function:: min(x: double const; y: double const)
 
-min returns double
+min returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -565,7 +565,7 @@ min returns double
 
 .. das:function:: max(x: double const; y: double const)
 
-max returns double
+max returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -582,7 +582,7 @@ max returns double
 
 .. das:function:: min(x: int64 const; y: int64 const)
 
-min returns int64
+min returns int64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -599,7 +599,7 @@ min returns int64
 
 .. das:function:: max(x: int64 const; y: int64 const)
 
-max returns int64
+max returns int64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -616,7 +616,7 @@ max returns int64
 
 .. das:function:: min(x: uint64 const; y: uint64 const)
 
-min returns uint64
+min returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -633,7 +633,7 @@ min returns uint64
 
 .. das:function:: max(x: uint64 const; y: uint64 const)
 
-max returns uint64
+max returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -650,130 +650,140 @@ max returns uint64
 float* and double
 +++++++++++++++++
 
-  *  :ref:`sin (x:float const) : float <function-_at_math_c__c_sin_Cf>` 
-  *  :ref:`cos (x:float const) : float <function-_at_math_c__c_cos_Cf>` 
-  *  :ref:`tan (x:float const) : float <function-_at_math_c__c_tan_Cf>` 
-  *  :ref:`sin (x:float2 const) : float2 <function-_at_math_c__c_sin_Cf2>` 
-  *  :ref:`cos (x:float2 const) : float2 <function-_at_math_c__c_cos_Cf2>` 
-  *  :ref:`tan (x:float2 const) : float2 <function-_at_math_c__c_tan_Cf2>` 
-  *  :ref:`sin (x:float3 const) : float3 <function-_at_math_c__c_sin_Cf3>` 
-  *  :ref:`cos (x:float3 const) : float3 <function-_at_math_c__c_cos_Cf3>` 
-  *  :ref:`tan (x:float3 const) : float3 <function-_at_math_c__c_tan_Cf3>` 
-  *  :ref:`sin (x:float4 const) : float4 <function-_at_math_c__c_sin_Cf4>` 
-  *  :ref:`cos (x:float4 const) : float4 <function-_at_math_c__c_cos_Cf4>` 
-  *  :ref:`tan (x:float4 const) : float4 <function-_at_math_c__c_tan_Cf4>` 
-  *  :ref:`exp (x:float const) : float <function-_at_math_c__c_exp_Cf>` 
-  *  :ref:`log (x:float const) : float <function-_at_math_c__c_log_Cf>` 
-  *  :ref:`exp2 (x:float const) : float <function-_at_math_c__c_exp2_Cf>` 
-  *  :ref:`log2 (x:float const) : float <function-_at_math_c__c_log2_Cf>` 
-  *  :ref:`rcp (x:float const) : float <function-_at_math_c__c_rcp_Cf>` 
-  *  :ref:`pow (x:float const;y:float const) : float <function-_at_math_c__c_pow_Cf_Cf>` 
-  *  :ref:`exp (x:float2 const) : float2 <function-_at_math_c__c_exp_Cf2>` 
-  *  :ref:`log (x:float2 const) : float2 <function-_at_math_c__c_log_Cf2>` 
-  *  :ref:`exp2 (x:float2 const) : float2 <function-_at_math_c__c_exp2_Cf2>` 
-  *  :ref:`log2 (x:float2 const) : float2 <function-_at_math_c__c_log2_Cf2>` 
-  *  :ref:`rcp (x:float2 const) : float2 <function-_at_math_c__c_rcp_Cf2>` 
-  *  :ref:`pow (x:float2 const;y:float2 const) : float2 <function-_at_math_c__c_pow_Cf2_Cf2>` 
-  *  :ref:`exp (x:float3 const) : float3 <function-_at_math_c__c_exp_Cf3>` 
-  *  :ref:`log (x:float3 const) : float3 <function-_at_math_c__c_log_Cf3>` 
-  *  :ref:`exp2 (x:float3 const) : float3 <function-_at_math_c__c_exp2_Cf3>` 
-  *  :ref:`log2 (x:float3 const) : float3 <function-_at_math_c__c_log2_Cf3>` 
-  *  :ref:`rcp (x:float3 const) : float3 <function-_at_math_c__c_rcp_Cf3>` 
-  *  :ref:`pow (x:float3 const;y:float3 const) : float3 <function-_at_math_c__c_pow_Cf3_Cf3>` 
-  *  :ref:`exp (x:float4 const) : float4 <function-_at_math_c__c_exp_Cf4>` 
-  *  :ref:`log (x:float4 const) : float4 <function-_at_math_c__c_log_Cf4>` 
-  *  :ref:`exp2 (x:float4 const) : float4 <function-_at_math_c__c_exp2_Cf4>` 
-  *  :ref:`log2 (x:float4 const) : float4 <function-_at_math_c__c_log2_Cf4>` 
-  *  :ref:`rcp (x:float4 const) : float4 <function-_at_math_c__c_rcp_Cf4>` 
-  *  :ref:`pow (x:float4 const;y:float4 const) : float4 <function-_at_math_c__c_pow_Cf4_Cf4>` 
-  *  :ref:`floor (x:float const) : float <function-_at_math_c__c_floor_Cf>` 
-  *  :ref:`ceil (x:float const) : float <function-_at_math_c__c_ceil_Cf>` 
-  *  :ref:`sqrt (x:float const) : float <function-_at_math_c__c_sqrt_Cf>` 
-  *  :ref:`saturate (x:float const) : float <function-_at_math_c__c_saturate_Cf>` 
-  *  :ref:`floor (x:float2 const) : float2 <function-_at_math_c__c_floor_Cf2>` 
-  *  :ref:`ceil (x:float2 const) : float2 <function-_at_math_c__c_ceil_Cf2>` 
-  *  :ref:`sqrt (x:float2 const) : float2 <function-_at_math_c__c_sqrt_Cf2>` 
-  *  :ref:`saturate (x:float2 const) : float2 <function-_at_math_c__c_saturate_Cf2>` 
-  *  :ref:`floor (x:float3 const) : float3 <function-_at_math_c__c_floor_Cf3>` 
-  *  :ref:`ceil (x:float3 const) : float3 <function-_at_math_c__c_ceil_Cf3>` 
-  *  :ref:`sqrt (x:float3 const) : float3 <function-_at_math_c__c_sqrt_Cf3>` 
-  *  :ref:`saturate (x:float3 const) : float3 <function-_at_math_c__c_saturate_Cf3>` 
-  *  :ref:`floor (x:float4 const) : float4 <function-_at_math_c__c_floor_Cf4>` 
-  *  :ref:`ceil (x:float4 const) : float4 <function-_at_math_c__c_ceil_Cf4>` 
-  *  :ref:`sqrt (x:float4 const) : float4 <function-_at_math_c__c_sqrt_Cf4>` 
-  *  :ref:`saturate (x:float4 const) : float4 <function-_at_math_c__c_saturate_Cf4>` 
-  *  :ref:`abs (x:int const) : int <function-_at_math_c__c_abs_Ci>` 
-  *  :ref:`sign (x:int const) : int <function-_at_math_c__c_sign_Ci>` 
-  *  :ref:`abs (x:int2 const) : int2 <function-_at_math_c__c_abs_Ci2>` 
-  *  :ref:`sign (x:int2 const) : int2 <function-_at_math_c__c_sign_Ci2>` 
-  *  :ref:`abs (x:int3 const) : int3 <function-_at_math_c__c_abs_Ci3>` 
-  *  :ref:`sign (x:int3 const) : int3 <function-_at_math_c__c_sign_Ci3>` 
-  *  :ref:`abs (x:int4 const) : int4 <function-_at_math_c__c_abs_Ci4>` 
-  *  :ref:`sign (x:int4 const) : int4 <function-_at_math_c__c_sign_Ci4>` 
-  *  :ref:`abs (x:uint const) : uint <function-_at_math_c__c_abs_Cu>` 
-  *  :ref:`sign (x:uint const) : uint <function-_at_math_c__c_sign_Cu>` 
-  *  :ref:`abs (x:uint2 const) : uint2 <function-_at_math_c__c_abs_Cu2>` 
-  *  :ref:`sign (x:uint2 const) : uint2 <function-_at_math_c__c_sign_Cu2>` 
-  *  :ref:`abs (x:uint3 const) : uint3 <function-_at_math_c__c_abs_Cu3>` 
-  *  :ref:`sign (x:uint3 const) : uint3 <function-_at_math_c__c_sign_Cu3>` 
-  *  :ref:`abs (x:uint4 const) : uint4 <function-_at_math_c__c_abs_Cu4>` 
-  *  :ref:`sign (x:uint4 const) : uint4 <function-_at_math_c__c_sign_Cu4>` 
-  *  :ref:`abs (x:float const) : float <function-_at_math_c__c_abs_Cf>` 
-  *  :ref:`sign (x:float const) : float <function-_at_math_c__c_sign_Cf>` 
-  *  :ref:`abs (x:float2 const) : float2 <function-_at_math_c__c_abs_Cf2>` 
-  *  :ref:`sign (x:float2 const) : float2 <function-_at_math_c__c_sign_Cf2>` 
-  *  :ref:`abs (x:float3 const) : float3 <function-_at_math_c__c_abs_Cf3>` 
-  *  :ref:`sign (x:float3 const) : float3 <function-_at_math_c__c_sign_Cf3>` 
-  *  :ref:`abs (x:float4 const) : float4 <function-_at_math_c__c_abs_Cf4>` 
-  *  :ref:`sign (x:float4 const) : float4 <function-_at_math_c__c_sign_Cf4>` 
-  *  :ref:`abs (x:double const) : double <function-_at_math_c__c_abs_Cd>` 
-  *  :ref:`sign (x:double const) : double <function-_at_math_c__c_sign_Cd>` 
-  *  :ref:`abs (x:int64 const) : int64 <function-_at_math_c__c_abs_Ci64>` 
-  *  :ref:`sign (x:int64 const) : int64 <function-_at_math_c__c_sign_Ci64>` 
-  *  :ref:`abs (x:uint64 const) : uint64 <function-_at_math_c__c_abs_Cu64>` 
-  *  :ref:`sign (x:uint64 const) : uint64 <function-_at_math_c__c_sign_Cu64>` 
-  *  :ref:`is_nan (x:float const) : bool <function-_at_math_c__c_is_nan_Cf>` 
-  *  :ref:`is_finite (x:float const) : bool <function-_at_math_c__c_is_finite_Cf>` 
-  *  :ref:`is_nan (x:double const) : bool <function-_at_math_c__c_is_nan_Cd>` 
-  *  :ref:`is_finite (x:double const) : bool <function-_at_math_c__c_is_finite_Cd>` 
-  *  :ref:`sqrt (x:double const) : double <function-_at_math_c__c_sqrt_Cd>` 
-  *  :ref:`exp (x:double const) : double <function-_at_math_c__c_exp_Cd>` 
-  *  :ref:`rcp (x:double const) : double <function-_at_math_c__c_rcp_Cd>` 
-  *  :ref:`log (x:double const) : double <function-_at_math_c__c_log_Cd>` 
-  *  :ref:`pow (x:double const;y:double const) : double <function-_at_math_c__c_pow_Cd_Cd>` 
-  *  :ref:`exp2 (x:double const) : double <function-_at_math_c__c_exp2_Cd>` 
-  *  :ref:`log2 (x:double const) : double <function-_at_math_c__c_log2_Cd>` 
-  *  :ref:`sin (x:double const) : double <function-_at_math_c__c_sin_Cd>` 
-  *  :ref:`cos (x:double const) : double <function-_at_math_c__c_cos_Cd>` 
-  *  :ref:`asin (x:double const) : double <function-_at_math_c__c_asin_Cd>` 
-  *  :ref:`acos (x:double const) : double <function-_at_math_c__c_acos_Cd>` 
-  *  :ref:`tan (x:double const) : double <function-_at_math_c__c_tan_Cd>` 
-  *  :ref:`atan (x:double const) : double <function-_at_math_c__c_atan_Cd>` 
-  *  :ref:`atan2 (y:double const;x:double const) : double <function-_at_math_c__c_atan2_Cd_Cd>` 
+  *  :ref:`sin (x:float const) : float const <function-_at_math_c__c_sin_Cf>` 
+  *  :ref:`cos (x:float const) : float const <function-_at_math_c__c_cos_Cf>` 
+  *  :ref:`tan (x:float const) : float const <function-_at_math_c__c_tan_Cf>` 
+  *  :ref:`sin (x:float2 const) : float2 const <function-_at_math_c__c_sin_Cf2>` 
+  *  :ref:`cos (x:float2 const) : float2 const <function-_at_math_c__c_cos_Cf2>` 
+  *  :ref:`tan (x:float2 const) : float2 const <function-_at_math_c__c_tan_Cf2>` 
+  *  :ref:`sin (x:float3 const) : float3 const <function-_at_math_c__c_sin_Cf3>` 
+  *  :ref:`cos (x:float3 const) : float3 const <function-_at_math_c__c_cos_Cf3>` 
+  *  :ref:`tan (x:float3 const) : float3 const <function-_at_math_c__c_tan_Cf3>` 
+  *  :ref:`sin (x:float4 const) : float4 const <function-_at_math_c__c_sin_Cf4>` 
+  *  :ref:`cos (x:float4 const) : float4 const <function-_at_math_c__c_cos_Cf4>` 
+  *  :ref:`tan (x:float4 const) : float4 const <function-_at_math_c__c_tan_Cf4>` 
+  *  :ref:`exp (x:float const) : float const <function-_at_math_c__c_exp_Cf>` 
+  *  :ref:`log (x:float const) : float const <function-_at_math_c__c_log_Cf>` 
+  *  :ref:`exp2 (x:float const) : float const <function-_at_math_c__c_exp2_Cf>` 
+  *  :ref:`log2 (x:float const) : float const <function-_at_math_c__c_log2_Cf>` 
+  *  :ref:`rcp (x:float const) : float const <function-_at_math_c__c_rcp_Cf>` 
+  *  :ref:`pow (x:float const;y:float const) : float const <function-_at_math_c__c_pow_Cf_Cf>` 
+  *  :ref:`exp (x:float2 const) : float2 const <function-_at_math_c__c_exp_Cf2>` 
+  *  :ref:`log (x:float2 const) : float2 const <function-_at_math_c__c_log_Cf2>` 
+  *  :ref:`exp2 (x:float2 const) : float2 const <function-_at_math_c__c_exp2_Cf2>` 
+  *  :ref:`log2 (x:float2 const) : float2 const <function-_at_math_c__c_log2_Cf2>` 
+  *  :ref:`rcp (x:float2 const) : float2 const <function-_at_math_c__c_rcp_Cf2>` 
+  *  :ref:`pow (x:float2 const;y:float2 const) : float2 const <function-_at_math_c__c_pow_Cf2_Cf2>` 
+  *  :ref:`exp (x:float3 const) : float3 const <function-_at_math_c__c_exp_Cf3>` 
+  *  :ref:`log (x:float3 const) : float3 const <function-_at_math_c__c_log_Cf3>` 
+  *  :ref:`exp2 (x:float3 const) : float3 const <function-_at_math_c__c_exp2_Cf3>` 
+  *  :ref:`log2 (x:float3 const) : float3 const <function-_at_math_c__c_log2_Cf3>` 
+  *  :ref:`rcp (x:float3 const) : float3 const <function-_at_math_c__c_rcp_Cf3>` 
+  *  :ref:`pow (x:float3 const;y:float3 const) : float3 const <function-_at_math_c__c_pow_Cf3_Cf3>` 
+  *  :ref:`exp (x:float4 const) : float4 const <function-_at_math_c__c_exp_Cf4>` 
+  *  :ref:`log (x:float4 const) : float4 const <function-_at_math_c__c_log_Cf4>` 
+  *  :ref:`exp2 (x:float4 const) : float4 const <function-_at_math_c__c_exp2_Cf4>` 
+  *  :ref:`log2 (x:float4 const) : float4 const <function-_at_math_c__c_log2_Cf4>` 
+  *  :ref:`rcp (x:float4 const) : float4 const <function-_at_math_c__c_rcp_Cf4>` 
+  *  :ref:`pow (x:float4 const;y:float4 const) : float4 const <function-_at_math_c__c_pow_Cf4_Cf4>` 
+  *  :ref:`floor (x:float const) : float const <function-_at_math_c__c_floor_Cf>` 
+  *  :ref:`ceil (x:float const) : float const <function-_at_math_c__c_ceil_Cf>` 
+  *  :ref:`sqrt (x:float const) : float const <function-_at_math_c__c_sqrt_Cf>` 
+  *  :ref:`saturate (x:float const) : float const <function-_at_math_c__c_saturate_Cf>` 
+  *  :ref:`floor (x:float2 const) : float2 const <function-_at_math_c__c_floor_Cf2>` 
+  *  :ref:`ceil (x:float2 const) : float2 const <function-_at_math_c__c_ceil_Cf2>` 
+  *  :ref:`sqrt (x:float2 const) : float2 const <function-_at_math_c__c_sqrt_Cf2>` 
+  *  :ref:`saturate (x:float2 const) : float2 const <function-_at_math_c__c_saturate_Cf2>` 
+  *  :ref:`floor (x:float3 const) : float3 const <function-_at_math_c__c_floor_Cf3>` 
+  *  :ref:`ceil (x:float3 const) : float3 const <function-_at_math_c__c_ceil_Cf3>` 
+  *  :ref:`sqrt (x:float3 const) : float3 const <function-_at_math_c__c_sqrt_Cf3>` 
+  *  :ref:`saturate (x:float3 const) : float3 const <function-_at_math_c__c_saturate_Cf3>` 
+  *  :ref:`floor (x:float4 const) : float4 const <function-_at_math_c__c_floor_Cf4>` 
+  *  :ref:`ceil (x:float4 const) : float4 const <function-_at_math_c__c_ceil_Cf4>` 
+  *  :ref:`sqrt (x:float4 const) : float4 const <function-_at_math_c__c_sqrt_Cf4>` 
+  *  :ref:`saturate (x:float4 const) : float4 const <function-_at_math_c__c_saturate_Cf4>` 
+  *  :ref:`abs (x:int const) : int const <function-_at_math_c__c_abs_Ci>` 
+  *  :ref:`sign (x:int const) : int const <function-_at_math_c__c_sign_Ci>` 
+  *  :ref:`abs (x:int2 const) : int2 const <function-_at_math_c__c_abs_Ci2>` 
+  *  :ref:`sign (x:int2 const) : int2 const <function-_at_math_c__c_sign_Ci2>` 
+  *  :ref:`abs (x:int3 const) : int3 const <function-_at_math_c__c_abs_Ci3>` 
+  *  :ref:`sign (x:int3 const) : int3 const <function-_at_math_c__c_sign_Ci3>` 
+  *  :ref:`abs (x:int4 const) : int4 const <function-_at_math_c__c_abs_Ci4>` 
+  *  :ref:`sign (x:int4 const) : int4 const <function-_at_math_c__c_sign_Ci4>` 
+  *  :ref:`abs (x:uint const) : uint const <function-_at_math_c__c_abs_Cu>` 
+  *  :ref:`sign (x:uint const) : uint const <function-_at_math_c__c_sign_Cu>` 
+  *  :ref:`abs (x:uint2 const) : uint2 const <function-_at_math_c__c_abs_Cu2>` 
+  *  :ref:`sign (x:uint2 const) : uint2 const <function-_at_math_c__c_sign_Cu2>` 
+  *  :ref:`abs (x:uint3 const) : uint3 const <function-_at_math_c__c_abs_Cu3>` 
+  *  :ref:`sign (x:uint3 const) : uint3 const <function-_at_math_c__c_sign_Cu3>` 
+  *  :ref:`abs (x:uint4 const) : uint4 const <function-_at_math_c__c_abs_Cu4>` 
+  *  :ref:`sign (x:uint4 const) : uint4 const <function-_at_math_c__c_sign_Cu4>` 
+  *  :ref:`abs (x:float const) : float const <function-_at_math_c__c_abs_Cf>` 
+  *  :ref:`sign (x:float const) : float const <function-_at_math_c__c_sign_Cf>` 
+  *  :ref:`abs (x:float2 const) : float2 const <function-_at_math_c__c_abs_Cf2>` 
+  *  :ref:`sign (x:float2 const) : float2 const <function-_at_math_c__c_sign_Cf2>` 
+  *  :ref:`abs (x:float3 const) : float3 const <function-_at_math_c__c_abs_Cf3>` 
+  *  :ref:`sign (x:float3 const) : float3 const <function-_at_math_c__c_sign_Cf3>` 
+  *  :ref:`abs (x:float4 const) : float4 const <function-_at_math_c__c_abs_Cf4>` 
+  *  :ref:`sign (x:float4 const) : float4 const <function-_at_math_c__c_sign_Cf4>` 
+  *  :ref:`abs (x:double const) : double const <function-_at_math_c__c_abs_Cd>` 
+  *  :ref:`sign (x:double const) : double const <function-_at_math_c__c_sign_Cd>` 
+  *  :ref:`abs (x:int64 const) : int64 const <function-_at_math_c__c_abs_Ci64>` 
+  *  :ref:`sign (x:int64 const) : int64 const <function-_at_math_c__c_sign_Ci64>` 
+  *  :ref:`abs (x:uint64 const) : uint64 const <function-_at_math_c__c_abs_Cu64>` 
+  *  :ref:`sign (x:uint64 const) : uint64 const <function-_at_math_c__c_sign_Cu64>` 
+  *  :ref:`is_nan (x:float const) : bool const <function-_at_math_c__c_is_nan_Cf>` 
+  *  :ref:`is_finite (x:float const) : bool const <function-_at_math_c__c_is_finite_Cf>` 
+  *  :ref:`is_nan (x:double const) : bool const <function-_at_math_c__c_is_nan_Cd>` 
+  *  :ref:`is_finite (x:double const) : bool const <function-_at_math_c__c_is_finite_Cd>` 
+  *  :ref:`sqrt (x:double const) : double const <function-_at_math_c__c_sqrt_Cd>` 
+  *  :ref:`exp (x:double const) : double const <function-_at_math_c__c_exp_Cd>` 
+  *  :ref:`rcp (x:double const) : double const <function-_at_math_c__c_rcp_Cd>` 
+  *  :ref:`log (x:double const) : double const <function-_at_math_c__c_log_Cd>` 
+  *  :ref:`pow (x:double const;y:double const) : double const <function-_at_math_c__c_pow_Cd_Cd>` 
+  *  :ref:`exp2 (x:double const) : double const <function-_at_math_c__c_exp2_Cd>` 
+  *  :ref:`log2 (x:double const) : double const <function-_at_math_c__c_log2_Cd>` 
+  *  :ref:`sin (x:double const) : double const <function-_at_math_c__c_sin_Cd>` 
+  *  :ref:`cos (x:double const) : double const <function-_at_math_c__c_cos_Cd>` 
+  *  :ref:`asin (x:double const) : double const <function-_at_math_c__c_asin_Cd>` 
+  *  :ref:`acos (x:double const) : double const <function-_at_math_c__c_acos_Cd>` 
+  *  :ref:`safe_asin (x:double const) : double const <function-_at_math_c__c_safe_asin_Cd>` 
+  *  :ref:`safe_acos (x:double const) : double const <function-_at_math_c__c_safe_acos_Cd>` 
+  *  :ref:`tan (x:double const) : double const <function-_at_math_c__c_tan_Cd>` 
+  *  :ref:`atan (x:double const) : double const <function-_at_math_c__c_atan_Cd>` 
+  *  :ref:`atan2 (y:double const;x:double const) : double const <function-_at_math_c__c_atan2_Cd_Cd>` 
   *  :ref:`sincos (x:float const;s:float& implicit;c:float& implicit) : void <function-_at_math_c__c_sincos_Cf_&If_&If>` 
   *  :ref:`sincos (x:double const;s:double& implicit;c:double& implicit) : void <function-_at_math_c__c_sincos_Cd_&Id_&Id>` 
-  *  :ref:`asin (x:float const) : float <function-_at_math_c__c_asin_Cf>` 
-  *  :ref:`acos (x:float const) : float <function-_at_math_c__c_acos_Cf>` 
-  *  :ref:`atan (x:float const) : float <function-_at_math_c__c_atan_Cf>` 
-  *  :ref:`atan2 (y:float const;x:float const) : float <function-_at_math_c__c_atan2_Cf_Cf>` 
-  *  :ref:`asin (x:float2 const) : float2 <function-_at_math_c__c_asin_Cf2>` 
-  *  :ref:`asin (x:float3 const) : float3 <function-_at_math_c__c_asin_Cf3>` 
-  *  :ref:`asin (x:float4 const) : float4 <function-_at_math_c__c_asin_Cf4>` 
-  *  :ref:`acos (x:float2 const) : float2 <function-_at_math_c__c_acos_Cf2>` 
-  *  :ref:`acos (x:float3 const) : float3 <function-_at_math_c__c_acos_Cf3>` 
-  *  :ref:`acos (x:float4 const) : float4 <function-_at_math_c__c_acos_Cf4>` 
-  *  :ref:`atan (x:float2 const) : float2 <function-_at_math_c__c_atan_Cf2>` 
-  *  :ref:`atan (x:float3 const) : float3 <function-_at_math_c__c_atan_Cf3>` 
-  *  :ref:`atan (x:float4 const) : float4 <function-_at_math_c__c_atan_Cf4>` 
-  *  :ref:`atan2 (y:float2 const;x:float2 const) : float2 <function-_at_math_c__c_atan2_Cf2_Cf2>` 
-  *  :ref:`atan2 (y:float3 const;x:float3 const) : float3 <function-_at_math_c__c_atan2_Cf3_Cf3>` 
-  *  :ref:`atan2 (y:float4 const;x:float4 const) : float4 <function-_at_math_c__c_atan2_Cf4_Cf4>` 
+  *  :ref:`asin (x:float const) : float const <function-_at_math_c__c_asin_Cf>` 
+  *  :ref:`acos (x:float const) : float const <function-_at_math_c__c_acos_Cf>` 
+  *  :ref:`safe_asin (x:float const) : float const <function-_at_math_c__c_safe_asin_Cf>` 
+  *  :ref:`safe_acos (x:float const) : float const <function-_at_math_c__c_safe_acos_Cf>` 
+  *  :ref:`atan (x:float const) : float const <function-_at_math_c__c_atan_Cf>` 
+  *  :ref:`atan2 (y:float const;x:float const) : float const <function-_at_math_c__c_atan2_Cf_Cf>` 
+  *  :ref:`asin (x:float2 const) : float2 const <function-_at_math_c__c_asin_Cf2>` 
+  *  :ref:`asin (x:float3 const) : float3 const <function-_at_math_c__c_asin_Cf3>` 
+  *  :ref:`asin (x:float4 const) : float4 const <function-_at_math_c__c_asin_Cf4>` 
+  *  :ref:`acos (x:float2 const) : float2 const <function-_at_math_c__c_acos_Cf2>` 
+  *  :ref:`acos (x:float3 const) : float3 const <function-_at_math_c__c_acos_Cf3>` 
+  *  :ref:`acos (x:float4 const) : float4 const <function-_at_math_c__c_acos_Cf4>` 
+  *  :ref:`safe_asin (x:float2 const) : float2 const <function-_at_math_c__c_safe_asin_Cf2>` 
+  *  :ref:`safe_asin (x:float3 const) : float3 const <function-_at_math_c__c_safe_asin_Cf3>` 
+  *  :ref:`safe_asin (x:float4 const) : float4 const <function-_at_math_c__c_safe_asin_Cf4>` 
+  *  :ref:`safe_acos (x:float2 const) : float2 const <function-_at_math_c__c_safe_acos_Cf2>` 
+  *  :ref:`safe_acos (x:float3 const) : float3 const <function-_at_math_c__c_safe_acos_Cf3>` 
+  *  :ref:`safe_acos (x:float4 const) : float4 const <function-_at_math_c__c_safe_acos_Cf4>` 
+  *  :ref:`atan (x:float2 const) : float2 const <function-_at_math_c__c_atan_Cf2>` 
+  *  :ref:`atan (x:float3 const) : float3 const <function-_at_math_c__c_atan_Cf3>` 
+  *  :ref:`atan (x:float4 const) : float4 const <function-_at_math_c__c_atan_Cf4>` 
+  *  :ref:`atan2 (y:float2 const;x:float2 const) : float2 const <function-_at_math_c__c_atan2_Cf2_Cf2>` 
+  *  :ref:`atan2 (y:float3 const;x:float3 const) : float3 const <function-_at_math_c__c_atan2_Cf3_Cf3>` 
+  *  :ref:`atan2 (y:float4 const;x:float4 const) : float4 const <function-_at_math_c__c_atan2_Cf4_Cf4>` 
 
 .. _function-_at_math_c__c_sin_Cf:
 
 .. das:function:: sin(x: float const)
 
-sin returns float
+sin returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -788,7 +798,7 @@ sin returns float
 
 .. das:function:: cos(x: float const)
 
-cos returns float
+cos returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -803,7 +813,7 @@ cos returns float
 
 .. das:function:: tan(x: float const)
 
-tan returns float
+tan returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -818,7 +828,7 @@ tan returns float
 
 .. das:function:: sin(x: float2 const)
 
-sin returns float2
+sin returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -833,7 +843,7 @@ sin returns float2
 
 .. das:function:: cos(x: float2 const)
 
-cos returns float2
+cos returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -848,7 +858,7 @@ cos returns float2
 
 .. das:function:: tan(x: float2 const)
 
-tan returns float2
+tan returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -863,7 +873,7 @@ tan returns float2
 
 .. das:function:: sin(x: float3 const)
 
-sin returns float3
+sin returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -878,7 +888,7 @@ sin returns float3
 
 .. das:function:: cos(x: float3 const)
 
-cos returns float3
+cos returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -893,7 +903,7 @@ cos returns float3
 
 .. das:function:: tan(x: float3 const)
 
-tan returns float3
+tan returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -908,7 +918,7 @@ tan returns float3
 
 .. das:function:: sin(x: float4 const)
 
-sin returns float4
+sin returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -923,7 +933,7 @@ sin returns float4
 
 .. das:function:: cos(x: float4 const)
 
-cos returns float4
+cos returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -938,7 +948,7 @@ cos returns float4
 
 .. das:function:: tan(x: float4 const)
 
-tan returns float4
+tan returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -953,7 +963,7 @@ tan returns float4
 
 .. das:function:: exp(x: float const)
 
-exp returns float
+exp returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -968,7 +978,7 @@ exp returns float
 
 .. das:function:: log(x: float const)
 
-log returns float
+log returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -983,7 +993,7 @@ log returns float
 
 .. das:function:: exp2(x: float const)
 
-exp2 returns float
+exp2 returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -998,7 +1008,7 @@ exp2 returns float
 
 .. das:function:: log2(x: float const)
 
-log2 returns float
+log2 returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1013,7 +1023,7 @@ log2 returns float
 
 .. das:function:: rcp(x: float const)
 
-rcp returns float
+rcp returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1028,7 +1038,7 @@ rcp returns float
 
 .. das:function:: pow(x: float const; y: float const)
 
-pow returns float
+pow returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1045,7 +1055,7 @@ pow returns float
 
 .. das:function:: exp(x: float2 const)
 
-exp returns float2
+exp returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1060,7 +1070,7 @@ exp returns float2
 
 .. das:function:: log(x: float2 const)
 
-log returns float2
+log returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1075,7 +1085,7 @@ log returns float2
 
 .. das:function:: exp2(x: float2 const)
 
-exp2 returns float2
+exp2 returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1090,7 +1100,7 @@ exp2 returns float2
 
 .. das:function:: log2(x: float2 const)
 
-log2 returns float2
+log2 returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1105,7 +1115,7 @@ log2 returns float2
 
 .. das:function:: rcp(x: float2 const)
 
-rcp returns float2
+rcp returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1120,7 +1130,7 @@ rcp returns float2
 
 .. das:function:: pow(x: float2 const; y: float2 const)
 
-pow returns float2
+pow returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1137,7 +1147,7 @@ pow returns float2
 
 .. das:function:: exp(x: float3 const)
 
-exp returns float3
+exp returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1152,7 +1162,7 @@ exp returns float3
 
 .. das:function:: log(x: float3 const)
 
-log returns float3
+log returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1167,7 +1177,7 @@ log returns float3
 
 .. das:function:: exp2(x: float3 const)
 
-exp2 returns float3
+exp2 returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1182,7 +1192,7 @@ exp2 returns float3
 
 .. das:function:: log2(x: float3 const)
 
-log2 returns float3
+log2 returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1197,7 +1207,7 @@ log2 returns float3
 
 .. das:function:: rcp(x: float3 const)
 
-rcp returns float3
+rcp returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1212,7 +1222,7 @@ rcp returns float3
 
 .. das:function:: pow(x: float3 const; y: float3 const)
 
-pow returns float3
+pow returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1229,7 +1239,7 @@ pow returns float3
 
 .. das:function:: exp(x: float4 const)
 
-exp returns float4
+exp returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1244,7 +1254,7 @@ exp returns float4
 
 .. das:function:: log(x: float4 const)
 
-log returns float4
+log returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1259,7 +1269,7 @@ log returns float4
 
 .. das:function:: exp2(x: float4 const)
 
-exp2 returns float4
+exp2 returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1274,7 +1284,7 @@ exp2 returns float4
 
 .. das:function:: log2(x: float4 const)
 
-log2 returns float4
+log2 returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1289,7 +1299,7 @@ log2 returns float4
 
 .. das:function:: rcp(x: float4 const)
 
-rcp returns float4
+rcp returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1304,7 +1314,7 @@ rcp returns float4
 
 .. das:function:: pow(x: float4 const; y: float4 const)
 
-pow returns float4
+pow returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1321,7 +1331,7 @@ pow returns float4
 
 .. das:function:: floor(x: float const)
 
-floor returns float
+floor returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1336,7 +1346,7 @@ floor returns float
 
 .. das:function:: ceil(x: float const)
 
-ceil returns float
+ceil returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1351,7 +1361,7 @@ ceil returns float
 
 .. das:function:: sqrt(x: float const)
 
-sqrt returns float
+sqrt returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1366,7 +1376,7 @@ sqrt returns float
 
 .. das:function:: saturate(x: float const)
 
-saturate returns float
+saturate returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1381,7 +1391,7 @@ saturate returns float
 
 .. das:function:: floor(x: float2 const)
 
-floor returns float2
+floor returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1396,7 +1406,7 @@ floor returns float2
 
 .. das:function:: ceil(x: float2 const)
 
-ceil returns float2
+ceil returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1411,7 +1421,7 @@ ceil returns float2
 
 .. das:function:: sqrt(x: float2 const)
 
-sqrt returns float2
+sqrt returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1426,7 +1436,7 @@ sqrt returns float2
 
 .. das:function:: saturate(x: float2 const)
 
-saturate returns float2
+saturate returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1441,7 +1451,7 @@ saturate returns float2
 
 .. das:function:: floor(x: float3 const)
 
-floor returns float3
+floor returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1456,7 +1466,7 @@ floor returns float3
 
 .. das:function:: ceil(x: float3 const)
 
-ceil returns float3
+ceil returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1471,7 +1481,7 @@ ceil returns float3
 
 .. das:function:: sqrt(x: float3 const)
 
-sqrt returns float3
+sqrt returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1486,7 +1496,7 @@ sqrt returns float3
 
 .. das:function:: saturate(x: float3 const)
 
-saturate returns float3
+saturate returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1501,7 +1511,7 @@ saturate returns float3
 
 .. das:function:: floor(x: float4 const)
 
-floor returns float4
+floor returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1516,7 +1526,7 @@ floor returns float4
 
 .. das:function:: ceil(x: float4 const)
 
-ceil returns float4
+ceil returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1531,7 +1541,7 @@ ceil returns float4
 
 .. das:function:: sqrt(x: float4 const)
 
-sqrt returns float4
+sqrt returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1546,7 +1556,7 @@ sqrt returns float4
 
 .. das:function:: saturate(x: float4 const)
 
-saturate returns float4
+saturate returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1561,7 +1571,7 @@ saturate returns float4
 
 .. das:function:: abs(x: int const)
 
-abs returns int
+abs returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -1576,7 +1586,7 @@ abs returns int
 
 .. das:function:: sign(x: int const)
 
-sign returns int
+sign returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -1591,7 +1601,7 @@ sign returns int
 
 .. das:function:: abs(x: int2 const)
 
-abs returns int2
+abs returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1606,7 +1616,7 @@ abs returns int2
 
 .. das:function:: sign(x: int2 const)
 
-sign returns int2
+sign returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1621,7 +1631,7 @@ sign returns int2
 
 .. das:function:: abs(x: int3 const)
 
-abs returns int3
+abs returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1636,7 +1646,7 @@ abs returns int3
 
 .. das:function:: sign(x: int3 const)
 
-sign returns int3
+sign returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1651,7 +1661,7 @@ sign returns int3
 
 .. das:function:: abs(x: int4 const)
 
-abs returns int4
+abs returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1666,7 +1676,7 @@ abs returns int4
 
 .. das:function:: sign(x: int4 const)
 
-sign returns int4
+sign returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1681,7 +1691,7 @@ sign returns int4
 
 .. das:function:: abs(x: uint const)
 
-abs returns uint
+abs returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -1696,7 +1706,7 @@ abs returns uint
 
 .. das:function:: sign(x: uint const)
 
-sign returns uint
+sign returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -1711,7 +1721,7 @@ sign returns uint
 
 .. das:function:: abs(x: uint2 const)
 
-abs returns uint2
+abs returns uint2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1726,7 +1736,7 @@ abs returns uint2
 
 .. das:function:: sign(x: uint2 const)
 
-sign returns uint2
+sign returns uint2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1741,7 +1751,7 @@ sign returns uint2
 
 .. das:function:: abs(x: uint3 const)
 
-abs returns uint3
+abs returns uint3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1756,7 +1766,7 @@ abs returns uint3
 
 .. das:function:: sign(x: uint3 const)
 
-sign returns uint3
+sign returns uint3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1771,7 +1781,7 @@ sign returns uint3
 
 .. das:function:: abs(x: uint4 const)
 
-abs returns uint4
+abs returns uint4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1786,7 +1796,7 @@ abs returns uint4
 
 .. das:function:: sign(x: uint4 const)
 
-sign returns uint4
+sign returns uint4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1801,7 +1811,7 @@ sign returns uint4
 
 .. das:function:: abs(x: float const)
 
-abs returns float
+abs returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1816,7 +1826,7 @@ abs returns float
 
 .. das:function:: sign(x: float const)
 
-sign returns float
+sign returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -1831,7 +1841,7 @@ sign returns float
 
 .. das:function:: abs(x: float2 const)
 
-abs returns float2
+abs returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1846,7 +1856,7 @@ abs returns float2
 
 .. das:function:: sign(x: float2 const)
 
-sign returns float2
+sign returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1861,7 +1871,7 @@ sign returns float2
 
 .. das:function:: abs(x: float3 const)
 
-abs returns float3
+abs returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1876,7 +1886,7 @@ abs returns float3
 
 .. das:function:: sign(x: float3 const)
 
-sign returns float3
+sign returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1891,7 +1901,7 @@ sign returns float3
 
 .. das:function:: abs(x: float4 const)
 
-abs returns float4
+abs returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1906,7 +1916,7 @@ abs returns float4
 
 .. das:function:: sign(x: float4 const)
 
-sign returns float4
+sign returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1921,7 +1931,7 @@ sign returns float4
 
 .. das:function:: abs(x: double const)
 
-abs returns double
+abs returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -1936,7 +1946,7 @@ abs returns double
 
 .. das:function:: sign(x: double const)
 
-sign returns double
+sign returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -1951,7 +1961,7 @@ sign returns double
 
 .. das:function:: abs(x: int64 const)
 
-abs returns int64
+abs returns int64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1966,7 +1976,7 @@ abs returns int64
 
 .. das:function:: sign(x: int64 const)
 
-sign returns int64
+sign returns int64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1981,7 +1991,7 @@ sign returns int64
 
 .. das:function:: abs(x: uint64 const)
 
-abs returns uint64
+abs returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -1996,7 +2006,7 @@ abs returns uint64
 
 .. das:function:: sign(x: uint64 const)
 
-sign returns uint64
+sign returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2011,7 +2021,7 @@ sign returns uint64
 
 .. das:function:: is_nan(x: float const)
 
-is_nan returns bool
+is_nan returns bool const
 
 +--------+-------------+
 +argument+argument type+
@@ -2026,7 +2036,7 @@ is_nan returns bool
 
 .. das:function:: is_finite(x: float const)
 
-is_finite returns bool
+is_finite returns bool const
 
 +--------+-------------+
 +argument+argument type+
@@ -2041,7 +2051,7 @@ is_finite returns bool
 
 .. das:function:: is_nan(x: double const)
 
-is_nan returns bool
+is_nan returns bool const
 
 +--------+-------------+
 +argument+argument type+
@@ -2056,7 +2066,7 @@ is_nan returns bool
 
 .. das:function:: is_finite(x: double const)
 
-is_finite returns bool
+is_finite returns bool const
 
 +--------+-------------+
 +argument+argument type+
@@ -2071,7 +2081,7 @@ is_finite returns bool
 
 .. das:function:: sqrt(x: double const)
 
-sqrt returns double
+sqrt returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2086,7 +2096,7 @@ sqrt returns double
 
 .. das:function:: exp(x: double const)
 
-exp returns double
+exp returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2101,7 +2111,7 @@ exp returns double
 
 .. das:function:: rcp(x: double const)
 
-rcp returns double
+rcp returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2116,7 +2126,7 @@ rcp returns double
 
 .. das:function:: log(x: double const)
 
-log returns double
+log returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2131,7 +2141,7 @@ log returns double
 
 .. das:function:: pow(x: double const; y: double const)
 
-pow returns double
+pow returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2148,7 +2158,7 @@ pow returns double
 
 .. das:function:: exp2(x: double const)
 
-exp2 returns double
+exp2 returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2163,7 +2173,7 @@ exp2 returns double
 
 .. das:function:: log2(x: double const)
 
-log2 returns double
+log2 returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2178,7 +2188,7 @@ log2 returns double
 
 .. das:function:: sin(x: double const)
 
-sin returns double
+sin returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2193,7 +2203,7 @@ sin returns double
 
 .. das:function:: cos(x: double const)
 
-cos returns double
+cos returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2208,7 +2218,7 @@ cos returns double
 
 .. das:function:: asin(x: double const)
 
-asin returns double
+asin returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2223,7 +2233,7 @@ asin returns double
 
 .. das:function:: acos(x: double const)
 
-acos returns double
+acos returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2234,11 +2244,41 @@ acos returns double
 
 |function-math-acos|
 
+.. _function-_at_math_c__c_safe_asin_Cd:
+
+.. das:function:: safe_asin(x: double const)
+
+safe_asin returns double const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
+
+
+|function-math-safe_asin|
+
+.. _function-_at_math_c__c_safe_acos_Cd:
+
+.. das:function:: safe_acos(x: double const)
+
+safe_acos returns double const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +double const +
++--------+-------------+
+
+
+|function-math-safe_acos|
+
 .. _function-_at_math_c__c_tan_Cd:
 
 .. das:function:: tan(x: double const)
 
-tan returns double
+tan returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2253,7 +2293,7 @@ tan returns double
 
 .. das:function:: atan(x: double const)
 
-atan returns double
+atan returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2268,7 +2308,7 @@ atan returns double
 
 .. das:function:: atan2(y: double const; x: double const)
 
-atan2 returns double
+atan2 returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -2319,7 +2359,7 @@ atan2 returns double
 
 .. das:function:: asin(x: float const)
 
-asin returns float
+asin returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2334,7 +2374,7 @@ asin returns float
 
 .. das:function:: acos(x: float const)
 
-acos returns float
+acos returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2345,11 +2385,41 @@ acos returns float
 
 |function-math-acos|
 
+.. _function-_at_math_c__c_safe_asin_Cf:
+
+.. das:function:: safe_asin(x: float const)
+
+safe_asin returns float const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-safe_asin|
+
+.. _function-_at_math_c__c_safe_acos_Cf:
+
+.. das:function:: safe_acos(x: float const)
+
+safe_acos returns float const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-safe_acos|
+
 .. _function-_at_math_c__c_atan_Cf:
 
 .. das:function:: atan(x: float const)
 
-atan returns float
+atan returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2364,7 +2434,7 @@ atan returns float
 
 .. das:function:: atan2(y: float const; x: float const)
 
-atan2 returns float
+atan2 returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2381,7 +2451,7 @@ atan2 returns float
 
 .. das:function:: asin(x: float2 const)
 
-asin returns float2
+asin returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2396,7 +2466,7 @@ asin returns float2
 
 .. das:function:: asin(x: float3 const)
 
-asin returns float3
+asin returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2411,7 +2481,7 @@ asin returns float3
 
 .. das:function:: asin(x: float4 const)
 
-asin returns float4
+asin returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2426,7 +2496,7 @@ asin returns float4
 
 .. das:function:: acos(x: float2 const)
 
-acos returns float2
+acos returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2441,7 +2511,7 @@ acos returns float2
 
 .. das:function:: acos(x: float3 const)
 
-acos returns float3
+acos returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2456,7 +2526,7 @@ acos returns float3
 
 .. das:function:: acos(x: float4 const)
 
-acos returns float4
+acos returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2467,11 +2537,101 @@ acos returns float4
 
 |function-math-acos|
 
+.. _function-_at_math_c__c_safe_asin_Cf2:
+
+.. das:function:: safe_asin(x: float2 const)
+
+safe_asin returns float2 const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-safe_asin|
+
+.. _function-_at_math_c__c_safe_asin_Cf3:
+
+.. das:function:: safe_asin(x: float3 const)
+
+safe_asin returns float3 const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-safe_asin|
+
+.. _function-_at_math_c__c_safe_asin_Cf4:
+
+.. das:function:: safe_asin(x: float4 const)
+
+safe_asin returns float4 const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-safe_asin|
+
+.. _function-_at_math_c__c_safe_acos_Cf2:
+
+.. das:function:: safe_acos(x: float2 const)
+
+safe_acos returns float2 const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-safe_acos|
+
+.. _function-_at_math_c__c_safe_acos_Cf3:
+
+.. das:function:: safe_acos(x: float3 const)
+
+safe_acos returns float3 const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-safe_acos|
+
+.. _function-_at_math_c__c_safe_acos_Cf4:
+
+.. das:function:: safe_acos(x: float4 const)
+
+safe_acos returns float4 const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-safe_acos|
+
 .. _function-_at_math_c__c_atan_Cf2:
 
 .. das:function:: atan(x: float2 const)
 
-atan returns float2
+atan returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2486,7 +2646,7 @@ atan returns float2
 
 .. das:function:: atan(x: float3 const)
 
-atan returns float3
+atan returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2501,7 +2661,7 @@ atan returns float3
 
 .. das:function:: atan(x: float4 const)
 
-atan returns float4
+atan returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2516,7 +2676,7 @@ atan returns float4
 
 .. das:function:: atan2(y: float2 const; x: float2 const)
 
-atan2 returns float2
+atan2 returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2533,7 +2693,7 @@ atan2 returns float2
 
 .. das:function:: atan2(y: float3 const; x: float3 const)
 
-atan2 returns float3
+atan2 returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2550,7 +2710,7 @@ atan2 returns float3
 
 .. das:function:: atan2(y: float4 const; x: float4 const)
 
-atan2 returns float4
+atan2 returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2567,54 +2727,54 @@ atan2 returns float4
 float* only
 +++++++++++
 
-  *  :ref:`rcp_est (x:float const) : float <function-_at_math_c__c_rcp_est_Cf>` 
-  *  :ref:`rcp_est (x:float2 const) : float2 <function-_at_math_c__c_rcp_est_Cf2>` 
-  *  :ref:`rcp_est (x:float3 const) : float3 <function-_at_math_c__c_rcp_est_Cf3>` 
-  *  :ref:`rcp_est (x:float4 const) : float4 <function-_at_math_c__c_rcp_est_Cf4>` 
-  *  :ref:`fract (x:float const) : float <function-_at_math_c__c_fract_Cf>` 
-  *  :ref:`round (x:float const) : float <function-_at_math_c__c_round_Cf>` 
-  *  :ref:`rsqrt (x:float const) : float <function-_at_math_c__c_rsqrt_Cf>` 
-  *  :ref:`rsqrt_est (x:float const) : float <function-_at_math_c__c_rsqrt_est_Cf>` 
-  *  :ref:`fract (x:float2 const) : float2 <function-_at_math_c__c_fract_Cf2>` 
-  *  :ref:`round (x:float2 const) : float2 <function-_at_math_c__c_round_Cf2>` 
-  *  :ref:`rsqrt (x:float2 const) : float2 <function-_at_math_c__c_rsqrt_Cf2>` 
-  *  :ref:`rsqrt_est (x:float2 const) : float2 <function-_at_math_c__c_rsqrt_est_Cf2>` 
-  *  :ref:`fract (x:float3 const) : float3 <function-_at_math_c__c_fract_Cf3>` 
-  *  :ref:`round (x:float3 const) : float3 <function-_at_math_c__c_round_Cf3>` 
-  *  :ref:`rsqrt (x:float3 const) : float3 <function-_at_math_c__c_rsqrt_Cf3>` 
-  *  :ref:`rsqrt_est (x:float3 const) : float3 <function-_at_math_c__c_rsqrt_est_Cf3>` 
-  *  :ref:`fract (x:float4 const) : float4 <function-_at_math_c__c_fract_Cf4>` 
-  *  :ref:`round (x:float4 const) : float4 <function-_at_math_c__c_round_Cf4>` 
-  *  :ref:`rsqrt (x:float4 const) : float4 <function-_at_math_c__c_rsqrt_Cf4>` 
-  *  :ref:`rsqrt_est (x:float4 const) : float4 <function-_at_math_c__c_rsqrt_est_Cf4>` 
-  *  :ref:`atan_est (x:float const) : float <function-_at_math_c__c_atan_est_Cf>` 
-  *  :ref:`atan2_est (y:float const;x:float const) : float <function-_at_math_c__c_atan2_est_Cf_Cf>` 
-  *  :ref:`atan_est (x:float2 const) : float2 <function-_at_math_c__c_atan_est_Cf2>` 
-  *  :ref:`atan_est (x:float3 const) : float3 <function-_at_math_c__c_atan_est_Cf3>` 
-  *  :ref:`atan_est (x:float4 const) : float4 <function-_at_math_c__c_atan_est_Cf4>` 
-  *  :ref:`atan2_est (y:float2 const;x:float2 const) : float2 <function-_at_math_c__c_atan2_est_Cf2_Cf2>` 
-  *  :ref:`atan2_est (y:float3 const;x:float3 const) : float3 <function-_at_math_c__c_atan2_est_Cf3_Cf3>` 
-  *  :ref:`atan2_est (y:float4 const;x:float4 const) : float4 <function-_at_math_c__c_atan2_est_Cf4_Cf4>` 
-  *  :ref:`floori (x:float const) : int <function-_at_math_c__c_floori_Cf>` 
-  *  :ref:`ceili (x:float const) : int <function-_at_math_c__c_ceili_Cf>` 
-  *  :ref:`roundi (x:float const) : int <function-_at_math_c__c_roundi_Cf>` 
-  *  :ref:`trunci (x:float const) : int <function-_at_math_c__c_trunci_Cf>` 
-  *  :ref:`floori (x:double const) : int <function-_at_math_c__c_floori_Cd>` 
-  *  :ref:`ceili (x:double const) : int <function-_at_math_c__c_ceili_Cd>` 
-  *  :ref:`roundi (x:double const) : int <function-_at_math_c__c_roundi_Cd>` 
-  *  :ref:`trunci (x:double const) : int <function-_at_math_c__c_trunci_Cd>` 
-  *  :ref:`floori (x:float2 const) : int2 <function-_at_math_c__c_floori_Cf2>` 
-  *  :ref:`ceili (x:float2 const) : int2 <function-_at_math_c__c_ceili_Cf2>` 
-  *  :ref:`roundi (x:float2 const) : int2 <function-_at_math_c__c_roundi_Cf2>` 
-  *  :ref:`trunci (x:float2 const) : int2 <function-_at_math_c__c_trunci_Cf2>` 
-  *  :ref:`floori (x:float3 const) : int3 <function-_at_math_c__c_floori_Cf3>` 
-  *  :ref:`ceili (x:float3 const) : int3 <function-_at_math_c__c_ceili_Cf3>` 
-  *  :ref:`roundi (x:float3 const) : int3 <function-_at_math_c__c_roundi_Cf3>` 
-  *  :ref:`trunci (x:float3 const) : int3 <function-_at_math_c__c_trunci_Cf3>` 
-  *  :ref:`floori (x:float4 const) : int4 <function-_at_math_c__c_floori_Cf4>` 
-  *  :ref:`ceili (x:float4 const) : int4 <function-_at_math_c__c_ceili_Cf4>` 
-  *  :ref:`roundi (x:float4 const) : int4 <function-_at_math_c__c_roundi_Cf4>` 
-  *  :ref:`trunci (x:float4 const) : int4 <function-_at_math_c__c_trunci_Cf4>` 
+  *  :ref:`rcp_est (x:float const) : float const <function-_at_math_c__c_rcp_est_Cf>` 
+  *  :ref:`rcp_est (x:float2 const) : float2 const <function-_at_math_c__c_rcp_est_Cf2>` 
+  *  :ref:`rcp_est (x:float3 const) : float3 const <function-_at_math_c__c_rcp_est_Cf3>` 
+  *  :ref:`rcp_est (x:float4 const) : float4 const <function-_at_math_c__c_rcp_est_Cf4>` 
+  *  :ref:`fract (x:float const) : float const <function-_at_math_c__c_fract_Cf>` 
+  *  :ref:`round (x:float const) : float const <function-_at_math_c__c_round_Cf>` 
+  *  :ref:`rsqrt (x:float const) : float const <function-_at_math_c__c_rsqrt_Cf>` 
+  *  :ref:`rsqrt_est (x:float const) : float const <function-_at_math_c__c_rsqrt_est_Cf>` 
+  *  :ref:`fract (x:float2 const) : float2 const <function-_at_math_c__c_fract_Cf2>` 
+  *  :ref:`round (x:float2 const) : float2 const <function-_at_math_c__c_round_Cf2>` 
+  *  :ref:`rsqrt (x:float2 const) : float2 const <function-_at_math_c__c_rsqrt_Cf2>` 
+  *  :ref:`rsqrt_est (x:float2 const) : float2 const <function-_at_math_c__c_rsqrt_est_Cf2>` 
+  *  :ref:`fract (x:float3 const) : float3 const <function-_at_math_c__c_fract_Cf3>` 
+  *  :ref:`round (x:float3 const) : float3 const <function-_at_math_c__c_round_Cf3>` 
+  *  :ref:`rsqrt (x:float3 const) : float3 const <function-_at_math_c__c_rsqrt_Cf3>` 
+  *  :ref:`rsqrt_est (x:float3 const) : float3 const <function-_at_math_c__c_rsqrt_est_Cf3>` 
+  *  :ref:`fract (x:float4 const) : float4 const <function-_at_math_c__c_fract_Cf4>` 
+  *  :ref:`round (x:float4 const) : float4 const <function-_at_math_c__c_round_Cf4>` 
+  *  :ref:`rsqrt (x:float4 const) : float4 const <function-_at_math_c__c_rsqrt_Cf4>` 
+  *  :ref:`rsqrt_est (x:float4 const) : float4 const <function-_at_math_c__c_rsqrt_est_Cf4>` 
+  *  :ref:`atan_est (x:float const) : float const <function-_at_math_c__c_atan_est_Cf>` 
+  *  :ref:`atan2_est (y:float const;x:float const) : float const <function-_at_math_c__c_atan2_est_Cf_Cf>` 
+  *  :ref:`atan_est (x:float2 const) : float2 const <function-_at_math_c__c_atan_est_Cf2>` 
+  *  :ref:`atan_est (x:float3 const) : float3 const <function-_at_math_c__c_atan_est_Cf3>` 
+  *  :ref:`atan_est (x:float4 const) : float4 const <function-_at_math_c__c_atan_est_Cf4>` 
+  *  :ref:`atan2_est (y:float2 const;x:float2 const) : float2 const <function-_at_math_c__c_atan2_est_Cf2_Cf2>` 
+  *  :ref:`atan2_est (y:float3 const;x:float3 const) : float3 const <function-_at_math_c__c_atan2_est_Cf3_Cf3>` 
+  *  :ref:`atan2_est (y:float4 const;x:float4 const) : float4 const <function-_at_math_c__c_atan2_est_Cf4_Cf4>` 
+  *  :ref:`floori (x:float const) : int const <function-_at_math_c__c_floori_Cf>` 
+  *  :ref:`ceili (x:float const) : int const <function-_at_math_c__c_ceili_Cf>` 
+  *  :ref:`roundi (x:float const) : int const <function-_at_math_c__c_roundi_Cf>` 
+  *  :ref:`trunci (x:float const) : int const <function-_at_math_c__c_trunci_Cf>` 
+  *  :ref:`floori (x:double const) : int const <function-_at_math_c__c_floori_Cd>` 
+  *  :ref:`ceili (x:double const) : int const <function-_at_math_c__c_ceili_Cd>` 
+  *  :ref:`roundi (x:double const) : int const <function-_at_math_c__c_roundi_Cd>` 
+  *  :ref:`trunci (x:double const) : int const <function-_at_math_c__c_trunci_Cd>` 
+  *  :ref:`floori (x:float2 const) : int2 const <function-_at_math_c__c_floori_Cf2>` 
+  *  :ref:`ceili (x:float2 const) : int2 const <function-_at_math_c__c_ceili_Cf2>` 
+  *  :ref:`roundi (x:float2 const) : int2 const <function-_at_math_c__c_roundi_Cf2>` 
+  *  :ref:`trunci (x:float2 const) : int2 const <function-_at_math_c__c_trunci_Cf2>` 
+  *  :ref:`floori (x:float3 const) : int3 const <function-_at_math_c__c_floori_Cf3>` 
+  *  :ref:`ceili (x:float3 const) : int3 const <function-_at_math_c__c_ceili_Cf3>` 
+  *  :ref:`roundi (x:float3 const) : int3 const <function-_at_math_c__c_roundi_Cf3>` 
+  *  :ref:`trunci (x:float3 const) : int3 const <function-_at_math_c__c_trunci_Cf3>` 
+  *  :ref:`floori (x:float4 const) : int4 const <function-_at_math_c__c_floori_Cf4>` 
+  *  :ref:`ceili (x:float4 const) : int4 const <function-_at_math_c__c_ceili_Cf4>` 
+  *  :ref:`roundi (x:float4 const) : int4 const <function-_at_math_c__c_roundi_Cf4>` 
+  *  :ref:`trunci (x:float4 const) : int4 const <function-_at_math_c__c_trunci_Cf4>` 
   *  :ref:`- (x:math::float4x4 const implicit) : math::float4x4 <function-_at_math_c__c_-_CIH_ls_math_c__c_float4x4_gr_>` 
   *  :ref:`- (x:math::float3x4 const implicit) : math::float3x4 <function-_at_math_c__c_-_CIH_ls_math_c__c_float3x4_gr_>` 
   *  :ref:`- (x:math::float3x3 const implicit) : math::float3x3 <function-_at_math_c__c_-_CIH_ls_math_c__c_float3x3_gr_>` 
@@ -2623,7 +2783,7 @@ float* only
 
 .. das:function:: rcp_est(x: float const)
 
-rcp_est returns float
+rcp_est returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2638,7 +2798,7 @@ rcp_est returns float
 
 .. das:function:: rcp_est(x: float2 const)
 
-rcp_est returns float2
+rcp_est returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2653,7 +2813,7 @@ rcp_est returns float2
 
 .. das:function:: rcp_est(x: float3 const)
 
-rcp_est returns float3
+rcp_est returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2668,7 +2828,7 @@ rcp_est returns float3
 
 .. das:function:: rcp_est(x: float4 const)
 
-rcp_est returns float4
+rcp_est returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2683,7 +2843,7 @@ rcp_est returns float4
 
 .. das:function:: fract(x: float const)
 
-fract returns float
+fract returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2698,7 +2858,7 @@ fract returns float
 
 .. das:function:: round(x: float const)
 
-round returns float
+round returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2713,7 +2873,7 @@ round returns float
 
 .. das:function:: rsqrt(x: float const)
 
-rsqrt returns float
+rsqrt returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2728,7 +2888,7 @@ rsqrt returns float
 
 .. das:function:: rsqrt_est(x: float const)
 
-rsqrt_est returns float
+rsqrt_est returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2743,7 +2903,7 @@ rsqrt_est returns float
 
 .. das:function:: fract(x: float2 const)
 
-fract returns float2
+fract returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2758,7 +2918,7 @@ fract returns float2
 
 .. das:function:: round(x: float2 const)
 
-round returns float2
+round returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2773,7 +2933,7 @@ round returns float2
 
 .. das:function:: rsqrt(x: float2 const)
 
-rsqrt returns float2
+rsqrt returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2788,7 +2948,7 @@ rsqrt returns float2
 
 .. das:function:: rsqrt_est(x: float2 const)
 
-rsqrt_est returns float2
+rsqrt_est returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2803,7 +2963,7 @@ rsqrt_est returns float2
 
 .. das:function:: fract(x: float3 const)
 
-fract returns float3
+fract returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2818,7 +2978,7 @@ fract returns float3
 
 .. das:function:: round(x: float3 const)
 
-round returns float3
+round returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2833,7 +2993,7 @@ round returns float3
 
 .. das:function:: rsqrt(x: float3 const)
 
-rsqrt returns float3
+rsqrt returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2848,7 +3008,7 @@ rsqrt returns float3
 
 .. das:function:: rsqrt_est(x: float3 const)
 
-rsqrt_est returns float3
+rsqrt_est returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2863,7 +3023,7 @@ rsqrt_est returns float3
 
 .. das:function:: fract(x: float4 const)
 
-fract returns float4
+fract returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2878,7 +3038,7 @@ fract returns float4
 
 .. das:function:: round(x: float4 const)
 
-round returns float4
+round returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2893,7 +3053,7 @@ round returns float4
 
 .. das:function:: rsqrt(x: float4 const)
 
-rsqrt returns float4
+rsqrt returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2908,7 +3068,7 @@ rsqrt returns float4
 
 .. das:function:: rsqrt_est(x: float4 const)
 
-rsqrt_est returns float4
+rsqrt_est returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2923,7 +3083,7 @@ rsqrt_est returns float4
 
 .. das:function:: atan_est(x: float const)
 
-atan_est returns float
+atan_est returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2938,7 +3098,7 @@ atan_est returns float
 
 .. das:function:: atan2_est(y: float const; x: float const)
 
-atan2_est returns float
+atan2_est returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -2955,7 +3115,7 @@ atan2_est returns float
 
 .. das:function:: atan_est(x: float2 const)
 
-atan_est returns float2
+atan_est returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2970,7 +3130,7 @@ atan_est returns float2
 
 .. das:function:: atan_est(x: float3 const)
 
-atan_est returns float3
+atan_est returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -2985,7 +3145,7 @@ atan_est returns float3
 
 .. das:function:: atan_est(x: float4 const)
 
-atan_est returns float4
+atan_est returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3000,7 +3160,7 @@ atan_est returns float4
 
 .. das:function:: atan2_est(y: float2 const; x: float2 const)
 
-atan2_est returns float2
+atan2_est returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3017,7 +3177,7 @@ atan2_est returns float2
 
 .. das:function:: atan2_est(y: float3 const; x: float3 const)
 
-atan2_est returns float3
+atan2_est returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3034,7 +3194,7 @@ atan2_est returns float3
 
 .. das:function:: atan2_est(y: float4 const; x: float4 const)
 
-atan2_est returns float4
+atan2_est returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3051,7 +3211,7 @@ atan2_est returns float4
 
 .. das:function:: floori(x: float const)
 
-floori returns int
+floori returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3066,7 +3226,7 @@ floori returns int
 
 .. das:function:: ceili(x: float const)
 
-ceili returns int
+ceili returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3081,7 +3241,7 @@ ceili returns int
 
 .. das:function:: roundi(x: float const)
 
-roundi returns int
+roundi returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3096,7 +3256,7 @@ roundi returns int
 
 .. das:function:: trunci(x: float const)
 
-trunci returns int
+trunci returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3111,7 +3271,7 @@ trunci returns int
 
 .. das:function:: floori(x: double const)
 
-floori returns int
+floori returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3126,7 +3286,7 @@ floori returns int
 
 .. das:function:: ceili(x: double const)
 
-ceili returns int
+ceili returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3141,7 +3301,7 @@ ceili returns int
 
 .. das:function:: roundi(x: double const)
 
-roundi returns int
+roundi returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3156,7 +3316,7 @@ roundi returns int
 
 .. das:function:: trunci(x: double const)
 
-trunci returns int
+trunci returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -3171,7 +3331,7 @@ trunci returns int
 
 .. das:function:: floori(x: float2 const)
 
-floori returns int2
+floori returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3186,7 +3346,7 @@ floori returns int2
 
 .. das:function:: ceili(x: float2 const)
 
-ceili returns int2
+ceili returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3201,7 +3361,7 @@ ceili returns int2
 
 .. das:function:: roundi(x: float2 const)
 
-roundi returns int2
+roundi returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3216,7 +3376,7 @@ roundi returns int2
 
 .. das:function:: trunci(x: float2 const)
 
-trunci returns int2
+trunci returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3231,7 +3391,7 @@ trunci returns int2
 
 .. das:function:: floori(x: float3 const)
 
-floori returns int3
+floori returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3246,7 +3406,7 @@ floori returns int3
 
 .. das:function:: ceili(x: float3 const)
 
-ceili returns int3
+ceili returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3261,7 +3421,7 @@ ceili returns int3
 
 .. das:function:: roundi(x: float3 const)
 
-roundi returns int3
+roundi returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3276,7 +3436,7 @@ roundi returns int3
 
 .. das:function:: trunci(x: float3 const)
 
-trunci returns int3
+trunci returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3291,7 +3451,7 @@ trunci returns int3
 
 .. das:function:: floori(x: float4 const)
 
-floori returns int4
+floori returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3306,7 +3466,7 @@ floori returns int4
 
 .. das:function:: ceili(x: float4 const)
 
-ceili returns int4
+ceili returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3321,7 +3481,7 @@ ceili returns int4
 
 .. das:function:: roundi(x: float4 const)
 
-roundi returns int4
+roundi returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3336,7 +3496,7 @@ roundi returns int4
 
 .. das:function:: trunci(x: float4 const)
 
-trunci returns int4
+trunci returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3396,29 +3556,29 @@ trunci returns int4
 float3 only
 +++++++++++
 
-  *  :ref:`cross (x:float3 const;y:float3 const) : float3 <function-_at_math_c__c_cross_Cf3_Cf3>` 
-  *  :ref:`distance (x:float2 const;y:float2 const) : float <function-_at_math_c__c_distance_Cf2_Cf2>` 
-  *  :ref:`distance_sq (x:float2 const;y:float2 const) : float <function-_at_math_c__c_distance_sq_Cf2_Cf2>` 
-  *  :ref:`inv_distance (x:float2 const;y:float2 const) : float <function-_at_math_c__c_inv_distance_Cf2_Cf2>` 
-  *  :ref:`inv_distance_sq (x:float2 const;y:float2 const) : float <function-_at_math_c__c_inv_distance_sq_Cf2_Cf2>` 
-  *  :ref:`distance (x:float3 const;y:float3 const) : float <function-_at_math_c__c_distance_Cf3_Cf3>` 
-  *  :ref:`distance_sq (x:float3 const;y:float3 const) : float <function-_at_math_c__c_distance_sq_Cf3_Cf3>` 
-  *  :ref:`inv_distance (x:float3 const;y:float3 const) : float <function-_at_math_c__c_inv_distance_Cf3_Cf3>` 
-  *  :ref:`inv_distance_sq (x:float3 const;y:float3 const) : float <function-_at_math_c__c_inv_distance_sq_Cf3_Cf3>` 
-  *  :ref:`distance (x:float4 const;y:float4 const) : float <function-_at_math_c__c_distance_Cf4_Cf4>` 
-  *  :ref:`distance_sq (x:float4 const;y:float4 const) : float <function-_at_math_c__c_distance_sq_Cf4_Cf4>` 
-  *  :ref:`inv_distance (x:float4 const;y:float4 const) : float <function-_at_math_c__c_inv_distance_Cf4_Cf4>` 
-  *  :ref:`inv_distance_sq (x:float4 const;y:float4 const) : float <function-_at_math_c__c_inv_distance_sq_Cf4_Cf4>` 
-  *  :ref:`reflect (v:float3 const;n:float3 const) : float3 <function-_at_math_c__c_reflect_Cf3_Cf3>` 
-  *  :ref:`reflect (v:float2 const;n:float2 const) : float2 <function-_at_math_c__c_reflect_Cf2_Cf2>` 
-  *  :ref:`refract (v:float3 const;n:float3 const;nint:float const) : float3 <function-_at_math_c__c_refract_Cf3_Cf3_Cf>` 
-  *  :ref:`refract (v:float2 const;n:float2 const;nint:float const) : float2 <function-_at_math_c__c_refract_Cf2_Cf2_Cf>` 
+  *  :ref:`cross (x:float3 const;y:float3 const) : float3 const <function-_at_math_c__c_cross_Cf3_Cf3>` 
+  *  :ref:`distance (x:float2 const;y:float2 const) : float const <function-_at_math_c__c_distance_Cf2_Cf2>` 
+  *  :ref:`distance_sq (x:float2 const;y:float2 const) : float const <function-_at_math_c__c_distance_sq_Cf2_Cf2>` 
+  *  :ref:`inv_distance (x:float2 const;y:float2 const) : float const <function-_at_math_c__c_inv_distance_Cf2_Cf2>` 
+  *  :ref:`inv_distance_sq (x:float2 const;y:float2 const) : float const <function-_at_math_c__c_inv_distance_sq_Cf2_Cf2>` 
+  *  :ref:`distance (x:float3 const;y:float3 const) : float const <function-_at_math_c__c_distance_Cf3_Cf3>` 
+  *  :ref:`distance_sq (x:float3 const;y:float3 const) : float const <function-_at_math_c__c_distance_sq_Cf3_Cf3>` 
+  *  :ref:`inv_distance (x:float3 const;y:float3 const) : float const <function-_at_math_c__c_inv_distance_Cf3_Cf3>` 
+  *  :ref:`inv_distance_sq (x:float3 const;y:float3 const) : float const <function-_at_math_c__c_inv_distance_sq_Cf3_Cf3>` 
+  *  :ref:`distance (x:float4 const;y:float4 const) : float const <function-_at_math_c__c_distance_Cf4_Cf4>` 
+  *  :ref:`distance_sq (x:float4 const;y:float4 const) : float const <function-_at_math_c__c_distance_sq_Cf4_Cf4>` 
+  *  :ref:`inv_distance (x:float4 const;y:float4 const) : float const <function-_at_math_c__c_inv_distance_Cf4_Cf4>` 
+  *  :ref:`inv_distance_sq (x:float4 const;y:float4 const) : float const <function-_at_math_c__c_inv_distance_sq_Cf4_Cf4>` 
+  *  :ref:`reflect (v:float3 const;n:float3 const) : float3 const <function-_at_math_c__c_reflect_Cf3_Cf3>` 
+  *  :ref:`reflect (v:float2 const;n:float2 const) : float2 const <function-_at_math_c__c_reflect_Cf2_Cf2>` 
+  *  :ref:`refract (v:float3 const;n:float3 const;nint:float const) : float3 const <function-_at_math_c__c_refract_Cf3_Cf3_Cf>` 
+  *  :ref:`refract (v:float2 const;n:float2 const;nint:float const) : float2 const <function-_at_math_c__c_refract_Cf2_Cf2_Cf>` 
 
 .. _function-_at_math_c__c_cross_Cf3_Cf3:
 
 .. das:function:: cross(x: float3 const; y: float3 const)
 
-cross returns float3
+cross returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3435,7 +3595,7 @@ cross returns float3
 
 .. das:function:: distance(x: float2 const; y: float2 const)
 
-distance returns float
+distance returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3452,7 +3612,7 @@ distance returns float
 
 .. das:function:: distance_sq(x: float2 const; y: float2 const)
 
-distance_sq returns float
+distance_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3469,7 +3629,7 @@ distance_sq returns float
 
 .. das:function:: inv_distance(x: float2 const; y: float2 const)
 
-inv_distance returns float
+inv_distance returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3486,7 +3646,7 @@ inv_distance returns float
 
 .. das:function:: inv_distance_sq(x: float2 const; y: float2 const)
 
-inv_distance_sq returns float
+inv_distance_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3503,7 +3663,7 @@ inv_distance_sq returns float
 
 .. das:function:: distance(x: float3 const; y: float3 const)
 
-distance returns float
+distance returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3520,7 +3680,7 @@ distance returns float
 
 .. das:function:: distance_sq(x: float3 const; y: float3 const)
 
-distance_sq returns float
+distance_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3537,7 +3697,7 @@ distance_sq returns float
 
 .. das:function:: inv_distance(x: float3 const; y: float3 const)
 
-inv_distance returns float
+inv_distance returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3554,7 +3714,7 @@ inv_distance returns float
 
 .. das:function:: inv_distance_sq(x: float3 const; y: float3 const)
 
-inv_distance_sq returns float
+inv_distance_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3571,7 +3731,7 @@ inv_distance_sq returns float
 
 .. das:function:: distance(x: float4 const; y: float4 const)
 
-distance returns float
+distance returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3588,7 +3748,7 @@ distance returns float
 
 .. das:function:: distance_sq(x: float4 const; y: float4 const)
 
-distance_sq returns float
+distance_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3605,7 +3765,7 @@ distance_sq returns float
 
 .. das:function:: inv_distance(x: float4 const; y: float4 const)
 
-inv_distance returns float
+inv_distance returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3622,7 +3782,7 @@ inv_distance returns float
 
 .. das:function:: inv_distance_sq(x: float4 const; y: float4 const)
 
-inv_distance_sq returns float
+inv_distance_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3639,7 +3799,7 @@ inv_distance_sq returns float
 
 .. das:function:: reflect(v: float3 const; n: float3 const)
 
-reflect returns float3
+reflect returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3659,7 +3819,7 @@ returns vector representing reflection of vector v from normal n same as ::
 
 .. das:function:: reflect(v: float2 const; n: float2 const)
 
-reflect returns float2
+reflect returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3679,7 +3839,7 @@ returns vector representing reflection of vector v from normal n same as ::
 
 .. das:function:: refract(v: float3 const; n: float3 const; nint: float const)
 
-refract returns float3
+refract returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3706,7 +3866,7 @@ returns vector representing refractoin of vector v from normal n same as ::
 
 .. das:function:: refract(v: float2 const; n: float2 const; nint: float const)
 
-refract returns float2
+refract returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3733,33 +3893,33 @@ returns vector representing refractoin of vector v from normal n same as ::
 float2, float3, float4
 ++++++++++++++++++++++
 
-  *  :ref:`dot (x:float2 const;y:float2 const) : float <function-_at_math_c__c_dot_Cf2_Cf2>` 
-  *  :ref:`dot (x:float3 const;y:float3 const) : float <function-_at_math_c__c_dot_Cf3_Cf3>` 
-  *  :ref:`dot (x:float4 const;y:float4 const) : float <function-_at_math_c__c_dot_Cf4_Cf4>` 
-  *  :ref:`fast_normalize (x:float2 const) : float2 <function-_at_math_c__c_fast_normalize_Cf2>` 
-  *  :ref:`fast_normalize (x:float3 const) : float3 <function-_at_math_c__c_fast_normalize_Cf3>` 
-  *  :ref:`fast_normalize (x:float4 const) : float4 <function-_at_math_c__c_fast_normalize_Cf4>` 
-  *  :ref:`normalize (x:float2 const) : float2 <function-_at_math_c__c_normalize_Cf2>` 
-  *  :ref:`normalize (x:float3 const) : float3 <function-_at_math_c__c_normalize_Cf3>` 
-  *  :ref:`normalize (x:float4 const) : float4 <function-_at_math_c__c_normalize_Cf4>` 
-  *  :ref:`length (x:float2 const) : float <function-_at_math_c__c_length_Cf2>` 
-  *  :ref:`length (x:float3 const) : float <function-_at_math_c__c_length_Cf3>` 
-  *  :ref:`length (x:float4 const) : float <function-_at_math_c__c_length_Cf4>` 
-  *  :ref:`inv_length (x:float2 const) : float <function-_at_math_c__c_inv_length_Cf2>` 
-  *  :ref:`inv_length (x:float3 const) : float <function-_at_math_c__c_inv_length_Cf3>` 
-  *  :ref:`inv_length (x:float4 const) : float <function-_at_math_c__c_inv_length_Cf4>` 
-  *  :ref:`inv_length_sq (x:float2 const) : float <function-_at_math_c__c_inv_length_sq_Cf2>` 
-  *  :ref:`inv_length_sq (x:float3 const) : float <function-_at_math_c__c_inv_length_sq_Cf3>` 
-  *  :ref:`inv_length_sq (x:float4 const) : float <function-_at_math_c__c_inv_length_sq_Cf4>` 
-  *  :ref:`length_sq (x:float2 const) : float <function-_at_math_c__c_length_sq_Cf2>` 
-  *  :ref:`length_sq (x:float3 const) : float <function-_at_math_c__c_length_sq_Cf3>` 
-  *  :ref:`length_sq (x:float4 const) : float <function-_at_math_c__c_length_sq_Cf4>` 
+  *  :ref:`dot (x:float2 const;y:float2 const) : float const <function-_at_math_c__c_dot_Cf2_Cf2>` 
+  *  :ref:`dot (x:float3 const;y:float3 const) : float const <function-_at_math_c__c_dot_Cf3_Cf3>` 
+  *  :ref:`dot (x:float4 const;y:float4 const) : float const <function-_at_math_c__c_dot_Cf4_Cf4>` 
+  *  :ref:`fast_normalize (x:float2 const) : float2 const <function-_at_math_c__c_fast_normalize_Cf2>` 
+  *  :ref:`fast_normalize (x:float3 const) : float3 const <function-_at_math_c__c_fast_normalize_Cf3>` 
+  *  :ref:`fast_normalize (x:float4 const) : float4 const <function-_at_math_c__c_fast_normalize_Cf4>` 
+  *  :ref:`normalize (x:float2 const) : float2 const <function-_at_math_c__c_normalize_Cf2>` 
+  *  :ref:`normalize (x:float3 const) : float3 const <function-_at_math_c__c_normalize_Cf3>` 
+  *  :ref:`normalize (x:float4 const) : float4 const <function-_at_math_c__c_normalize_Cf4>` 
+  *  :ref:`length (x:float2 const) : float const <function-_at_math_c__c_length_Cf2>` 
+  *  :ref:`length (x:float3 const) : float const <function-_at_math_c__c_length_Cf3>` 
+  *  :ref:`length (x:float4 const) : float const <function-_at_math_c__c_length_Cf4>` 
+  *  :ref:`inv_length (x:float2 const) : float const <function-_at_math_c__c_inv_length_Cf2>` 
+  *  :ref:`inv_length (x:float3 const) : float const <function-_at_math_c__c_inv_length_Cf3>` 
+  *  :ref:`inv_length (x:float4 const) : float const <function-_at_math_c__c_inv_length_Cf4>` 
+  *  :ref:`inv_length_sq (x:float2 const) : float const <function-_at_math_c__c_inv_length_sq_Cf2>` 
+  *  :ref:`inv_length_sq (x:float3 const) : float const <function-_at_math_c__c_inv_length_sq_Cf3>` 
+  *  :ref:`inv_length_sq (x:float4 const) : float const <function-_at_math_c__c_inv_length_sq_Cf4>` 
+  *  :ref:`length_sq (x:float2 const) : float const <function-_at_math_c__c_length_sq_Cf2>` 
+  *  :ref:`length_sq (x:float3 const) : float const <function-_at_math_c__c_length_sq_Cf3>` 
+  *  :ref:`length_sq (x:float4 const) : float const <function-_at_math_c__c_length_sq_Cf4>` 
 
 .. _function-_at_math_c__c_dot_Cf2_Cf2:
 
 .. das:function:: dot(x: float2 const; y: float2 const)
 
-dot returns float
+dot returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3776,7 +3936,7 @@ dot returns float
 
 .. das:function:: dot(x: float3 const; y: float3 const)
 
-dot returns float
+dot returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3793,7 +3953,7 @@ dot returns float
 
 .. das:function:: dot(x: float4 const; y: float4 const)
 
-dot returns float
+dot returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3810,7 +3970,7 @@ dot returns float
 
 .. das:function:: fast_normalize(x: float2 const)
 
-fast_normalize returns float2
+fast_normalize returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3825,7 +3985,7 @@ fast_normalize returns float2
 
 .. das:function:: fast_normalize(x: float3 const)
 
-fast_normalize returns float3
+fast_normalize returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3840,7 +4000,7 @@ fast_normalize returns float3
 
 .. das:function:: fast_normalize(x: float4 const)
 
-fast_normalize returns float4
+fast_normalize returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3855,7 +4015,7 @@ fast_normalize returns float4
 
 .. das:function:: normalize(x: float2 const)
 
-normalize returns float2
+normalize returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3870,7 +4030,7 @@ normalize returns float2
 
 .. das:function:: normalize(x: float3 const)
 
-normalize returns float3
+normalize returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3885,7 +4045,7 @@ normalize returns float3
 
 .. das:function:: normalize(x: float4 const)
 
-normalize returns float4
+normalize returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -3900,7 +4060,7 @@ normalize returns float4
 
 .. das:function:: length(x: float2 const)
 
-length returns float
+length returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3915,7 +4075,7 @@ length returns float
 
 .. das:function:: length(x: float3 const)
 
-length returns float
+length returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3930,7 +4090,7 @@ length returns float
 
 .. das:function:: length(x: float4 const)
 
-length returns float
+length returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3945,7 +4105,7 @@ length returns float
 
 .. das:function:: inv_length(x: float2 const)
 
-inv_length returns float
+inv_length returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3960,7 +4120,7 @@ inv_length returns float
 
 .. das:function:: inv_length(x: float3 const)
 
-inv_length returns float
+inv_length returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3975,7 +4135,7 @@ inv_length returns float
 
 .. das:function:: inv_length(x: float4 const)
 
-inv_length returns float
+inv_length returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -3990,7 +4150,7 @@ inv_length returns float
 
 .. das:function:: inv_length_sq(x: float2 const)
 
-inv_length_sq returns float
+inv_length_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4005,7 +4165,7 @@ inv_length_sq returns float
 
 .. das:function:: inv_length_sq(x: float3 const)
 
-inv_length_sq returns float
+inv_length_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4020,7 +4180,7 @@ inv_length_sq returns float
 
 .. das:function:: inv_length_sq(x: float4 const)
 
-inv_length_sq returns float
+inv_length_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4035,7 +4195,7 @@ inv_length_sq returns float
 
 .. das:function:: length_sq(x: float2 const)
 
-length_sq returns float
+length_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4050,7 +4210,7 @@ length_sq returns float
 
 .. das:function:: length_sq(x: float3 const)
 
-length_sq returns float
+length_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4065,7 +4225,7 @@ length_sq returns float
 
 .. das:function:: length_sq(x: float4 const)
 
-length_sq returns float
+length_sq returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4080,16 +4240,16 @@ length_sq returns float
 Noise functions
 +++++++++++++++
 
-  *  :ref:`uint32_hash (seed:uint const) : uint <function-_at_math_c__c_uint32_hash_Cu>` 
-  *  :ref:`uint_noise_1D (position:int const;seed:uint const) : uint <function-_at_math_c__c_uint_noise_1D_Ci_Cu>` 
-  *  :ref:`uint_noise_2D (position:int2 const;seed:uint const) : uint <function-_at_math_c__c_uint_noise_2D_Ci2_Cu>` 
-  *  :ref:`uint_noise_3D (position:int3 const;seed:uint const) : uint <function-_at_math_c__c_uint_noise_3D_Ci3_Cu>` 
+  *  :ref:`uint32_hash (seed:uint const) : uint const <function-_at_math_c__c_uint32_hash_Cu>` 
+  *  :ref:`uint_noise_1D (position:int const;seed:uint const) : uint const <function-_at_math_c__c_uint_noise_1D_Ci_Cu>` 
+  *  :ref:`uint_noise_2D (position:int2 const;seed:uint const) : uint const <function-_at_math_c__c_uint_noise_2D_Ci2_Cu>` 
+  *  :ref:`uint_noise_3D (position:int3 const;seed:uint const) : uint const <function-_at_math_c__c_uint_noise_3D_Ci3_Cu>` 
 
 .. _function-_at_math_c__c_uint32_hash_Cu:
 
 .. das:function:: uint32_hash(seed: uint const)
 
-uint32_hash returns uint
+uint32_hash returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -4104,7 +4264,7 @@ uint32_hash returns uint
 
 .. das:function:: uint_noise_1D(position: int const; seed: uint const)
 
-uint_noise_1D returns uint
+uint_noise_1D returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -4121,7 +4281,7 @@ uint_noise_1D returns uint
 
 .. das:function:: uint_noise_2D(position: int2 const; seed: uint const)
 
-uint_noise_2D returns uint
+uint_noise_2D returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -4138,7 +4298,7 @@ uint_noise_2D returns uint
 
 .. das:function:: uint_noise_3D(position: int3 const; seed: uint const)
 
-uint_noise_3D returns uint
+uint_noise_3D returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -4155,57 +4315,57 @@ uint_noise_3D returns uint
 lerp/mad/clamp
 ++++++++++++++
 
-  *  :ref:`mad (a:float const;b:float const;c:float const) : float <function-_at_math_c__c_mad_Cf_Cf_Cf>` 
-  *  :ref:`lerp (a:float const;b:float const;t:float const) : float <function-_at_math_c__c_lerp_Cf_Cf_Cf>` 
-  *  :ref:`mad (a:float2 const;b:float2 const;c:float2 const) : float2 <function-_at_math_c__c_mad_Cf2_Cf2_Cf2>` 
-  *  :ref:`lerp (a:float2 const;b:float2 const;t:float2 const) : float2 <function-_at_math_c__c_lerp_Cf2_Cf2_Cf2>` 
-  *  :ref:`mad (a:float3 const;b:float3 const;c:float3 const) : float3 <function-_at_math_c__c_mad_Cf3_Cf3_Cf3>` 
-  *  :ref:`lerp (a:float3 const;b:float3 const;t:float3 const) : float3 <function-_at_math_c__c_lerp_Cf3_Cf3_Cf3>` 
-  *  :ref:`mad (a:float4 const;b:float4 const;c:float4 const) : float4 <function-_at_math_c__c_mad_Cf4_Cf4_Cf4>` 
-  *  :ref:`lerp (a:float4 const;b:float4 const;t:float4 const) : float4 <function-_at_math_c__c_lerp_Cf4_Cf4_Cf4>` 
-  *  :ref:`mad (a:float2 const;b:float const;c:float2 const) : float2 <function-_at_math_c__c_mad_Cf2_Cf_Cf2>` 
-  *  :ref:`mad (a:float3 const;b:float const;c:float3 const) : float3 <function-_at_math_c__c_mad_Cf3_Cf_Cf3>` 
-  *  :ref:`mad (a:float4 const;b:float const;c:float4 const) : float4 <function-_at_math_c__c_mad_Cf4_Cf_Cf4>` 
-  *  :ref:`mad (a:int const;b:int const;c:int const) : int <function-_at_math_c__c_mad_Ci_Ci_Ci>` 
-  *  :ref:`mad (a:int2 const;b:int2 const;c:int2 const) : int2 <function-_at_math_c__c_mad_Ci2_Ci2_Ci2>` 
-  *  :ref:`mad (a:int3 const;b:int3 const;c:int3 const) : int3 <function-_at_math_c__c_mad_Ci3_Ci3_Ci3>` 
-  *  :ref:`mad (a:int4 const;b:int4 const;c:int4 const) : int4 <function-_at_math_c__c_mad_Ci4_Ci4_Ci4>` 
-  *  :ref:`mad (a:int2 const;b:int const;c:int2 const) : int2 <function-_at_math_c__c_mad_Ci2_Ci_Ci2>` 
-  *  :ref:`mad (a:int3 const;b:int const;c:int3 const) : int3 <function-_at_math_c__c_mad_Ci3_Ci_Ci3>` 
-  *  :ref:`mad (a:int4 const;b:int const;c:int4 const) : int4 <function-_at_math_c__c_mad_Ci4_Ci_Ci4>` 
-  *  :ref:`mad (a:uint const;b:uint const;c:uint const) : uint <function-_at_math_c__c_mad_Cu_Cu_Cu>` 
-  *  :ref:`mad (a:uint2 const;b:uint2 const;c:uint2 const) : uint2 <function-_at_math_c__c_mad_Cu2_Cu2_Cu2>` 
-  *  :ref:`mad (a:uint3 const;b:uint3 const;c:uint3 const) : uint3 <function-_at_math_c__c_mad_Cu3_Cu3_Cu3>` 
-  *  :ref:`mad (a:uint4 const;b:uint4 const;c:uint4 const) : uint4 <function-_at_math_c__c_mad_Cu4_Cu4_Cu4>` 
-  *  :ref:`mad (a:uint2 const;b:uint const;c:uint2 const) : uint2 <function-_at_math_c__c_mad_Cu2_Cu_Cu2>` 
-  *  :ref:`mad (a:uint3 const;b:uint const;c:uint3 const) : uint3 <function-_at_math_c__c_mad_Cu3_Cu_Cu3>` 
-  *  :ref:`mad (a:uint4 const;b:uint const;c:uint4 const) : uint4 <function-_at_math_c__c_mad_Cu4_Cu_Cu4>` 
-  *  :ref:`mad (a:double const;b:double const;c:double const) : double <function-_at_math_c__c_mad_Cd_Cd_Cd>` 
-  *  :ref:`lerp (a:double const;b:double const;t:double const) : double <function-_at_math_c__c_lerp_Cd_Cd_Cd>` 
-  *  :ref:`clamp (t:int const;a:int const;b:int const) : int <function-_at_math_c__c_clamp_Ci_Ci_Ci>` 
-  *  :ref:`clamp (t:int2 const;a:int2 const;b:int2 const) : int2 <function-_at_math_c__c_clamp_Ci2_Ci2_Ci2>` 
-  *  :ref:`clamp (t:int3 const;a:int3 const;b:int3 const) : int3 <function-_at_math_c__c_clamp_Ci3_Ci3_Ci3>` 
-  *  :ref:`clamp (t:int4 const;a:int4 const;b:int4 const) : int4 <function-_at_math_c__c_clamp_Ci4_Ci4_Ci4>` 
-  *  :ref:`clamp (t:uint const;a:uint const;b:uint const) : uint <function-_at_math_c__c_clamp_Cu_Cu_Cu>` 
-  *  :ref:`clamp (t:uint2 const;a:uint2 const;b:uint2 const) : uint2 <function-_at_math_c__c_clamp_Cu2_Cu2_Cu2>` 
-  *  :ref:`clamp (t:uint3 const;a:uint3 const;b:uint3 const) : uint3 <function-_at_math_c__c_clamp_Cu3_Cu3_Cu3>` 
-  *  :ref:`clamp (t:uint4 const;a:uint4 const;b:uint4 const) : uint4 <function-_at_math_c__c_clamp_Cu4_Cu4_Cu4>` 
-  *  :ref:`clamp (t:float const;a:float const;b:float const) : float <function-_at_math_c__c_clamp_Cf_Cf_Cf>` 
-  *  :ref:`clamp (t:float2 const;a:float2 const;b:float2 const) : float2 <function-_at_math_c__c_clamp_Cf2_Cf2_Cf2>` 
-  *  :ref:`clamp (t:float3 const;a:float3 const;b:float3 const) : float3 <function-_at_math_c__c_clamp_Cf3_Cf3_Cf3>` 
-  *  :ref:`clamp (t:float4 const;a:float4 const;b:float4 const) : float4 <function-_at_math_c__c_clamp_Cf4_Cf4_Cf4>` 
-  *  :ref:`clamp (t:double const;a:double const;b:double const) : double <function-_at_math_c__c_clamp_Cd_Cd_Cd>` 
-  *  :ref:`clamp (t:int64 const;a:int64 const;b:int64 const) : int64 <function-_at_math_c__c_clamp_Ci64_Ci64_Ci64>` 
-  *  :ref:`clamp (t:uint64 const;a:uint64 const;b:uint64 const) : uint64 <function-_at_math_c__c_clamp_Cu64_Cu64_Cu64>` 
-  *  :ref:`lerp (a:float2 const;b:float2 const;t:float const) : float2 <function-_at_math_c__c_lerp_Cf2_Cf2_Cf>` 
-  *  :ref:`lerp (a:float3 const;b:float3 const;t:float const) : float3 <function-_at_math_c__c_lerp_Cf3_Cf3_Cf>` 
-  *  :ref:`lerp (a:float4 const;b:float4 const;t:float const) : float4 <function-_at_math_c__c_lerp_Cf4_Cf4_Cf>` 
+  *  :ref:`mad (a:float const;b:float const;c:float const) : float const <function-_at_math_c__c_mad_Cf_Cf_Cf>` 
+  *  :ref:`lerp (a:float const;b:float const;t:float const) : float const <function-_at_math_c__c_lerp_Cf_Cf_Cf>` 
+  *  :ref:`mad (a:float2 const;b:float2 const;c:float2 const) : float2 const <function-_at_math_c__c_mad_Cf2_Cf2_Cf2>` 
+  *  :ref:`lerp (a:float2 const;b:float2 const;t:float2 const) : float2 const <function-_at_math_c__c_lerp_Cf2_Cf2_Cf2>` 
+  *  :ref:`mad (a:float3 const;b:float3 const;c:float3 const) : float3 const <function-_at_math_c__c_mad_Cf3_Cf3_Cf3>` 
+  *  :ref:`lerp (a:float3 const;b:float3 const;t:float3 const) : float3 const <function-_at_math_c__c_lerp_Cf3_Cf3_Cf3>` 
+  *  :ref:`mad (a:float4 const;b:float4 const;c:float4 const) : float4 const <function-_at_math_c__c_mad_Cf4_Cf4_Cf4>` 
+  *  :ref:`lerp (a:float4 const;b:float4 const;t:float4 const) : float4 const <function-_at_math_c__c_lerp_Cf4_Cf4_Cf4>` 
+  *  :ref:`mad (a:float2 const;b:float const;c:float2 const) : float2 const <function-_at_math_c__c_mad_Cf2_Cf_Cf2>` 
+  *  :ref:`mad (a:float3 const;b:float const;c:float3 const) : float3 const <function-_at_math_c__c_mad_Cf3_Cf_Cf3>` 
+  *  :ref:`mad (a:float4 const;b:float const;c:float4 const) : float4 const <function-_at_math_c__c_mad_Cf4_Cf_Cf4>` 
+  *  :ref:`mad (a:int const;b:int const;c:int const) : int const <function-_at_math_c__c_mad_Ci_Ci_Ci>` 
+  *  :ref:`mad (a:int2 const;b:int2 const;c:int2 const) : int2 const <function-_at_math_c__c_mad_Ci2_Ci2_Ci2>` 
+  *  :ref:`mad (a:int3 const;b:int3 const;c:int3 const) : int3 const <function-_at_math_c__c_mad_Ci3_Ci3_Ci3>` 
+  *  :ref:`mad (a:int4 const;b:int4 const;c:int4 const) : int4 const <function-_at_math_c__c_mad_Ci4_Ci4_Ci4>` 
+  *  :ref:`mad (a:int2 const;b:int const;c:int2 const) : int2 const <function-_at_math_c__c_mad_Ci2_Ci_Ci2>` 
+  *  :ref:`mad (a:int3 const;b:int const;c:int3 const) : int3 const <function-_at_math_c__c_mad_Ci3_Ci_Ci3>` 
+  *  :ref:`mad (a:int4 const;b:int const;c:int4 const) : int4 const <function-_at_math_c__c_mad_Ci4_Ci_Ci4>` 
+  *  :ref:`mad (a:uint const;b:uint const;c:uint const) : uint const <function-_at_math_c__c_mad_Cu_Cu_Cu>` 
+  *  :ref:`mad (a:uint2 const;b:uint2 const;c:uint2 const) : uint2 const <function-_at_math_c__c_mad_Cu2_Cu2_Cu2>` 
+  *  :ref:`mad (a:uint3 const;b:uint3 const;c:uint3 const) : uint3 const <function-_at_math_c__c_mad_Cu3_Cu3_Cu3>` 
+  *  :ref:`mad (a:uint4 const;b:uint4 const;c:uint4 const) : uint4 const <function-_at_math_c__c_mad_Cu4_Cu4_Cu4>` 
+  *  :ref:`mad (a:uint2 const;b:uint const;c:uint2 const) : uint2 const <function-_at_math_c__c_mad_Cu2_Cu_Cu2>` 
+  *  :ref:`mad (a:uint3 const;b:uint const;c:uint3 const) : uint3 const <function-_at_math_c__c_mad_Cu3_Cu_Cu3>` 
+  *  :ref:`mad (a:uint4 const;b:uint const;c:uint4 const) : uint4 const <function-_at_math_c__c_mad_Cu4_Cu_Cu4>` 
+  *  :ref:`mad (a:double const;b:double const;c:double const) : double const <function-_at_math_c__c_mad_Cd_Cd_Cd>` 
+  *  :ref:`lerp (a:double const;b:double const;t:double const) : double const <function-_at_math_c__c_lerp_Cd_Cd_Cd>` 
+  *  :ref:`clamp (t:int const;a:int const;b:int const) : int const <function-_at_math_c__c_clamp_Ci_Ci_Ci>` 
+  *  :ref:`clamp (t:int2 const;a:int2 const;b:int2 const) : int2 const <function-_at_math_c__c_clamp_Ci2_Ci2_Ci2>` 
+  *  :ref:`clamp (t:int3 const;a:int3 const;b:int3 const) : int3 const <function-_at_math_c__c_clamp_Ci3_Ci3_Ci3>` 
+  *  :ref:`clamp (t:int4 const;a:int4 const;b:int4 const) : int4 const <function-_at_math_c__c_clamp_Ci4_Ci4_Ci4>` 
+  *  :ref:`clamp (t:uint const;a:uint const;b:uint const) : uint const <function-_at_math_c__c_clamp_Cu_Cu_Cu>` 
+  *  :ref:`clamp (t:uint2 const;a:uint2 const;b:uint2 const) : uint2 const <function-_at_math_c__c_clamp_Cu2_Cu2_Cu2>` 
+  *  :ref:`clamp (t:uint3 const;a:uint3 const;b:uint3 const) : uint3 const <function-_at_math_c__c_clamp_Cu3_Cu3_Cu3>` 
+  *  :ref:`clamp (t:uint4 const;a:uint4 const;b:uint4 const) : uint4 const <function-_at_math_c__c_clamp_Cu4_Cu4_Cu4>` 
+  *  :ref:`clamp (t:float const;a:float const;b:float const) : float const <function-_at_math_c__c_clamp_Cf_Cf_Cf>` 
+  *  :ref:`clamp (t:float2 const;a:float2 const;b:float2 const) : float2 const <function-_at_math_c__c_clamp_Cf2_Cf2_Cf2>` 
+  *  :ref:`clamp (t:float3 const;a:float3 const;b:float3 const) : float3 const <function-_at_math_c__c_clamp_Cf3_Cf3_Cf3>` 
+  *  :ref:`clamp (t:float4 const;a:float4 const;b:float4 const) : float4 const <function-_at_math_c__c_clamp_Cf4_Cf4_Cf4>` 
+  *  :ref:`clamp (t:double const;a:double const;b:double const) : double const <function-_at_math_c__c_clamp_Cd_Cd_Cd>` 
+  *  :ref:`clamp (t:int64 const;a:int64 const;b:int64 const) : int64 const <function-_at_math_c__c_clamp_Ci64_Ci64_Ci64>` 
+  *  :ref:`clamp (t:uint64 const;a:uint64 const;b:uint64 const) : uint64 const <function-_at_math_c__c_clamp_Cu64_Cu64_Cu64>` 
+  *  :ref:`lerp (a:float2 const;b:float2 const;t:float const) : float2 const <function-_at_math_c__c_lerp_Cf2_Cf2_Cf>` 
+  *  :ref:`lerp (a:float3 const;b:float3 const;t:float const) : float3 const <function-_at_math_c__c_lerp_Cf3_Cf3_Cf>` 
+  *  :ref:`lerp (a:float4 const;b:float4 const;t:float const) : float4 const <function-_at_math_c__c_lerp_Cf4_Cf4_Cf>` 
 
 .. _function-_at_math_c__c_mad_Cf_Cf_Cf:
 
 .. das:function:: mad(a: float const; b: float const; c: float const)
 
-mad returns float
+mad returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4224,7 +4384,7 @@ mad returns float
 
 .. das:function:: lerp(a: float const; b: float const; t: float const)
 
-lerp returns float
+lerp returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4243,7 +4403,7 @@ lerp returns float
 
 .. das:function:: mad(a: float2 const; b: float2 const; c: float2 const)
 
-mad returns float2
+mad returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4262,7 +4422,7 @@ mad returns float2
 
 .. das:function:: lerp(a: float2 const; b: float2 const; t: float2 const)
 
-lerp returns float2
+lerp returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4281,7 +4441,7 @@ lerp returns float2
 
 .. das:function:: mad(a: float3 const; b: float3 const; c: float3 const)
 
-mad returns float3
+mad returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4300,7 +4460,7 @@ mad returns float3
 
 .. das:function:: lerp(a: float3 const; b: float3 const; t: float3 const)
 
-lerp returns float3
+lerp returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4319,7 +4479,7 @@ lerp returns float3
 
 .. das:function:: mad(a: float4 const; b: float4 const; c: float4 const)
 
-mad returns float4
+mad returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4338,7 +4498,7 @@ mad returns float4
 
 .. das:function:: lerp(a: float4 const; b: float4 const; t: float4 const)
 
-lerp returns float4
+lerp returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4357,7 +4517,7 @@ lerp returns float4
 
 .. das:function:: mad(a: float2 const; b: float const; c: float2 const)
 
-mad returns float2
+mad returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4376,7 +4536,7 @@ mad returns float2
 
 .. das:function:: mad(a: float3 const; b: float const; c: float3 const)
 
-mad returns float3
+mad returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4395,7 +4555,7 @@ mad returns float3
 
 .. das:function:: mad(a: float4 const; b: float const; c: float4 const)
 
-mad returns float4
+mad returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4414,7 +4574,7 @@ mad returns float4
 
 .. das:function:: mad(a: int const; b: int const; c: int const)
 
-mad returns int
+mad returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -4433,7 +4593,7 @@ mad returns int
 
 .. das:function:: mad(a: int2 const; b: int2 const; c: int2 const)
 
-mad returns int2
+mad returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4452,7 +4612,7 @@ mad returns int2
 
 .. das:function:: mad(a: int3 const; b: int3 const; c: int3 const)
 
-mad returns int3
+mad returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4471,7 +4631,7 @@ mad returns int3
 
 .. das:function:: mad(a: int4 const; b: int4 const; c: int4 const)
 
-mad returns int4
+mad returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4490,7 +4650,7 @@ mad returns int4
 
 .. das:function:: mad(a: int2 const; b: int const; c: int2 const)
 
-mad returns int2
+mad returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4509,7 +4669,7 @@ mad returns int2
 
 .. das:function:: mad(a: int3 const; b: int const; c: int3 const)
 
-mad returns int3
+mad returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4528,7 +4688,7 @@ mad returns int3
 
 .. das:function:: mad(a: int4 const; b: int const; c: int4 const)
 
-mad returns int4
+mad returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4547,7 +4707,7 @@ mad returns int4
 
 .. das:function:: mad(a: uint const; b: uint const; c: uint const)
 
-mad returns uint
+mad returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -4566,7 +4726,7 @@ mad returns uint
 
 .. das:function:: mad(a: uint2 const; b: uint2 const; c: uint2 const)
 
-mad returns uint2
+mad returns uint2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4585,7 +4745,7 @@ mad returns uint2
 
 .. das:function:: mad(a: uint3 const; b: uint3 const; c: uint3 const)
 
-mad returns uint3
+mad returns uint3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4604,7 +4764,7 @@ mad returns uint3
 
 .. das:function:: mad(a: uint4 const; b: uint4 const; c: uint4 const)
 
-mad returns uint4
+mad returns uint4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4623,7 +4783,7 @@ mad returns uint4
 
 .. das:function:: mad(a: uint2 const; b: uint const; c: uint2 const)
 
-mad returns uint2
+mad returns uint2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4642,7 +4802,7 @@ mad returns uint2
 
 .. das:function:: mad(a: uint3 const; b: uint const; c: uint3 const)
 
-mad returns uint3
+mad returns uint3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4661,7 +4821,7 @@ mad returns uint3
 
 .. das:function:: mad(a: uint4 const; b: uint const; c: uint4 const)
 
-mad returns uint4
+mad returns uint4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4680,7 +4840,7 @@ mad returns uint4
 
 .. das:function:: mad(a: double const; b: double const; c: double const)
 
-mad returns double
+mad returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -4699,7 +4859,7 @@ mad returns double
 
 .. das:function:: lerp(a: double const; b: double const; t: double const)
 
-lerp returns double
+lerp returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -4718,7 +4878,7 @@ lerp returns double
 
 .. das:function:: clamp(t: int const; a: int const; b: int const)
 
-clamp returns int
+clamp returns int const
 
 +--------+-------------+
 +argument+argument type+
@@ -4737,7 +4897,7 @@ clamp returns int
 
 .. das:function:: clamp(t: int2 const; a: int2 const; b: int2 const)
 
-clamp returns int2
+clamp returns int2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4756,7 +4916,7 @@ clamp returns int2
 
 .. das:function:: clamp(t: int3 const; a: int3 const; b: int3 const)
 
-clamp returns int3
+clamp returns int3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4775,7 +4935,7 @@ clamp returns int3
 
 .. das:function:: clamp(t: int4 const; a: int4 const; b: int4 const)
 
-clamp returns int4
+clamp returns int4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4794,7 +4954,7 @@ clamp returns int4
 
 .. das:function:: clamp(t: uint const; a: uint const; b: uint const)
 
-clamp returns uint
+clamp returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -4813,7 +4973,7 @@ clamp returns uint
 
 .. das:function:: clamp(t: uint2 const; a: uint2 const; b: uint2 const)
 
-clamp returns uint2
+clamp returns uint2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4832,7 +4992,7 @@ clamp returns uint2
 
 .. das:function:: clamp(t: uint3 const; a: uint3 const; b: uint3 const)
 
-clamp returns uint3
+clamp returns uint3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4851,7 +5011,7 @@ clamp returns uint3
 
 .. das:function:: clamp(t: uint4 const; a: uint4 const; b: uint4 const)
 
-clamp returns uint4
+clamp returns uint4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4870,7 +5030,7 @@ clamp returns uint4
 
 .. das:function:: clamp(t: float const; a: float const; b: float const)
 
-clamp returns float
+clamp returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -4889,7 +5049,7 @@ clamp returns float
 
 .. das:function:: clamp(t: float2 const; a: float2 const; b: float2 const)
 
-clamp returns float2
+clamp returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4908,7 +5068,7 @@ clamp returns float2
 
 .. das:function:: clamp(t: float3 const; a: float3 const; b: float3 const)
 
-clamp returns float3
+clamp returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4927,7 +5087,7 @@ clamp returns float3
 
 .. das:function:: clamp(t: float4 const; a: float4 const; b: float4 const)
 
-clamp returns float4
+clamp returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4946,7 +5106,7 @@ clamp returns float4
 
 .. das:function:: clamp(t: double const; a: double const; b: double const)
 
-clamp returns double
+clamp returns double const
 
 +--------+-------------+
 +argument+argument type+
@@ -4965,7 +5125,7 @@ clamp returns double
 
 .. das:function:: clamp(t: int64 const; a: int64 const; b: int64 const)
 
-clamp returns int64
+clamp returns int64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -4984,7 +5144,7 @@ clamp returns int64
 
 .. das:function:: clamp(t: uint64 const; a: uint64 const; b: uint64 const)
 
-clamp returns uint64
+clamp returns uint64 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5003,7 +5163,7 @@ clamp returns uint64
 
 .. das:function:: lerp(a: float2 const; b: float2 const; t: float const)
 
-lerp returns float2
+lerp returns float2 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5022,7 +5182,7 @@ lerp returns float2
 
 .. das:function:: lerp(a: float3 const; b: float3 const; t: float const)
 
-lerp returns float3
+lerp returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5041,7 +5201,7 @@ lerp returns float3
 
 .. das:function:: lerp(a: float4 const; b: float4 const; t: float const)
 
-lerp returns float4
+lerp returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5061,17 +5221,17 @@ Matrix operations
 +++++++++++++++++
 
   *  :ref:`* (x:math::float4x4 const implicit;y:math::float4x4 const implicit) : math::float4x4 <function-_at_math_c__c_*_CIH_ls_math_c__c_float4x4_gr__CIH_ls_math_c__c_float4x4_gr_>` 
-  *  :ref:`== (x:math::float4x4 const implicit;y:math::float4x4 const implicit) : bool <function-_at_math_c__c__eq__eq__CIH_ls_math_c__c_float4x4_gr__CIH_ls_math_c__c_float4x4_gr_>` 
-  *  :ref:`\!= (x:math::float4x4 const implicit;y:math::float4x4 const implicit) : bool <function-_at_math_c__c__ex__eq__CIH_ls_math_c__c_float4x4_gr__CIH_ls_math_c__c_float4x4_gr_>` 
+  *  :ref:`== (x:math::float4x4 const implicit;y:math::float4x4 const implicit) : bool const <function-_at_math_c__c__eq__eq__CIH_ls_math_c__c_float4x4_gr__CIH_ls_math_c__c_float4x4_gr_>` 
+  *  :ref:`\!= (x:math::float4x4 const implicit;y:math::float4x4 const implicit) : bool const <function-_at_math_c__c__ex__eq__CIH_ls_math_c__c_float4x4_gr__CIH_ls_math_c__c_float4x4_gr_>` 
   *  :ref:`* (x:math::float3x4 const implicit;y:math::float3x4 const implicit) : math::float3x4 <function-_at_math_c__c_*_CIH_ls_math_c__c_float3x4_gr__CIH_ls_math_c__c_float3x4_gr_>` 
-  *  :ref:`* (x:math::float3x4 const implicit;y:float3 const) : float3 <function-_at_math_c__c_*_CIH_ls_math_c__c_float3x4_gr__Cf3>` 
-  *  :ref:`* (x:math::float4x4 const implicit;y:float4 const) : float4 <function-_at_math_c__c_*_CIH_ls_math_c__c_float4x4_gr__Cf4>` 
-  *  :ref:`== (x:math::float3x4 const implicit;y:math::float3x4 const implicit) : bool <function-_at_math_c__c__eq__eq__CIH_ls_math_c__c_float3x4_gr__CIH_ls_math_c__c_float3x4_gr_>` 
-  *  :ref:`\!= (x:math::float3x4 const implicit;y:math::float3x4 const implicit) : bool <function-_at_math_c__c__ex__eq__CIH_ls_math_c__c_float3x4_gr__CIH_ls_math_c__c_float3x4_gr_>` 
+  *  :ref:`* (x:math::float3x4 const implicit;y:float3 const) : float3 const <function-_at_math_c__c_*_CIH_ls_math_c__c_float3x4_gr__Cf3>` 
+  *  :ref:`* (x:math::float4x4 const implicit;y:float4 const) : float4 const <function-_at_math_c__c_*_CIH_ls_math_c__c_float4x4_gr__Cf4>` 
+  *  :ref:`== (x:math::float3x4 const implicit;y:math::float3x4 const implicit) : bool const <function-_at_math_c__c__eq__eq__CIH_ls_math_c__c_float3x4_gr__CIH_ls_math_c__c_float3x4_gr_>` 
+  *  :ref:`\!= (x:math::float3x4 const implicit;y:math::float3x4 const implicit) : bool const <function-_at_math_c__c__ex__eq__CIH_ls_math_c__c_float3x4_gr__CIH_ls_math_c__c_float3x4_gr_>` 
   *  :ref:`* (x:math::float3x3 const implicit;y:math::float3x3 const implicit) : math::float3x3 <function-_at_math_c__c_*_CIH_ls_math_c__c_float3x3_gr__CIH_ls_math_c__c_float3x3_gr_>` 
-  *  :ref:`* (x:math::float3x3 const implicit;y:float3 const) : float3 <function-_at_math_c__c_*_CIH_ls_math_c__c_float3x3_gr__Cf3>` 
-  *  :ref:`== (x:math::float3x3 const implicit;y:math::float3x3 const implicit) : bool <function-_at_math_c__c__eq__eq__CIH_ls_math_c__c_float3x3_gr__CIH_ls_math_c__c_float3x3_gr_>` 
-  *  :ref:`\!= (x:math::float3x3 const implicit;y:math::float3x3 const implicit) : bool <function-_at_math_c__c__ex__eq__CIH_ls_math_c__c_float3x3_gr__CIH_ls_math_c__c_float3x3_gr_>` 
+  *  :ref:`* (x:math::float3x3 const implicit;y:float3 const) : float3 const <function-_at_math_c__c_*_CIH_ls_math_c__c_float3x3_gr__Cf3>` 
+  *  :ref:`== (x:math::float3x3 const implicit;y:math::float3x3 const implicit) : bool const <function-_at_math_c__c__eq__eq__CIH_ls_math_c__c_float3x3_gr__CIH_ls_math_c__c_float3x3_gr_>` 
+  *  :ref:`\!= (x:math::float3x3 const implicit;y:math::float3x3 const implicit) : bool const <function-_at_math_c__c__ex__eq__CIH_ls_math_c__c_float3x3_gr__CIH_ls_math_c__c_float3x3_gr_>` 
 
 .. _function-_at_math_c__c_*_CIH_ls_math_c__c_float4x4_gr__CIH_ls_math_c__c_float4x4_gr_:
 
@@ -5094,7 +5254,7 @@ Matrix operations
 
 .. das:function:: operator ==(x: float4x4 const implicit; y: float4x4 const implicit)
 
-== returns bool
+== returns bool const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5111,7 +5271,7 @@ Matrix operations
 
 .. das:function:: operator !=(x: float4x4 const implicit; y: float4x4 const implicit)
 
-!= returns bool
+!= returns bool const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5145,7 +5305,7 @@ Matrix operations
 
 .. das:function:: operator *(x: float3x4 const implicit; y: float3 const)
 
-* returns float3
+* returns float3 const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5162,7 +5322,7 @@ Matrix operations
 
 .. das:function:: operator *(x: float4x4 const implicit; y: float4 const)
 
-* returns float4
+* returns float4 const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5179,7 +5339,7 @@ Matrix operations
 
 .. das:function:: operator ==(x: float3x4 const implicit; y: float3x4 const implicit)
 
-== returns bool
+== returns bool const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5196,7 +5356,7 @@ Matrix operations
 
 .. das:function:: operator !=(x: float3x4 const implicit; y: float3x4 const implicit)
 
-!= returns bool
+!= returns bool const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5230,7 +5390,7 @@ Matrix operations
 
 .. das:function:: operator *(x: float3x3 const implicit; y: float3 const)
 
-* returns float3
+* returns float3 const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5247,7 +5407,7 @@ Matrix operations
 
 .. das:function:: operator ==(x: float3x3 const implicit; y: float3x3 const implicit)
 
-== returns bool
+== returns bool const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5264,7 +5424,7 @@ Matrix operations
 
 .. das:function:: operator !=(x: float3x3 const implicit; y: float3x3 const implicit)
 
-!= returns bool
+!= returns bool const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5417,7 +5577,7 @@ Matrix manipulation
   *  :ref:`inverse (m:math::float4x4 const implicit) : math::float4x4 <function-_at_math_c__c_inverse_CIH_ls_math_c__c_float4x4_gr_>` 
   *  :ref:`orthonormal_inverse (m:math::float3x3 const implicit) : math::float3x3 <function-_at_math_c__c_orthonormal_inverse_CIH_ls_math_c__c_float3x3_gr_>` 
   *  :ref:`orthonormal_inverse (m:math::float3x4 const implicit) : math::float3x4 <function-_at_math_c__c_orthonormal_inverse_CIH_ls_math_c__c_float3x4_gr_>` 
-  *  :ref:`rotate (x:math::float3x4 const implicit;y:float3 const) : float3 <function-_at_math_c__c_rotate_CIH_ls_math_c__c_float3x4_gr__Cf3>` 
+  *  :ref:`rotate (x:math::float3x4 const implicit;y:float3 const) : float3 const <function-_at_math_c__c_rotate_CIH_ls_math_c__c_float3x4_gr__Cf3>` 
   *  :ref:`identity (x:math::float3x3 implicit) : void <function-_at_math_c__c_identity_IH_ls_math_c__c_float3x3_gr_>` 
 
 .. _function-_at_math_c__c_identity_IH_ls_math_c__c_float4x4_gr_:
@@ -5650,7 +5810,7 @@ orthonormal_inverse returns  :ref:`math::float3x4 <handle-math-float3x4>`
 
 .. das:function:: rotate(x: float3x4 const implicit; y: float3 const)
 
-rotate returns float3
+rotate returns float3 const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5680,17 +5840,17 @@ rotate returns float3
 Quaternion operations
 +++++++++++++++++++++
 
-  *  :ref:`quat_from_unit_arc (v0:float3 const;v1:float3 const) : float4 <function-_at_math_c__c_quat_from_unit_arc_Cf3_Cf3>` 
-  *  :ref:`quat_from_unit_vec_ang (v:float3 const;ang:float const) : float4 <function-_at_math_c__c_quat_from_unit_vec_ang_Cf3_Cf>` 
-  *  :ref:`quat_mul (q1:float4 const;q2:float4 const) : float4 <function-_at_math_c__c_quat_mul_Cf4_Cf4>` 
-  *  :ref:`quat_mul_vec (q:float4 const;v:float3 const) : float3 <function-_at_math_c__c_quat_mul_vec_Cf4_Cf3>` 
-  *  :ref:`quat_conjugate (q:float4 const) : float4 <function-_at_math_c__c_quat_conjugate_Cf4>` 
+  *  :ref:`quat_from_unit_arc (v0:float3 const;v1:float3 const) : float4 const <function-_at_math_c__c_quat_from_unit_arc_Cf3_Cf3>` 
+  *  :ref:`quat_from_unit_vec_ang (v:float3 const;ang:float const) : float4 const <function-_at_math_c__c_quat_from_unit_vec_ang_Cf3_Cf>` 
+  *  :ref:`quat_mul (q1:float4 const;q2:float4 const) : float4 const <function-_at_math_c__c_quat_mul_Cf4_Cf4>` 
+  *  :ref:`quat_mul_vec (q:float4 const;v:float3 const) : float3 const <function-_at_math_c__c_quat_mul_vec_Cf4_Cf3>` 
+  *  :ref:`quat_conjugate (q:float4 const) : float4 const <function-_at_math_c__c_quat_conjugate_Cf4>` 
 
 .. _function-_at_math_c__c_quat_from_unit_arc_Cf3_Cf3:
 
 .. das:function:: quat_from_unit_arc(v0: float3 const; v1: float3 const)
 
-quat_from_unit_arc returns float4
+quat_from_unit_arc returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5707,7 +5867,7 @@ quat_from_unit_arc returns float4
 
 .. das:function:: quat_from_unit_vec_ang(v: float3 const; ang: float const)
 
-quat_from_unit_vec_ang returns float4
+quat_from_unit_vec_ang returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5724,7 +5884,7 @@ quat_from_unit_vec_ang returns float4
 
 .. das:function:: quat_mul(q1: float4 const; q2: float4 const)
 
-quat_mul returns float4
+quat_mul returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5741,7 +5901,7 @@ quat_mul returns float4
 
 .. das:function:: quat_mul_vec(q: float4 const; v: float3 const)
 
-quat_mul_vec returns float3
+quat_mul_vec returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5758,7 +5918,7 @@ quat_mul_vec returns float3
 
 .. das:function:: quat_conjugate(q: float4 const)
 
-quat_conjugate returns float4
+quat_conjugate returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5773,14 +5933,14 @@ quat_conjugate returns float4
 Packing and unpacking
 +++++++++++++++++++++
 
-  *  :ref:`pack_float_to_byte (x:float4 const) : uint <function-_at_math_c__c_pack_float_to_byte_Cf4>` 
-  *  :ref:`unpack_byte_to_float (x:uint const) : float4 <function-_at_math_c__c_unpack_byte_to_float_Cu>` 
+  *  :ref:`pack_float_to_byte (x:float4 const) : uint const <function-_at_math_c__c_pack_float_to_byte_Cf4>` 
+  *  :ref:`unpack_byte_to_float (x:uint const) : float4 const <function-_at_math_c__c_unpack_byte_to_float_Cu>` 
 
 .. _function-_at_math_c__c_pack_float_to_byte_Cf4:
 
 .. das:function:: pack_float_to_byte(x: float4 const)
 
-pack_float_to_byte returns uint
+pack_float_to_byte returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -5795,7 +5955,7 @@ pack_float_to_byte returns uint
 
 .. das:function:: unpack_byte_to_float(x: uint const)
 
-unpack_byte_to_float returns float4
+unpack_byte_to_float returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5882,7 +6042,7 @@ Uncategorized
 
 .. das:function:: determinant(x: float4x4 const implicit)
 
-determinant returns float
+determinant returns float const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5897,7 +6057,7 @@ determinant returns float
 
 .. das:function:: determinant(x: float3x4 const implicit)
 
-determinant returns float
+determinant returns float const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5980,7 +6140,7 @@ determinant returns float
 
 .. das:function:: quat_from_euler(angles: float3 const)
 
-quat_from_euler returns float4
+quat_from_euler returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -5995,7 +6155,7 @@ quat_from_euler returns float4
 
 .. das:function:: quat_from_euler(x: float const; y: float const; z: float const)
 
-quat_from_euler returns float4
+quat_from_euler returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -6014,7 +6174,7 @@ quat_from_euler returns float4
 
 .. das:function:: euler_from_quat(angles: float4 const)
 
-euler_from_quat returns float3
+euler_from_quat returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -6029,7 +6189,7 @@ euler_from_quat returns float3
 
 .. das:function:: quat(m: float3x3 const implicit)
 
-quat returns float4
+quat returns float4 const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -6044,7 +6204,7 @@ quat returns float4
 
 .. das:function:: quat(m: float3x4 const implicit)
 
-quat returns float4
+quat returns float4 const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -6059,7 +6219,7 @@ quat returns float4
 
 .. das:function:: quat(m: float4x4 const implicit)
 
-quat returns float4
+quat returns float4 const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -6074,7 +6234,7 @@ quat returns float4
 
 .. das:function:: quat_slerp(t: float const; a: float4 const; b: float4 const)
 
-quat_slerp returns float4
+quat_slerp returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -6093,7 +6253,7 @@ quat_slerp returns float4
 
 .. das:function:: determinant(x: float3x3 const implicit)
 
-determinant returns float
+determinant returns float const
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +

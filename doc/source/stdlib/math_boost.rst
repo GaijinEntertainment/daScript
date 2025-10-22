@@ -69,14 +69,14 @@ ray (direction and origin)
 Angle conversions
 +++++++++++++++++
 
-  *  :ref:`degrees (f:float const) : float <function-_at_math_boost_c__c_degrees_Cf>` 
-  *  :ref:`radians (f:float const) : float <function-_at_math_boost_c__c_radians_Cf>` 
+  *  :ref:`degrees (f:float const) : float const <function-_at_math_boost_c__c_degrees_Cf>` 
+  *  :ref:`radians (f:float const) : float const <function-_at_math_boost_c__c_radians_Cf>` 
 
 .. _function-_at_math_boost_c__c_degrees_Cf:
 
 .. das:function:: degrees(f: float const)
 
-degrees returns float
+degrees returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -91,7 +91,7 @@ convert radians to degrees
 
 .. das:function:: radians(f: float const)
 
-radians returns float
+radians returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -106,15 +106,15 @@ convert degrees to radians
 Intersections
 +++++++++++++
 
-  *  :ref:`is_intersecting (a:math_boost::AABR const;b:math_boost::AABR const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABR_gr__CS_ls_math_boost_c__c_AABR_gr_>` 
-  *  :ref:`is_intersecting (a:math_boost::AABB const;b:math_boost::AABB const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABB_gr__CS_ls_math_boost_c__c_AABB_gr_>` 
-  *  :ref:`is_intersecting (ray:math_boost::Ray const;aabb:math_boost::AABB const;Tmin:float const;Tmax:float const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_Ray_gr__CS_ls_math_boost_c__c_AABB_gr__Cf_Cf>` 
+  *  :ref:`is_intersecting (a:math_boost::AABR const;b:math_boost::AABR const) : bool const <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABR_gr__CS_ls_math_boost_c__c_AABR_gr_>` 
+  *  :ref:`is_intersecting (a:math_boost::AABB const;b:math_boost::AABB const) : bool const <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABB_gr__CS_ls_math_boost_c__c_AABB_gr_>` 
+  *  :ref:`is_intersecting (ray:math_boost::Ray const;aabb:math_boost::AABB const;Tmin:float const;Tmax:float const) : bool const <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_Ray_gr__CS_ls_math_boost_c__c_AABB_gr__Cf_Cf>` 
 
 .. _function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABR_gr__CS_ls_math_boost_c__c_AABR_gr_:
 
 .. das:function:: is_intersecting(a: AABR const; b: AABR const)
 
-is_intersecting returns bool
+is_intersecting returns bool const
 
 +--------+--------------------------------------------------------+
 +argument+argument type                                           +
@@ -131,7 +131,7 @@ A.LO<=B.HI && A.HI>=B.LO
 
 .. das:function:: is_intersecting(a: AABB const; b: AABB const)
 
-is_intersecting returns bool
+is_intersecting returns bool const
 
 +--------+--------------------------------------------------------+
 +argument+argument type                                           +
@@ -148,7 +148,7 @@ A.LO<=B.HI && A.HI>=B.LO
 
 .. das:function:: is_intersecting(ray: Ray const; aabb: AABB const; Tmin: float const; Tmax: float const)
 
-is_intersecting returns bool
+is_intersecting returns bool const
 
 +--------+--------------------------------------------------------+
 +argument+argument type                                           +
@@ -324,15 +324,15 @@ planar shadow projection matrix, i.e. all light shadows to be projected on a pla
 Plane
 +++++
 
-  *  :ref:`plane_dot (Plane:float4 const;Vec:float4 const) : float <function-_at_math_boost_c__c_plane_dot_Cf4_Cf4>` 
+  *  :ref:`plane_dot (Plane:float4 const;Vec:float4 const) : float const <function-_at_math_boost_c__c_plane_dot_Cf4_Cf4>` 
   *  :ref:`plane_normalize (Plane:float4 const) : float4 const <function-_at_math_boost_c__c_plane_normalize_Cf4>` 
-  *  :ref:`plane_from_point_normal (p:float3 const;n:float3 const) : float4 <function-_at_math_boost_c__c_plane_from_point_normal_Cf3_Cf3>` 
+  *  :ref:`plane_from_point_normal (p:float3 const;n:float3 const) : float4 const <function-_at_math_boost_c__c_plane_from_point_normal_Cf3_Cf3>` 
 
 .. _function-_at_math_boost_c__c_plane_dot_Cf4_Cf4:
 
 .. das:function:: plane_dot(Plane: float4 const; Vec: float4 const)
 
-plane_dot returns float
+plane_dot returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -364,7 +364,7 @@ normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
 
 .. das:function:: plane_from_point_normal(p: float3 const; n: float3 const)
 
-plane_from_point_normal returns float4
+plane_from_point_normal returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -381,16 +381,16 @@ construct plane from point `p` and normal `n`
 Color packig and unpacking
 ++++++++++++++++++++++++++
 
-  *  :ref:`RGBA_TO_UCOLOR (x:float const;y:float const;z:float const;w:float const) : uint <function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf_Cf_Cf_Cf>` 
-  *  :ref:`RGBA_TO_UCOLOR (xyzw:float4 const) : uint <function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf4>` 
-  *  :ref:`UCOLOR_TO_RGBA (x:uint const) : float4 <function-_at_math_boost_c__c_UCOLOR_TO_RGBA_Cu>` 
-  *  :ref:`UCOLOR_TO_RGB (x:uint const) : float3 <function-_at_math_boost_c__c_UCOLOR_TO_RGB_Cu>` 
+  *  :ref:`RGBA_TO_UCOLOR (x:float const;y:float const;z:float const;w:float const) : uint const <function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf_Cf_Cf_Cf>` 
+  *  :ref:`RGBA_TO_UCOLOR (xyzw:float4 const) : uint const <function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf4>` 
+  *  :ref:`UCOLOR_TO_RGBA (x:uint const) : float4 const <function-_at_math_boost_c__c_UCOLOR_TO_RGBA_Cu>` 
+  *  :ref:`UCOLOR_TO_RGB (x:uint const) : float3 const <function-_at_math_boost_c__c_UCOLOR_TO_RGB_Cu>` 
 
 .. _function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf_Cf_Cf_Cf:
 
 .. das:function:: RGBA_TO_UCOLOR(x: float const; y: float const; z: float const; w: float const)
 
-RGBA_TO_UCOLOR returns uint
+RGBA_TO_UCOLOR returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -411,7 +411,7 @@ conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
 
 .. das:function:: RGBA_TO_UCOLOR(xyzw: float4 const)
 
-RGBA_TO_UCOLOR returns uint
+RGBA_TO_UCOLOR returns uint const
 
 +--------+-------------+
 +argument+argument type+
@@ -426,7 +426,7 @@ conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
 
 .. das:function:: UCOLOR_TO_RGBA(x: uint const)
 
-UCOLOR_TO_RGBA returns float4
+UCOLOR_TO_RGBA returns float4 const
 
 +--------+-------------+
 +argument+argument type+
@@ -441,7 +441,7 @@ conversion from ucolor to RGBA. x components are in [0,255] range
 
 .. das:function:: UCOLOR_TO_RGB(x: uint const)
 
-UCOLOR_TO_RGB returns float3
+UCOLOR_TO_RGB returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -460,7 +460,7 @@ Uncategorized
 
 .. das:function:: linear_to_SRGB(x: float const)
 
-linear_to_SRGB returns float
+linear_to_SRGB returns float const
 
 +--------+-------------+
 +argument+argument type+
@@ -475,7 +475,7 @@ convert value from linear space to sRGB curve space
 
 .. das:function:: linear_to_SRGB(c: float3 const)
 
-linear_to_SRGB returns float3
+linear_to_SRGB returns float3 const
 
 +--------+-------------+
 +argument+argument type+
@@ -490,7 +490,7 @@ convert value from linear space to sRGB curve space
 
 .. das:function:: linear_to_SRGB(c: float4 const)
 
-linear_to_SRGB returns float4
+linear_to_SRGB returns float4 const
 
 +--------+-------------+
 +argument+argument type+

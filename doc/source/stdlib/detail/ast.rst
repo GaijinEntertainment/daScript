@@ -318,6 +318,8 @@
 
 .. |method-ast-AstVisitor.preVisitStructure| replace:: before `Structure`
 
+.. |method-ast-AstVisitor.canVisitStructureFieldInit| replace:: if true structure field initialization expressions will be visited
+
 .. |method-ast-AstVisitor.preVisitStructureField| replace:: before every structure field
 
 .. |method-ast-AstVisitor.visitStructureField| replace:: after every structure field
@@ -424,6 +426,8 @@
 
 .. |method-ast-AstVisitor.canVisitLooksLikeCallArgument| replace:: If true `ExprLooksLikeCall` arguments will be visited
 
+.. |method-ast-AstVisitor.canVisitExprLooksLikeCallArgument| replace:: If true `ExprLooksLikeCall` arguments will be visited
+
 .. |method-ast-AstVisitor.preVisitExprLooksLikeCall| replace:: before `ExprLooksLikeCall`
 
 .. |method-ast-AstVisitor.visitExprLooksLikeCall| replace:: after `ExprLooksLikeCall`
@@ -478,9 +482,13 @@
 
 .. |method-ast-AstVisitor.preVisitExprOp3Right| replace:: before the right option
 
+.. |method-ast-AstVisitor.isRightFirstExprCopy| replace:: returns true if the right operand of `ExprCopy` should be visited first
+
 .. |method-ast-AstVisitor.preVisitExprCopy| replace:: before `ExprCopy`
 
 .. |method-ast-AstVisitor.visitExprCopy| replace:: after `ExprCopy`
+
+.. |method-ast-AstVisitor.isRightFirstExprMove| replace:: returns true if the right operand of `ExprMove` should be visited first
 
 .. |method-ast-AstVisitor.preVisitExprCopyRight| replace:: before the right operand
 
@@ -489,6 +497,8 @@
 .. |method-ast-AstVisitor.visitExprMove| replace:: after `ExprMove`
 
 .. |method-ast-AstVisitor.preVisitExprMoveRight| replace:: before the right operand
+
+.. |method-ast-AstVisitor.isRightFirstExprClone| replace:: returns true if the right operand of `ExprClone` should be visited first
 
 .. |method-ast-AstVisitor.preVisitExprClone| replace:: before `ExprClone`
 
@@ -554,6 +564,10 @@
 
 .. |method-ast-AstVisitor.canVisitMakeStructBlock| replace:: if true the visitor can visit the block behind `ExprMakeStruct`
 
+.. |method-ast-AstVisitor.canVisitExprMakeStructBody| replace:: if true the visitor can visit the body of `ExprMakeStruct`
+
+.. |method-ast-AstVisitor.canVisitExprMakeStructBlock| replace:: if true the visitor can visit the block behind `ExprMakeStruct`
+
 .. |method-ast-AstVisitor.preVisitExprMakeStruct| replace:: before `ExprMakeStruct`
 
 .. |method-ast-AstVisitor.preVisitMakeStructureBlock| replace:: before the block behind `ExprMakeStruct`
@@ -593,6 +607,8 @@
 .. |method-ast-AstVisitor.preVisitExprArrayComprehensionSubexpr| replace:: before the subexpression
 
 .. |method-ast-AstVisitor.preVisitExprArrayComprehensionWhere| replace:: before the where clause
+
+.. |method-ast-AstVisitor.canVisitExprTypeInfo| replace:: If true the visitor can visit the type info expression
 
 .. |method-ast-AstVisitor.preVisitExprTypeInfo| replace:: before `ExprTypeInfo`
 
@@ -661,6 +677,8 @@
 .. |method-ast-AstVisitor.preVisitExprCast| replace:: before `ExprCast`
 
 .. |method-ast-AstVisitor.visitExprCast| replace:: after `ExprCast`
+
+.. |method-ast-AstVisitor.preVisitExprDeleteSizeExpression| replace:: before the size expression
 
 .. |method-ast-AstVisitor.preVisitExprDelete| replace:: before `ExprDelete`
 
@@ -875,6 +893,12 @@
 .. |function-ast-make_visitor| replace:: Creates adapter for the `AstVisitor` interface.
 
 .. |function-ast-visit| replace:: Invokes visitor for the given object.
+
+.. |function-ast-visit_module| replace:: Invokes visitor for the given module.
+
+.. |function-ast-visit_enumeration| replace:: Invokes visitor for the given enumeration.
+
+.. |function-ast-visit_structure| replace:: Invokes visitor for the given structure.
 
 .. |function-ast-visit_modules| replace:: Invokes visitor for the given list of modules inside the `Program`.
 
@@ -1460,4 +1484,117 @@
 .. |function-ast-infer_generic_type| replace:: Infers generic type for the specified type and pass type.
 
 .. |function-ast-update_alias_map| replace:: Updates alias map for the specified infer.
+
+.. |typedef-ast-ExprMakeBlockPtr| replace:: Smart pointer to 'ExprMakeBlock'.
+
+.. |structure_annotation-ast-BuiltInFunction| replace:: Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
+
+.. |structure_annotation-ast-ExternalFnBase| replace:: Base class for external function bindings.
+
+.. |function-ast-make_type_info| replace:: Generates TypeInfo? for the specified type, given DebugInfoHelper.
+
+.. |function-ast-make_variable_debug_info| replace:: Generates VariableInfo? for the specified variable, given DebugInfoHelper.
+
+.. |function-ast-make_struct_variable_debug_info| replace:: Generates VariableInfo? for the specified structure field, given DebugInfoHelper.
+
+.. |function-ast-make_struct_debug_info| replace:: Generates StructInfo? for the specified structure, given DebugInfoHelper.
+
+.. |function-ast-make_function_debug_info| replace:: Generates FunctInfo? for the specified function, given DebugInfoHelper.
+
+.. |function-ast-make_enum_debug_info| replace:: Generates EnumInfo? for the specified enumeration, given DebugInfoHelper.
+
+.. |function-ast-make_invokable_type_debug_info| replace:: Generates FuncInfo? for the specified invokable type (lambda, block), given DebugInfoHelper.
+
+.. |function-ast-make_block_type| replace:: Generates TypeDeclPtr for the specified block or lambda type.
+
+.. |function-ast-find_call_macro| replace:: Find CallMacro by name in the Module.
+
+.. |function-ast-find_struct_field_parent| replace:: Finds parent structure of the specified field declaration.
+
+.. |function-ast-for_each_module_no_order| replace:: Iterates through each module in the program in no particular order (in order they appear in libgroup).
+
+.. |function-ast-for_each_annotation_ordered| replace:: Iterates through each annotation in the given module in the order they were added.
+
+.. |function-ast-for_each_module_function| replace:: Iterates through each function in the given module.
+
+.. |function-ast-clone_file_info| replace:: Clones FileInfo structure.
+
+.. |function-ast-get_handled_type_index_type_declaration| replace:: Returns type declaration of the index type in the handled type.
+
+.. |function-ast-get_vector_ptr_at_index| replace:: Returns pointer to the vector element at the specified index, given pointer to the vector object and TypeDeclPtr.
+
+.. |function-ast-get_vector_length| replace:: Returns length of the vector, given pointer to the vector object and TypeDeclPtr.
+
+.. |function-ast-get_function_hash_by_id| replace:: Returns hash of the function by its unique id.
+
+.. |function-ast-get_aot_arg_suffix| replace:: Returns AOT argument suffix for the specified function.
+
+.. |function-ast-get_aot_arg_prefix| replace:: Returns AOT argument prefix for the specified function.
+
+.. |function-ast-get_func_aot_prefix| replace:: Returns AOT function prefix for the specified function.
+
+.. |function-ast-get_struct_aot_prefix| replace:: Returns AOT structure prefix for the specified structure.
+
+.. |function-ast-get_aot_name| replace:: Returns AOT name for the specified function.
+
+.. |function-ast-module_find_annotation| replace:: Finds annotation of the specified type in the given module.
+
+.. |function-ast-module_find_type_annotation| replace:: Finds type annotation of the specified type in the given module.
+
+.. |function-ast-not_inferred| replace:: Specifies that function has been modified via macro and should be inferred again.
+
+.. |function-ast-debug_helper_iter_structs| replace:: Iterates through all structures in the DebugInfoHelper, calling the provided block with each structure.
+
+.. |function-ast-debug_helper_iter_types| replace:: Iterates through all types in the DebugInfoHelper, calling the provided block with each type.
+
+.. |function-ast-debug_helper_iter_vars| replace:: Iterates through all variables in the DebugInfoHelper, calling the provided block with each variable.
+
+.. |function-ast-debug_helper_iter_funcs| replace:: Iterates through all functions in the DebugInfoHelper, calling the provided block with each function.
+
+.. |function-ast-debug_helper_iter_enums| replace:: Iterates through all enumerations in the DebugInfoHelper, calling the provided block with each enumeration.
+
+.. |function-ast-debug_helper_find_type_cppname| replace:: Finds type in the DebugInfoHelper and returns it C++ name.
+
+.. |function-ast-debug_helper_find_struct_cppname| replace:: Finds structure in the DebugInfoHelper and returns it C++ name.
+
+.. |function-ast-macro_aot_infix| replace:: Returns true if macro requires AOT infix for the specified handled type.
+
+.. |function-ast-getInitSemanticHashWithDep| replace:: Returns initialization semantic hash including dependencies for the entire program.
+
+.. |function-ast-aot_require| replace:: Write data to the 'require' section of the AOT module.
+
+.. |function-ast-aot_previsit_get_field| replace:: Previsit for getting field in AOT generation.
+
+.. |function-ast-aot_visit_get_field| replace:: Visit for getting field in AOT generation.
+
+.. |function-ast-aot_previsit_get_field_ptr| replace:: Previsit for getting field pointer in AOT generation.
+
+.. |function-ast-aot_type_ann_get_field_ptr| replace:: Returns string with access symbol for the field (like -> for the pointer types, or . for the value types).
+
+.. |function-ast-aot_need_type_info| replace:: Returns true if TypeInfo? is needed for the specified type in 'typeinfo' expression.
+
+.. |function-ast-write_aot_body| replace:: Writes AOT body for the specified StructureAnnotation.
+
+.. |function-ast-write_aot_suffix| replace:: Writes AOT suffix for the specified StructureAnnotation.
+
+.. |function-ast-write_aot_macro_prefix| replace:: Writes AOT macro prefix for the specified TypeInfoMacro.
+
+.. |function-ast-write_aot_macro_suffix| replace:: Writes AOT macro suffix for the specified TypeInfoMacro.
+
+.. |function-ast-string_builder_str| replace:: Returns string from the StringBuilder expression, given pointer to the StringBuilder object.
+
+.. |function-ast-string_builder_clear| replace:: Clears the StringBuilder object, given pointer to the StringBuilder object.
+
+.. |function-ast-module_find_structure| replace:: Finds structure by name in the specified module.
+
+
+
+
+
+
+
+
+
+
+
 

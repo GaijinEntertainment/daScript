@@ -47,7 +47,7 @@ it defines as follows
 
 .. das:function:: Server.init(self: Server; port: int const)
 
-init returns bool
+init returns bool const
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -88,19 +88,19 @@ init returns bool
 
 .. das:function:: Server.has_session(self: Server)
 
-has_session returns bool
+has_session returns bool const
 
 |method-network-Server.has_session|
 
 .. das:function:: Server.is_open(self: Server)
 
-is_open returns bool
+is_open returns bool const
 
 |method-network-Server.is_open|
 
 .. das:function:: Server.is_connected(self: Server)
 
-is_connected returns bool
+is_connected returns bool const
 
 |method-network-Server.is_connected|
 
@@ -110,7 +110,7 @@ is_connected returns bool
 
 .. das:function:: Server.send(self: Server; data: uint8? const; size: int const)
 
-send returns bool
+send returns bool const
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -180,19 +180,19 @@ send returns bool
 Low lever NetworkServer IO
 ++++++++++++++++++++++++++
 
-  *  :ref:`make_server (class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : bool <function-_at_network_c__c_make_server_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
-  *  :ref:`server_init (server:smart_ptr\<network::NetworkServer\> const implicit;port:int const;context:__context const;at:__lineInfo const) : bool <function-_at_network_c__c_server_init_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_Ci_C_c_C_l>` 
-  *  :ref:`server_is_open (server:smart_ptr\<network::NetworkServer\> const implicit;context:__context const;at:__lineInfo const) : bool <function-_at_network_c__c_server_is_open_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l>` 
-  *  :ref:`server_is_connected (server:smart_ptr\<network::NetworkServer\> const implicit;context:__context const;at:__lineInfo const) : bool <function-_at_network_c__c_server_is_connected_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`make_server (class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : bool const <function-_at_network_c__c_make_server_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`server_init (server:smart_ptr\<network::NetworkServer\> const implicit;port:int const;context:__context const;at:__lineInfo const) : bool const <function-_at_network_c__c_server_init_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_Ci_C_c_C_l>` 
+  *  :ref:`server_is_open (server:smart_ptr\<network::NetworkServer\> const implicit;context:__context const;at:__lineInfo const) : bool const <function-_at_network_c__c_server_is_open_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`server_is_connected (server:smart_ptr\<network::NetworkServer\> const implicit;context:__context const;at:__lineInfo const) : bool const <function-_at_network_c__c_server_is_connected_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l>` 
   *  :ref:`server_tick (server:smart_ptr\<network::NetworkServer\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_network_c__c_server_tick_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l>` 
-  *  :ref:`server_send (server:smart_ptr\<network::NetworkServer\> const implicit;data:uint8? const implicit;size:int const;context:__context const;at:__lineInfo const) : bool <function-_at_network_c__c_server_send_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_CI1_ls_u8_gr__qm__Ci_C_c_C_l>` 
+  *  :ref:`server_send (server:smart_ptr\<network::NetworkServer\> const implicit;data:uint8? const implicit;size:int const;context:__context const;at:__lineInfo const) : bool const <function-_at_network_c__c_server_send_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_CI1_ls_u8_gr__qm__Ci_C_c_C_l>` 
   *  :ref:`server_restore (server:smart_ptr\<network::NetworkServer\> const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const;at:__lineInfo const) : void <function-_at_network_c__c_server_restore_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c_C_l>` 
 
 .. _function-_at_network_c__c_make_server_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
 .. das:function:: make_server(class: void? const implicit; info: StructInfo const? const implicit)
 
-make_server returns bool
+make_server returns bool const
 
 +--------+------------------------------------------------------------------------+
 +argument+argument type                                                           +
@@ -209,7 +209,7 @@ make_server returns bool
 
 .. das:function:: server_init(server: smart_ptr<NetworkServer> const implicit; port: int const)
 
-server_init returns bool
+server_init returns bool const
 
 +--------+----------------------------------------------------------------------------------------+
 +argument+argument type                                                                           +
@@ -226,7 +226,7 @@ server_init returns bool
 
 .. das:function:: server_is_open(server: smart_ptr<NetworkServer> const implicit)
 
-server_is_open returns bool
+server_is_open returns bool const
 
 +--------+----------------------------------------------------------------------------------------+
 +argument+argument type                                                                           +
@@ -241,7 +241,7 @@ server_is_open returns bool
 
 .. das:function:: server_is_connected(server: smart_ptr<NetworkServer> const implicit)
 
-server_is_connected returns bool
+server_is_connected returns bool const
 
 +--------+----------------------------------------------------------------------------------------+
 +argument+argument type                                                                           +
@@ -269,7 +269,7 @@ server_is_connected returns bool
 
 .. das:function:: server_send(server: smart_ptr<NetworkServer> const implicit; data: uint8? const implicit; size: int const)
 
-server_send returns bool
+server_send returns bool const
 
 +--------+----------------------------------------------------------------------------------------+
 +argument+argument type                                                                           +

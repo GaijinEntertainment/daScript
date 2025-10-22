@@ -719,12 +719,12 @@ Textual descriptions of the objects
 +++++++++++++++++++++++++++++++++++
 
   *  :ref:`describe (list:rtti::AnnotationArgumentList const) : string const <function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationArgumentList_gr_>` 
-  *  :ref:`describe (ann:rtti::AnnotationDeclaration const) : string <function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationDeclaration_gr_>` 
+  *  :ref:`describe (ann:rtti::AnnotationDeclaration const) : string const <function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationDeclaration_gr_>` 
   *  :ref:`describe (list:rtti::AnnotationList const) : string const <function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationList_gr_>` 
-  *  :ref:`describe (vvar:smart_ptr\<ast::Variable\> const) : string <function-_at_ast_boost_c__c_describe_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_M>` 
-  *  :ref:`debug_expression (expr:smart_ptr\<ast::Expression\> const;deFlags:bitfield\<refCount\> const) : string <function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CY_ls_DebugExpressionFlags_gr_N_ls_refCount_gr_t>` 
-  *  :ref:`debug_expression (expr:ast::Expression? const) : string <function-_at_ast_boost_c__c_debug_expression_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_>` 
-  *  :ref:`describe (expr:ast::Expression? const) : string <function-_at_ast_boost_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_>` 
+  *  :ref:`describe (vvar:smart_ptr\<ast::Variable\> const) : string const <function-_at_ast_boost_c__c_describe_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_M>` 
+  *  :ref:`debug_expression (expr:smart_ptr\<ast::Expression\> const;deFlags:bitfield\<refCount\> const) : string const <function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CY_ls_DebugExpressionFlags_gr_N_ls_refCount_gr_t>` 
+  *  :ref:`debug_expression (expr:ast::Expression? const) : string const <function-_at_ast_boost_c__c_debug_expression_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_>` 
+  *  :ref:`describe (expr:ast::Expression? const) : string const <function-_at_ast_boost_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_>` 
   *  :ref:`describe_bitfield (bf:auto const;merger:string const) : auto <function-_at_ast_boost_c__c_describe_bitfield_C._Cs>` 
   *  :ref:`describe_function_short (func:smart_ptr\<ast::Function\> const|ast::Function? const const) : auto <function-_at_ast_boost_c__c_describe_function_short_C0_ls_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M;C1_ls_H_ls_ast_c__c_Function_gr__gr__qm__gr_|>` 
 
@@ -747,7 +747,7 @@ describe returns string const
 
 .. das:function:: describe(ann: AnnotationDeclaration const)
 
-describe returns string
+describe returns string const
 
 +--------+------------------------------------------------------------------------------+
 +argument+argument type                                                                 +
@@ -777,7 +777,7 @@ describe returns string const
 
 .. das:function:: describe(vvar: VariablePtr)
 
-describe returns string
+describe returns string const
 
 +--------+----------------------------------------+
 +argument+argument type                           +
@@ -792,7 +792,7 @@ describe returns string
 
 .. das:function:: debug_expression(expr: ExpressionPtr; deFlags: DebugExpressionFlags)
 
-debug_expression returns string
+debug_expression returns string const
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -809,7 +809,7 @@ debug_expression returns string
 
 .. das:function:: debug_expression(expr: Expression? const)
 
-debug_expression returns string
+debug_expression returns string const
 
 +--------+-------------------------------------------------------+
 +argument+argument type                                          +
@@ -824,7 +824,7 @@ debug_expression returns string
 
 .. das:function:: describe(expr: Expression? const)
 
-describe returns string
+describe returns string const
 
 +--------+-------------------------------------------------------+
 +argument+argument type                                          +
@@ -871,33 +871,34 @@ describe_function_short returns auto
 Queries
 +++++++
 
-  *  :ref:`isVectorType (typ:rtti::Type const) : bool <function-_at_ast_boost_c__c_isVectorType_CE_ls_rtti_c__c_Type_gr_>` 
-  *  :ref:`isExpression (t:smart_ptr\<ast::TypeDecl\> const;top:bool const) : bool <function-_at_ast_boost_c__c_isExpression_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb>` 
-  *  :ref:`is_same_or_inherited (parent:ast::Structure? const;child:ast::Structure? const) : bool const <function-_at_ast_boost_c__c_is_same_or_inherited_C1_ls_H_ls_ast_c__c_Structure_gr__gr__qm__C1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_>` 
+  *  :ref:`isVectorType (typ:rtti::Type const) : bool const <function-_at_ast_boost_c__c_isVectorType_CE_ls_rtti_c__c_Type_gr_>` 
+  *  :ref:`isExpression (t:smart_ptr\<ast::TypeDecl\> const;top:bool const) : bool const <function-_at_ast_boost_c__c_isExpression_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb>` 
+  *  :ref:`is_same_or_inherited (parent:ast::Structure const? const;child:ast::Structure const? const) : bool const <function-_at_ast_boost_c__c_is_same_or_inherited_C1_ls_CH_ls_ast_c__c_Structure_gr__gr__qm__C1_ls_CH_ls_ast_c__c_Structure_gr__gr__qm_>` 
   *  :ref:`is_class_method (cinfo:smart_ptr\<ast::Structure\> const;finfo:smart_ptr\<ast::TypeDecl\> const) : bool const <function-_at_ast_boost_c__c_is_class_method_CY_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M>` 
   *  :ref:`find_arg (argn:string const;args:rtti::AnnotationArgumentList const) : variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\> <function-_at_ast_boost_c__c_find_arg_Cs_CH_ls_rtti_c__c_AnnotationArgumentList_gr_>` 
   *  :ref:`find_arg (args:rtti::AnnotationArgumentList const;argn:string const) : variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\> <function-_at_ast_boost_c__c_find_arg_CH_ls_rtti_c__c_AnnotationArgumentList_gr__Cs>` 
   *  :ref:`find_unique_function (mod:rtti::Module? const;name:string const;canfail:bool const) : smart_ptr\<ast::Function\> <function-_at_ast_boost_c__c_find_unique_function_C1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__Cs_Cb>` 
   *  :ref:`find_unique_generic (mod:rtti::Module? const;name:string const;canfail:bool const) : smart_ptr\<ast::Function\> <function-_at_ast_boost_c__c_find_unique_generic_C1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__Cs_Cb>` 
   *  :ref:`find_annotation (mod_name:string const;ann_name:string const) : rtti::Annotation const? <function-_at_ast_boost_c__c_find_annotation_Cs_Cs>` 
-  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;svar:smart_ptr\<ast::Variable\> const) : int <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr__qm_M_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_M>` 
-  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;source:smart_ptr\<ast::Expression\> const) : int <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr__qm_M_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
-  *  :ref:`isCMRES (fun:smart_ptr\<ast::Function\> const) : bool <function-_at_ast_boost_c__c_isCMRES_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M>` 
-  *  :ref:`isCMRES (fun:ast::Function? const) : bool <function-_at_ast_boost_c__c_isCMRES_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_>` 
-  *  :ref:`isMakeLocal (expr:smart_ptr\<ast::Expression\> const) : bool <function-_at_ast_boost_c__c_isMakeLocal_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
+  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;svar:smart_ptr\<ast::Variable\> const) : int const <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr__qm_M_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_M>` 
+  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;source:smart_ptr\<ast::Expression\> const) : int const <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr__qm_M_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
+  *  :ref:`isCMRES (fun:smart_ptr\<ast::Function\> const) : bool const <function-_at_ast_boost_c__c_isCMRES_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M>` 
+  *  :ref:`isCMRES (fun:ast::Function? const) : bool const <function-_at_ast_boost_c__c_isCMRES_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_>` 
+  *  :ref:`isMakeLocal (expr:smart_ptr\<ast::Expression\> const) : bool const <function-_at_ast_boost_c__c_isMakeLocal_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
+  *  :ref:`isExprCallFunc (expr:smart_ptr\<ast::Expression\> const) : bool const <function-_at_ast_boost_c__c_isExprCallFunc_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
   *  :ref:`get_workhorse_types () : rtti::Type[31] <function-_at_ast_boost_c__c_get_workhorse_types>` 
-  *  :ref:`find_argument_index (typ:smart_ptr\<ast::TypeDecl\> const;name:string const) : int <function-_at_ast_boost_c__c_find_argument_index_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cs>` 
-  *  :ref:`isCMRESType (blockT:smart_ptr\<ast::TypeDecl\> const) : bool <function-_at_ast_boost_c__c_isCMRESType_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M>` 
+  *  :ref:`find_argument_index (typ:smart_ptr\<ast::TypeDecl\> const;name:string const) : int const <function-_at_ast_boost_c__c_find_argument_index_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cs>` 
+  *  :ref:`isCMRESType (blockT:smart_ptr\<ast::TypeDecl\> const) : bool const <function-_at_ast_boost_c__c_isCMRESType_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M>` 
   *  :ref:`getVectorElementCount (bt:rtti::Type const) : int const <function-_at_ast_boost_c__c_getVectorElementCount_CE_ls_rtti_c__c_Type_gr_>` 
   *  :ref:`getVectorElementSize (bt:rtti::Type const) : int const <function-_at_ast_boost_c__c_getVectorElementSize_CE_ls_rtti_c__c_Type_gr_>` 
   *  :ref:`getVectorElementType (bt:rtti::Type const) : rtti::Type const <function-_at_ast_boost_c__c_getVectorElementType_CE_ls_rtti_c__c_Type_gr_>` 
-  *  :ref:`getVectorOffset (bt:rtti::Type const;ident:string const) : int <function-_at_ast_boost_c__c_getVectorOffset_CE_ls_rtti_c__c_Type_gr__Cs>` 
+  *  :ref:`getVectorOffset (bt:rtti::Type const;ident:string const) : int const <function-_at_ast_boost_c__c_getVectorOffset_CE_ls_rtti_c__c_Type_gr__Cs>` 
 
 .. _function-_at_ast_boost_c__c_isVectorType_CE_ls_rtti_c__c_Type_gr_:
 
 .. das:function:: isVectorType(typ: Type const)
 
-isVectorType returns bool
+isVectorType returns bool const
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -912,7 +913,7 @@ isVectorType returns bool
 
 .. das:function:: isExpression(t: TypeDeclPtr; top: bool const)
 
-isExpression returns bool
+isExpression returns bool const
 
 +--------+----------------------------------------+
 +argument+argument type                           +
@@ -925,19 +926,19 @@ isExpression returns bool
 
 |function-ast_boost-isExpression|
 
-.. _function-_at_ast_boost_c__c_is_same_or_inherited_C1_ls_H_ls_ast_c__c_Structure_gr__gr__qm__C1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_:
+.. _function-_at_ast_boost_c__c_is_same_or_inherited_C1_ls_CH_ls_ast_c__c_Structure_gr__gr__qm__C1_ls_CH_ls_ast_c__c_Structure_gr__gr__qm_:
 
-.. das:function:: is_same_or_inherited(parent: Structure? const; child: Structure? const)
+.. das:function:: is_same_or_inherited(parent: Structure const? const; child: Structure const? const)
 
 is_same_or_inherited returns bool const
 
-+--------+-----------------------------------------------------+
-+argument+argument type                                        +
-+========+=====================================================+
-+parent  + :ref:`ast::Structure <handle-ast-Structure>` ? const+
-+--------+-----------------------------------------------------+
-+child   + :ref:`ast::Structure <handle-ast-Structure>` ? const+
-+--------+-----------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++parent  + :ref:`ast::Structure <handle-ast-Structure>`  const? const+
++--------+-----------------------------------------------------------+
++child   + :ref:`ast::Structure <handle-ast-Structure>`  const? const+
++--------+-----------------------------------------------------------+
 
 
 |function-ast_boost-is_same_or_inherited|
@@ -1055,7 +1056,7 @@ find_annotation returns  :ref:`rtti::Annotation <handle-rtti-Annotation>`  const
 
 .. das:function:: get_for_source_index(expr: smart_ptr<ExprFor> const; svar: VariablePtr)
 
-get_for_source_index returns int
+get_for_source_index returns int const
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -1072,7 +1073,7 @@ get_for_source_index returns int
 
 .. das:function:: get_for_source_index(expr: smart_ptr<ExprFor> const; source: ExpressionPtr)
 
-get_for_source_index returns int
+get_for_source_index returns int const
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -1089,7 +1090,7 @@ get_for_source_index returns int
 
 .. das:function:: isCMRES(fun: FunctionPtr)
 
-isCMRES returns bool
+isCMRES returns bool const
 
 +--------+----------------------------------------+
 +argument+argument type                           +
@@ -1104,7 +1105,7 @@ isCMRES returns bool
 
 .. das:function:: isCMRES(fun: Function? const)
 
-isCMRES returns bool
+isCMRES returns bool const
 
 +--------+---------------------------------------------------+
 +argument+argument type                                      +
@@ -1119,7 +1120,7 @@ isCMRES returns bool
 
 .. das:function:: isMakeLocal(expr: ExpressionPtr)
 
-isMakeLocal returns bool
+isMakeLocal returns bool const
 
 +--------+--------------------------------------------+
 +argument+argument type                               +
@@ -1129,6 +1130,21 @@ isMakeLocal returns bool
 
 
 |function-ast_boost-isMakeLocal|
+
+.. _function-_at_ast_boost_c__c_isExprCallFunc_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M:
+
+.. das:function:: isExprCallFunc(expr: ExpressionPtr)
+
+isExprCallFunc returns bool const
+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>` +
++--------+--------------------------------------------+
+
+
+|function-ast_boost-isExprCallFunc|
 
 .. _function-_at_ast_boost_c__c_get_workhorse_types:
 
@@ -1142,7 +1158,7 @@ get_workhorse_types returns  :ref:`rtti::Type <enum-rtti-Type>` [31]
 
 .. das:function:: find_argument_index(typ: TypeDeclPtr; name: string const)
 
-find_argument_index returns int
+find_argument_index returns int const
 
 +--------+----------------------------------------+
 +argument+argument type                           +
@@ -1159,7 +1175,7 @@ find_argument_index returns int
 
 .. das:function:: isCMRESType(blockT: TypeDeclPtr)
 
-isCMRESType returns bool
+isCMRESType returns bool const
 
 +--------+----------------------------------------+
 +argument+argument type                           +
@@ -1219,7 +1235,7 @@ getVectorElementType returns  :ref:`rtti::Type <enum-rtti-Type>`  const
 
 .. das:function:: getVectorOffset(bt: Type const; ident: string const)
 
-getVectorOffset returns int
+getVectorOffset returns int const
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -1236,21 +1252,21 @@ getVectorOffset returns int
 Annotations
 +++++++++++
 
-  *  :ref:`append_annotation (mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : smart_ptr\<rtti::AnnotationDeclaration\> <function-_at_ast_boost_c__c_append_annotation_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
+  *  :ref:`append_annotation (mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : smart_ptr\<rtti::AnnotationDeclaration\> <function-_at_ast_boost_c__c_append_annotation_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;Y_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
   *  :ref:`append_annotation (mod_name:string const;ann_name:string const) : smart_ptr\<rtti::AnnotationDeclaration\> <function-_at_ast_boost_c__c_append_annotation_Cs_Cs>` 
   *  :ref:`append_annotation (func:smart_ptr\<ast::Function\> -const;mod_name:string const;ann_name:string const) : void <function-_at_ast_boost_c__c_append_annotation_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_Cs_Cs>` 
   *  :ref:`append_annotation (blk:smart_ptr\<ast::ExprBlock\> -const;mod_name:string const;ann_name:string const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_Cs_Cs>` 
   *  :ref:`append_annotation (st:smart_ptr\<ast::Structure\> -const;mod_name:string const;ann_name:string const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_Cs_Cs>` 
-  *  :ref:`append_annotation (func:smart_ptr\<ast::Function\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
-  *  :ref:`append_annotation (blk:smart_ptr\<ast::ExprBlock\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
-  *  :ref:`append_annotation (st:smart_ptr\<ast::Structure\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
+  *  :ref:`append_annotation (func:smart_ptr\<ast::Function\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;Y_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
+  *  :ref:`append_annotation (blk:smart_ptr\<ast::ExprBlock\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;Y_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
+  *  :ref:`append_annotation (st:smart_ptr\<ast::Structure\> -const;mod_name:string const;ann_name:string const;args:array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\> const) : void <function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;Y_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A>` 
   *  :ref:`add_annotation_argument (arguments:rtti::AnnotationArgumentList -const;argName:string const;val:bool const) : int const <function-_at_ast_boost_c__c_add_annotation_argument_H_ls_rtti_c__c_AnnotationArgumentList_gr__Cs_Cb>` 
   *  :ref:`add_annotation_argument (arguments:rtti::AnnotationArgumentList -const;argName:string const;val:int const) : int const <function-_at_ast_boost_c__c_add_annotation_argument_H_ls_rtti_c__c_AnnotationArgumentList_gr__Cs_Ci>` 
   *  :ref:`add_annotation_argument (arguments:rtti::AnnotationArgumentList -const;argName:string const;val:float const) : int const <function-_at_ast_boost_c__c_add_annotation_argument_H_ls_rtti_c__c_AnnotationArgumentList_gr__Cs_Cf>` 
   *  :ref:`add_annotation_argument (arguments:rtti::AnnotationArgumentList -const;argName:string const;val:string const) : int const <function-_at_ast_boost_c__c_add_annotation_argument_H_ls_rtti_c__c_AnnotationArgumentList_gr__Cs_Cs>` 
   *  :ref:`add_annotation_argument (arguments:rtti::AnnotationArgumentList -const;ann:rtti::AnnotationArgument const) : int const <function-_at_ast_boost_c__c_add_annotation_argument_H_ls_rtti_c__c_AnnotationArgumentList_gr__CH_ls_rtti_c__c_AnnotationArgument_gr_>` 
 
-.. _function-_at_ast_boost_c__c_append_annotation_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A:
+.. _function-_at_ast_boost_c__c_append_annotation_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;Y_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A:
 
 .. das:function:: append_annotation(mod_name: string const; ann_name: string const; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>> const)
 
@@ -1337,7 +1353,7 @@ append_annotation returns smart_ptr< :ref:`rtti::AnnotationDeclaration <handle-r
 
 |function-ast_boost-append_annotation|
 
-.. _function-_at_ast_boost_c__c_append_annotation_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A:
+.. _function-_at_ast_boost_c__c_append_annotation_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;Y_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A:
 
 .. das:function:: append_annotation(func: FunctionPtr; mod_name: string const; ann_name: string const; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>> const)
 
@@ -1356,7 +1372,7 @@ append_annotation returns smart_ptr< :ref:`rtti::AnnotationDeclaration <handle-r
 
 |function-ast_boost-append_annotation|
 
-.. _function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A:
+.. _function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;Y_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A:
 
 .. das:function:: append_annotation(blk: smart_ptr<ExprBlock>; mod_name: string const; ann_name: string const; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>> const)
 
@@ -1375,7 +1391,7 @@ append_annotation returns smart_ptr< :ref:`rtti::AnnotationDeclaration <handle-r
 
 |function-ast_boost-append_annotation|
 
-.. _function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;FY_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A:
+.. _function-_at_ast_boost_c__c_append_annotation_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_Cs_Cs_C1_ls_N_ls_argname;argvalue_gr_0_ls_s;Y_ls_RttiValue_gr_N_ls_tBool;tInt;tUInt;tInt64;tUInt64;tFloat;tDouble;tString;nothing_gr_0_ls_b;i;u;i64;u64;f;d;s;*_gr_V_gr_U_gr_A:
 
 .. das:function:: append_annotation(st: smart_ptr<Structure>; mod_name: string const; ann_name: string const; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>> const)
 
@@ -1491,7 +1507,7 @@ add_annotation_argument returns int const
 Expression generation
 +++++++++++++++++++++
 
-  *  :ref:`override_method (str:smart_ptr\<ast::Structure\> -const;name:string const;funcName:string const) : bool <function-_at_ast_boost_c__c_override_method_Y_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_Cs_Cs>` 
+  *  :ref:`override_method (str:smart_ptr\<ast::Structure\> -const;name:string const;funcName:string const) : bool const <function-_at_ast_boost_c__c_override_method_Y_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_Cs_Cs>` 
   *  :ref:`panic_expr_as () : void? <function-_at_ast_boost_c__c_panic_expr_as>` 
   *  :ref:`make_static_assert_false (text:string const;at:rtti::LineInfo const) : smart_ptr\<ast::ExprStaticAssert\> <function-_at_ast_boost_c__c_make_static_assert_false_Cs_CH_ls_rtti_c__c_LineInfo_gr_>` 
   *  :ref:`convert_to_expression (value:auto& ==const -const;at:rtti::LineInfo const) : auto <function-_at_ast_boost_c__c_convert_to_expression_&_eq_._CH_ls_rtti_c__c_LineInfo_gr_>` 
@@ -1503,7 +1519,7 @@ Expression generation
 
 .. das:function:: override_method(str: StructurePtr; name: string const; funcName: string const)
 
-override_method returns bool
+override_method returns bool const
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -1656,7 +1672,7 @@ Setup
   *  :ref:`setup_call_list (name:string const;at:rtti::LineInfo const;subblock:block\<(var fn:smart_ptr\<ast::Function\> -const):void\> const) : ast::ExprBlock? <function-_at_ast_boost_c__c_setup_call_list_Cs_CH_ls_rtti_c__c_LineInfo_gr__CN_ls_fn_gr_0_ls_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`setup_call_list (name:string const;at:rtti::LineInfo const;isInit:bool const;isPrivate:bool const;isLateInit:bool const) : ast::ExprBlock? <function-_at_ast_boost_c__c_setup_call_list_Cs_CH_ls_rtti_c__c_LineInfo_gr__Cb_Cb_Cb>` 
   *  :ref:`setup_macro (name:string const;at:rtti::LineInfo const) : ast::ExprBlock? <function-_at_ast_boost_c__c_setup_macro_Cs_CH_ls_rtti_c__c_LineInfo_gr_>` 
-  *  :ref:`setup_tag_annotation (name:string const;tag:string const;classPtr:auto const) : auto <function-_at_ast_boost_c__c_setup_tag_annotation_Cs_Cs_C.>` 
+  *  :ref:`setup_tag_annotation (name:string const;tag:string const;classPtr:auto -const) : auto <function-_at_ast_boost_c__c_setup_tag_annotation_Cs_Cs_.>` 
 
 .. _function-_at_ast_boost_c__c_setup_call_list_Cs_CH_ls_rtti_c__c_LineInfo_gr__CN_ls_fn_gr_0_ls_Y_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_gr_1_ls_v_gr__builtin_:
 
@@ -1717,9 +1733,9 @@ setup_macro returns  :ref:`ast::ExprBlock <handle-ast-ExprBlock>` ?
 
 |function-ast_boost-setup_macro|
 
-.. _function-_at_ast_boost_c__c_setup_tag_annotation_Cs_Cs_C.:
+.. _function-_at_ast_boost_c__c_setup_tag_annotation_Cs_Cs_.:
 
-.. das:function:: setup_tag_annotation(name: string const; tag: string const; classPtr: auto const)
+.. das:function:: setup_tag_annotation(name: string const; tag: string const; classPtr: auto)
 
 setup_tag_annotation returns auto
 
@@ -1730,10 +1746,273 @@ setup_tag_annotation returns auto
 +--------+-------------+
 +tag     +string const +
 +--------+-------------+
-+classPtr+auto const   +
++classPtr+auto         +
 +--------+-------------+
 
 
 |function-ast_boost-setup_tag_annotation|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_BuiltInFunction_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_:
+
+.. das:function:: operator `is`BuiltInFunction(foo: Function? const)
+
+`is`BuiltInFunction returns bool const
+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++foo     + :ref:`ast::Function <handle-ast-Function>` ? const+
++--------+---------------------------------------------------+
+
+
+|function-ast_boost-`is`BuiltInFunction|
+
+.. _function-_at_ast_boost_c__c__rq_as_rq_BuiltInFunction_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_:
+
+.. das:function:: operator `as`BuiltInFunction(foo: Function? const)
+
+`as`BuiltInFunction returns  :ref:`ast::BuiltInFunction <handle-ast-BuiltInFunction>` ?
+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++foo     + :ref:`ast::Function <handle-ast-Function>` ? const+
++--------+---------------------------------------------------+
+
+
+|function-ast_boost-`as`BuiltInFunction|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_ExternalFnBase_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_:
+
+.. das:function:: operator `is`ExternalFnBase(foo: Function? const)
+
+`is`ExternalFnBase returns bool const
+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++foo     + :ref:`ast::Function <handle-ast-Function>` ? const+
++--------+---------------------------------------------------+
+
+
+|function-ast_boost-`is`ExternalFnBase|
+
+.. _function-_at_ast_boost_c__c__rq_as_rq_ExternalFnBase_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_:
+
+.. das:function:: operator `as`ExternalFnBase(foo: Function? const)
+
+`as`ExternalFnBase returns  :ref:`ast::ExternalFnBase <handle-ast-ExternalFnBase>` ?
+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++foo     + :ref:`ast::Function <handle-ast-Function>` ? const+
++--------+---------------------------------------------------+
+
+
+|function-ast_boost-`as`ExternalFnBase|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_FunctionAnnotation_C1_ls_H_ls_rtti_c__c_Annotation_gr__gr__qm_:
+
+.. das:function:: operator `is`FunctionAnnotation(foo: Annotation? const)
+
+`is`FunctionAnnotation returns bool const
+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++foo     + :ref:`rtti::Annotation <handle-rtti-Annotation>` ? const+
++--------+---------------------------------------------------------+
+
+
+|function-ast_boost-`is`FunctionAnnotation|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_FunctionAnnotation_C1_ls_H_ls_rtti_c__c_Annotation_gr__gr__qm_M:
+
+.. das:function:: operator `is`FunctionAnnotation(foo: smart_ptr<Annotation> const)
+
+`is`FunctionAnnotation returns bool const
+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++foo     +smart_ptr< :ref:`rtti::Annotation <handle-rtti-Annotation>` > const+
++--------+-------------------------------------------------------------------+
+
+
+|function-ast_boost-`is`FunctionAnnotation|
+
+.. _function-_at_ast_boost_c__c__rq_as_rq_FunctionAnnotation_C1_ls_H_ls_rtti_c__c_Annotation_gr__gr__qm_:
+
+.. das:function:: operator `as`FunctionAnnotation(foo: Annotation? const)
+
+`as`FunctionAnnotation returns  :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` ?
+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++foo     + :ref:`rtti::Annotation <handle-rtti-Annotation>` ? const+
++--------+---------------------------------------------------------+
+
+
+|function-ast_boost-`as`FunctionAnnotation|
+
+.. _function-_at_ast_boost_c__c__rq_as_rq_FunctionAnnotation_C1_ls_H_ls_rtti_c__c_Annotation_gr__gr__qm_M:
+
+.. das:function:: operator `as`FunctionAnnotation(foo: smart_ptr<Annotation> const)
+
+`as`FunctionAnnotation returns  :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` ?
+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++foo     +smart_ptr< :ref:`rtti::Annotation <handle-rtti-Annotation>` > const+
++--------+-------------------------------------------------------------------+
+
+
+|function-ast_boost-`as`FunctionAnnotation|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_StructureAnnotation_C1_ls_H_ls_rtti_c__c_Annotation_gr__gr__qm_:
+
+.. das:function:: operator `is`StructureAnnotation(foo: Annotation? const)
+
+`is`StructureAnnotation returns bool const
+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++foo     + :ref:`rtti::Annotation <handle-rtti-Annotation>` ? const+
++--------+---------------------------------------------------------+
+
+
+|function-ast_boost-`is`StructureAnnotation|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_StructureAnnotation_C1_ls_H_ls_rtti_c__c_Annotation_gr__gr__qm_M:
+
+.. das:function:: operator `is`StructureAnnotation(foo: smart_ptr<Annotation> const)
+
+`is`StructureAnnotation returns bool const
+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++foo     +smart_ptr< :ref:`rtti::Annotation <handle-rtti-Annotation>` > const+
++--------+-------------------------------------------------------------------+
+
+
+|function-ast_boost-`is`StructureAnnotation|
+
+.. _function-_at_ast_boost_c__c__rq_as_rq_StructureAnnotation_C1_ls_H_ls_rtti_c__c_Annotation_gr__gr__qm_:
+
+.. das:function:: operator `as`StructureAnnotation(foo: Annotation? const)
+
+`as`StructureAnnotation returns  :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` ?
+
++--------+---------------------------------------------------------+
++argument+argument type                                            +
++========+=========================================================+
++foo     + :ref:`rtti::Annotation <handle-rtti-Annotation>` ? const+
++--------+---------------------------------------------------------+
+
+
+|function-ast_boost-`as`StructureAnnotation|
+
+.. _function-_at_ast_boost_c__c__rq_as_rq_StructureAnnotation_C1_ls_H_ls_rtti_c__c_Annotation_gr__gr__qm_M:
+
+.. das:function:: operator `as`StructureAnnotation(foo: smart_ptr<Annotation> const)
+
+`as`StructureAnnotation returns  :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` ?
+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++foo     +smart_ptr< :ref:`rtti::Annotation <handle-rtti-Annotation>` > const+
++--------+-------------------------------------------------------------------+
+
+
+|function-ast_boost-`as`StructureAnnotation|
+
+.. _function-_at_ast_boost_c__c_walk_and_convert_C1_ls_Cu8_gr__qm__CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_CH_ls_rtti_c__c_LineInfo_gr_:
+
+.. das:function:: walk_and_convert(data: uint8 const? const; info: TypeDeclPtr; at: LineInfo const)
+
+walk_and_convert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+----------------------------------------------------+
++argument+argument type                                       +
++========+====================================================+
++data    +uint8 const? const                                  +
++--------+----------------------------------------------------+
++info    + :ref:`TypeDeclPtr <alias-TypeDeclPtr>`             +
++--------+----------------------------------------------------+
++at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const+
++--------+----------------------------------------------------+
+
+
+|function-ast_boost-walk_and_convert|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_BuiltInFunction_C.:
+
+.. das:function:: operator `is`BuiltInFunction(anything: auto const)
+
+`is`BuiltInFunction returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++anything+auto const   +
++--------+-------------+
+
+
+|function-ast_boost-`is`BuiltInFunction|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_ExternalFnBase_C.:
+
+.. das:function:: operator `is`ExternalFnBase(anything: auto const)
+
+`is`ExternalFnBase returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++anything+auto const   +
++--------+-------------+
+
+
+|function-ast_boost-`is`ExternalFnBase|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_FunctionAnnotation_C.:
+
+.. das:function:: operator `is`FunctionAnnotation(anything: auto const)
+
+`is`FunctionAnnotation returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++anything+auto const   +
++--------+-------------+
+
+
+|function-ast_boost-`is`FunctionAnnotation|
+
+.. _function-_at_ast_boost_c__c__rq_is_rq_StructureAnnotation_C.:
+
+.. das:function:: operator `is`StructureAnnotation(anything: auto const)
+
+`is`StructureAnnotation returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++anything+auto const   +
++--------+-------------+
+
+
+|function-ast_boost-`is`StructureAnnotation|
 
 

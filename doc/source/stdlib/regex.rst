@@ -91,7 +91,7 @@ ReNode fields are
 +-------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 +id     +int                                                                                                                                                                                            +
 +-------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+fun2   +function<(regex: :ref:`regex::Regex <struct-regex-Regex>` ;node: :ref:`regex::ReNode <struct-regex-ReNode>` ?;str:uint8? const):uint8?>                                                        +
++fun2   +function<(regex: :ref:`regex::Regex <struct-regex-Regex>` ;node: :ref:`regex::ReNode <struct-regex-ReNode>` ?;str:uint8 const? const):uint8 const?>                                            +
 +-------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 +gen2   +function<(node: :ref:`regex::ReNode <struct-regex-ReNode>` ?;rnd: :ref:`ReGenRandom <alias-ReGenRandom>` ;str: :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void>+
 +-------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -115,7 +115,7 @@ ReNode fields are
 +-------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 +index  +int                                                                                                                                                                                            +
 +-------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-+tail   +uint8?                                                                                                                                                                                         +
++tail   +uint8 const?                                                                                                                                                                                   +
 +-------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
@@ -132,7 +132,7 @@ Regex fields are
 +-----------+---------------------------------------------+
 +root       + :ref:`regex::ReNode <struct-regex-ReNode>` ?+
 +-----------+---------------------------------------------+
-+match      +uint8?                                       +
++match      +uint8 const?                                 +
 +-----------+---------------------------------------------+
 +groups     +array<tuple<range;string>>                   +
 +-----------+---------------------------------------------+
@@ -149,8 +149,8 @@ Compilation and validation
 ++++++++++++++++++++++++++
 
   *  :ref:`visit_top_down (node:regex::ReNode? -const;blk:block\<(var n:regex::ReNode? -const):void\> const) : void <function-_at_regex_c__c_visit_top_down_1_ls_S_ls_regex_c__c_ReNode_gr__gr__qm__CN_ls_n_gr_0_ls_1_ls_S_ls_regex_c__c_ReNode_gr__gr__qm__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`is_valid (re:regex::Regex -const) : bool <function-_at_regex_c__c_is_valid_S_ls_regex_c__c_Regex_gr_>` 
-  *  :ref:`regex_compile (re:regex::Regex -const;expr:string const) : bool <function-_at_regex_c__c_regex_compile_S_ls_regex_c__c_Regex_gr__Cs>` 
+  *  :ref:`is_valid (re:regex::Regex -const) : bool const <function-_at_regex_c__c_is_valid_S_ls_regex_c__c_Regex_gr_>` 
+  *  :ref:`regex_compile (re:regex::Regex -const;expr:string const) : bool const <function-_at_regex_c__c_regex_compile_S_ls_regex_c__c_Regex_gr__Cs>` 
   *  :ref:`regex_compile (expr:string const) : regex::Regex <function-_at_regex_c__c_regex_compile_Cs>` 
   *  :ref:`regex_compile (re:regex::Regex -const) : regex::Regex <function-_at_regex_c__c_regex_compile_S_ls_regex_c__c_Regex_gr_>` 
   *  :ref:`regex_debug (regex:regex::Regex const) : void <function-_at_regex_c__c_regex_debug_CS_ls_regex_c__c_Regex_gr_>` 
@@ -175,7 +175,7 @@ Compilation and validation
 
 .. das:function:: is_valid(re: Regex)
 
-is_valid returns bool
+is_valid returns bool const
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -190,7 +190,7 @@ returns `true` if enumeration compiled correctly
 
 .. das:function:: regex_compile(re: Regex; expr: string const)
 
-regex_compile returns bool
+regex_compile returns bool const
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -266,14 +266,14 @@ Prints character set in human readable form.
 Access
 ++++++
 
-  *  :ref:`regex_group (regex:regex::Regex const;index:int const;match:string const) : string <function-_at_regex_c__c_regex_group_CS_ls_regex_c__c_Regex_gr__Ci_Cs>` 
+  *  :ref:`regex_group (regex:regex::Regex const;index:int const;match:string const) : string const <function-_at_regex_c__c_regex_group_CS_ls_regex_c__c_Regex_gr__Ci_Cs>` 
   *  :ref:`regex_foreach (regex:regex::Regex -const;str:string const;blk:block\<(at:range const):bool\> const) : void <function-_at_regex_c__c_regex_foreach_S_ls_regex_c__c_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_>` 
 
 .. _function-_at_regex_c__c_regex_group_CS_ls_regex_c__c_Regex_gr__Ci_Cs:
 
 .. das:function:: regex_group(regex: Regex const; index: int const; match: string const)
 
-regex_group returns string
+regex_group returns string const
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -309,13 +309,13 @@ Iterates through all matches for the given regular expression in `str`.
 Match
 +++++
 
-  *  :ref:`regex_match (regex:regex::Regex -const;str:string const;offset:int const) : int <function-_at_regex_c__c_regex_match_S_ls_regex_c__c_Regex_gr__Cs_Ci>` 
+  *  :ref:`regex_match (regex:regex::Regex -const;str:string const;offset:int const) : int const <function-_at_regex_c__c_regex_match_S_ls_regex_c__c_Regex_gr__Cs_Ci>` 
 
 .. _function-_at_regex_c__c_regex_match_S_ls_regex_c__c_Regex_gr__Cs_Ci:
 
 .. das:function:: regex_match(regex: Regex; str: string const; offset: int const)
 
-regex_match returns int
+regex_match returns int const
 
 +--------+------------------------------------------+
 +argument+argument type                             +
@@ -335,14 +335,14 @@ If `offset` is specified, first that many number of symbols will not be matched.
 Generation
 ++++++++++
 
-  *  :ref:`re_gen_get_rep_limit () : uint <function-_at_regex_c__c_re_gen_get_rep_limit>` 
-  *  :ref:`re_gen (re:regex::Regex -const;rnd:iterator\<uint\> -const) : string <function-_at_regex_c__c_re_gen_S_ls_regex_c__c_Regex_gr__Y_ls_ReGenRandom_gr_1_ls_u_gr_G>` 
+  *  :ref:`re_gen_get_rep_limit () : uint const <function-_at_regex_c__c_re_gen_get_rep_limit>` 
+  *  :ref:`re_gen (re:regex::Regex -const;rnd:iterator\<uint\> -const) : string const <function-_at_regex_c__c_re_gen_S_ls_regex_c__c_Regex_gr__Y_ls_ReGenRandom_gr_1_ls_u_gr_G>` 
 
 .. _function-_at_regex_c__c_re_gen_get_rep_limit:
 
 .. das:function:: re_gen_get_rep_limit()
 
-re_gen_get_rep_limit returns uint
+re_gen_get_rep_limit returns uint const
 
 |function-regex-re_gen_get_rep_limit|
 
@@ -350,7 +350,7 @@ re_gen_get_rep_limit returns uint
 
 .. das:function:: re_gen(re: Regex; rnd: ReGenRandom)
 
-re_gen returns string
+re_gen returns string const
 
 +--------+------------------------------------------+
 +argument+argument type                             +

@@ -30,12 +30,12 @@ a cloning infastructure is generated for the lambda, which is invoked in the new
 Invocations
 +++++++++++
 
-  *  :ref:`new_job (l:lambda\<\> -const) : void <function-_at_jobque_boost_c__c_new_job__at_>` 
-  *  :ref:`new_thread (l:lambda\<\> -const) : void <function-_at_jobque_boost_c__c_new_thread__at_>` 
+  *  :ref:`new_job (l:lambda\<void\> -const) : void <function-_at_jobque_boost_c__c_new_job_1_ls_v_gr__at_>` 
+  *  :ref:`new_thread (l:lambda\<void\> -const) : void <function-_at_jobque_boost_c__c_new_thread_1_ls_v_gr__at_>` 
 
-.. _function-_at_jobque_boost_c__c_new_job__at_:
+.. _function-_at_jobque_boost_c__c_new_job_1_ls_v_gr__at_:
 
-.. das:function:: new_job(l: lambda<>)
+.. das:function:: new_job(l: lambda<void>)
 
 +--------+-------------+
 +argument+argument type+
@@ -51,9 +51,9 @@ Create a new job.
     * once new job is invoked, lambda is invoked on the new context on the job thread.
 note, this is never called if job-que is there.
 
-.. _function-_at_jobque_boost_c__c_new_thread__at_:
+.. _function-_at_jobque_boost_c__c_new_thread_1_ls_v_gr__at_:
 
-.. das:function:: new_thread(l: lambda<>)
+.. das:function:: new_thread(l: lambda<void>)
 
 +--------+-------------+
 +argument+argument type+
@@ -165,37 +165,37 @@ pushes value to the channel (at the end)
 Internal capture details
 ++++++++++++++++++++++++
 
-  *  :ref:`capture_jobque_channel (ch:jobque::Channel? const) : jobque::Channel? <function-_at_jobque_boost_c__c_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_>` 
-  *  :ref:`capture_jobque_job_status (js:jobque::JobStatus? const) : jobque::JobStatus? <function-_at_jobque_boost_c__c_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_>` 
+  *  :ref:`capture_jobque_channel (ch:jobque::Channel? -const) : jobque::Channel? <function-_at_jobque_boost_c__c_capture_jobque_channel_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_>` 
+  *  :ref:`capture_jobque_job_status (js:jobque::JobStatus? -const) : jobque::JobStatus? <function-_at_jobque_boost_c__c_capture_jobque_job_status_1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_>` 
   *  :ref:`release_capture_jobque_channel (ch:jobque::Channel? const) : void <function-_at_jobque_boost_c__c_release_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_>` 
   *  :ref:`release_capture_jobque_job_status (js:jobque::JobStatus? const) : void <function-_at_jobque_boost_c__c_release_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_>` 
 
-.. _function-_at_jobque_boost_c__c_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_:
+.. _function-_at_jobque_boost_c__c_capture_jobque_channel_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_:
 
-.. das:function:: capture_jobque_channel(ch: Channel? const)
+.. das:function:: capture_jobque_channel(ch: Channel?)
 
 capture_jobque_channel returns  :ref:`jobque::Channel <handle-jobque-Channel>` ?
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ?+
++--------+-------------------------------------------------+
 
 
 this function is used to capture a channel that is used by the jobque.
 
-.. _function-_at_jobque_boost_c__c_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_:
+.. _function-_at_jobque_boost_c__c_capture_jobque_job_status_1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_:
 
-.. das:function:: capture_jobque_job_status(js: JobStatus? const)
+.. das:function:: capture_jobque_job_status(js: JobStatus?)
 
 capture_jobque_job_status returns  :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?
 
-+--------+-----------------------------------------------------------+
-+argument+argument type                                              +
-+========+===========================================================+
-+js      + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const+
-+--------+-----------------------------------------------------------+
++--------+-----------------------------------------------------+
++argument+argument type                                        +
++========+=====================================================+
++js      + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?+
++--------+-----------------------------------------------------+
 
 
 this function is used to capture a job status that is used by the jobque.
@@ -230,17 +230,17 @@ this function is used to release a job status that is used by the jobque.
 Uncategorized
 +++++++++++++
 
-.. _function-_at_jobque_boost_c__c_capture_jobque_lock_box_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm_:
+.. _function-_at_jobque_boost_c__c_capture_jobque_lock_box_1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm_:
 
-.. das:function:: capture_jobque_lock_box(js: LockBox? const)
+.. das:function:: capture_jobque_lock_box(js: LockBox?)
 
 capture_jobque_lock_box returns  :ref:`jobque::LockBox <handle-jobque-LockBox>` ?
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+js      + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
-+--------+-------------------------------------------------------+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++js      + :ref:`jobque::LockBox <handle-jobque-LockBox>` ?+
++--------+-------------------------------------------------+
 
 
 this function is used to capture a lock box that is used by the jobque.

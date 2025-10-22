@@ -85,3 +85,5 @@
 .. |function-fio-chdir| replace:: changes current directory.
 
 .. |function-fio-getcwd| replace:: returns current working directory.
+
+.. |function-fio-has_env_variable| replace:: returns true if the environment variable is defined.

@@ -220,3 +220,4 @@
 
 .. |function-rtti-each| replace:: Iterates through each element of the object.
 
+.. |structure_annotation-rtti-DebugInfoHelper| replace:: Helper object which holds debug information about the simulated program.

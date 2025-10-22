@@ -210,4 +210,24 @@
 
 .. |class-ast_boost-SetupTypeMacro| replace:: This is base class for type macro setup.
 
+.. |function-ast_boost-isExprCallFunc| replace:: Returns true if expression is ExprCallFunction.
+
+.. |function-ast_boost-walk_and_convert| replace:: Walks data and converts it to an AST which generates such data.
+
+.. |function-ast_boost-`is`BuiltInFunction| replace:: Returns true if function is one of builtin (bound) functions, derived from BuiltInFunction.
+
+.. |function-ast_boost-`as`BuiltInFunction| replace:: Casts function to BuiltInFunction, or returns null if it is not derived from BuiltInFunction.
+
+.. |function-ast_boost-`is`ExternalFnBase| replace:: Returns true if function is one of external (bound) functions, derived from ExternalFnBase.
+
+.. |function-ast_boost-`as`ExternalFnBase| replace:: Casts function to ExternalFnBase, or returns null if it is not derived from ExternalFnBase.
+
+.. |function-ast_boost-`is`FunctionAnnotation| replace:: Returns true if function is one of function annotations, derived from AstFunctionAnnotation.
+
+.. |function-ast_boost-`as`FunctionAnnotation| replace:: Casts function to AstFunctionAnnotation, or returns null if it is not derived from AstFunctionAnnotation.
+
+.. |function-ast_boost-`is`StructureAnnotation| replace:: Returns true if function is one of structure annotations, derived from AstStructureAnnotation.
+
+.. |function-ast_boost-`as`StructureAnnotation| replace:: Casts function to AstStructureAnnotation, or returns null if it is not derived from AstStructureAnnotation.
+
 
