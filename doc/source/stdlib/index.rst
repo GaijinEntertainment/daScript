@@ -78,6 +78,9 @@ THE SOFTWARE.
    faker.rst
    fuzzer.rst
    match.rst
+   linq.rst
+   linq_boost.rst
+
 
 
 
