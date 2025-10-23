@@ -126,11 +126,13 @@ def private to_table_impl_const(a : auto(ARGT); tt : auto(TT); key : block<(v : 
 
 [skip_lock_check]
 def to_table(var a : iterator<auto(TT)>; key : block<(v : TT -&) : auto>; elementSelector : block<(v : TT -&) : auto>) : table<typedecl(_::unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&> {
+    //! Converts an iterator to a table
     return <- to_table_impl(a, type<TT -const -&>, key, elementSelector)
 }
 
 [skip_lock_check]
 def to_table(a : array<auto(TT)>; key : block<(v : TT -&) : auto>; elementSelector : block<(v : TT -&) : auto>) : table<typedecl(_::unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&> {
+    //! Converts an array to a table
     return <- to_table_impl_const(a, type<TT -const -&>, key, elementSelector)
 }
 
@@ -168,6 +170,7 @@ def concat(a, b : array<auto(TT)>) : array<TT -const -&> {
 
 [skip_lock_check]
 def concat_to_array(var a, b : iterator<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates two iterators and returns an array
     return <- concat_impl(a, b, type<TT -const -&>, 0)
 }
 
@@ -367,20 +370,24 @@ def order_descending_to_array(var a : iterator<auto(TT)>; fun : block<(v1 : TT -
 }
 
 def less(a, b) : bool {
+    //! Compares two values, returns true if first is less than second
     return a < b
 }
 
 def less(a, b : tuple<auto(TT)>) : bool {
+    //! Compares two tuples, returns true if first is less than second
     return a._0 < b._0
 }
 
 def less(a, b : tuple<auto(TT), auto(UU)>) : bool {
+    //! Compares two tuples, returns true if first is less than second
     return true if (a._0 < b._0)
     return false if (a._0 > b._0)
     return a._1 < b._1
 }
 
 def less(a, b : tuple<auto(TT), auto(UU), auto(VV)>) : bool {
+    //! Compares two tuples, returns true if first is less than second
     return true if (a._0 < b._0)
     return false if (a._0 > b._0)
     return true if (a._1 < b._1)
@@ -389,6 +396,7 @@ def less(a, b : tuple<auto(TT), auto(UU), auto(VV)>) : bool {
 }
 
 def less(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>) : bool {
+    //! Compares two tuples, returns true if first is less than second
     return true if (a._0 < b._0)
     return false if (a._0 > b._0)
     return true if (a._1 < b._1)
@@ -1433,7 +1441,7 @@ def sum(src : array<auto(TT)>) : TT -const -& {
 }
 
 [skip_lock_check, unused_argument(tt)]
-def average_impl(var src; tt : auto(TT)) : TT -const -& {
+def private average_impl(var src; tt : auto(TT)) : TT -const -& {
     var total : TT -const -&
     var count : uint64
     for (x in src) {
@@ -1451,7 +1459,7 @@ def average_impl(var src; tt : auto(TT)) : TT -const -& {
 }
 
 [skip_lock_check, unused_argument(tt)]
-def average_impl_const(src : auto(ARGT); tt : auto(TT)) : TT -const -& {
+def private average_impl_const(src : auto(ARGT); tt : auto(TT)) : TT -const -& {
     static_if (typeinfo is_workhorse(type<TT>)) {
         return average_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>)
     } else {

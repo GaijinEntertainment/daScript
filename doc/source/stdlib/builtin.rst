@@ -4625,15 +4625,15 @@ mul128 returns urange64 const
 
 .. das:function:: __bit_set(value: bitfield8:uint8& implicit; mask: bitfield8:uint8 const; on: bool const)
 
-+--------+-------------------+
-+argument+argument type      +
-+========+===================+
-+value   +bitfield8& implicit+
-+--------+-------------------+
-+mask    +bitfield8 const    +
-+--------+-------------------+
-+on      +bool const         +
-+--------+-------------------+
++--------+-----------------------------+
++argument+argument type                +
++========+=============================+
++value   +bitfield8 : uint8<>& implicit+
++--------+-----------------------------+
++mask    +bitfield8 : uint8<> const    +
++--------+-----------------------------+
++on      +bool const                   +
++--------+-----------------------------+
 
 
 |function-builtin-__bit_set|
@@ -4642,15 +4642,15 @@ mul128 returns urange64 const
 
 .. das:function:: __bit_set(value: bitfield16:uint16& implicit; mask: bitfield16:uint16 const; on: bool const)
 
-+--------+--------------------+
-+argument+argument type       +
-+========+====================+
-+value   +bitfield16& implicit+
-+--------+--------------------+
-+mask    +bitfield16 const    +
-+--------+--------------------+
-+on      +bool const          +
-+--------+--------------------+
++--------+-------------------------------+
++argument+argument type                  +
++========+===============================+
++value   +bitfield16 : uint16<>& implicit+
++--------+-------------------------------+
++mask    +bitfield16 : uint16<> const    +
++--------+-------------------------------+
++on      +bool const                     +
++--------+-------------------------------+
 
 
 |function-builtin-__bit_set|
@@ -4659,15 +4659,15 @@ mul128 returns urange64 const
 
 .. das:function:: __bit_set(value: bitfield64:uint64& implicit; mask: bitfield64:uint64 const; on: bool const)
 
-+--------+--------------------+
-+argument+argument type       +
-+========+====================+
-+value   +bitfield64& implicit+
-+--------+--------------------+
-+mask    +bitfield64 const    +
-+--------+--------------------+
-+on      +bool const          +
-+--------+--------------------+
++--------+-------------------------------+
++argument+argument type                  +
++========+===============================+
++value   +bitfield64 : uint64<>& implicit+
++--------+-------------------------------+
++mask    +bitfield64 : uint64<> const    +
++--------+-------------------------------+
++on      +bool const                     +
++--------+-------------------------------+
 
 
 |function-builtin-__bit_set|

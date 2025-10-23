@@ -257,11 +257,11 @@ Creates `JsonValue` out of value.
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-+--------+---------------+
-+argument+argument type  +
-+========+===============+
-+v       +bitfield8 const+
-+--------+---------------+
++--------+-------------------------+
++argument+argument type            +
++========+=========================+
++v       +bitfield8 : uint8<> const+
++--------+-------------------------+
 
 
 Creates `JsonValue` out of value.
@@ -272,11 +272,11 @@ Creates `JsonValue` out of value.
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-+--------+----------------+
-+argument+argument type   +
-+========+================+
-+v       +bitfield16 const+
-+--------+----------------+
++--------+---------------------------+
++argument+argument type              +
++========+===========================+
++v       +bitfield16 : uint16<> const+
++--------+---------------------------+
 
 
 Creates `JsonValue` out of value.
@@ -287,11 +287,11 @@ Creates `JsonValue` out of value.
 
 JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
-+--------+----------------+
-+argument+argument type   +
-+========+================+
-+v       +bitfield64 const+
-+--------+----------------+
++--------+---------------------------+
++argument+argument type              +
++========+===========================+
++v       +bitfield64 : uint64<> const+
++--------+---------------------------+
 
 
 Creates `JsonValue` out of value.

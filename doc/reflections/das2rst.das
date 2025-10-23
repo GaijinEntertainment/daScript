@@ -54,6 +54,8 @@ require daslib/export_constructor
 require daslib/faker
 require daslib/fuzzer
 require daslib/match
+require daslib/linq
+require daslib/linq_boost
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -668,6 +670,33 @@ def document_module_match(root : string) {
     document("Pattern matching", mod, "{root}/match.rst", "{root}/detail/match.rst", groups)
 }
 
+def document_module_linq(root : string) {
+    var mod = find_module("linq")
+    var groups <- array<DocGroup>(
+        group_by_regex("Sorting data", mod, %regex~(reverse.*|order.*)$%%),
+        group_by_regex("Set operations", mod, %regex~(distinct.*|union.*|intersect.*|except.*|unique.*)$%%),
+        group_by_regex("Concatenation operations", mod, %regex~(concat.*|append.*|prepend.*)$%%),
+        group_by_regex("Generation operations", mod, %regex~(default_empty|repeat|empty|range_sequence)$%%),
+        group_by_regex("Aggregation operations", mod, %regex~(count.*|long_count.*|sum.*|min.*|max.*|average.*|aggregate.*)$%%),
+        group_by_regex("Filtering data", mod, %regex~(where_.*)$%%),
+        group_by_regex("Partitioning data", mod, %regex~(skip.*|take.*|chunk.*)$%%),
+        group_by_regex("Join and group operations", mod, %regex~(join.*|group_join.*|group.*)$%%),
+        group_by_regex("Querying data", mod, %regex~(all.*|any.*|contains.*)$%%),
+        group_by_regex("Element operations", mod, %regex~(first.*|last.*|single.*|element_at.*)$%%),
+        group_by_regex("Transform operations", mod, %regex~(select.*|zip.*)$%%),
+        group_by_regex("Convertion operations", mod, %regex~(to_table.*|to_sequence.*)$%%),
+        group_by_regex("Comparators and keys", mod, %regex~(less.*|unique_key.*|sequence_equal.*)$%%)
+    )
+    document("LINQ", mod, "{root}/linq.rst", "{root}/detail/linq.rst", groups)
+}
+
+def document_module_linq_boost(root : string) {
+    var mod = find_module("linq_boost")
+    var groups <- array<DocGroup>(
+        hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr)$%%))
+    )
+    document("Boost module for LINQ", mod, "{root}/linq_boost.rst", "{root}/detail/linq_boost.rst", groups)
+}
 
 [export]
 def main {
@@ -738,4 +767,6 @@ def main {
     document_module_uriparser_boost(root)
     document_module_utf8_utils(root)
     document_module_match(root)
+    document_module_linq(root)
+    document_module_linq_boost(root)
 }
