@@ -21,7 +21,7 @@ Type aliases
 
 .. _alias-ProgramFlags:
 
-.. das:attribute:: ProgramFlags is a bitfield
+.. das:attribute:: bitfield ProgramFlags
 
 +-----------------+---+-----+
 +field            +bit+value+
@@ -50,7 +50,7 @@ Type aliases
 
 .. _alias-context_category_flags:
 
-.. das:attribute:: context_category_flags is a bitfield
+.. das:attribute:: bitfield context_category_flags
 
 +-----------------+---+-----+
 +field            +bit+value+
@@ -81,7 +81,7 @@ Type aliases
 
 .. _alias-TypeInfoFlags:
 
-.. das:attribute:: TypeInfoFlags is a bitfield
+.. das:attribute:: bitfield TypeInfoFlags
 
 +----------------+---+-----+
 +field           +bit+value+
@@ -126,7 +126,7 @@ Type aliases
 
 .. _alias-StructInfoFlags:
 
-.. das:attribute:: StructInfoFlags is a bitfield
+.. das:attribute:: bitfield StructInfoFlags
 
 +------------+---+-----+
 +field       +bit+value+
@@ -147,7 +147,7 @@ Type aliases
 
 .. _alias-ModuleFlags:
 
-.. das:attribute:: ModuleFlags is a bitfield
+.. das:attribute:: bitfield ModuleFlags
 
 +-----------------+---+-----+
 +field            +bit+value+
@@ -176,7 +176,7 @@ Type aliases
 
 .. _alias-AnnotationDeclarationFlags:
 
-.. das:attribute:: AnnotationDeclarationFlags is a bitfield
+.. das:attribute:: bitfield AnnotationDeclarationFlags
 
 +---------+---+-----+
 +field    +bit+value+
@@ -189,7 +189,7 @@ Type aliases
 
 .. _alias-RttiValue:
 
-.. das:attribute:: RttiValue is a variant type
+.. das:attribute:: variant RttiValue
 
 +-------+------+
 +tBool  +bool  +

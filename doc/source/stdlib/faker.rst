@@ -19,7 +19,7 @@ Type aliases
 
 .. _alias-BitRepresentation64:
 
-.. das:attribute:: BitRepresentation64 is a variant type
+.. das:attribute:: variant BitRepresentation64
 
 +---+-------+
 +ui2+uint[2]+

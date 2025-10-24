@@ -22,7 +22,7 @@ Type aliases
 
 .. _alias-Vec4f:
 
-.. das:attribute:: Vec4f is a variant type
+.. das:attribute:: variant Vec4f
 
 +----+------+
 +data+float4+

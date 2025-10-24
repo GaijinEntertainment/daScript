@@ -34,7 +34,7 @@ Bit array which represents an 8-bit character set.
 
 .. _alias-MaybeReNode:
 
-.. das:attribute:: MaybeReNode is a variant type
+.. das:attribute:: variant MaybeReNode
 
 +-------+---------------------------------------------+
 +value  + :ref:`regex::ReNode <struct-regex-ReNode>` ?+

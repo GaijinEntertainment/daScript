@@ -391,11 +391,19 @@ def document_topic(doc_file : file; topic : string implicit) {
 def document_bitfield(doc_file : file; value : TypeDeclPtr) {
     var tab : array<array<string>>
     emplace(tab, array<string>("field", "bit", "value"))
-    for (an, bit in value.argNames, range(32)) {
+    var maxBits = 32
+    if (value.baseType == Type.tBitfield8) {
+        maxBits = 8
+    } elif (value.baseType == Type.tBitfield16) {
+        maxBits = 16
+    } elif (value.baseType == Type.tBitfield64) {
+        maxBits = 64
+    }
+    for (an, bit in value.argNames, range(maxBits)) {
         var line : array<string>
         push(line, string(an))
         push(line, string(bit))
-        push(line, string(1 << bit))
+        push(line, string(1ul << uint64(bit)))
         emplace(tab, line)
     }
     fwrite(doc_file, make_table(tab, true))
@@ -424,19 +432,34 @@ def document_tuple(doc_file : file; value : TypeDeclPtr) {
 }
 
 def document_typedef(doc_file : file; mod : Module?; name : string implicit; value) {
-    fwrite(doc_file, make_label(alias_label_name(value)))
-    fwrite(doc_file, make_domain("das:attribute"))
-    fwrite(doc_file, name)
     if (value.baseType == Type.tBitfield || value.baseType == Type.tBitfield8 || value.baseType == Type.tBitfield16 || value.baseType == Type.tBitfield64) {
-        fwrite(doc_file, " is a bitfield\n\n")
+        fwrite(doc_file, make_label(alias_label_name(value)))
+        fwrite(doc_file, make_domain("das:attribute"))
+        fwrite(doc_file, "bitfield {name}")
+        if (value.baseType == Type.tBitfield8) {
+            fwrite(doc_file, " : uint8")
+        } elif (value.baseType == Type.tBitfield16) {
+            fwrite(doc_file, " : uint16")
+        } elif (value.baseType == Type.tBitfield64) {
+            fwrite(doc_file, " : uint64")
+        }
+        fwrite(doc_file, "\n\n")
         document_bitfield(doc_file, value)
     } elif (value.baseType == Type.tVariant) {
-        fwrite(doc_file, " is a variant type\n\n")
+        fwrite(doc_file, make_label(alias_label_name(value)))
+        fwrite(doc_file, make_domain("das:attribute"))
+        fwrite(doc_file, "variant {name}")
+        fwrite(doc_file, "\n\n")
         document_variant(doc_file, value)
     } elif (value.baseType == Type.tTuple) {
-        fwrite(doc_file, " is a tuple type\n\n")
+        fwrite(doc_file, make_label(alias_label_name(value)))
+        fwrite(doc_file, make_domain("das:attribute"))
+        fwrite(doc_file, "tuple {name}")
         document_tuple(doc_file, value)
     } else {
+        fwrite(doc_file, make_label(alias_label_name(value)))
+        fwrite(doc_file, make_domain("das:attribute"))
+        fwrite(doc_file, name)
         var tp = describe(value, false, false, false)
         tp = replace(tp, "$::", "")
         fwrite(doc_file, " = {tp}\n\n")

@@ -21,7 +21,7 @@ Type aliases
 
 .. _alias-ItCheck:
 
-.. das:attribute:: ItCheck is a variant type
+.. das:attribute:: variant ItCheck
 
 +---+------+
 +yes+string+
