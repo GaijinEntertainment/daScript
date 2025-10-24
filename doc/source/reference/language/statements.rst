@@ -78,6 +78,7 @@ One liner if statement::
 
     if ( a > b ) a = b  // this is a single-line notation
     a = b if ( a < b )  // this is a postfix notation
+    return 13 if ( a == 42 ) else return 7  // this is a full ternary notation
 
 ^^^^^^^^^^^^^^^^^
 while statement

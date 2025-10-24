@@ -42,6 +42,11 @@ Modules can be `private` or `public`::
 Default publicity of the functions, structures, or enumerations are that of the module
 (i.e. if the module is public and a function's publicity is not specified, that function is public).
 
+
+Module can be made visible to all modules in the project via the `inscope` modifier::
+
+    module Foo inscope
+
 ---------------
 Builtin modules
 ---------------
