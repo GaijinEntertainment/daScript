@@ -21,7 +21,7 @@ Type aliases
 
 .. _alias-JsValue:
 
-.. das:attribute:: JsValue is a variant type
+.. das:attribute:: variant JsValue
 
 +--------+---------------------------------------------------------------+
 +_object +table<string; :ref:`json::JsonValue <struct-json-JsonValue>` ?>+
@@ -44,7 +44,7 @@ Single JSON element.
 
 .. _alias-Token:
 
-.. das:attribute:: Token is a variant type
+.. das:attribute:: variant Token
 
 +--------+------+
 +_string +string+

@@ -26,7 +26,7 @@ Type aliases
 
 .. _alias-DebugExpressionFlags:
 
-.. das:attribute:: DebugExpressionFlags is a bitfield
+.. das:attribute:: bitfield DebugExpressionFlags
 
 +--------+---+-----+
 +field   +bit+value+

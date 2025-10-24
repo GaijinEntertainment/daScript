@@ -16,7 +16,7 @@ Type aliases
 
 .. _alias-print_flags:
 
-.. das:attribute:: print_flags is a bitfield
+.. das:attribute:: bitfield print_flags
 
 +------------------+---+-----+
 +field             +bit+value+

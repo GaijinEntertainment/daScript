@@ -20,7 +20,7 @@ Type aliases
 
 .. _alias-TypeDeclFlags:
 
-.. das:attribute:: TypeDeclFlags is a bitfield
+.. das:attribute:: bitfield TypeDeclFlags
 
 +---------------+---+------+
 +field          +bit+value +
@@ -67,7 +67,7 @@ Type aliases
 
 .. _alias-FieldDeclarationFlags:
 
-.. das:attribute:: FieldDeclarationFlags is a bitfield
+.. das:attribute:: bitfield FieldDeclarationFlags
 
 +----------------+---+-----+
 +field           +bit+value+
@@ -98,7 +98,7 @@ Type aliases
 
 .. _alias-StructureFlags:
 
-.. das:attribute:: StructureFlags is a bitfield
+.. das:attribute:: bitfield StructureFlags
 
 +---------------------+---+------+
 +field                +bit+value +
@@ -147,7 +147,7 @@ Type aliases
 
 .. _alias-ExprGenFlags:
 
-.. das:attribute:: ExprGenFlags is a bitfield
+.. das:attribute:: bitfield ExprGenFlags
 
 +---------------+---+-----+
 +field          +bit+value+
@@ -164,7 +164,7 @@ Type aliases
 
 .. _alias-ExprLetFlags:
 
-.. das:attribute:: ExprLetFlags is a bitfield
+.. das:attribute:: bitfield ExprLetFlags
 
 +----------------+---+-----+
 +field           +bit+value+
@@ -181,7 +181,7 @@ Type aliases
 
 .. _alias-ExprFlags:
 
-.. das:attribute:: ExprFlags is a bitfield
+.. das:attribute:: bitfield ExprFlags
 
 +-------------------+---+-----+
 +field              +bit+value+
@@ -202,7 +202,7 @@ Type aliases
 
 .. _alias-ExprPrintFlags:
 
-.. das:attribute:: ExprPrintFlags is a bitfield
+.. das:attribute:: bitfield ExprPrintFlags
 
 +-----------+---+-----+
 +field      +bit+value+
@@ -219,82 +219,82 @@ Type aliases
 
 .. _alias-FunctionFlags:
 
-.. das:attribute:: FunctionFlags is a bitfield
+.. das:attribute:: bitfield FunctionFlags
 
-+---------------------+---+-----------+
-+field                +bit+value      +
-+=====================+===+===========+
-+builtIn              +0  +1          +
-+---------------------+---+-----------+
-+policyBased          +1  +2          +
-+---------------------+---+-----------+
-+callBased            +2  +4          +
-+---------------------+---+-----------+
-+interopFn            +3  +8          +
-+---------------------+---+-----------+
-+hasReturn            +4  +16         +
-+---------------------+---+-----------+
-+copyOnReturn         +5  +32         +
-+---------------------+---+-----------+
-+moveOnReturn         +6  +64         +
-+---------------------+---+-----------+
-+exports              +7  +128        +
-+---------------------+---+-----------+
-+init                 +8  +256        +
-+---------------------+---+-----------+
-+addr                 +9  +512        +
-+---------------------+---+-----------+
-+used                 +10 +1024       +
-+---------------------+---+-----------+
-+fastCall             +11 +2048       +
-+---------------------+---+-----------+
-+knownSideEffects     +12 +4096       +
-+---------------------+---+-----------+
-+hasToRunAtCompileTime+13 +8192       +
-+---------------------+---+-----------+
-+unsafeOperation      +14 +16384      +
-+---------------------+---+-----------+
-+unsafeDeref          +15 +32768      +
-+---------------------+---+-----------+
-+hasMakeBlock         +16 +65536      +
-+---------------------+---+-----------+
-+aotNeedPrologue      +17 +131072     +
-+---------------------+---+-----------+
-+noAot                +18 +262144     +
-+---------------------+---+-----------+
-+aotHybrid            +19 +524288     +
-+---------------------+---+-----------+
-+aotTemplate          +20 +1048576    +
-+---------------------+---+-----------+
-+generated            +21 +2097152    +
-+---------------------+---+-----------+
-+privateFunction      +22 +4194304    +
-+---------------------+---+-----------+
-+_generator           +23 +8388608    +
-+---------------------+---+-----------+
-+_lambda              +24 +16777216   +
-+---------------------+---+-----------+
-+firstArgReturnType   +25 +33554432   +
-+---------------------+---+-----------+
-+noPointerCast        +26 +67108864   +
-+---------------------+---+-----------+
-+isClassMethod        +27 +134217728  +
-+---------------------+---+-----------+
-+isTypeConstructor    +28 +268435456  +
-+---------------------+---+-----------+
-+shutdown             +29 +536870912  +
-+---------------------+---+-----------+
-+anyTemplate          +30 +1073741824 +
-+---------------------+---+-----------+
-+macroInit            +31 +-2147483648+
-+---------------------+---+-----------+
++---------------------+---+----------+
++field                +bit+value     +
++=====================+===+==========+
++builtIn              +0  +1         +
++---------------------+---+----------+
++policyBased          +1  +2         +
++---------------------+---+----------+
++callBased            +2  +4         +
++---------------------+---+----------+
++interopFn            +3  +8         +
++---------------------+---+----------+
++hasReturn            +4  +16        +
++---------------------+---+----------+
++copyOnReturn         +5  +32        +
++---------------------+---+----------+
++moveOnReturn         +6  +64        +
++---------------------+---+----------+
++exports              +7  +128       +
++---------------------+---+----------+
++init                 +8  +256       +
++---------------------+---+----------+
++addr                 +9  +512       +
++---------------------+---+----------+
++used                 +10 +1024      +
++---------------------+---+----------+
++fastCall             +11 +2048      +
++---------------------+---+----------+
++knownSideEffects     +12 +4096      +
++---------------------+---+----------+
++hasToRunAtCompileTime+13 +8192      +
++---------------------+---+----------+
++unsafeOperation      +14 +16384     +
++---------------------+---+----------+
++unsafeDeref          +15 +32768     +
++---------------------+---+----------+
++hasMakeBlock         +16 +65536     +
++---------------------+---+----------+
++aotNeedPrologue      +17 +131072    +
++---------------------+---+----------+
++noAot                +18 +262144    +
++---------------------+---+----------+
++aotHybrid            +19 +524288    +
++---------------------+---+----------+
++aotTemplate          +20 +1048576   +
++---------------------+---+----------+
++generated            +21 +2097152   +
++---------------------+---+----------+
++privateFunction      +22 +4194304   +
++---------------------+---+----------+
++_generator           +23 +8388608   +
++---------------------+---+----------+
++_lambda              +24 +16777216  +
++---------------------+---+----------+
++firstArgReturnType   +25 +33554432  +
++---------------------+---+----------+
++noPointerCast        +26 +67108864  +
++---------------------+---+----------+
++isClassMethod        +27 +134217728 +
++---------------------+---+----------+
++isTypeConstructor    +28 +268435456 +
++---------------------+---+----------+
++shutdown             +29 +536870912 +
++---------------------+---+----------+
++anyTemplate          +30 +1073741824+
++---------------------+---+----------+
++macroInit            +31 +2147483648+
++---------------------+---+----------+
 
 
 |typedef-ast-FunctionFlags|
 
 .. _alias-MoreFunctionFlags:
 
-.. das:attribute:: MoreFunctionFlags is a bitfield
+.. das:attribute:: bitfield MoreFunctionFlags
 
 +--------------------------+---+-------+
 +field                     +bit+value  +
@@ -353,7 +353,7 @@ Type aliases
 
 .. _alias-FunctionSideEffectFlags:
 
-.. das:attribute:: FunctionSideEffectFlags is a bitfield
+.. das:attribute:: bitfield FunctionSideEffectFlags
 
 +--------------+---+-----+
 +field         +bit+value+
@@ -376,7 +376,7 @@ Type aliases
 
 .. _alias-VariableFlags:
 
-.. das:attribute:: VariableFlags is a bitfield
+.. das:attribute:: bitfield VariableFlags
 
 +-------------------+---+------+
 +field              +bit+value +
@@ -425,7 +425,7 @@ Type aliases
 
 .. _alias-VariableAccessFlags:
 
-.. das:attribute:: VariableAccessFlags is a bitfield
+.. das:attribute:: bitfield VariableAccessFlags
 
 +-------------+---+-----+
 +field        +bit+value+
@@ -448,7 +448,7 @@ Type aliases
 
 .. _alias-ExprBlockFlags:
 
-.. das:attribute:: ExprBlockFlags is a bitfield
+.. das:attribute:: bitfield ExprBlockFlags
 
 +--------------------------+---+-----+
 +field                     +bit+value+
@@ -491,7 +491,7 @@ Type aliases
 
 .. _alias-ExprAtFlags:
 
-.. das:attribute:: ExprAtFlags is a bitfield
+.. das:attribute:: bitfield ExprAtFlags
 
 +------------+---+-----+
 +field       +bit+value+
@@ -510,7 +510,7 @@ Type aliases
 
 .. _alias-ExprMakeLocalFlags:
 
-.. das:attribute:: ExprMakeLocalFlags is a bitfield
+.. das:attribute:: bitfield ExprMakeLocalFlags
 
 +---------------+---+-----+
 +field          +bit+value+
@@ -533,7 +533,7 @@ Type aliases
 
 .. _alias-ExprAscendFlags:
 
-.. das:attribute:: ExprAscendFlags is a bitfield
+.. das:attribute:: bitfield ExprAscendFlags
 
 +------------+---+-----+
 +field       +bit+value+
@@ -550,7 +550,7 @@ Type aliases
 
 .. _alias-ExprCastFlags:
 
-.. das:attribute:: ExprCastFlags is a bitfield
+.. das:attribute:: bitfield ExprCastFlags
 
 +---------------+---+-----+
 +field          +bit+value+
@@ -565,7 +565,7 @@ Type aliases
 
 .. _alias-ExprVarFlags:
 
-.. das:attribute:: ExprVarFlags is a bitfield
+.. das:attribute:: bitfield ExprVarFlags
 
 +-----------+---+-----+
 +field      +bit+value+
@@ -592,7 +592,7 @@ Type aliases
 
 .. _alias-ExprMakeStructFlags:
 
-.. das:attribute:: ExprMakeStructFlags is a bitfield
+.. das:attribute:: bitfield ExprMakeStructFlags
 
 +----------------------+---+-----+
 +field                 +bit+value+
@@ -627,7 +627,7 @@ Type aliases
 
 .. _alias-MakeFieldDeclFlags:
 
-.. das:attribute:: MakeFieldDeclFlags is a bitfield
+.. das:attribute:: bitfield MakeFieldDeclFlags
 
 +--------------+---+-----+
 +field         +bit+value+
@@ -642,7 +642,7 @@ Type aliases
 
 .. _alias-ExprFieldDerefFlags:
 
-.. das:attribute:: ExprFieldDerefFlags is a bitfield
+.. das:attribute:: bitfield ExprFieldDerefFlags
 
 +------------------+---+-----+
 +field             +bit+value+
@@ -657,7 +657,7 @@ Type aliases
 
 .. _alias-ExprFieldFieldFlags:
 
-.. das:attribute:: ExprFieldFieldFlags is a bitfield
+.. das:attribute:: bitfield ExprFieldFieldFlags
 
 +------------+---+-----+
 +field       +bit+value+
@@ -678,7 +678,7 @@ Type aliases
 
 .. _alias-ExprSwizzleFieldFlags:
 
-.. das:attribute:: ExprSwizzleFieldFlags is a bitfield
+.. das:attribute:: bitfield ExprSwizzleFieldFlags
 
 +-----+---+-----+
 +field+bit+value+
@@ -695,7 +695,7 @@ Type aliases
 
 .. _alias-ExprYieldFlags:
 
-.. das:attribute:: ExprYieldFlags is a bitfield
+.. das:attribute:: bitfield ExprYieldFlags
 
 +-------------+---+-----+
 +field        +bit+value+
@@ -710,7 +710,7 @@ Type aliases
 
 .. _alias-ExprReturnFlags:
 
-.. das:attribute:: ExprReturnFlags is a bitfield
+.. das:attribute:: bitfield ExprReturnFlags
 
 +------------------+---+-----+
 +field             +bit+value+
@@ -739,7 +739,7 @@ Type aliases
 
 .. _alias-ExprMakeBlockFlags:
 
-.. das:attribute:: ExprMakeBlockFlags is a bitfield
+.. das:attribute:: bitfield ExprMakeBlockFlags
 
 +---------------+---+-----+
 +field          +bit+value+
@@ -754,7 +754,7 @@ Type aliases
 
 .. _alias-CopyFlags:
 
-.. das:attribute:: CopyFlags is a bitfield
+.. das:attribute:: bitfield CopyFlags
 
 +------------------+---+-----+
 +field             +bit+value+
@@ -771,7 +771,7 @@ Type aliases
 
 .. _alias-MoveFlags:
 
-.. das:attribute:: MoveFlags is a bitfield
+.. das:attribute:: bitfield MoveFlags
 
 +------------------+---+-----+
 +field             +bit+value+
@@ -786,7 +786,7 @@ Type aliases
 
 .. _alias-IfFlags:
 
-.. das:attribute:: IfFlags is a bitfield
+.. das:attribute:: bitfield IfFlags
 
 +---------+---+-----+
 +field    +bit+value+
