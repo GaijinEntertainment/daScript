@@ -709,6 +709,7 @@ namespace das
             : ExprConstT(a,i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
         auto getValue() const { return ExprConstT::getValue(); };
+        virtual void serialize( AstSerializer & ser ) override;
         TypeDeclPtr bitfieldType;
     };
 

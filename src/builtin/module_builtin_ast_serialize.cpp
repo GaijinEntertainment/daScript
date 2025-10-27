@@ -1494,10 +1494,15 @@ namespace das {
         ser << isSmartPtr << ptrType;
     }
 
-     void ExprConstEnumeration::serialize( AstSerializer & ser ) {
+    void ExprConstEnumeration::serialize( AstSerializer & ser ) {
         ExprConst::serialize(ser);
         ser << enumType << text;
-     }
+    }
+
+    void ExprConstBitfield::serialize( AstSerializer & ser ) {
+        ExprConst::serialize(ser);
+        ser << bitfieldType;
+    }
 
     void ExprConstString::serialize(AstSerializer& ser) {
         ExprConst::serialize(ser);
@@ -2309,7 +2314,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 65;
+        static constexpr uint32_t currentVersion = 66;
         return currentVersion;
     }
 
