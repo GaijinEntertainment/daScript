@@ -5893,7 +5893,9 @@ namespace das {
                                     return Visitor::visit(expr);
                                 }
                                 reportAstChanged();
-                                return found->init->clone();
+                                auto res = found->init->clone();
+                                res->at = makeConstAt(expr);
+                                return res;
                             } else {
                                 TextWriter tw;
                                 if ( verbose ) {
