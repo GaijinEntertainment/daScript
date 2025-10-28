@@ -6428,7 +6428,7 @@ namespace das {
             }
             if ( expr->func ) {
                 if ( expr->func->firstArgReturnType || isBitfieldOp(expr->func) ) {
-                    TypeDecl::clone(expr->type,expr->arguments[0]->type);
+                    TypeDecl::clone(expr->type,expr->subexpr->type);
                     expr->type->ref = false;
                 } else {
                     TypeDecl::clone(expr->type,expr->func->result);
@@ -6643,7 +6643,7 @@ namespace das {
             }
             if ( expr->func ) {
                 if ( expr->func->firstArgReturnType ) {
-                    TypeDecl::clone(expr->type,expr->arguments[0]->type);
+                    TypeDecl::clone(expr->type,expr->left->type);
                     expr->type->ref = false;
                 } else if ( isBitfieldOp(expr->func) ) {
                     TypeDecl::clone(expr->type,expr->func->result);
