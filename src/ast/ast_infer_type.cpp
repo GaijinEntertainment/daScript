@@ -5817,6 +5817,13 @@ namespace das {
             return nullptr;
         }
 
+        LineInfo makeConstAt ( ExprField * expr ) const {
+            LineInfo constAt = expr->value->at;
+            constAt.last_column = expr->atField.last_column;
+            constAt.last_line = expr->atField.last_line;
+            return constAt;
+        }
+
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( expr->value->rtti_isVar() && !expr->value->type ) {    // if its a var expression, but it did not infer
                 auto var = static_cast<ExprVar *>(expr->value.get());
@@ -5847,7 +5854,7 @@ namespace das {
                     reportAstChanged();
                     auto td = make_smart<TypeDecl>(possibleEnums.back());
                     td->constant = true;
-                    auto res = make_smart<ExprConstEnumeration>(expr->at, expr->name, td);
+                    auto res = make_smart<ExprConstEnumeration>(makeConstAt(expr), expr->name, td);
                     bool infE = false;
                     res->value = getEnumerationValue(res.get(), infE);
                     if ( infE ) res->type = td;
@@ -5859,7 +5866,7 @@ namespace das {
                         reportAstChanged();
                         auto td = make_smart<TypeDecl>(*alias);
                         td->ref = false;
-                        auto bitConst = new ExprConstBitfield(expr->at, 1ull << uint64_t(bit));
+                        auto bitConst = new ExprConstBitfield(makeConstAt(expr), 1ull << uint64_t(bit));
                         bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
                         bitConst->type = td;
                         return bitConst;
@@ -6358,6 +6365,12 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprOp1
+        bool isBitfieldOp ( const Function * fnc ) const {
+            if ( fnc->module->name=="$" && fnc->arguments[0]->type->isBitfield() ) {
+                return true;
+            }
+            return false;
+        }
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
             if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             // pointer arithmetics
@@ -6414,8 +6427,8 @@ namespace das {
                 return opCall;
             }
             if ( expr->func ) {
-                if ( expr->func->firstArgReturnType ) {
-                    TypeDecl::clone(expr->type,expr->arguments[0]->type);
+                if ( expr->func->firstArgReturnType || isBitfieldOp(expr->func) ) {
+                    TypeDecl::clone(expr->type,expr->subexpr->type);
                     expr->type->ref = false;
                 } else {
                     TypeDecl::clone(expr->type,expr->func->result);
@@ -6630,8 +6643,15 @@ namespace das {
             }
             if ( expr->func ) {
                 if ( expr->func->firstArgReturnType ) {
-                    TypeDecl::clone(expr->type,expr->arguments[0]->type);
+                    TypeDecl::clone(expr->type,expr->left->type);
                     expr->type->ref = false;
+                } else if ( isBitfieldOp(expr->func) ) {
+                    TypeDecl::clone(expr->type,expr->func->result);
+                    if ( !expr->left->type->alias.empty() ) {
+                        expr->type->alias = expr->left->type->alias;
+                    } else if ( !expr->right->type->alias.empty() ) {
+                        expr->type->alias = expr->right->type->alias;
+                    }
                 } else {
                     TypeDecl::clone(expr->type,expr->func->result);
                 }
