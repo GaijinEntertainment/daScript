@@ -413,6 +413,7 @@ class LlvmJitVisitor : AstVisitor {
 
     def process_finally(expr : ExpressionPtr) {
         var blk <- collect_finally(expr, true)
+        sort(blk) <| $(a, b) => uid.get_block_name_ptr(a).publ() < uid.get_block_name_ptr(b).publ()
         for (bl in blk) {
             finallyBlocks[bl] = append_basic_block("finally_block_at_{int(bl.at.line)}_")
         }
@@ -426,6 +427,7 @@ class LlvmJitVisitor : AstVisitor {
 
     def process_labels(expr : ExpressionPtr) {
         var lls <- collect_labels(expr)
+        sort(lls)
         for (ll in lls) {
             labels[ll] = append_basic_block("label_{ll}_")
         }
@@ -684,7 +686,7 @@ class LlvmJitVisitor : AstVisitor {
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
         // build wrapper function
         build_wrapper_function(fnmna, fun.arguments, fun.result, isCMRES(fun), null, fun.at)
-        build_function_entry(fun.at, intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
+        build_function_entry(fun.at, hash(get_mangled_name(fun)), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations, fun.arguments)
         process_labels(fun.body)
         process_finally(fun.body)
@@ -4838,7 +4840,7 @@ class LlvmJitVisitor : AstVisitor {
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
         // build wrapper function
         build_wrapper_function(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
-        build_function_entry(expr.at, intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
+        build_function_entry(expr.at, hash(fnmna), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations, thisBlock.arguments)
         process_labels(expr)
         process_finally(expr)
@@ -4891,6 +4893,7 @@ class LlvmJitVisitor : AstVisitor {
 
     def override preVisitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) : void {
         var captured <- capture_block(expr._block)
+        sort(captured) <| $(a, b) => string(a.variable.name) < string(b.variable.name)
         // build block type
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(types.LLVMFloat4Type(), 10u))
@@ -6046,7 +6049,7 @@ class JIT_LLVM : AstSimulateMacro {
                 }
                 generated_funcs |> emplace(fun)
             }
-            if (false) {
+            if (true) {
                 // Let's remove unused attributes before we print IR.
                 var pm = LLVMCreatePassManager()
                 LLVMAddGlobalDCEPass(pm)

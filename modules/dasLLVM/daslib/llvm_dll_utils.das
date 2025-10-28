@@ -144,6 +144,10 @@ class public UidGen : AstVisitor {
         add(get_ptr(expr))
     }
 
+    def public get_block_name_ptr(blk : ExprBlock?) : DllName {
+        return get_base(blk, "block_{get_mangled_name(blk)}")
+    }
+
     def public get_block_name(blk : smart_ptr<ExprBlock>) : DllName {
         return get_base(get_ptr(blk), "block_{get_mangled_name(blk)}")
     }
@@ -210,7 +214,6 @@ struct public DLLHandle {
         if (fn_addr == null) {
             return false
         }
-        print("{fn.publ()}\n")
         *fn_addr = ptr;
         return true
     }
