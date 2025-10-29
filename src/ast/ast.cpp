@@ -1004,7 +1004,7 @@ namespace das {
 
     // add extern func
 
-    void addExternFunc(Module& mod, const FunctionPtr & fnX, bool isCmres, SideEffects seFlags) {
+    DAS_API void addExternFunc(Module& mod, const FunctionPtr & fnX, bool isCmres, SideEffects seFlags) {
         if (!isCmres) {
             if (fnX->result->isRefType() && !fnX->result->ref) {
                 DAS_FATAL_ERROR(

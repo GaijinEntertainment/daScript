@@ -257,7 +257,7 @@ namespace das
         return -1;
     }
 
-    int getVariantAlign ( TypeInfo * info ) {
+    static int getVariantAlign ( TypeInfo * info ) {
         int al = getTypeBaseAlign(Type::tInt);
         for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
             al = das::max ( al, getTypeAlign(info->argTypes[i]) );
@@ -265,7 +265,7 @@ namespace das
         return al;
     }
 
-    int getVariantSize ( TypeInfo * info ) {
+    static int getVariantSize ( TypeInfo * info ) {
         int maxSize = 0;
         int al = getVariantAlign(info) - 1;
         for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
@@ -277,7 +277,7 @@ namespace das
         return maxSize;
     }
 
-    int getVariantFieldOffset ( TypeInfo * info, int index ) {
+    DAS_API int getVariantFieldOffset ( TypeInfo * info, int index ) {
         DAS_ASSERT(info->type==Type::tVariant);
         DAS_ASSERT(uint32_t(index)<info->argCount);
         int al = getVariantAlign(info) - 1;
@@ -285,7 +285,7 @@ namespace das
         return offset;
     }
 
-    int getTypeBaseSize ( TypeInfo * info ) {
+    DAS_API int getTypeBaseSize ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
             return int(info->getAnnotation()->getSizeOf());
         } else if ( info->type==Type::tStructure ) {
@@ -299,7 +299,7 @@ namespace das
         }
     }
 
-    int getTypeBaseAlign ( TypeInfo * info ) {
+    DAS_API int getTypeBaseAlign ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
             return int(info->getAnnotation()->getAlignOf());
         } else if ( info->type==Type::tStructure ) {
@@ -313,7 +313,7 @@ namespace das
         }
     }
 
-    int getDimSize ( TypeInfo * info ) {
+    DAS_API int getDimSize ( TypeInfo * info ) {
         int size = 1;
         if ( info->dimSize ) {
             for ( uint32_t i=0, is=info->dimSize; i!=is; ++i ) {
@@ -323,23 +323,23 @@ namespace das
         return size;
     }
 
-    int getTypeSize ( TypeInfo * info ) {
+    DAS_API int getTypeSize ( TypeInfo * info ) {
         return getDimSize(info) * getTypeBaseSize(info);
     }
 
-    int getTypeAlign ( TypeInfo * info ) {
+    DAS_API int getTypeAlign ( TypeInfo * info ) {
         return getTypeBaseAlign(info);
     }
 
-    bool isVoid ( const TypeInfo * THIS ) {
+    DAS_API bool isVoid ( const TypeInfo * THIS ) {
         return (THIS->type==Type::tVoid) && (THIS->dimSize==0);
     }
 
-    bool isPointer ( const TypeInfo * THIS ) {
+    DAS_API bool isPointer ( const TypeInfo * THIS ) {
         return (THIS->type==Type::tPointer) && (THIS->dimSize==0);
     }
 
-    bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType ) {
+    DAS_API bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType ) {
         // passing non-ref to ref, or passing not the same type
         if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,RefMatters::no, ConstMatters::no, TemporaryMatters::no,false) ) {
             return false;
@@ -352,7 +352,7 @@ namespace das
         return true;
     }
 
-    bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType) {
+    DAS_API bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType) {
         if (!passType) {
             return false;
         }
@@ -380,7 +380,7 @@ namespace das
         return true;
     }
 
-    bool isSameType ( const TypeInfo * THIS,
+    DAS_API bool isSameType ( const TypeInfo * THIS,
                      const TypeInfo * decl,
                      RefMatters refMatters,
                      ConstMatters constMatters,
@@ -478,7 +478,7 @@ namespace das
         return true;
     }
 
-    bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS ) {
+    DAS_API bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS ) {
         if ( castS->count < THIS->count ) {
             return false;
         }
@@ -495,7 +495,7 @@ namespace das
         return true;
     }
 
-    string debug_type ( const TypeInfo * info ) {
+    DAS_API string debug_type ( const TypeInfo * info ) {
         if ( !info ) return "";
         TextWriter stream;
         // its never auto or alias
@@ -584,7 +584,7 @@ namespace das
         return stream.str();
     }
 
-    string getTypeInfoMangledName ( TypeInfo * info ) {
+    DAS_API string getTypeInfoMangledName ( TypeInfo * info ) {
         TextWriter ss;
         if ( info->flags & TypeInfo::flag_isConst )     ss << "C";
         if ( info->flags & TypeInfo::flag_ref )         ss << "&";
@@ -771,6 +771,45 @@ namespace das
         }
     }
 
+    void FAccessStorImpl::clear() {
+        files.clear();
+    }
+    FileInfoPtr FAccessStorImpl::take( const string & fileName ) {
+        auto it = files.find(fileName);
+        if ( it == files.end() ) return nullptr;
+        return das::move(it->second);
+    }
+    FileInfo *FAccessStorImpl::tryGet( const string & fileName ) {
+        auto it = files.find(fileName);
+        if ( it == files.end() ) return nullptr;
+        return it->second.get();
+    }
+
+    FileInfo *FAccessStorImpl::insert( const string & fileName, FileInfoPtr && info ) {
+        files[fileName] = das::move(info);
+        auto ins = files.find(fileName);
+        ins->second->name = (char *) ins->first.c_str();
+        return ins->second.get();
+
+    }
+
+    bool FAccessStorImpl::erase(const string & fileName) {
+        auto it = files.find(fileName);
+        if ( it != files.end() ) {
+            files.erase(it);
+            return true;
+        } else {
+            return false;
+        }
+    }
+    void FAccessStorImpl::freeSource() {
+        for ( auto & fp : files ) {
+            fp.second->freeSourceData();
+        }            
+    }
+
+    FileAccess::FileAccess() : files(std::make_shared<FAccessStorImpl>()) {}
+
     bool FileAccess::isSameFileName ( const string & a, const string & b ) const {
         if ( a.size() != b.size() ) return false;
         auto it_a = a.begin();
@@ -790,34 +829,23 @@ namespace das
     }
 
     FileInfoPtr FileAccess::letGoOfFileInfo ( const string & fileName ) {
-        auto it = files.find(fileName);
-        if ( it == files.end() ) return nullptr;
-        return das::move(it->second);
+        return das::move(files->take(fileName));
     }
 
     FileInfo * FileAccess::setFileInfo ( const string & fileName, FileInfoPtr && info ) {
         // TODO: test. for now we need to allow replace
         // if ( files.find(fileName)!=files.end() ) return nullptr;
-        files[fileName] = das::move(info);
-        auto ins = files.find(fileName);
-        ins->second->name = (char *) ins->first.c_str();
-        return ins->second.get();
+        return files->insert(fileName, std::move(info));
     }
 
     bool FileAccess::invalidateFileInfo ( const string & fileName ) {
-        auto it = files.find(fileName);
-        if ( it != files.end() ) {
-            files.erase(it);
-            return true;
-        } else {
-            return false;
-        }
+        return files->erase(fileName);
     }
 
     FileInfo * FileAccess::getFileInfo ( const string & fileName ) {
-        auto it = files.find(fileName);
-        if ( it != files.end() ) {
-            return it->second.get();
+        auto res = files->tryGet(fileName);
+        if ( res != nullptr ) {
+            return res;
         }
         auto ni = getNewFileInfo(fileName);
         if ( ni ) {
@@ -846,8 +874,6 @@ namespace das
     }
 
     void FileAccess::freeSourceData() {
-        for ( auto & fp : files ) {
-            fp.second->freeSourceData();
-        }
+        files->freeSource();
     }
 }

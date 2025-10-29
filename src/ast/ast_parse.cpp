@@ -1037,7 +1037,7 @@ namespace das {
         return hash_blockz64(reinterpret_cast<const uint8_t *>(relPath.c_str()));
     }
 
-    ProgramPtr compileDaScript ( const string & fileName,
+    DAS_API ProgramPtr compileDaScript ( const string & fileName,
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
                                 ModuleGroup & libGroup,

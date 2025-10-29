@@ -10,7 +10,7 @@ namespace das
     //  -   return correct insert index of original value? is this at all possible?
     //  -   throw runtime error in the context, when grow inside locked table (recover well)
 
-    extern const char * rts_null;
+    DAS_API extern const char * rts_null;
 
     template <typename KeyType>
     struct KeyCompare {

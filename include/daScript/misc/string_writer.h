@@ -6,13 +6,19 @@ namespace das {
     struct LineInfo;
 
     // todo: support hex
-    struct StringWriterTag {};
-    extern StringWriterTag HEX;
-    extern StringWriterTag DEC;
-    extern StringWriterTag FIXEDFP;
-    extern StringWriterTag SCIENTIFIC;
+    struct StringWriterTag {
+        StringWriterTag() = default;
+        StringWriterTag(const StringWriterTag&) = delete;
+        StringWriterTag& operator=(const StringWriterTag&) = delete;
+        StringWriterTag(StringWriterTag&&) = delete;
+        StringWriterTag& operator=(StringWriterTag&&) = delete;
+    };
+    DAS_APIEI extern StringWriterTag HEX;
+    DAS_APIEI extern StringWriterTag DEC;
+    DAS_APIEI extern StringWriterTag FIXEDFP;
+    DAS_APIEI extern StringWriterTag SCIENTIFIC;
 
-    class StringWriter {
+    class DAS_API StringWriter {
     public:
         virtual ~StringWriter() {}
         virtual string str() const = 0;
@@ -65,7 +71,7 @@ namespace das {
     #define DAS_STRING_BUILDER_BUFFER_SIZE   256
     #endif
 
-    class TextWriter : public StringWriter {
+    class DAS_API TextWriter : public StringWriter {
     public:
         TextWriter() {}
 
@@ -97,7 +103,7 @@ namespace das {
         int32_t capacity = DAS_STRING_BUILDER_BUFFER_SIZE;
     };
 
-    class TextPrinter : public TextWriter {
+    class DAS_API TextPrinter : public TextWriter {
     public:
         TextPrinter() {}
         virtual void output() override;
@@ -135,8 +141,8 @@ namespace das {
         trace       = 0,
     };
 
-    const char * getLogMarker(int level);
-    void logger ( int level, const char *marker, const char * text, Context * context, LineInfo * at );
+    DAS_API const char * getLogMarker(int level);
+    DAS_API void logger ( int level, const char *marker, const char * text, Context * context, LineInfo * at );
 
     class LOG : public TextWriter {
     public:

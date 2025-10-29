@@ -2,11 +2,10 @@
 
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/simulate.h"
-#include "daScript/simulate/hash.h"
+#include "daScript/simulate/aot.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
-#include "daScript/simulate/sim_policy.h"
 #include "misc/include_fmt.h"
 
 namespace das
@@ -145,7 +144,7 @@ namespace das
     char * fmt_u16 ( const char * fmt, uint16_t value, Context * context, LineInfoArg * at ) {
         return fmt_T(fmt, value, context, at);
     }
-    char * fmt_i32 ( const char * fmt, int32_t value, Context * context, LineInfoArg * at ) {
+    DAS_API char * fmt_i32 ( const char * fmt, int32_t value, Context * context, LineInfoArg * at ) {
         return fmt_T(fmt, value, context, at);
     }
     char * fmt_u32 ( const char * fmt, uint32_t value, Context * context, LineInfoArg * at ) {
@@ -160,7 +159,7 @@ namespace das
     char * fmt_f ( const char * fmt, float value, Context * context, LineInfoArg * at ) {
         return fmt_T(fmt, value, context, at);
     }
-    char * fmt_d ( const char * fmt, double value, Context * context, LineInfoArg * at ) {
+    DAS_API char * fmt_d ( const char * fmt, double value, Context * context, LineInfoArg * at ) {
         return fmt_T(fmt, value, context, at);
     }
 
@@ -189,7 +188,7 @@ namespace das
     char * das_lexical_cast_int_u16 ( uint16_t x, bool hex, Context * __context__, LineInfoArg * at ) {
         return das_lexical_cast_int_T(x, hex, __context__, at);
     }
-    char * das_lexical_cast_int_i32 ( int32_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+    DAS_API char * das_lexical_cast_int_i32 ( int32_t x, bool hex, Context * __context__, LineInfoArg * at ) {
         return das_lexical_cast_int_T(x, hex, __context__, at);
     }
     char * das_lexical_cast_int_u32 ( uint32_t x, bool hex, Context * __context__, LineInfoArg * at ) {
@@ -210,7 +209,7 @@ namespace das
         return __context__->allocateString(buffer,uint32_t(result-buffer),at);
     }
 
-    char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at ) {
+    DAS_API char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at ) {
         return das_lexical_cast_fp_T(x, __context__, at);
     }
     char * das_lexical_cast_fp_d ( double x, Context * __context__, LineInfoArg * at ) {
@@ -260,9 +259,9 @@ namespace das
 
     // helper functions
 
-    const char * rts_null = "";
+    DAS_API const char * rts_null = "";
 
-    int hexChar ( char ch ) {
+    static int hexChar ( char ch ) {
         if ( ch>='a' && ch<='f' ) {
             return ch - 'a' + 10;
         } else if ( ch>='A' && ch<='F' ) {
@@ -275,7 +274,7 @@ namespace das
     }
 
 
-    bool encodeUtf8Char(uint32_t ch, char * result) {
+    static bool encodeUtf8Char(uint32_t ch, char * result) {
 
       if (ch <= 0x7F) {
           result[0] = char(ch);
@@ -334,7 +333,7 @@ namespace das
       return false;
     }
 
-    string unescapeString ( const string & input, bool * error, bool ) {
+    DAS_API string unescapeString ( const string & input, bool * error, bool ) {
         if ( error ) *error = false;
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
@@ -402,7 +401,7 @@ namespace das
         return result;
     }
 
-    string escapeString ( const string & input, bool das_escape ) {
+    DAS_API string escapeString ( const string & input, bool das_escape ) {
         const char* str = input.c_str();
         const char* strEnd = str + input.length();
         string result;
@@ -435,7 +434,7 @@ namespace das
         return result;
     }
 
-    string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int /*LROW*/, int LCOL, int TAB ) {
+    static string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int /*LROW*/, int LCOL, int TAB ) {
         TextWriter text;
         int col=0, row=1;
         auto it = st;
@@ -498,7 +497,7 @@ namespace das
         return text.str();
     }
 
-    string to_cpp_double ( double val ) {
+    DAS_API string to_cpp_double ( double val ) {
         if ( val==DBL_MIN ) return "DBL_MIN";
         else if ( val==-DBL_MIN ) return "(-DBL_MIN)";
         else if ( val==DBL_MAX ) return "DBL_MAX";
@@ -511,7 +510,7 @@ namespace das
         }
     }
 
-    int32_t levenshtein_distance ( const char * s1, const char * s2 ) {
+    DAS_API int32_t levenshtein_distance ( const char * s1, const char * s2 ) {
         int len1 = int(strlen(s1));
         int len2 = int(strlen(s2));
         if ( len1==0 ) return len2;
@@ -530,7 +529,7 @@ namespace das
         return v1[len2];
     }
 
-    string to_cpp_float ( float val ) {
+    DAS_API string to_cpp_float ( float val ) {
         if ( val==FLT_MIN ) return "FLT_MIN";
         else if ( val==-FLT_MIN ) return "(-FLT_MIN)";
         else if ( val==FLT_MAX ) return "FLT_MAX";
@@ -543,7 +542,7 @@ namespace das
         }
     }
 
-    string reportError(const struct LineInfo & at, const string & message,
+    DAS_API string reportError(const struct LineInfo & at, const string & message,
         const string & extra, const string & fixme, CompilationError erc) {
         const char * src = nullptr;
         uint32_t len = 0;
@@ -556,7 +555,7 @@ namespace das
                 message, extra, fixme, erc );
     }
 
-    string reportError ( const char * st, uint32_t stlen, const char * fileName,
+    DAS_API string reportError ( const char * st, uint32_t stlen, const char * fileName,
         int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;

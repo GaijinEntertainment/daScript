@@ -204,7 +204,7 @@ Result transform_syntax(const string &filename, const string content, format::Fo
 
 
         DasParserState parserState;
-        parserState.g_Access = access;
+        parserState.g_Access = reinterpret_pointer_cast<FileAccess>(access);
         parserState.g_FileAccessStack.push_back(access->getFileInfo(filename));
         parserState.g_Program = program;
         parserState.das_def_tab_size = daScriptEnvironment::getBound()->das_def_tab_size;

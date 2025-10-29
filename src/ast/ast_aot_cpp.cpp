@@ -4210,7 +4210,7 @@ namespace das {
         return tw.str();
     }
 
-    void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
+    DAS_API void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg) {
         crossPlatform = cfg.cross_platform;
         auto printer = TextPrinter();
         auto pctx = SimulateWithErrReport(program, printer);

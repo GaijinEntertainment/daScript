@@ -6,7 +6,7 @@
 
 namespace das {
 
-    uint64_t getCancelLimit();
+    DAS_API uint64_t getCancelLimit();
 
     class StringBuilderWriter : public TextWriter {
     public:

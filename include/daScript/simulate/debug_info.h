@@ -108,7 +108,7 @@ namespace das
         string      cppName;
     };
 
-    struct FileInfo {
+    struct DAS_API FileInfo {
     public:
         virtual void freeSourceData() { }
         virtual ~FileInfo() { freeSourceData(); }
@@ -124,7 +124,7 @@ namespace das
     };
     typedef unique_ptr<FileInfo> FileInfoPtr;
 
-    class TextFileInfo : public FileInfo {
+    class DAS_API TextFileInfo : public FileInfo {
     public:
         TextFileInfo ( ) = default;
         TextFileInfo ( const char * src, uint32_t len, bool own )
@@ -182,11 +182,38 @@ namespace das
         string              fromFile2;
     };
 
-    typedef smart_ptr<class FileAccess> FileAccessPtr;
-    class FileAccess : public ptr_ref_count {
+    class FAccessStorage {
     public:
+        virtual ~FAccessStorage() {}
+        virtual void clear() = 0;
+        virtual FileInfoPtr take( const string & fileName ) = 0;
+        virtual FileInfo *tryGet( const string & fileName ) = 0;
+        virtual bool erase( const string & fileName ) = 0;
+        virtual FileInfo * insert( const string & fileName, FileInfoPtr && info ) = 0;
+        virtual void serialize ( AstSerializer & ser ) = 0;
+        virtual void freeSource() = 0;
+    };
+
+    // Put Impl here because of serialize
+    class FAccessStorImpl : public FAccessStorage {
+    public:
+        void clear() override;
+        FileInfoPtr take( const string & fileName ) override;
+        FileInfo *tryGet( const string & fileName ) override;
+        FileInfo *insert( const string & fileName, FileInfoPtr && info ) override;
+        void serialize ( AstSerializer & ser ) override;
+        bool erase(const string & fileName) override;
+        void freeSource() override;
+    private:
+        das_hash_map<string, FileInfoPtr>    files;
+    };
+
+    typedef smart_ptr<class FileAccess> FileAccessPtr;
+    class DAS_API FileAccess : public ptr_ref_count {
+    public:
+        FileAccess();
         virtual ~FileAccess() {}
-        void reset() { files.clear(); }
+        void reset() { files->clear(); }
         FileInfo * setFileInfo ( const string & fileName, FileInfoPtr && info );
         FileInfo * getFileInfo ( const string & fileName );
         virtual bool invalidateFileInfo ( const string & fileName );
@@ -215,7 +242,7 @@ namespace das
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
-        das_hash_map<string, FileInfoPtr>    files;
+        shared_ptr<FAccessStorage>    files;
     };
     template <> struct isCloneable<FileAccess> : false_type {};
 
@@ -250,7 +277,7 @@ namespace das
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 
-    struct LineInfo {
+    struct DAS_API LineInfo {
         LineInfo() = default;
         LineInfo(FileInfo * fi, int c, int l, int lc, int ll)
             : fileInfo(fi)
@@ -270,7 +297,7 @@ namespace das
 
     struct LineInfoArg : LineInfo {};
 
-    struct TypeInfo {
+    struct DAS_API TypeInfo {
         enum {
             flag_ref = 1<<0,
             flag_refType = 1<<1,
@@ -463,22 +490,22 @@ namespace das
         }
     };
 
-    string das_to_string ( Type t );
-    Type nameToBasicType(const string & name);
+    DAS_API string das_to_string ( Type t );
+    DAS_API Type nameToBasicType(const string & name);
 
-    int getTypeBaseSize ( Type type );
-    int getTypeBaseAlign ( Type type );
-    int getTypeBaseSize ( TypeInfo * info );
-    int getDimSize ( TypeInfo * info );
-    int getTypeSize ( TypeInfo * info );
-    int getTypeAlign ( TypeInfo * info );
-    int getTupleFieldOffset ( TypeInfo * info, int index );
-    int getVariantFieldOffset ( TypeInfo * info, int index );
+    DAS_API int getTypeBaseSize ( Type type );
+    DAS_API int getTypeBaseAlign ( Type type );
+    DAS_API int getTypeBaseSize ( TypeInfo * info );
+    DAS_API int getDimSize ( TypeInfo * info );
+    DAS_API int getTypeSize ( TypeInfo * info );
+    DAS_API int getTypeAlign ( TypeInfo * info );
+    DAS_API int getTupleFieldOffset ( TypeInfo * info, int index );
+    DAS_API int getVariantFieldOffset ( TypeInfo * info, int index );
 
-    bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel );
-    bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );
-    bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType );
-    bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType);
+    DAS_API bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel );
+    DAS_API bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );
+    DAS_API bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType );
+    DAS_API bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType);
 
     enum class PrintFlags : uint32_t {
         none =                  0
@@ -496,6 +523,6 @@ namespace das
             | PrintFlags::typeQualifiers | PrintFlags::fixedFloatingPoint
     };
 
-    string debug_type ( const TypeInfo * info );
-    string getTypeInfoMangledName ( TypeInfo * info );
+    DAS_API string debug_type ( const TypeInfo * info );
+    DAS_API string getTypeInfoMangledName ( TypeInfo * info );
 }
