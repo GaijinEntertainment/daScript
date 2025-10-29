@@ -1,6 +1,7 @@
 CMAKE_TEXT_XXD(libDaScriptTest examples/test/unit_test.das)
 
 ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
+set_target_properties(libDaScriptTest PROPERTIES POSITION_INDEPENDENT_CODE ON)
 SETUP_CPP11(libDaScriptTest)
 ADD_PROJECT_XXD_DEPENDS(libDaScriptTest)
 
@@ -56,11 +57,11 @@ SOURCE_GROUP_FILES("generated" TEST_GENERATED_SRC)
 
 add_executable(daScriptTest ${UNIT_TEST_SRC} ${COMPILATION_FAIL_TEST_SRC} ${MIX_TEST_SRC} ${MODULE_TEST_SRC}
     ${TEST_MAIN_SRC} ${OPTIMIZATION_SRC} ${RUNTIME_ERRORS_SRC} ${TEST_GENERATED_SRC})
-TARGET_LINK_LIBRARIES(daScriptTest libDaScript libDaScriptTest libDaScriptAot Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScriptTest libDaScript libDaScriptTest libDaScriptAot ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(daScriptTest libDaScriptTest libDaScriptAot Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(daScriptTest libDaScriptTest libDaScriptAot ${DAS_MODULES_LIBS})
 TARGET_INCLUDE_DIRECTORIES(daScriptTest PUBLIC ${PROJECT_SOURCE_DIR}/examples/test)
 SETUP_CPP11(daScriptTest)
-add_dependencies(daScriptTest daScriptTestAot dasAotStub)
+add_dependencies(daScriptTest daScriptTestAot)
 SETUP_LTO(daScriptTest)
 #target_precompile_headers(daScriptTest PUBLIC include/daScript/misc/platform.h)
 
@@ -72,9 +73,9 @@ ${CMAKE_CURRENT_SOURCE_DIR}/examples/test/unitTest.h
 add_executable(daScriptTestThreads ${UNIT_TEST_SRC} ${THREADS_MAIN_SRC}
 #    ${TEST_GENERATED_SRC}
 )
-TARGET_LINK_LIBRARIES(daScriptTestThreads libDaScript libDaScriptTest libDaScriptAot Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScriptTestThreads libDaScript libDaScriptTest libDaScriptAot ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(daScriptTestThreads libDaScriptTest libDaScriptAot Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(daScriptTestThreads libDaScriptTest libDaScriptAot ${DAS_MODULES_LIBS})
 TARGET_INCLUDE_DIRECTORIES(daScriptTestThreads PUBLIC ${PROJECT_SOURCE_DIR}/examples/test)
 SETUP_CPP11(daScriptTestThreads)
-#add_dependencies(daScriptTest daScriptTestAot dasAotStub)
+#add_dependencies(daScriptTest daScriptTestAot)
 SETUP_LTO(daScriptTestThreads)

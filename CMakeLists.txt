@@ -379,6 +379,7 @@ ADD_LIBRARY(libUriParser STATIC ${URIPARSER_SRCS})
 SETUP_CPP11(libUriParser)
 target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
 target_compile_definitions(libUriParser PUBLIC URI_STATIC_BUILD)
+set_target_properties(libUriParser PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(libUriParser PUBLIC
   ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/include
 )
@@ -877,10 +878,11 @@ SET(AOT_STUB_SRC
 )
 
 MACRO(SETUP_LIBDASCRIPT library aotFiles standaloneFiles)
-    ADD_LIBRARY(${library} STATIC ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
+    ADD_LIBRARY(${library} SHARED ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
             ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
             ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC}
             ${standaloneFiles} ${aotFiles})
+    target_link_libraries(${library} libDaScriptTest)
     ADD_DEPENDENCIES(${library} need_and_resolve)
     ADD_TARGET_PROJECT_XXD_DEPENDS(${library} libDaScript)
     target_include_directories(${library} PUBLIC
@@ -889,6 +891,7 @@ MACRO(SETUP_LIBDASCRIPT library aotFiles standaloneFiles)
             ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
     target_link_libraries(${library} libUriParser)
+    set_target_properties(${library} PROPERTIES POSITION_INDEPENDENT_CODE ON)
     #target_link_libraries(${library} fmt::fmt)
     IF(LINUX_UUID)
         target_link_libraries(${library} uuid)
@@ -937,7 +940,7 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
-    add_library(libDaScriptAot STATIC ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
+    add_library(libDaScriptAot STATIC ${AOT_STUB_SRC})
     ADD_DEPENDENCIES(libDaScriptAot dasAotStub libDaScript)
     TARGET_LINK_LIBRARIES(libDaScriptAot libDaScript)
     SETUP_CPP11(libDaScriptAot)
@@ -954,12 +957,12 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
-    SET(SRC_LIBRARIES libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+    SET(SRC_LIBRARIES Threads::Threads ${DAS_MODULES_LIBS})
 
     MACRO(SETUP_COMPILER_BINARY target_name library_name)
         add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
         TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES})
-        ADD_DEPENDENCIES(${target_name} ${library_name} libDaScriptTest ${DAS_MODULES_LIBS})
+        ADD_DEPENDENCIES(${target_name} ${library_name} ${DAS_MODULES_LIBS})
         SETUP_CPP11(${target_name})
         SETUP_LTO(${target_name})
     ENDMACRO()
