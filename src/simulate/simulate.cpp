@@ -1592,7 +1592,10 @@ namespace das
         }
         virtual bool onAfterCall ( Prologue * ) override {
             return !stackTopOnly;
-         }
+        }
+        virtual void onCorruptStack (Prologue * ) override {
+            ssw << "!!! stack corrupted, aborting stack walk !!!\n";
+        }
     public:
         bool showArguments = true;
         bool showLocalVariables = true;

@@ -287,6 +287,7 @@ namespace das
         virtual void onBeforeVariables ( ) { }
         virtual void onVariable ( FuncInfo *, LocalVariableInfo *, void *, bool ) { }
         virtual bool onAfterCall ( Prologue * ) { return true; }
+        virtual void onCorruptStack ( Prologue * ) { }
     };
     typedef smart_ptr<StackWalker> StackWalkerPtr;
 

@@ -210,6 +210,7 @@ class DapiStackWalker {
     def abstract onBeforeVariables : void
     def abstract onVariable(inf : FuncInfo; vinfo : LocalVariableInfo; arg : void?; inScope : bool) : void
     def abstract onAfterCall(pp : Prologue) : bool
+    def abstract onCorruptStack(pp : Prologue) : void
 }
 
 def make_stack_walker(classPtr) : smart_ptr<StackWalker> {

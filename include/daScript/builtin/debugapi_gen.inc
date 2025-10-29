@@ -1223,9 +1223,10 @@ protected:
     __fn_onBeforeVariables = 9,
     __fn_onVariable = 10,
     __fn_onAfterCall = 11,
+    __fn_onCorruptStack = 12,
   };
 protected:
-  int _das_class_method_offset[12];
+  int _das_class_method_offset[13];
 public:
   DapiStackWalker_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_canWalkArguments] = info->fields[2]->offset;
@@ -1240,6 +1241,7 @@ public:
       _das_class_method_offset[__fn_onBeforeVariables] = info->fields[11]->offset;
       _das_class_method_offset[__fn_onVariable] = info->fields[12]->offset;
       _das_class_method_offset[__fn_onAfterCall] = info->fields[13]->offset;
+      _das_class_method_offset[__fn_onCorruptStack] = info->fields[14]->offset;
   }
   __forceinline Func get_canWalkArguments ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_canWalkArguments]);
@@ -1345,6 +1347,15 @@ public:
   }
   __forceinline bool invoke_onAfterCall ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp ) const {
     return das_invoke_function<bool>::invoke
+      <void *,Prologue const  &>
+        (__context__,nullptr,__funcCall__,
+          self,pp);
+  }
+  __forceinline Func get_onCorruptStack ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onCorruptStack]);
+  }
+  __forceinline void invoke_onCorruptStack ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp ) const {
+    das_invoke_function<void>::invoke
       <void *,Prologue const  &>
         (__context__,nullptr,__funcCall__,
           self,pp);
