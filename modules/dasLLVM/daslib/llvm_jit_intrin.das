@@ -115,7 +115,11 @@ let g_intrin_lookup <- {
 
 def public has_intrinsic(expr : smart_ptr<ExprCallFunc>) {
     var result = false
+    assume argType = expr.arguments[0]._type
     let call_name = "{expr.func._module.name}::{expr.func.name}"
+    if (call_name == "$::length" && !argType.isGoodArrayType) {
+        return false
+    }
     g_intrin_lookup |> get(call_name) <| $(pfun) {
         result = true
     }
