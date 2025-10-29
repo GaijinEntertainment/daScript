@@ -1713,7 +1713,7 @@ namespace das
         }
     }
 
-    const char * getLogMarker(int level)
+    DAS_API const char * getLogMarker(int level)
     {
         if ( level >= LogLevel::error )
             return "[E] ";
@@ -1725,7 +1725,7 @@ namespace das
             return "";
     }
 
-    void logger ( int level, const char *prefix, const char * text, Context * context, LineInfo * at) {
+    DAS_API void logger ( int level, const char *prefix, const char * text, Context * context, LineInfo * at) {
         bool any = false;
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             any |= pAgent->onLog(context, at, level, text);

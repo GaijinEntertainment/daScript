@@ -1168,7 +1168,7 @@ namespace das {
     }
 
     smart_ptr<FileAccess> makeFileAccess( char * pak, Context *, LineInfoArg * ) {
-        return get_file_access(pak);
+        return reinterpret_pointer_cast<FileAccess>(get_file_access(pak));
     }
 
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {

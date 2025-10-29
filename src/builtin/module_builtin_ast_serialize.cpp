@@ -274,8 +274,9 @@ namespace das {
         dtag(HASH_TAG("DasHashmap"));
         if ( writing ) {
             uint64_t size = value.size(); *this << size;
-            for ( auto & item : value ) {
-                *this << item.first << item.second;
+            for ( auto it = value.begin(); it != value.end(); it++ ) {
+                auto &[k, v] = *it;
+                *this << const_cast<K&>(k) << v;
             }
             return;
         }
@@ -766,12 +767,16 @@ namespace das {
         return *this;
     }
 
+    void FAccessStorImpl::serialize ( AstSerializer & ser ) {
+        ser << files;
+    }
+
     void FileAccess::serialize ( AstSerializer & ser ) {
         if ( ser.writing ) {
             uint8_t tag = 0;
             ser << tag;
         }
-        ser << files;
+        files->serialize(ser);
     }
 
     void ModuleFileAccess::serialize ( AstSerializer & ser ) {
@@ -779,7 +784,7 @@ namespace das {
             uint8_t tag = 1;
             ser << tag;
         }
-        ser << files;
+        files->serialize(ser);
     }
 
     AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
