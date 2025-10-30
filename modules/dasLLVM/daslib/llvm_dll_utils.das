@@ -28,16 +28,79 @@ struct public DllName {
     }
 }
 
-
-// Sometimes we need unique id for some nodes. This visitor generates such ids.
-class public UidGen : AstVisitor {
+// We need unique ids for dll names. Visitor generates this ids.
+class UidGen : AstVisitor {
     uid : uint64
+    id_map : table<void?, uint64>?
+    @do_not_delete thisFunc : Function?
+
+    def private add(ptr : void?) {
+        *id_map |> insert(ptr, uid)
+        uid++
+    }
+
+    [unused_argument(expr)] def override preVisitFunction(expr : FunctionPtr) {
+        uid = 0 |> uint64()
+    }
+
+    def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
+        add(get_ptr(expr))
+    }
+
+    def override preVisitExprNew(expr : smart_ptr<ExprNew>) {
+        add(get_ptr(expr))
+        add(get_ptr(expr.typeexpr))
+    }
+
+    def override preVisitExprAscend(expr : smart_ptr<ExprAscend>) {
+        add(get_ptr(expr))
+        add(get_ptr(expr.subexpr._type))
+    }
+
+    def override preVisitExprDelete(expr : smart_ptr<ExprDelete>) {
+        add(get_ptr(expr))
+        add(get_ptr(expr.subexpr._type.firstType))
+    }
+
+
+    def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) {
+        add(get_ptr(expr))
+    }
+
+    def override preVisitExprBlock(expr : smart_ptr<ExprBlock>) {
+        add(get_ptr(expr))
+    }
+
+    def override preVisitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) {
+        add(get_ptr(expr))
+    }
+
+    def override preVisitExprCall(expr : smart_ptr<ExprCall>) {
+        add(get_ptr(expr))
+    }
+
+    def override preVisitExprOp2(var expr : smart_ptr<ExprOp2>) {
+        add(get_ptr(expr))
+    }
+
+    def override preVisitExprOp1(var expr : smart_ptr<ExprOp1>) {
+        add(get_ptr(expr))
+    }
+
+    def override preVisitExprStringBuilder(expr : smart_ptr<ExprStringBuilder>) {
+        add(get_ptr(expr))
+    }
+
+}
+
+class public UidNodes {
     id_map : table<void?, uint64>
     namesp : string
     @do_not_delete thisFunc : Function?
 
-    def UidGen(prog : Program?) {
+    def UidNodes(prog : Program?; var tab : table<void?, uint64>) {
         namesp = prog.thisNamespace |> string()
+        id_map <- tab
     }
 
     def const get_namesp_prefix() {
@@ -54,56 +117,24 @@ class public UidGen : AstVisitor {
         }
     }
 
-    def private add(ptr : void?) {
-        id_map |> insert(ptr, uid)
-        uid++
-    }
-
     def get_addr(expr : smart_ptr<ExprAddr>) : DllName {
         return get_base(get_ptr(expr), "addr_{get_mangled_name(expr.func)}")
-    }
-
-    def override preVisitFunction(expr : FunctionPtr) {
-        uid = 0 |> uint64()
-    }
-
-    def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
-        add(get_ptr(expr))
     }
 
     def get_new(expr : TypeDeclPtr) : DllName {
         return get_base(get_ptr(expr), "new`handle`{get_mangled_name(expr)}")
     }
 
-    def override preVisitExprNew(expr : smart_ptr<ExprNew>) {
-        add(get_ptr(expr))
-        add(get_ptr(expr.typeexpr))
-    }
-
     def get_ascend_new(expr : smart_ptr<ExprAscend>) {
         return get_base(get_ptr(expr), "ascend_new`handle`{get_mangled_name(expr.subexpr._type)}")
-    }
-
-    def override preVisitExprAscend(expr : smart_ptr<ExprAscend>) {
-        add(get_ptr(expr))
-        add(get_ptr(expr.subexpr._type))
     }
 
     def get_delete_type(t : TypeDeclPtr) : DllName {
         return get_base(get_ptr(t), "delete`handle`{get_mangled_name(t)}")
     }
 
-    def override preVisitExprDelete(expr : smart_ptr<ExprDelete>) {
-        add(get_ptr(expr))
-        add(get_ptr(expr.subexpr._type.firstType))
-    }
-
     def get_tinfo(expr : smart_ptr<ExprTypeInfo>) {
         return get_base(get_ptr(expr), "tinfo_{expr.typeexpr.get_mnh}")
-    }
-
-    def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) {
-        add(get_ptr(expr))
     }
 
     def get_ascend_tinfo(expr : smart_ptr<ExprAscend>) {
@@ -115,33 +146,12 @@ class public UidGen : AstVisitor {
         return get_base(get_ptr(expr), "ctor_{expr.constructor}")
     }
 
-    def override preVisitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) {
-        add(get_ptr(expr))
-    }
-
     def get_call(expr : smart_ptr<ExprCallFunc>) : DllName {
         return get_base(get_ptr(expr), "call_{get_mangled_name(expr.func)}")
     }
 
-
-    def override preVisitExprCall(expr : smart_ptr<ExprCall>) {
-        add(get_ptr(expr))
-    }
-
-    def override preVisitExprOp2(var expr : smart_ptr<ExprOp2>) {
-        add(get_ptr(expr))
-    }
-
-    def override preVisitExprOp1(var expr : smart_ptr<ExprOp1>) {
-        add(get_ptr(expr))
-    }
-
     def get_string_builder(expr : smart_ptr<ExprStringBuilder>) {
         return get_base(get_ptr(expr), "string_builder")
-    }
-
-    def override preVisitExprStringBuilder(expr : smart_ptr<ExprStringBuilder>) {
-        add(get_ptr(expr))
     }
 
     def public get_block_name_ptr(blk : ExprBlock?) : DllName {
@@ -150,10 +160,6 @@ class public UidGen : AstVisitor {
 
     def public get_block_name(blk : smart_ptr<ExprBlock>) : DllName {
         return get_base(get_ptr(blk), "block_{get_mangled_name(blk)}")
-    }
-
-    def override preVisitExprBlock(expr : smart_ptr<ExprBlock>) {
-        add(get_ptr(expr))
     }
 
     def reset(var func : Function?) {
@@ -170,6 +176,19 @@ class public UidGen : AstVisitor {
 
 }
 
+def public create_uid_nodes(prog : Program?; funcs : array<FunctionPtr>) {
+    var res = new table<void?, uint64>()
+    var uids = new UidGen(id_map = res)
+    var inscope adapter <- make_visitor(*uids)
+    for (fun in funcs) {
+        visit(fun, adapter)
+    }
+    unsafe {
+        delete uids
+    }
+    return new UidNodes(prog, *res)
+}
+
 
 // All dll operations pass through this class 
 struct public DLLHandle {
@@ -183,16 +202,7 @@ struct public DLLHandle {
         }
     }
 
-    // def has_function(fn : FunctionPtr) : bool {
-    //     if (handle == null) {
-    //         return false
-    //     }
-    //     var written_hash = get_function_hash(get_dll_fn_name(fn))
-    //     let is_ok = (written_hash != null && get_function_aot_hash(fn |> get_ptr) == *written_hash)
-    //     return is_ok;
-    // }
-
-    def get_function_address(fn : DllName) {
+    def get_function_address(fn : DllName) : void? {
         assert(handle != null, "dynamic_lib_handle is null")
         return handle |> get_function_address(fn.publ());
     }
