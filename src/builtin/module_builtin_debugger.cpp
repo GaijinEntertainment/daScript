@@ -757,6 +757,11 @@ namespace debugapi {
                 return true;
             }
         }
+        virtual void onCorruptStack ( Prologue * pp ) override {
+            if ( auto fnOnCorruptStack = get_onCorruptStack(classPtr) ) {
+                invoke_onCorruptStack(context,fnOnCorruptStack,classPtr,*pp);
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;
@@ -825,7 +830,7 @@ namespace debugapi {
     #if DAS_ENABLE_STACK_WALK
         char * sp = context.stack.ap();
         int32_t depth = 0;
-        while (  sp < context.stack.top() ) {
+        while ( sp < context.stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
             FuncInfo * info = nullptr;
@@ -840,7 +845,16 @@ namespace debugapi {
                     info = pp->info;
                 }
             }
-            sp += info ? info->stackSize : pp->stackSize;
+            auto incr = info ? info->stackSize : pp->stackSize;
+            if ( incr >= context.stack.size() || incr<sizeof(Prologue) ) {
+                // corrupted stack
+                break;
+            }
+            sp += incr;
+            if ( sp > context.stack.top() ) {
+                // corrupted stack
+                break;
+            }
             depth ++;
         }
         return depth;
@@ -854,7 +868,7 @@ namespace debugapi {
     #if DAS_ENABLE_STACK_WALK
         char * sp = context.stack.ap();
         const LineInfo * lineAt = &at;
-        while (  sp < context.stack.top() ) {
+        while ( sp < context.stack.top() ) {
             Prologue * pp = (Prologue *) sp;
             Block * block = nullptr;
             FuncInfo * info = nullptr;
@@ -868,6 +882,11 @@ namespace debugapi {
                 } else {
                     info = pp->info;
                 }
+            }
+            auto incr = info ? info->stackSize : pp->stackSize;
+            if ( incr >= context.stack.size() || incr<sizeof(Prologue) ) {
+                walker->onCorruptStack(pp);
+                break;
             }
             walker->onBeforeCall(pp,SP);
             if ( !info ) {
@@ -909,7 +928,11 @@ namespace debugapi {
                 }
             }
             lineAt = info ? pp->line : nullptr;
-            sp += info ? info->stackSize : pp->stackSize;
+            sp += incr;
+            if ( sp > context.stack.top() ) {
+                walker->onCorruptStack(pp);
+                break;
+            }
             if ( !walker->onAfterCall(pp) ) break;
         }
     #else
