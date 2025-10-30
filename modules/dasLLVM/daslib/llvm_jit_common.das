@@ -38,10 +38,10 @@ let public LLVM_JIT_ALWAYS_SOLID = llvm_config::llvm_jit_always_solid()
 var public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = false
 
 let public LLVM_OUTPUT_OJBECT_FILE = false
-let public LLVM_OUTPUT_OJBECT_FILE_NAME = "/home/alexey-churkin/daScript/out/"
+let public LLVM_OUTPUT_OJBECT_FILE_NAME = "out/"
 
 let public LLVM_ENABLE_DLL_LOADING = true
-let public JIT_DLL_OUTPUT = "/home/alexey-churkin/daScript/output.dll"
+let public JIT_DLL_OUTPUT = "output.dll"
 let public DASCRIPT_LIBRARY = "build/liblibDaScript.a" // liblibDaScript.a on linux
 
 let public LLVM_ENABLE_OPT_PASS = false // LLVM_DEBUG_EVERYTHING ? false : true
