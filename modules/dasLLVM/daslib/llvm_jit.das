@@ -1029,37 +1029,37 @@ class LlvmJitVisitor : AstVisitor {
         return LLVMBuildPointerCast(g_builder, new_ptr, dim_element_type_to_llvm_type(expr._type), "new")
     }
 
-    def get_new_handle_function(t : TypeDeclPtr) : LLVMOpaqueValue? {
-        let func_name = uid.get_new(t)
-        var new_handle = LLVMGetNamedGlobal(g_mod, func_name.publ())
+    def get_new_handle_function(t : TypeDeclPtr; obj_name : DllName) : tuple<LLVMOpaqueValue?; LLVMOpaqueType?> {
+        var new_handle = LLVMGetNamedGlobal(g_mod, obj_name.publ())
         let fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
                     fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType()))
         if (new_handle == null) {
             var new_handle_ptr = get_jit_new(t)
             if (new_handle_ptr == null) {
                 failed_T(t, "missing new`handle function pointer for {describe(t)}")
-                return null
+                return tuple(null, null)
             }
             // void * new_handle ( Context * ) {
-            new_handle = LLVMAddFunctionWithType(g_mod, func_name.publ(), fn_type)
-            new_handle = save_address_global(func_name, new_handle_ptr, LLVMPointerType(fn_type, 0u))
-            g_fn_types[func_name.publ()] = fn_type
+            new_handle = LLVMAddFunctionWithType(g_mod, obj_name.publ(), fn_type)
+            new_handle = save_address_global(obj_name, new_handle_ptr, LLVMPointerType(fn_type, 0u))
+            g_fn_types[obj_name.publ()] = fn_type
         } else {
             new_handle = LLVMBuildLoad2(g_builder, LLVMPointerType(fn_type, 0u), new_handle, "")
         }
-        return new_handle
+        return tuple(new_handle, fn_type)
     }
 
-    def alloc_handle_type(typeexpr : TypeDeclPtr) : LLVMOpaqueValue? {
+    def alloc_handle_type(typeexpr : TypeDeclPtr; var obj_name : DllName = DllName()) : LLVMOpaqueValue? {
         assert(typeexpr.isHandle)
-        let fn_new_handle = get_new_handle_function(typeexpr)
+        if (obj_name.publ() |> length  == 0) {
+            obj_name = uid.get_new(typeexpr)
+        }
+        let (fn_new_handle, typ) = get_new_handle_function(typeexpr, obj_name)
         if (fn_new_handle == null) {
             return LLVMConstNull(types.LLVMVoidPtrType())
         }
         var params = [get_context_param()]
-        let name = uid.get_new(typeexpr).publ()
-        var typ = g_fn_types[name]
-        var ccall = LLVMBuildCall2(g_builder, typ, fn_new_handle, params, name)
+        var ccall = LLVMBuildCall2(g_builder, typ, fn_new_handle, params, "call_{obj_name.publ()}")
         var nounwind = g_ctx |> LLVMGetEnumAttribute("nounwind")
         var willreturn = g_ctx |> LLVMGetEnumAttribute("willreturn")
         var nocapture = g_ctx |> LLVMGetEnumAttribute("nocapture")
@@ -1091,7 +1091,7 @@ class LlvmJitVisitor : AstVisitor {
                     if (expr.typeexpr.baseType == Type.tHandle) {
                         var inscope elemT = clone_type(expr.typeexpr)
                         elemT.dim |> clear() // hack to get correct ptr to ctor
-                        new_ptr = alloc_handle_type(elemT)
+                        new_ptr = alloc_handle_type(elemT, uid.get_new(expr.typeexpr))
                         check_ptr_zero(new_ptr, expr.at, "new returned null")
                         new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(elemT), 0u), "")
                     } else {
@@ -5256,15 +5256,15 @@ class LlvmJitVisitor : AstVisitor {
         if (bt == Type.tInt || bt == Type.tUInt || bt == Type.tBitfield || bt == Type.tEnumeration) {
             var tbit = LLVMBuildExtractElement(g_builder, v4f, types.ConstI32(0ul), "")
             return LLVMBuildBitCast(g_builder, tbit, types.t_int32, "vec4f_to_int")
-        } elif (bt == Type.tInt64 || bt == Type.tUInt64) {
+        } elif (bt == Type.tInt64 || bt == Type.tUInt64 || bt == Type.tEnumeration64 || bt == Type.tBitfield64) {
             var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(types.t_int64, 2u), "")
             var tbit = LLVMBuildExtractElement(g_builder, tvec, types.ConstI32(0ul), "")
             return tbit
-        } elif (bt == Type.tInt8 || bt == Type.tUInt8 || bt == Type.tEnumeration8) {
+        } elif (bt == Type.tInt8 || bt == Type.tUInt8 || bt == Type.tEnumeration8 || bt == Type.tBitfield8) {
             var tbit = LLVMBuildExtractElement(g_builder, v4f, types.ConstI32(0ul), "")
             var tres = LLVMBuildBitCast(g_builder, tbit, types.t_int32, "vec4f_to_int")
             return LLVMBuildTruncOrBitCast(g_builder, tres, types.t_int8, "int_to_int8")
-        } elif (bt == Type.tInt16 || bt == Type.tUInt16 || bt == Type.tEnumeration16) {
+        } elif (bt == Type.tInt16 || bt == Type.tUInt16 || bt == Type.tEnumeration16 || bt == Type.tBitfield16) {
             var tbit = LLVMBuildExtractElement(g_builder, v4f, types.ConstI32(0ul), "")
             var tres = LLVMBuildBitCast(g_builder, tbit, types.t_int32, "vec4f_to_int")
             return LLVMBuildTruncOrBitCast(g_builder, tres, types.t_int16, "int_to_int16")
@@ -5382,7 +5382,10 @@ class LlvmJitVisitor : AstVisitor {
             if (bt == Type.tInt || bt == Type.tUInt || bt == Type.tBitfield || bt == Type.tEnumeration) {
                 var tbit = LLVMBuildBitCast(g_builder, tsrc, types.t_float, "tbit")
                 tres = LLVMBuildInsertElement(g_builder, vres, tbit, types.ConstI32(0ul), "return_result")
-            } elif (bt == Type.tBool || bt == Type.tInt8 || bt == Type.tInt16 || bt == Type.tUInt8 || bt == Type.tUInt16 || bt == Type.tEnumeration8 || bt == Type.tEnumeration16) {
+            } elif (bt == Type.tBool || bt == Type.tInt8 || bt == Type.tInt16 ||
+                                        bt == Type.tUInt8 || bt == Type.tUInt16 ||
+                                        bt == Type.tEnumeration8 || bt == Type.tEnumeration16 ||
+                                        bt == Type.tBitfield8 || bt == Type.tBitfield16) {
                 var tibit = LLVMBuildZExtOrBitCast(g_builder, tsrc, types.t_int32, "int_bit")
                 var tbit = LLVMBuildBitCast(g_builder, tibit, types.t_float, "tbit")
                 tres = LLVMBuildInsertElement(g_builder, vres, tbit, types.ConstI32(0ul), "return_result")
@@ -6049,7 +6052,7 @@ class JIT_LLVM : AstSimulateMacro {
                 }
                 generated_funcs |> emplace(fun)
             }
-            if (true) {
+            if (false) {
                 // Let's remove unused attributes before we print IR.
                 var pm = LLVMCreatePassManager()
                 LLVMAddGlobalDCEPass(pm)
