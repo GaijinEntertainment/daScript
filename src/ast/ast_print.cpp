@@ -778,7 +778,7 @@ namespace das {
             if ( c->enumType->module && !c->enumType->module->name.empty() ) {
                 ss << c->enumType->module->name << "::";
             }
-            ss << c->enumType->name << " " << c->text;
+            ss << c->enumType->name << "." << c->text;
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt * c ) override {
@@ -819,7 +819,7 @@ namespace das {
                 name = c->bitfieldType->findBitfieldName(c->getValue());
             }
             if ( !name.empty() ) {
-                ss << c->bitfieldType->alias << " " << name;
+                ss << c->bitfieldType->alias << "." << name;
             } else {
                 ss << "bitfield(0x" << HEX << c->getValue() << DEC << ")";
             }

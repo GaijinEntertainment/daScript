@@ -431,7 +431,7 @@ namespace das {
                 *log    << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n"
                         << string(tab+1,'\t') << "getDasRoot()='" << getDasRoot() << "'\n";
             }
-            missing.push_back({reqNameHint, reqLineHint, chain, MissingHint::FileNotFound});
+            missing.push_back({!reqNameHint.empty() ? reqNameHint : fileName, !reqNameHint.empty() ? reqLineHint : 0, chain, MissingHint::FileNotFound});
             return false;
         }
     }
