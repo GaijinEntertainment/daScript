@@ -87,6 +87,7 @@ namespace das {
         string * parent, const LineInfo & atParent );
     void ast_structureDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & loc, Structure * ps,
         const LineInfo & atPs, vector<VariableDeclaration*> * list );
+    bool ast_structureAlias ( yyscan_t scanner, string * name, TypeDecl * typeDecl, const LineInfo & atName );
     Enumeration * ast_addEmptyEnum ( yyscan_t scanner, string * name, const LineInfo & atName );
     void ast_enumDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & atannL, bool pubE, Enumeration * pEnum, Enumeration * pE, Type ebt );
     void ast_globalLetList (  yyscan_t scanner, bool kwd_let, bool glob_shar, bool pub_var, vector<VariableDeclaration*> * list );

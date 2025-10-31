@@ -939,7 +939,7 @@ expression_with_alias
         $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, ExpressionPtr($subexpr));
         delete $aname;
     }
-    |   DAS_TYPEDEF[loc] NAME[aname] '=' type_declaration[decl] {
+    |   DAS_TYPEDEF[loc] { yyextra->das_force_oxford_comma=true;} NAME[aname] '=' type_declaration[decl] {
         $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, TypeDeclPtr($decl));
     }
     ;
@@ -2367,6 +2367,10 @@ struct_variable_declaration_list
     }
     |   struct_variable_declaration_list[list] semicolon {
         $$ = $list;
+    }
+    |  struct_variable_declaration_list[list] DAS_TYPEDEF[loc] { yyextra->das_force_oxford_comma=true;} NAME[aname] '=' type_declaration[decl] semicolon {
+        $$ = $list;
+        ast_structureAlias(scanner,$aname,$decl,tokAt(scanner,@loc));
     }
     |   struct_variable_declaration_list[list] {
         if ( !yyextra->g_CommentReaders.empty() ) {

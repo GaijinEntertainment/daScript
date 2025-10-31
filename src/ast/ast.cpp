@@ -230,6 +230,10 @@ namespace das {
 
     // structure
 
+    TypeDeclPtr Structure::findAlias ( const string & aliasName ) const {
+        return aliases.find(aliasName);
+    }
+
     uint64_t Structure::getOwnSemanticHash(HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep) const {
         hb.updateString(getMangledName());
         hb.update(fields.size());
@@ -237,6 +241,10 @@ namespace das {
             hb.updateString(fld.name);
             hb.update(fld.type->getOwnSemanticHash(hb, dep, adep));
         }
+        aliases.foreach([&](const TypeDeclPtr & atype) {
+            hb.update(atype->getOwnSemanticHash(hb, dep, adep));
+            return true;
+        });
         return hb.getHash();
     }
 
@@ -247,6 +255,10 @@ namespace das {
             cs->fields.emplace_back(fd.name, make_smart<TypeDecl>(*fd.type), fd.init, fd.annotation, fd.moveSemantics, fd.at);
             cs->fields.back().flags = fd.flags;
         }
+        aliases.foreach([&](const TypeDeclPtr & atype) -> bool {
+            cs->aliases.insert(atype->alias, make_smart<TypeDecl>(*atype));
+            return true;
+        });
         cs->at = at;
         cs->module = module;
         cs->flags = flags;
@@ -3144,6 +3156,17 @@ namespace das {
 
     StructurePtr Program::visitStructure(Visitor & vis, Structure * pst) {
         vis.preVisit(pst);
+        pst->aliases.foreach([&](auto & alsv){
+            vis.preVisitStructureAlias(pst, alsv->alias, alsv.get());
+            vis.preVisit(alsv.get());
+            auto alssv = alsv->visit(vis);
+            if ( alssv ) alssv = vis.visit(alssv.get());
+            if ( alssv ) alsv = vis.visitStructureAlias(pst, alsv->alias, alsv.get());
+            if ( alssv!=alsv ) {
+                pst->aliases.replace(alssv->alias, alssv);
+                alsv = alssv;
+            }
+        });
         for ( auto & fi : pst->fields ) {
             vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
             if ( fi.type ) {

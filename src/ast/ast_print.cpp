@@ -210,6 +210,13 @@ namespace das {
                 ss << "] ";
             }
         }
+        virtual void preVisitStructureAlias ( Structure * var, const string & name, TypeDecl * at ) override {
+            Visitor::preVisitStructureAlias(var, name, at);
+            ss << "\ttypedef " << name << " = " << at->describe();
+            if ( gen2 ) ss << ";";
+            ss << "\n";
+        }
+
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
             Visitor::preVisitStructureField(that, decl, last);
             ss << "\t";

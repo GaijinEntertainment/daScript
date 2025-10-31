@@ -401,6 +401,11 @@ namespace das {
                 if ( auto rT = func->result->findAlias(name,true) ) {
                     return rT;
                 }
+                if ( func->classParent ) {
+                    if ( auto cT = func->classParent->findAlias(name) ) {
+                        return cT;
+                    }
+                }
             }
             TypeDeclPtr rT;
             thisModule->globals.find_first([&](auto gvar){
