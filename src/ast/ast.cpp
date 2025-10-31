@@ -2326,7 +2326,9 @@ namespace das {
     ExpressionPtr ExprAssume::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( vis.canVisitWithAliasSubexpression(this) ) {
-            subexpr = subexpr->visit(vis);
+            if ( subexpr ) subexpr = subexpr->visit(vis);
+            if ( assumeType ) assumeType = assumeType->visit(vis);
+
         }
         return vis.visit(this);
     }
@@ -2335,7 +2337,8 @@ namespace das {
         auto cexpr = clonePtr<ExprAssume>(expr);
         Expression::clone(cexpr);
         cexpr->alias = alias;
-        cexpr->subexpr = subexpr->clone();
+        if ( subexpr ) cexpr->subexpr = subexpr->clone();
+        if ( assumeType ) cexpr->assumeType = make_smart<TypeDecl>(*assumeType);
         return cexpr;
     }
 

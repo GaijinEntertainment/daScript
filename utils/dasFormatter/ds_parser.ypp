@@ -996,8 +996,11 @@ expression_with
 
 expression_with_alias
     :   DAS_ASSUME[loc] NAME[aname] '=' { yyextra->das_need_oxford_comma=true; } expr[subexpr] semicolon {
-        $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, $subexpr );
+        $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, ExpressionPtr($subexpr));
         delete $aname;
+    }
+    |   DAS_ASSUME[loc] DAS_TYPE NAME[aname] '=' type_declaration[decl] {
+        $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, TypeDeclPtr($decl));
     }
     ;
 

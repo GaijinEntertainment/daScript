@@ -648,7 +648,10 @@ namespace das {
         }
         virtual void preVisit ( ExprAssume * wh ) override {
             Visitor::preVisit(wh);
-            ss << "assume " << wh->alias << " = ";
+            ss << "assume ";
+            if ( wh->assumeType ) ss << "type ";
+            ss << wh->alias << " = ";
+            if ( wh->assumeType ) ss << wh->assumeType->describe();
         }
     // tag
         virtual void preVisit ( ExprTag * expr ) override {

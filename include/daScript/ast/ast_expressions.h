@@ -1003,6 +1003,8 @@ namespace das
         ExprAssume() { __rtti = "ExprAssume"; };
         ExprAssume(const LineInfo & a, const string & al, const ExpressionPtr & se )
             : Expression(a), alias(al), subexpr(se) { __rtti = "ExprAssume"; }
+        ExprAssume(const LineInfo & a, const string & al, const TypeDeclPtr & at )
+            : Expression(a), alias(al), assumeType(at) { __rtti = "ExprAssume"; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1010,6 +1012,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         string          alias;
         ExpressionPtr   subexpr;
+        TypeDeclPtr     assumeType;
     };
 
     template <typename TT>

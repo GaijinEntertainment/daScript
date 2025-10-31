@@ -1543,7 +1543,7 @@ namespace das {
 
     void ExprAssume::serialize(AstSerializer& ser) {
         Expression::serialize(ser);
-        ser << alias << subexpr;
+        ser << alias << subexpr << assumeType;
     }
 
     void ExprMakeBlock::serialize(AstSerializer & ser) {
@@ -2314,7 +2314,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 66;
+        static constexpr uint32_t currentVersion = 67;
         return currentVersion;
     }
 

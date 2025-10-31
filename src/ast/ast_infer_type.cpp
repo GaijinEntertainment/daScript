@@ -83,8 +83,10 @@ namespace das {
         vector<ExprBlock *>     scopes;
         vector<ExprWith *>      with;
         vector<smart_ptr<ExprAssume>> assume;
+        vector<smart_ptr<ExprAssume>> assumeType;
         vector<size_t>          varStack;
         vector<size_t>          assumeStack;
+        vector<size_t>          assumeTypeStack;
         vector<bool>            inFinally;
         bool                    canFoldResult = true;
         das_hash_set<int32_t>   labels;
@@ -131,10 +133,13 @@ namespace das {
         void pushVarStack() {
             varStack.push_back(local.size());
             assumeStack.push_back(assume.size());
+            assumeTypeStack.push_back(assumeType.size());
         }
         void popVarStack()  {
             assume.resize(assumeStack.back());
             assumeStack.pop_back();
+            assumeType.resize(assumeTypeStack.back());
+            assumeTypeStack.pop_back();
             local.resize(varStack.back());
             varStack.pop_back();
         }
@@ -377,6 +382,11 @@ namespace das {
         // within current context
         TypeDeclPtr findAlias ( const string & name ) const {
             if ( func ) {
+                for ( auto & ast : assumeType ) {
+                    if ( ast->alias == name ) {
+                        return ast->assumeType;
+                    }
+                }
                 for ( auto it = local.rbegin(), its=local.rend(); it!=its; ++it ) {
                     auto & var = *it;
                     if ( auto vT = var->type->findAlias(name) ) {
@@ -7463,63 +7473,81 @@ namespace das {
             Visitor::preVisit(expr);
             const auto & name = expr->alias;
             // assume
-            for ( const auto & aa : assume ) {
-                if ( aa->alias==name ) {
-                    error("can't assume " + name + ", alias already taken by another assume expression at " + aa->at.describe(), "", "",
-                                  expr->at, CompilationError::invalid_assume);
-                    return;
-                }
-            }
-            // local variable
-            for ( const auto & lv : local ) {
-                if ( lv->name==name || lv->aka==name ) {
-                    error("can't assume " + name + ", alias already taken by local variable at " + lv->at.describe(), "", "",
-                                  expr->at, CompilationError::invalid_assume);
-                    return;
-                }
-            }
-            // with
-            if ( auto mW = hasMatchingWith(name) ) {
-                error("can't assume " + name + ", alias already taken by `with` at " + mW->at.describe(), "", "",
-                    expr->at, CompilationError::invalid_assume);
-                return;
-            }
-            // block arguments
-            for ( const auto & block : blocks ) {
-                for ( const auto & arg : block->arguments ) {
-                    if ( arg->name==name || arg->aka==name ) {
-                        error("can't assume " + name + ", alias already taken by block argument at " + arg->at.describe(), "", "",
+            if ( expr->subexpr ) {
+                for ( const auto & aa : assume ) {
+                    if ( aa->alias==name ) {
+                        error("can't assume " + name + ", alias already taken by another assume expression at " + aa->at.describe(), "", "",
                                     expr->at, CompilationError::invalid_assume);
                         return;
                     }
                 }
-            }
-            // function argument
-            if ( func ) {
-                for ( auto & arg : func->arguments ) {
-                    if ( arg->name==name || arg->aka==name ) {
-                        error("can't assume " + name + ", alias already taken by block argument at " + arg->at.describe(), "", "",
+                // local variable
+                for ( const auto & lv : local ) {
+                    if ( lv->name==name || lv->aka==name ) {
+                        error("can't assume " + name + ", alias already taken by local variable at " + lv->at.describe(), "", "",
                                     expr->at, CompilationError::invalid_assume);
                         return;
                     }
                 }
-            }
-            // global
-            auto globals = findMatchingVar(name, false);
-            if ( globals.size() ) {
-                if ( globals.size()==1 ) {
-                    error("can't assume " + name + ", alias already taken by global variable at " + globals[0]->at.describe(), "", "",
-                                expr->at, CompilationError::invalid_assume);
-                } else {
-                    error("can't assume " + name + ", alias already taken by multiple global variables", "", "",
-                                expr->at, CompilationError::invalid_assume);
+                // with
+                if ( auto mW = hasMatchingWith(name) ) {
+                    error("can't assume " + name + ", alias already taken by `with` at " + mW->at.describe(), "", "",
+                        expr->at, CompilationError::invalid_assume);
+                    return;
                 }
-                return;
+                // block arguments
+                for ( const auto & block : blocks ) {
+                    for ( const auto & arg : block->arguments ) {
+                        if ( arg->name==name || arg->aka==name ) {
+                            error("can't assume " + name + ", alias already taken by block argument at " + arg->at.describe(), "", "",
+                                        expr->at, CompilationError::invalid_assume);
+                            return;
+                        }
+                    }
+                }
+                // function argument
+                if ( func ) {
+                    for ( auto & arg : func->arguments ) {
+                        if ( arg->name==name || arg->aka==name ) {
+                            error("can't assume " + name + ", alias already taken by block argument at " + arg->at.describe(), "", "",
+                                        expr->at, CompilationError::invalid_assume);
+                            return;
+                        }
+                    }
+                }
+                // global
+                auto globals = findMatchingVar(name, false);
+                if ( globals.size() ) {
+                    if ( globals.size()==1 ) {
+                        error("can't assume " + name + ", alias already taken by global variable at " + globals[0]->at.describe(), "", "",
+                                    expr->at, CompilationError::invalid_assume);
+                    } else {
+                        error("can't assume " + name + ", alias already taken by multiple global variables", "", "",
+                                    expr->at, CompilationError::invalid_assume);
+                    }
+                    return;
+                }
+            } else {
+                auto clashAlias = func ? findFuncAlias(func, name) : findAlias(name);
+                if ( clashAlias ) {
+                    error("can't assume " + name + ", alias already taken by function alias at " + clashAlias->at.describe(), "", "",
+                        expr->at, CompilationError::invalid_assume);
+                    return;
+                }
+                if ( !expr->assumeType ) {
+                    error("assume without subexpression must have type", "", "",
+                        expr->at, CompilationError::invalid_assume);
+                    return;
+                }
             }
         }
 
         virtual ExpressionPtr visit ( ExprAssume * expr ) override {
-            assume.emplace_back(expr);
+            if ( expr->subexpr ) {
+                assume.emplace_back(expr);
+            } else {
+                assumeType.emplace_back(expr);
+            }
             return expr;
         }
     // ExprWith
@@ -8111,7 +8139,7 @@ namespace das {
                 // we build var_name._partIndex
                 auto varName = make_smart<ExprVar>(varAt,name);
                 auto partExpr = make_smart<ExprField>(varAt,varName,"_" + to_string(partIndex),true);
-                assume.push_back(make_smart<ExprAssume>(varAt,part,partExpr));
+                assume.push_back(make_smart<ExprAssume>(varAt,part,ExpressionPtr(partExpr)));
                 partIndex ++;
             }
 
