@@ -26,6 +26,24 @@ namespace das
     {
     }
 
+    LineInfo TypeDecl::getDeclarationLocation() const {
+        if ( !at.empty() ) return at;
+        switch ( baseType ) {
+            case Type::tStructure:
+                if ( structType ) return structType->at;
+                break;
+            case Type::tEnumeration:
+            case Type::tEnumeration8:
+            case Type::tEnumeration16:
+            case Type::tEnumeration64:
+                if ( enumType ) return enumType->at;
+                break;
+            default:
+                break;
+        }
+        return LineInfo();
+    }
+
     int TypeDecl::maxBitfieldBits() const {
         switch ( baseType ) {
             case Type::tBitfield:    return 32;

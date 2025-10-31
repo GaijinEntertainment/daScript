@@ -7528,9 +7528,16 @@ namespace das {
                     return;
                 }
             } else {
-                auto clashAlias = func ? findFuncAlias(func, name) : findAlias(name);
+                auto clashAlias = findAlias(name);
                 if ( clashAlias ) {
-                    error("can't assume " + name + ", alias already taken by function alias at " + clashAlias->at.describe(), "", "",
+                    string extra;
+                    if ( verbose ) {
+                        auto atClash = clashAlias->getDeclarationLocation();
+                        if ( !atClash.empty() ) {
+                            extra = "previously declarated at " + atClash.describe();
+                        }
+                    }
+                    error("can't assume " + name + ", type or alias name is already used", extra, "",
                         expr->at, CompilationError::invalid_assume);
                     return;
                 }
