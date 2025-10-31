@@ -237,6 +237,7 @@ namespace das {
         static void clone ( TypeDeclPtr & dest, const TypeDeclPtr & src );
         Type getR2VType() const;
         int maxBitfieldBits() const;
+        LineInfo getDeclarationLocation() const;
     public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
