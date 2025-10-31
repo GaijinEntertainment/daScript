@@ -999,7 +999,7 @@ expression_with_alias
         $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, ExpressionPtr($subexpr));
         delete $aname;
     }
-    |   DAS_ASSUME[loc] DAS_TYPE NAME[aname] '=' type_declaration[decl] {
+    |   DAS_TYPEDEF[loc] NAME[aname] '=' type_declaration[decl] {
         $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, TypeDeclPtr($decl));
     }
     ;
