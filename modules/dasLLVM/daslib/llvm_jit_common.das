@@ -40,14 +40,13 @@ var public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = false
 let public LLVM_OUTPUT_OJBECT_FILE = false
 let public LLVM_OUTPUT_OJBECT_FILE_NAME = "out/"
 
-let public LLVM_ENABLE_DLL_LOADING = true
-let public JIT_DLL_OUTPUT = "output.dll"
-let public DASCRIPT_LIBRARY = "build/liblibDaScript.a" // liblibDaScript.a on linux
+let public LLVM_ENABLE_DLL_LOADING = false
+let public JIT_DLL_OUTPUT = "out/"
 
-let public LLVM_ENABLE_OPT_PASS = false // LLVM_DEBUG_EVERYTHING ? false : true
-let public LLVM_OPT_LEVEL = 0u // LLVM_DEBUG_EVERYTHING ? 0u : 3u
-let public LLVM_SIZE_LEVEL = 0u // LLVM_DEBUG_EVERYTHING ? 0u : 3u
-let public LLVM_JIT_OPT_LEVEL = 0u // LLVM_DEBUG_EVERYTHING ? 0u : 3u
+let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
+let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 3u
+let public LLVM_SIZE_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 3u
+let public LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 3u
 let public LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING || LLVM_DEBUG_RESULT
 let public LLVM_INLINE_THRESHOLD = 1024u // 225u
 
@@ -97,7 +96,6 @@ var public g_mod : LLVMOpaqueModule?
 var public g_engine : LLVMExecutionEngineRef
 var public g_failed : bool = false
 var public g_errors : array<string>
-var public g_loading_from_dll : bool = true
 
 var public g_t_simFunction : LLVMOpaqueType?
 var public g_t_function : LLVMOpaqueType?
@@ -109,19 +107,31 @@ var public g_t_sequence : LLVMOpaqueType?
 
 var g_str2v : table<string; LLVMOpaqueValue?>
 
-class Attributes {
+class public Attributes {
     noreturn : LLVMOpaqueAttributeRef?
     readonly : LLVMOpaqueAttributeRef?
     nounwind : LLVMOpaqueAttributeRef?
     willreturn : LLVMOpaqueAttributeRef?
     nocapture : LLVMOpaqueAttributeRef?
+    alwaysinline : LLVMOpaqueAttributeRef?
+    noinline : LLVMOpaqueAttributeRef?
+    hot : LLVMOpaqueAttributeRef?
+    noalias : LLVMOpaqueAttributeRef?
+    sext : LLVMOpaqueAttributeRef?
+    zext : LLVMOpaqueAttributeRef?
 
     def Attributes(ctx : LLVMContextRef) {
-        noreturn = g_ctx |> LLVMGetEnumAttribute("noreturn")
-        readonly = g_ctx |> LLVMGetEnumAttribute("readonly")
-        nounwind = g_ctx |> LLVMGetEnumAttribute("nounwind")
-        willreturn = g_ctx |> LLVMGetEnumAttribute("willreturn")
-        nocapture = g_ctx |> LLVMGetEnumAttribute("nocapture")
+        noreturn = ctx |> LLVMGetEnumAttribute("noreturn")
+        readonly = ctx |> LLVMGetEnumAttribute("readonly")
+        nounwind = ctx |> LLVMGetEnumAttribute("nounwind")
+        willreturn = ctx |> LLVMGetEnumAttribute("willreturn")
+        nocapture = ctx |> LLVMGetEnumAttribute("nocapture")
+        alwaysinline = ctx |> LLVMGetEnumAttribute("alwaysinline")
+        noinline = ctx |> LLVMGetEnumAttribute("noinline")
+        hot = ctx |> LLVMGetEnumAttribute("hot")
+        noalias = ctx |> LLVMGetEnumAttribute("noalias")
+        sext = ctx |> LLVMGetEnumAttribute("signext")
+        zext = ctx |> LLVMGetEnumAttribute("zeroext")
     }
 
 }
@@ -191,6 +201,76 @@ def public FN_JIT_TABLE_FIND(t : Type) {
     return "`jit`table_find`{t}`"
 }
 
+def private add_table_linkage(val : LLVMOpaqueValue?) {
+    LLVMSetLinkage(val, LLVMLinkage.LLVMWeakAnyLinkage);
+}
+
+def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?; fn_name : string; at_type : LLVMOpaqueType?; fn_ptr : void?) {
+    var tab_fun : LLVMOpaqueValue? = null
+    if (!g_fn_types |> key_exists(fn_name)) {
+        // create fn
+        g_fn_types[fn_name] = at_type
+
+        let at_ptr_type = LLVMPointerType(at_type, 0u)
+        tab_fun = LLVMAddGlobal(llvm_module, LLVMPointerType(at_ptr_type, 0u), fn_name)
+        add_table_linkage(tab_fun)
+        LLVMSetInitializer(tab_fun, types.ConstPtr(fn_ptr |> intptr(), at_ptr_type))
+    } else {
+        // we already created it
+        tab_fun = LLVMGetNamedGlobal(llvm_module, fn_name)
+    }
+    return tab_fun
+}
+
+def public get_table_at(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
+    assume fn_ptr = get_jit_table_at(unsafe(reinterpret<int> t))
+    // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
+    assume at_type = LLVMFunctionType(types.t_int32,   // int32_t result
+        fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), // table ptr
+        base_type_to_llvm_type(t),                           // key
+        types.t_int32,                                    // valueTypeSize
+        types.LLVMVoidPtrType(),                          // context
+        types.LLVMVoidPtrType(),                          // at
+    ))
+    let fn_name = FN_JIT_TABLE_AT(t)
+    var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, at_type, fn_ptr)
+    assert(tab_fun != null)
+    tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(at_type, 0u), tab_fun, "func_at")
+    return (tab_fun, at_type)
+}
+
+def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
+    assume fn_ptr = get_jit_table_find(unsafe(reinterpret<int> t))
+    // int32_t jit_table_find ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
+    let find_type = LLVMFunctionType(types.t_int32,   // int32_t result
+            fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(),   // table ptr
+            base_type_to_llvm_type(t),                          // key
+            types.t_int32,                                    // valueTypeSize
+            types.LLVMVoidPtrType()                 // context
+            ))
+    let fn_name = FN_JIT_TABLE_FIND(t)
+    var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, find_type, fn_ptr)
+    assert(tab_fun != null)
+    tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(find_type, 0u), tab_fun, "func_find")
+    return (tab_fun, find_type)
+}
+
+def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
+    let fn_name = FN_JIT_TABLE_ERASE(t)
+    assume fn_ptr = get_jit_table_erase(unsafe(reinterpret<int> t))
+    // bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
+    let erase_type = LLVMFunctionType(types.t_int1,                        // bool result
+            fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(),   // table ptr
+            base_type_to_llvm_type(t),                          // key
+            types.t_int32,                                    // valueTypeSize
+            types.LLVMVoidPtrType()                 // context
+            ))
+    var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, erase_type, fn_ptr)
+    assert(tab_fun != null)
+    tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(erase_type, 0u), tab_fun, "func_erase")
+    return (tab_fun, erase_type)
+}
+
 var public g_fn_types : table<string; LLVMTypeRef>
 
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
@@ -199,82 +279,9 @@ def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLV
     return rv
 }
 
-def private add_table_linkage(val : LLVMOpaqueValue?) {
-    LLVMSetLinkage(val, LLVMLinkage.LLVMWeakAnyLinkage);
-}
 
 [macro_function]
-def private add_table_methods(llvm_module : LLVMOpaqueModule?; llvm_engine : LLVMExecutionEngineRef; var types : PrimitiveTypes?; var dll : DLLHandle?; attrs : Attributes?) {
-    // table functions
-    for (t in get_workhorse_types()) {
-        // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
-        let at_type = LLVMFunctionType(types.t_int32,   // int32_t result
-                fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), // table ptr
-                base_type_to_llvm_type(t),                           // key
-                types.t_int32,                                    // valueTypeSize
-                types.LLVMVoidPtrType(),                          // context
-                types.LLVMVoidPtrType(),                          // at
-                ))
-        let at_name = FN_JIT_TABLE_AT(t)
-        g_fn_types[at_name] = at_type
-
-        let at_impl = get_jit_table_at(unsafe(reinterpret<int> t))
-        let at_ptr_type = LLVMPointerType(at_type, 0u)
-        var jit_table_at = LLVMAddGlobal(llvm_module, LLVMPointerType(at_ptr_type, 0u), at_name)
-        add_table_linkage(jit_table_at)
-        LLVMSetInitializer(jit_table_at, types.ConstPtr(at_impl |> intptr(), at_ptr_type))
-
-        let at_variable = dll.handle == null ? null : dll.get_function_address(DllName(at_name))
-        if (at_variable != null) {
-            dll.set_function_address(DllName(at_name), at_impl)
-        }
-        // int32_t jit_table_find ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
-        let find_type = LLVMFunctionType(types.t_int32,   // int32_t result
-                fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(),   // table ptr
-                base_type_to_llvm_type(t),                          // key
-                types.t_int32,                                    // valueTypeSize
-                types.LLVMVoidPtrType()                 // context
-                ))
-        let find_name = FN_JIT_TABLE_FIND(t)
-        g_fn_types[find_name] = find_type
-
-        let find_impl = get_jit_table_find(unsafe(reinterpret<int> t))
-        let find_ptr_type = LLVMPointerType(find_type, 0u)
-        var jit_table_find = LLVMAddGlobal(llvm_module, LLVMPointerType(find_ptr_type, 0u), find_name)
-        add_table_linkage(jit_table_find)
-        LLVMSetInitializer(jit_table_find, types.ConstPtr(find_impl |> intptr(), find_ptr_type))
-
-        let find_variable = dll.handle == null ? null : dll.get_function_address(DllName(find_name))
-        if (find_variable != null) {
-            dll.set_function_address(DllName(find_name), find_impl)
-        }
-
-        // bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
-        let erase_type = LLVMFunctionType(types.t_int1,                        // bool result
-                fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(),   // table ptr
-                base_type_to_llvm_type(t),                          // key
-                types.t_int32,                                    // valueTypeSize
-                types.LLVMVoidPtrType()                 // context
-                ))
-        let erase_name = FN_JIT_TABLE_ERASE(t)
-        let erase_ptr_type = LLVMPointerType(erase_type, 0u)
-        let erase_impl = get_jit_table_erase(unsafe(reinterpret<int> t))
-
-        var jit_table_erase = LLVMAddGlobal(llvm_module, LLVMPointerType(erase_ptr_type, 0u), erase_name)
-        add_table_linkage(jit_table_erase)
-        LLVMSetInitializer(jit_table_erase, types.ConstPtr(erase_impl |> intptr(), erase_ptr_type))
-
-        let erase_variable = dll.handle == null ? null : dll.get_function_address(DllName(erase_name))
-        g_fn_types[erase_name] = erase_type
-        if (erase_variable != null) {
-            dll.set_function_address(DllName(erase_name), find_impl)
-        }
-    }
-}
-
-
-[macro_function]
-def public init_jit(var dll : DLLHandle?) {
+def public init_jit() {
     return if (is_in_completion() || is_compiling_macros())
     return if (g_mod != null)    // prevent double init
     LLVMLinkInMCJIT()
@@ -418,7 +425,6 @@ def public init_jit(var dll : DLLHandle?) {
     LLVMAddAttributesToFunction(jit_array_unlock, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_array_unlock, urange(0, 2), nocapture)
 
-    add_table_methods(g_mod, g_engine, g_prim_t, dll, attrs)
     // int jit_str_cmp ( char * a, char * b )
     var jit_str_cmp = LLVMAddFunctionWithType(g_mod, FN_JIT_STR_CMP,
         LLVMFunctionType(g_prim_t.t_int32,
@@ -634,20 +640,20 @@ def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void
 
 
 [macro_function]
-def public finalize_jit(prog : Program?) {
+def public finalize_jit(prog : Program?; write_dll : bool) {
     return if (is_in_completion() || is_compiling_macros())
     return if (g_mod == null)    // prevent double finalize
     if (LLVM_LOG_RESULT) {
         LLVMDumpModule(g_mod)
         fflush(fstderr())
     }
-    if (LLVM_OUTPUT_OJBECT_FILE) {
+    if (write_dll) {
         with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
             let error : string?
-            let file = LLVM_OUTPUT_OJBECT_FILE_NAME
+            let file = "{LLVM_OUTPUT_OJBECT_FILE_NAME}{prog.thisNamespace}.o"
             let filetype = LLVMCodeGenFileType.LLVMObjectFile
-            LLVMTargetMachineEmitToFile(targetMachine, g_mod, "{file}{prog.thisNamespace}", filetype, error)
-            // create_shared_library(file, JIT_DLL_OUTPUT, DASCRIPT_LIBRARY)
+            LLVMTargetMachineEmitToFile(targetMachine, g_mod, file, filetype, error)
+            create_shared_library(file, "{JIT_DLL_OUTPUT}{prog.thisNamespace}.dll")
         }
     }
     g_engine |> LLVMRunStaticConstructors()
@@ -745,9 +751,9 @@ def public failed_T(v : TypeDeclPtr; msg : string) {
 
 def public base_type_to_llvm_type(t : Type) {
     return g_prim_t.t_int32 if (t == Type.tInt || t == Type.tUInt || t == Type.tBitfield || t == Type.tEnumeration)
-    return g_prim_t.t_int64 if (t == Type.tInt64 || t == Type.tUInt64 || t == Type.tEnumeration64)
-    return g_prim_t.t_int16 if (t == Type.tInt16 || t == Type.tUInt16 || t == Type.tEnumeration16)
-    return g_prim_t.t_int8 if (t == Type.tInt8 || t == Type.tUInt8 || t == Type.tEnumeration8)
+    return g_prim_t.t_int64 if (t == Type.tInt64 || t == Type.tUInt64 || t == Type.tBitfield64 || t == Type.tEnumeration64)
+    return g_prim_t.t_int16 if (t == Type.tInt16 || t == Type.tUInt16 || t == Type.tBitfield16 || t == Type.tEnumeration16)
+    return g_prim_t.t_int8 if (t == Type.tInt8 || t == Type.tUInt8 || t == Type.tBitfield8 || t == Type.tEnumeration8)
     return g_prim_t.t_float if (t == Type.tFloat)
     return g_prim_t.t_double if (t == Type.tDouble)
     return g_prim_t.t_int1 if (t == Type.tBool)
