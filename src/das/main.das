@@ -1,3 +1,4 @@
+options gen2
 require ast/ast_aot_cpp
 require ast/standalone_contexts
 

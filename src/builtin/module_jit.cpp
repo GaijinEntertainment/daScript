@@ -394,24 +394,20 @@ extern "C" {
     }
 
 #if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
-    void create_shared_library ( const char * objFilePath, const char * libraryName, const char * jitModuleObj ) {
+    void create_shared_library ( const char * objFilePath, const char * libraryName ) {
         char cmd[1024];
 
-        if (!check_file_present(jitModuleObj)) {
-            LOG(LogLevel::error) << "File '" << jitModuleObj << "' , containing daScript library, does not exist\n";
-            return;
-        }
         if (!check_file_present(objFilePath)) {
             LOG(LogLevel::error) << "File '" << objFilePath << "' , containing compiled definitions, does not exist\n";
             return;
         }
 
         #if defined(_WIN32) || defined(_WIN64)
-            auto result = fmt::format_to(cmd, FMT_STRING("clang-cl {} {} -link -DLL -OUT:{} 2>&1"), objFilePath, jitModuleObj, libraryName);
+            auto result = fmt::format_to(cmd, FMT_STRING("clang-cl {} -link -DLL -OUT:{} 2>&1"), objFilePath, libraryName);
         #elif defined(__APPLE__)
-            auto result = fmt::format_to(cmd, FMT_STRING("clang -shared -o {} {} {} 2>&1"), libraryName, objFilePath, jitModuleObj);
+            auto result = fmt::format_to(cmd, FMT_STRING("clang -shared -o {} {} 2>&1"), libraryName, objFilePath);
         #else
-            auto result = fmt::format_to(cmd, FMT_STRING("gcc -shared -o {} {} {} 2>&1"), libraryName, objFilePath, jitModuleObj);
+            auto result = fmt::format_to(cmd, FMT_STRING("gcc -shared -o {} {} 2>&1"), libraryName, objFilePath);
         #endif
             *result = '\0';
 
@@ -575,7 +571,7 @@ extern "C" {
                     ->args({"library"});
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
-                    ->args({"objFilePath","libraryName","jitModuleObj"});
+                    ->args({"objFilePath","libraryName"});
             addExtern<DAS_BIND_FUN(jit_initialize_fileinfo)>(*this, lib,  "jit_initialize_fileinfo",
                 SideEffects::worstDefault, "jit_initialize_fileinfo");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));

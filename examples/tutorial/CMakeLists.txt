@@ -1,6 +1,6 @@
 MACRO(DAS_TUTORIAL tutorial_name tutorial_src)
     add_executable(${tutorial_name} ${tutorial_src})
-    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript Threads::Threads)
+    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript Threads::Threads libDaScriptTest)
     ADD_DEPENDENCIES(${tutorial_name} libDaScript)
     SETUP_CPP11(${tutorial_name})
 ENDMACRO()

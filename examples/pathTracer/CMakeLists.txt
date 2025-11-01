@@ -5,8 +5,8 @@ ${DAS_DASCRIPT_MAIN_SRC}
 )
 add_executable(pathtracer_dasAot ${PATHTRACER_DASAOT_MAIN_SRC} )
 target_compile_definitions(pathtracer_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
-TARGET_LINK_LIBRARIES(pathtracer_dasAot libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(pathtracer_dasAot libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(pathtracer_dasAot libDaScriptTest libDaScriptAot Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(pathtracer_dasAot libDaScriptTest libDaScriptAot ${DAS_MODULES_LIBS})
 SETUP_CPP11(pathtracer_dasAot)
 SETUP_LTO(pathtracer_dasAot)
 
@@ -23,8 +23,8 @@ ${CMAKE_CURRENT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_profile.das
 )
 add_executable(path_tracer ${PATHTRACER_AOT_SRC} ${PATHTRACER_AOT_GENERATED_SRC})
 target_include_directories(path_tracer PUBLIC ${PROJECT_SOURCE_DIR}/examples/pathTracer)
-TARGET_LINK_LIBRARIES(path_tracer libDaScript libDaScriptAot ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(path_tracer libDaScript libDaScriptAot pathtracer_dasAotStub)
+TARGET_LINK_LIBRARIES(path_tracer libDaScriptAot ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(path_tracer libDaScriptAot pathtracer_dasAotStub)
 SETUP_CPP11(path_tracer)
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/pathTracer
