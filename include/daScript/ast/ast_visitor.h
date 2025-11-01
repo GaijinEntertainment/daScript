@@ -58,6 +58,8 @@ namespace das {
         virtual EnumerationPtr visit ( Enumeration * enu ) { return enu; }
         // STRUCTURE
         virtual void preVisit ( Structure * var ) { }
+        virtual void preVisitStructureAlias ( Structure * var, const string & name, TypeDecl * at ) {}
+        virtual TypeDeclPtr visitStructureAlias ( Structure * var, const string & name, TypeDecl * at ) { return at; }
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) {}
         virtual StructurePtr visit ( Structure * var ) { return var; }

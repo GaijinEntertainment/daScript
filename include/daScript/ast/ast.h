@@ -287,10 +287,12 @@ namespace das
         bool hasAnyInitializers() const;
         void serialize( AstSerializer & ser );
         uint64_t getOwnSemanticHash(HashBuilder & hb,das_set<Structure *> & dep, das_set<Annotation *> & adep) const;
+        TypeDeclPtr findAlias ( const string & name ) const;
     public:
         string                          name;
         vector<FieldDeclaration>        fields;
         das_hash_map<string,int32_t>    fieldLookup;
+        safebox<TypeDecl>               aliases;
         LineInfo                        at;
         Module *                        module = nullptr;
         Structure *                     parent = nullptr;

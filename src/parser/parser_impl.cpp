@@ -275,6 +275,32 @@ namespace das {
         }
     }
 
+    bool ast_structureAlias ( yyscan_t scanner, string * name, TypeDecl * typeDecl, const LineInfo & atName ) {
+        if (!typeDecl->alias.empty()) {
+            das_yyerror(scanner,"alias is already defined "+typeDecl->alias, atName,
+                CompilationError::invalid_type);
+            delete name;
+            delete typeDecl;
+            return false;
+        }
+        typeDecl->alias = *name;
+        delete name;
+        if ( !yyextra->g_thisStructure ) {
+            das_yyerror(scanner,"typedef outside of structure", atName,
+                CompilationError::invalid_type);
+            delete typeDecl;
+            return false;
+        }
+        if ( yyextra->g_thisStructure->aliases.find(typeDecl->alias) ) {
+            das_yyerror(scanner,"alias is already defined "+typeDecl->alias, atName,
+                CompilationError::invalid_type);
+            delete typeDecl;
+            return false;
+        }
+        yyextra->g_thisStructure->aliases.insert(typeDecl->alias, typeDecl);
+        return true;
+    }
+
     void ast_structureDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & loc, Structure * ps,
         const LineInfo & atPs, vector<VariableDeclaration*> * list ) {
         if ( ps ) {

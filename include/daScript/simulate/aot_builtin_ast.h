@@ -184,6 +184,8 @@ namespace das {
         virtual EnumerationPtr visit ( Enumeration * enu ) override;
         // STRUCTURE
         virtual void preVisit ( Structure * var ) override;
+        virtual void preVisitStructureAlias ( Structure * var, const string & name, TypeDecl * at ) override;
+        virtual TypeDeclPtr visitStructureAlias ( Structure * var, const string & name, TypeDecl * at ) override;
         virtual void preVisitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override;
         virtual bool canVisitStructureFieldInit ( Structure * var ) override;
         virtual void visitStructureField ( Structure * var, Structure::FieldDeclaration & decl, bool last ) override;
@@ -571,6 +573,9 @@ namespace das {
     void forceAtFunctionRaw ( const smart_ptr_raw<Function> & func, const LineInfo & at );
     void forceGeneratedRaw ( const smart_ptr_raw<Expression> & expr, bool setGenerated );
     void forceGeneratedFunctionRaw ( const smart_ptr_raw<Function> & func, bool setGenerated );
+    bool add_structure_alias ( Structure * structure, char * name, const TypeDeclPtr & aliasType, Context * context, LineInfoArg * at );
+    void for_each_structure_alias ( Structure * structure, const TBlock<void,smart_ptr_raw<TypeDecl>> & block, Context * context, LineInfoArg * at );
+    TypeDeclPtr get_structure_alias ( Structure * structure, const char * aliasName, Context * context, LineInfoArg * at );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

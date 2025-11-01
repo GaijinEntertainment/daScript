@@ -1190,6 +1190,7 @@ namespace das {
         ser << name;
         ser << at     << module;
         ser << fields << fieldLookup;
+        ser << aliases;
         ser << parent // parent could be in the current module or in some other
                       // module
             << flags
@@ -2314,7 +2315,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 67;
+        static constexpr uint32_t currentVersion = 68;
         return currentVersion;
     }
 

@@ -2258,11 +2258,16 @@ structure_variable_declaration
     }
     ;
 
+
 struct_variable_declaration_list
     :   {
         $$ = new vector<VariableDeclaration*>();
     }
     |  struct_variable_declaration_list[list] DAS_EMIT_SEMICOLON { $$ = $list; }
+    |  struct_variable_declaration_list[list] DAS_TYPEDEF[loc] NAME[aname] '=' type_declaration[decl] SEMICOLON {
+        $$ = $list;
+        ast_structureAlias(scanner,$aname,$decl,tokAt(scanner,@loc));
+    }
     |   struct_variable_declaration_list[list] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@list);
