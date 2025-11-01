@@ -75,6 +75,7 @@ namespace das {
         bool finished() const { return !needRestart; }
         bool verbose = true;
     protected:
+        Structure *             currentStructure = nullptr;
         FunctionPtr             func;
         VariablePtr             globalVar;
         vector<VariablePtr>     local;
@@ -401,10 +402,11 @@ namespace das {
                 if ( auto rT = func->result->findAlias(name,true) ) {
                     return rT;
                 }
-                if ( func->classParent ) {
-                    if ( auto cT = func->classParent->findAlias(name) ) {
-                        return cT;
-                    }
+            }
+            Structure * aliasStruct = currentStructure ? currentStructure : (func ? func->classParent : nullptr);
+            if ( aliasStruct ) {
+                if ( auto cT = aliasStruct->findAlias(name) ) {
+                    return cT;
                 }
             }
             TypeDeclPtr rT;
@@ -2109,6 +2111,7 @@ namespace das {
         }
         virtual void preVisit ( Structure * that ) override {
             Visitor::preVisit(that);
+            currentStructure = that;
             fieldOffset = 0;
             cppLayout = that->cppLayout;
             cppLayoutPod = !that->cppLayoutNotPod;
@@ -2295,6 +2298,7 @@ namespace das {
                 error("type creates circular dependency",  "", "",
                     var->at,CompilationError::invalid_type);
             }
+            currentStructure = nullptr;
             return Visitor::visit(var);
         }
     // globals

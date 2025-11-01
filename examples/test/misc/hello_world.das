@@ -1,30 +1,17 @@
-options gen2
-
 require t_counter
 
-[unused_argument(dummy)]
-def take_counter(foo : $counter(type<auto(TT)>); dummy : TT = type<TT>)  {
-    /// this one uses dummy variable to force TT to be deduced
-    print("counter TT is {typeinfo typename(type<TT>)}\n")
-}
+typedef Counter = $counter(type<int>)
 
-def take_another_counter(foo : $counter(type<auto(TT)>)) : TT {
-    // this one uses result to force TT to be deduced
-    print("another counter TT is {typeinfo typename(type<TT>)}\n")
-    return default<TT>
-}
 
-typedef IntCounter = $counter(type<int>)
-
-def take_int_counter(var foo : IntCounter) {
-    foo.next()
-    print("int counter value is {foo.value()}\n")
+def take_any_counter(var t : $counter(type<auto(TT)>)) : TT {
+    print("any counter type is {typeinfo typename(type<TT>)}\n")
+    return t.value()
 }
 
 [export]
 def main {
-    var foo = IntCounter()
-    take_int_counter(foo)
-    take_counter(foo)
-    take_another_counter(default< $counter(type<float>) >)
+    var c = Counter()
+    c.next()
+    take_any_counter(c)
 }
+

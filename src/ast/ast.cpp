@@ -3161,9 +3161,9 @@ namespace das {
             vis.preVisit(alsv.get());
             auto alssv = alsv->visit(vis);
             if ( alssv ) alssv = vis.visit(alssv.get());
-            if ( alssv ) alsv = vis.visitStructureAlias(pst, alsv->alias, alsv.get());
+            if ( alssv ) alssv = vis.visitStructureAlias(pst, alssv->alias, alssv.get());
             if ( alssv!=alsv ) {
-                pst->aliases.replace(alssv->alias, alssv);
+                pst->aliases.replace(alsv->alias, alssv);
                 alsv = alssv;
             }
         });

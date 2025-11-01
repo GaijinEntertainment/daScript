@@ -391,6 +391,8 @@ class AstVisitor {
     def abstract canVisitExprMakeStructBlock(expr : smart_ptr<ExprMakeStruct>; blk : ExpressionPtr) : bool
     def abstract preVisitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) : void
     def abstract visitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) : ExpressionPtr
+    def abstract preVisitStructureAlias(str : StructurePtr; name : das_string; at : TypeDeclPtr) : void
+    def abstract visitStructureAlias(str : StructurePtr; name : das_string; at : TypeDeclPtr) : TypeDeclPtr
     def abstract preVisitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) : void
     def abstract visitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) : void
     def abstract preVisitExprMakeStructField(expr : smart_ptr<ExprMakeStruct>; index : int; decl : MakeFieldDeclPtr; last : bool) : void

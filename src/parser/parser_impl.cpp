@@ -276,6 +276,13 @@ namespace das {
     }
 
     bool ast_structureAlias ( yyscan_t scanner, string * name, TypeDecl * typeDecl, const LineInfo & atName ) {
+        if (!typeDecl->alias.empty()) {
+            das_yyerror(scanner,"alias is already defined "+typeDecl->alias, atName,
+                CompilationError::invalid_type);
+            delete name;
+            delete typeDecl;
+            return false;
+        }
         typeDecl->alias = *name;
         delete name;
         if ( !yyextra->g_thisStructure ) {

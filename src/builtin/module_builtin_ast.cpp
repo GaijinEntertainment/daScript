@@ -980,6 +980,31 @@ namespace das {
         return mod->aotRequire(*ss) != ModuleAotType::no_aot;
     }
 
+    bool add_structure_alias ( Structure * structure, char * name, const TypeDeclPtr & aliasType, Context * context, LineInfoArg * at ) {
+        if ( !structure ) context->throw_error_at(at, "expecting structure");
+        if ( !aliasType ) context->throw_error_at(at, "expecting alias type");
+        if ( !name ) context->throw_error_at(at, "expecting alias name in the type");
+        aliasType->alias = name;
+        if ( structure->aliases.find(aliasType->alias) ) return false;
+        structure->aliases.insert(aliasType->alias, aliasType);
+        return true;
+    }
+
+    void for_each_structure_alias ( Structure * structure, const TBlock<void,smart_ptr_raw<TypeDecl>> & block, Context * context, LineInfoArg * at ) {
+        if ( !structure ) context->throw_error_at(at, "expecting structure");
+        structure->aliases.foreach([&](const TypeDeclPtr & aliasType){
+            vec4f args[1];
+            args[0] = cast<smart_ptr_raw<TypeDecl>>::from(aliasType);
+            context->invoke(block, args, nullptr, at);
+        });
+    }
+
+    TypeDeclPtr get_structure_alias ( Structure * structure, const char * aliasName, Context * context, LineInfoArg * at ) {
+        if ( !structure ) context->throw_error_at(at, "expecting structure");
+        if ( !aliasName ) context->throw_error_at(at, "expecting alias name");
+        return structure->aliases.find(aliasName);
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -1449,6 +1474,15 @@ namespace das {
         addExtern<DAS_BIND_FUN(makeBlockType)>(*this, lib,  "make_block_type",
                                                   SideEffects::none, "makeBlockType")
             ->args({"blk"});
+        addExtern<DAS_BIND_FUN(add_structure_alias)>(*this, lib,  "add_structure_alias",
+                                                  SideEffects::modifyExternal, "add_structure_alias")
+            ->args({"structure","aliasName","alias","context","at"});
+        addExtern<DAS_BIND_FUN(get_structure_alias)>(*this, lib,  "get_structure_alias",
+                                                    SideEffects::none, "get_structure_alias")
+                ->args({"structure","aliasName","context","at"});
+        addExtern<DAS_BIND_FUN(for_each_structure_alias)>(*this, lib,  "for_each_structure_alias",
+                                                    SideEffects::modifyExternal, "for_each_structure_alias")
+                ->args({"structure","block","context","at"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {

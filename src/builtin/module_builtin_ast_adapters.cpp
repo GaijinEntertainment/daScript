@@ -285,6 +285,26 @@ namespace das {
         }
     }
 
+    void VisitorAdapter::preVisitStructureAlias ( Structure * var, const string & name, TypeDecl * at ) {
+        if ( auto fnPreVisit = get_preVisitStructureAlias(classPtr) ) {
+            runMacroFunction(context, "preVisitStructureAlias", [&]() {
+                invoke_preVisitStructureAlias(context,fnPreVisit,classPtr,var,name,at);
+            });
+        }
+    }
+
+    TypeDeclPtr VisitorAdapter::visitStructureAlias ( Structure * var, const string & name, TypeDecl * at ) {
+        if ( auto fnVisit = get_visitStructureAlias(classPtr) ) {
+            TypeDeclPtr result;
+            runMacroFunction(context, "visitStructureAlias", [&]() {
+                result = invoke_visitStructureAlias(context,fnVisit,classPtr,var,name,at);
+            });
+            return return_smart(result,at);
+        } else {
+            return at;
+        }
+    }
+
     void VisitorAdapter::preVisitStructureField(Structure *var, Structure::FieldDeclaration &decl, bool last) {
         if ( auto fnPreVisit = get_preVisitStructureField(classPtr) ) {
             runMacroFunction(context, "preVisitStructureField", [&]() {
