@@ -1,9 +1,9 @@
 require t_counter
 
-typedef Counter = $counter(type<int>)
+typedef Counter = counter<int>()
 
 
-def take_any_counter(var t : $counter(type<auto(TT)>)) : TT {
+def take_any_counter(var t : counter<auto(TT)>()) : TT {
     print("any counter type is {typeinfo typename(type<TT>)}\n")
     return t.value()
 }
