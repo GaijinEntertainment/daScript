@@ -3403,14 +3403,14 @@ type_declaration_no_options
         $$->at = tokRangeAt(scanner,@td,@subexpr);
         $$->dimExpr.push_back($subexpr);
     }
-    |   '$' name_in_namespace[name] '(' optional_expr_list[arguments] ')' {
+    |   '$' name_in_namespace[name] optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
         $$->dimExpr = sequenceToList($arguments);
         $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
-    |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' '(' optional_expr_list[arguments] ')' {
+    |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
         $$->dimExpr = typesAndSequenceToList($declL,$arguments);

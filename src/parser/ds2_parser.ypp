@@ -458,6 +458,7 @@
 %type <pExpression>         expr_assign
 %type <pExpression>         expr_list
 %type <pExpression>         optional_expr_list
+%type <pExpression>         optional_expr_list_in_braces
 %type <pExpression>         optional_expr_map_tuple_list
 %type <pExpression>         expr_map_tuple_list
 %type <pExpression>         expression_label
@@ -3120,6 +3121,12 @@ type_declaration_no_options
     }
     ;
 
+
+optional_expr_list_in_braces
+    :       { $$ = nullptr; }
+    |   '(' expr_list[exprL] optional_comma ')' { $$ = $exprL; }
+    ;
+
 type_declaration_no_options_no_dim
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(scanner,@basicType); }
     |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
@@ -3141,21 +3148,21 @@ type_declaration_no_options_no_dim
         $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
-    |   '$' name_in_namespace[name] '(' optional_expr_list[arguments] ')' {
+    |   '$' name_in_namespace[name] optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
         $$->dimExpr = sequenceToList($arguments);
         $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
-    |   name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' '(' optional_expr_list[arguments] ')' {
+    |   name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
         $$->dimExpr = typesAndSequenceToList($declL,$arguments);
         $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
-    |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' '(' optional_expr_list[arguments] ')' {
+    |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
         $$->dimExpr = typesAndSequenceToList($declL,$arguments);
