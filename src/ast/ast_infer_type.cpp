@@ -7757,7 +7757,7 @@ namespace das {
             markNoDiscard(that);
         }
         virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
-            if ( jitEnabled() & that->type && (
+            if ( jitEnabled() && that->type && (
                     (that->type->isHandle() && that->type->annotation->isIterable()) ||
                     (that->type->isString())
              )) {
