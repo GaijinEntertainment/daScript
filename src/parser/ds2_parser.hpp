@@ -62,7 +62,8 @@ extern int das2_yydebug;
     #include "parser_state.h"
 
 #if defined(_MSC_VER) && !defined(__clang__)
-    #if defined(DAS_RELWITHDEBINFO)
+    #if !defined(_DEBUG)
+        #pragma optimize( "", off )
         #pragma optimize( "s", on )
     #endif
 #endif
