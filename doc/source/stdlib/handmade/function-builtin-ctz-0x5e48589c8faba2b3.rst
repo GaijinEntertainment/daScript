@@ -1,0 +1,1 @@
+ count trailing zeros

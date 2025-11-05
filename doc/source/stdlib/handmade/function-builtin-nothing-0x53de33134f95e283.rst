@@ -1,0 +1,1 @@
+ returns empty iterator
