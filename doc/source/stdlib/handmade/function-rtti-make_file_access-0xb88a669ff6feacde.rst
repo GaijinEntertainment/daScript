@@ -1,0 +1,1 @@
+ Creates new `FileAccess` object.

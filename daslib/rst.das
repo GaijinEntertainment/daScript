@@ -738,7 +738,7 @@ def document_variant(mod:Module?;doc_file:file; name:string; value:TypeDeclPtr)
         push(line,string(an))
         push(line,describe_type(at))
         emplace(tab,line)
-    document_topic("Variants", doc_file,topic("typedef",mod,name), describe(value), tab)
+    document_topic("Variants", doc_file,topic("typedef",mod,name), describe(value), tab, mod.moduleFlags.builtIn)
 
 def document_typedef(doc_file:file;mod:Module?;name:string implicit;value)
     if value.baseType==Type.tBitfield || value.baseType==Type.tBitfield8 || value.baseType==Type.tBitfield16 || value.baseType==Type.tBitfield64
@@ -834,7 +834,7 @@ def public document_enumeration(doc_file:file;mod:Module?;value)
         push(line,string(en.name))
         push(line,describe(en.value))
         emplace(tab,line)
-    document_topic("Values", doc_file,topic("enumeration",mod,string(value.name)),"enum {value.name}", tab)
+    document_topic("Values", doc_file,topic("enumeration",mod,string(value.name)),"enum {value.name}", tab, mod.moduleFlags.builtIn)
 
 
 def public document_enumerations(doc_file:file;mods:array<Module?>) : bool
