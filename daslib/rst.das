@@ -614,7 +614,7 @@ def document_topic(header: string; doc_file:file;topic,content:string implicit; 
             let expected = length(tab) - 1
             if got < expected
                 if strict_struct_fields
-                    error("{topic} has less documentation than values. Expected {expected} ({[for it in tab; it[0]]}), got {got}")
+                    error("{topic} has less documentation than values. Expected {expected} ({[for it in tab; it[0]]}), got {got}\n")
                     if !has_hint
                         panic("invalid documentation")
 

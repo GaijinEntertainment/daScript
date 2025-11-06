@@ -1,0 +1,1 @@
+ Creates scoped URI variable.

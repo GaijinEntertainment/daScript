@@ -1,0 +1,1 @@
+ Generates new GUID.
