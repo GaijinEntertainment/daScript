@@ -5,8 +5,6 @@
 Network socket library
 ======================
 
-.. include:: detail/network.rst
-
 The NETWORK module implements basic TCP socket listening server (currently only one connection).
 It would eventually be expanded to support client as well.
 
@@ -16,7 +14,6 @@ All functions and symbols are in "network" module, use require to get access to 
 
     require network
 
-
 ++++++++++++++++++
 Handled structures
 ++++++++++++++++++
@@ -25,7 +22,8 @@ Handled structures
 
 .. das:attribute:: NetworkServer
 
-|structure_annotation-network-NetworkServer|
+ Base impliemntation of the server.
+
 
 +++++++
 Classes
@@ -35,270 +33,163 @@ Classes
 
 .. das:attribute:: Server
 
-|class-network-Server|
-
-it defines as follows
-
-  | _server : smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` >
-
-.. das:function:: Server.make_server_adapter(self: Server)
-
-|method-network-Server.make_server_adapter|
-
-.. das:function:: Server.init(self: Server; port: int const)
-
-init returns bool const
-
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+self    + :ref:`network::Server <struct-network-Server>` +
-+--------+------------------------------------------------+
-+port    +int const                                       +
-+--------+------------------------------------------------+
+:Fields: * **_server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > -  Single socket listener combined with single socket connection.
 
 
-|method-network-Server.init|
+.. _function-network_Server_rq_make_server_adapter_Server:
 
-.. das:function:: Server.restore(self: Server; shared_orphan: smart_ptr<NetworkServer>&)
+.. das:function:: Server.make_server_adapter()
 
-+-------------+--------------------------------------------------------------------------+
-+argument     +argument type                                                             +
-+=============+==========================================================================+
-+self         + :ref:`network::Server <struct-network-Server>`                           +
-+-------------+--------------------------------------------------------------------------+
-+shared_orphan+smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` >&+
-+-------------+--------------------------------------------------------------------------+
+Creates a server adapter for the given server instance.
 
+.. _function-network_Server_rq_init_Server_int:
 
-|method-network-Server.restore|
+.. das:function:: Server.init(port: int) : bool
 
-.. das:function:: Server.save(self: Server; shared_orphan: smart_ptr<NetworkServer>&)
+Returns true if the server was successfully initialized on the given port.
 
-+-------------+--------------------------------------------------------------------------+
-+argument     +argument type                                                             +
-+=============+==========================================================================+
-+self         + :ref:`network::Server <struct-network-Server>`                           +
-+-------------+--------------------------------------------------------------------------+
-+shared_orphan+smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` >&+
-+-------------+--------------------------------------------------------------------------+
+:Arguments: * **port** : int
+
+.. _function-network_Server_rq_restore_Server_smart_ptr_ls_NetworkServer_gr_:
+
+.. das:function:: Server.restore(shared_orphan: smart_ptr<NetworkServer>&)
+
+Restores the server with the given shared orphan network server pointer.
+This is necessary to re-establish the server state after reload of a script.
 
 
-|method-network-Server.save|
+:Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
 
-.. das:function:: Server.has_session(self: Server)
+.. _function-network_Server_rq_save_Server_smart_ptr_ls_NetworkServer_gr_:
 
-has_session returns bool const
+.. das:function:: Server.save(shared_orphan: smart_ptr<NetworkServer>&)
 
-|method-network-Server.has_session|
+Saves the server state to a shared orphan network server pointer.
+This is necessary to re-establish the server state after reload of a script.
 
-.. das:function:: Server.is_open(self: Server)
+:Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
 
-is_open returns bool const
+.. _function-network_Server_rq_has_session_Server:
 
-|method-network-Server.is_open|
+.. das:function:: Server.has_session() : bool
 
-.. das:function:: Server.is_connected(self: Server)
+Returns true if the server has an active session.
 
-is_connected returns bool const
+.. _function-network_Server_rq_is_open_Server:
 
-|method-network-Server.is_connected|
+.. das:function:: Server.is_open() : bool
 
-.. das:function:: Server.tick(self: Server)
+Return true if the server is open and ready to accept connections.
 
-|method-network-Server.tick|
+.. _function-network_Server_rq_is_connected_Server:
 
-.. das:function:: Server.send(self: Server; data: uint8? const; size: int const)
+.. das:function:: Server.is_connected() : bool
 
-send returns bool const
+Returns true if the server is connected to a client.
 
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+self    + :ref:`network::Server <struct-network-Server>` +
-+--------+------------------------------------------------+
-+data    +uint8? const                                    +
-+--------+------------------------------------------------+
-+size    +int const                                       +
-+--------+------------------------------------------------+
+.. _function-network_Server_rq_tick_Server:
 
+.. das:function:: Server.tick()
 
-|method-network-Server.send|
+Ticks the server to process incoming connections and data.
 
-.. das:function:: Server.onConnect(self: Server)
+.. _function-network_Server_rq_send_Server_uint8_q__int:
 
-|method-network-Server.onConnect|
+.. das:function:: Server.send(data: uint8?; size: int) : bool
 
-.. das:function:: Server.onDisconnect(self: Server)
+Sends data to the connected client. Returns true if the data was sent successfully.
 
-|method-network-Server.onDisconnect|
+:Arguments: * **data** : uint8?
 
-.. das:function:: Server.onData(self: Server; buf: uint8? const; size: int const)
+            * **size** : int
 
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+self    + :ref:`network::Server <struct-network-Server>` +
-+--------+------------------------------------------------+
-+buf     +uint8? const                                    +
-+--------+------------------------------------------------+
-+size    +int const                                       +
-+--------+------------------------------------------------+
+.. _function-network_Server:
+
+.. das:function:: Server() : Server
+
+Initializes and returns a new instance of the network Server class.
 
 
-|method-network-Server.onData|
 
-.. das:function:: Server.onError(self: Server; msg: string const; code: int const)
-
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+self    + :ref:`network::Server <struct-network-Server>` +
-+--------+------------------------------------------------+
-+msg     +string const                                    +
-+--------+------------------------------------------------+
-+code    +int const                                       +
-+--------+------------------------------------------------+
-
-
-|method-network-Server.onError|
-
-.. das:function:: Server.onLog(self: Server; msg: string const)
-
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+self    + :ref:`network::Server <struct-network-Server>` +
-+--------+------------------------------------------------+
-+msg     +string const                                    +
-+--------+------------------------------------------------+
-
-
-|method-network-Server.onLog|
 
 ++++++++++++++++++++++++++
 Low lever NetworkServer IO
 ++++++++++++++++++++++++++
 
-  *  :ref:`make_server (class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : bool const <function-_at_network_c__c_make_server_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
-  *  :ref:`server_init (server:smart_ptr\<network::NetworkServer\> const implicit;port:int const;context:__context const;at:__lineInfo const) : bool const <function-_at_network_c__c_server_init_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_Ci_C_c_C_l>` 
-  *  :ref:`server_is_open (server:smart_ptr\<network::NetworkServer\> const implicit;context:__context const;at:__lineInfo const) : bool const <function-_at_network_c__c_server_is_open_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l>` 
-  *  :ref:`server_is_connected (server:smart_ptr\<network::NetworkServer\> const implicit;context:__context const;at:__lineInfo const) : bool const <function-_at_network_c__c_server_is_connected_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l>` 
-  *  :ref:`server_tick (server:smart_ptr\<network::NetworkServer\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_network_c__c_server_tick_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l>` 
-  *  :ref:`server_send (server:smart_ptr\<network::NetworkServer\> const implicit;data:uint8? const implicit;size:int const;context:__context const;at:__lineInfo const) : bool const <function-_at_network_c__c_server_send_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_CI1_ls_u8_gr__qm__Ci_C_c_C_l>` 
-  *  :ref:`server_restore (server:smart_ptr\<network::NetworkServer\> const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const;at:__lineInfo const) : void <function-_at_network_c__c_server_restore_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`make_server (class: void? implicit; info: StructInfo const? implicit) : bool <function-network_make_server_void_q__implicit_StructInfo_const_q__implicit>` 
+  *  :ref:`server_init (server: smart_ptr\<NetworkServer\> implicit; port: int) : bool <function-network_server_init_smart_ptr_ls_NetworkServer_gr__implicit_int>` 
+  *  :ref:`server_is_open (server: smart_ptr\<NetworkServer\> implicit) : bool <function-network_server_is_open_smart_ptr_ls_NetworkServer_gr__implicit>` 
+  *  :ref:`server_is_connected (server: smart_ptr\<NetworkServer\> implicit) : bool <function-network_server_is_connected_smart_ptr_ls_NetworkServer_gr__implicit>` 
+  *  :ref:`server_tick (server: smart_ptr\<NetworkServer\> implicit) <function-network_server_tick_smart_ptr_ls_NetworkServer_gr__implicit>` 
+  *  :ref:`server_send (server: smart_ptr\<NetworkServer\> implicit; data: uint8? implicit; size: int) : bool <function-network_server_send_smart_ptr_ls_NetworkServer_gr__implicit_uint8_q__implicit_int>` 
+  *  :ref:`server_restore (server: smart_ptr\<NetworkServer\> implicit; class: void? implicit; info: StructInfo const? implicit) <function-network_server_restore_smart_ptr_ls_NetworkServer_gr__implicit_void_q__implicit_StructInfo_const_q__implicit>` 
 
-.. _function-_at_network_c__c_make_server_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
+.. _function-network_make_server_void_q__implicit_StructInfo_const_q__implicit:
 
-.. das:function:: make_server(class: void? const implicit; info: StructInfo const? const implicit)
+.. das:function:: make_server(class: void? implicit; info: StructInfo const? implicit) : bool
 
-make_server returns bool const
+ Creates new instance of the server.
 
-+--------+------------------------------------------------------------------------+
-+argument+argument type                                                           +
-+========+========================================================================+
-+class   +void? const implicit                                                    +
-+--------+------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit+
-+--------+------------------------------------------------------------------------+
+:Arguments: * **class** : void? implicit
 
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
 
-|function-network-make_server|
+.. _function-network_server_init_smart_ptr_ls_NetworkServer_gr__implicit_int:
 
-.. _function-_at_network_c__c_server_init_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_Ci_C_c_C_l:
+.. das:function:: server_init(server: smart_ptr<NetworkServer> implicit; port: int) : bool
 
-.. das:function:: server_init(server: smart_ptr<NetworkServer> const implicit; port: int const)
+ Initializes server with given port.
 
-server_init returns bool const
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
-+--------+----------------------------------------------------------------------------------------+
-+argument+argument type                                                                           +
-+========+========================================================================================+
-+server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
-+--------+----------------------------------------------------------------------------------------+
-+port    +int const                                                                               +
-+--------+----------------------------------------------------------------------------------------+
+            * **port** : int
 
+.. _function-network_server_is_open_smart_ptr_ls_NetworkServer_gr__implicit:
 
-|function-network-server_init|
+.. das:function:: server_is_open(server: smart_ptr<NetworkServer> implicit) : bool
 
-.. _function-_at_network_c__c_server_is_open_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l:
+ Returns true if server is listening to the port.
 
-.. das:function:: server_is_open(server: smart_ptr<NetworkServer> const implicit)
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
-server_is_open returns bool const
+.. _function-network_server_is_connected_smart_ptr_ls_NetworkServer_gr__implicit:
 
-+--------+----------------------------------------------------------------------------------------+
-+argument+argument type                                                                           +
-+========+========================================================================================+
-+server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
-+--------+----------------------------------------------------------------------------------------+
+.. das:function:: server_is_connected(server: smart_ptr<NetworkServer> implicit) : bool
 
+ Returns true if server is connected to the client.
 
-|function-network-server_is_open|
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
-.. _function-_at_network_c__c_server_is_connected_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l:
+.. _function-network_server_tick_smart_ptr_ls_NetworkServer_gr__implicit:
 
-.. das:function:: server_is_connected(server: smart_ptr<NetworkServer> const implicit)
+.. das:function:: server_tick(server: smart_ptr<NetworkServer> implicit)
 
-server_is_connected returns bool const
+ This needs to be called periodically for the server to work.
 
-+--------+----------------------------------------------------------------------------------------+
-+argument+argument type                                                                           +
-+========+========================================================================================+
-+server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
-+--------+----------------------------------------------------------------------------------------+
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
+.. _function-network_server_send_smart_ptr_ls_NetworkServer_gr__implicit_uint8_q__implicit_int:
 
-|function-network-server_is_connected|
+.. das:function:: server_send(server: smart_ptr<NetworkServer> implicit; data: uint8? implicit; size: int) : bool
 
-.. _function-_at_network_c__c_server_tick_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l:
+ Sends data from server to the client.
 
-.. das:function:: server_tick(server: smart_ptr<NetworkServer> const implicit)
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
-+--------+----------------------------------------------------------------------------------------+
-+argument+argument type                                                                           +
-+========+========================================================================================+
-+server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
-+--------+----------------------------------------------------------------------------------------+
+            * **data** : uint8? implicit
 
+            * **size** : int
 
-|function-network-server_tick|
+.. _function-network_server_restore_smart_ptr_ls_NetworkServer_gr__implicit_void_q__implicit_StructInfo_const_q__implicit:
 
-.. _function-_at_network_c__c_server_send_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_CI1_ls_u8_gr__qm__Ci_C_c_C_l:
+.. das:function:: server_restore(server: smart_ptr<NetworkServer> implicit; class: void? implicit; info: StructInfo const? implicit)
 
-.. das:function:: server_send(server: smart_ptr<NetworkServer> const implicit; data: uint8? const implicit; size: int const)
+ Restores server from orphaned state.
 
-server_send returns bool const
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
-+--------+----------------------------------------------------------------------------------------+
-+argument+argument type                                                                           +
-+========+========================================================================================+
-+server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
-+--------+----------------------------------------------------------------------------------------+
-+data    +uint8? const implicit                                                                   +
-+--------+----------------------------------------------------------------------------------------+
-+size    +int const                                                                               +
-+--------+----------------------------------------------------------------------------------------+
+            * **class** : void? implicit
 
-
-|function-network-server_send|
-
-.. _function-_at_network_c__c_server_restore_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c_C_l:
-
-.. das:function:: server_restore(server: smart_ptr<NetworkServer> const implicit; class: void? const implicit; info: StructInfo const? const implicit)
-
-+--------+----------------------------------------------------------------------------------------+
-+argument+argument type                                                                           +
-+========+========================================================================================+
-+server  +smart_ptr< :ref:`network::NetworkServer <handle-network-NetworkServer>` > const implicit+
-+--------+----------------------------------------------------------------------------------------+
-+class   +void? const implicit                                                                    +
-+--------+----------------------------------------------------------------------------------------+
-+info    + :ref:`rtti::StructInfo <handle-rtti-StructInfo>`  const? const implicit                +
-+--------+----------------------------------------------------------------------------------------+
-
-
-|function-network-server_restore|
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
 
 

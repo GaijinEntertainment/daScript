@@ -705,8 +705,8 @@ def main {
     document_module_builtin(root)
     document_module_math(root)
     document_module_fio(root)
-    return
     document_module_network(root)
+    return
     document_module_uriparser(root)
     document_module_rtti(root)
     document_module_ast(root)
