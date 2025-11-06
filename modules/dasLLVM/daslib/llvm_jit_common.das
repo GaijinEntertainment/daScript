@@ -90,6 +90,21 @@ struct JitEngine {
 
 var private g_all_engines : array<JitEngine>
 
+// do not jit this finalize. It creates garbage in every module even though it's never actually called in runtime
+[no_jit]
+def finalize(var a : JitEngine) {
+    delete a
+}
+[no_jit]
+def finalize(var a : array<JitEngine>) {
+    for (aV in a) {
+        unsafe {
+            delete aV
+        }
+    }
+    __builtin_array_free(a, typeinfo sizeof(a[0]))
+}
+
 var public g_ctx : LLVMContextRef
 var public g_prim_t : PrimitiveTypes?
 var public g_mod : LLVMOpaqueModule?
