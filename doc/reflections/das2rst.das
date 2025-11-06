@@ -704,8 +704,8 @@ def main {
     // document embedded modules
     document_module_builtin(root)
     document_module_math(root)
-    return
     document_module_fio(root)
+    return
     document_module_network(root)
     document_module_uriparser(root)
     document_module_rtti(root)

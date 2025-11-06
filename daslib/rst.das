@@ -1049,7 +1049,7 @@ def document_structure(doc_file:file;mod:Module?;var value:StructurePtr)
             emplace(tab,line)
     // fwrite(doc_file,"{value.name} fields are\n\n")
     // fwrite(doc_file,make_table(tab))
-    document_topic("Fields",doc_file,topic("structure",mod,string(value.name)), "struct {value.name}", tab)
+    document_topic("Fields",doc_file,topic("structure",mod,string(value.name)), "struct {value.name}", tab, mod.moduleFlags.builtIn)
 
     for fld in value.fields
         if is_class_method(value,fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented)

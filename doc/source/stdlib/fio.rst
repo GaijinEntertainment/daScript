@@ -5,14 +5,11 @@
 File input output library
 =========================
 
-.. include:: detail/fio.rst
-
 The FIO module exposes C++ FILE * API, file mapping,  directory and file stat manipulation routines to Daslang.
 
 All functions and symbols are in "fio" module, use require to get access to it. ::
 
     require fio
-
 
 ++++++++++++
 Type aliases
@@ -22,7 +19,7 @@ Type aliases
 
 .. das:attribute:: file = FILE const?
 
-|typedef-fio-file|
+ alias for the `FILE const?`; its there since most file functions expect exactly this type
 
 +++++++++
 Constants
@@ -32,42 +29,40 @@ Constants
 
 .. das:attribute:: seek_set = 0
 
-|variable-fio-seek_set|
+ constant for `fseek` which sets the file pointer to the beginning of the file plus the offset.
 
 .. _global-fio-seek_cur:
 
 .. das:attribute:: seek_cur = 1
 
-|variable-fio-seek_cur|
+ constant for `fseek` which sets the file pointer to the current position of the file plus the offset.
 
 .. _global-fio-seek_end:
 
 .. das:attribute:: seek_end = 2
 
-|variable-fio-seek_end|
+ constant for `fseek` which sets the file pointer to the end of the file plus the offset.
 
 .. _global-fio-df_magic:
 
 .. das:attribute:: df_magic = 0x12345678
 
-|variable-fio-df_magic|
+ obsolete. magic number for `binary_save` and `binary_load`.
+
+++++++++++
+Structures
+++++++++++
 
 .. _struct-fio-df_header:
 
 .. das:attribute:: df_header
 
+obsolete. header for the `fsave` and `fload` which internally use `binary_save` and `binary_load`.
 
+:Fields: * **magic** : uint - magic bits, to identify the file type.
 
-df_header fields are
+         * **size** : int - total size of the saved data (not including this header)
 
-+-----+----+
-+magic+uint+
-+-----+----+
-+size +int +
-+-----+----+
-
-
-|structure-fio-df_header|
 
 ++++++++++++++++++
 Handled structures
@@ -77,31 +72,68 @@ Handled structures
 
 .. das:attribute:: FStat
 
-FStat fields are
+.. _function-fio__dot__rq_size_FStat_implicit:
 
-+--------+----+
-+is_valid+bool+
-+--------+----+
+.. das:function:: FStat implicit.size() : uint64
 
-
-FStat property operators are
-
-+------+----------------------------------------------+
-+size  +uint64 const                                  +
-+------+----------------------------------------------+
-+atime + :ref:`builtin::clock <handle-builtin-clock>` +
-+------+----------------------------------------------+
-+ctime + :ref:`builtin::clock <handle-builtin-clock>` +
-+------+----------------------------------------------+
-+mtime + :ref:`builtin::clock <handle-builtin-clock>` +
-+------+----------------------------------------------+
-+is_reg+bool const                                    +
-+------+----------------------------------------------+
-+is_dir+bool const                                    +
-+------+----------------------------------------------+
+Returns the size of the file represented by the given FStat object.
 
 
-|structure_annotation-fio-FStat|
+
+.. _function-fio__dot__rq_atime_FStat_implicit:
+
+.. das:function:: FStat implicit.atime() : clock
+
+Returns the atime of the file represented by the given FStat object.
+
+
+
+.. _function-fio__dot__rq_ctime_FStat_implicit:
+
+.. das:function:: FStat implicit.ctime() : clock
+
+Returns the ctime of the file represented by the given FStat object.
+
+
+
+.. _function-fio__dot__rq_mtime_FStat_implicit:
+
+.. das:function:: FStat implicit.mtime() : clock
+
+Returns the mtime of the file represented by the given FStat object.
+
+
+
+.. _function-fio__dot__rq_is_reg_FStat_implicit:
+
+.. das:function:: FStat implicit.is_reg() : bool
+
+Returns true if the file represented by the given FStat object is a regular file.
+
+
+
+.. _function-fio__dot__rq_is_dir_FStat_implicit:
+
+.. das:function:: FStat implicit.is_dir() : bool
+
+Returns true if the file represented by the given FStat object is a directory.
+
+
+
+:Properties: * **size** : uint64
+
+             * **atime** :  :ref:`clock <handle-builtin-clock>` 
+
+             * **ctime** :  :ref:`clock <handle-builtin-clock>` 
+
+             * **mtime** :  :ref:`clock <handle-builtin-clock>` 
+
+             * **is_reg** : bool
+
+             * **is_dir** : bool
+
+:Fields: * **is_valid** : bool -  `stat` and `fstat` return file information in this structure.
+
 
 +++++++++++++
 Handled types
@@ -111,734 +143,467 @@ Handled types
 
 .. das:attribute:: FILE
 
-|any_annotation-fio-FILE|
+ Holds system specific `FILE` type.
 
 +++++++++++++++++
 File manipulation
 +++++++++++++++++
 
-  *  :ref:`remove (name:string const implicit) : bool const <function-_at_fio_c__c_remove_CIs>` 
-  *  :ref:`rename (old_name:string const implicit;new_name:string const implicit) : bool const <function-_at_fio_c__c_rename_CIs_CIs>` 
-  *  :ref:`fopen (name:string const implicit;mode:string const implicit) : fio::FILE const? const <function-_at_fio_c__c_fopen_CIs_CIs>` 
-  *  :ref:`fclose (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fclose_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`fflush (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fflush_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`fprint (file:fio::FILE const? const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fprint_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIs_C_c_C_l>` 
-  *  :ref:`fread (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string const <function-_at_fio_c__c_fread_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`fmap (file:fio::FILE const? const implicit;block:block\<(var arg0:array\<uint8\>#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fmap_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`fgets (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : string const <function-_at_fio_c__c_fgets_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`fwrite (file:fio::FILE const? const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_fio_c__c_fwrite_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIs_C_c_C_l>` 
-  *  :ref:`feof (file:fio::FILE const? const implicit) : bool const <function-_at_fio_c__c_feof_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm_>` 
-  *  :ref:`fseek (file:fio::FILE const? const implicit;offset:int64 const;mode:int const;context:__context const;line:__lineInfo const) : int64 const <function-_at_fio_c__c_fseek_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__Ci64_Ci_C_c_C_l>` 
-  *  :ref:`ftell (file:fio::FILE const? const implicit;context:__context const;line:__lineInfo const) : int64 const <function-_at_fio_c__c_ftell_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`fstat (file:fio::FILE const? const implicit;stat:fio::FStat implicit;context:__context const;line:__lineInfo const) : bool const <function-_at_fio_c__c_fstat_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__IH_ls_fio_c__c_FStat_gr__C_c_C_l>` 
-  *  :ref:`stat (file:string const implicit;stat:fio::FStat implicit) : bool const <function-_at_fio_c__c_stat_CIs_IH_ls_fio_c__c_FStat_gr_>` 
-  *  :ref:`fstdin () : fio::FILE const? const <function-_at_fio_c__c_fstdin>` 
-  *  :ref:`fstdout () : fio::FILE const? const <function-_at_fio_c__c_fstdout>` 
-  *  :ref:`fstderr () : fio::FILE const? const <function-_at_fio_c__c_fstderr>` 
-  *  :ref:`getchar () : int const <function-_at_fio_c__c_getchar>` 
-  *  :ref:`fload (file:fio::FILE const? const;size:int const;blk:block\<(data:array\<uint8\> const):void\> const) : void <function-_at_fio_c__c_fload_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__Ci_CN_ls_data_gr_0_ls_C1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`fopen (name:string const;mode:string const;blk:block\<(f:fio::FILE const? const):void\> const) : auto <function-_at_fio_c__c_fopen_Cs_Cs_CN_ls_f_gr_0_ls_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`stat (path:string const) : fio::FStat <function-_at_fio_c__c_stat_Cs>` 
-  *  :ref:`fstat (f:fio::FILE const? const) : fio::FStat <function-_at_fio_c__c_fstat_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm_>` 
-  *  :ref:`fread (f:fio::FILE const? const;blk:block\<(data:string const#):auto\> const) : auto <function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CN_ls_data_gr_0_ls_C_hh_s_gr_1_ls_._gr__builtin_>` 
-  *  :ref:`fload (f:fio::FILE const? const;buf:auto(BufType) const -const) : auto <function-_at_fio_c__c_fload_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CY_ls_BufType_gr_.>` 
-  *  :ref:`fsave (f:fio::FILE const? const;buf:auto(BufType) const) : auto <function-_at_fio_c__c_fsave_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CY_ls_BufType_gr_.>` 
-  *  :ref:`fread (f:fio::FILE const? const;buf:auto(BufType) const implicit) : auto <function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIY_ls_BufType_gr_.>` 
-  *  :ref:`fread (f:fio::FILE const? const;buf:array\<auto(BufType)\> const implicit) : auto <function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CI1_ls_Y_ls_BufType_gr_._gr_A>` 
-  *  :ref:`fwrite (f:fio::FILE const? const;buf:auto(BufType) const implicit) : auto <function-_at_fio_c__c_fwrite_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIY_ls_BufType_gr_.>` 
-  *  :ref:`fwrite (f:fio::FILE const? const;buf:array\<auto(BufType)\> const implicit) : auto <function-_at_fio_c__c_fwrite_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CI1_ls_Y_ls_BufType_gr_._gr_A>` 
+  *  :ref:`remove (name: string implicit) : bool <function-fio_remove_string_implicit>` 
+  *  :ref:`rename (old_name: string implicit; new_name: string implicit) : bool <function-fio_rename_string_implicit_string_implicit>` 
+  *  :ref:`fopen (name: string implicit; mode: string implicit) : FILE const? <function-fio_fopen_string_implicit_string_implicit>` 
+  *  :ref:`fclose (file: FILE const? implicit) <function-fio_fclose_FILE_const_q__implicit>` 
+  *  :ref:`fflush (file: FILE const? implicit) <function-fio_fflush_FILE_const_q__implicit>` 
+  *  :ref:`fprint (file: FILE const? implicit; text: string implicit) <function-fio_fprint_FILE_const_q__implicit_string_implicit>` 
+  *  :ref:`fread (file: FILE const? implicit) : string <function-fio_fread_FILE_const_q__implicit>` 
+  *  :ref:`fmap (file: FILE const? implicit; block: block\<(array\<uint8\>#):void\>) <function-fio_fmap_FILE_const_q__implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>` 
+  *  :ref:`fgets (file: FILE const? implicit) : string <function-fio_fgets_FILE_const_q__implicit>` 
+  *  :ref:`fwrite (file: FILE const? implicit; text: string implicit) <function-fio_fwrite_FILE_const_q__implicit_string_implicit>` 
+  *  :ref:`feof (file: FILE const? implicit) : bool <function-fio_feof_FILE_const_q__implicit>` 
+  *  :ref:`fseek (file: FILE const? implicit; offset: int64; mode: int) : int64 <function-fio_fseek_FILE_const_q__implicit_int64_int>` 
+  *  :ref:`ftell (file: FILE const? implicit) : int64 <function-fio_ftell_FILE_const_q__implicit>` 
+  *  :ref:`fstat (file: FILE const? implicit; stat: FStat implicit) : bool <function-fio_fstat_FILE_const_q__implicit_FStat_implicit>` 
+  *  :ref:`stat (file: string implicit; stat: FStat implicit) : bool <function-fio_stat_string_implicit_FStat_implicit>` 
+  *  :ref:`fstdin () : FILE const? <function-fio_fstdin>` 
+  *  :ref:`fstdout () : FILE const? <function-fio_fstdout>` 
+  *  :ref:`fstderr () : FILE const? <function-fio_fstderr>` 
+  *  :ref:`getchar () : int <function-fio_getchar>` 
+  *  :ref:`fload (file: file; size: int; blk: block\<(data:array\<uint8\>):void\>) <function-fio_fload_file_int_block_ls_data_c_array_ls_uint8_gr__c_void_gr_>` 
+  *  :ref:`fopen (name: string; mode: string; blk: block\<(f:file):void\>) : auto <function-fio_fopen_string_string_block_ls_f_c_file_c_void_gr_>` 
+  *  :ref:`stat (path: string) : FStat <function-fio_stat_string>` 
+  *  :ref:`fstat (f: file) : FStat <function-fio_fstat_file>` 
+  *  :ref:`fread (f: file; blk: block\<(data:string#):auto\>) : auto <function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_>` 
+  *  :ref:`fload (f: file; var buf: auto(BufType)) : auto <function-fio_fload_file_autoBufType>` 
+  *  :ref:`fsave (f: file; buf: auto(BufType)) : auto <function-fio_fsave_file_autoBufType>` 
+  *  :ref:`fread (f: file; buf: auto(BufType) implicit) : auto <function-fio_fread_file_autoBufType_implicit>` 
+  *  :ref:`fread (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fread_file_array_ls_autoBufType_gr_>` 
+  *  :ref:`fwrite (f: file; buf: auto(BufType) implicit) : auto <function-fio_fwrite_file_autoBufType_implicit>` 
+  *  :ref:`fwrite (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fwrite_file_array_ls_autoBufType_gr_>` 
 
-.. _function-_at_fio_c__c_remove_CIs:
+.. _function-fio_remove_string_implicit:
 
-.. das:function:: remove(name: string const implicit)
+.. das:function:: remove(name: string implicit) : bool
 
-remove returns bool const
+ deletes file specified by name
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+name    +string const implicit+
-+--------+---------------------+
+:Arguments: * **name** : string implicit
 
+.. _function-fio_rename_string_implicit_string_implicit:
 
-|function-fio-remove|
+.. das:function:: rename(old_name: string implicit; new_name: string implicit) : bool
 
-.. _function-_at_fio_c__c_rename_CIs_CIs:
+ renames file.
 
-.. das:function:: rename(old_name: string const implicit; new_name: string const implicit)
+:Arguments: * **old_name** : string implicit
 
-rename returns bool const
+            * **new_name** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+old_name+string const implicit+
-+--------+---------------------+
-+new_name+string const implicit+
-+--------+---------------------+
+.. _function-fio_fopen_string_implicit_string_implicit:
 
+.. das:function:: fopen(name: string implicit; mode: string implicit) : FILE const?
 
-|function-fio-rename|
+ equivalent to C `fopen`. Opens file in different modes.
 
-.. _function-_at_fio_c__c_fopen_CIs_CIs:
+:Arguments: * **name** : string implicit
 
-.. das:function:: fopen(name: string const implicit; mode: string const implicit)
+            * **mode** : string implicit
 
-fopen returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
+.. _function-fio_fclose_FILE_const_q__implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+name    +string const implicit+
-+--------+---------------------+
-+mode    +string const implicit+
-+--------+---------------------+
+.. das:function:: fclose(file: FILE const? implicit)
 
+ equivalent to C `fclose`. Closes file.
 
-|function-fio-fopen|
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
-.. _function-_at_fio_c__c_fclose_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l:
+.. _function-fio_fflush_FILE_const_q__implicit:
 
-.. das:function:: fclose(file: FILE const? const implicit)
+.. das:function:: fflush(file: FILE const? implicit)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
+ equivalent to C `fflush`. Flushes FILE buffers.
 
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
-|function-fio-fclose|
+.. _function-fio_fprint_FILE_const_q__implicit_string_implicit:
 
-.. _function-_at_fio_c__c_fflush_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l:
+.. das:function:: fprint(file: FILE const? implicit; text: string implicit)
 
-.. das:function:: fflush(file: FILE const? const implicit)
+ same as `print` but outputs to file.
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
+            * **text** : string implicit
 
-|function-fio-fflush|
+.. _function-fio_fread_FILE_const_q__implicit:
 
-.. _function-_at_fio_c__c_fprint_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIs_C_c_C_l:
+.. das:function:: fread(file: FILE const? implicit) : string
 
-.. das:function:: fprint(file: FILE const? const implicit; text: string const implicit)
+ reads data from file.
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
-+text    +string const implicit                                     +
-+--------+----------------------------------------------------------+
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
+.. _function-fio_fmap_FILE_const_q__implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_:
 
-|function-fio-fprint|
+.. das:function:: fmap(file: FILE const? implicit; block: block<(array<uint8>#):void>)
 
-.. _function-_at_fio_c__c_fread_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l:
+ create map view of file, i.e. maps file contents to memory. Data is available as array<uint8> inside the block.
 
-.. das:function:: fread(file: FILE const? const implicit)
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
-fread returns string const
+            * **block** : block<(array<uint8>#):void> implicit
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
+.. _function-fio_fgets_FILE_const_q__implicit:
 
+.. das:function:: fgets(file: FILE const? implicit) : string
 
-|function-fio-fread|
+ equivalent to C `fgets`. Reads and returns new string from the line.
 
-.. _function-_at_fio_c__c_fmap_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
-.. das:function:: fmap(file: FILE const? const implicit; block: block<(var arg0:array<uint8>#):void> const implicit)
+.. _function-fio_fwrite_FILE_const_q__implicit_string_implicit:
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
-+block   +block<(array<uint8>#):void> const implicit                +
-+--------+----------------------------------------------------------+
+.. das:function:: fwrite(file: FILE const? implicit; text: string implicit)
 
+ writes data fo file.
 
-|function-fio-fmap|
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
-.. _function-_at_fio_c__c_fgets_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l:
+            * **text** : string implicit
 
-.. das:function:: fgets(file: FILE const? const implicit)
+.. _function-fio_feof_FILE_const_q__implicit:
 
-fgets returns string const
+.. das:function:: feof(file: FILE const? implicit) : bool
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
+ equivalent to C `feof`. Returns true if end of file has been reached.
 
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
-|function-fio-fgets|
+.. _function-fio_fseek_FILE_const_q__implicit_int64_int:
 
-.. _function-_at_fio_c__c_fwrite_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIs_C_c_C_l:
+.. das:function:: fseek(file: FILE const? implicit; offset: int64; mode: int) : int64
 
-.. das:function:: fwrite(file: FILE const? const implicit; text: string const implicit)
+ equivalent to C `fseek`. Rewinds position of the current FILE pointer.
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
-+text    +string const implicit                                     +
-+--------+----------------------------------------------------------+
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
+            * **offset** : int64
 
-|function-fio-fwrite|
+            * **mode** : int
 
-.. _function-_at_fio_c__c_feof_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm_:
+.. _function-fio_ftell_FILE_const_q__implicit:
 
-.. das:function:: feof(file: FILE const? const implicit)
+.. das:function:: ftell(file: FILE const? implicit) : int64
 
-feof returns bool const
+ equivalent to C `ftell`. Returns current FILE pointer position.
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
+.. _function-fio_fstat_FILE_const_q__implicit_FStat_implicit:
 
-|function-fio-feof|
+.. das:function:: fstat(file: FILE const? implicit; stat: FStat implicit) : bool
 
-.. _function-_at_fio_c__c_fseek_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__Ci64_Ci_C_c_C_l:
+ equivalent to C `fstat`. Returns information about file, such as file size, timestamp, etc.
 
-.. das:function:: fseek(file: FILE const? const implicit; offset: int64 const; mode: int const)
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
-fseek returns int64 const
+            * **stat** :  :ref:`FStat <handle-fio-FStat>`  implicit
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
-+offset  +int64 const                                               +
-+--------+----------------------------------------------------------+
-+mode    +int const                                                 +
-+--------+----------------------------------------------------------+
+.. _function-fio_stat_string_implicit_FStat_implicit:
 
+.. das:function:: stat(file: string implicit; stat: FStat implicit) : bool
 
-|function-fio-fseek|
+ same as fstat, but file is specified by file name.
 
-.. _function-_at_fio_c__c_ftell_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l:
+:Arguments: * **file** : string implicit
 
-.. das:function:: ftell(file: FILE const? const implicit)
+            * **stat** :  :ref:`FStat <handle-fio-FStat>`  implicit
 
-ftell returns int64 const
+.. _function-fio_fstdin:
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
+.. das:function:: fstdin() : FILE const?
 
+ returns FILE pointer to standard input.
 
-|function-fio-ftell|
+.. _function-fio_fstdout:
 
-.. _function-_at_fio_c__c_fstat_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__IH_ls_fio_c__c_FStat_gr__C_c_C_l:
+.. das:function:: fstdout() : FILE const?
 
-.. das:function:: fstat(file: FILE const? const implicit; stat: FStat implicit)
+ returns FILE pointer to standard output.
 
-fstat returns bool const
+.. _function-fio_fstderr:
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+file    + :ref:`fio::FILE <handle-fio-FILE>`  const? const implicit+
-+--------+----------------------------------------------------------+
-+stat    + :ref:`fio::FStat <handle-fio-FStat>`  implicit           +
-+--------+----------------------------------------------------------+
+.. das:function:: fstderr() : FILE const?
 
+ returns FILE pointer to standard error.
 
-|function-fio-fstat|
+.. _function-fio_getchar:
 
-.. _function-_at_fio_c__c_stat_CIs_IH_ls_fio_c__c_FStat_gr_:
+.. das:function:: getchar() : int
 
-.. das:function:: stat(file: string const implicit; stat: FStat implicit)
+ equivalent to C `getchar`. Reads and returns next character from standard input.
 
-stat returns bool const
+.. _function-fio_fload_file_int_block_ls_data_c_array_ls_uint8_gr__c_void_gr_:
 
-+--------+-----------------------------------------------+
-+argument+argument type                                  +
-+========+===============================================+
-+file    +string const implicit                          +
-+--------+-----------------------------------------------+
-+stat    + :ref:`fio::FStat <handle-fio-FStat>`  implicit+
-+--------+-----------------------------------------------+
+.. das:function:: fload(file: file; size: int; blk: block<(data:array<uint8>):void>)
 
+ obsolete. saves data to file.
 
-|function-fio-stat|
+:Arguments: * **file** :  :ref:`file <alias-file>` 
 
-.. _function-_at_fio_c__c_fstdin:
+            * **size** : int
 
-.. das:function:: fstdin()
+            * **blk** : block<(data:array<uint8>):void>
 
-fstdin returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
+.. _function-fio_fopen_string_string_block_ls_f_c_file_c_void_gr_:
 
-|function-fio-fstdin|
+.. das:function:: fopen(name: string; mode: string; blk: block<(f:file):void>) : auto
 
-.. _function-_at_fio_c__c_fstdout:
+ equivalent to C `fopen`. Opens file in different modes.
 
-.. das:function:: fstdout()
+:Arguments: * **name** : string
 
-fstdout returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
+            * **mode** : string
 
-|function-fio-fstdout|
+            * **blk** : block<(f: :ref:`file <alias-file>` ):void>
 
-.. _function-_at_fio_c__c_fstderr:
+.. _function-fio_stat_string:
 
-.. das:function:: fstderr()
+.. das:function:: stat(path: string) : FStat
 
-fstderr returns  :ref:`fio::FILE <handle-fio-FILE>`  const? const
+ same as fstat, but file is specified by file name.
 
-|function-fio-fstderr|
+:Arguments: * **path** : string
 
-.. _function-_at_fio_c__c_getchar:
+.. _function-fio_fstat_file:
 
-.. das:function:: getchar()
+.. das:function:: fstat(f: file) : FStat
 
-getchar returns int const
+ equivalent to C `fstat`. Returns information about file, such as file size, timestamp, etc.
 
-|function-fio-getchar|
+:Arguments: * **f** :  :ref:`file <alias-file>` 
 
-.. _function-_at_fio_c__c_fload_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__Ci_CN_ls_data_gr_0_ls_C1_ls_u8_gr_A_gr_1_ls_v_gr__builtin_:
+.. _function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_:
 
-.. das:function:: fload(file: file; size: int const; blk: block<(data:array<uint8> const):void> const)
+.. das:function:: fread(f: file; blk: block<(data:string#):auto>) : auto
 
-+--------+-------------------------------------------+
-+argument+argument type                              +
-+========+===========================================+
-+file    + :ref:`file <alias-file>`                  +
-+--------+-------------------------------------------+
-+size    +int const                                  +
-+--------+-------------------------------------------+
-+blk     +block<(data:array<uint8> const):void> const+
-+--------+-------------------------------------------+
+ reads data from file.
 
+:Arguments: * **f** :  :ref:`file <alias-file>` 
 
-|function-fio-fload|
+            * **blk** : block<(data:string#):auto>
 
-.. _function-_at_fio_c__c_fopen_Cs_Cs_CN_ls_f_gr_0_ls_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin_:
+.. _function-fio_fload_file_autoBufType:
 
-.. das:function:: fopen(name: string const; mode: string const; blk: block<(f:FILE const? const):void> const)
+.. das:function:: fload(f: file; buf: auto(BufType)) : auto
 
-fopen returns auto
+ obsolete. saves data to file.
 
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+name    +string const                                    +
-+--------+------------------------------------------------+
-+mode    +string const                                    +
-+--------+------------------------------------------------+
-+blk     +block<(f: :ref:`file <alias-file>` ):void> const+
-+--------+------------------------------------------------+
+:Arguments: * **f** :  :ref:`file <alias-file>` 
 
+            * **buf** : auto(BufType)
 
-|function-fio-fopen|
+.. _function-fio_fsave_file_autoBufType:
 
-.. _function-_at_fio_c__c_stat_Cs:
+.. das:function:: fsave(f: file; buf: auto(BufType)) : auto
 
-.. das:function:: stat(path: string const)
+ obsolete. loads data from file.
 
-stat returns  :ref:`fio::FStat <handle-fio-FStat>` 
+:Arguments: * **f** :  :ref:`file <alias-file>` 
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+path    +string const +
-+--------+-------------+
+            * **buf** : auto(BufType)
 
+.. _function-fio_fread_file_autoBufType_implicit:
 
-|function-fio-stat|
+.. das:function:: fread(f: file; buf: auto(BufType) implicit) : auto
 
-.. _function-_at_fio_c__c_fstat_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm_:
+ reads data from file.
 
-.. das:function:: fstat(f: file)
+:Arguments: * **f** :  :ref:`file <alias-file>` 
 
-fstat returns  :ref:`fio::FStat <handle-fio-FStat>` 
+            * **buf** : auto(BufType) implicit
 
-+--------+--------------------------+
-+argument+argument type             +
-+========+==========================+
-+f       + :ref:`file <alias-file>` +
-+--------+--------------------------+
+.. _function-fio_fread_file_array_ls_autoBufType_gr_:
 
+.. das:function:: fread(f: file; buf: array<auto(BufType)>) : auto
 
-|function-fio-fstat|
+ reads data from file.
 
-.. _function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CN_ls_data_gr_0_ls_C_hh_s_gr_1_ls_._gr__builtin_:
+:Arguments: * **f** :  :ref:`file <alias-file>` 
 
-.. das:function:: fread(f: file; blk: block<(data:string const#):auto> const)
+            * **buf** : array<auto(BufType)> implicit
 
-fread returns auto
+.. _function-fio_fwrite_file_autoBufType_implicit:
 
-+--------+--------------------------------------+
-+argument+argument type                         +
-+========+======================================+
-+f       + :ref:`file <alias-file>`             +
-+--------+--------------------------------------+
-+blk     +block<(data:string const#):auto> const+
-+--------+--------------------------------------+
+.. das:function:: fwrite(f: file; buf: auto(BufType) implicit) : auto
 
+ writes data fo file.
 
-|function-fio-fread|
+:Arguments: * **f** :  :ref:`file <alias-file>` 
 
-.. _function-_at_fio_c__c_fload_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CY_ls_BufType_gr_.:
+            * **buf** : auto(BufType) implicit
 
-.. das:function:: fload(f: file; buf: auto(BufType) const)
+.. _function-fio_fwrite_file_array_ls_autoBufType_gr_:
 
-fload returns auto
+.. das:function:: fwrite(f: file; buf: array<auto(BufType)>) : auto
 
-+--------+--------------------------+
-+argument+argument type             +
-+========+==========================+
-+f       + :ref:`file <alias-file>` +
-+--------+--------------------------+
-+buf     +auto(BufType) const       +
-+--------+--------------------------+
+ writes data fo file.
 
+:Arguments: * **f** :  :ref:`file <alias-file>` 
 
-|function-fio-fload|
-
-.. _function-_at_fio_c__c_fsave_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CY_ls_BufType_gr_.:
-
-.. das:function:: fsave(f: file; buf: auto(BufType) const)
-
-fsave returns auto
-
-+--------+--------------------------+
-+argument+argument type             +
-+========+==========================+
-+f       + :ref:`file <alias-file>` +
-+--------+--------------------------+
-+buf     +auto(BufType) const       +
-+--------+--------------------------+
-
-
-|function-fio-fsave|
-
-.. _function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIY_ls_BufType_gr_.:
-
-.. das:function:: fread(f: file; buf: auto(BufType) const implicit)
-
-fread returns auto
-
-+--------+----------------------------+
-+argument+argument type               +
-+========+============================+
-+f       + :ref:`file <alias-file>`   +
-+--------+----------------------------+
-+buf     +auto(BufType) const implicit+
-+--------+----------------------------+
-
-
-|function-fio-fread|
-
-.. _function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CI1_ls_Y_ls_BufType_gr_._gr_A:
-
-.. das:function:: fread(f: file; buf: array<auto(BufType)> const implicit)
-
-fread returns auto
-
-+--------+-----------------------------------+
-+argument+argument type                      +
-+========+===================================+
-+f       + :ref:`file <alias-file>`          +
-+--------+-----------------------------------+
-+buf     +array<auto(BufType)> const implicit+
-+--------+-----------------------------------+
-
-
-|function-fio-fread|
-
-.. _function-_at_fio_c__c_fwrite_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIY_ls_BufType_gr_.:
-
-.. das:function:: fwrite(f: file; buf: auto(BufType) const implicit)
-
-fwrite returns auto
-
-+--------+----------------------------+
-+argument+argument type               +
-+========+============================+
-+f       + :ref:`file <alias-file>`   +
-+--------+----------------------------+
-+buf     +auto(BufType) const implicit+
-+--------+----------------------------+
-
-
-|function-fio-fwrite|
-
-.. _function-_at_fio_c__c_fwrite_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CI1_ls_Y_ls_BufType_gr_._gr_A:
-
-.. das:function:: fwrite(f: file; buf: array<auto(BufType)> const implicit)
-
-fwrite returns auto
-
-+--------+-----------------------------------+
-+argument+argument type                      +
-+========+===================================+
-+f       + :ref:`file <alias-file>`          +
-+--------+-----------------------------------+
-+buf     +array<auto(BufType)> const implicit+
-+--------+-----------------------------------+
-
-
-|function-fio-fwrite|
+            * **buf** : array<auto(BufType)> implicit
 
 +++++++++++++++++
 Path manipulation
 +++++++++++++++++
 
-  *  :ref:`dir_name (name:string const implicit;context:__context const;line:__lineInfo const) : string const <function-_at_fio_c__c_dir_name_CIs_C_c_C_l>` 
-  *  :ref:`base_name (name:string const implicit;context:__context const;line:__lineInfo const) : string const <function-_at_fio_c__c_base_name_CIs_C_c_C_l>` 
-  *  :ref:`get_full_file_name (path:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_get_full_file_name_CIs_C_c_C_l>` 
+  *  :ref:`dir_name (name: string implicit) : string <function-fio_dir_name_string_implicit>` 
+  *  :ref:`base_name (name: string implicit) : string <function-fio_base_name_string_implicit>` 
+  *  :ref:`get_full_file_name (path: string implicit) : string <function-fio_get_full_file_name_string_implicit>` 
 
-.. _function-_at_fio_c__c_dir_name_CIs_C_c_C_l:
+.. _function-fio_dir_name_string_implicit:
 
-.. das:function:: dir_name(name: string const implicit)
+.. das:function:: dir_name(name: string implicit) : string
 
-dir_name returns string const
+ equivalent to linux `dirname`. Splits path and returns the component preceding the final '/'.  Trailing '/' characters are not counted as part of the pathname.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+name    +string const implicit+
-+--------+---------------------+
+:Arguments: * **name** : string implicit
 
+.. _function-fio_base_name_string_implicit:
 
-|function-fio-dir_name|
+.. das:function:: base_name(name: string implicit) : string
 
-.. _function-_at_fio_c__c_base_name_CIs_C_c_C_l:
+ equivalent to linux `basename`. Splits path and returns the string up to, but not including, the final '/'.
 
-.. das:function:: base_name(name: string const implicit)
+:Arguments: * **name** : string implicit
 
-base_name returns string const
+.. _function-fio_get_full_file_name_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+name    +string const implicit+
-+--------+---------------------+
+.. das:function:: get_full_file_name(path: string implicit) : string
 
+ returns full name of the file in normalized form.
 
-|function-fio-base_name|
-
-.. _function-_at_fio_c__c_get_full_file_name_CIs_C_c_C_l:
-
-.. das:function:: get_full_file_name(path: string const implicit)
-
-get_full_file_name returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+path    +string const implicit+
-+--------+---------------------+
-
-
-|function-fio-get_full_file_name|
+:Arguments: * **path** : string implicit
 
 ++++++++++++++++++++++
 Directory manipulation
 ++++++++++++++++++++++
 
-  *  :ref:`mkdir (path:string const implicit) : bool const <function-_at_fio_c__c_mkdir_CIs>` 
-  *  :ref:`chdir (path:string const implicit) : bool const <function-_at_fio_c__c_chdir_CIs>` 
-  *  :ref:`getcwd (context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_getcwd_C_c_C_l>` 
-  *  :ref:`dir (path:string const;blk:block\<(filename:string const):void\> const) : auto <function-_at_fio_c__c_dir_Cs_CN_ls_filename_gr_0_ls_Cs_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`mkdir (path: string implicit) : bool <function-fio_mkdir_string_implicit>` 
+  *  :ref:`chdir (path: string implicit) : bool <function-fio_chdir_string_implicit>` 
+  *  :ref:`getcwd () : string <function-fio_getcwd>` 
+  *  :ref:`dir (path: string; blk: block\<(filename:string):void\>) : auto <function-fio_dir_string_block_ls_filename_c_string_c_void_gr_>` 
 
-.. _function-_at_fio_c__c_mkdir_CIs:
+.. _function-fio_mkdir_string_implicit:
 
-.. das:function:: mkdir(path: string const implicit)
+.. das:function:: mkdir(path: string implicit) : bool
 
-mkdir returns bool const
+ makes directory.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+path    +string const implicit+
-+--------+---------------------+
+:Arguments: * **path** : string implicit
 
+.. _function-fio_chdir_string_implicit:
 
-|function-fio-mkdir|
+.. das:function:: chdir(path: string implicit) : bool
 
-.. _function-_at_fio_c__c_chdir_CIs:
+ changes current directory.
 
-.. das:function:: chdir(path: string const implicit)
+:Arguments: * **path** : string implicit
 
-chdir returns bool const
+.. _function-fio_getcwd:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+path    +string const implicit+
-+--------+---------------------+
+.. das:function:: getcwd() : string
 
+ returns current working directory.
 
-|function-fio-chdir|
+.. _function-fio_dir_string_block_ls_filename_c_string_c_void_gr_:
 
-.. _function-_at_fio_c__c_getcwd_C_c_C_l:
+.. das:function:: dir(path: string; blk: block<(filename:string):void>) : auto
 
-.. das:function:: getcwd()
+ iterates through all files in the specified `path`.
 
-getcwd returns string const
+:Arguments: * **path** : string
 
-|function-fio-getcwd|
-
-.. _function-_at_fio_c__c_dir_Cs_CN_ls_filename_gr_0_ls_Cs_gr_1_ls_v_gr__builtin_:
-
-.. das:function:: dir(path: string const; blk: block<(filename:string const):void> const)
-
-dir returns auto
-
-+--------+-----------------------------------------+
-+argument+argument type                            +
-+========+=========================================+
-+path    +string const                             +
-+--------+-----------------------------------------+
-+blk     +block<(filename:string const):void> const+
-+--------+-----------------------------------------+
-
-
-|function-fio-dir|
+            * **blk** : block<(filename:string):void>
 
 ++++++++++++++++++++
 OS specific routines
 ++++++++++++++++++++
 
-  *  :ref:`sleep (msec:uint const) : void <function-_at_fio_c__c_sleep_Cu>` 
-  *  :ref:`exit (exitCode:int const) : void <function-_at_fio_c__c_exit_Ci>` 
-  *  :ref:`popen (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int const <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`popen_binary (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int const <function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`get_env_variable (var:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_get_env_variable_CIs_C_c_C_l>` 
-  *  :ref:`has_env_variable (var:string const implicit;context:__context const;at:__lineInfo const) : bool const <function-_at_fio_c__c_has_env_variable_CIs_C_c_C_l>` 
-  *  :ref:`sanitize_command_line (var:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l>` 
+  *  :ref:`sleep (msec: uint) <function-fio_sleep_uint>` 
+  *  :ref:`exit (exitCode: int) <function-fio_exit_int>` 
+  *  :ref:`popen (command: string implicit; scope: block\<(FILE const?):void\>) : int <function-fio_popen_string_implicit_block_ls_FILE_const_q__c_void_gr_>` 
+  *  :ref:`popen_binary (command: string implicit; scope: block\<(FILE const?):void\>) : int <function-fio_popen_binary_string_implicit_block_ls_FILE_const_q__c_void_gr_>` 
+  *  :ref:`get_env_variable (var: string implicit) : string <function-fio_get_env_variable_string_implicit>` 
+  *  :ref:`has_env_variable (var: string implicit) : bool <function-fio_has_env_variable_string_implicit>` 
+  *  :ref:`sanitize_command_line (var: string implicit) : string <function-fio_sanitize_command_line_string_implicit>` 
 
-.. _function-_at_fio_c__c_sleep_Cu:
+.. _function-fio_sleep_uint:
 
-.. das:function:: sleep(msec: uint const)
+.. das:function:: sleep(msec: uint)
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+msec    +uint const   +
-+--------+-------------+
+ sleeps for specified number of milliseconds.
 
+:Arguments: * **msec** : uint
 
-|function-fio-sleep|
+.. _function-fio_exit_int:
 
-.. _function-_at_fio_c__c_exit_Ci:
-
-.. das:function:: exit(exitCode: int const)
+.. das:function:: exit(exitCode: int)
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+exitCode+int const    +
-+--------+-------------+
+ equivalent to C `exit`. Terminates program.
 
+:Arguments: * **exitCode** : int
 
-|function-fio-exit|
+.. _function-fio_popen_string_implicit_block_ls_FILE_const_q__c_void_gr_:
 
-.. _function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: popen(command: string const implicit; scope: block<(arg0:FILE const? const):void> const implicit)
-
-popen returns int const
+.. das:function:: popen(command: string implicit; scope: block<(FILE const?):void>) : int
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+command +string const implicit                                                         +
-+--------+------------------------------------------------------------------------------+
-+scope   +block<( :ref:`fio::FILE <handle-fio-FILE>`  const? const):void> const implicit+
-+--------+------------------------------------------------------------------------------+
+ equivalent to linux `popen`. Opens pipe to command.
 
+:Arguments: * **command** : string implicit
 
-|function-fio-popen|
+            * **scope** : block<( :ref:`FILE <handle-fio-FILE>` ?):void> implicit
 
-.. _function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-fio_popen_binary_string_implicit_block_ls_FILE_const_q__c_void_gr_:
 
-.. das:function:: popen_binary(command: string const implicit; scope: block<(arg0:FILE const? const):void> const implicit)
-
-popen_binary returns int const
+.. das:function:: popen_binary(command: string implicit; scope: block<(FILE const?):void>) : int
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+command +string const implicit                                                         +
-+--------+------------------------------------------------------------------------------+
-+scope   +block<( :ref:`fio::FILE <handle-fio-FILE>`  const? const):void> const implicit+
-+--------+------------------------------------------------------------------------------+
+ opens pipe to command and returns FILE pointer to it, in binary mode.
 
+:Arguments: * **command** : string implicit
 
-|function-fio-popen_binary|
+            * **scope** : block<( :ref:`FILE <handle-fio-FILE>` ?):void> implicit
 
-.. _function-_at_fio_c__c_get_env_variable_CIs_C_c_C_l:
+.. _function-fio_get_env_variable_string_implicit:
 
-.. das:function:: get_env_variable(var: string const implicit)
+.. das:function:: get_env_variable(var: string implicit) : string
 
-get_env_variable returns string const
+ returns value of the environment variable.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+var     +string const implicit+
-+--------+---------------------+
+:Arguments: * **var** : string implicit
 
+.. _function-fio_has_env_variable_string_implicit:
 
-|function-fio-get_env_variable|
+.. das:function:: has_env_variable(var: string implicit) : bool
 
-.. _function-_at_fio_c__c_has_env_variable_CIs_C_c_C_l:
+ returns true if the environment variable is defined.
 
-.. das:function:: has_env_variable(var: string const implicit)
+:Arguments: * **var** : string implicit
 
-has_env_variable returns bool const
+.. _function-fio_sanitize_command_line_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+var     +string const implicit+
-+--------+---------------------+
+.. das:function:: sanitize_command_line(var: string implicit) : string
 
+ sanitizes command line arguments.
 
-|function-fio-has_env_variable|
-
-.. _function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l:
-
-.. das:function:: sanitize_command_line(var: string const implicit)
-
-sanitize_command_line returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+var     +string const implicit+
-+--------+---------------------+
-
-
-|function-fio-sanitize_command_line|
+:Arguments: * **var** : string implicit
 
 
