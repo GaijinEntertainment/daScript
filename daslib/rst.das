@@ -1135,7 +1135,7 @@ def document_structure_annotation(doc_file:file;mod:Module?;value)
         push(line,f.typ)
         emplace(tab,line)
 
-    document_topic("Fields",doc_file,topic("structure_annotation",mod,string(value.name)), "Annotation {value.name}", tab)
+    document_topic("Fields",doc_file,topic("structure_annotation",mod,string(value.name)), "Annotation {value.name}", tab, mod.moduleFlags.builtIn)
 
 def document_structure_annotations(doc_file:file;mods:array<Module?>; var hook = DocsHook())
     var any = false
