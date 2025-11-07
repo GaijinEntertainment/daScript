@@ -1,0 +1,1 @@
+ Generic function infer history.

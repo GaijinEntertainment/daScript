@@ -1,0 +1,1 @@
+ Holds bool constant.

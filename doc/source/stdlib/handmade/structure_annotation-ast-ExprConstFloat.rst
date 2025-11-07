@@ -1,0 +1,1 @@
+ Holds float constant.

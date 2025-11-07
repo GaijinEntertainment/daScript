@@ -1,0 +1,1 @@
+ Holds uint constant.

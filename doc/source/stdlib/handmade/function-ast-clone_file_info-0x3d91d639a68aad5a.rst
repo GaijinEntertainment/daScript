@@ -1,0 +1,1 @@
+ Clones FileInfo structure.

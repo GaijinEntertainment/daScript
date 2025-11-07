@@ -1,0 +1,1 @@
+ Holds string constant.

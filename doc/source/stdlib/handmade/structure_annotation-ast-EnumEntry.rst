@@ -1,0 +1,1 @@
+ Entry in the enumeration.

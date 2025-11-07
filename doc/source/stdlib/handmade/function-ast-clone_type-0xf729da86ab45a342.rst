@@ -1,0 +1,1 @@
+ Clones `TypeDecl` with subtypes.

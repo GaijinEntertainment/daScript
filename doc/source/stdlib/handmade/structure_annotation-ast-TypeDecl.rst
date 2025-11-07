@@ -1,0 +1,1 @@
+ Any type declaration.

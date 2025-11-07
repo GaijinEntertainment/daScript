@@ -708,8 +708,8 @@ def main {
     document_module_network(root)
     document_module_uriparser(root)
     document_module_rtti(root)
-    return
     document_module_ast(root)
+    return
     document_module_strings(root)
     document_module_jobque(root)
 
