@@ -1,1 +1,2 @@
- Adapter for the `AstPassMacro`.
+Adapter for the `AstPassMacro`.
+Name of the macro

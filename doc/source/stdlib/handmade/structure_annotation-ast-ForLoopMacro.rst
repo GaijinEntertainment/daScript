@@ -1,1 +1,2 @@
- Adapter for the 'AstForLoopMacro'.
+Adapter for the 'AstForLoopMacro'.
+Name of the macro

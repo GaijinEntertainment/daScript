@@ -1,1 +1,2 @@
- Adapter for the `AstCaptureMacro`.
+Adapter for the `AstCaptureMacro`.
+Name of the macro

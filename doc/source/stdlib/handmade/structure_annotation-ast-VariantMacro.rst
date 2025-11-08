@@ -1,1 +1,2 @@
- Adapter for the `AstVariantMacro`.
+Adapter for the `AstVariantMacro`.
+Name of the macro

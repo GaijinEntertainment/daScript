@@ -1,1 +1,1 @@
- Macro which is attached to the context simulation.
+Macro which is attached to the context simulation.

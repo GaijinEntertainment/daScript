@@ -1,1 +1,2 @@
- Adapter for the `AstSimulateMacro`.
+Adapter for the `AstSimulateMacro`.
+Name of the macro.
