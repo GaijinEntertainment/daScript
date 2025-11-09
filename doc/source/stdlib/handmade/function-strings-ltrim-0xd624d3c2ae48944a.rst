@@ -1,0 +1,1 @@
+ Removes leading white space.

@@ -5,14 +5,11 @@
 String manipulation library
 ===========================
 
-.. include:: detail/strings.rst
-
 The string library implements string formatting, conversion, searching, and modification routines.
 
 All functions and symbols are in "strings" module, use require to get access to it. ::
 
     require strings
-
 
 ++++++++++++
 Enumerations
@@ -22,16 +19,14 @@ Enumerations
 
 .. das:attribute:: ConversionResult
 
-+----------------+--+
-+ok              +0 +
-+----------------+--+
-+invalid_argument+22+
-+----------------+--+
-+out_of_range    +34+
-+----------------+--+
+Result of conversion from string to number.
 
+:Values: * **ok** = 0 - Successful conversion
 
-|enumeration-strings-ConversionResult|
+         * **invalid_argument** = 22 - Argument is not a valid number
+
+         * **out_of_range** = 34 - Argument is out of range for the target type
+
 
 ++++++++++++++++++
 Handled structures
@@ -41,2239 +36,1434 @@ Handled structures
 
 .. das:attribute:: StringBuilderWriter
 
-|structure_annotation-strings-StringBuilderWriter|
+ Object representing a string builder. Its significantly faster to write data to the string builder and than convert it to a string, as oppose to using sequences of string concatenations.
+
 
 +++++++++++++
 Character set
 +++++++++++++
 
-  *  :ref:`is_char_in_set (Character:int const;Charset:uint const[8] implicit;Context:__context const;At:__lineInfo const) : bool const <function-_at_strings_c__c_is_char_in_set_Ci_CI_lb_8_rb_u_C_c_C_l>` 
-  *  :ref:`set_total (Charset:uint const[8] implicit) : uint const <function-_at_strings_c__c_set_total_CI_lb_8_rb_u>` 
-  *  :ref:`set_element (Character:int const;Charset:uint const[8] implicit) : int const <function-_at_strings_c__c_set_element_Ci_CI_lb_8_rb_u>` 
+  *  :ref:`is_char_in_set (Character: int; Charset: uint const[8] implicit) : bool <function-strings_is_char_in_set_int_uint_const8_implicit>` 
+  *  :ref:`set_total (Charset: uint const[8] implicit) : uint <function-strings_set_total_uint_const8_implicit>` 
+  *  :ref:`set_element (Character: int; Charset: uint const[8] implicit) : int <function-strings_set_element_int_uint_const8_implicit>` 
 
-.. _function-_at_strings_c__c_is_char_in_set_Ci_CI_lb_8_rb_u_C_c_C_l:
+.. _function-strings_is_char_in_set_int_uint_const8_implicit:
 
-.. das:function:: is_char_in_set(Character: int const; Charset: uint const[8] implicit)
+.. das:function:: is_char_in_set(Character: int; Charset: uint const[8] implicit) : bool
 
-is_char_in_set returns bool const
+ Returns true if character bit is set in the set (of 256 bits in uint32[8]).
 
-+---------+----------------------+
-+argument +argument type         +
-+=========+======================+
-+Character+int const             +
-+---------+----------------------+
-+Charset  +uint const[8] implicit+
-+---------+----------------------+
+:Arguments: * **Character** : int
 
+            * **Charset** : uint[8] implicit
 
-|function-strings-is_char_in_set|
+.. _function-strings_set_total_uint_const8_implicit:
 
-.. _function-_at_strings_c__c_set_total_CI_lb_8_rb_u:
+.. das:function:: set_total(Charset: uint const[8] implicit) : uint
 
-.. das:function:: set_total(Charset: uint const[8] implicit)
+ Total number of elements in the character set.
 
-set_total returns uint const
+:Arguments: * **Charset** : uint[8] implicit
 
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+Charset +uint const[8] implicit+
-+--------+----------------------+
+.. _function-strings_set_element_int_uint_const8_implicit:
 
+.. das:function:: set_element(Character: int; Charset: uint const[8] implicit) : int
 
-|function-strings-set_total|
+ Gen character set element by element index (not character index).
 
-.. _function-_at_strings_c__c_set_element_Ci_CI_lb_8_rb_u:
+:Arguments: * **Character** : int
 
-.. das:function:: set_element(Character: int const; Charset: uint const[8] implicit)
-
-set_element returns int const
-
-+---------+----------------------+
-+argument +argument type         +
-+=========+======================+
-+Character+int const             +
-+---------+----------------------+
-+Charset  +uint const[8] implicit+
-+---------+----------------------+
-
-
-|function-strings-set_element|
+            * **Charset** : uint[8] implicit
 
 ++++++++++++++++
 Character groups
 ++++++++++++++++
 
-  *  :ref:`is_alpha (Character:int const) : bool const <function-_at_strings_c__c_is_alpha_Ci>` 
-  *  :ref:`is_alnum (Character:int const) : bool const <function-_at_strings_c__c_is_alnum_Ci>` 
-  *  :ref:`is_hex (Character:int const) : bool const <function-_at_strings_c__c_is_hex_Ci>` 
-  *  :ref:`is_tab_or_space (Character:int const) : bool const <function-_at_strings_c__c_is_tab_or_space_Ci>` 
-  *  :ref:`is_new_line (Character:int const) : bool const <function-_at_strings_c__c_is_new_line_Ci>` 
-  *  :ref:`is_white_space (Character:int const) : bool const <function-_at_strings_c__c_is_white_space_Ci>` 
-  *  :ref:`is_number (Character:int const) : bool const <function-_at_strings_c__c_is_number_Ci>` 
+  *  :ref:`is_alpha (Character: int) : bool <function-strings_is_alpha_int>` 
+  *  :ref:`is_alnum (Character: int) : bool <function-strings_is_alnum_int>` 
+  *  :ref:`is_hex (Character: int) : bool <function-strings_is_hex_int>` 
+  *  :ref:`is_tab_or_space (Character: int) : bool <function-strings_is_tab_or_space_int>` 
+  *  :ref:`is_new_line (Character: int) : bool <function-strings_is_new_line_int>` 
+  *  :ref:`is_white_space (Character: int) : bool <function-strings_is_white_space_int>` 
+  *  :ref:`is_number (Character: int) : bool <function-strings_is_number_int>` 
 
-.. _function-_at_strings_c__c_is_alpha_Ci:
+.. _function-strings_is_alpha_int:
 
-.. das:function:: is_alpha(Character: int const)
+.. das:function:: is_alpha(Character: int) : bool
 
-is_alpha returns bool const
+ Returns true if character is [A-Za-z].
 
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+Character+int const    +
-+---------+-------------+
+:Arguments: * **Character** : int
 
+.. _function-strings_is_alnum_int:
 
-|function-strings-is_alpha|
+.. das:function:: is_alnum(Character: int) : bool
 
-.. _function-_at_strings_c__c_is_alnum_Ci:
+ Returns true if character is alphanumeric [A-Za-z0-9].
 
-.. das:function:: is_alnum(Character: int const)
+:Arguments: * **Character** : int
 
-is_alnum returns bool const
+.. _function-strings_is_hex_int:
 
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+Character+int const    +
-+---------+-------------+
+.. das:function:: is_hex(Character: int) : bool
 
+ Returns true if character is hexadecimal [0-9A-Fa-f].
 
-|function-strings-is_alnum|
+:Arguments: * **Character** : int
 
-.. _function-_at_strings_c__c_is_hex_Ci:
+.. _function-strings_is_tab_or_space_int:
 
-.. das:function:: is_hex(Character: int const)
+.. das:function:: is_tab_or_space(Character: int) : bool
 
-is_hex returns bool const
+ Returns true if character is tab or space [ \t].
 
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+Character+int const    +
-+---------+-------------+
+:Arguments: * **Character** : int
 
+.. _function-strings_is_new_line_int:
 
-|function-strings-is_hex|
+.. das:function:: is_new_line(Character: int) : bool
 
-.. _function-_at_strings_c__c_is_tab_or_space_Ci:
+ Returns true if character is '\n' or '\r'.
 
-.. das:function:: is_tab_or_space(Character: int const)
+:Arguments: * **Character** : int
 
-is_tab_or_space returns bool const
+.. _function-strings_is_white_space_int:
 
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+Character+int const    +
-+---------+-------------+
+.. das:function:: is_white_space(Character: int) : bool
 
+ Returns true if character is [ \t\n\r].
 
-|function-strings-is_tab_or_space|
+:Arguments: * **Character** : int
 
-.. _function-_at_strings_c__c_is_new_line_Ci:
+.. _function-strings_is_number_int:
 
-.. das:function:: is_new_line(Character: int const)
+.. das:function:: is_number(Character: int) : bool
 
-is_new_line returns bool const
+ Returns true if character is [0-9].
 
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+Character+int const    +
-+---------+-------------+
-
-
-|function-strings-is_new_line|
-
-.. _function-_at_strings_c__c_is_white_space_Ci:
-
-.. das:function:: is_white_space(Character: int const)
-
-is_white_space returns bool const
-
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+Character+int const    +
-+---------+-------------+
-
-
-|function-strings-is_white_space|
-
-.. _function-_at_strings_c__c_is_number_Ci:
-
-.. das:function:: is_number(Character: int const)
-
-is_number returns bool const
-
-+---------+-------------+
-+argument +argument type+
-+=========+=============+
-+Character+int const    +
-+---------+-------------+
-
-
-|function-strings-is_number|
+:Arguments: * **Character** : int
 
 ++++++++++++++++++
 Character by index
 ++++++++++++++++++
 
-  *  :ref:`character_at (str:string const implicit;idx:int const;context:__context const;at:__lineInfo const) : int const <function-_at_strings_c__c_character_at_CIs_Ci_C_c_C_l>` 
-  *  :ref:`character_uat (str:string const implicit;idx:int const) : int const <function-_at_strings_c__c_character_uat_CIs_Ci>` 
+  *  :ref:`character_at (str: string implicit; idx: int) : int <function-strings_character_at_string_implicit_int>` 
+  *  :ref:`character_uat (str: string implicit; idx: int) : int <function-strings_character_uat_string_implicit_int>` 
 
-.. _function-_at_strings_c__c_character_at_CIs_Ci_C_c_C_l:
+.. _function-strings_character_at_string_implicit_int:
 
-.. das:function:: character_at(str: string const implicit; idx: int const)
+.. das:function:: character_at(str: string implicit; idx: int) : int
 
-character_at returns int const
+ Returns character of the string 'str' at index 'idx'.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+idx     +int const            +
-+--------+---------------------+
+:Arguments: * **str** : string implicit
 
+            * **idx** : int
 
-|function-strings-character_at|
+.. _function-strings_character_uat_string_implicit_int:
 
-.. _function-_at_strings_c__c_character_uat_CIs_Ci:
-
-.. das:function:: character_uat(str: string const implicit; idx: int const)
-
-character_uat returns int const
+.. das:function:: character_uat(str: string implicit; idx: int) : int
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+idx     +int const            +
-+--------+---------------------+
+ Returns character of the string 'str' at index 'idx'. This function does not check bounds of index.
 
+:Arguments: * **str** : string implicit
 
-|function-strings-character_uat|
+            * **idx** : int
 
 +++++++++++++++++
 String properties
 +++++++++++++++++
 
-  *  :ref:`ends_with (str:string const implicit;cmp:string const implicit;context:__context const) : bool const <function-_at_strings_c__c_ends_with_CIs_CIs_C_c>` 
-  *  :ref:`ends_with (str:$::das_string const implicit;cmp:string const implicit;context:__context const) : bool const <function-_at_strings_c__c_ends_with_CIH_ls__builtin__c__c_das_string_gr__CIs_C_c>` 
-  *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;context:__context const) : bool const <function-_at_strings_c__c_starts_with_CIs_CIs_C_c>` 
-  *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;cmpLen:uint const;context:__context const) : bool const <function-_at_strings_c__c_starts_with_CIs_CIs_Cu_C_c>` 
-  *  :ref:`starts_with (str:string const implicit;offset:int const;cmp:string const implicit;context:__context const) : bool const <function-_at_strings_c__c_starts_with_CIs_Ci_CIs_C_c>` 
-  *  :ref:`starts_with (str:string const implicit;offset:int const;cmp:string const implicit;cmpLen:uint const;context:__context const) : bool const <function-_at_strings_c__c_starts_with_CIs_Ci_CIs_Cu_C_c>` 
-  *  :ref:`length (str:string const implicit;context:__context const) : int const <function-_at_strings_c__c_length_CIs_C_c>` 
-  *  :ref:`length (str:$::das_string const implicit) : int const <function-_at_strings_c__c_length_CIH_ls__builtin__c__c_das_string_gr_>` 
+  *  :ref:`ends_with (str: string implicit; cmp: string implicit) : bool <function-strings_ends_with_string_implicit_string_implicit>` 
+  *  :ref:`ends_with (str: das_string implicit; cmp: string implicit) : bool <function-strings_ends_with_das_string_implicit_string_implicit>` 
+  *  :ref:`starts_with (str: string implicit; cmp: string implicit) : bool <function-strings_starts_with_string_implicit_string_implicit>` 
+  *  :ref:`starts_with (str: string implicit; cmp: string implicit; cmpLen: uint) : bool <function-strings_starts_with_string_implicit_string_implicit_uint>` 
+  *  :ref:`starts_with (str: string implicit; offset: int; cmp: string implicit) : bool <function-strings_starts_with_string_implicit_int_string_implicit>` 
+  *  :ref:`starts_with (str: string implicit; offset: int; cmp: string implicit; cmpLen: uint) : bool <function-strings_starts_with_string_implicit_int_string_implicit_uint>` 
+  *  :ref:`length (str: string implicit) : int <function-strings_length_string_implicit>` 
+  *  :ref:`length (str: das_string implicit) : int <function-strings_length_das_string_implicit>` 
 
-.. _function-_at_strings_c__c_ends_with_CIs_CIs_C_c:
+.. _function-strings_ends_with_string_implicit_string_implicit:
 
-.. das:function:: ends_with(str: string const implicit; cmp: string const implicit)
+.. das:function:: ends_with(str: string implicit; cmp: string implicit) : bool
 
-ends_with returns bool const
+ returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+cmp     +string const implicit+
-+--------+---------------------+
+:Arguments: * **str** : string implicit
 
+            * **cmp** : string implicit
 
-|function-strings-ends_with|
+.. _function-strings_ends_with_das_string_implicit_string_implicit:
 
-.. _function-_at_strings_c__c_ends_with_CIH_ls__builtin__c__c_das_string_gr__CIs_C_c:
+.. das:function:: ends_with(str: das_string implicit; cmp: string implicit) : bool
 
-.. das:function:: ends_with(str: das_string const implicit; cmp: string const implicit)
+ returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
 
-ends_with returns bool const
+:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+str     + :ref:`builtin::das_string <handle-builtin-das_string>`  const implicit+
-+--------+-----------------------------------------------------------------------+
-+cmp     +string const implicit                                                  +
-+--------+-----------------------------------------------------------------------+
+            * **cmp** : string implicit
 
+.. _function-strings_starts_with_string_implicit_string_implicit:
 
-|function-strings-ends_with|
+.. das:function:: starts_with(str: string implicit; cmp: string implicit) : bool
 
-.. _function-_at_strings_c__c_starts_with_CIs_CIs_C_c:
+ returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
 
-.. das:function:: starts_with(str: string const implicit; cmp: string const implicit)
+:Arguments: * **str** : string implicit
 
-starts_with returns bool const
+            * **cmp** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+cmp     +string const implicit+
-+--------+---------------------+
+.. _function-strings_starts_with_string_implicit_string_implicit_uint:
 
+.. das:function:: starts_with(str: string implicit; cmp: string implicit; cmpLen: uint) : bool
 
-|function-strings-starts_with|
+ returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
 
-.. _function-_at_strings_c__c_starts_with_CIs_CIs_Cu_C_c:
+:Arguments: * **str** : string implicit
 
-.. das:function:: starts_with(str: string const implicit; cmp: string const implicit; cmpLen: uint const)
+            * **cmp** : string implicit
 
-starts_with returns bool const
+            * **cmpLen** : uint
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+cmp     +string const implicit+
-+--------+---------------------+
-+cmpLen  +uint const           +
-+--------+---------------------+
+.. _function-strings_starts_with_string_implicit_int_string_implicit:
 
+.. das:function:: starts_with(str: string implicit; offset: int; cmp: string implicit) : bool
 
-|function-strings-starts_with|
+ returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
 
-.. _function-_at_strings_c__c_starts_with_CIs_Ci_CIs_C_c:
+:Arguments: * **str** : string implicit
 
-.. das:function:: starts_with(str: string const implicit; offset: int const; cmp: string const implicit)
+            * **offset** : int
 
-starts_with returns bool const
+            * **cmp** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+offset  +int const            +
-+--------+---------------------+
-+cmp     +string const implicit+
-+--------+---------------------+
+.. _function-strings_starts_with_string_implicit_int_string_implicit_uint:
 
+.. das:function:: starts_with(str: string implicit; offset: int; cmp: string implicit; cmpLen: uint) : bool
 
-|function-strings-starts_with|
+ returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
 
-.. _function-_at_strings_c__c_starts_with_CIs_Ci_CIs_Cu_C_c:
+:Arguments: * **str** : string implicit
 
-.. das:function:: starts_with(str: string const implicit; offset: int const; cmp: string const implicit; cmpLen: uint const)
+            * **offset** : int
 
-starts_with returns bool const
+            * **cmp** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+offset  +int const            +
-+--------+---------------------+
-+cmp     +string const implicit+
-+--------+---------------------+
-+cmpLen  +uint const           +
-+--------+---------------------+
+            * **cmpLen** : uint
 
+.. _function-strings_length_string_implicit:
 
-|function-strings-starts_with|
+.. das:function:: length(str: string implicit) : int
 
-.. _function-_at_strings_c__c_length_CIs_C_c:
+ Return length of string
 
-.. das:function:: length(str: string const implicit)
+:Arguments: * **str** : string implicit
 
-length returns int const
+.. _function-strings_length_das_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+.. das:function:: length(str: das_string implicit) : int
 
+ Return length of string
 
-|function-strings-length|
-
-.. _function-_at_strings_c__c_length_CIH_ls__builtin__c__c_das_string_gr_:
-
-.. das:function:: length(str: das_string const implicit)
-
-length returns int const
-
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+str     + :ref:`builtin::das_string <handle-builtin-das_string>`  const implicit+
-+--------+-----------------------------------------------------------------------+
-
-
-|function-strings-length|
+:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
 ++++++++++++++
 String builder
 ++++++++++++++
 
-  *  :ref:`build_string (block:block\<(var arg0:strings::StringBuilderWriter):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : string const <function-_at_strings_c__c_build_string_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`build_hash (block:block\<(var arg0:strings::StringBuilderWriter):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : uint64 const <function-_at_strings_c__c_build_hash_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`write (writer:strings::StringBuilderWriter;anything:any) : strings::StringBuilderWriter& <function-_at_strings_c__c_write_H_ls_strings_c__c_StringBuilderWriter_gr__*>` 
-  *  :ref:`write_char (writer:strings::StringBuilderWriter implicit;ch:int const) : strings::StringBuilderWriter& <function-_at_strings_c__c_write_char_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci>` 
-  *  :ref:`write_chars (writer:strings::StringBuilderWriter implicit;ch:int const;count:int const) : strings::StringBuilderWriter& <function-_at_strings_c__c_write_chars_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci_Ci>` 
-  *  :ref:`write_escape_string (writer:strings::StringBuilderWriter implicit;str:string const implicit) : strings::StringBuilderWriter& <function-_at_strings_c__c_write_escape_string_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int64 const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci64>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint64 const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu64>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:float const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cf>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:double const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cd>` 
-  *  :ref:`format (format:string const implicit;value:int const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_format_CIs_Ci_C_c_C_l>` 
-  *  :ref:`format (format:string const implicit;value:uint const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_format_CIs_Cu_C_c_C_l>` 
-  *  :ref:`format (format:string const implicit;value:int64 const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_format_CIs_Ci64_C_c_C_l>` 
-  *  :ref:`format (format:string const implicit;value:uint64 const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_format_CIs_Cu64_C_c_C_l>` 
-  *  :ref:`format (format:string const implicit;value:float const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_format_CIs_Cf_C_c_C_l>` 
-  *  :ref:`format (format:string const implicit;value:double const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_format_CIs_Cd_C_c_C_l>` 
+  *  :ref:`build_string (block: block\<(StringBuilderWriter):void\>) : string <function-strings_build_string_block_ls_StringBuilderWriter_c_void_gr_>` 
+  *  :ref:`build_hash (block: block\<(StringBuilderWriter):void\>) : uint64 <function-strings_build_hash_block_ls_StringBuilderWriter_c_void_gr_>` 
+  *  :ref:`write (writer: StringBuilderWriter; anything: any) : StringBuilderWriter& <function-strings_write_StringBuilderWriter_any>` 
+  *  :ref:`write_char (writer: StringBuilderWriter implicit; ch: int) : StringBuilderWriter& <function-strings_write_char_StringBuilderWriter_implicit_int>` 
+  *  :ref:`write_chars (writer: StringBuilderWriter implicit; ch: int; count: int) : StringBuilderWriter& <function-strings_write_chars_StringBuilderWriter_implicit_int_int>` 
+  *  :ref:`write_escape_string (writer: StringBuilderWriter implicit; str: string implicit) : StringBuilderWriter& <function-strings_write_escape_string_StringBuilderWriter_implicit_string_implicit>` 
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_int>` 
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_uint>` 
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_int64>` 
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_uint64>` 
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_float>` 
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_double>` 
+  *  :ref:`format (format: string implicit; value: int) : string <function-strings_format_string_implicit_int>` 
+  *  :ref:`format (format: string implicit; value: uint) : string <function-strings_format_string_implicit_uint>` 
+  *  :ref:`format (format: string implicit; value: int64) : string <function-strings_format_string_implicit_int64>` 
+  *  :ref:`format (format: string implicit; value: uint64) : string <function-strings_format_string_implicit_uint64>` 
+  *  :ref:`format (format: string implicit; value: float) : string <function-strings_format_string_implicit_float>` 
+  *  :ref:`format (format: string implicit; value: double) : string <function-strings_format_string_implicit_double>` 
 
-.. _function-_at_strings_c__c_build_string_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-strings_build_string_block_ls_StringBuilderWriter_c_void_gr_:
 
-.. das:function:: build_string(block: block<(var arg0:StringBuilderWriter):void> const implicit)
+.. das:function:: build_string(block: block<(StringBuilderWriter):void>) : string
 
-build_string returns string const
+ Create StringBuilderWriter and pass it to the block. Upon completion of a block, return whatever was written as string.
 
-+--------+-------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                          +
-+========+=======================================================================================================+
-+block   +block<( :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> const implicit+
-+--------+-------------------------------------------------------------------------------------------------------+
+:Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> implicit
 
+.. _function-strings_build_hash_block_ls_StringBuilderWriter_c_void_gr_:
 
-|function-strings-build_string|
+.. das:function:: build_hash(block: block<(StringBuilderWriter):void>) : uint64
 
-.. _function-_at_strings_c__c_build_hash_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+ Build hash of the string (as oppose to building entire string).
 
-.. das:function:: build_hash(block: block<(var arg0:StringBuilderWriter):void> const implicit)
+:Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> implicit
 
-build_hash returns uint64 const
+.. _function-strings_write_StringBuilderWriter_any:
 
-+--------+-------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                          +
-+========+=======================================================================================================+
-+block   +block<( :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> const implicit+
-+--------+-------------------------------------------------------------------------------------------------------+
+.. das:function:: write(writer: StringBuilderWriter; anything: any) : StringBuilderWriter&
 
+ Returns textual representation of the value.
 
-|function-strings-build_hash|
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` 
 
-.. _function-_at_strings_c__c_write_H_ls_strings_c__c_StringBuilderWriter_gr__*:
+            * **anything** : any
 
-.. das:function:: write(writer: StringBuilderWriter; anything: any)
+.. _function-strings_write_char_StringBuilderWriter_implicit_int:
 
-write returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+.. das:function:: write_char(writer: StringBuilderWriter implicit; ch: int) : StringBuilderWriter&
 
-+--------+--------------------------------------------------------------------------+
-+argument+argument type                                                             +
-+========+==========================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` +
-+--------+--------------------------------------------------------------------------+
-+anything+any                                                                       +
-+--------+--------------------------------------------------------------------------+
+ Writes character into StringBuilderWriter.
 
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
-|function-strings-write|
+            * **ch** : int
 
-.. _function-_at_strings_c__c_write_char_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci:
+.. _function-strings_write_chars_StringBuilderWriter_implicit_int_int:
 
-.. das:function:: write_char(writer: StringBuilderWriter implicit; ch: int const)
+.. das:function:: write_chars(writer: StringBuilderWriter implicit; ch: int; count: int) : StringBuilderWriter&
 
-write_char returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+ Writes multiple characters into StringBuilderWriter.
 
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+ch      +int const                                                                          +
-+--------+-----------------------------------------------------------------------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **ch** : int
 
-|function-strings-write_char|
+            * **count** : int
 
-.. _function-_at_strings_c__c_write_chars_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci_Ci:
+.. _function-strings_write_escape_string_StringBuilderWriter_implicit_string_implicit:
 
-.. das:function:: write_chars(writer: StringBuilderWriter implicit; ch: int const; count: int const)
+.. das:function:: write_escape_string(writer: StringBuilderWriter implicit; str: string implicit) : StringBuilderWriter&
 
-write_chars returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+ Writes escaped string into StringBuilderWriter.
 
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+ch      +int const                                                                          +
-+--------+-----------------------------------------------------------------------------------+
-+count   +int const                                                                          +
-+--------+-----------------------------------------------------------------------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **str** : string implicit
 
-|function-strings-write_chars|
+.. _function-strings_format_StringBuilderWriter_implicit_string_implicit_int:
 
-.. _function-_at_strings_c__c_write_escape_string_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs:
-
-.. das:function:: write_escape_string(writer: StringBuilderWriter implicit; str: string const implicit)
-
-write_escape_string returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+str     +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-write_escape_string|
-
-.. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci:
-
-.. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: int const)
-
-format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter&
 
 .. warning:: 
   This function is deprecated.
 
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +int const                                                                          +
-+--------+-----------------------------------------------------------------------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
-|function-strings-format|
+            * **format** : string implicit
 
-.. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu:
+            * **value** : int
 
-.. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: uint const)
+.. _function-strings_format_StringBuilderWriter_implicit_string_implicit_uint:
 
-format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter&
 
 .. warning:: 
   This function is deprecated.
 
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +uint const                                                                         +
-+--------+-----------------------------------------------------------------------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
-|function-strings-format|
+            * **format** : string implicit
 
-.. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci64:
+            * **value** : uint
 
-.. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: int64 const)
+.. _function-strings_format_StringBuilderWriter_implicit_string_implicit_int64:
 
-format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter&
 
 .. warning:: 
   This function is deprecated.
 
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +int64 const                                                                        +
-+--------+-----------------------------------------------------------------------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
-|function-strings-format|
+            * **format** : string implicit
 
-.. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu64:
+            * **value** : int64
 
-.. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: uint64 const)
+.. _function-strings_format_StringBuilderWriter_implicit_string_implicit_uint64:
 
-format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter&
 
 .. warning:: 
   This function is deprecated.
 
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +uint64 const                                                                       +
-+--------+-----------------------------------------------------------------------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
-|function-strings-format|
+            * **format** : string implicit
 
-.. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cf:
+            * **value** : uint64
 
-.. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: float const)
+.. _function-strings_format_StringBuilderWriter_implicit_string_implicit_float:
 
-format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter&
 
 .. warning:: 
   This function is deprecated.
 
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +float const                                                                        +
-+--------+-----------------------------------------------------------------------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
-|function-strings-format|
+            * **format** : string implicit
 
-.. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cd:
+            * **value** : float
 
-.. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: double const)
+.. _function-strings_format_StringBuilderWriter_implicit_string_implicit_double:
 
-format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+.. das:function:: format(writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter&
 
 .. warning:: 
   This function is deprecated.
 
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +double const                                                                       +
-+--------+-----------------------------------------------------------------------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
-|function-strings-format|
+            * **format** : string implicit
 
-.. _function-_at_strings_c__c_format_CIs_Ci_C_c_C_l:
+            * **value** : double
 
-.. das:function:: format(format: string const implicit; value: int const)
+.. _function-strings_format_string_implicit_int:
 
-format returns string const
+.. das:function:: format(format: string implicit; value: int) : string
 
 .. warning:: 
   This function is deprecated.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +int const            +
-+--------+---------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **format** : string implicit
 
-|function-strings-format|
+            * **value** : int
 
-.. _function-_at_strings_c__c_format_CIs_Cu_C_c_C_l:
+.. _function-strings_format_string_implicit_uint:
 
-.. das:function:: format(format: string const implicit; value: uint const)
-
-format returns string const
+.. das:function:: format(format: string implicit; value: uint) : string
 
 .. warning:: 
   This function is deprecated.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +uint const           +
-+--------+---------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **format** : string implicit
 
-|function-strings-format|
+            * **value** : uint
 
-.. _function-_at_strings_c__c_format_CIs_Ci64_C_c_C_l:
+.. _function-strings_format_string_implicit_int64:
 
-.. das:function:: format(format: string const implicit; value: int64 const)
-
-format returns string const
+.. das:function:: format(format: string implicit; value: int64) : string
 
 .. warning:: 
   This function is deprecated.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +int64 const          +
-+--------+---------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **format** : string implicit
 
-|function-strings-format|
+            * **value** : int64
 
-.. _function-_at_strings_c__c_format_CIs_Cu64_C_c_C_l:
+.. _function-strings_format_string_implicit_uint64:
 
-.. das:function:: format(format: string const implicit; value: uint64 const)
-
-format returns string const
+.. das:function:: format(format: string implicit; value: uint64) : string
 
 .. warning:: 
   This function is deprecated.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +uint64 const         +
-+--------+---------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **format** : string implicit
 
-|function-strings-format|
+            * **value** : uint64
 
-.. _function-_at_strings_c__c_format_CIs_Cf_C_c_C_l:
+.. _function-strings_format_string_implicit_float:
 
-.. das:function:: format(format: string const implicit; value: float const)
-
-format returns string const
+.. das:function:: format(format: string implicit; value: float) : string
 
 .. warning:: 
   This function is deprecated.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +float const          +
-+--------+---------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **format** : string implicit
 
-|function-strings-format|
+            * **value** : float
 
-.. _function-_at_strings_c__c_format_CIs_Cd_C_c_C_l:
+.. _function-strings_format_string_implicit_double:
 
-.. das:function:: format(format: string const implicit; value: double const)
-
-format returns string const
+.. das:function:: format(format: string implicit; value: double) : string
 
 .. warning:: 
   This function is deprecated.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +double const         +
-+--------+---------------------+
+ Converts value to string given specified format (that of C printf).
 
+:Arguments: * **format** : string implicit
 
-|function-strings-format|
+            * **value** : double
 
 ++++++++++++++++++++++++
 das::string manipulation
 ++++++++++++++++++++++++
 
-  *  :ref:`append (str:$::das_string implicit;ch:int const) : void <function-_at_strings_c__c_append_IH_ls__builtin__c__c_das_string_gr__Ci>` 
-  *  :ref:`resize (str:$::das_string implicit;new_length:int const) : void <function-_at_strings_c__c_resize_IH_ls__builtin__c__c_das_string_gr__Ci>` 
+  *  :ref:`append (str: das_string implicit; ch: int) <function-strings_append_das_string_implicit_int>` 
+  *  :ref:`resize (str: das_string implicit; new_length: int) <function-strings_resize_das_string_implicit_int>` 
 
-.. _function-_at_strings_c__c_append_IH_ls__builtin__c__c_das_string_gr__Ci:
+.. _function-strings_append_das_string_implicit_int:
 
-.. das:function:: append(str: das_string implicit; ch: int const)
+.. das:function:: append(str: das_string implicit; ch: int)
 
-+--------+-----------------------------------------------------------------+
-+argument+argument type                                                    +
-+========+=================================================================+
-+str     + :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
-+--------+-----------------------------------------------------------------+
-+ch      +int const                                                        +
-+--------+-----------------------------------------------------------------+
+ Appends single character `ch` to das::string `str`.
 
+:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
-|function-strings-append|
+            * **ch** : int
 
-.. _function-_at_strings_c__c_resize_IH_ls__builtin__c__c_das_string_gr__Ci:
+.. _function-strings_resize_das_string_implicit_int:
 
-.. das:function:: resize(str: das_string implicit; new_length: int const)
+.. das:function:: resize(str: das_string implicit; new_length: int)
 
-+----------+-----------------------------------------------------------------+
-+argument  +argument type                                                    +
-+==========+=================================================================+
-+str       + :ref:`builtin::das_string <handle-builtin-das_string>`  implicit+
-+----------+-----------------------------------------------------------------+
-+new_length+int const                                                        +
-+----------+-----------------------------------------------------------------+
+ Resize string, i.e make it specified length.
 
+:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
-|function-strings-resize|
+            * **new_length** : int
 
 ++++++++++++++++++++
 String modifications
 ++++++++++++++++++++
 
-  *  :ref:`repeat (str:string const implicit;count:int const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_repeat_CIs_Ci_C_c_C_l>` 
-  *  :ref:`strip (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_strip_CIs_C_c_C_l>` 
-  *  :ref:`strip_right (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_strip_right_CIs_C_c_C_l>` 
-  *  :ref:`strip_left (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_strip_left_CIs_C_c_C_l>` 
-  *  :ref:`chop (str:string const implicit;start:int const;length:int const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_chop_CIs_Ci_Ci_C_c_C_l>` 
-  *  :ref:`slice (str:string const implicit;start:int const;end:int const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_slice_CIs_Ci_Ci_C_c_C_l>` 
-  *  :ref:`slice (str:string const implicit;start:int const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_slice_CIs_Ci_C_c_C_l>` 
-  *  :ref:`reverse (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_reverse_CIs_C_c_C_l>` 
-  *  :ref:`to_upper (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_to_upper_CIs_C_c_C_l>` 
-  *  :ref:`to_lower (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_to_lower_CIs_C_c_C_l>` 
-  *  :ref:`to_lower_in_place (str:string const implicit) : string const <function-_at_strings_c__c_to_lower_in_place_CIs>` 
-  *  :ref:`to_upper_in_place (str:string const implicit) : string const <function-_at_strings_c__c_to_upper_in_place_CIs>` 
-  *  :ref:`escape (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_escape_CIs_C_c_C_l>` 
-  *  :ref:`unescape (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_unescape_CIs_C_c_C_l>` 
-  *  :ref:`safe_unescape (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_safe_unescape_CIs_C_c_C_l>` 
-  *  :ref:`replace (str:string const implicit;toSearch:string const implicit;replace:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c_C_l>` 
-  *  :ref:`rtrim (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_rtrim_CIs_C_c_C_l>` 
-  *  :ref:`rtrim (str:string const implicit;chars:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_rtrim_CIs_CIs_C_c_C_l>` 
-  *  :ref:`ltrim (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_ltrim_CIs_C_c_C_l>` 
-  *  :ref:`trim (str:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_trim_CIs_C_c_C_l>` 
+  *  :ref:`repeat (str: string implicit; count: int) : string <function-strings_repeat_string_implicit_int>` 
+  *  :ref:`strip (str: string implicit) : string <function-strings_strip_string_implicit>` 
+  *  :ref:`strip_right (str: string implicit) : string <function-strings_strip_right_string_implicit>` 
+  *  :ref:`strip_left (str: string implicit) : string <function-strings_strip_left_string_implicit>` 
+  *  :ref:`chop (str: string implicit; start: int; length: int) : string <function-strings_chop_string_implicit_int_int>` 
+  *  :ref:`slice (str: string implicit; start: int; end: int) : string <function-strings_slice_string_implicit_int_int>` 
+  *  :ref:`slice (str: string implicit; start: int) : string <function-strings_slice_string_implicit_int>` 
+  *  :ref:`reverse (str: string implicit) : string <function-strings_reverse_string_implicit>` 
+  *  :ref:`to_upper (str: string implicit) : string <function-strings_to_upper_string_implicit>` 
+  *  :ref:`to_lower (str: string implicit) : string <function-strings_to_lower_string_implicit>` 
+  *  :ref:`to_lower_in_place (str: string implicit) : string <function-strings_to_lower_in_place_string_implicit>` 
+  *  :ref:`to_upper_in_place (str: string implicit) : string <function-strings_to_upper_in_place_string_implicit>` 
+  *  :ref:`escape (str: string implicit) : string <function-strings_escape_string_implicit>` 
+  *  :ref:`unescape (str: string implicit) : string <function-strings_unescape_string_implicit>` 
+  *  :ref:`safe_unescape (str: string implicit) : string <function-strings_safe_unescape_string_implicit>` 
+  *  :ref:`replace (str: string implicit; toSearch: string implicit; replace: string implicit) : string <function-strings_replace_string_implicit_string_implicit_string_implicit>` 
+  *  :ref:`rtrim (str: string implicit) : string <function-strings_rtrim_string_implicit>` 
+  *  :ref:`rtrim (str: string implicit; chars: string implicit) : string <function-strings_rtrim_string_implicit_string_implicit>` 
+  *  :ref:`ltrim (str: string implicit) : string <function-strings_ltrim_string_implicit>` 
+  *  :ref:`trim (str: string implicit) : string <function-strings_trim_string_implicit>` 
 
-.. _function-_at_strings_c__c_repeat_CIs_Ci_C_c_C_l:
+.. _function-strings_repeat_string_implicit_int:
 
-.. das:function:: repeat(str: string const implicit; count: int const)
+.. das:function:: repeat(str: string implicit; count: int) : string
 
-repeat returns string const
+ Repeat string specified number of times, and return the result.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+count   +int const            +
-+--------+---------------------+
+:Arguments: * **str** : string implicit
 
+            * **count** : int
 
-|function-strings-repeat|
+.. _function-strings_strip_string_implicit:
 
-.. _function-_at_strings_c__c_strip_CIs_C_c_C_l:
+.. das:function:: strip(str: string implicit) : string
 
-.. das:function:: strip(str: string const implicit)
+ Strips white-space-only characters that might appear at the beginning or end of the given string and returns the new stripped string.
 
-strip returns string const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+.. _function-strings_strip_right_string_implicit:
 
+.. das:function:: strip_right(str: string implicit) : string
 
-|function-strings-strip|
+ Strips white-space-only characters that might appear at the end of the given string and returns the new stripped string.
 
-.. _function-_at_strings_c__c_strip_right_CIs_C_c_C_l:
+:Arguments: * **str** : string implicit
 
-.. das:function:: strip_right(str: string const implicit)
+.. _function-strings_strip_left_string_implicit:
 
-strip_right returns string const
+.. das:function:: strip_left(str: string implicit) : string
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+ Strips white-space-only characters that might appear at the beginning of the given string and returns the new stripped string.
 
+:Arguments: * **str** : string implicit
 
-|function-strings-strip_right|
+.. _function-strings_chop_string_implicit_int_int:
 
-.. _function-_at_strings_c__c_strip_left_CIs_C_c_C_l:
+.. das:function:: chop(str: string implicit; start: int; length: int) : string
 
-.. das:function:: strip_left(str: string const implicit)
+ Return all part of the strings starting at start and ending at start + length.
 
-strip_left returns string const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+            * **start** : int
 
+            * **length** : int
 
-|function-strings-strip_left|
+.. _function-strings_slice_string_implicit_int_int:
 
-.. _function-_at_strings_c__c_chop_CIs_Ci_Ci_C_c_C_l:
+.. das:function:: slice(str: string implicit; start: int; end: int) : string
 
-.. das:function:: chop(str: string const implicit; start: int const; length: int const)
+ Return all part of the strings starting at start and ending by end. Start can be negative (-1 means "1 from the end").
 
-chop returns string const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+start   +int const            +
-+--------+---------------------+
-+length  +int const            +
-+--------+---------------------+
+            * **start** : int
 
+            * **end** : int
 
-|function-strings-chop|
+.. _function-strings_slice_string_implicit_int:
 
-.. _function-_at_strings_c__c_slice_CIs_Ci_Ci_C_c_C_l:
+.. das:function:: slice(str: string implicit; start: int) : string
 
-.. das:function:: slice(str: string const implicit; start: int const; end: int const)
+ Return all part of the strings starting at start and ending by end. Start can be negative (-1 means "1 from the end").
 
-slice returns string const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+start   +int const            +
-+--------+---------------------+
-+end     +int const            +
-+--------+---------------------+
+            * **start** : int
 
+.. _function-strings_reverse_string_implicit:
 
-|function-strings-slice|
+.. das:function:: reverse(str: string implicit) : string
 
-.. _function-_at_strings_c__c_slice_CIs_Ci_C_c_C_l:
+ Return reversed string
 
-.. das:function:: slice(str: string const implicit; start: int const)
+:Arguments: * **str** : string implicit
 
-slice returns string const
+.. _function-strings_to_upper_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+start   +int const            +
-+--------+---------------------+
+.. das:function:: to_upper(str: string implicit) : string
 
+ Return all upper case string
 
-|function-strings-slice|
+:Arguments: * **str** : string implicit
 
-.. _function-_at_strings_c__c_reverse_CIs_C_c_C_l:
+.. _function-strings_to_lower_string_implicit:
 
-.. das:function:: reverse(str: string const implicit)
+.. das:function:: to_lower(str: string implicit) : string
 
-reverse returns string const
+ Return all lower case string
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+:Arguments: * **str** : string implicit
 
+.. _function-strings_to_lower_in_place_string_implicit:
 
-|function-strings-reverse|
-
-.. _function-_at_strings_c__c_to_upper_CIs_C_c_C_l:
-
-.. das:function:: to_upper(str: string const implicit)
-
-to_upper returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-to_upper|
-
-.. _function-_at_strings_c__c_to_lower_CIs_C_c_C_l:
-
-.. das:function:: to_lower(str: string const implicit)
-
-to_lower returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-to_lower|
-
-.. _function-_at_strings_c__c_to_lower_in_place_CIs:
-
-.. das:function:: to_lower_in_place(str: string const implicit)
-
-to_lower_in_place returns string const
+.. das:function:: to_lower_in_place(str: string implicit) : string
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+ Modify string in place to be all lower case
 
+:Arguments: * **str** : string implicit
 
-|function-strings-to_lower_in_place|
+.. _function-strings_to_upper_in_place_string_implicit:
 
-.. _function-_at_strings_c__c_to_upper_in_place_CIs:
-
-.. das:function:: to_upper_in_place(str: string const implicit)
-
-to_upper_in_place returns string const
+.. das:function:: to_upper_in_place(str: string implicit) : string
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+ Modify string in place to be all upper case string
 
+:Arguments: * **str** : string implicit
 
-|function-strings-to_upper_in_place|
+.. _function-strings_escape_string_implicit:
 
-.. _function-_at_strings_c__c_escape_CIs_C_c_C_l:
+.. das:function:: escape(str: string implicit) : string
 
-.. das:function:: escape(str: string const implicit)
+ Escape string so that escape sequences are printable, for example converting "\n" into "\\n".
 
-escape returns string const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+.. _function-strings_unescape_string_implicit:
 
+.. das:function:: unescape(str: string implicit) : string
 
-|function-strings-escape|
+ Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
 
-.. _function-_at_strings_c__c_unescape_CIs_C_c_C_l:
+:Arguments: * **str** : string implicit
 
-.. das:function:: unescape(str: string const implicit)
+.. _function-strings_safe_unescape_string_implicit:
 
-unescape returns string const
+.. das:function:: safe_unescape(str: string implicit) : string
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+ Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
 
+:Arguments: * **str** : string implicit
 
-|function-strings-unescape|
+.. _function-strings_replace_string_implicit_string_implicit_string_implicit:
 
-.. _function-_at_strings_c__c_safe_unescape_CIs_C_c_C_l:
+.. das:function:: replace(str: string implicit; toSearch: string implicit; replace: string implicit) : string
 
-.. das:function:: safe_unescape(str: string const implicit)
+ Replace all occurances of the stubstring in the string with another substring.
 
-safe_unescape returns string const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+            * **toSearch** : string implicit
 
+            * **replace** : string implicit
 
-|function-strings-safe_unescape|
+.. _function-strings_rtrim_string_implicit:
 
-.. _function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c_C_l:
+.. das:function:: rtrim(str: string implicit) : string
 
-.. das:function:: replace(str: string const implicit; toSearch: string const implicit; replace: string const implicit)
+ Removes trailing white space.
 
-replace returns string const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+toSearch+string const implicit+
-+--------+---------------------+
-+replace +string const implicit+
-+--------+---------------------+
+.. _function-strings_rtrim_string_implicit_string_implicit:
 
+.. das:function:: rtrim(str: string implicit; chars: string implicit) : string
 
-|function-strings-replace|
+ Removes trailing white space.
 
-.. _function-_at_strings_c__c_rtrim_CIs_C_c_C_l:
+:Arguments: * **str** : string implicit
 
-.. das:function:: rtrim(str: string const implicit)
+            * **chars** : string implicit
 
-rtrim returns string const
+.. _function-strings_ltrim_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+.. das:function:: ltrim(str: string implicit) : string
 
+ Removes leading white space.
 
-|function-strings-rtrim|
+:Arguments: * **str** : string implicit
 
-.. _function-_at_strings_c__c_rtrim_CIs_CIs_C_c_C_l:
+.. _function-strings_trim_string_implicit:
 
-.. das:function:: rtrim(str: string const implicit; chars: string const implicit)
+.. das:function:: trim(str: string implicit) : string
 
-rtrim returns string const
+ Removes leading and trailing white space.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+chars   +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-rtrim|
-
-.. _function-_at_strings_c__c_ltrim_CIs_C_c_C_l:
-
-.. das:function:: ltrim(str: string const implicit)
-
-ltrim returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-ltrim|
-
-.. _function-_at_strings_c__c_trim_CIs_C_c_C_l:
-
-.. das:function:: trim(str: string const implicit)
-
-trim returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-trim|
+:Arguments: * **str** : string implicit
 
 +++++++++++++++++
 Search substrings
 +++++++++++++++++
 
-  *  :ref:`find (str:string const implicit;substr:string const implicit;start:int const;context:__context const) : int const <function-_at_strings_c__c_find_CIs_CIs_Ci_C_c>` 
-  *  :ref:`find (str:string const implicit;substr:string const implicit) : int const <function-_at_strings_c__c_find_CIs_CIs>` 
-  *  :ref:`find (str:string const implicit;substr:int const;context:__context const) : int const <function-_at_strings_c__c_find_CIs_Ci_C_c>` 
-  *  :ref:`find (str:string const implicit;substr:int const;start:int const;context:__context const) : int const <function-_at_strings_c__c_find_CIs_Ci_Ci_C_c>` 
+  *  :ref:`find (str: string implicit; substr: string implicit; start: int) : int <function-strings_find_string_implicit_string_implicit_int>` 
+  *  :ref:`find (str: string implicit; substr: string implicit) : int <function-strings_find_string_implicit_string_implicit>` 
+  *  :ref:`find (str: string implicit; substr: int) : int <function-strings_find_string_implicit_int>` 
+  *  :ref:`find (str: string implicit; substr: int; start: int) : int <function-strings_find_string_implicit_int_int>` 
 
-.. _function-_at_strings_c__c_find_CIs_CIs_Ci_C_c:
+.. _function-strings_find_string_implicit_string_implicit_int:
 
-.. das:function:: find(str: string const implicit; substr: string const implicit; start: int const)
+.. das:function:: find(str: string implicit; substr: string implicit; start: int) : int
 
-find returns int const
+ Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+substr  +string const implicit+
-+--------+---------------------+
-+start   +int const            +
-+--------+---------------------+
+:Arguments: * **str** : string implicit
 
+            * **substr** : string implicit
 
-|function-strings-find|
+            * **start** : int
 
-.. _function-_at_strings_c__c_find_CIs_CIs:
+.. _function-strings_find_string_implicit_string_implicit:
 
-.. das:function:: find(str: string const implicit; substr: string const implicit)
+.. das:function:: find(str: string implicit; substr: string implicit) : int
 
-find returns int const
+ Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+substr  +string const implicit+
-+--------+---------------------+
+:Arguments: * **str** : string implicit
 
+            * **substr** : string implicit
 
-|function-strings-find|
+.. _function-strings_find_string_implicit_int:
 
-.. _function-_at_strings_c__c_find_CIs_Ci_C_c:
+.. das:function:: find(str: string implicit; substr: int) : int
 
-.. das:function:: find(str: string const implicit; substr: int const)
+ Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
 
-find returns int const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+substr  +int const            +
-+--------+---------------------+
+            * **substr** : int
 
+.. _function-strings_find_string_implicit_int_int:
 
-|function-strings-find|
+.. das:function:: find(str: string implicit; substr: int; start: int) : int
 
-.. _function-_at_strings_c__c_find_CIs_Ci_Ci_C_c:
+ Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
 
-.. das:function:: find(str: string const implicit; substr: int const; start: int const)
+:Arguments: * **str** : string implicit
 
-find returns int const
+            * **substr** : int
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+substr  +int const            +
-+--------+---------------------+
-+start   +int const            +
-+--------+---------------------+
-
-
-|function-strings-find|
+            * **start** : int
 
 ++++++++++++++++++++++++++
 String conversion routines
 ++++++++++++++++++++++++++
 
-  *  :ref:`string (bytes:array\<uint8\> const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c_C_l>` 
-  *  :ref:`to_char (char:int const;context:__context const;at:__lineInfo const) : string const <function-_at_strings_c__c_to_char_Ci_C_c_C_l>` 
-  *  :ref:`int (str:string const implicit;context:__context const;at:__lineInfo const) : int const <function-_at_strings_c__c_int_CIs_C_c_C_l>` 
-  *  :ref:`uint (str:string const implicit;context:__context const;at:__lineInfo const) : uint const <function-_at_strings_c__c_uint_CIs_C_c_C_l>` 
-  *  :ref:`int64 (str:string const implicit;context:__context const;at:__lineInfo const) : int64 const <function-_at_strings_c__c_int64_CIs_C_c_C_l>` 
-  *  :ref:`uint64 (str:string const implicit;context:__context const;at:__lineInfo const) : uint64 const <function-_at_strings_c__c_uint64_CIs_C_c_C_l>` 
-  *  :ref:`float (str:string const implicit;context:__context const;at:__lineInfo const) : float const <function-_at_strings_c__c_float_CIs_C_c_C_l>` 
-  *  :ref:`double (str:string const implicit;context:__context const;at:__lineInfo const) : double const <function-_at_strings_c__c_double_CIs_C_c_C_l>` 
-  *  :ref:`to_int (value:string const implicit;hex:bool const) : int const <function-_at_strings_c__c_to_int_CIs_Cb>` 
-  *  :ref:`to_uint (value:string const implicit;hex:bool const) : uint const <function-_at_strings_c__c_to_uint_CIs_Cb>` 
-  *  :ref:`to_int64 (value:string const implicit;hex:bool const) : int64 const <function-_at_strings_c__c_to_int64_CIs_Cb>` 
-  *  :ref:`to_uint64 (value:string const implicit;hex:bool const) : uint64 const <function-_at_strings_c__c_to_uint64_CIs_Cb>` 
-  *  :ref:`to_float (value:string const implicit) : float const <function-_at_strings_c__c_to_float_CIs>` 
-  *  :ref:`to_double (value:string const implicit) : double const <function-_at_strings_c__c_to_double_CIs>` 
-  *  :ref:`int (str:string const implicit;result:strings::ConversionResult& implicit;offset:int& implicit;hex:bool const) : int const <function-_at_strings_c__c_int_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb>` 
-  *  :ref:`uint (str:string const implicit;result:strings::ConversionResult& implicit;offset:int& implicit;hex:bool const) : uint const <function-_at_strings_c__c_uint_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb>` 
-  *  :ref:`int64 (str:string const implicit;result:strings::ConversionResult& implicit;offset:int& implicit;hex:bool const) : int64 const <function-_at_strings_c__c_int64_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb>` 
-  *  :ref:`uint64 (str:string const implicit;result:strings::ConversionResult& implicit;offset:int& implicit;hex:bool const) : uint64 const <function-_at_strings_c__c_uint64_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb>` 
-  *  :ref:`float (str:string const implicit;result:strings::ConversionResult& implicit;offset:int& implicit) : float const <function-_at_strings_c__c_float_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii>` 
-  *  :ref:`double (str:string const implicit;result:strings::ConversionResult& implicit;offset:int& implicit) : double const <function-_at_strings_c__c_double_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int8) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int8>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint8) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint8>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int16) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int16>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint16) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint16>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int64>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint64>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_float>` 
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_double>` 
+  *  :ref:`string (bytes: array\<uint8\>) : string <function-strings_string_array_ls_uint8_gr_>` 
+  *  :ref:`to_char (char: int) : string <function-strings_to_char_int>` 
+  *  :ref:`int8 (str: string implicit) : int8 <function-strings_int8_string_implicit>` 
+  *  :ref:`uint8 (str: string implicit) : uint8 <function-strings_uint8_string_implicit>` 
+  *  :ref:`int16 (str: string implicit) : int16 <function-strings_int16_string_implicit>` 
+  *  :ref:`uint16 (str: string implicit) : uint16 <function-strings_uint16_string_implicit>` 
+  *  :ref:`int (str: string implicit) : int <function-strings_int_string_implicit>` 
+  *  :ref:`uint (str: string implicit) : uint <function-strings_uint_string_implicit>` 
+  *  :ref:`int64 (str: string implicit) : int64 <function-strings_int64_string_implicit>` 
+  *  :ref:`uint64 (str: string implicit) : uint64 <function-strings_uint64_string_implicit>` 
+  *  :ref:`float (str: string implicit) : float <function-strings_float_string_implicit>` 
+  *  :ref:`double (str: string implicit) : double <function-strings_double_string_implicit>` 
+  *  :ref:`to_int8 (value: string implicit; hex: bool = false) : int8 <function-strings_to_int8_string_implicit_bool>` 
+  *  :ref:`to_uint8 (value: string implicit; hex: bool = false) : uint8 <function-strings_to_uint8_string_implicit_bool>` 
+  *  :ref:`to_int16 (value: string implicit; hex: bool = false) : int16 <function-strings_to_int16_string_implicit_bool>` 
+  *  :ref:`to_int (value: string implicit; hex: bool = false) : int <function-strings_to_int_string_implicit_bool>` 
+  *  :ref:`to_uint (value: string implicit; hex: bool = false) : uint <function-strings_to_uint_string_implicit_bool>` 
+  *  :ref:`to_int64 (value: string implicit; hex: bool = false) : int64 <function-strings_to_int64_string_implicit_bool>` 
+  *  :ref:`to_uint64 (value: string implicit; hex: bool = false) : uint64 <function-strings_to_uint64_string_implicit_bool>` 
+  *  :ref:`to_cpp_float (value: float) : string <function-strings_to_cpp_float_float>` 
+  *  :ref:`to_float (value: string implicit) : float <function-strings_to_float_string_implicit>` 
+  *  :ref:`to_double (value: string implicit) : double <function-strings_to_double_string_implicit>` 
+  *  :ref:`int8 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int8 <function-strings_int8_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`uint8 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint8 <function-strings_uint8_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`int16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16 <function-strings_int16_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`uint16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16 <function-strings_uint16_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`int (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int <function-strings_int_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`uint (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint <function-strings_uint_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`int64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int64 <function-strings_int64_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`uint64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64 <function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`float (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : float <function-strings_float_string_implicit_ConversionResult_implicit_int_implicit>` 
+  *  :ref:`double (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double <function-strings_double_string_implicit_ConversionResult_implicit_int_implicit>` 
+  *  :ref:`fmt (format: string implicit; value: int8) : string <function-strings_fmt_string_implicit_int8>` 
+  *  :ref:`fmt (format: string implicit; value: uint8) : string <function-strings_fmt_string_implicit_uint8>` 
+  *  :ref:`fmt (format: string implicit; value: int16) : string <function-strings_fmt_string_implicit_int16>` 
+  *  :ref:`fmt (format: string implicit; value: uint16) : string <function-strings_fmt_string_implicit_uint16>` 
+  *  :ref:`fmt (format: string implicit; value: int) : string <function-strings_fmt_string_implicit_int>` 
+  *  :ref:`fmt (format: string implicit; value: uint) : string <function-strings_fmt_string_implicit_uint>` 
+  *  :ref:`fmt (format: string implicit; value: int64) : string <function-strings_fmt_string_implicit_int64>` 
+  *  :ref:`fmt (format: string implicit; value: uint64) : string <function-strings_fmt_string_implicit_uint64>` 
+  *  :ref:`fmt (format: string implicit; value: float) : string <function-strings_fmt_string_implicit_float>` 
+  *  :ref:`fmt (format: string implicit; value: double) : string <function-strings_fmt_string_implicit_double>` 
 
-.. _function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c_C_l:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int8:
 
-.. das:function:: string(bytes: array<uint8> const implicit)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int8) : StringBuilderWriter&
 
-string returns string const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------------+
-+argument+argument type              +
-+========+===========================+
-+bytes   +array<uint8> const implicit+
-+--------+---------------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-string|
+            * **value** : int8
 
-.. _function-_at_strings_c__c_to_char_Ci_C_c_C_l:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint8:
 
-.. das:function:: to_char(char: int const)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint8) : StringBuilderWriter&
 
-to_char returns string const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+char    +int const    +
-+--------+-------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-to_char|
+            * **value** : uint8
 
-.. _function-_at_strings_c__c_int_CIs_C_c_C_l:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int16:
 
-.. das:function:: int(str: string const implicit)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int16) : StringBuilderWriter&
 
-int returns int const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-int|
+            * **value** : int16
 
-.. _function-_at_strings_c__c_uint_CIs_C_c_C_l:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint16:
 
-.. das:function:: uint(str: string const implicit)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint16) : StringBuilderWriter&
 
-uint returns uint const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-uint|
+            * **value** : uint16
 
-.. _function-_at_strings_c__c_int64_CIs_C_c_C_l:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int:
 
-.. das:function:: int64(str: string const implicit)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter&
 
-int64 returns int64 const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-int64|
+            * **value** : int
 
-.. _function-_at_strings_c__c_uint64_CIs_C_c_C_l:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint:
 
-.. das:function:: uint64(str: string const implicit)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter&
 
-uint64 returns uint64 const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-uint64|
+            * **value** : uint
 
-.. _function-_at_strings_c__c_float_CIs_C_c_C_l:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int64:
 
-.. das:function:: float(str: string const implicit)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter&
 
-float returns float const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-float|
+            * **value** : int64
 
-.. _function-_at_strings_c__c_double_CIs_C_c_C_l:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint64:
 
-.. das:function:: double(str: string const implicit)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter&
 
-double returns double const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-double|
+            * **value** : uint64
 
-.. _function-_at_strings_c__c_to_int_CIs_Cb:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_float:
 
-.. das:function:: to_int(value: string const implicit; hex: bool const)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter&
 
-to_int returns int const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-to_int|
+            * **value** : float
 
-.. _function-_at_strings_c__c_to_uint_CIs_Cb:
+.. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_double:
 
-.. das:function:: to_uint(value: string const implicit; hex: bool const)
+.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter&
 
-to_uint returns uint const
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
+            * **format** : string implicit
 
-|function-strings-to_uint|
+            * **value** : double
 
-.. _function-_at_strings_c__c_to_int64_CIs_Cb:
+.. _function-strings_string_array_ls_uint8_gr_:
 
-.. das:function:: to_int64(value: string const implicit; hex: bool const)
+.. das:function:: string(bytes: array<uint8>) : string
 
-to_int64 returns int64 const
+ Return string from the byte array.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
+:Arguments: * **bytes** : array<uint8> implicit
 
+.. _function-strings_to_char_int:
 
-|function-strings-to_int64|
+.. das:function:: to_char(char: int) : string
 
-.. _function-_at_strings_c__c_to_uint64_CIs_Cb:
+ Convert character to string.
 
-.. das:function:: to_uint64(value: string const implicit; hex: bool const)
+:Arguments: * **char** : int
 
-to_uint64 returns uint64 const
+.. _function-strings_int8_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
+.. das:function:: int8(str: string implicit) : int8
 
+ Converts string to int8. In case of error panic.
 
-|function-strings-to_uint64|
+:Arguments: * **str** : string implicit
 
-.. _function-_at_strings_c__c_to_float_CIs:
+.. _function-strings_uint8_string_implicit:
 
-.. das:function:: to_float(value: string const implicit)
+.. das:function:: uint8(str: string implicit) : uint8
 
-to_float returns float const
+ Convert string to uint8. In case of error panic.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
+:Arguments: * **str** : string implicit
 
+.. _function-strings_int16_string_implicit:
 
-|function-strings-to_float|
+.. das:function:: int16(str: string implicit) : int16
 
-.. _function-_at_strings_c__c_to_double_CIs:
+ Converts string to int16. In case of error panic.
 
-.. das:function:: to_double(value: string const implicit)
+:Arguments: * **str** : string implicit
 
-to_double returns double const
+.. _function-strings_uint16_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
+.. das:function:: uint16(str: string implicit) : uint16
 
+ Convert string to uint16. In case of error panic.
 
-|function-strings-to_double|
+:Arguments: * **str** : string implicit
 
-.. _function-_at_strings_c__c_int_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
+.. _function-strings_int_string_implicit:
 
-.. das:function:: int(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool const)
+.. das:function:: int(str: string implicit) : int
 
-int returns int const
+ Converts string to integer. In case of error panic.
 
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
-+hex     +bool const                                                                  +
-+--------+----------------------------------------------------------------------------+
+:Arguments: * **str** : string implicit
 
+.. _function-strings_uint_string_implicit:
 
-|function-strings-int|
+.. das:function:: uint(str: string implicit) : uint
 
-.. _function-_at_strings_c__c_uint_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
+ Convert string to uint. In case of error panic.
 
-.. das:function:: uint(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool const)
+:Arguments: * **str** : string implicit
 
-uint returns uint const
+.. _function-strings_int64_string_implicit:
 
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
-+hex     +bool const                                                                  +
-+--------+----------------------------------------------------------------------------+
+.. das:function:: int64(str: string implicit) : int64
 
+ Converts string to int64. In case of error panic.
 
-|function-strings-uint|
+:Arguments: * **str** : string implicit
 
-.. _function-_at_strings_c__c_int64_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
+.. _function-strings_uint64_string_implicit:
 
-.. das:function:: int64(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool const)
+.. das:function:: uint64(str: string implicit) : uint64
 
-int64 returns int64 const
+ Convert string to uint64. In case of error panic.
 
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
-+hex     +bool const                                                                  +
-+--------+----------------------------------------------------------------------------+
+:Arguments: * **str** : string implicit
 
+.. _function-strings_float_string_implicit:
 
-|function-strings-int64|
+.. das:function:: float(str: string implicit) : float
 
-.. _function-_at_strings_c__c_uint64_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
+ Converts string to float. In case of error panic.
 
-.. das:function:: uint64(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool const)
+:Arguments: * **str** : string implicit
 
-uint64 returns uint64 const
+.. _function-strings_double_string_implicit:
 
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
-+hex     +bool const                                                                  +
-+--------+----------------------------------------------------------------------------+
+.. das:function:: double(str: string implicit) : double
 
+ Converts string to double. In case of error panic.
 
-|function-strings-uint64|
+:Arguments: * **str** : string implicit
 
-.. _function-_at_strings_c__c_float_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii:
+.. _function-strings_to_int8_string_implicit_bool:
 
-.. das:function:: float(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit)
+.. das:function:: to_int8(value: string implicit; hex: bool = false) : int8
 
-float returns float const
+ Convert string to int8. In case of error returns 0
 
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
+:Arguments: * **value** : string implicit
 
+            * **hex** : bool
 
-|function-strings-float|
+.. _function-strings_to_uint8_string_implicit_bool:
 
-.. _function-_at_strings_c__c_double_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii:
+.. das:function:: to_uint8(value: string implicit; hex: bool = false) : uint8
 
-.. das:function:: double(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit)
+ Convert string to uint8. In case of error returns 0u
 
-double returns double const
+:Arguments: * **value** : string implicit
 
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
+            * **hex** : bool
 
+.. _function-strings_to_int16_string_implicit_bool:
 
-|function-strings-double|
+.. das:function:: to_int16(value: string implicit; hex: bool = false) : int16
+
+ Convert string to int16. In case of error returns 0
+
+:Arguments: * **value** : string implicit
+
+            * **hex** : bool
+
+.. _function-strings_to_int_string_implicit_bool:
+
+.. das:function:: to_int(value: string implicit; hex: bool = false) : int
+
+ Convert string to int. In case of error returns 0
+
+:Arguments: * **value** : string implicit
+
+            * **hex** : bool
+
+.. _function-strings_to_uint_string_implicit_bool:
+
+.. das:function:: to_uint(value: string implicit; hex: bool = false) : uint
+
+ Convert string to uint. In case of error returns 0u
+
+:Arguments: * **value** : string implicit
+
+            * **hex** : bool
+
+.. _function-strings_to_int64_string_implicit_bool:
+
+.. das:function:: to_int64(value: string implicit; hex: bool = false) : int64
+
+ Convert string to int64. In case of error returns 0l
+
+:Arguments: * **value** : string implicit
+
+            * **hex** : bool
+
+.. _function-strings_to_uint64_string_implicit_bool:
+
+.. das:function:: to_uint64(value: string implicit; hex: bool = false) : uint64
+
+ Convert string to uint64. In case of error returns 0ul
+
+:Arguments: * **value** : string implicit
+
+            * **hex** : bool
+
+.. _function-strings_to_cpp_float_float:
+
+.. das:function:: to_cpp_float(value: float) : string
+
+ Convert string to float using C++ fmt::format_to, while also recognizing FLT_MIN, FLT_MAX, etc.
+
+:Arguments: * **value** : float
+
+.. _function-strings_to_float_string_implicit:
+
+.. das:function:: to_float(value: string implicit) : float
+
+ Convert string to float. In case of error returns 0.0
+
+:Arguments: * **value** : string implicit
+
+.. _function-strings_to_double_string_implicit:
+
+.. das:function:: to_double(value: string implicit) : double
+
+ Convert string to double. In case of error returns 0.0lf
+
+:Arguments: * **value** : string implicit
+
+.. _function-strings_int8_string_implicit_ConversionResult_implicit_int_implicit_bool:
+
+.. das:function:: int8(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int8
+
+ Converts string to int8. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_uint8_string_implicit_ConversionResult_implicit_int_implicit_bool:
+
+.. das:function:: uint8(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint8
+
+ Convert string to uint8. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_int16_string_implicit_ConversionResult_implicit_int_implicit_bool:
+
+.. das:function:: int16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16
+
+ Converts string to int16. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_uint16_string_implicit_ConversionResult_implicit_int_implicit_bool:
+
+.. das:function:: uint16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16
+
+ Convert string to uint16. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_int_string_implicit_ConversionResult_implicit_int_implicit_bool:
+
+.. das:function:: int(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int
+
+ Converts string to integer. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_uint_string_implicit_ConversionResult_implicit_int_implicit_bool:
+
+.. das:function:: uint(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint
+
+ Convert string to uint. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_int64_string_implicit_ConversionResult_implicit_int_implicit_bool:
+
+.. das:function:: int64(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int64
+
+ Converts string to int64. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool:
+
+.. das:function:: uint64(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64
+
+ Convert string to uint64. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_float_string_implicit_ConversionResult_implicit_int_implicit:
+
+.. das:function:: float(str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : float
+
+ Converts string to float. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+.. _function-strings_double_string_implicit_ConversionResult_implicit_int_implicit:
+
+.. das:function:: double(str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double
+
+ Converts string to double. In case of error panic.
+
+:Arguments: * **str** : string implicit
+
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+
+            * **offset** : int& implicit
+
+.. _function-strings_fmt_string_implicit_int8:
+
+.. das:function:: fmt(format: string implicit; value: int8) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int8
+
+.. _function-strings_fmt_string_implicit_uint8:
+
+.. das:function:: fmt(format: string implicit; value: uint8) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint8
+
+.. _function-strings_fmt_string_implicit_int16:
+
+.. das:function:: fmt(format: string implicit; value: int16) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int16
+
+.. _function-strings_fmt_string_implicit_uint16:
+
+.. das:function:: fmt(format: string implicit; value: uint16) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint16
+
+.. _function-strings_fmt_string_implicit_int:
+
+.. das:function:: fmt(format: string implicit; value: int) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int
+
+.. _function-strings_fmt_string_implicit_uint:
+
+.. das:function:: fmt(format: string implicit; value: uint) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint
+
+.. _function-strings_fmt_string_implicit_int64:
+
+.. das:function:: fmt(format: string implicit; value: int64) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int64
+
+.. _function-strings_fmt_string_implicit_uint64:
+
+.. das:function:: fmt(format: string implicit; value: uint64) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint64
+
+.. _function-strings_fmt_string_implicit_float:
+
+.. das:function:: fmt(format: string implicit; value: float) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : float
+
+.. _function-strings_fmt_string_implicit_double:
+
+.. das:function:: fmt(format: string implicit; value: double) : string
+
+ Converts value to string given specified format (that of libfmt or C++20 std::format).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : double
 
 +++++++++++++++
 String as array
 +++++++++++++++
 
-  *  :ref:`peek_data (str:string const implicit;block:block\<(arg0:array\<uint8\> const#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_strings_c__c_peek_data_CIs_CI0_ls_C_hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`modify_data (str:string const implicit;block:block\<(var arg0:array\<uint8\>#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : string const <function-_at_strings_c__c_modify_data_CIs_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`peek_data (str: string implicit; block: block\<(array\<uint8\>#):void\>) <function-strings_peek_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>` 
+  *  :ref:`modify_data (str: string implicit; block: block\<(array\<uint8\>#):void\>) : string <function-strings_modify_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>` 
 
-.. _function-_at_strings_c__c_peek_data_CIs_CI0_ls_C_hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-strings_peek_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_:
 
-.. das:function:: peek_data(str: string const implicit; block: block<(arg0:array<uint8> const#):void> const implicit)
+.. das:function:: peek_data(str: string implicit; block: block<(array<uint8>#):void>)
 
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+str     +string const implicit                           +
-+--------+------------------------------------------------+
-+block   +block<(array<uint8> const#):void> const implicit+
-+--------+------------------------------------------------+
+ Passes temporary array which is mapped to the string data to a block as read-only.
 
+:Arguments: * **str** : string implicit
 
-|function-strings-peek_data|
+            * **block** : block<(array<uint8>#):void> implicit
 
-.. _function-_at_strings_c__c_modify_data_CIs_CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-strings_modify_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_:
 
-.. das:function:: modify_data(str: string const implicit; block: block<(var arg0:array<uint8>#):void> const implicit)
+.. das:function:: modify_data(str: string implicit; block: block<(array<uint8>#):void>) : string
 
-modify_data returns string const
+ Passes temporary array which is mapped to the string data to a block for both reading and writing.
 
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+str     +string const implicit                     +
-+--------+------------------------------------------+
-+block   +block<(array<uint8>#):void> const implicit+
-+--------+------------------------------------------+
+:Arguments: * **str** : string implicit
 
-
-|function-strings-modify_data|
+            * **block** : block<(array<uint8>#):void> implicit
 
 +++++++++++++++++++++++++++
 Low level memory allocation
 +++++++++++++++++++++++++++
 
-  *  :ref:`delete_string (str:string& implicit;context:__context const;lineinfo:__lineInfo const) : bool const <function-_at_strings_c__c_delete_string_&Is_C_c_C_l>` 
-  *  :ref:`reserve_string_buffer (str:string const implicit;length:int const;context:__context const) : string const <function-_at_strings_c__c_reserve_string_buffer_CIs_Ci_C_c>` 
+  *  :ref:`delete_string (str: string& implicit) : bool <function-strings_delete_string_string_implicit>` 
+  *  :ref:`reserve_string_buffer (str: string implicit; length: int) : string <function-strings_reserve_string_buffer_string_implicit_int>` 
 
-.. _function-_at_strings_c__c_delete_string_&Is_C_c_C_l:
+.. _function-strings_delete_string_string_implicit:
 
-.. das:function:: delete_string(str: string& implicit)
-
-delete_string returns bool const
+.. das:function:: delete_string(str: string& implicit) : bool
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+----------------+
-+argument+argument type   +
-+========+================+
-+str     +string& implicit+
-+--------+----------------+
+ Removes string from the string heap. This is unsafe because it will free the memory and all dangling strings will be broken.
 
+:Arguments: * **str** : string& implicit
 
-|function-strings-delete_string|
+.. _function-strings_reserve_string_buffer_string_implicit_int:
 
-.. _function-_at_strings_c__c_reserve_string_buffer_CIs_Ci_C_c:
+.. das:function:: reserve_string_buffer(str: string implicit; length: int) : string
 
-.. das:function:: reserve_string_buffer(str: string const implicit; length: int const)
+ Allocate copy of the string data on the heap.
 
-reserve_string_buffer returns string const
+:Arguments: * **str** : string implicit
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-+length  +int const            +
-+--------+---------------------+
-
-
-|function-strings-reserve_string_buffer|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci8_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: int8 const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +int8 const                                                                         +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu8_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: uint8 const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +uint8 const                                                                        +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci16_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: int16 const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +int16 const                                                                        +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu16_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: uint16 const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +uint16 const                                                                       +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: int const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +int const                                                                          +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: uint const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +uint const                                                                         +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci64_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: int64 const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +int64 const                                                                        +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu64_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: uint64 const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +uint64 const                                                                       +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cf_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: float const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +float const                                                                        +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cd_C_c_C_l:
-
-.. das:function:: fmt(writer: StringBuilderWriter implicit; format: string const implicit; value: double const)
-
-fmt returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
-
-+--------+-----------------------------------------------------------------------------------+
-+argument+argument type                                                                      +
-+========+===================================================================================+
-+writer  + :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit+
-+--------+-----------------------------------------------------------------------------------+
-+format  +string const implicit                                                              +
-+--------+-----------------------------------------------------------------------------------+
-+value   +double const                                                                       +
-+--------+-----------------------------------------------------------------------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_int8_CIs_C_c_C_l:
-
-.. das:function:: int8(str: string const implicit)
-
-int8 returns int8 const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-int8|
-
-.. _function-_at_strings_c__c_uint8_CIs_C_c_C_l:
-
-.. das:function:: uint8(str: string const implicit)
-
-uint8 returns uint8 const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-uint8|
-
-.. _function-_at_strings_c__c_int16_CIs_C_c_C_l:
-
-.. das:function:: int16(str: string const implicit)
-
-int16 returns int16 const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-int16|
-
-.. _function-_at_strings_c__c_uint16_CIs_C_c_C_l:
-
-.. das:function:: uint16(str: string const implicit)
-
-uint16 returns uint16 const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-uint16|
-
-.. _function-_at_strings_c__c_to_int8_CIs_Cb:
-
-.. das:function:: to_int8(value: string const implicit; hex: bool const)
-
-to_int8 returns int8 const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_int8|
-
-.. _function-_at_strings_c__c_to_uint8_CIs_Cb:
-
-.. das:function:: to_uint8(value: string const implicit; hex: bool const)
-
-to_uint8 returns uint8 const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_uint8|
-
-.. _function-_at_strings_c__c_to_int16_CIs_Cb:
-
-.. das:function:: to_int16(value: string const implicit; hex: bool const)
-
-to_int16 returns int16 const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+value   +string const implicit+
-+--------+---------------------+
-+hex     +bool const           +
-+--------+---------------------+
-
-
-|function-strings-to_int16|
-
-.. _function-_at_strings_c__c_to_cpp_float_Cf_C_c_C_l:
-
-.. das:function:: to_cpp_float(value: float const)
-
-to_cpp_float returns string const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+value   +float const  +
-+--------+-------------+
-
-
-|function-strings-to_cpp_float|
-
-.. _function-_at_strings_c__c_int8_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
-
-.. das:function:: int8(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool const)
-
-int8 returns int8 const
-
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
-+hex     +bool const                                                                  +
-+--------+----------------------------------------------------------------------------+
-
-
-|function-strings-int8|
-
-.. _function-_at_strings_c__c_uint8_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
-
-.. das:function:: uint8(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool const)
-
-uint8 returns uint8 const
-
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
-+hex     +bool const                                                                  +
-+--------+----------------------------------------------------------------------------+
-
-
-|function-strings-uint8|
-
-.. _function-_at_strings_c__c_int16_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
-
-.. das:function:: int16(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool const)
-
-int16 returns int16 const
-
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
-+hex     +bool const                                                                  +
-+--------+----------------------------------------------------------------------------+
-
-
-|function-strings-int16|
-
-.. _function-_at_strings_c__c_uint16_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
-
-.. das:function:: uint16(str: string const implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool const)
-
-uint16 returns uint16 const
-
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+str     +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+result  + :ref:`strings::ConversionResult <enum-strings-ConversionResult>` & implicit+
-+--------+----------------------------------------------------------------------------+
-+offset  +int& implicit                                                               +
-+--------+----------------------------------------------------------------------------+
-+hex     +bool const                                                                  +
-+--------+----------------------------------------------------------------------------+
-
-
-|function-strings-uint16|
-
-.. _function-_at_strings_c__c_fmt_CIs_Ci8_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: int8 const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +int8 const           +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Cu8_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: uint8 const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +uint8 const          +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Ci16_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: int16 const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +int16 const          +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Cu16_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: uint16 const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +uint16 const         +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Ci_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: int const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +int const            +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Cu_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: uint const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +uint const           +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Ci64_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: int64 const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +int64 const          +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Cu64_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: uint64 const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +uint64 const         +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Cf_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: float const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +float const          +
-+--------+---------------------+
-
-
-|function-strings-fmt|
-
-.. _function-_at_strings_c__c_fmt_CIs_Cd_C_c_C_l:
-
-.. das:function:: fmt(format: string const implicit; value: double const)
-
-fmt returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+format  +string const implicit+
-+--------+---------------------+
-+value   +double const         +
-+--------+---------------------+
-
-
-|function-strings-fmt|
+            * **length** : int
 
 

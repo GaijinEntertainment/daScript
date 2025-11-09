@@ -1,0 +1,1 @@
+ Writes character into StringBuilderWriter.

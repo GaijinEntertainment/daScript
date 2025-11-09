@@ -241,7 +241,7 @@ def document_module_strings(root : string) {
         group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|
 strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim|safe_unescape|ltrim|trim)$%%),
         group_by_regex("Search substrings", mod, %regex~find.*%%),
-        group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|int64|uint64|to_double|to_float|to_int|to_uint|to_int64|to_uint64|string|to_char)$%%),
+        group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|int64|uint64|to_double|to_float|to_int|to_uint|to_int64|to_uint64|string|to_char|fmt|int8|to_int8|uint8|to_uint8|int16|to_int16|uint16|to_uint16|to_cpp_float)$%%),
         group_by_regex("String as array", mod, %regex~(modify_data|peek_data)$%%),
         group_by_regex("Low level memory allocation", mod, %regex~(delete_string|reserve_string_buffer)$%%)
     );
@@ -709,8 +709,8 @@ def main {
     document_module_uriparser(root)
     document_module_rtti(root)
     document_module_ast(root)
-    return
     document_module_strings(root)
+    return
     document_module_jobque(root)
 
     document_module_algorithm(root)
