@@ -217,7 +217,8 @@ def public FN_JIT_TABLE_FIND(t : Type) {
 }
 
 def private add_table_linkage(val : LLVMOpaqueValue?) {
-    LLVMSetLinkage(val, LLVMLinkage.LLVMWeakAnyLinkage);
+    // windows crashes with weak linkage
+    LLVMSetLinkage(val, LLVMLinkage.LLVMExternalLinkage)
 }
 
 def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?; fn_name : string; at_type : LLVMOpaqueType?; fn_ptr : void?) {
