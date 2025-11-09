@@ -5,8 +5,6 @@
 General prupose serialization
 =============================
 
-.. include:: detail/archive.rst
-
 The archive module implements general purpose serialization infrastructure.
 
 All functions and symbols are in "archive" module, use require to get access to it. ::
@@ -23,25 +21,22 @@ For example this is how DECS implements component serialization: ::
         arch |> serialize(src.info)
         invoke(src.info.serializer, arch, src.data)
 
+++++++++++
+Structures
+++++++++++
 
 .. _struct-archive-Archive:
 
 .. das:attribute:: Archive
 
-
-
-Archive fields are
-
-+-------+---------------------------------------------------------+
-+version+uint                                                     +
-+-------+---------------------------------------------------------+
-+reading+bool                                                     +
-+-------+---------------------------------------------------------+
-+stream + :ref:`archive::Serializer <struct-archive-Serializer>` ?+
-+-------+---------------------------------------------------------+
-
-
 Archive is a combination of serialization stream, and state (version, and reading status).
+
+:Fields: * **version** : uint - Version of the archive format.
+
+         * **reading** : bool - True if the archive is for reading, false for writing.
+
+         * **stream** :  :ref:`Serializer <struct-archive-Serializer>` ? - Serialization stream.
+
 
 +++++++
 Classes
@@ -53,61 +48,6 @@ Classes
 
 Base class for serializers.
 
-it defines as follows
-
-
-.. das:function:: Serializer.write(self: Serializer; bytes: void? const implicit; size: int const)
-
-write returns bool
-
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+self    + :ref:`archive::Serializer <struct-archive-Serializer>` +
-+--------+--------------------------------------------------------+
-+bytes   +void? const implicit                                    +
-+--------+--------------------------------------------------------+
-+size    +int const                                               +
-+--------+--------------------------------------------------------+
-
-
-Write binary data to stream.
-
-.. das:function:: Serializer.read(self: Serializer; bytes: void? const implicit; size: int const)
-
-read returns bool
-
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+self    + :ref:`archive::Serializer <struct-archive-Serializer>` +
-+--------+--------------------------------------------------------+
-+bytes   +void? const implicit                                    +
-+--------+--------------------------------------------------------+
-+size    +int const                                               +
-+--------+--------------------------------------------------------+
-
-
-Read binary data from stream.
-
-.. das:function:: Serializer.error(self: Serializer; code: string const)
-
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+self    + :ref:`archive::Serializer <struct-archive-Serializer>` +
-+--------+--------------------------------------------------------+
-+code    +string const                                            +
-+--------+--------------------------------------------------------+
-
-
-Report error to the archive
-
-.. das:function:: Serializer.OK(self: Serializer)
-
-OK returns bool
-
-Return status of the archive
 
 .. _struct-archive-MemSerializer:
 
@@ -115,407 +55,279 @@ Return status of the archive
 
 This serializer stores data in memory (in the array<uint8>)
 
-it defines as follows
 
-  | data       : array<uint8>
-  | readOffset : int
-  | lastError  : string
+.. _function-archive_MemSerializer_rq_write_MemSerializer_void_q__implicit_int:
 
-.. das:function:: MemSerializer.write(self: Serializer; bytes: void? const implicit; size: int const)
-
-write returns bool
-
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+self    + :ref:`archive::Serializer <struct-archive-Serializer>` +
-+--------+--------------------------------------------------------+
-+bytes   +void? const implicit                                    +
-+--------+--------------------------------------------------------+
-+size    +int const                                               +
-+--------+--------------------------------------------------------+
-
+.. das:function:: MemSerializer.write(bytes: void? implicit; size: int) : bool
 
 Appends bytes at the end of the data.
 
-.. das:function:: MemSerializer.read(self: Serializer; bytes: void? const implicit; size: int const)
+:Arguments: * **bytes** : void? implicit
 
-read returns bool
+            * **size** : int
 
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+self    + :ref:`archive::Serializer <struct-archive-Serializer>` +
-+--------+--------------------------------------------------------+
-+bytes   +void? const implicit                                    +
-+--------+--------------------------------------------------------+
-+size    +int const                                               +
-+--------+--------------------------------------------------------+
+.. _function-archive_MemSerializer_rq_read_MemSerializer_void_q__implicit_int:
 
+.. das:function:: MemSerializer.read(bytes: void? implicit; size: int) : bool
 
 Reads bytes from data, advances the reading position.
 
-.. das:function:: MemSerializer.error(self: Serializer; code: string const)
+:Arguments: * **bytes** : void? implicit
 
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+self    + :ref:`archive::Serializer <struct-archive-Serializer>` +
-+--------+--------------------------------------------------------+
-+code    +string const                                            +
-+--------+--------------------------------------------------------+
+            * **size** : int
 
+.. _function-archive_MemSerializer_rq_error_MemSerializer_string:
+
+.. das:function:: MemSerializer.error(code: string)
 
 Sets the last error code.
 
-.. das:function:: MemSerializer.OK(self: Serializer)
+:Arguments: * **code** : string
 
-OK returns bool
+.. _function-archive_MemSerializer_rq_OK_MemSerializer:
+
+.. das:function:: MemSerializer.OK() : bool
 
 Implements 'OK' method, which returns true if the serializer is in a valid state.
 
-.. das:function:: MemSerializer.extractData(self: MemSerializer)
+.. _function-archive_MemSerializer_rq_extractData_MemSerializer:
 
-extractData returns array<uint8>
+.. das:function:: MemSerializer.extractData() : array<uint8>
 
 Extract the data from the serializer.
 
-.. das:function:: MemSerializer.getCopyOfData(self: MemSerializer)
+.. _function-archive_MemSerializer_rq_getCopyOfData_MemSerializer:
 
-getCopyOfData returns array<uint8>
+.. das:function:: MemSerializer.getCopyOfData() : array<uint8>
 
 Returns copy of the data from the seiralizer.
 
-.. das:function:: MemSerializer.getLastError(self: MemSerializer)
+.. _function-archive_MemSerializer_rq_getLastError_MemSerializer:
 
-getLastError returns string const
+.. das:function:: MemSerializer.getLastError() : string
 
 Returns last serialization error.
+
+.. _function-archive_MemSerializer:
+
+.. das:function:: MemSerializer() : MemSerializer
+
+Initialize the serializer for reading or writing.
+
+.. _function-archive_MemSerializer_array_ls_uint8_gr_:
+
+.. das:function:: MemSerializer(from: array<uint8>) : MemSerializer
+
+|detail/function-archive-MemSerializer-MemSerializer-0xe5381da5d7f52677|
+
+:Arguments: * **from** : array<uint8>
 
 +++++++++++++
 Serialization
 +++++++++++++
 
-  *  :ref:`serialize (arch:archive::Archive -const;value:math::float3x3 -const) : void <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__H_ls_math_c__c_float3x3_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:math::float3x4 -const) : void <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__H_ls_math_c__c_float3x4_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:math::float4x4 -const) : void <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__H_ls_math_c__c_float4x4_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:string& -const) : void <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&s>` 
-  *  :ref:`serialize_raw (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_raw_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_.>` 
-  *  :ref:`read_raw (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_read_raw_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_.>` 
-  *  :ref:`write_raw (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_write_raw_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_.>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_((IsAnyEnumMacro_c_expect_any_enum(value_eq_true)||IsAnyWorkhorseNonPtrMacro_c_expect_any_workhorse_raw(value_eq_true))||IsValueHandle_c_expect_value_handle(value_eq_true))_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyFunctionNonPtrMacro_c_expect_any_function(value_eq_true)_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyStructMacro_c_expect_any_struct(value_eq_true)_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyTupleNonPtrMacro_c_expect_any_tuple(value_eq_true)_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyVariantNonPtrMacro_c_expect_any_variant(value_eq_true)_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)[] -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr___lb_-1_rb_Y_ls_TT_gr_.>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:array\<auto(TT)\> -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr_A>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:table\<auto(KT);auto(VT)\> -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)? -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr__qm_>` 
+  *  :ref:`serialize (var arch: Archive; var value: float3x3) <function-archive_serialize_Archive_float3x3>` 
+  *  :ref:`serialize (var arch: Archive; var value: float3x4) <function-archive_serialize_Archive_float3x4>` 
+  *  :ref:`serialize (var arch: Archive; var value: float4x4) <function-archive_serialize_Archive_float4x4>` 
+  *  :ref:`serialize (var arch: Archive; var value: string&) <function-archive_serialize_Archive_string>` 
+  *  :ref:`serialize_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_raw_Archive_autoTT>` 
+  *  :ref:`read_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_read_raw_Archive_autoTT>` 
+  *  :ref:`write_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_write_raw_Archive_autoTT>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)[]) : auto <function-archive_serialize_Archive_autoTT>` 
+  *  :ref:`serialize (var arch: Archive; var value: array\<auto(TT)\>) : auto <function-archive_serialize_Archive_array_ls_autoTT_gr_>` 
+  *  :ref:`serialize (var arch: Archive; var value: table\<auto(KT), auto(VT)\>) : auto <function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)?) : auto <function-archive_serialize_Archive_autoTT_q_>` 
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__H_ls_math_c__c_float3x3_gr_:
+.. _function-archive_serialize_Archive_float3x3:
 
 .. das:function:: serialize(arch: Archive; value: float3x3)
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   + :ref:`math::float3x3 <handle-math-float3x3>`     +
-+--------+--------------------------------------------------+
+|detail/function-archive-serialize-0x36bc5c6c5b9ab5d7|
 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-todo: implement preallocat string with raii
+            * **value** :  :ref:`float3x3 <handle-math-float3x3>` 
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__H_ls_math_c__c_float3x4_gr_:
+.. _function-archive_serialize_Archive_float3x4:
 
 .. das:function:: serialize(arch: Archive; value: float3x4)
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   + :ref:`math::float3x4 <handle-math-float3x4>`     +
-+--------+--------------------------------------------------+
+|detail/function-archive-serialize-0x36c15c6c5ba334d7|
 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-todo: implement preallocat string with raii
+            * **value** :  :ref:`float3x4 <handle-math-float3x4>` 
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__H_ls_math_c__c_float4x4_gr_:
+.. _function-archive_serialize_Archive_float4x4:
 
 .. das:function:: serialize(arch: Archive; value: float4x4)
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   + :ref:`math::float4x4 <handle-math-float4x4>`     +
-+--------+--------------------------------------------------+
+|detail/function-archive-serialize-0x4ec35c6c70387bd7|
 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-todo: implement preallocat string with raii
+            * **value** :  :ref:`float4x4 <handle-math-float4x4>` 
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&s:
+.. _function-archive_serialize_Archive_string:
 
 .. das:function:: serialize(arch: Archive; value: string&)
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +string&                                           +
-+--------+--------------------------------------------------+
+|detail/function-archive-serialize-0x1064f15a69990e2d|
 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-todo: implement preallocat string with raii
+            * **value** : string&
 
-.. _function-_at_archive_c__c_serialize_raw_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_.:
+.. _function-archive_serialize_raw_Archive_autoTT:
 
-.. das:function:: serialize_raw(arch: Archive; value: auto(TT)&)
-
-serialize_raw returns auto
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
-
+.. das:function:: serialize_raw(arch: Archive; value: auto(TT)&) : auto
 
 Serialize raw data (straight up bytes for raw pod)
 
-.. _function-_at_archive_c__c_read_raw_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_.:
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-.. das:function:: read_raw(arch: Archive; value: auto(TT)&)
+            * **value** : auto(TT)&
 
-read_raw returns auto
+.. _function-archive_read_raw_Archive_autoTT:
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
-
+.. das:function:: read_raw(arch: Archive; value: auto(TT)&) : auto
 
 Read raw data (straight up bytes for raw pod)
 
-.. _function-_at_archive_c__c_write_raw_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_.:
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-.. das:function:: write_raw(arch: Archive; value: auto(TT)&)
+            * **value** : auto(TT)&
 
-write_raw returns auto
+.. _function-archive_write_raw_Archive_autoTT:
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
-
+.. das:function:: write_raw(arch: Archive; value: auto(TT)&) : auto
 
 Write raw data (straight up bytes for raw pod)
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_((IsAnyEnumMacro_c_expect_any_enum(value_eq_true)||IsAnyWorkhorseNonPtrMacro_c_expect_any_workhorse_raw(value_eq_true))||IsValueHandle_c_expect_value_handle(value_eq_true))_gr_:
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-.. das:function:: serialize(arch: Archive; value: auto(TT)&)
+            * **value** : auto(TT)&
 
-serialize returns auto
+.. _function-archive_serialize_Archive_autoTT:
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
+Serializes structured data, based on the `value` type.
 
-todo: implement preallocat string with raii
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyFunctionNonPtrMacro_c_expect_any_function(value_eq_true)_gr_:
+            * **value** : auto(TT)&
 
-.. das:function:: serialize(arch: Archive; value: auto(TT)&)
+.. _function-archive_serialize_Archive_autoTT:
 
-serialize returns auto
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
+Serializes structured data, based on the `value` type.
 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-todo: implement preallocat string with raii
+            * **value** : auto(TT)&
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyStructMacro_c_expect_any_struct(value_eq_true)_gr_:
+.. _function-archive_serialize_Archive_autoTT:
 
-.. das:function:: serialize(arch: Archive; value: auto(TT)&)
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-serialize returns auto
+Serializes structured data, based on the `value` type.
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
+            * **value** : auto(TT)&
 
-todo: implement preallocat string with raii
+.. _function-archive_serialize_Archive_autoTT:
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyTupleNonPtrMacro_c_expect_any_tuple(value_eq_true)_gr_:
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-.. das:function:: serialize(arch: Archive; value: auto(TT)&)
+Serializes structured data, based on the `value` type.
 
-serialize returns auto
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
+            * **value** : auto(TT)&
 
+.. _function-archive_serialize_Archive_autoTT:
 
-todo: implement preallocat string with raii
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyVariantNonPtrMacro_c_expect_any_variant(value_eq_true)_gr_:
+Serializes structured data, based on the `value` type.
 
-.. das:function:: serialize(arch: Archive; value: auto(TT)&)
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-serialize returns auto
+            * **value** : auto(TT)&
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
+.. _function-archive_serialize_Archive_autoTT:
 
+.. das:function:: serialize(arch: Archive; value: auto(TT)[]) : auto
 
-todo: implement preallocat string with raii
+|detail/function-archive-serialize-0xc22a77853d491dca|
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr___lb_-1_rb_Y_ls_TT_gr_.:
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-.. das:function:: serialize(arch: Archive; value: auto(TT)[])
+            * **value** : auto(TT)[-1]
 
-serialize returns auto
+.. _function-archive_serialize_Archive_array_ls_autoTT_gr_:
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)[-1]                                      +
-+--------+--------------------------------------------------+
+.. das:function:: serialize(arch: Archive; value: array<auto(TT)>) : auto
 
+|detail/function-archive-serialize-0x6bda914b651b2d2f|
 
-todo: implement preallocat string with raii
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr_A:
+            * **value** : array<auto(TT)>
 
-.. das:function:: serialize(arch: Archive; value: array<auto(TT)>)
+.. _function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_:
 
-serialize returns auto
+.. das:function:: serialize(arch: Archive; value: table<auto(KT), auto(VT)>) : auto
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +array<auto(TT)>                                   +
-+--------+--------------------------------------------------+
+|detail/function-archive-serialize-0xa62df472ba362ee1|
 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-todo: implement preallocat string with raii
+            * **value** : table<auto(KT);auto(VT)>
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T:
+.. _function-archive_serialize_Archive_autoTT_q_:
 
-.. das:function:: serialize(arch: Archive; value: table<auto(KT);auto(VT)>)
+.. das:function:: serialize(arch: Archive; value: auto(TT)?) : auto
 
-serialize returns auto
+|detail/function-archive-serialize-0xc207d3853d0e411e|
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +table<auto(KT);auto(VT)>                          +
-+--------+--------------------------------------------------+
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-
-todo: implement preallocat string with raii
-
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr__qm_:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)?)
-
-serialize returns auto
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)?                                         +
-+--------+--------------------------------------------------+
-
-
-todo: implement preallocat string with raii
+            * **value** : auto(TT)?
 
 ++++++++++++++
 Memory archive
 ++++++++++++++
 
-  *  :ref:`mem_archive_save (t:auto& -const) : auto <function-_at_archive_c__c_mem_archive_save_&.>` 
-  *  :ref:`mem_archive_load (data:array\<uint8\> -const;t:auto& -const;canfail:bool const) : bool <function-_at_archive_c__c_mem_archive_load_1_ls_u8_gr_A_&._Cb>` 
+  *  :ref:`mem_archive_save (var t: auto&) : auto <function-archive_mem_archive_save_auto>` 
+  *  :ref:`mem_archive_load (var data: array\<uint8\>; var t: auto&; canfail: bool = false) : bool <function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool>` 
 
-.. _function-_at_archive_c__c_mem_archive_save_&.:
+.. _function-archive_mem_archive_save_auto:
 
-.. das:function:: mem_archive_save(t: auto&)
-
-mem_archive_save returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+t       +auto&        +
-+--------+-------------+
-
+.. das:function:: mem_archive_save(t: auto&) : auto
 
 Saves the object to a memory archive. Result is array<uint8> with the serialized data.
 
-.. _function-_at_archive_c__c_mem_archive_load_1_ls_u8_gr_A_&._Cb:
+:Arguments: * **t** : auto&
 
-.. das:function:: mem_archive_load(data: array<uint8>; t: auto&; canfail: bool const)
+.. _function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool:
 
-mem_archive_load returns bool
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+data    +array<uint8> +
-+--------+-------------+
-+t       +auto&        +
-+--------+-------------+
-+canfail +bool const   +
-+--------+-------------+
-
+.. das:function:: mem_archive_load(data: array<uint8>; t: auto&; canfail: bool = false) : bool
 
 Loads the object from a memory archive. `data` is the array<uint8> with the serialized data, returned from `mem_archive_save`.
+
+:Arguments: * **data** : array<uint8>
+
+            * **t** : auto&
+
+            * **canfail** : bool
 
 

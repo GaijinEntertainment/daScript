@@ -714,11 +714,11 @@ def main {
     document_module_jobque(root)
     document_module_algorithm(root)
     document_module_apply_in_context(root)
+    document_module_apply(root)
+    document_module_archive(root)
 
     return
 
-    document_module_apply(root)
-    document_module_archive(root)
     document_module_array_boost(root)
     document_module_assert_once(root)
     document_module_ast_block_to_loop(root)

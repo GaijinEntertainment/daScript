@@ -82,9 +82,9 @@ class public MemSerializer : Serializer {
 
 struct public Archive {
     //! Archive is a combination of serialization stream, and state (version, and reading status).
-    version : uint
-    reading : bool
-    stream  : Serializer?
+    version : uint //! Version of the archive format.
+    reading : bool //! True if the archive is for reading, false for writing.
+    stream  : Serializer? //! Serialization stream.
 }
 
 def public serialize_raw(var arch : Archive; var value : auto(TT)&) {
