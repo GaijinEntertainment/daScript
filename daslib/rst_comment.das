@@ -50,13 +50,13 @@ def panic_rst ( s : string )
     panic("panic")
 
 [macro_function]
-def private get_macro_name ( st:StructurePtr; mtype:string )
+def private get_macro_name ( st:StructurePtr; mtype:string ) : string
     for ann in st.annotations
         if ann.annotation.name==mtype
             for arg in ann.arguments
                 if arg.name=="name"
                     return string(arg.sValue)
-    return ""
+    return string(st.name)
 
 
 var private modName : function<(): string>

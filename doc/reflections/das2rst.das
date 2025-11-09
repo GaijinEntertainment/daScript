@@ -493,7 +493,8 @@ def document_module_array_boost(root : string) {
     var mod = find_module("array_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Temporary arrays", mod, %regex~(temp_array)$%%),
-        group_by_regex("Empty check", mod, %regex~(empty)$%%)
+        group_by_regex("Empty check", mod, %regex~(empty)$%%),
+        group_by_regex("Sub-array view", mod, %regex~(array_view)$%%)
     )
     document("Boost package for array manipulation", mod, "array_boost.rst", groups)
 }
@@ -716,11 +717,11 @@ def main {
     document_module_apply_in_context(root)
     document_module_apply(root)
     document_module_archive(root)
+    document_module_array_boost(root)
+    document_module_assert_once(root)
 
     return
 
-    document_module_array_boost(root)
-    document_module_assert_once(root)
     document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)
     document_module_ast_used(root)

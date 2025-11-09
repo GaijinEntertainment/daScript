@@ -5,39 +5,27 @@
 Boost package for array manipulation
 ====================================
 
-.. include:: detail/array_boost.rst
-
 The array_boost module implements collection of array manipulation routines.
 
 All functions and symbols are in "array_boost" module, use require to get access to it. ::
 
     require daslib/array_boost
 
-
 ++++++++++++++++
 Temporary arrays
 ++++++++++++++++
 
-  *  :ref:`temp_array (arr:auto implicit ==const -const) : auto <function-_at_array_boost_c__c_temp_array_I_eq_.>` 
-  *  :ref:`temp_array (arr:auto const implicit ==const) : auto <function-_at_array_boost_c__c_temp_array_CI_eq_.>` 
-  *  :ref:`temp_array (data:auto? ==const -const;lenA:int const;a:auto(TT) const) : array\<TT -const -#\> <function-_at_array_boost_c__c_temp_array__eq_1_ls_._gr__qm__Ci_CY_ls_TT_gr_.>` 
-  *  :ref:`temp_array (data:auto? const ==const;lenA:int const;a:auto(TT) const) : array\<TT -const -#\> const <function-_at_array_boost_c__c_temp_array_C_eq_1_ls_._gr__qm__Ci_CY_ls_TT_gr_.>` 
+  *  :ref:`temp_array (var arr: auto implicit ==const) : auto <function-array_boost_temp_array__auto_implicit__eq__eq_const>` 
+  *  :ref:`temp_array (arr: auto const implicit ==const) : auto <function-array_boost_temp_array_auto_const_implicit__eq__eq_const>` 
+  *  :ref:`temp_array (var data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array__auto_q___eq__eq_const_int_autoTT>` 
+  *  :ref:`temp_array (data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array_auto_q___eq__eq_const_int_autoTT>` 
 
-.. _function-_at_array_boost_c__c_temp_array_I_eq_.:
+.. _function-array_boost_temp_array__auto_implicit__eq__eq_const:
 
-.. das:function:: temp_array(arr: auto implicit ==const)
-
-temp_array returns auto
+.. das:function:: temp_array(arr: auto implicit ==const) : auto
 
 .. warning:: 
   This is unsafe operation.
-
-+--------+--------------+
-+argument+argument type +
-+========+==============+
-+arr     +auto implicit!+
-+--------+--------------+
-
 
 Creates temporary array from the given object.
 Important requirements are:
@@ -45,145 +33,96 @@ Important requirements are:
     * each element follows the next one directly, with the stride equal to size of the element
     * object memory does not change within the lifetime of the returned array
 
-.. _function-_at_array_boost_c__c_temp_array_CI_eq_.:
+:Arguments: * **arr** : auto implicit!
 
-.. das:function:: temp_array(arr: auto const implicit ==const)
+.. _function-array_boost_temp_array_auto_const_implicit__eq__eq_const:
 
-temp_array returns auto
-
-.. warning:: 
-  This is unsafe operation.
-
-+--------+--------------------+
-+argument+argument type       +
-+========+====================+
-+arr     +auto const implicit!+
-+--------+--------------------+
-
-
-Creates temporary array from the given object.
-Important requirements are:
-    * object memory is linear
-    * each element follows the next one directly, with the stride equal to size of the element
-    * object memory does not change within the lifetime of the returned array
-
-.. _function-_at_array_boost_c__c_temp_array__eq_1_ls_._gr__qm__Ci_CY_ls_TT_gr_.:
-
-.. das:function:: temp_array(data: auto? ==const; lenA: int const; a: auto(TT) const)
-
-temp_array returns array<TT>
+.. das:function:: temp_array(arr: auto const implicit ==const) : auto
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+--------------+
-+argument+argument type +
-+========+==============+
-+data    +auto?!        +
-+--------+--------------+
-+lenA    +int const     +
-+--------+--------------+
-+a       +auto(TT) const+
-+--------+--------------+
+|detail/function-array_boost-temp_array-0xf0cc4ff83b0f1369|
 
+:Arguments: * **arr** : auto implicit!
 
-Creates temporary array from the given object.
-Important requirements are:
-    * object memory is linear
-    * each element follows the next one directly, with the stride equal to size of the element
-    * object memory does not change within the lifetime of the returned array
+.. _function-array_boost_temp_array__auto_q___eq__eq_const_int_autoTT:
 
-.. _function-_at_array_boost_c__c_temp_array_C_eq_1_ls_._gr__qm__Ci_CY_ls_TT_gr_.:
-
-.. das:function:: temp_array(data: auto? const ==const; lenA: int const; a: auto(TT) const)
-
-temp_array returns array<TT> const
+.. das:function:: temp_array(data: auto? ==const; lenA: int; a: auto(TT)) : array<TT>
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+--------------+
-+argument+argument type +
-+========+==============+
-+data    +auto? const!  +
-+--------+--------------+
-+lenA    +int const     +
-+--------+--------------+
-+a       +auto(TT) const+
-+--------+--------------+
+|detail/function-array_boost-temp_array-0xf367cd2b42cc8761|
 
+:Arguments: * **data** : auto?!
 
-Creates temporary array from the given object.
-Important requirements are:
-    * object memory is linear
-    * each element follows the next one directly, with the stride equal to size of the element
-    * object memory does not change within the lifetime of the returned array
+            * **lenA** : int
+
+            * **a** : auto(TT)
+
+.. _function-array_boost_temp_array_auto_q___eq__eq_const_int_autoTT:
+
+.. das:function:: temp_array(data: auto? ==const; lenA: int; a: auto(TT)) : array<TT>
+
+.. warning:: 
+  This is unsafe operation.
+
+|detail/function-array_boost-temp_array-0x13facae9301ce1a9|
+
+:Arguments: * **data** : auto?!
+
+            * **lenA** : int
+
+            * **a** : auto(TT)
 
 +++++++++++
 Empty check
 +++++++++++
 
-  *  :ref:`empty (v:auto(VecT) const) : auto <function-_at_array_boost_c__c_empty_CY_ls_VecT_gr_._%_ls_IsAnyArrayMacro_c_expect_any_array(v_eq_true)_gr_>` 
+  *  :ref:`empty (v: auto(VecT)) : auto <function-array_boost_empty_autoVecT>` 
 
-.. _function-_at_array_boost_c__c_empty_CY_ls_VecT_gr_._%_ls_IsAnyArrayMacro_c_expect_any_array(v_eq_true)_gr_:
+.. _function-array_boost_empty_autoVecT:
 
-.. das:function:: empty(v: auto(VecT) const)
-
-empty returns auto
-
-+--------+----------------+
-+argument+argument type   +
-+========+================+
-+v       +auto(VecT) const+
-+--------+----------------+
-
+.. das:function:: empty(v: auto(VecT)) : auto
 
 returns true if 'v' has 0 elements. this also implies that `length(v)` is defined.
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+:Arguments: * **v** : auto(VecT)
 
-.. _function-_at_array_boost_c__c_array_view_C_eq_1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CN_ls_view_gr_0_ls_C_hh_1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_v_gr__builtin_:
+++++++++++++++
+Sub-array view
+++++++++++++++
 
-.. das:function:: array_view(bytes: array<auto(TT)> const ==const; offset: int const; length: int const; blk: block<(view:array<TT> const#):void> const)
+  *  :ref:`array_view (bytes: array\<auto(TT)\>; offset: int; length: int; blk: block\<(view:array\<TT\>#):void\>) : auto <function-array_boost_array_view_array_ls_autoTT_gr__int_int_block_ls_view_c_array_ls_TT_gr__hh__c_void_gr_>` 
+  *  :ref:`array_view (var bytes: array\<auto(TT)\>; offset: int; length: int; blk: block\<(var view:array\<TT\>#):void\>) : auto <function-array_boost_array_view__array_ls_autoTT_gr__int_int_block_ls_var_view_c_array_ls_TT_gr__hh__c_void_gr_>` 
 
-array_view returns auto
+.. _function-array_boost_array_view_array_ls_autoTT_gr__int_int_block_ls_view_c_array_ls_TT_gr__hh__c_void_gr_:
 
-+--------+-----------------------------------------+
-+argument+argument type                            +
-+========+=========================================+
-+bytes   +array<auto(TT)> const!                   +
-+--------+-----------------------------------------+
-+offset  +int const                                +
-+--------+-----------------------------------------+
-+length  +int const                                +
-+--------+-----------------------------------------+
-+blk     +block<(view:array<TT> const#):void> const+
-+--------+-----------------------------------------+
-
+.. das:function:: array_view(bytes: array<auto(TT)>; offset: int; length: int; blk: block<(view:array<TT>#):void>) : auto
 
 creates a view of the array, which is a temporary array that is valid only within the block
 
-.. _function-_at_array_boost_c__c_array_view__eq_1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CN_ls_view_gr_0_ls__hh_1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_v_gr__builtin_:
+:Arguments: * **bytes** : array<auto(TT)>!
 
-.. das:function:: array_view(bytes: array<auto(TT)> ==const; offset: int const; length: int const; blk: block<(var view:array<TT>#):void> const)
+            * **offset** : int
 
-array_view returns auto
+            * **length** : int
 
-+--------+-----------------------------------+
-+argument+argument type                      +
-+========+===================================+
-+bytes   +array<auto(TT)>!                   +
-+--------+-----------------------------------+
-+offset  +int const                          +
-+--------+-----------------------------------+
-+length  +int const                          +
-+--------+-----------------------------------+
-+blk     +block<(view:array<TT>#):void> const+
-+--------+-----------------------------------+
+            * **blk** : block<(view:array<TT>#):void>
 
+.. _function-array_boost_array_view__array_ls_autoTT_gr__int_int_block_ls_var_view_c_array_ls_TT_gr__hh__c_void_gr_:
+
+.. das:function:: array_view(bytes: array<auto(TT)>; offset: int; length: int; blk: block<(var view:array<TT>#):void>) : auto
 
 creates a view of the array, which is a temporary array that is valid only within the block
+
+:Arguments: * **bytes** : array<auto(TT)>!
+
+            * **offset** : int
+
+            * **length** : int
+
+            * **blk** : block<(view:array<TT>#):void>
 
 
