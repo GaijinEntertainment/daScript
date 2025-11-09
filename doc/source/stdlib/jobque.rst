@@ -5,15 +5,11 @@
 Jobs and threads
 ================
 
-.. include:: detail/jobque.rst
-
 Apply module implements job que and threading.
 
 All functions and symbols are in "jobque" module, use require to get access to it. ::
 
     require jobque
-
-
 
 ++++++++++++++++++
 Handled structures
@@ -23,603 +19,453 @@ Handled structures
 
 .. das:attribute:: JobStatus
 
-JobStatus property operators are
+.. _function-jobque__dot__rq_isReady_JobStatus_implicit:
 
-+-------+----------+
-+isReady+bool const+
-+-------+----------+
-+isValid+bool const+
-+-------+----------+
-+size   +int const +
-+-------+----------+
+.. das:function:: JobStatus implicit.isReady() : bool
 
+Weather or not the job is completed.
 
-|structure_annotation-jobque-JobStatus|
+.. _function-jobque__dot__rq_isValid_JobStatus_implicit:
+
+.. das:function:: JobStatus implicit.isValid() : bool
+
+If the job status object is valid.
+
+.. _function-jobque__dot__rq_size_JobStatus_implicit:
+
+.. das:function:: JobStatus implicit.size() : int
+
+Number of remaining elements, which were previously appended.
+
+:Properties: * **isReady** : bool
+
+             * **isValid** : bool
+
+             * **size** : int
+
+ Job status indicator (ready or not, as well as entry count).
+
 
 .. _handle-jobque-Channel:
 
 .. das:attribute:: Channel
 
-Channel property operators are
+.. _function-jobque__dot__rq_isEmpty_Channel_implicit:
 
-+-------+----------+
-+isEmpty+bool const+
-+-------+----------+
-+total  +int const +
-+-------+----------+
+.. das:function:: Channel implicit.isEmpty() : bool
 
+Weather there are no remaining elements in the pipe.
 
-|structure_annotation-jobque-Channel|
+.. _function-jobque__dot__rq_total_Channel_implicit:
+
+.. das:function:: Channel implicit.total() : int
+
+Total number of elements in the pipe.
+
+:Properties: * **isEmpty** : bool
+
+             * **total** : int
+
+ Channel provides a way to communicate between multiple contexts, including threads and jobs. Channel has internal entry count.
+
 
 .. _handle-jobque-LockBox:
 
 .. das:attribute:: LockBox
 
-|structure_annotation-jobque-LockBox|
+ Lockbox. Similar to channel, only for single object.
+
 
 .. _handle-jobque-Atomic32:
 
 .. das:attribute:: Atomic32
 
-|structure_annotation-jobque-Atomic32|
+ Atomic 32 bit integer.
+
 
 .. _handle-jobque-Atomic64:
 
 .. das:attribute:: Atomic64
 
-|structure_annotation-jobque-Atomic64|
+ Atomic 64 bit integer.
+
 
 +++++++++++++++++++++++++++
 Channel, JobStatus, Lockbox
 +++++++++++++++++++++++++++
 
-  *  :ref:`lock_box_create (context:__context const;line:__lineInfo const) : jobque::LockBox? <function-_at_jobque_c__c_lock_box_create_C_c_C_l>` 
-  *  :ref:`lock_box_remove (box:jobque::LockBox?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_lock_box_remove_&I1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`append (channel:jobque::JobStatus? const implicit;size:int const;context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__Ci_C_c_C_l>` 
-  *  :ref:`channel_create (context:__context const;line:__lineInfo const) : jobque::Channel? <function-_at_jobque_c__c_channel_create_C_c_C_l>` 
-  *  :ref:`channel_remove (channel:jobque::Channel?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_channel_remove_&I1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`add_ref (status:jobque::JobStatus? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_add_ref_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`release (status:jobque::JobStatus?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_release_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`join (job:jobque::JobStatus? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`notify (job:jobque::JobStatus? const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`notify_and_release (job:jobque::JobStatus?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_notify_and_release_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`job_status_create (context:__context const;line:__lineInfo const) : jobque::JobStatus? <function-_at_jobque_c__c_job_status_create_C_c_C_l>` 
-  *  :ref:`job_status_remove (jobStatus:jobque::JobStatus?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_job_status_remove_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`lock_box_create () : LockBox? <function-jobque_lock_box_create>` 
+  *  :ref:`lock_box_remove (box: LockBox?& implicit) <function-jobque_lock_box_remove_LockBox_q__implicit>` 
+  *  :ref:`append (channel: JobStatus? implicit; size: int) : int <function-jobque_append_JobStatus_q__implicit_int>` 
+  *  :ref:`channel_create () : Channel? <function-jobque_channel_create>` 
+  *  :ref:`channel_remove (channel: Channel?& implicit) <function-jobque_channel_remove_Channel_q__implicit>` 
+  *  :ref:`add_ref (status: JobStatus? implicit) <function-jobque_add_ref_JobStatus_q__implicit>` 
+  *  :ref:`release (status: JobStatus?& implicit) <function-jobque_release_JobStatus_q__implicit>` 
+  *  :ref:`join (job: JobStatus? implicit) <function-jobque_join_JobStatus_q__implicit>` 
+  *  :ref:`notify (job: JobStatus? implicit) <function-jobque_notify_JobStatus_q__implicit>` 
+  *  :ref:`notify_and_release (job: JobStatus?& implicit) <function-jobque_notify_and_release_JobStatus_q__implicit>` 
+  *  :ref:`job_status_create () : JobStatus? <function-jobque_job_status_create>` 
+  *  :ref:`job_status_remove (jobStatus: JobStatus?& implicit) <function-jobque_job_status_remove_JobStatus_q__implicit>` 
 
-.. _function-_at_jobque_c__c_lock_box_create_C_c_C_l:
+.. _function-jobque_lock_box_create:
 
-.. das:function:: lock_box_create()
+.. das:function:: lock_box_create() : LockBox?
 
-lock_box_create returns  :ref:`jobque::LockBox <handle-jobque-LockBox>` ?
+ Creates lockbox.
 
-|function-jobque-lock_box_create|
-
-.. _function-_at_jobque_c__c_lock_box_remove_&I1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__C_c_C_l:
+.. _function-jobque_lock_box_remove_LockBox_q__implicit:
 
 .. das:function:: lock_box_remove(box: LockBox?& implicit)
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+-----------------------------------------------------------+
-+argument+argument type                                              +
-+========+===========================================================+
-+box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ?& implicit+
-+--------+-----------------------------------------------------------+
+ Destroys lockbox.
 
+:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?& implicit
 
-|function-jobque-lock_box_remove|
+.. _function-jobque_append_JobStatus_q__implicit_int:
 
-.. _function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__Ci_C_c_C_l:
+.. das:function:: append(channel: JobStatus? implicit; size: int) : int
 
-.. das:function:: append(channel: JobStatus? const implicit; size: int const)
+ Increase entry count to the channel.
 
-append returns int const
+:Arguments: * **channel** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
-+--------+--------------------------------------------------------------------+
-+argument+argument type                                                       +
-+========+====================================================================+
-+channel + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const implicit+
-+--------+--------------------------------------------------------------------+
-+size    +int const                                                           +
-+--------+--------------------------------------------------------------------+
+            * **size** : int
 
+.. _function-jobque_channel_create:
 
-|function-jobque-append|
-
-.. _function-_at_jobque_c__c_channel_create_C_c_C_l:
-
-.. das:function:: channel_create()
-
-channel_create returns  :ref:`jobque::Channel <handle-jobque-Channel>` ?
+.. das:function:: channel_create() : Channel?
 
 .. warning:: 
   This is unsafe operation.
 
-|function-jobque-channel_create|
+ Creates channel.
 
-.. _function-_at_jobque_c__c_channel_remove_&I1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C_c_C_l:
+.. _function-jobque_channel_remove_Channel_q__implicit:
 
 .. das:function:: channel_remove(channel: Channel?& implicit)
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+-----------------------------------------------------------+
-+argument+argument type                                              +
-+========+===========================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ?& implicit+
-+--------+-----------------------------------------------------------+
+ Destroys channel.
 
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?& implicit
 
-|function-jobque-channel_remove|
+.. _function-jobque_add_ref_JobStatus_q__implicit:
 
-.. _function-_at_jobque_c__c_add_ref_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
+.. das:function:: add_ref(status: JobStatus? implicit)
 
-.. das:function:: add_ref(status: JobStatus? const implicit)
+ Increase reference count of the job status or channel.
 
-+--------+--------------------------------------------------------------------+
-+argument+argument type                                                       +
-+========+====================================================================+
-+status  + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const implicit+
-+--------+--------------------------------------------------------------------+
+:Arguments: * **status** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
-
-|function-jobque-add_ref|
-
-.. _function-_at_jobque_c__c_release_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
+.. _function-jobque_release_JobStatus_q__implicit:
 
 .. das:function:: release(status: JobStatus?& implicit)
 
-+--------+---------------------------------------------------------------+
-+argument+argument type                                                  +
-+========+===============================================================+
-+status  + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?& implicit+
-+--------+---------------------------------------------------------------+
+ Decrease reference count of the job status or channel. Object is delete when reference count reaches 0.
 
+:Arguments: * **status** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
 
-|function-jobque-release|
+.. _function-jobque_join_JobStatus_q__implicit:
 
-.. _function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
+.. das:function:: join(job: JobStatus? implicit)
 
-.. das:function:: join(job: JobStatus? const implicit)
+ Wait until channel entry count reaches 0.
 
-+--------+--------------------------------------------------------------------+
-+argument+argument type                                                       +
-+========+====================================================================+
-+job     + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const implicit+
-+--------+--------------------------------------------------------------------+
+:Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
+.. _function-jobque_notify_JobStatus_q__implicit:
 
-|function-jobque-join|
+.. das:function:: notify(job: JobStatus? implicit)
 
-.. _function-_at_jobque_c__c_notify_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
+ Notify channel that entry is completed (decrease entry count).
 
-.. das:function:: notify(job: JobStatus? const implicit)
+:Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
-+--------+--------------------------------------------------------------------+
-+argument+argument type                                                       +
-+========+====================================================================+
-+job     + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const implicit+
-+--------+--------------------------------------------------------------------+
-
-
-|function-jobque-notify|
-
-.. _function-_at_jobque_c__c_notify_and_release_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
+.. _function-jobque_notify_and_release_JobStatus_q__implicit:
 
 .. das:function:: notify_and_release(job: JobStatus?& implicit)
 
-+--------+---------------------------------------------------------------+
-+argument+argument type                                                  +
-+========+===============================================================+
-+job     + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?& implicit+
-+--------+---------------------------------------------------------------+
+ Notify channel or job status that entry is completed (decrease entry count) and decrease reference count of the job status or channel.
 
+:Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
 
-|function-jobque-notify_and_release|
+.. _function-jobque_job_status_create:
 
-.. _function-_at_jobque_c__c_job_status_create_C_c_C_l:
+.. das:function:: job_status_create() : JobStatus?
 
-.. das:function:: job_status_create()
+ Creates job status.
 
-job_status_create returns  :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?
-
-|function-jobque-job_status_create|
-
-.. _function-_at_jobque_c__c_job_status_remove_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
+.. _function-jobque_job_status_remove_JobStatus_q__implicit:
 
 .. das:function:: job_status_remove(jobStatus: JobStatus?& implicit)
 
 .. warning:: 
   This is unsafe operation.
 
-+---------+---------------------------------------------------------------+
-+argument +argument type                                                  +
-+=========+===============================================================+
-+jobStatus+ :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?& implicit+
-+---------+---------------------------------------------------------------+
+ Destroys job status.
 
-
-|function-jobque-job_status_remove|
+:Arguments: * **jobStatus** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
 
 +++++++
 Queries
 +++++++
 
-  *  :ref:`get_total_hw_jobs (context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_get_total_hw_jobs_C_c_C_l>` 
-  *  :ref:`get_total_hw_threads () : int const <function-_at_jobque_c__c_get_total_hw_threads>` 
-  *  :ref:`is_job_que_shutting_down () : bool const <function-_at_jobque_c__c_is_job_que_shutting_down>` 
+  *  :ref:`get_total_hw_jobs () : int <function-jobque_get_total_hw_jobs>` 
+  *  :ref:`get_total_hw_threads () : int <function-jobque_get_total_hw_threads>` 
+  *  :ref:`is_job_que_shutting_down () : bool <function-jobque_is_job_que_shutting_down>` 
 
-.. _function-_at_jobque_c__c_get_total_hw_jobs_C_c_C_l:
+.. _function-jobque_get_total_hw_jobs:
 
-.. das:function:: get_total_hw_jobs()
+.. das:function:: get_total_hw_jobs() : int
 
-get_total_hw_jobs returns int const
+ Total number of hardware threads supporting job system.
 
-|function-jobque-get_total_hw_jobs|
+.. _function-jobque_get_total_hw_threads:
 
-.. _function-_at_jobque_c__c_get_total_hw_threads:
+.. das:function:: get_total_hw_threads() : int
 
-.. das:function:: get_total_hw_threads()
+ Total number of hardware threads available.
 
-get_total_hw_threads returns int const
+.. _function-jobque_is_job_que_shutting_down:
 
-|function-jobque-get_total_hw_threads|
+.. das:function:: is_job_que_shutting_down() : bool
 
-.. _function-_at_jobque_c__c_is_job_que_shutting_down:
-
-.. das:function:: is_job_que_shutting_down()
-
-is_job_que_shutting_down returns bool const
-
-|function-jobque-is_job_que_shutting_down|
+ Returns true if job que infrastructure is shut-down or not initialized.
 
 ++++++++++++++++++++
 Internal invocations
 ++++++++++++++++++++
 
-  *  :ref:`new_job_invoke (lambda:lambda\<\> const;function:function\<\> const;lambdaSize:int const;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_new_job_invoke_C_at__C_at__at__Ci_C_c_C_l>` 
-  *  :ref:`new_thread_invoke (lambda:lambda\<\> const;function:function\<\> const;lambdaSize:int const;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_new_thread_invoke_C_at__C_at__at__Ci_C_c_C_l>` 
-  *  :ref:`new_debugger_thread (block:block\<\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_new_debugger_thread_CI_builtin__C_c_C_l>` 
+  *  :ref:`new_job_invoke (lambda: lambda\<():void\>; function: function\<():void\>; lambdaSize: int) <function-jobque_new_job_invoke_lambda_ls__c_void_gr__function_ls__c_void_gr__int>` 
+  *  :ref:`new_thread_invoke (lambda: lambda\<():void\>; function: function\<():void\>; lambdaSize: int) <function-jobque_new_thread_invoke_lambda_ls__c_void_gr__function_ls__c_void_gr__int>` 
+  *  :ref:`new_debugger_thread (block: block\<():void\>) <function-jobque_new_debugger_thread_block_ls__c_void_gr_>` 
 
-.. _function-_at_jobque_c__c_new_job_invoke_C_at__C_at__at__Ci_C_c_C_l:
+.. _function-jobque_new_job_invoke_lambda_ls__c_void_gr__function_ls__c_void_gr__int:
 
-.. das:function:: new_job_invoke(lambda: lambda<> const; function: function<> const; lambdaSize: int const)
+.. das:function:: new_job_invoke(lambda: lambda<():void>; function: function<():void>; lambdaSize: int)
 
-+----------+----------------+
-+argument  +argument type   +
-+==========+================+
-+lambda    +lambda<> const  +
-+----------+----------------+
-+function  +function<> const+
-+----------+----------------+
-+lambdaSize+int const       +
-+----------+----------------+
+ Creates clone of the current context, moves attached lambda to it.
 
+:Arguments: * **lambda** : lambda<void>
 
-|function-jobque-new_job_invoke|
+            * **function** : function<void>
 
-.. _function-_at_jobque_c__c_new_thread_invoke_C_at__C_at__at__Ci_C_c_C_l:
+            * **lambdaSize** : int
 
-.. das:function:: new_thread_invoke(lambda: lambda<> const; function: function<> const; lambdaSize: int const)
+.. _function-jobque_new_thread_invoke_lambda_ls__c_void_gr__function_ls__c_void_gr__int:
 
-+----------+----------------+
-+argument  +argument type   +
-+==========+================+
-+lambda    +lambda<> const  +
-+----------+----------------+
-+function  +function<> const+
-+----------+----------------+
-+lambdaSize+int const       +
-+----------+----------------+
+.. das:function:: new_thread_invoke(lambda: lambda<():void>; function: function<():void>; lambdaSize: int)
 
+ Creates clone of the current context, moves attached lambda to it.
 
-|function-jobque-new_thread_invoke|
+:Arguments: * **lambda** : lambda<void>
 
-.. _function-_at_jobque_c__c_new_debugger_thread_CI_builtin__C_c_C_l:
+            * **function** : function<void>
 
-.. das:function:: new_debugger_thread(block: block<> const implicit)
+            * **lambdaSize** : int
 
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+block   +block<> const implicit+
-+--------+----------------------+
+.. _function-jobque_new_debugger_thread_block_ls__c_void_gr_:
 
+.. das:function:: new_debugger_thread(block: block<():void>)
 
-|function-jobque-new_debugger_thread|
+ Creates a new thread for debugging purposes (tick thread).
+
+:Arguments: * **block** : block<void> implicit
 
 ++++++++++++
 Construction
 ++++++++++++
 
-  *  :ref:`with_lock_box (block:block\<(var arg0:jobque::LockBox?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_lock_box_CI0_ls_1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`with_channel (block:block\<(var arg0:jobque::Channel?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_channel_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`with_channel (count:int const;block:block\<(var arg0:jobque::Channel?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_channel_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`with_job_status (total:int const;block:block\<(var arg0:jobque::JobStatus?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_job_status_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`with_job_que (block:block\<void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_job_que_CI1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`with_lock_box (block: block\<(LockBox?):void\>) <function-jobque_with_lock_box_block_ls_LockBox_q__c_void_gr_>` 
+  *  :ref:`with_channel (block: block\<(Channel?):void\>) <function-jobque_with_channel_block_ls_Channel_q__c_void_gr_>` 
+  *  :ref:`with_channel (count: int; block: block\<(Channel?):void\>) <function-jobque_with_channel_int_block_ls_Channel_q__c_void_gr_>` 
+  *  :ref:`with_job_status (total: int; block: block\<(JobStatus?):void\>) <function-jobque_with_job_status_int_block_ls_JobStatus_q__c_void_gr_>` 
+  *  :ref:`with_job_que (block: block\<():void\>) <function-jobque_with_job_que_block_ls__c_void_gr_>` 
 
-.. _function-_at_jobque_c__c_with_lock_box_CI0_ls_1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-jobque_with_lock_box_block_ls_LockBox_q__c_void_gr_:
 
-.. das:function:: with_lock_box(block: block<(var arg0:LockBox?):void> const implicit)
+.. das:function:: with_lock_box(block: block<(LockBox?):void>)
 
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+block   +block<( :ref:`jobque::LockBox <handle-jobque-LockBox>` ?):void> const implicit+
-+--------+------------------------------------------------------------------------------+
+ Creates `LockBox`, makes it available inside the scope of the block.
 
+:Arguments: * **block** : block<( :ref:`LockBox <handle-jobque-LockBox>` ?):void> implicit
 
-|function-jobque-with_lock_box|
+.. _function-jobque_with_channel_block_ls_Channel_q__c_void_gr_:
 
-.. _function-_at_jobque_c__c_with_channel_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
+.. das:function:: with_channel(block: block<(Channel?):void>)
 
-.. das:function:: with_channel(block: block<(var arg0:Channel?):void> const implicit)
+ Creates `Channel`, makes it available inside the scope of the block.
 
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+block   +block<( :ref:`jobque::Channel <handle-jobque-Channel>` ?):void> const implicit+
-+--------+------------------------------------------------------------------------------+
+:Arguments: * **block** : block<( :ref:`Channel <handle-jobque-Channel>` ?):void> implicit
 
+.. _function-jobque_with_channel_int_block_ls_Channel_q__c_void_gr_:
 
-|function-jobque-with_channel|
+.. das:function:: with_channel(count: int; block: block<(Channel?):void>)
 
-.. _function-_at_jobque_c__c_with_channel_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
+ Creates `Channel`, makes it available inside the scope of the block.
 
-.. das:function:: with_channel(count: int const; block: block<(var arg0:Channel?):void> const implicit)
+:Arguments: * **count** : int
 
-+--------+------------------------------------------------------------------------------+
-+argument+argument type                                                                 +
-+========+==============================================================================+
-+count   +int const                                                                     +
-+--------+------------------------------------------------------------------------------+
-+block   +block<( :ref:`jobque::Channel <handle-jobque-Channel>` ?):void> const implicit+
-+--------+------------------------------------------------------------------------------+
+            * **block** : block<( :ref:`Channel <handle-jobque-Channel>` ?):void> implicit
 
+.. _function-jobque_with_job_status_int_block_ls_JobStatus_q__c_void_gr_:
 
-|function-jobque-with_channel|
+.. das:function:: with_job_status(total: int; block: block<(JobStatus?):void>)
 
-.. _function-_at_jobque_c__c_with_job_status_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
+ Creates `JobStatus`, makes it available inside the scope of the block.
 
-.. das:function:: with_job_status(total: int const; block: block<(var arg0:JobStatus?):void> const implicit)
+:Arguments: * **total** : int
 
-+--------+----------------------------------------------------------------------------------+
-+argument+argument type                                                                     +
-+========+==================================================================================+
-+total   +int const                                                                         +
-+--------+----------------------------------------------------------------------------------+
-+block   +block<( :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?):void> const implicit+
-+--------+----------------------------------------------------------------------------------+
+            * **block** : block<( :ref:`JobStatus <handle-jobque-JobStatus>` ?):void> implicit
 
+.. _function-jobque_with_job_que_block_ls__c_void_gr_:
 
-|function-jobque-with_job_status|
+.. das:function:: with_job_que(block: block<():void>)
 
-.. _function-_at_jobque_c__c_with_job_que_CI1_ls_v_gr__builtin__C_c_C_l:
+ Makes sure jobque infrastructure is available inside the scope of the block.
 
-.. das:function:: with_job_que(block: block<void> const implicit)
-
-+--------+----------------------+
-+argument+argument type         +
-+========+======================+
-+block   +block<> const implicit+
-+--------+----------------------+
-
-
-|function-jobque-with_job_que|
+:Arguments: * **block** : block<void> implicit
 
 ++++++
 Atomic
 ++++++
 
-  *  :ref:`atomic32_create (context:__context const;line:__lineInfo const) : jobque::Atomic32? <function-_at_jobque_c__c_atomic32_create_C_c_C_l>` 
-  *  :ref:`atomic32_remove (atomic:jobque::Atomic32?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_atomic32_remove_&I1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`with_atomic32 (block:block\<(var arg0:jobque::Atomic32?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_atomic32_CI0_ls_1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`set (atomic:jobque::Atomic32? const implicit;value:int const;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_set_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__Ci_C_c_C_l>` 
-  *  :ref:`get (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_get_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`inc (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`dec (atomic:jobque::Atomic32? const implicit;context:__context const;line:__lineInfo const) : int const <function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`atomic64_create (context:__context const;line:__lineInfo const) : jobque::Atomic64? <function-_at_jobque_c__c_atomic64_create_C_c_C_l>` 
-  *  :ref:`atomic64_remove (atomic:jobque::Atomic64?& implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_atomic64_remove_&I1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`with_atomic64 (block:block\<(var arg0:jobque::Atomic64?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_with_atomic64_CI0_ls_1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`set (atomic:jobque::Atomic64? const implicit;value:int64 const;context:__context const;line:__lineInfo const) : void <function-_at_jobque_c__c_set_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__Ci64_C_c_C_l>` 
-  *  :ref:`get (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 const <function-_at_jobque_c__c_get_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`inc (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 const <function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
-  *  :ref:`dec (atomic:jobque::Atomic64? const implicit;context:__context const;line:__lineInfo const) : int64 const <function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`atomic32_create () : Atomic32? <function-jobque_atomic32_create>` 
+  *  :ref:`atomic32_remove (atomic: Atomic32?& implicit) <function-jobque_atomic32_remove_Atomic32_q__implicit>` 
+  *  :ref:`with_atomic32 (block: block\<(Atomic32?):void\>) <function-jobque_with_atomic32_block_ls_Atomic32_q__c_void_gr_>` 
+  *  :ref:`set (atomic: Atomic32? implicit; value: int) <function-jobque_set_Atomic32_q__implicit_int>` 
+  *  :ref:`get (atomic: Atomic32? implicit) : int <function-jobque_get_Atomic32_q__implicit>` 
+  *  :ref:`inc (atomic: Atomic32? implicit) : int <function-jobque_inc_Atomic32_q__implicit>` 
+  *  :ref:`dec (atomic: Atomic32? implicit) : int <function-jobque_dec_Atomic32_q__implicit>` 
+  *  :ref:`atomic64_create () : Atomic64? <function-jobque_atomic64_create>` 
+  *  :ref:`atomic64_remove (atomic: Atomic64?& implicit) <function-jobque_atomic64_remove_Atomic64_q__implicit>` 
+  *  :ref:`with_atomic64 (block: block\<(Atomic64?):void\>) <function-jobque_with_atomic64_block_ls_Atomic64_q__c_void_gr_>` 
+  *  :ref:`set (atomic: Atomic64? implicit; value: int64) <function-jobque_set_Atomic64_q__implicit_int64>` 
+  *  :ref:`get (atomic: Atomic64? implicit) : int64 <function-jobque_get_Atomic64_q__implicit>` 
+  *  :ref:`inc (atomic: Atomic64? implicit) : int64 <function-jobque_inc_Atomic64_q__implicit>` 
+  *  :ref:`dec (atomic: Atomic64? implicit) : int64 <function-jobque_dec_Atomic64_q__implicit>` 
 
-.. _function-_at_jobque_c__c_atomic32_create_C_c_C_l:
+.. _function-jobque_atomic32_create:
 
-.. das:function:: atomic32_create()
+.. das:function:: atomic32_create() : Atomic32?
 
-atomic32_create returns  :ref:`jobque::Atomic32 <handle-jobque-Atomic32>` ?
+ Creates atomic 32 bit integer.
 
-|function-jobque-atomic32_create|
-
-.. _function-_at_jobque_c__c_atomic32_remove_&I1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l:
+.. _function-jobque_atomic32_remove_Atomic32_q__implicit:
 
 .. das:function:: atomic32_remove(atomic: Atomic32?& implicit)
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+atomic  + :ref:`jobque::Atomic32 <handle-jobque-Atomic32>` ?& implicit+
-+--------+-------------------------------------------------------------+
+ Destroys atomic 32 bit integer.
 
+:Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ?& implicit
 
-|function-jobque-atomic32_remove|
+.. _function-jobque_with_atomic32_block_ls_Atomic32_q__c_void_gr_:
 
-.. _function-_at_jobque_c__c_with_atomic32_CI0_ls_1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
+.. das:function:: with_atomic32(block: block<(Atomic32?):void>)
 
-.. das:function:: with_atomic32(block: block<(var arg0:Atomic32?):void> const implicit)
+ Creates `Atomic32`, makes it available inside the scope of the block.
 
-+--------+--------------------------------------------------------------------------------+
-+argument+argument type                                                                   +
-+========+================================================================================+
-+block   +block<( :ref:`jobque::Atomic32 <handle-jobque-Atomic32>` ?):void> const implicit+
-+--------+--------------------------------------------------------------------------------+
+:Arguments: * **block** : block<( :ref:`Atomic32 <handle-jobque-Atomic32>` ?):void> implicit
 
+.. _function-jobque_set_Atomic32_q__implicit_int:
 
-|function-jobque-with_atomic32|
+.. das:function:: set(atomic: Atomic32? implicit; value: int)
 
-.. _function-_at_jobque_c__c_set_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__Ci_C_c_C_l:
+ Set atomic integer value.
 
-.. das:function:: set(atomic: Atomic32? const implicit; value: int const)
+:Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
-+--------+------------------------------------------------------------------+
-+argument+argument type                                                     +
-+========+==================================================================+
-+atomic  + :ref:`jobque::Atomic32 <handle-jobque-Atomic32>` ? const implicit+
-+--------+------------------------------------------------------------------+
-+value   +int const                                                         +
-+--------+------------------------------------------------------------------+
+            * **value** : int
 
+.. _function-jobque_get_Atomic32_q__implicit:
 
-|function-jobque-set|
+.. das:function:: get(atomic: Atomic32? implicit) : int
 
-.. _function-_at_jobque_c__c_get_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l:
+ Get atomic integer value.
 
-.. das:function:: get(atomic: Atomic32? const implicit)
+:Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
-get returns int const
+.. _function-jobque_inc_Atomic32_q__implicit:
 
-+--------+------------------------------------------------------------------+
-+argument+argument type                                                     +
-+========+==================================================================+
-+atomic  + :ref:`jobque::Atomic32 <handle-jobque-Atomic32>` ? const implicit+
-+--------+------------------------------------------------------------------+
+.. das:function:: inc(atomic: Atomic32? implicit) : int
 
+ Increase atomic integer value and returns result.
 
-|function-jobque-get|
+:Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
-.. _function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l:
+.. _function-jobque_dec_Atomic32_q__implicit:
 
-.. das:function:: inc(atomic: Atomic32? const implicit)
+.. das:function:: dec(atomic: Atomic32? implicit) : int
 
-inc returns int const
+ Decrease atomic integer value and returns result.
 
-+--------+------------------------------------------------------------------+
-+argument+argument type                                                     +
-+========+==================================================================+
-+atomic  + :ref:`jobque::Atomic32 <handle-jobque-Atomic32>` ? const implicit+
-+--------+------------------------------------------------------------------+
+:Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
+.. _function-jobque_atomic64_create:
 
-|function-jobque-inc|
+.. das:function:: atomic64_create() : Atomic64?
 
-.. _function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l:
+ Creates atomic 64 bit integer.
 
-.. das:function:: dec(atomic: Atomic32? const implicit)
-
-dec returns int const
-
-+--------+------------------------------------------------------------------+
-+argument+argument type                                                     +
-+========+==================================================================+
-+atomic  + :ref:`jobque::Atomic32 <handle-jobque-Atomic32>` ? const implicit+
-+--------+------------------------------------------------------------------+
-
-
-|function-jobque-dec|
-
-.. _function-_at_jobque_c__c_atomic64_create_C_c_C_l:
-
-.. das:function:: atomic64_create()
-
-atomic64_create returns  :ref:`jobque::Atomic64 <handle-jobque-Atomic64>` ?
-
-|function-jobque-atomic64_create|
-
-.. _function-_at_jobque_c__c_atomic64_remove_&I1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l:
+.. _function-jobque_atomic64_remove_Atomic64_q__implicit:
 
 .. das:function:: atomic64_remove(atomic: Atomic64?& implicit)
 
 .. warning:: 
   This is unsafe operation.
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+atomic  + :ref:`jobque::Atomic64 <handle-jobque-Atomic64>` ?& implicit+
-+--------+-------------------------------------------------------------+
+ Destroys atomic 64 bit integer.
 
+:Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ?& implicit
 
-|function-jobque-atomic64_remove|
+.. _function-jobque_with_atomic64_block_ls_Atomic64_q__c_void_gr_:
 
-.. _function-_at_jobque_c__c_with_atomic64_CI0_ls_1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
+.. das:function:: with_atomic64(block: block<(Atomic64?):void>)
 
-.. das:function:: with_atomic64(block: block<(var arg0:Atomic64?):void> const implicit)
+ Creates `Atomic64`, makes it available inside the scope of the block.
 
-+--------+--------------------------------------------------------------------------------+
-+argument+argument type                                                                   +
-+========+================================================================================+
-+block   +block<( :ref:`jobque::Atomic64 <handle-jobque-Atomic64>` ?):void> const implicit+
-+--------+--------------------------------------------------------------------------------+
+:Arguments: * **block** : block<( :ref:`Atomic64 <handle-jobque-Atomic64>` ?):void> implicit
 
+.. _function-jobque_set_Atomic64_q__implicit_int64:
 
-|function-jobque-with_atomic64|
+.. das:function:: set(atomic: Atomic64? implicit; value: int64)
 
-.. _function-_at_jobque_c__c_set_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__Ci64_C_c_C_l:
+ Set atomic integer value.
 
-.. das:function:: set(atomic: Atomic64? const implicit; value: int64 const)
+:Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
-+--------+------------------------------------------------------------------+
-+argument+argument type                                                     +
-+========+==================================================================+
-+atomic  + :ref:`jobque::Atomic64 <handle-jobque-Atomic64>` ? const implicit+
-+--------+------------------------------------------------------------------+
-+value   +int64 const                                                       +
-+--------+------------------------------------------------------------------+
+            * **value** : int64
 
+.. _function-jobque_get_Atomic64_q__implicit:
 
-|function-jobque-set|
+.. das:function:: get(atomic: Atomic64? implicit) : int64
 
-.. _function-_at_jobque_c__c_get_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l:
+ Get atomic integer value.
 
-.. das:function:: get(atomic: Atomic64? const implicit)
+:Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
-get returns int64 const
+.. _function-jobque_inc_Atomic64_q__implicit:
 
-+--------+------------------------------------------------------------------+
-+argument+argument type                                                     +
-+========+==================================================================+
-+atomic  + :ref:`jobque::Atomic64 <handle-jobque-Atomic64>` ? const implicit+
-+--------+------------------------------------------------------------------+
+.. das:function:: inc(atomic: Atomic64? implicit) : int64
 
+ Increase atomic integer value and returns result.
 
-|function-jobque-get|
+:Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
-.. _function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l:
+.. _function-jobque_dec_Atomic64_q__implicit:
 
-.. das:function:: inc(atomic: Atomic64? const implicit)
+.. das:function:: dec(atomic: Atomic64? implicit) : int64
 
-inc returns int64 const
+ Decrease atomic integer value and returns result.
 
-+--------+------------------------------------------------------------------+
-+argument+argument type                                                     +
-+========+==================================================================+
-+atomic  + :ref:`jobque::Atomic64 <handle-jobque-Atomic64>` ? const implicit+
-+--------+------------------------------------------------------------------+
-
-
-|function-jobque-inc|
-
-.. _function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l:
-
-.. das:function:: dec(atomic: Atomic64? const implicit)
-
-dec returns int64 const
-
-+--------+------------------------------------------------------------------+
-+argument+argument type                                                     +
-+========+==================================================================+
-+atomic  + :ref:`jobque::Atomic64 <handle-jobque-Atomic64>` ? const implicit+
-+--------+------------------------------------------------------------------+
-
-
-|function-jobque-dec|
+:Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
 

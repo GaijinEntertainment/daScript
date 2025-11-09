@@ -710,8 +710,8 @@ def main {
     document_module_rtti(root)
     document_module_ast(root)
     document_module_strings(root)
-    return
     document_module_jobque(root)
+    return
 
     document_module_algorithm(root)
     document_module_apply_in_context(root)
