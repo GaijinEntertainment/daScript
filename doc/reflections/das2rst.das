@@ -369,7 +369,8 @@ def document_module_algorithm(root : string) {
     var mod = find_module("algorithm")
     var groups <- array<DocGroup>(
         group_by_regex("Search", mod, %regex~(lower_bound|binary_search)$%%),
-        group_by_regex("Array manipulation", mod, %regex~(unique|sort_unique|reverse|combine)$%%)
+        group_by_regex("Array manipulation", mod, %regex~(unique|sort_unique|reverse|combine|erase_all|topological_sort)$%%),
+        group_by_regex("Table manipulation", mod, %regex~(intersection|union|difference|identical)$%%)
     )
     document("Miscelanious algorithms", mod, "algorithm.rst", groups)
 }
@@ -711,9 +712,9 @@ def main {
     document_module_ast(root)
     document_module_strings(root)
     document_module_jobque(root)
+    document_module_algorithm(root)
     return
 
-    document_module_algorithm(root)
     document_module_apply_in_context(root)
     document_module_apply(root)
     document_module_archive(root)
