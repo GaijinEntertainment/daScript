@@ -713,9 +713,10 @@ def main {
     document_module_strings(root)
     document_module_jobque(root)
     document_module_algorithm(root)
+    document_module_apply_in_context(root)
+
     return
 
-    document_module_apply_in_context(root)
     document_module_apply(root)
     document_module_archive(root)
     document_module_array_boost(root)
