@@ -1,0 +1,1 @@
+ [enumration_macro] implementation.

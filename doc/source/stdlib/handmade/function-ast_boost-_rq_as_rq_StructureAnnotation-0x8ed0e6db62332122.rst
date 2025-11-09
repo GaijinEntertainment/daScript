@@ -1,0 +1,1 @@
+Returns StructureAnnotation or panics.

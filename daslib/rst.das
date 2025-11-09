@@ -526,6 +526,9 @@ def make_table_(tab:array<array<string>>;withHeader:bool=false)
 //         write(writer,"+\n")
 
 def is_handmade(mod : Module?)
+    // several modules are handmade even though they are built-in
+    if mod.name=="ast_boost"
+        return true
     return mod.moduleFlags.builtIn && !mod.moduleFlags.promoted
 
 def topic(category:string;mod:Module?;name:string implicit)
@@ -728,7 +731,7 @@ def document_bitfield(mod:Module?;doc_file:file; name:string; value:TypeDeclPtr)
             push(line,"{(glob.init as ExprConstBitfield).value}")
             emplace(tab,line)
 
-    document_topic("Fields", doc_file,topic("typedef",mod,name), describe(value), tab, mod.moduleFlags.builtIn)
+    document_topic("Fields", doc_file,topic("typedef",mod,name), describe(value), tab, is_handmade(mod))
 
 def document_variant(mod:Module?;doc_file:file; name:string; value:TypeDeclPtr)
     var tab : array<array<string>>
@@ -738,7 +741,7 @@ def document_variant(mod:Module?;doc_file:file; name:string; value:TypeDeclPtr)
         push(line,string(an))
         push(line,describe_type(at))
         emplace(tab,line)
-    document_topic("Variants", doc_file,topic("typedef",mod,name), describe(value), tab, mod.moduleFlags.builtIn)
+    document_topic("Variants", doc_file,topic("typedef",mod,name), describe(value), tab, is_handmade(mod))
 
 def document_typedef(doc_file:file;mod:Module?;name:string implicit;value)
     if value.baseType==Type.tBitfield || value.baseType==Type.tBitfield8 || value.baseType==Type.tBitfield16 || value.baseType==Type.tBitfield64
@@ -834,7 +837,7 @@ def public document_enumeration(doc_file:file;mod:Module?;value)
         push(line,string(en.name))
         push(line,describe(en.value))
         emplace(tab,line)
-    document_topic("Values", doc_file,topic("enumeration",mod,string(value.name)),"enum {value.name}", tab, mod.moduleFlags.builtIn)
+    document_topic("Values", doc_file,topic("enumeration",mod,string(value.name)),"enum {value.name}", tab, is_handmade(mod))
 
 
 def public document_enumerations(doc_file:file;mods:array<Module?>) : bool
@@ -1000,7 +1003,7 @@ def document_classes(doc_file:file;mods:array<Module?>)
                         push(line,fld.init != null ? describe(fld.init) : "")
                     emplace(fields,line)
 
-            document_topic("Fields", doc_file,topic("class",mod,string(value.name)), "class {value.name}", fields)
+            document_topic("Fields", doc_file,topic("class",mod,string(value.name)), "class {value.name}", fields, is_handmade(mod))
 
             for fld in value.fields
                 if is_class_method(value,fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented)
@@ -1049,7 +1052,7 @@ def document_structure(doc_file:file;mod:Module?;var value:StructurePtr)
             emplace(tab,line)
     // fwrite(doc_file,"{value.name} fields are\n\n")
     // fwrite(doc_file,make_table(tab))
-    document_topic("Fields",doc_file,topic("structure",mod,string(value.name)), "struct {value.name}", tab, mod.moduleFlags.builtIn)
+    document_topic("Fields",doc_file,topic("structure",mod,string(value.name)), "struct {value.name}", tab, is_handmade(mod))
 
     for fld in value.fields
         if is_class_method(value,fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented)
@@ -1135,7 +1138,7 @@ def document_structure_annotation(doc_file:file;mod:Module?;value)
         push(line,f.typ)
         emplace(tab,line)
 
-    document_topic("Fields",doc_file,topic("structure_annotation",mod,string(value.name)), "Annotation {value.name}", tab, mod.moduleFlags.builtIn)
+    document_topic("Fields",doc_file,topic("structure_annotation",mod,string(value.name)), "Annotation {value.name}", tab, is_handmade(mod))
 
 def document_structure_annotations(doc_file:file;mods:array<Module?>; var hook = DocsHook())
     var any = false

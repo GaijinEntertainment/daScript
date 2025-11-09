@@ -719,11 +719,11 @@ def main {
     document_module_archive(root)
     document_module_array_boost(root)
     document_module_assert_once(root)
+    document_module_ast_block_to_loop(root)
+    document_module_ast_boost(root)
 
     return
 
-    document_module_ast_block_to_loop(root)
-    document_module_ast_boost(root)
     document_module_ast_used(root)
     document_module_constexpr(root)
     document_module_contracts(root)

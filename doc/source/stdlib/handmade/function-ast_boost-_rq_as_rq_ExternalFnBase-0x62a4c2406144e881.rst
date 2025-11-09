@@ -1,0 +1,1 @@
+Returns ExternalFnBase or panics.
