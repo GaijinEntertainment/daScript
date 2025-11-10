@@ -604,7 +604,7 @@ def document_function_topic(doc_file:file;resType:smart_ptr<TypeDecl>&;topic,con
     if paramsIdx == -1 && returnsIdx == -1 && length(args) > 1
         fwrite(doc_file,make_table(header, args))
 
-def document_topic(header: string; doc_file:file;topic,content:string implicit; var tab : array<array<string>>; has_hint : bool = false )
+def document_topic(header: string; doc_file:file;topic,content:string implicit; var tab : array<array<string>> )
     document_topic(doc_file,topic,content) <| $(txt)
         if add_stub_header && txt |> starts_with(STUB)
             if length(tab) > 1
@@ -618,8 +618,7 @@ def document_topic(header: string; doc_file:file;topic,content:string implicit; 
             if got < expected
                 if strict_struct_fields
                     error("{topic} has less documentation than values. Expected {expected} ({[for it in tab; it[0]]}), got {got}\n")
-                    if !has_hint
-                        panic("invalid documentation")
+                    panic("invalid documentation")
 
                 for i in range(got)
                     fwrite(doc_file,"{lines[i]}\n")
@@ -655,33 +654,6 @@ def document_topic(header: string; doc_file:file;topic,content:string implicit; 
             fwrite(doc_file,make_table(header, tab))
         return txt
 
-var topic_regex = %regex~\|handmade\/(.*)\|%%
-var topic_variable_regex = %regex~\|handmade\/Variable\-(.*)\|%%
-var topic_function_regex = %regex~\|handmade\/function\-(.*)\-0x(.*)\|%%
-var topic_annotation_regex = %regex~\|handmade\/annotation\-(.*)\|%%
-
-def private find_matching_hint ( topic : string )
-    if regex_match(topic_function_regex, topic) != -1
-        let topic_name = regex_group(topic_function_regex, 1, topic)
-        let topic_text = topic_stubs?["function-{topic_name}"] ?? ""
-        return topic_text
-    elif regex_match(topic_variable_regex, topic) != -1
-        let topic_name = regex_group(topic_variable_regex, 1, topic)
-        let topic_text = topic_stubs?["variable-{topic_name}"] ?? ""
-        return topic_text
-    elif regex_match(topic_annotation_regex, topic) != -1
-        let topic_name = regex_group(topic_annotation_regex, 1, topic)
-        let topic_text = topic_stubs?["any_annotation-{topic_name}"] ?? ""
-        return topic_text
-    elif regex_match(topic_regex, topic) != -1
-        let topic_name = regex_group(topic_regex, 1, topic)
-        let topic_text = topic_stubs?[topic_name] ?? ""
-        return topic_text
-    else
-        panic("invalid topic name: {topic}")
-    return ""
-
-
 def document_topic(doc_file:file;topic,content:string implicit; cb : block<(text : string) : string>)
     let topic_file_name = "{topic_root}/{slice(topic,1,-1)}.rst"
     // print("documenting topic: {topic} -> {topic_file_name}\n{content}\n")
@@ -690,15 +662,10 @@ def document_topic(doc_file:file;topic,content:string implicit; cb : block<(text
     if topic |> starts_with("|handmade/") && !stat(topic_file_name,st)
         fopen(topic_file_name,"wb") <| $ ( topic_file )
             if topic_file!=null
-                let hint = find_matching_hint(topic)
-                if !empty(hint)
-                    fwrite(topic_file,"{hint}\n")
-                else
-                    print("no hint found for topic {topic}\n")
-                    if add_stub_header
-                        fwrite(topic_file,"{STUB}\n")
-                    if content != ""
-                        fwrite(topic_file,"{content}\n")
+                if add_stub_header
+                    fwrite(topic_file,"{STUB}\n")
+                if content != ""
+                    fwrite(topic_file,"{content}\n")
             else
                 panic("can't open {topic_file_name}")
 
@@ -731,7 +698,7 @@ def document_bitfield(mod:Module?;doc_file:file; name:string; value:TypeDeclPtr)
             push(line,"{(glob.init as ExprConstBitfield).value}")
             emplace(tab,line)
 
-    document_topic("Fields", doc_file,topic("typedef",mod,name), describe(value), tab, is_handmade(mod))
+    document_topic("Fields", doc_file,topic("typedef",mod,name), describe(value), tab)
 
 def document_variant(mod:Module?;doc_file:file; name:string; value:TypeDeclPtr)
     var tab : array<array<string>>
@@ -741,7 +708,7 @@ def document_variant(mod:Module?;doc_file:file; name:string; value:TypeDeclPtr)
         push(line,string(an))
         push(line,describe_type(at))
         emplace(tab,line)
-    document_topic("Variants", doc_file,topic("typedef",mod,name), describe(value), tab, is_handmade(mod))
+    document_topic("Variants", doc_file,topic("typedef",mod,name), describe(value), tab)
 
 def document_typedef(doc_file:file;mod:Module?;name:string implicit;value)
     if value.baseType==Type.tBitfield || value.baseType==Type.tBitfield8 || value.baseType==Type.tBitfield16 || value.baseType==Type.tBitfield64
@@ -837,7 +804,7 @@ def public document_enumeration(doc_file:file;mod:Module?;value)
         push(line,string(en.name))
         push(line,describe(en.value))
         emplace(tab,line)
-    document_topic("Values", doc_file,topic("enumeration",mod,string(value.name)),"enum {value.name}", tab, is_handmade(mod))
+    document_topic("Values", doc_file,topic("enumeration",mod,string(value.name)),"enum {value.name}", tab)
 
 
 def public document_enumerations(doc_file:file;mods:array<Module?>) : bool
@@ -1003,7 +970,7 @@ def document_classes(doc_file:file;mods:array<Module?>)
                         push(line,fld.init != null ? describe(fld.init) : "")
                     emplace(fields,line)
 
-            document_topic("Fields", doc_file,topic("class",mod,string(value.name)), "class {value.name}", fields, is_handmade(mod))
+            document_topic("Fields", doc_file,topic("class",mod,string(value.name)), "class {value.name}", fields)
 
             for fld in value.fields
                 if is_class_method(value,fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented)
@@ -1052,7 +1019,7 @@ def document_structure(doc_file:file;mod:Module?;var value:StructurePtr)
             emplace(tab,line)
     // fwrite(doc_file,"{value.name} fields are\n\n")
     // fwrite(doc_file,make_table(tab))
-    document_topic("Fields",doc_file,topic("structure",mod,string(value.name)), "struct {value.name}", tab, is_handmade(mod))
+    document_topic("Fields",doc_file,topic("structure",mod,string(value.name)), "struct {value.name}", tab)
 
     for fld in value.fields
         if is_class_method(value,fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented)
@@ -1138,7 +1105,7 @@ def document_structure_annotation(doc_file:file;mod:Module?;value)
         push(line,f.typ)
         emplace(tab,line)
 
-    document_topic("Fields",doc_file,topic("structure_annotation",mod,string(value.name)), "Annotation {value.name}", tab, is_handmade(mod))
+    document_topic("Fields",doc_file,topic("structure_annotation",mod,string(value.name)), "Annotation {value.name}", tab)
 
 def document_structure_annotations(doc_file:file;mods:array<Module?>; var hook = DocsHook())
     var any = false
@@ -1584,23 +1551,6 @@ def public mkdir_rec(path : string) : bool
 
     return mkdir(path)
 
-var doc_regex <- %regex~\.\.\s*\|(.*)\|\s*replace::\s*(.*)\r?\n%%
-
-var topic_stubs : table<string;string>
-
-def process_module_hints ( name : string )
-    topic_stubs.clear()
-    let hint_file_name = "{get_das_root()}/doc/source/stdlib/hints/{name}"
-    fopen(hint_file_name, "rb") <| $ ( rstFile )
-        if rstFile != null
-            fread(rstFile) <| $ ( temp_content )
-                let content = clone_string(temp_content)
-                regex_foreach(doc_regex, content) <| $ ( at : range )
-                    let DEF = regex_group(doc_regex, 1, content)
-                    let VAL = regex_group(doc_regex, 2, content)
-                    topic_stubs.insert(DEF, VAL)
-                    return true
-
 def public documents(name:string; mods:array<Module?>; fname:string; var groups:array<DocGroup>; var hook : DocsHook = DocsHook())
     static_if log_documentation
         print("Documenting {name} into {fname}\n")
@@ -1611,9 +1561,6 @@ def public documents(name:string; mods:array<Module?>; fname:string; var groups:
     var doc_file = fopen(path,"wb")
     if doc_file == null
         panic("can't open {path}")
-
-    process_module_hints(fname)
-
     fwrite(doc_file,"\n")
     var mod_name = string(mods[0].name)
     if mod_name=="$"
