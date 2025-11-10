@@ -118,7 +118,7 @@ Random iterators
 
 .. das:function:: each_random_uint(rnd_seed: int = 13) : iterator<uint>
 
-|detail/function-random-each_random_uint-0x651923e6e6200478|
+infinite generator of random uints initialized with `rnd_seed`
 
 :Arguments: * **rnd_seed** : int
 

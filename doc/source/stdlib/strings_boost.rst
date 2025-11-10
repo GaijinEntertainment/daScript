@@ -29,7 +29,7 @@ Split and join
 
 .. das:function:: split(text: string implicit; delim: string implicit) : array<string>
 
-|detail/function-strings_boost-split-0x98c88ba73f93b208|
+Splits a string into an array of substrings based on the specified delimiter.
 
 :Arguments: * **text** : string implicit
 
@@ -39,7 +39,7 @@ Split and join
 
 .. das:function:: split_by_chars(text: string implicit; delim: string implicit) : array<string>
 
-|detail/function-strings_boost-split_by_chars-0x50d77ec70e92537d|
+Splits the input string into an array of substrings based on the specified delimiter characters.
 
 :Arguments: * **text** : string implicit
 
@@ -49,7 +49,7 @@ Split and join
 
 .. das:function:: join(it: auto; separator: string implicit) : auto
 
-|detail/function-strings_boost-join-0x41e62613d7875e24|
+Joins the elements of an iterable into a single string, separated by the specified separator.
 
 :Arguments: * **it** : auto
 
@@ -59,7 +59,7 @@ Split and join
 
 .. das:function:: join(it: iterator<auto(TT)>; separator: string implicit) : auto
 
-|detail/function-strings_boost-join-0x4544055f6291437c|
+Joins the elements of an iterable into a single string, separated by the specified separator.
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -69,8 +69,7 @@ Split and join
 
 .. das:function:: join(iterable: array<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-|detail/function-strings_boost-join-0xa8d0711c81d56f64|
-
+Joins the elements of an array into a single string, separated by the specified separator, using a custom block to convert each element to a string.
 :Arguments: * **iterable** : array<auto(TT)>
 
             * **separator** : string
@@ -81,7 +80,7 @@ Split and join
 
 .. das:function:: join(iterable: iterator<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-|detail/function-strings_boost-join-0x7596deabac971650|
+Joins the elements of an iterable into a single string, separated by the specified separator, using a custom block to convert each element to a string.
 
 :Arguments: * **iterable** : iterator<auto(TT)>
 
@@ -93,7 +92,7 @@ Split and join
 
 .. das:function:: join(iterable: auto(TT)[]; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-|detail/function-strings_boost-join-0xf3e1ee03922f20b1|
+Joins the elements of an array into a single string, separated by the specified separator, using a custom block to convert each element to a string.
 
 :Arguments: * **iterable** : auto(TT)[-1]
 
@@ -105,7 +104,7 @@ Split and join
 
 .. das:function:: split(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
 
-|detail/function-strings_boost-split-0x6e8403f09615ca42|
+Splits a string into substrings based on the specified delimiter characters, invoking a custom block for each substring.
 
 :Arguments: * **text** : string implicit
 
@@ -117,7 +116,7 @@ Split and join
 
 .. das:function:: split_by_chars(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
 
-|detail/function-strings_boost-split_by_chars-0xb26a143cca9b4599|
+Splits a string into substrings based on the specified delimiter characters, invoking a custom block for each substring.
 
 :Arguments: * **text** : string implicit
 
@@ -135,7 +134,7 @@ Formatting
 
 .. das:function:: wide(text: string implicit; width: int) : string
 
-|detail/function-strings_boost-wide-0xd7e9426ac00a0273|
+Pads the given string to the specified width by appending spaces if necessary.
 
 :Arguments: * **text** : string implicit
 
@@ -153,7 +152,7 @@ Queries and comparisons
 
 .. das:function:: is_character_at(foo: array<uint8>; idx: int; ch: int) : auto
 
-|detail/function-strings_boost-is_character_at-0x178db01adc75a5e3|
+Returns whether the character at the specified index in the byte array matches the given character code.
 
 :Arguments: * **foo** : array<uint8> implicit
 
@@ -165,7 +164,7 @@ Queries and comparisons
 
 .. das:function:: eq(a: string implicit; b: das_string) : auto
 
-|detail/function-strings_boost-eq-0xbd40acbc40406243|
+Compares a string with a das_string for equality.
 
 :Arguments: * **a** : string implicit
 
@@ -175,7 +174,7 @@ Queries and comparisons
 
 .. das:function:: eq(b: das_string; a: string implicit) : auto
 
-|detail/function-strings_boost-eq-0xc6812cfa1c95c52b|
+Compares a das_string with a string for equality.
 
 :Arguments: * **b** :  :ref:`das_string <handle-builtin-das_string>` 
 
@@ -191,7 +190,7 @@ Replace
 
 .. das:function:: replace_multiple(source: string; replaces: array<tuple<text:string;replacement:string>>) : string
 
-|detail/function-strings_boost-replace_multiple-0x40ddf96517436d79|
+Replaces multiple substrings in the source string according to the provided list of replacements.
 
 :Arguments: * **source** : string
 
@@ -208,7 +207,7 @@ Levenshtein distance
 
 .. das:function:: levenshtein_distance(s: string implicit; t: string implicit) : int
 
-|detail/function-strings_boost-levenshtein_distance-0x92499c3cd3c81949|
+Returns the Levenshtein distance between two strings.
 
 :Arguments: * **s** : string implicit
 
@@ -218,7 +217,7 @@ Levenshtein distance
 
 .. das:function:: levenshtein_distance_fast(s: string implicit; t: string implicit) : int
 
-|detail/function-strings_boost-levenshtein_distance_fast-0x86bb381a3ba281ed|
+Returns the Levenshtein distance between two strings, which is a measure of the difference between them.
 
 :Arguments: * **s** : string implicit
 
