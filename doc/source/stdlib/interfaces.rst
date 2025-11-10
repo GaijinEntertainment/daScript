@@ -5,8 +5,6 @@
 Interfaces
 ==========
 
-.. include:: detail/interfaces.rst
-
 The interface module implements [interface] pattern, which allows classes to expose multiple interfaces.
 
 All functions and symbols are in "interfaces" module, use require to get access to it. ::
@@ -56,6 +54,8 @@ Additionally get`ITick and get`ILogger methods are generated for the Foo class. 
     f->get`ITick()->tick(1.0)
     f->get`ITick()->afterTick()
     f->get`ILogger()->log("hello")
+
+
 ++++++++++++++++
 Structure macros
 ++++++++++++++++

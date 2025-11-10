@@ -11,35 +11,35 @@ require daslib/strings_boost
 
 variant JsValue {
     //! Single JSON element.
-    _object  : table<string; JsonValue?>
-    _array   : array<JsonValue?>
-    _string  : string
-    _number  : double
-    _longint : int64   // extension, not part of JSON standard
-    _bool    : bool
-    _null    : void?
+    _object  : table<string; JsonValue?>    //! JSON object
+    _array   : array<JsonValue?>           //! JSON array
+    _string  : string                      //! JSON string
+    _number  : double                      //! JSON number
+    _longint : int64                       //! extension, not part of JSON standard (represents long integer numbers)
+    _bool    : bool                        //! JSON boolean
+    _null    : void?                       //! JSON null
 }
 
 struct JsonValue {
     //! JSON value, wraps any JSON element.
-    value : JsValue
+    value : JsValue                         //! value of the JSON element
 }
 
 variant Token {
     //! JSON input stream token.
-    _string  : string
-    _number  : double
-    _longint : int64   // extension, not part of JSON standard
-    _bool    : bool
-    _null    : void?
-    _symbol  : int
-    _error   : string
+    _string  : string                       //! string token
+    _number  : double                       //! number token
+    _longint : int64                        //! extension, not part of JSON standard (represents long integer numbers)
+    _bool    : bool                         //! boolean token
+    _null    : void?                        //! null token
+    _symbol  : int                          //! symbol token (one of []{}:,)
+    _error   : string                       //! error token
 }
 
 struct TokenAt {
     //! JSON parsing token. Contains token and its position.
-    value : Token
-    line, row : int
+    value : Token                           //! token value
+    line, row : int                         //! token position in the input stream
 }
 
 let private {

@@ -13,19 +13,19 @@ require daslib/strings_boost
 
 struct Template {
     //! This structure contains collection of subsitution rules for a template.
-    kaboomVar : table<string; tuple<prefix : string; suffix : string> >
-    call2name : table<string; string>
-    field2name : table<string; string>
-    var2name : table<string; string>
-    var2expr : table<string; smart_ptr<Expression>>
-    var2exprList : table<string; array<smart_ptr<Expression>>>
-    type2type : table<string; string>
-    type2etype : table<string; TypeDeclPtr>
-    struct2etype : table<Structure?; TypeDeclPtr>
-    blockArgName : table<string; string>
-    annArg : table<string; lambda<(var ann : AnnotationDeclaration) : void> >
-    blkArg : table<string; array<VariablePtr>>
-    tag2expr : table<string; smart_ptr<Expression>>
+    kaboomVar : table<string; tuple<prefix : string; suffix : string> >         //! variable field access replacement rules
+    call2name : table<string; string>                                           //! call name replacement rules
+    field2name : table<string; string>                                          //! field name replacement rules
+    var2name : table<string; string>                                            //! variable name replacement rules
+    var2expr : table<string; smart_ptr<Expression>>                             //! variable expression replacement rules
+    var2exprList : table<string; array<smart_ptr<Expression>>>                  //! variable expression list replacement rules
+    type2type : table<string; string>                                           //! type name replacement rules
+    type2etype : table<string; TypeDeclPtr>                                     //! type to type declaration replacement rules
+    struct2etype : table<Structure?; TypeDeclPtr>                               //! structure to type declaration replacement rules
+    blockArgName : table<string; string>                                        //! block argument name replacement rules
+    annArg : table<string; lambda<(var ann : AnnotationDeclaration) : void> >   //! annotation argument replacement rules
+    blkArg : table<string; array<VariablePtr>>                                  //! block argument replacement rules
+    tag2expr : table<string; smart_ptr<Expression>>                             //! tag expression replacement rules
 }
 
 def kaboomVarField(var self : Template; name, prefix, suffix : string) {

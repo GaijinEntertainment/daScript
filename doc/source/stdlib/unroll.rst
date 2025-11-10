@@ -5,8 +5,6 @@
 Loop unrolling
 ==============
 
-.. include:: detail/unroll.rst
-
 The unroll module implements loop unrolling infrastructure.
 
 All functions and symbols are in "unroll" module, use require to get access to it. ::
@@ -35,19 +33,14 @@ For example:::
 Unrolling
 +++++++++
 
-  *  :ref:`unroll (blk:block\<void\> const) : void <function-_at_unroll_c__c_unroll_C1_ls_v_gr__builtin_>` 
+  *  :ref:`unroll (blk: block\<():void\>) <function-unroll_unroll_block_ls__c_void_gr_>` 
 
-.. _function-_at_unroll_c__c_unroll_C1_ls_v_gr__builtin_:
+.. _function-unroll_unroll_block_ls__c_void_gr_:
 
-.. das:function:: unroll(blk: block<void> const)
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+blk     +block<> const+
-+--------+-------------+
-
+.. das:function:: unroll(blk: block<():void>)
 
 Unrolls the for loop (with fixed range)
+
+:Arguments: * **blk** : block<void>
 
 

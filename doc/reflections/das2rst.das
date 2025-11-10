@@ -723,9 +723,6 @@ def main {
     document_module_ast_boost(root)
     document_module_ast_used(root)
     document_module_constexpr(root)
-
-    return
-
     document_module_contracts(root)
     document_module_coroutines(root)
     document_module_cpp_bind(root)

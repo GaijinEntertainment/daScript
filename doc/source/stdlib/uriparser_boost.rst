@@ -5,8 +5,6 @@
 Boost package for the URI parser
 ================================
 
-.. include:: detail/uriparser_boost.rst
-
 The uriparser_boost module implements additional infrastructure for the URI parser.
 
 All functions and symbols are in "uriparser_boost" module, use require to get access to it. ::
@@ -17,198 +15,121 @@ All functions and symbols are in "uriparser_boost" module, use require to get ac
 Split and compose
 +++++++++++++++++
 
-  *  :ref:`uri_split_full_path (uri:uriparser::Uri const implicit) : array\<string\> <function-_at_uriparser_boost_c__c_uri_split_full_path_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`uri_compose_query (query:table\<string;string\> const) : string const <function-_at_uriparser_boost_c__c_uri_compose_query_C1_ls_s_gr_2_ls_s_gr_T>` 
-  *  :ref:`uri_compose_query_in_order (query:table\<string;string\> const) : string const <function-_at_uriparser_boost_c__c_uri_compose_query_in_order_C1_ls_s_gr_2_ls_s_gr_T>` 
-  *  :ref:`uri_compose (scheme:string const;userInfo:string const;hostText:string const;portText:string const;path:string const;query:string const;fragment:string const) : uriparser::Uri <function-_at_uriparser_boost_c__c_uri_compose_Cs_Cs_Cs_Cs_Cs_Cs_Cs>` 
+  *  :ref:`uri_split_full_path (uri: Uri implicit) : array\<string\> <function-uriparser_boost_uri_split_full_path_Uri_implicit>` 
+  *  :ref:`uri_compose_query (query: table\<string, string\>) : string <function-uriparser_boost_uri_compose_query_table_ls_string,_string_gr_>` 
+  *  :ref:`uri_compose_query_in_order (query: table\<string, string\>) : string <function-uriparser_boost_uri_compose_query_in_order_table_ls_string,_string_gr_>` 
+  *  :ref:`uri_compose (scheme: string; userInfo: string; hostText: string; portText: string; path: string; query: string; fragment: string) : Uri <function-uriparser_boost_uri_compose_string_string_string_string_string_string_string>` 
 
-.. _function-_at_uriparser_boost_c__c_uri_split_full_path_CIH_ls_uriparser_c__c_Uri_gr_:
+.. _function-uriparser_boost_uri_split_full_path_Uri_implicit:
 
-.. das:function:: uri_split_full_path(uri: Uri const implicit)
-
-uri_split_full_path returns array<string>
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: uri_split_full_path(uri: Uri implicit) : array<string>
 
 Split the full path of a URI into its components.
 
-.. _function-_at_uriparser_boost_c__c_uri_compose_query_C1_ls_s_gr_2_ls_s_gr_T:
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. das:function:: uri_compose_query(query: table<string;string> const)
+.. _function-uriparser_boost_uri_compose_query_table_ls_string,_string_gr_:
 
-uri_compose_query returns string const
-
-+--------+--------------------------+
-+argument+argument type             +
-+========+==========================+
-+query   +table<string;string> const+
-+--------+--------------------------+
-
+.. das:function:: uri_compose_query(query: table<string, string>) : string
 
 Compose a query string from a table of key-value pairs.
 
-.. _function-_at_uriparser_boost_c__c_uri_compose_query_in_order_C1_ls_s_gr_2_ls_s_gr_T:
+:Arguments: * **query** : table<string;string>
 
-.. das:function:: uri_compose_query_in_order(query: table<string;string> const)
+.. _function-uriparser_boost_uri_compose_query_in_order_table_ls_string,_string_gr_:
 
-uri_compose_query_in_order returns string const
-
-+--------+--------------------------+
-+argument+argument type             +
-+========+==========================+
-+query   +table<string;string> const+
-+--------+--------------------------+
-
+.. das:function:: uri_compose_query_in_order(query: table<string, string>) : string
 
 Compose a query string from a table of key-value pairs, in the sorted order.
 
-.. _function-_at_uriparser_boost_c__c_uri_compose_Cs_Cs_Cs_Cs_Cs_Cs_Cs:
+:Arguments: * **query** : table<string;string>
 
-.. das:function:: uri_compose(scheme: string const; userInfo: string const; hostText: string const; portText: string const; path: string const; query: string const; fragment: string const)
+.. _function-uriparser_boost_uri_compose_string_string_string_string_string_string_string:
 
-uri_compose returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+scheme  +string const +
-+--------+-------------+
-+userInfo+string const +
-+--------+-------------+
-+hostText+string const +
-+--------+-------------+
-+portText+string const +
-+--------+-------------+
-+path    +string const +
-+--------+-------------+
-+query   +string const +
-+--------+-------------+
-+fragment+string const +
-+--------+-------------+
-
+.. das:function:: uri_compose(scheme: string; userInfo: string; hostText: string; portText: string; path: string; query: string; fragment: string) : Uri
 
 Compose a URI from its components.
+
+:Arguments: * **scheme** : string
+
+            * **userInfo** : string
+
+            * **hostText** : string
+
+            * **portText** : string
+
+            * **path** : string
+
+            * **query** : string
+
+            * **fragment** : string
 
 +++++++++++++++++++
 Component accessors
 +++++++++++++++++++
 
-  *  :ref:`scheme (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_scheme_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`user_info (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_user_info_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`host (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_host_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`port (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_port_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`path (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_path_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`query (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_query_CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`fragment (uri:uriparser::Uri const implicit) : string const <function-_at_uriparser_boost_c__c_fragment_CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`scheme (uri: Uri implicit) : string <function-uriparser_boost_scheme_Uri_implicit>` 
+  *  :ref:`user_info (uri: Uri implicit) : string <function-uriparser_boost_user_info_Uri_implicit>` 
+  *  :ref:`host (uri: Uri implicit) : string <function-uriparser_boost_host_Uri_implicit>` 
+  *  :ref:`port (uri: Uri implicit) : string <function-uriparser_boost_port_Uri_implicit>` 
+  *  :ref:`path (uri: Uri implicit) : string <function-uriparser_boost_path_Uri_implicit>` 
+  *  :ref:`query (uri: Uri implicit) : string <function-uriparser_boost_query_Uri_implicit>` 
+  *  :ref:`fragment (uri: Uri implicit) : string <function-uriparser_boost_fragment_Uri_implicit>` 
 
-.. _function-_at_uriparser_boost_c__c_scheme_CIH_ls_uriparser_c__c_Uri_gr_:
+.. _function-uriparser_boost_scheme_Uri_implicit:
 
-.. das:function:: scheme(uri: Uri const implicit)
-
-scheme returns string const
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: scheme(uri: Uri implicit) : string
 
 Returns the scheme of a URI.
 
-.. _function-_at_uriparser_boost_c__c_user_info_CIH_ls_uriparser_c__c_Uri_gr_:
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. das:function:: user_info(uri: Uri const implicit)
+.. _function-uriparser_boost_user_info_Uri_implicit:
 
-user_info returns string const
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: user_info(uri: Uri implicit) : string
 
 Return the user info of a URI.
 
-.. _function-_at_uriparser_boost_c__c_host_CIH_ls_uriparser_c__c_Uri_gr_:
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. das:function:: host(uri: Uri const implicit)
+.. _function-uriparser_boost_host_Uri_implicit:
 
-host returns string const
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: host(uri: Uri implicit) : string
 
 Return the host of a URI.
 
-.. _function-_at_uriparser_boost_c__c_port_CIH_ls_uriparser_c__c_Uri_gr_:
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. das:function:: port(uri: Uri const implicit)
+.. _function-uriparser_boost_port_Uri_implicit:
 
-port returns string const
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: port(uri: Uri implicit) : string
 
 Return the port of a URI.
 
-.. _function-_at_uriparser_boost_c__c_path_CIH_ls_uriparser_c__c_Uri_gr_:
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. das:function:: path(uri: Uri const implicit)
+.. _function-uriparser_boost_path_Uri_implicit:
 
-path returns string const
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: path(uri: Uri implicit) : string
 
 Return the path of a URI.
 
-.. _function-_at_uriparser_boost_c__c_query_CIH_ls_uriparser_c__c_Uri_gr_:
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. das:function:: query(uri: Uri const implicit)
+.. _function-uriparser_boost_query_Uri_implicit:
 
-query returns string const
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: query(uri: Uri implicit) : string
 
 Return the query of a URI.
 
-.. _function-_at_uriparser_boost_c__c_fragment_CIH_ls_uriparser_c__c_Uri_gr_:
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. das:function:: fragment(uri: Uri const implicit)
+.. _function-uriparser_boost_fragment_Uri_implicit:
 
-fragment returns string const
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: fragment(uri: Uri implicit) : string
 
 Return the fragment of a URI.
+
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 

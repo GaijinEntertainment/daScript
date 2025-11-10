@@ -15,17 +15,20 @@ require math public
 
 struct AABR {
     //! axis aligned bounding rectangle
-    min, max : float2
+    min : float2   //! min coordinates
+    max : float2   //! max coordinates
 }
 
 struct AABB {
     //! axis aligned bounding box
-    min, max : float3
+    min : float3   //! min coordinates
+    max : float3   //! max coordinates
 }
 
 struct Ray {
     //! ray (direction and origin)
-    dir, origin : float3
+    dir : float3    //! direction
+    origin : float3 //! origin
 }
 
 def degrees(f : float) {

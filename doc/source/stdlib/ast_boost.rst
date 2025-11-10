@@ -199,8 +199,7 @@ Classes
 
 .. das:function:: MacroMacro.apply(func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
-// stub
-def apply : function<(var self:ast::AstFunctionAnnotation;var func:smart_ptr<ast::Function> aka FunctionPtr -const;var group:rtti::ModuleGroup -const;args:rtti::AnnotationArgumentList const;var errors:$::das_string -const):bool>
+Implementation details of a function annotation macro.
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -221,8 +220,7 @@ def apply : function<(var self:ast::AstFunctionAnnotation;var func:smart_ptr<ast
 
 .. das:function:: TagFunctionAnnotation.apply(func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
-// stub
-def apply : function<(var self:ast::AstFunctionAnnotation;var func:smart_ptr<ast::Function> aka FunctionPtr -const;var group:rtti::ModuleGroup -const;args:rtti::AnnotationArgumentList const;var errors:$::das_string -const):bool>
+Implementation details of a function annotation macro.
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -243,8 +241,7 @@ def apply : function<(var self:ast::AstFunctionAnnotation;var func:smart_ptr<ast
 
 .. das:function:: TagStructureAnnotation.apply(str: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
-// stub
-def apply : function<(var self:ast::AstStructureAnnotation;var st:smart_ptr<ast::Structure> aka StructurePtr -const;var group:rtti::ModuleGroup -const;args:rtti::AnnotationArgumentList const;var errors:$::das_string -const):bool>
+Implementation details of a function annotation macro.
 
 :Arguments: * **str** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
