@@ -21,19 +21,24 @@ Type aliases
 
 .. das:attribute:: CharSet = uint[8]
 
-|detail/typedef-regex-CharSet|
+Character set for regex.
 
 .. _alias-ReGenRandom:
 
 .. das:attribute:: ReGenRandom = iterator<uint>
 
-|detail/typedef-regex-ReGenRandom|
+Regex generator random iterator.
 
 .. _alias-MaybeReNode:
 
 .. das:attribute:: variant MaybeReNode
 
-|detail/typedef-regex-MaybeReNode|
+Regex node or nothing.
+
+:Variants: * **value** :  :ref:`ReNode <struct-regex-ReNode>` ? - Node.
+
+           * **nothing** : void? - Nothing.
+
 
 ++++++++++++
 Enumerations
@@ -43,7 +48,28 @@ Enumerations
 
 .. das:attribute:: ReOp
 
-|detail/enumeration-regex-ReOp|
+Type of regular expression operation.
+
+:Values: * **Char** = 0 - Matching a character
+
+         * **Set** = 1 - Matching a character set
+
+         * **Any** = 2 - Matches any character
+
+         * **Eos** = 3 - Matches end of string
+
+         * **Group** = 4 - Matching a group
+
+         * **Plus** = 5 - Repetition: one or more
+
+         * **Star** = 6 - Repetition: zero or more
+
+         * **Question** = 7 - Repetition: zero or one
+
+         * **Concat** = 8 - First followed by second
+
+         * **Union** = 9 - Either first or second
+
 
 ++++++++++
 Structures
@@ -53,13 +79,55 @@ Structures
 
 .. das:attribute:: ReNode
 
-|detail/structure-regex-ReNode|
+Regular expression node.
+
+:Fields: * **op** :  :ref:`ReOp <enum-regex-ReOp>`  - Regex operation
+
+         * **id** : int - Unique node identifier
+
+         * **fun2** : function<(regex: :ref:`Regex <struct-regex-Regex>` ;node: :ref:`ReNode <struct-regex-ReNode>` ?;str:uint8?):uint8?> - Matchig function
+
+         * **gen2** : function<(node: :ref:`ReNode <struct-regex-ReNode>` ?;rnd: :ref:`ReGenRandom <alias-ReGenRandom>` ;str: :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> - Generator function
+
+         * **at** : range - Source range
+
+         * **text** : string - Text fragment
+
+         * **textLen** : int - Length of text fragment
+
+         * **all** : array< :ref:`ReNode <struct-regex-ReNode>` ?> - All child nodes
+
+         * **left** :  :ref:`ReNode <struct-regex-ReNode>` ? - Left child node
+
+         * **right** :  :ref:`ReNode <struct-regex-ReNode>` ? - Right child node
+
+         * **subexpr** :  :ref:`ReNode <struct-regex-ReNode>` ? - Subexpression node
+
+         * **next** :  :ref:`ReNode <struct-regex-ReNode>` ? - Next node in the list
+
+         * **cset** :  :ref:`CharSet <alias-CharSet>`  - Character set for character class matching
+
+         * **index** : int - Index for character class matching
+
+         * **tail** : uint8? - Tail of the string
+
 
 .. _struct-regex-Regex:
 
 .. das:attribute:: Regex
 
-|detail/structure-regex-Regex|
+Regular expression structure.
+
+:Fields: * **root** :  :ref:`ReNode <struct-regex-ReNode>` ? - Root node of the regex.
+
+         * **match** : uint8? - Original source text.
+
+         * **groups** : array<tuple<range;string>> - Captured groups.
+
+         * **earlyOut** :  :ref:`CharSet <alias-CharSet>`  - Character set for early out optimization.
+
+         * **canEarlyOut** : bool - Whether early out optimization is enabled.
+
 
 ++++++++++++++++++++++++++
 Compilation and validation
@@ -77,7 +145,7 @@ Compilation and validation
 
 .. das:function:: visit_top_down(node: ReNode?; blk: block<(var n:ReNode?):void>)
 
-|detail/function-regex-visit_top_down-0x867105c84f7707dd|
+Visitor for regex nodes in top-down manner.
 
 :Arguments: * **node** :  :ref:`ReNode <struct-regex-ReNode>` ?
 
@@ -87,7 +155,7 @@ Compilation and validation
 
 .. das:function:: is_valid(re: Regex) : bool
 
-|detail/function-regex-is_valid-0x48938b17eb85e468|
+Whether the regex is valid.
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -95,7 +163,7 @@ Compilation and validation
 
 .. das:function:: regex_compile(re: Regex; expr: string) : bool
 
-|detail/function-regex-regex_compile-0xbee372cb413d18d4|
+Precompile a regular expression.
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -105,7 +173,7 @@ Compilation and validation
 
 .. das:function:: regex_compile(expr: string) : Regex
 
-|detail/function-regex-regex_compile-0x8d1fa7153512427c|
+Precompiles regular expression.
 
 :Arguments: * **expr** : string
 
@@ -113,7 +181,7 @@ Compilation and validation
 
 .. das:function:: regex_compile(re: Regex) : Regex
 
-|detail/function-regex-regex_compile-0xf92d1317941ea54f|
+Precompile a regular expression.
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -121,7 +189,7 @@ Compilation and validation
 
 .. das:function:: regex_debug(regex: Regex)
 
-|detail/function-regex-regex_debug-0xb83173e5f53e7307|
+Debugs regular expression by printing its structure.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -129,7 +197,7 @@ Compilation and validation
 
 .. das:function:: debug_set(cset: CharSet)
 
-|detail/function-regex-debug_set-0xcca0fc7d0b472fcc|
+Debugs character set by printing all characters it contains.
 
 :Arguments: * **cset** :  :ref:`CharSet <alias-CharSet>` 
 
@@ -144,7 +212,7 @@ Access
 
 .. das:function:: regex_group(regex: Regex; index: int; match: string) : string
 
-|detail/function-regex-regex_group-0xd24e0018b69956a1|
+Returns the substring matched by the specified regex group.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -156,7 +224,7 @@ Access
 
 .. das:function:: regex_foreach(regex: Regex; str: string; blk: block<(at:range):bool>)
 
-|detail/function-regex-regex_foreach-0xf58d1bd2afa1c1cf|
+Iterate over all matches of a regex in a string.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -164,23 +232,36 @@ Access
 
             * **blk** : block<(at:range):bool>
 
-+++++
-Match
-+++++
++++++++++++++++
+Match & replace
++++++++++++++++
 
   *  :ref:`regex_match (var regex: Regex; str: string; offset: int = 0) : int <function-regex_regex_match_Regex_string_int>` 
+  *  :ref:`regex_replace (var regex: Regex; str: string; blk: block\<(at:string):string\>) : string <function-regex_regex_replace_Regex_string_block_ls_at_c_string_c_string_gr_>` 
 
 .. _function-regex_regex_match_Regex_string_int:
 
 .. das:function:: regex_match(regex: Regex; str: string; offset: int = 0) : int
 
-|detail/function-regex-regex_match-0x57eb2a8a877d853e|
+Matches a regular expression against a string and returns the position of the match.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **str** : string
 
             * **offset** : int
+
+.. _function-regex_regex_replace_Regex_string_block_ls_at_c_string_c_string_gr_:
+
+.. das:function:: regex_replace(regex: Regex; str: string; blk: block<(at:string):string>) : string
+
+Replaces substrings matched by the regex with the result of the provided block.
+
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
+
+            * **str** : string
+
+            * **blk** : block<(at:string):string>
 
 ++++++++++
 Generation
@@ -193,32 +274,16 @@ Generation
 
 .. das:function:: re_gen_get_rep_limit() : uint
 
-|detail/function-regex-re_gen_get_rep_limit-0xf9842345edbf4128|
+Limit of repetitions for regex quantifiers.
 
 .. _function-regex_re_gen_Regex_ReGenRandom:
 
 .. das:function:: re_gen(re: Regex; rnd: ReGenRandom) : string
 
-|detail/function-regex-re_gen-0x43707a23b4974c5a|
+Generate a random string matching the regex.
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **rnd** :  :ref:`ReGenRandom <alias-ReGenRandom>` 
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-regex_regex_replace_Regex_string_block_ls_at_c_string_c_string_gr_:
-
-.. das:function:: regex_replace(regex: Regex; str: string; blk: block<(at:string):string>) : string
-
-|detail/function-regex-regex_replace-0x1afe0b10a073cf4f|
-
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
-
-            * **str** : string
-
-            * **blk** : block<(at:string):string>
 
 

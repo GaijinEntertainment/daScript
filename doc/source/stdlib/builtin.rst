@@ -3107,10 +3107,7 @@ Bit operations
 
 .. das:function:: __bit_set(value: bitfield8:uint8<>& implicit; mask: bitfield8:uint8<>; on: bool)
 
-// stub
-def def public __bit_set(var value:bitfield8:uint8<>& implicit; mask:bitfield8:uint8<> const; on:bool const
-
-
+Set bit in a bitfield.
 
 :Arguments: * **value** : bitfield : uint8<>& implicit
 
@@ -3122,10 +3119,7 @@ def def public __bit_set(var value:bitfield8:uint8<>& implicit; mask:bitfield8:u
 
 .. das:function:: __bit_set(value: bitfield16:uint16<>& implicit; mask: bitfield16:uint16<>; on: bool)
 
-// stub
-def def public __bit_set(var value:bitfield16:uint16<>& implicit; mask:bitfield16:uint16<> const; on:bool const
-
-
+Set bit in a bitfield.
 
 :Arguments: * **value** : bitfield : uint16<>& implicit
 
@@ -3137,10 +3131,7 @@ def def public __bit_set(var value:bitfield16:uint16<>& implicit; mask:bitfield1
 
 .. das:function:: __bit_set(value: bitfield64:uint64<>& implicit; mask: bitfield64:uint64<>; on: bool)
 
-// stub
-def def public __bit_set(var value:bitfield64:uint64<>& implicit; mask:bitfield64:uint64<> const; on:bool const
-
-
+Set bit in a bitfield.
 
 :Arguments: * **value** : bitfield : uint64<>& implicit
 

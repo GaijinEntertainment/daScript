@@ -19,6 +19,6 @@ Reader macros
 
 .. das:attribute:: regex
 
-|detail/reader_macro-regex_boost-regex|
+Reader macro regex. This once comnversts %regex~ macros into regex::Regex objects during compilation time.
 
 

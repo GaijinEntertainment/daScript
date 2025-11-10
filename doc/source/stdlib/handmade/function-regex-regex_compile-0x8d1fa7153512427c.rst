@@ -1,0 +1,1 @@
+Precompiles regular expression.

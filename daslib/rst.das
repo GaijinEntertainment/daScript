@@ -527,7 +527,7 @@ def make_table_(tab:array<array<string>>;withHeader:bool=false)
 
 def is_handmade(mod : Module?)
     // several modules are handmade even though they are built-in
-    if mod.name=="ast_boost" || mod.name=="strings_boost"
+    if mod.name=="ast_boost" || mod.name=="strings_boost" || mod.name=="regex" || mod.name=="regex_boost"
         return true
     return mod.moduleFlags.builtIn && !mod.moduleFlags.promoted
 
