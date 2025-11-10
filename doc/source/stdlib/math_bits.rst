@@ -37,7 +37,7 @@ bit representation of x is interpreted as a float
 
 .. das:function:: int_bits_to_float(x: int2) : float2
 
-|detail/function-math_bits-int_bits_to_float-0xaafc59fcc1694d59|
+bit representation of x is interpreted as a float
 
 :Arguments: * **x** : int2
 
@@ -45,7 +45,7 @@ bit representation of x is interpreted as a float
 
 .. das:function:: int_bits_to_float(x: int3) : float3
 
-|detail/function-math_bits-int_bits_to_float-0xaafc58fcc1694ba6|
+bit representation of x is interpreted as a float
 
 :Arguments: * **x** : int3
 
@@ -53,7 +53,7 @@ bit representation of x is interpreted as a float
 
 .. das:function:: int_bits_to_float(x: int4) : float4
 
-|detail/function-math_bits-int_bits_to_float-0xaafc5bfcc16950bf|
+bit representation of x is interpreted as a float
 
 :Arguments: * **x** : int4
 
@@ -69,7 +69,7 @@ bit representation of x is interpreted as a float
 
 .. das:function:: uint_bits_to_float(x: uint2) : float2
 
-|detail/function-math_bits-uint_bits_to_float-0xd1a4ac25c694a828|
+bit representation of x is interpreted as a float2
 
 :Arguments: * **x** : uint2
 
@@ -77,7 +77,7 @@ bit representation of x is interpreted as a float
 
 .. das:function:: uint_bits_to_float(x: uint3) : float3
 
-|detail/function-math_bits-uint_bits_to_float-0xd1a4ad25c694a9db|
+bit representation of x is interpreted as a float3
 
 :Arguments: * **x** : uint3
 
@@ -85,7 +85,7 @@ bit representation of x is interpreted as a float
 
 .. das:function:: uint_bits_to_float(x: uint4) : float4
 
-|detail/function-math_bits-uint_bits_to_float-0xd1a4b225c694b25a|
+bit representation of x is interpreted as a float4
 
 :Arguments: * **x** : uint4
 
@@ -114,7 +114,7 @@ bit representation of x is interpreted as a int
 
 .. das:function:: float_bits_to_int(x: float2) : int2
 
-|detail/function-math_bits-float_bits_to_int-0x10b7acb821f31afe|
+bit representation of x is interpreted as a int2
 
 :Arguments: * **x** : float2
 
@@ -122,7 +122,7 @@ bit representation of x is interpreted as a int
 
 .. das:function:: float_bits_to_int(x: float3) : int3
 
-|detail/function-math_bits-float_bits_to_int-0x10b7adb821f31cb1|
+bit representation of x is interpreted as a int3
 
 :Arguments: * **x** : float3
 
@@ -130,7 +130,7 @@ bit representation of x is interpreted as a int
 
 .. das:function:: float_bits_to_int(x: float4) : int4
 
-|detail/function-math_bits-float_bits_to_int-0x10b7aeb821f31e64|
+bit representation of x is interpreted as a int4
 
 :Arguments: * **x** : float4
 
@@ -146,7 +146,7 @@ bit representation of x is interpreted as a uint
 
 .. das:function:: float_bits_to_uint(x: float2) : uint2
 
-|detail/function-math_bits-float_bits_to_uint-0x43434831d466ee1e|
+bit representation of x is interpreted as a uint2
 
 :Arguments: * **x** : float2
 
@@ -154,7 +154,7 @@ bit representation of x is interpreted as a uint
 
 .. das:function:: float_bits_to_uint(x: float3) : uint3
 
-|detail/function-math_bits-float_bits_to_uint-0x43444831d468a11e|
+bit representation of x is interpreted as a uint3
 
 :Arguments: * **x** : float3
 
@@ -162,7 +162,7 @@ bit representation of x is interpreted as a uint
 
 .. das:function:: float_bits_to_uint(x: float4) : uint4
 
-|detail/function-math_bits-float_bits_to_uint-0x433d4831d45cbc1e|
+bit representation of x is interpreted as a uint4
 
 :Arguments: * **x** : float4
 

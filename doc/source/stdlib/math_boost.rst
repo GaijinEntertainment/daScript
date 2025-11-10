@@ -93,7 +93,7 @@ returns true if inputs intersect
 
 .. das:function:: is_intersecting(a: AABB; b: AABB) : bool
 
-|detail/function-math_boost-is_intersecting-0x1c857741a57acbb2|
+returns true if inputs intersect
 
 :Arguments: * **a** :  :ref:`AABB <struct-math_boost-AABB>` 
 
@@ -103,7 +103,7 @@ returns true if inputs intersect
 
 .. das:function:: is_intersecting(ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool
 
-|detail/function-math_boost-is_intersecting-0x9e58f0ad7bc52d40|
+returns true if ray intersects aabb within [Tmin, Tmax]
 
 :Arguments: * **ray** :  :ref:`Ray <struct-math_boost-Ray>` 
 
@@ -255,6 +255,38 @@ construct plane from point `p` and normal `n`
 
             * **n** : float3
 
++++++++++++++++++
+Color conversions
++++++++++++++++++
+
+  *  :ref:`linear_to_SRGB (x: float) : float <function-math_boost_linear_to_SRGB_float>` 
+  *  :ref:`linear_to_SRGB (c: float3) : float3 <function-math_boost_linear_to_SRGB_float3>` 
+  *  :ref:`linear_to_SRGB (c: float4) : float4 <function-math_boost_linear_to_SRGB_float4>` 
+
+.. _function-math_boost_linear_to_SRGB_float:
+
+.. das:function:: linear_to_SRGB(x: float) : float
+
+convert value from linear space to sRGB curve space
+
+:Arguments: * **x** : float
+
+.. _function-math_boost_linear_to_SRGB_float3:
+
+.. das:function:: linear_to_SRGB(c: float3) : float3
+
+convert value from linear space to sRGB curve space
+
+:Arguments: * **c** : float3
+
+.. _function-math_boost_linear_to_SRGB_float4:
+
+.. das:function:: linear_to_SRGB(c: float4) : float4
+
+convert value from linear space to sRGB curve space
+
+:Arguments: * **c** : float4
+
 ++++++++++++++++++++++++++
 Color packig and unpacking
 ++++++++++++++++++++++++++
@@ -282,7 +314,7 @@ conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
 
 .. das:function:: RGBA_TO_UCOLOR(xyzw: float4) : uint
 
-|detail/function-math_boost-RGBA_TO_UCOLOR-0xfea34bf3d8bd7d71|
+conversion from RGBA to ucolor. xyzw components are in [0,1] range
 
 :Arguments: * **xyzw** : float4
 
@@ -301,33 +333,5 @@ conversion from ucolor to RGBA. x components are in [0,255] range
 conversion from ucolor to RGB. x components are in [0,255] range. result is float3(x,y,z)
 
 :Arguments: * **x** : uint
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-math_boost_linear_to_SRGB_float:
-
-.. das:function:: linear_to_SRGB(x: float) : float
-
-convert value from linear space to sRGB curve space
-
-:Arguments: * **x** : float
-
-.. _function-math_boost_linear_to_SRGB_float3:
-
-.. das:function:: linear_to_SRGB(c: float3) : float3
-
-|detail/function-math_boost-linear_to_SRGB-0x74ddd213dc94b6af|
-
-:Arguments: * **c** : float3
-
-.. _function-math_boost_linear_to_SRGB_float4:
-
-.. das:function:: linear_to_SRGB(c: float4) : float4
-
-|detail/function-math_boost-linear_to_SRGB-0x74e2d213dc9d35af|
-
-:Arguments: * **c** : float4
 
 
