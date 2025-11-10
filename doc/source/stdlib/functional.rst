@@ -34,6 +34,8 @@ Map, reduce
   *  :ref:`not (x: auto) : auto <function-functional_not_auto>` 
   *  :ref:`echo (var x: auto; extra: string = "\n") : auto <function-functional_echo_auto_string>` 
   *  :ref:`flatten (var it: iterator\<auto(TT)\>) : auto <function-functional_flatten_iterator_ls_autoTT_gr_>` 
+  *  :ref:`sorted (var arr: array\<auto\>) : auto <function-functional_sorted_array_ls_auto_gr_>` 
+  *  :ref:`sorted (var it: iterator\<auto(TT)\>) : auto <function-functional_sorted_iterator_ls_autoTT_gr_>` 
 
 .. _function-functional_filter_iterator_ls_autoTT_gr__lambda_ls_what_c_TT_c_bool_gr_:
 
@@ -49,7 +51,7 @@ iterates over `src` and yields only those elements for which `blk` returns true
 
 .. das:function:: filter(src: iterator<auto(TT)>; blk: function<(what:TT):bool>) : auto
 
-|detail/function-functional-filter-0x27d6a5e69de6ba9|
+iterates over `src` and yields only those elements for which `blk` returns true
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -69,7 +71,7 @@ iterates over `src` and yields the result of `blk` for each element
 
 .. das:function:: map(src: iterator<auto(TT)>; blk: function<(what:TT):auto(QQ)>) : auto
 
-|detail/function-functional-map-0x5bb08f25f30d970|
+iterates over `src` and yields the result of `blk` for each element
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -90,7 +92,8 @@ and previous reduction result
 
 .. das:function:: reduce(it: iterator<auto(TT)>; blk: function<(left:TT;right:TT):TT>) : auto
 
-|detail/function-functional-reduce-0xd490192be6966a38|
+iterates over `it` and yields the reduced (combined) result of `blk` for each element
+and previous reduction result
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -100,7 +103,8 @@ and previous reduction result
 
 .. das:function:: reduce(it: iterator<auto(TT)>; blk: block<(left:TT;right:TT):TT>) : auto
 
-|detail/function-functional-reduce-0xd2707be9d4c617c0|
+iterates over `it` and yields the reduced (combined) result of `blk` for each element
+and previous reduction result
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -213,6 +217,22 @@ iterates over `it`, than iterates over each element of each element of `it` and 
 
 :Arguments: * **it** : iterator<auto(TT)>
 
+.. _function-functional_sorted_array_ls_auto_gr_:
+
+.. das:function:: sorted(arr: array<auto>) : auto
+
+iterates over input and returns it sorted version
+
+:Arguments: * **arr** : array<auto>
+
+.. _function-functional_sorted_iterator_ls_autoTT_gr_:
+
+.. das:function:: sorted(it: iterator<auto(TT)>) : auto
+
+iterates over input and returns it sorted version
+
+:Arguments: * **it** : iterator<auto(TT)>
+
 +++++++
 Queries
 +++++++
@@ -239,25 +259,5 @@ yields true if `a` and `b` are not equal
 :Arguments: * **a** : auto
 
             * **b** : auto
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-functional_sorted_array_ls_auto_gr_:
-
-.. das:function:: sorted(arr: array<auto>) : auto
-
-iterates over input and returns it sorted version
-
-:Arguments: * **arr** : array<auto>
-
-.. _function-functional_sorted_iterator_ls_autoTT_gr_:
-
-.. das:function:: sorted(it: iterator<auto(TT)>) : auto
-
-iterates over input and returns it sorted version
-
-:Arguments: * **it** : iterator<auto(TT)>
 
 
