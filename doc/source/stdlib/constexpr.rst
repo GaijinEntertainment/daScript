@@ -5,8 +5,6 @@
 Constant expression checker and substitution
 ============================================
 
-.. include:: detail/constexpr.rst
-
 The constant_expression module implements `constant expression` function argument check, as well as argument substitution.
 
 All functions and symbols are in "constexpr" module, use require to get access to it. ::
@@ -51,21 +49,14 @@ For example::
 Macro helpers
 +++++++++++++
 
-  *  :ref:`isConstantExpression (expr:smart_ptr\<ast::Expression\> const) : bool const <function-_at_constant_expression_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
+  *  :ref:`isConstantExpression (expr: ExpressionPtr) : bool <function-constant_expression_isConstantExpression_ExpressionPtr>` 
 
-.. _function-_at_constant_expression_c__c_isConstantExpression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M:
+.. _function-constant_expression_isConstantExpression_ExpressionPtr:
 
-.. das:function:: isConstantExpression(expr: ExpressionPtr)
-
-isConstantExpression returns bool const
-
-+--------+--------------------------------------------+
-+argument+argument type                               +
-+========+============================================+
-+expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>` +
-+--------+--------------------------------------------+
-
+.. das:function:: isConstantExpression(expr: ExpressionPtr) : bool
 
 This macro function retrusn true if the expression is a constant expression
+
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 
