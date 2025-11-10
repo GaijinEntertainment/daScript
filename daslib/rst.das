@@ -388,7 +388,7 @@ def describe_type(td:TypeDeclPtr)
                         write(writer,describe_type(at))
             write(writer,">")
         elif baseType==Type.tBitfield || baseType==Type.tBitfield8 || baseType==Type.tBitfield16 || baseType==Type.tBitfield64
-            write(writer,das_to_string(baseType))
+            write(writer, "bitfield")
             if (baseType == Type.tBitfield8)
                 write(writer, " : uint8")
             elif (baseType == Type.tBitfield16)

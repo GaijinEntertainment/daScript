@@ -97,9 +97,9 @@ Value conversion
   *  :ref:`JV (v: float) : JsonValue? <function-json_JV_float>` 
   *  :ref:`JV (v: int) : JsonValue? <function-json_JV_int>` 
   *  :ref:`JV (v: bitfield) : JsonValue? <function-json_JV_bitfield>` 
-  *  :ref:`JV (v: bitfield8:uint8) : JsonValue? <function-json_JV_bitfield8_c_uint8>` 
-  *  :ref:`JV (v: bitfield16:uint16) : JsonValue? <function-json_JV_bitfield16_c_uint16>` 
-  *  :ref:`JV (v: bitfield64:uint64) : JsonValue? <function-json_JV_bitfield64_c_uint64>` 
+  *  :ref:`JV (v: bitfield8:uint8\<\>) : JsonValue? <function-json_JV_bitfield8_c_uint8_ls__gr_>` 
+  *  :ref:`JV (v: bitfield16:uint16\<\>) : JsonValue? <function-json_JV_bitfield16_c_uint16_ls__gr_>` 
+  *  :ref:`JV (v: bitfield64:uint64\<\>) : JsonValue? <function-json_JV_bitfield64_c_uint64_ls__gr_>` 
   *  :ref:`JV (val: int8) : JsonValue? <function-json_JV_int8>` 
   *  :ref:`JV (val: uint8) : JsonValue? <function-json_JV_uint8>` 
   *  :ref:`JV (val: int16) : JsonValue? <function-json_JV_int16>` 
@@ -118,7 +118,7 @@ Creates `JsonValue` representing `null`.
 
 .. das:function:: JV(v: string) : JsonValue?
 
-Creates `JsonValue` out of value.
+Creates `JsonValue` out of string value.
 
 :Arguments: * **v** : string
 
@@ -126,7 +126,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(v: double) : JsonValue?
 
-|detail/function-json-JV-0x2009c03d3b2bebb2|
+Creates `JsonValue` out of double value.
 
 :Arguments: * **v** : double
 
@@ -134,7 +134,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(v: bool) : JsonValue?
 
-|detail/function-json-JV-0xd3c782ad29543cc6|
+Creates `JsonValue` out of boolean value.
 
 :Arguments: * **v** : bool
 
@@ -142,7 +142,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(v: table<string, JsonValue?>) : JsonValue?
 
-|detail/function-json-JV-0x814552217927ee6f|
+Creates `JsonValue` out of object (table string->JsonValue?) value.
 
 :Arguments: * **v** : table<string; :ref:`JsonValue <struct-json-JsonValue>` ?>
 
@@ -150,7 +150,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(v: array<JsonValue?>) : JsonValue?
 
-|detail/function-json-JV-0xc3ad058b3e188167|
+Creates `JsonValue` out of array of `JsonValue?` value.
 
 :Arguments: * **v** : array< :ref:`JsonValue <struct-json-JsonValue>` ?>
 
@@ -158,7 +158,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(v: float) : JsonValue?
 
-|detail/function-json-JV-0x57f12a4b472e2cfa|
+Creates `JsonValue` out of float value.
 
 :Arguments: * **v** : float
 
@@ -166,7 +166,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(v: int) : JsonValue?
 
-|detail/function-json-JV-0xd6b497ad2b89b138|
+Creates `JsonValue` out of int value.
 
 :Arguments: * **v** : int
 
@@ -174,39 +174,39 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(v: bitfield) : JsonValue?
 
-|detail/function-json-JV-0xdc04f9425da5182e|
+Creates `JsonValue` out of bitfield value.
 
 :Arguments: * **v** : bitfield<>
 
-.. _function-json_JV_bitfield8_c_uint8:
+.. _function-json_JV_bitfield8_c_uint8_ls__gr_:
 
-.. das:function:: JV(v: bitfield8:uint8) : JsonValue?
+.. das:function:: JV(v: bitfield8:uint8<>) : JsonValue?
 
-|detail/function-json-JV-0x62e571ac63aee4db|
+Creates `JsonValue` out of bitfield8 value.
 
-:Arguments: * **v** : bitfield8 : uint8<>
+:Arguments: * **v** : bitfield : uint8<>
 
-.. _function-json_JV_bitfield16_c_uint16:
+.. _function-json_JV_bitfield16_c_uint16_ls__gr_:
 
-.. das:function:: JV(v: bitfield16:uint16) : JsonValue?
+.. das:function:: JV(v: bitfield16:uint16<>) : JsonValue?
 
-|detail/function-json-JV-0x1344863df8c8ae02|
+Creates `JsonValue` out of bitfield16 value.
 
-:Arguments: * **v** : bitfield16 : uint16<>
+:Arguments: * **v** : bitfield : uint16<>
 
-.. _function-json_JV_bitfield64_c_uint64:
+.. _function-json_JV_bitfield64_c_uint64_ls__gr_:
 
-.. das:function:: JV(v: bitfield64:uint64) : JsonValue?
+.. das:function:: JV(v: bitfield64:uint64<>) : JsonValue?
 
-|detail/function-json-JV-0x57d3862ddad4fb3d|
+Creates `JsonValue` out of bitfield64 value.
 
-:Arguments: * **v** : bitfield64 : uint64<>
+:Arguments: * **v** : bitfield : uint64<>
 
 .. _function-json_JV_int8:
 
 .. das:function:: JV(val: int8) : JsonValue?
 
-|detail/function-json-JV-0xd67c97ad2b2a8938|
+Creates `JsonValue` out of int8 value.
 
 :Arguments: * **val** : int8
 
@@ -214,7 +214,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(val: uint8) : JsonValue?
 
-|detail/function-json-JV-0x1707d332fa20c62e|
+Creates `JsonValue` out of uint8 value.
 
 :Arguments: * **val** : uint8
 
@@ -222,7 +222,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(val: int16) : JsonValue?
 
-|detail/function-json-JV-0xb808c9406d7d01ca|
+Creates `JsonValue` out of int16 value.
 
 :Arguments: * **val** : int16
 
@@ -230,7 +230,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(val: uint16) : JsonValue?
 
-|detail/function-json-JV-0x16d1cc32f9c4f849|
+Creates `JsonValue` out of uint16 value.
 
 :Arguments: * **val** : uint16
 
@@ -238,7 +238,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(val: uint) : JsonValue?
 
-|detail/function-json-JV-0xccada1ad234bfe22|
+Creates `JsonValue` out of uint value.
 
 :Arguments: * **val** : uint
 
@@ -246,7 +246,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(val: int64) : JsonValue?
 
-|detail/function-json-JV-0xb4a2c7406a99d564|
+Creates `JsonValue` out of int64 value.
 
 :Arguments: * **val** : int64
 
@@ -254,7 +254,7 @@ Creates `JsonValue` out of value.
 
 .. das:function:: JV(val: uint64) : JsonValue?
 
-|detail/function-json-JV-0x16d3cd32f9c85ffc|
+Creates `JsonValue` out of uint64 value.
 
 :Arguments: * **val** : uint64
 
@@ -282,7 +282,8 @@ if `error` is not empty, it contains the parsing error message.
 
 .. das:function:: read_json(text: array<uint8>; error: string&) : JsonValue?
 
-|detail/function-json-read_json-0xe5a7c0a3d9cc08bf|
+reads JSON from the `text` array of uint8.
+if `error` is not empty, it contains the parsing error message.
 
 :Arguments: * **text** : array<uint8>
 
@@ -347,7 +348,7 @@ Broken JSON
 .. das:function:: try_fixing_broken_json(bad: string) : string
 
 fixes broken json. so far supported
-1. "string" + "string" string concatination
+1. "string" + "string" string concatenation
 2. "text "nested text" text" nested quotes
 3. extra , at the end of object or array
 4. /uXXXXXX sequences in the middle of white space

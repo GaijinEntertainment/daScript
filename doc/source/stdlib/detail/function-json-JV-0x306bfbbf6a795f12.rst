@@ -1,1 +1,1 @@
-Creates `JsonValue` out of value.
+Creates `JsonValue` out of string value.

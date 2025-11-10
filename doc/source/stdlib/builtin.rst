@@ -3029,9 +3029,9 @@ Bit operations
   *  :ref:`popcnt (bits: uint64) : uint64 <function-builtin_popcnt_uint64>` 
   *  :ref:`mul128 (a: uint64; b: uint64) : urange64 <function-builtin_mul128_uint64_uint64>` 
   *  :ref:`__bit_set (value: bitfield& implicit; mask: bitfield; on: bool) <function-builtin___bit_set_bitfield_implicit_bitfield_bool>` 
-  *  :ref:`__bit_set (value: bitfield8:uint8& implicit; mask: bitfield8:uint8; on: bool) <function-builtin___bit_set_bitfield8_c_uint8_implicit_bitfield8_c_uint8_bool>` 
-  *  :ref:`__bit_set (value: bitfield16:uint16& implicit; mask: bitfield16:uint16; on: bool) <function-builtin___bit_set_bitfield16_c_uint16_implicit_bitfield16_c_uint16_bool>` 
-  *  :ref:`__bit_set (value: bitfield64:uint64& implicit; mask: bitfield64:uint64; on: bool) <function-builtin___bit_set_bitfield64_c_uint64_implicit_bitfield64_c_uint64_bool>` 
+  *  :ref:`__bit_set (value: bitfield8:uint8\<\>& implicit; mask: bitfield8:uint8\<\>; on: bool) <function-builtin___bit_set_bitfield8_c_uint8_ls__gr__implicit_bitfield8_c_uint8_ls__gr__bool>` 
+  *  :ref:`__bit_set (value: bitfield16:uint16\<\>& implicit; mask: bitfield16:uint16\<\>; on: bool) <function-builtin___bit_set_bitfield16_c_uint16_ls__gr__implicit_bitfield16_c_uint16_ls__gr__bool>` 
+  *  :ref:`__bit_set (value: bitfield64:uint64\<\>& implicit; mask: bitfield64:uint64\<\>; on: bool) <function-builtin___bit_set_bitfield64_c_uint64_ls__gr__implicit_bitfield64_c_uint64_ls__gr__bool>` 
 
 .. _function-builtin_clz_uint:
 
@@ -3103,39 +3103,48 @@ Bit operations
 
             * **on** : bool
 
-.. _function-builtin___bit_set_bitfield8_c_uint8_implicit_bitfield8_c_uint8_bool:
+.. _function-builtin___bit_set_bitfield8_c_uint8_ls__gr__implicit_bitfield8_c_uint8_ls__gr__bool:
 
-.. das:function:: __bit_set(value: bitfield8:uint8& implicit; mask: bitfield8:uint8; on: bool)
+.. das:function:: __bit_set(value: bitfield8:uint8<>& implicit; mask: bitfield8:uint8<>; on: bool)
 
- Sets the specified bit in the bitfield.
+// stub
+def def public __bit_set(var value:bitfield8:uint8<>& implicit; mask:bitfield8:uint8<> const; on:bool const
 
-:Arguments: * **value** : bitfield8 : uint8<>& implicit
 
-            * **mask** : bitfield8 : uint8<>
 
-            * **on** : bool
+:Arguments: * **value** : bitfield : uint8<>& implicit
 
-.. _function-builtin___bit_set_bitfield16_c_uint16_implicit_bitfield16_c_uint16_bool:
-
-.. das:function:: __bit_set(value: bitfield16:uint16& implicit; mask: bitfield16:uint16; on: bool)
-
- Sets the specified bit in the bitfield.
-
-:Arguments: * **value** : bitfield16 : uint16<>& implicit
-
-            * **mask** : bitfield16 : uint16<>
+            * **mask** : bitfield : uint8<>
 
             * **on** : bool
 
-.. _function-builtin___bit_set_bitfield64_c_uint64_implicit_bitfield64_c_uint64_bool:
+.. _function-builtin___bit_set_bitfield16_c_uint16_ls__gr__implicit_bitfield16_c_uint16_ls__gr__bool:
 
-.. das:function:: __bit_set(value: bitfield64:uint64& implicit; mask: bitfield64:uint64; on: bool)
+.. das:function:: __bit_set(value: bitfield16:uint16<>& implicit; mask: bitfield16:uint16<>; on: bool)
 
- Sets the specified bit in the bitfield.
+// stub
+def def public __bit_set(var value:bitfield16:uint16<>& implicit; mask:bitfield16:uint16<> const; on:bool const
 
-:Arguments: * **value** : bitfield64 : uint64<>& implicit
 
-            * **mask** : bitfield64 : uint64<>
+
+:Arguments: * **value** : bitfield : uint16<>& implicit
+
+            * **mask** : bitfield : uint16<>
+
+            * **on** : bool
+
+.. _function-builtin___bit_set_bitfield64_c_uint64_ls__gr__implicit_bitfield64_c_uint64_ls__gr__bool:
+
+.. das:function:: __bit_set(value: bitfield64:uint64<>& implicit; mask: bitfield64:uint64<>; on: bool)
+
+// stub
+def def public __bit_set(var value:bitfield64:uint64<>& implicit; mask:bitfield64:uint64<> const; on:bool const
+
+
+
+:Arguments: * **value** : bitfield : uint64<>& implicit
+
+            * **mask** : bitfield : uint64<>
 
             * **on** : bool
 
