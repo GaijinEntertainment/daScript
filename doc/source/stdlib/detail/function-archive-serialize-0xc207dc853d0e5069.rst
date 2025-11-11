@@ -1,1 +1,1 @@
-Serializes structured data, based on the `value` type.
+Serializes variant by serializing the index and the active field.

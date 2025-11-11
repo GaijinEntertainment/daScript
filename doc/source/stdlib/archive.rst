@@ -54,6 +54,9 @@ Base class for serializers.
 .. das:attribute:: MemSerializer : Serializer
 
 This serializer stores data in memory (in the array<uint8>)
+internal data buffer
+current reading offset
+last error code
 
 
 .. _function-archive_MemSerializer_rq_write_MemSerializer_void_q__implicit_int:
@@ -118,7 +121,7 @@ Initialize the serializer for reading or writing.
 
 .. das:function:: MemSerializer(from: array<uint8>) : MemSerializer
 
-|detail/function-archive-MemSerializer-MemSerializer-0xe5381da5d7f52677|
+Initialize the serializer for reading from the given data.
 
 :Arguments: * **from** : array<uint8>
 
@@ -147,7 +150,7 @@ Serialization
 
 .. das:function:: serialize(arch: Archive; value: float3x3)
 
-|detail/function-archive-serialize-0x36bc5c6c5b9ab5d7|
+Serializes float3x3 matrix
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -157,7 +160,7 @@ Serialization
 
 .. das:function:: serialize(arch: Archive; value: float3x4)
 
-|detail/function-archive-serialize-0x36c15c6c5ba334d7|
+Serializes float3x4 matrix
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -167,7 +170,7 @@ Serialization
 
 .. das:function:: serialize(arch: Archive; value: float4x4)
 
-|detail/function-archive-serialize-0x4ec35c6c70387bd7|
+Serializes float4x4 matrix
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -177,7 +180,7 @@ Serialization
 
 .. das:function:: serialize(arch: Archive; value: string&)
 
-|detail/function-archive-serialize-0x1064f15a69990e2d|
+Serializes string by serializing its length and characters.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -217,7 +220,7 @@ Write raw data (straight up bytes for raw pod)
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-Serializes structured data, based on the `value` type.
+Serializes variant by serializing the index and the active field.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -227,7 +230,7 @@ Serializes structured data, based on the `value` type.
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-Serializes structured data, based on the `value` type.
+Serializes variant by serializing the index and the active field.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -237,7 +240,7 @@ Serializes structured data, based on the `value` type.
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-Serializes structured data, based on the `value` type.
+Serializes variant by serializing the index and the active field.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -247,7 +250,7 @@ Serializes structured data, based on the `value` type.
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-Serializes structured data, based on the `value` type.
+Serializes variant by serializing the index and the active field.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -257,7 +260,7 @@ Serializes structured data, based on the `value` type.
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
-Serializes structured data, based on the `value` type.
+Serializes variant by serializing the index and the active field.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -267,7 +270,7 @@ Serializes structured data, based on the `value` type.
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)[]) : auto
 
-|detail/function-archive-serialize-0xc22a77853d491dca|
+Serializes array by serializing its length and each element.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -277,7 +280,7 @@ Serializes structured data, based on the `value` type.
 
 .. das:function:: serialize(arch: Archive; value: array<auto(TT)>) : auto
 
-|detail/function-archive-serialize-0x6bda914b651b2d2f|
+Serializes array by serializing its length and each element.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -287,7 +290,7 @@ Serializes structured data, based on the `value` type.
 
 .. das:function:: serialize(arch: Archive; value: table<auto(KT), auto(VT)>) : auto
 
-|detail/function-archive-serialize-0xa62df472ba362ee1|
+Serializes table by serializing its length and each key-value pair.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -297,7 +300,7 @@ Serializes structured data, based on the `value` type.
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)?) : auto
 
-|detail/function-archive-serialize-0xc207d3853d0e411e|
+Serializes nullable type by serializing a flag and the value if present.
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
