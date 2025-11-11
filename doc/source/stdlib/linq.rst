@@ -335,7 +335,7 @@ Set operations
 
 .. das:function:: unique_key(a: auto) : auto
 
-|detail/function-linq-unique_key-0xd7f9bc15013b917b|
+generates unique key of workhorse type for the value
 
 :Arguments: * **a** : auto
 
@@ -702,7 +702,7 @@ Concatenation operations
 
 .. das:function:: concat(a: array<auto(TT)>; b: array<auto(TT)>) : array<TT>
 
-|detail/function-linq-concat-0xd10b448bfaa36cc|
+Concatenates two arrays
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -1466,7 +1466,7 @@ Joins two iterators based on matching keys (inner join) and returns an array
 
 .. das:function:: group_join(srca: iterator<auto(TA)>; srcb: iterator<auto(TB)>; keya: auto; keyb: auto; result: auto) : iterator<typedecl(result(type<TA>,type<array<TB -const -&>>))>
 
-|detail/function-linq-group_join-0x34676dea6590e5a7|
+we pass TA, and sequence of TB to 'result'
 
 :Arguments: * **srca** : iterator<auto(TA)>
 
@@ -1482,7 +1482,7 @@ Joins two iterators based on matching keys (inner join) and returns an array
 
 .. das:function:: group_join(srca: array<auto(TA)>; srcb: array<auto(TB)>; keya: auto; keyb: auto; result: auto) : array<typedecl(result(type<TA>,type<array<TB -const -&>>))>
 
-|detail/function-linq-group_join-0x42970773d6927e13|
+we pass TA, and sequence of TB to 'result'
 
 :Arguments: * **srca** : array<auto(TA)>
 
@@ -1498,7 +1498,7 @@ Joins two iterators based on matching keys (inner join) and returns an array
 
 .. das:function:: group_join_to_array(srca: iterator<auto(TA)>; srcb: iterator<auto(TB)>; keya: auto; keyb: auto; result: auto) : array<typedecl(result(type<TA>,type<array<TB -const -&>>))>
 
-|detail/function-linq-group_join_to_array-0x8ffa2a33c4e503f5|
+we pass TA, and sequence of TB to 'result'
 
 :Arguments: * **srca** : iterator<auto(TA)>
 
@@ -1861,7 +1861,7 @@ Projects each element of an iterator into a new form and returns an array
 
 .. das:function:: select(src: iterator<auto(TT)>; result_selector: auto) : iterator<typedecl(result_selector(type<TT>))>
 
-|detail/function-linq-select-0xd0a2a9d2f1895671|
+Projects each element of an iterator into a new form using a selector function
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -1871,7 +1871,7 @@ Projects each element of an iterator into a new form and returns an array
 
 .. das:function:: select(src: array<auto(TT)>; result_selector: auto) : array<typedecl(result_selector(type<TT>))>
 
-|detail/function-linq-select-0xda1a4c3feab4ea70|
+Projects each element of an array into a new form using a selector function
 
 :Arguments: * **src** : array<auto(TT)>
 
@@ -1881,7 +1881,7 @@ Projects each element of an iterator into a new form and returns an array
 
 .. das:function:: select_to_array(src: iterator<auto(TT)>; result_selector: auto) : array<typedecl(result_selector(type<TT>))>
 
-|detail/function-linq-select_to_array-0xc1151dad61194839|
+Projects each element of an iterator into a new form using a selector function and returns an array
 
 :Arguments: * **src** : iterator<auto(TT)>
 

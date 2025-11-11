@@ -165,6 +165,7 @@ def private concat_impl_const(a : auto(ARGT); b : auto(ARGU); tt : auto(TT); res
 
 [skip_lock_check]
 def concat(a, b : array<auto(TT)>) : array<TT -const -&> {
+    //! Concatenates two arrays
     return <- concat_impl_const(a, b, type<TT -const -&>, length(a) + length(b))
 }
 
@@ -467,7 +468,7 @@ def order_by_descending_to_array(var a : iterator<auto(TT)>; key) : array<TT -co
 }
 
 def unique_key(a) {
-    ///! generates unique key of workhorse type for the value
+    //! generates unique key of workhorse type for the value
     static_if (typeinfo is_workhorse(a)) {
         return a
     } else {
@@ -1667,19 +1668,19 @@ def private group_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : a
 
 [skip_lock_check]
 def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    // we pass TA, and sequence of TB to 'result'
+    //! we pass TA, and sequence of TB to 'result'
     return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
 }
 
 [skip_lock_check]
 def group_join(srca : array<auto(TA)>; srcb : array<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    // we pass TA, and sequence of TB to 'result'
+    //! we pass TA, and sequence of TB to 'result'
     return <- group_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 }
 
 [skip_lock_check]
 def group_join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    // we pass TA, and sequence of TB to 'result'
+    //! we pass TA, and sequence of TB to 'result'
     return <- group_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 }
 
@@ -2683,16 +2684,19 @@ def private select_impl_const(src : auto(ARGT); tt : auto(TT); len : int; select
 
 [skip_lock_check]
 def select(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(type<TT>)) -const -&> {
+    //! Projects each element of an iterator into a new form using a selector function
     return <- select_impl(src, type<TT -const -&>, 0, result_selector).to_sequence_move()
 }
 
 [skip_lock_check]
 def select(src : array<auto(TT)>; result_selector) : array<typedecl(result_selector(type<TT>)) -const -&> {
+    //! Projects each element of an array into a new form using a selector function
     return <- select_impl_const(src, type<TT -const -&>, length(src), result_selector)
 }
 
 [skip_lock_check]
 def select_to_array(var src : iterator<auto(TT)>; result_selector) : array<typedecl(result_selector(type<TT>)) -const -&> {
+    //! Projects each element of an iterator into a new form using a selector function and returns an array
     return <- select_impl(src, type<TT -const -&>, 0, result_selector)
 }
 
