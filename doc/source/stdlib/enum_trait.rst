@@ -35,7 +35,7 @@ Handled enumerations
 
 .. das:attribute:: string_to_enum
 
-|detail/enumeration_macro-enum_trait-string_to_enum|
+Enumeration annotation which implements string constructor for enumeration.
 
 +++++++++++++
 Uncategorized
