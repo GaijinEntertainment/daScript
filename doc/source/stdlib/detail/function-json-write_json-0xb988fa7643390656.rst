@@ -1,1 +1,0 @@
-Overload accepting temporary type
