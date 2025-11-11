@@ -19,13 +19,27 @@ Structures
 
 .. das:attribute:: DocGroup
 
-|detail/structure-rst-DocGroup|
+Group of documentation items.
+
+:Fields: * **name** : string - Name of the group.
+
+         * **func** : array<tuple<fn: :ref:`Function <handle-ast-Function>` ?;mod: :ref:`Module <handle-rtti-Module>` ?>> - Functions in the group.
+
+         * **hidden** : bool - Whether the group is hidden.
+
+         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module, to which this group belongs.
+
 
 .. _struct-rst-DocsHook:
 
 .. das:attribute:: DocsHook
 
-|detail/structure-rst-DocsHook|
+Hook for RST documentation generation.
+
+:Fields: * **annotationFilter** : lambda<(ann: :ref:`Annotation <handle-rtti-Annotation>` ):bool> - Filter for the supported annotations.
+
+         * **afterEnums** : lambda<(f: :ref:`FILE <handle-fio-FILE>` ?;was_enums:bool):void> - Additional generation hook after the enumerations.
+
 
 ++++++++++++++++
 Document writers
@@ -40,7 +54,7 @@ Document writers
 
 .. das:function:: document_enumerations(doc_file: file; mods: array<Module?>) : bool
 
-|detail/function-rst-document_enumerations-0x976bd37277f1fb55|
+Documentation for enumerations in the given modules.
 
 :Arguments: * **doc_file** :  :ref:`file <alias-file>` 
 
@@ -50,7 +64,7 @@ Document writers
 
 .. das:function:: document(name: string; mod: Module?; fname: string; groups: array<DocGroup>; hook: DocsHook = DocsHook())
 
-|detail/function-rst-document-0x79ba3e8e1f0b229d|
+Documents the specified module into a RST file.
 
 :Arguments: * **name** : string
 
@@ -66,7 +80,7 @@ Document writers
 
 .. das:function:: documents(name: string; mods: array<Module?>; fname: string; groups: array<DocGroup>; hook: DocsHook = DocsHook())
 
-|detail/function-rst-documents-0x86ca6f0890c1f49d|
+Documents the specified modules into a RST file.
 
 :Arguments: * **name** : string
 
@@ -82,7 +96,7 @@ Document writers
 
 .. das:function:: document_enumeration(doc_file: file; mod: Module?; value: auto) : auto
 
-|detail/function-rst-document_enumeration-0x750805a4f9ad5c1a|
+Documentation for enumeration types.
 
 :Arguments: * **doc_file** :  :ref:`file <alias-file>` 
 
@@ -100,7 +114,7 @@ Descriptions
 
 .. das:function:: describe_short(expr: Expression?|smart_ptr<Expression>) : auto
 
-|detail/function-rst-describe_short-0xdc1e2684fd95608e|
+Describes the expression in short form.
 
 :Arguments: * **expr** : option< :ref:`Expression <handle-ast-Expression>` ?|smart_ptr< :ref:`Expression <handle-ast-Expression>` >&>
 
@@ -114,7 +128,7 @@ RST section makers
 
 .. das:function:: make_group(name: string; plus: string = "+") : string
 
-|detail/function-rst-make_group-0x5ea77103afb58c31|
+Creates a decorative group header for RST documentation.
 
 :Arguments: * **name** : string
 
@@ -133,7 +147,7 @@ Group operations
 
 .. das:function:: append_to_group_by_regex(group: DocGroup; mod: Module?; reg: Regex) : DocGroup&
 
-|detail/function-rst-append_to_group_by_regex-0xef2819470b739bd8|
+Adds functions matching a regex to a documentation group.
 
 :Arguments: * **group** :  :ref:`DocGroup <struct-rst-DocGroup>` 
 
@@ -145,7 +159,7 @@ Group operations
 
 .. das:function:: group_by_regex(name: string; mod: Module?; reg: Regex) : DocGroup
 
-|detail/function-rst-group_by_regex-0xe99d9c2c0e10bd06|
+Groups module items by regex.
 
 :Arguments: * **name** : string
 
@@ -157,7 +171,7 @@ Group operations
 
 .. das:function:: group_by_regex(name: string; mods: array<Module?>; reg: Regex) : DocGroup
 
-|detail/function-rst-group_by_regex-0x7b1aedda3b773906|
+Groups items in the module by matching their names against the provided regular expression.
 
 :Arguments: * **name** : string
 
@@ -169,7 +183,7 @@ Group operations
 
 .. das:function:: hide_group(group: DocGroup) : DocGroup
 
-|detail/function-rst-hide_group-0xc1116dada303b6e7|
+Makes the specified documentation group hidden.
 
 :Arguments: * **group** :  :ref:`DocGroup <struct-rst-DocGroup>` 
 
@@ -181,7 +195,7 @@ Uncategorized
 
 .. das:function:: safe_function_name(name: string) : string
 
-|detail/function-rst-safe_function_name-0xefb2f32a0bf06a5c|
+Creates a safe function name by replacing special characters.
 
 :Arguments: * **name** : string
 
@@ -189,7 +203,7 @@ Uncategorized
 
 .. das:function:: mkdir_rec(path: string) : bool
 
-|detail/function-rst-mkdir_rec-0x5bdf80adff742967|
+Recursively creates directories for the specified path.
 
 :Arguments: * **path** : string
 
@@ -197,7 +211,7 @@ Uncategorized
 
 .. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto
 
-|detail/function-rst-function_label_file-0x14df9f225d75bb39|
+Creates a unique label for a function suitable for use in file names.
 
 :Arguments: * **value** : option< :ref:`FunctionPtr <alias-FunctionPtr>` | :ref:`Function <handle-ast-Function>` ?>
 
@@ -207,7 +221,7 @@ Uncategorized
 
 .. das:function:: function_label_file(name: auto; value: smart_ptr<TypeDecl>; drop_args: int = 0) : auto
 
-|detail/function-rst-function_label_file-0xc77a64e03bd14298|
+Creates a unique label for a function based on its name and argument types.
 
 :Arguments: * **name** : auto
 
