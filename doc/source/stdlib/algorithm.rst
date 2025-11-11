@@ -50,7 +50,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 .. das:function:: lower_bound(a: array<auto(TT)>; val: TT) : auto
 
-|detail/function-algorithm-lower_bound-0xb469fc2f44d14195|
+Returns an iterator pointing to the first element in the array that is not less than (i.e. greater or equal to) value, or length(a) if no such element is found.
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -60,7 +60,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 .. das:function:: lower_bound(a: array<auto(TT)>; f: int; l: int; value: auto(QQ); less: block<(a:TT;b:QQ):bool>) : auto
 
-|detail/function-algorithm-lower_bound-0x65d7ba53126067c3|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -76,7 +76,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 .. das:function:: lower_bound(a: array<auto(TT)>; value: auto(QQ); less: block<(a:TT;b:QQ):bool>) : auto
 
-|detail/function-algorithm-lower_bound-0x1c9077e733599e3c|
+Returns an iterator pointing to the first element in the array that is not less than (i.e. greater or equal to) value, or length(a) if no such element is found.
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -88,7 +88,8 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 .. das:function:: binary_search(a: array<auto(TT)>; val: TT) : auto
 
-|detail/function-algorithm-binary_search-0xad4ffd6c53c3193|
+Returns true if an val appears within the array a.
+Array a must be sorted.
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -113,7 +114,8 @@ Array a must be sorted.
 
 .. das:function:: binary_search(a: array<auto(TT)>; val: TT; less: block<(a:TT;b:TT):bool>) : auto
 
-|detail/function-algorithm-binary_search-0x289919af628da4e1|
+Returns true if an val appears within the array a.
+Array a must be sorted according to the provided less function.
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -125,7 +127,8 @@ Array a must be sorted.
 
 .. das:function:: binary_search(a: array<auto(TT)>; f: int; last: int; val: TT; less: block<(a:TT;b:TT):bool>) : auto
 
-|detail/function-algorithm-binary_search-0x1f96034a82a36c98|
+Returns true if an val appears within the range [f, last).
+Array a must be sorted according to the provided less function.
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -141,7 +144,7 @@ Array a must be sorted.
 
 .. das:function:: lower_bound(a: auto; f: int; l: int; val: auto) : auto
 
-|detail/function-algorithm-lower_bound-0x9e462d5940438790|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 :Arguments: * **a** : auto
 
@@ -155,7 +158,7 @@ Array a must be sorted.
 
 .. das:function:: lower_bound(a: auto; val: auto) : auto
 
-|detail/function-algorithm-lower_bound-0x8cf240a3a8ad3c21|
+Returns an iterator pointing to the first element in the array that is not less than (i.e. greater or equal to) value, or length(a) if no such element is found.
 
 :Arguments: * **a** : auto
 
@@ -165,7 +168,7 @@ Array a must be sorted.
 
 .. das:function:: lower_bound(a: auto; f: int; l: int; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
-|detail/function-algorithm-lower_bound-0x1cbae16136742bf7|
+Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
 :Arguments: * **a** : auto
 
@@ -181,7 +184,7 @@ Array a must be sorted.
 
 .. das:function:: lower_bound(a: auto; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
-|detail/function-algorithm-lower_bound-0xc56e85976e59df7c|
+Returns an iterator pointing to the first element in the array that is not less than (i.e. greater or equal to) value, or length(a) if no such element is found.
 
 :Arguments: * **a** : auto
 
@@ -193,7 +196,7 @@ Array a must be sorted.
 
 .. das:function:: binary_search(a: auto; val: auto) : auto
 
-|detail/function-algorithm-binary_search-0x6140c5dea5a22cf|
+Returns true if an val appears within the array a.
 
 :Arguments: * **a** : auto
 
@@ -203,7 +206,7 @@ Array a must be sorted.
 
 .. das:function:: binary_search(a: auto; f: int; last: int; val: auto) : auto
 
-|detail/function-algorithm-binary_search-0x1cebf128180ac16e|
+Returns true if an val appears within the range [f, last).
 
 :Arguments: * **a** : auto
 
@@ -217,7 +220,7 @@ Array a must be sorted.
 
 .. das:function:: binary_search(a: auto; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
-|detail/function-algorithm-binary_search-0x9cc7c2707d845b4a|
+Returns true if an val appears within the array a.
 
 :Arguments: * **a** : auto
 
@@ -229,7 +232,7 @@ Array a must be sorted.
 
 .. das:function:: binary_search(a: auto; f: int; last: int; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
-|detail/function-algorithm-binary_search-0x1de8f19e6c44a56d|
+Returns true if an val appears within the range [f, last).
 
 :Arguments: * **a** : auto
 
@@ -294,7 +297,7 @@ Returns array of the elements of a and then b.
 
 .. das:function:: reverse(a: auto) : auto
 
-|detail/function-algorithm-reverse-0xc81754f6565380cd|
+Reverses the elements of array a in place.
 
 :Arguments: * **a** : auto
 
@@ -302,7 +305,7 @@ Returns array of the elements of a and then b.
 
 .. das:function:: combine(a: auto; b: auto) : auto
 
-|detail/function-algorithm-combine-0x9635b3d64daa7cb3|
+Returns array of the elements of a and then b.
 
 :Arguments: * **a** : auto
 
