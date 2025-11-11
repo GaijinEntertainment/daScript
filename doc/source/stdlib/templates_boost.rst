@@ -56,25 +56,25 @@ Call macros
 
 .. das:attribute:: qmacro_variable
 
-|detail/function_annotation-templates_boost-qmacro_variable|
+This macro implements expression reification for variables.
 
 .. _call-macro-templates_boost-qmacro_expr:
 
 .. das:attribute:: qmacro_expr
 
-|detail/function_annotation-templates_boost-qmacro_expr|
+This macro implements first line of the expression block reification 'qmacro_expr'
 
 .. _call-macro-templates_boost-qmacro_function:
 
 .. das:attribute:: qmacro_function
 
-|detail/function_annotation-templates_boost-qmacro_function|
+This macro implements expression reification for functions.
 
 .. _call-macro-templates_boost-qmacro_block_to_array:
 
 .. das:attribute:: qmacro_block_to_array
 
-|detail/function_annotation-templates_boost-qmacro_block_to_array|
+This macro implements expression block to array reification 'qmacro_block_to_array'
 
 .. _call-macro-templates_boost-qmacro_template_class:
 
@@ -92,19 +92,19 @@ This macro implements expression reification for class methods.
 
 .. das:attribute:: qmacro
 
-|detail/function_annotation-templates_boost-qmacro|
+This macro implements expression reification 'qmacro'
 
 .. _call-macro-templates_boost-qmacro_block:
 
 .. das:attribute:: qmacro_block
 
-|detail/function_annotation-templates_boost-qmacro_block|
+This macro implements expression block reification 'qmacro_block'
 
 .. _call-macro-templates_boost-qmacro_type:
 
 .. das:attribute:: qmacro_type
 
-|detail/function_annotation-templates_boost-qmacro_type|
+This macro implements type declaration reification 'qmacro_type'
 
 ++++++++++++++
 Template rules
@@ -247,7 +247,7 @@ Applies the template to the given expression. If `forceAt` is set, the resulting
 
 .. das:function:: apply_template(at: LineInfo; typ: smart_ptr<TypeDecl>&; blk: block<(var rules:Template):void>) : TypeDeclPtr
 
-|detail/function-templates_boost-apply_template-0xbd03dc0824434b87|
+Applies the template to the given type declaration. If `forceAt` is set, the resulting type declaration will have the same line info as 'at'.
 
 :Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
@@ -259,7 +259,7 @@ Applies the template to the given expression. If `forceAt` is set, the resulting
 
 .. das:function:: apply_template(at: LineInfo; expr: smart_ptr<Expression>&; blk: block<(var rules:Template):void>) : ExpressionPtr
 
-|detail/function-templates_boost-apply_template-0x445d2cd5d5d967b4|
+Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
 
 :Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
@@ -271,7 +271,7 @@ Applies the template to the given expression. If `forceAt` is set, the resulting
 
 .. das:function:: apply_template(expr: smart_ptr<Expression>&; blk: block<(var rules:Template):void>) : ExpressionPtr
 
-|detail/function-templates_boost-apply_template-0x5e1fedb237d55693|
+Applies the template to the given expression.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >&
 
@@ -348,7 +348,8 @@ Global variables type is would be inferred from the initial value.
 
 .. das:function:: add_global_var(mod: Module?; vname: string; typ: TypeDeclPtr; vat: LineInfo; priv: bool; blk: block<(var v:VariablePtr):void>) : bool
 
-|detail/function-templates_boost-add_global_var-0x3f283fbe2de53e8b|
+Add global variable to the module, given name and type.
+`priv` specifies if the variable is private to the block.
 
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>` ?
 
@@ -366,7 +367,7 @@ Global variables type is would be inferred from the initial value.
 
 .. das:function:: add_global_var(mod: Module?; vname: string; typ: TypeDeclPtr; vat: LineInfo; priv: bool) : bool
 
-|detail/function-templates_boost-add_global_var-0x2a95d1fcac2d79ad|
+Add global variable to the module, given name and type.
 
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>` ?
 
@@ -571,7 +572,7 @@ Adds a rule to the template to rename a call.
 
 .. das:function:: visit_expression(expr: ExpressionPtr; adapter: smart_ptr<VisitorAdapter>)
 
-|detail/function-templates_boost-visit_expression-0x80347ecfc9c19012|
+Visits the expression with the given visitor adapter.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -745,7 +746,7 @@ Implementation details for reification. This is a variable generation reificatio
 
 .. das:function:: apply_qmacro_template_class(instance_name: string; template_type: smart_ptr<TypeDecl>; blk: block<(var rules:Template):void>) : TypeDeclPtr
 
-|detail/function-templates_boost-apply_qmacro_template_class-0x91fe7e3cb4ec32a3|
+Implementation details for the expression reificaiton. This is a template class instantiation reification.
 
 :Arguments: * **instance_name** : string
 
@@ -781,7 +782,7 @@ Creates a class structure. Adds __rtti, __finalize fields.
 
 .. das:function:: make_class(name: string; baseClass: StructurePtr; mod: Module?) : smart_ptr<Structure>
 
-|detail/function-templates_boost-make_class-0xa44d394c609d93f0|
+Creates a class structure derived from baseClass. Adds __rtti, __finalize fields.
 
 :Arguments: * **name** : string
 
@@ -793,7 +794,7 @@ Creates a class structure. Adds __rtti, __finalize fields.
 
 .. das:function:: make_class(name: string; baseClass: Structure?; mod: Module?) : smart_ptr<Structure>
 
-|detail/function-templates_boost-make_class-0x3c5acb0be09874b4|
+Creates a class structure derived from baseClass. Adds __rtti, __finalize fields.
 
 :Arguments: * **name** : string
 
